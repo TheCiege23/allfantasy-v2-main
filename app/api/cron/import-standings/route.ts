@@ -40,7 +40,7 @@ export const maxDuration = 120
  */
 const JOB = "cron-import-standings"
 
-type StandingsSport = "NFL" | "NCAAF" | "MLB"
+type StandingsSport = "NFL" | "NCAAF" | "MLB" | "NBA" | "NHL"
 
 /**
  * Which sports one fire covers.
@@ -61,7 +61,15 @@ function resolveSports(param: string | null): StandingsSport[] {
   if (raw === "NCAAF") return ["NCAAF"]
   if (raw === "MLB") return ["MLB"]
   if (raw === "NFL") return ["NFL"]
-  return ["NFL", "MLB"]
+  if (raw === "NBA") return ["NBA"]
+  if (raw === "NHL") return ["NHL"]
+  /*
+   * NCAAF, NBA and NHL joined the default 2026-09-22. NCAAF's writer existed but ran only on an
+   * explicit `?sport=NCAAF` that no registry entry passes, so college standings were never
+   * written; NBA/NHL had no writer at all. Same one-slot constraint as above. The whole sweep is
+   * ~260 upserts (NCAAF 138 entries), well inside maxDuration.
+   */
+  return ["NFL", "MLB", "NCAAF", "NBA", "NHL"]
 }
 
 async function handle(req: NextRequest) {

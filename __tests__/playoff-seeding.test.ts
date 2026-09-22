@@ -81,6 +81,78 @@ describe("resolvePlayoffSeedField", () => {
     expect(field.warnings).toEqual([])
   })
 
+  /*
+   * NBA/NHL seasons span two years, standings rows are never purged, and seed writes are
+   * permanent — so the season is DERIVED from when the pool was made, never picked by which key
+   * exists. Both existence-based orders shipped and each seeded some window from last season.
+   */
+  const stubStandings = () =>
+    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) => {
+      if (where.cacheKey.startsWith === "NHL:standings:2025:")
+        return [{ data: { conference: "Western Conference", position: 1, teamName: "Winnipeg Jets", won: 56, lost: 26 } }]
+      if (where.cacheKey.startsWith === "NHL:standings:2026:")
+        return [{ data: { conference: "Western Conference", position: 1, teamName: "Dallas Stars", won: 5, lost: 2 } }]
+      return []
+    })
+  const readKeys = () =>
+    db.sportsDataCache.findMany.mock.calls.map((c: Array<{ where: { cacheKey: { startsWith: string } } }>) => c[0].where.cacheKey.startsWith)
+
+  it("a pool made BEFORE tip-off reads the coming season and waits — it never reaches last season's final rows", async () => {
+    // The real hazard: the new season has no key yet, while last season's FINAL rows do.
+    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) =>
+      where.cacheKey.startsWith === "NHL:standings:2025:"
+        ? [{ data: { conference: "Western Conference", position: 1, teamName: "Winnipeg Jets", won: 56, lost: 22, otLost: 4 } }]
+        : []
+    )
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    const field = await resolvePlayoffSeedField("nhl", 2026, new Date("2026-08-15T00:00:00Z"))
+    expect(readKeys()).toEqual(["NHL:standings:2026:"])
+    expect(field.season).toBe("2026")
+    expect(field.rowsRead).toBe(0)
+    expect(field.isFinal).toBe(false)
+  })
+
+  it("NHL overtime losses count as games played, or the field can never read final", async () => {
+    // 82 games each: 40 won, 30 lost, 12 lost in overtime.
+    db.sportsDataCache.findMany.mockResolvedValue([
+      { data: { conference: "Western Conference", position: 1, teamName: "Dallas Stars", won: 40, lost: 30, otLost: 12 } },
+      { data: { conference: "Eastern Conference", position: 1, teamName: "Boston Bruins", won: 44, lost: 28, otLost: 10 } },
+    ])
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    const field = await resolvePlayoffSeedField("nhl", 2027, new Date("2027-04-12T00:00:00Z"))
+    expect(field.minGamesPlayed).toBe(82)
+    expect(field.isFinal).toBe(true)
+  })
+
+  it("a pool made in November reads the season in progress", async () => {
+    stubStandings()
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    const field = await resolvePlayoffSeedField("nhl", 2026, new Date("2026-11-10T00:00:00Z"))
+    expect(readKeys()).toEqual(["NHL:standings:2026:"])
+    expect(field.rowsRead).toBe(1)
+  })
+
+  it("a pool made in April 2027 for the 2027 playoffs reads 2026-27", async () => {
+    stubStandings()
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    await resolvePlayoffSeedField("nhl", 2027, new Date("2027-04-12T00:00:00Z"))
+    expect(readKeys()).toEqual(["NHL:standings:2026:"])
+  })
+
+  it("splitYearSeasonStart: both labels of a season resolve to its start year; others read as a playoff year", async () => {
+    const { splitYearSeasonStart } = await import("@/lib/playoffs/playoffSeeding")
+    const autumn = new Date("2026-09-01T00:00:00Z")
+    const spring = new Date("2027-03-01T00:00:00Z")
+    expect(splitYearSeasonStart(2026, autumn)).toBe(2026)
+    expect(splitYearSeasonStart(2027, autumn)).toBe(2026)
+    expect(splitYearSeasonStart(2026, spring)).toBe(2026)
+    expect(splitYearSeasonStart(2027, spring)).toBe(2026)
+    expect(splitYearSeasonStart(2025, autumn)).toBe(2024) // explicit historic playoff year
+    expect(splitYearSeasonStart(2027, null)).toBe(2026) // no createdAt: playoff calendar year
+    expect(splitYearSeasonStart(2026, new Date("2026-06-30T23:00:00Z"))).toBe(2025) // June is still last season
+    expect(splitYearSeasonStart(2026, new Date("2026-07-01T00:00:00Z"))).toBe(2026)
+  })
+
   it("says so when nothing has been ingested, rather than returning a silent empty field", async () => {
     db.sportsDataCache.findMany.mockResolvedValue([])
     const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")

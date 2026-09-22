@@ -118,14 +118,17 @@ function providersAvailable(row: AdminSportDataReliabilityRow): boolean {
 }
 
 function countFor(row: AdminSportDataReliabilityRow, key: SportImportDataType): number | null {
-  if (key === "projectionsRankings" || key === "odds") return null
+  if (key === "odds") return null
+  // ⚠ Was hard-coded null, so no sport — NFL included — could ever read Ready here.
+  if (key === "projectionsRankings") return row.counts.projections ?? null
   return row.counts[key]
 }
 
 function lastSyncFor(row: AdminSportDataReliabilityRow, key: SportImportDataType): string | null {
   if (key === "schedules") return latestIso([row.lastSyncAtByType.schedules, row.lastSyncAtByType.fixtures])
   if (key === "liveScores") return latestIso([row.lastSyncAtByType.games, row.lastSyncAtByType.fixtures])
-  if (key === "projectionsRankings") return row.lastSyncAtByType.players ?? null
+  // Its own writers' timestamp — it used to borrow the players sync, which says nothing about projections.
+  if (key === "projectionsRankings") return row.lastSyncAtByType.projections ?? null
   if (key === "odds") return null
   return row.lastSyncAtByType[key] ?? null
 }

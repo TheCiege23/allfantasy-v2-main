@@ -62,6 +62,8 @@ type StandingsRow = {
   conference?: unknown
   won?: unknown
   lost?: unknown
+  tied?: unknown
+  otLost?: unknown
 }
 
 /**
@@ -99,6 +101,29 @@ function conferenceOf(group: unknown): string | null {
 }
 
 /**
+ * The standings season (START year) an NBA/NHL challenge is for.
+ *
+ * 🛑 ONE EXACT KEY, DERIVED — NEVER "whichever key exists". Standings rows are never purged and a
+ * finished season reads `isFinal`, while seed writes are permanent. Every existence-based rule
+ * tried here reached last season's final rows in some window: "year-1 first" for pools made
+ * Oct-Dec, "own year first, then year-1" for pools made Jul-Oct before the new season's first
+ * standings write. Only WHEN the pool was made says which season it is for, because
+ * `seasonYear` defaults to the calendar year and so means 2025-26 in spring 2026 and 2026-27 in
+ * autumn 2026. If the season's key does not exist yet, the answer is "wait", not "use the last one".
+ *
+ * `seasonYear` is honoured when it is either label of that season (start year, or the playoff
+ * calendar year). Any other explicit year is read as a playoff calendar year.
+ */
+export function splitYearSeasonStart(seasonYear: number, createdAt: Date | null | undefined): number {
+  const created = createdAt instanceof Date && Number.isFinite(createdAt.getTime()) ? createdAt : null
+  if (!created) return seasonYear - 1
+  // July onward belongs to the season that starts that autumn — the same cutoff the writer uses.
+  const start = created.getUTCMonth() >= 6 ? created.getUTCFullYear() : created.getUTCFullYear() - 1
+  if (seasonYear === start || seasonYear === start + 1) return start
+  return seasonYear - 1
+}
+
+/**
  * Read the seeded field for a sport and season out of the standings cache.
  *
  * ⚠ EXPIRY IS NOT CHECKED, ON PURPOSE. `SportsDataCache.expiresAt` does not
@@ -111,11 +136,16 @@ function conferenceOf(group: unknown): string | null {
 export async function resolvePlayoffSeedField(
   sport: PlayoffSport,
   seasonYear: number | string,
+  createdAt?: Date | null,
 ): Promise<PlayoffSeedField> {
-  const season = String(seasonYear)
-  const prefix = `${sport.toUpperCase()}:standings:${season}:`
   const warnings: string[] = []
 
+  // NBA/NHL are keyed by season START year; see splitYearSeasonStart for why it is derived.
+  const season =
+    sport === "nba" || sport === "nhl"
+      ? String(splitYearSeasonStart(Number(seasonYear), createdAt))
+      : String(seasonYear)
+  const prefix = `${sport.toUpperCase()}:standings:${season}:`
   const rows = await (prisma.sportsDataCache as any).findMany({
     where: { cacheKey: { startsWith: prefix } },
     select: { data: true },
@@ -135,7 +165,13 @@ export async function resolvePlayoffSeedField(
      */
     const won = Number(data.won)
     const lost = Number(data.lost)
-    if (Number.isFinite(won) && Number.isFinite(lost)) gamesPlayed.push(won + lost)
+    /*
+     * ⚠ NHL OVERTIME LOSSES ARE A SEPARATE COLUMN (`otLost`), not part of `lost`. Counting only
+     * won + lost put every NHL club ~8-15 games short of the 82-game season, so the field could
+     * never read as final and NHL pools would never seed. Ties/OT losses absent means zero.
+     */
+    const extra = (Number(data.tied) || 0) + (Number(data.otLost) || 0)
+    if (Number.isFinite(won) && Number.isFinite(lost)) gamesPlayed.push(won + lost + extra)
     if (!conference || !name || !Number.isFinite(seed) || seed <= 0) continue
     const bucket = seeds.get(conference) ?? new Map<number, string>()
     /*
@@ -213,17 +249,22 @@ export async function applyPlayoffSeedsToChallenges(challengeIds: string[]): Pro
 
   const challenges = await (prisma as any).playoffBracketChallenge.findMany({
     where: { id: { in: challengeIds } },
-    select: { id: true, sport: true, seasonYear: true },
+    select: { id: true, sport: true, seasonYear: true, createdAt: true },
   })
 
   const fields = new Map<string, PlayoffSeedField>()
-  for (const challenge of challenges as Array<{ id: string; sport: string; seasonYear: number }>) {
+  for (const challenge of challenges as Array<{ id: string; sport: string; seasonYear: number; createdAt?: Date | null }>) {
     const sport = String(challenge.sport ?? "").toLowerCase() as PlayoffSport
-    const key = `${sport}:${challenge.seasonYear}`
+    // Keyed by the RESOLVED season: two NBA challenges sharing a seasonYear can be for different seasons.
+    const season =
+      sport === "nba" || sport === "nhl"
+        ? splitYearSeasonStart(challenge.seasonYear, challenge.createdAt)
+        : challenge.seasonYear
+    const key = `${sport}:${season}`
     try {
       let field = fields.get(key)
       if (!field) {
-        field = await resolvePlayoffSeedField(sport, challenge.seasonYear)
+        field = await resolvePlayoffSeedField(sport, challenge.seasonYear, challenge.createdAt)
         fields.set(key, field)
         // Field-level warnings belong to the field, not to each challenge using it.
         sweep.warnings.push(...field.warnings.map((warning) => `${key}: ${warning}`))
@@ -281,12 +322,12 @@ export async function applyPlayoffSeedsToChallenge(input: {
 }): Promise<ApplyPlayoffSeedsResult> {
   const challenge = await (prisma as any).playoffBracketChallenge.findUnique({
     where: { id: input.challengeId },
-    select: { id: true, sport: true, seasonYear: true },
+    select: { id: true, sport: true, seasonYear: true, createdAt: true },
   })
   if (!challenge) throw new Error("Challenge not found")
 
   const sport = String(challenge.sport ?? "").toLowerCase() as PlayoffSport
-  const field = input.field ?? (await resolvePlayoffSeedField(sport, challenge.seasonYear))
+  const field = input.field ?? (await resolvePlayoffSeedField(sport, challenge.seasonYear, challenge.createdAt))
   const warnings = [...field.warnings]
 
   /*

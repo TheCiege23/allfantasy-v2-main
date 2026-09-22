@@ -133,12 +133,16 @@ describe('dedupeGamesByFixture', () => {
 })
 
 describe('espn standings module contract', () => {
-  it('advertises the two football codes and refuses the rest', async () => {
+  it('advertises the sports it writes and refuses the rest', async () => {
     // Imported lazily: the module is `server-only`, so a top-level import breaks the whole file.
     const { espnHasStandings } = await import('@/lib/standings/espnStandings')
     expect(espnHasStandings('NFL')).toBe(true)
     expect(espnHasStandings('ncaaf')).toBe(true)
-    expect(espnHasStandings('NBA')).toBe(false)
+    // NBA and NHL joined 2026-09-22 (split-year season handling in espnStandings).
+    expect(espnHasStandings('NBA')).toBe(true)
+    expect(espnHasStandings('nhl')).toBe(true)
+    // NCAAB has no writer: ESPN's payload for it was not verified.
+    expect(espnHasStandings('NCAAB')).toBe(false)
     expect(espnHasStandings('')).toBe(false)
   })
 })

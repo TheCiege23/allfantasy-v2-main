@@ -132,6 +132,28 @@ const WORLD_CUP_AI_GROUNDING_KEYS = ["teams", "schedules", "standings"] as const
 // are intentionally absent for the bracket product and should not show as gaps.
 const WORLD_CUP_MISSING_DATA_KEYS = ["teams", "schedules", "liveScores", "standings"] as const satisfies Array<keyof SportImportMatrixRow["cells"]>
 
+/*
+ * Data a sport genuinely has no source for, kept out of "Missing" and the AI-grounding count the
+ * same way World Cup's optional enrichments are. Not a place to hide a gap that has a writer.
+ * Soccer projections: nothing writes soccer `fantasy_stat_lines` (Rolling Insights player_stats is
+ * off for SOCCER and TheSportsDB season stats skip it), so compute-projections has nothing to read.
+ */
+const NOT_APPLICABLE: Partial<Record<string, ReadonlyArray<keyof SportImportMatrixRow["cells"]>>> = {
+  soccer: ["projectionsRankings"],
+}
+
+const GENERIC_MISSING_DATA_KEYS = [
+  "teams",
+  "players",
+  "schedules",
+  "liveScores",
+  "standings",
+  "injuries",
+  "news",
+  "playerStats",
+  "projectionsRankings",
+] as const satisfies Array<keyof SportImportMatrixRow["cells"]>
+
 function buildSportsRows(rows: SportImportMatrixRow[]): SportsOsSportRow[] {
   return rows.map((row) => {
     const teamsReady = isReady(row.cells.teams)
@@ -162,17 +184,10 @@ function buildSportsRows(rows: SportImportMatrixRow[]): SportsOsSportRow[] {
     const missingData =
       row.id === "world-cup"
         ? missingCellLabels(row, WORLD_CUP_MISSING_DATA_KEYS)
-        : missingCellLabels(row, [
-            "teams",
-            "players",
-            "schedules",
-            "liveScores",
-            "standings",
-            "injuries",
-            "news",
-            "playerStats",
-            "projectionsRankings",
-          ])
+        : missingCellLabels(
+            row,
+            GENERIC_MISSING_DATA_KEYS.filter((key) => !(NOT_APPLICABLE[row.id] ?? []).includes(key))
+          )
 
     // World Cup AI grounding is evaluated only on the 3 data types the bracket AI actually
     // consumes (teams, fixtures/schedules, standings).  The 6 generic sports data types

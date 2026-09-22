@@ -142,6 +142,11 @@ const PROVIDER_MAPPINGS = [
   { provider: "ClearSports", playerField: "clearSportsId", aliases: ["clearsports", "clear_sports"] },
   { provider: "MFL", playerField: "mflId", aliases: ["mfl"] },
   { provider: "Fleaflicker", playerField: "fleaflickerId", aliases: ["fleaflicker"] },
+  // ⚠ Both columns exist on PlayerIdentityMap and were left out here and from the
+  // missing-provider-id check below, so every CFBD-only college identity (written by
+  // lib/sports-data/cfbdIdentityBridge.ts) counted as having NO provider id at all.
+  { provider: "CFBD", playerField: "cfbdId", aliases: ["cfbd", "collegefootballdata"] },
+  { provider: "Fantrax", playerField: "fantraxId", aliases: ["fantrax"] },
 ] as const
 
 const SPORTS_TO_AUDIT = [
@@ -203,6 +208,39 @@ function topProblem(input: {
   }
 }
 
+/**
+ * The identity DEFECTS in a row — what the per-sport status and the headline both count.
+ *
+ * ⚠ DELIBERATELY NARROWER THAN THE COLUMNS THE PANEL SHOWS. Four of them are displayed but are
+ * not defects, and summing them is how the headline reached 194,318:
+ *  - `playersMissingTeam` spans every cached row, so free agents, retired and historical players
+ *    all count. `activeStatusTeamMismatches` — an ACTIVE player with no team — is the defect.
+ *  - `inactiveOrUnknownPlayers` is a status, not an error: a retired player is correctly retired.
+ *  - `duplicatePlayerNameGroups` groups raw names across SOURCE rows, so one person carried by
+ *    two providers is a "duplicate". It measures multi-source coverage, not collisions.
+ *  - `unmappedProviderPlayers` / `unmappedProviderTeams` are the provider-mapping headline's own
+ *    numbers; adding them here counted every unmapped row in two headlines at once.
+ */
+export function identityDefectCount(row: {
+  playersMissingProviderIds: number
+  playersMissingPosition: number
+  playersMissingStatus: number
+  activeStatusTeamMismatches: number
+  duplicateTeamIdentityGroups: number
+  duplicateProviderMappingGroups: number
+  teamMappingMismatches: number
+}): number {
+  return (
+    row.playersMissingProviderIds +
+    row.playersMissingPosition +
+    row.playersMissingStatus +
+    row.activeStatusTeamMismatches +
+    row.duplicateTeamIdentityGroups +
+    row.duplicateProviderMappingGroups +
+    row.teamMappingMismatches
+  )
+}
+
 export function buildSportsIdentityHealthSnapshot(input: {
   rows: SportsIdentityHealthAggregate[]
   now?: Date
@@ -212,29 +250,21 @@ export function buildSportsIdentityHealthSnapshot(input: {
     const teamCount = n(row.teamCount) + n(row.teamAssetCount)
     const playersMissingTeam = n(row.playersMissingTeam) + n(row.playerRecordsMissingTeam)
     const playersMissingPosition = n(row.playersMissingPosition) + n(row.playerRecordsMissingPosition)
-    const problemCount =
-      n(row.playersMissingProviderIds) +
-      playersMissingTeam +
-      playersMissingPosition +
-      n(row.playersMissingStatus) +
-      n(row.duplicatePlayerNameGroups) +
-      n(row.duplicateTeamIdentityGroups) +
-      n(row.duplicateProviderMappingGroups) +
-      n(row.unmappedProviderPlayers) +
-      n(row.unmappedProviderTeams) +
-      n(row.inactiveOrUnknownPlayers) +
-      n(row.activeStatusTeamMismatches) +
-      n(row.teamMappingMismatches)
+    const problemCount = identityDefectCount({
+      playersMissingProviderIds: n(row.playersMissingProviderIds),
+      playersMissingPosition,
+      playersMissingStatus: n(row.playersMissingStatus),
+      activeStatusTeamMismatches: n(row.activeStatusTeamMismatches),
+      duplicateTeamIdentityGroups: n(row.duplicateTeamIdentityGroups),
+      duplicateProviderMappingGroups: n(row.duplicateProviderMappingGroups),
+      teamMappingMismatches: n(row.teamMappingMismatches),
+    })
     const topProblems: string[] = []
     pushProblem(topProblems, "Missing provider ids", n(row.playersMissingProviderIds))
-    pushProblem(topProblems, "Missing team", playersMissingTeam)
+    pushProblem(topProblems, "Active without team", n(row.activeStatusTeamMismatches))
     pushProblem(topProblems, "Missing position", playersMissingPosition)
-    pushProblem(topProblems, "Duplicate player names", n(row.duplicatePlayerNameGroups))
     pushProblem(topProblems, "Duplicate team identity", n(row.duplicateTeamIdentityGroups))
     pushProblem(topProblems, "Duplicate provider mappings", n(row.duplicateProviderMappingGroups))
-    pushProblem(topProblems, "Unmapped provider players", n(row.unmappedProviderPlayers))
-    pushProblem(topProblems, "Unmapped provider teams", n(row.unmappedProviderTeams))
-    pushProblem(topProblems, "Inactive/unknown status", n(row.inactiveOrUnknownPlayers))
     pushProblem(topProblems, "Team mapping mismatch", n(row.teamMappingMismatches))
     return {
       id: row.id,
@@ -339,14 +369,14 @@ export function buildSportsIdentityHealthSnapshot(input: {
         recommendation: "Backfill PlayerIdentityMap provider ids before cross-provider AI comparisons.",
       }),
       topProblem({
-        id: `${row.id}:duplicate-player-names`,
+        id: `${row.id}:active-without-team`,
         sport: row.sport,
         label: row.label,
         category: "identity" as const,
-        count: row.duplicatePlayerNameGroups,
+        count: row.activeStatusTeamMismatches,
         total: row.playerCount,
-        message: "Duplicate player names within the same sport.",
-        recommendation: "Require canonical id resolution before Trade Analyzer or Draft Advisor uses exact player facts.",
+        message: "Players whose status is active but who carry no team.",
+        recommendation: "Refresh rosters for these players before lineup or trade answers cite their team.",
       }),
       topProblem({
         id: `${row.id}:duplicate-team-identities`,
@@ -367,16 +397,6 @@ export function buildSportsIdentityHealthSnapshot(input: {
         total: row.playerCount,
         message: "Player team values do not match known team codes/names.",
         recommendation: "Backfill team aliases and normalize provider team abbreviations before live launch.",
-      }),
-      topProblem({
-        id: `${row.id}:inactive-unknown-status`,
-        sport: row.sport,
-        label: row.label,
-        category: "identity" as const,
-        count: row.inactiveOrUnknownPlayers,
-        total: row.playerCount,
-        message: "Cached player statuses are inactive, retired, or unknown.",
-        recommendation: "Keep these players out of exact-answer AI contexts unless their current status is refreshed.",
       }),
     ])
     .concat(
@@ -451,23 +471,7 @@ export function buildSportsIdentityHealthSnapshot(input: {
       sportsAudited: rows.length,
       totalPlayers: rows.reduce((sum, row) => sum + row.playerCount, 0),
       totalTeams: rows.reduce((sum, row) => sum + row.teamCount, 0),
-      identityProblems: rows.reduce(
-        (sum, row) =>
-          sum +
-          row.playersMissingProviderIds +
-          row.playersMissingTeam +
-          row.playersMissingPosition +
-          row.playersMissingStatus +
-          row.duplicatePlayerNameGroups +
-          row.duplicateTeamIdentityGroups +
-          row.duplicateProviderMappingGroups +
-          row.unmappedProviderPlayers +
-          row.unmappedProviderTeams +
-          row.inactiveOrUnknownPlayers +
-          row.activeStatusTeamMismatches +
-          row.teamMappingMismatches,
-        0
-      ),
+      identityProblems: rows.reduce((sum, row) => sum + identityDefectCount(row), 0),
       imageProblems: imageRows.reduce(
         (sum, row) =>
           sum +
@@ -771,6 +775,8 @@ async function buildAggregateForSport(row: (typeof SPORTS_TO_AUDIT)[number]): Pr
       { OR: [{ clearSportsId: null }, { clearSportsId: "" }] },
       { OR: [{ mflId: null }, { mflId: "" }] },
       { OR: [{ fleaflickerId: null }, { fleaflickerId: "" }] },
+      { OR: [{ cfbdId: null }, { cfbdId: "" }] },
+      { OR: [{ fantraxId: null }, { fantraxId: "" }] },
     ],
   }
   const invalidUrl = (field: string) => ({
@@ -851,6 +857,9 @@ async function buildAggregateForSport(row: (typeof SPORTS_TO_AUDIT)[number]): Pr
       where: {
         sport,
         status: { contains: "active", mode: "insensitive" },
+        // ⚠ `contains: "active"` also matches "inactive", which counted every inactive
+        // player without a team as an ACTIVE one missing its team.
+        NOT: { status: { contains: "inactive", mode: "insensitive" } },
         OR: [{ team: null }, { team: "" }],
       },
     }),
