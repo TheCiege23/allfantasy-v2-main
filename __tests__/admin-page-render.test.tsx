@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
+  // AdminLiveRefresh (the header stamp) keeps the page current via router.refresh().
+  useRouter: () => ({ refresh: vi.fn() }),
 }))
 
 vi.mock("@/lib/adminAuth", () => ({

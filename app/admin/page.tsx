@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin-dashboard/AdminCommandCenterService"
 import { AdminCommandCenterOverview } from "@/components/admin/AdminCommandCenterOverview"
 import { GrowthSeriesPanel } from "@/components/admin/GrowthSeriesPanel"
+import { AdminLiveRefresh } from "@/components/admin/AdminLiveRefresh"
 // This file is a Server Component, so `ssr: false` isn't allowed here (Next.js
 // restricts that option to Client Components) — plain dynamic() still splits
 // the recharts-heavy panel into its own chunk instead of the main page bundle.
@@ -1670,15 +1671,7 @@ export default async function AdminPage({
             <a href="/core" data-testid="admin-exit-button" className="af-cc-tab">
               Exit Admin
             </a>
-            <div className="af-cc-stamp">
-              refreshed{" "}
-              {new Date(data.generatedAt).toLocaleTimeString("en-US", {
-                timeZone: "America/New_York",
-                hour: "numeric",
-                minute: "2-digit",
-                second: "2-digit",
-              })}
-            </div>
+            <AdminLiveRefresh generatedAt={data.generatedAt} />
           </div>
         </header>
 

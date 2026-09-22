@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react"
+import { useAdminRefresh } from "@/components/admin/adminRefreshSignal"
 import { RefreshCw, ShieldCheck, ShieldAlert, ShieldOff, Database, Globe, Zap, Play, CheckCircle2, XCircle } from "lucide-react"
 import type { AdminWorldCupAction, AdminWorldCupActionResult } from "@/app/api/admin/world-cup/actions/route"
 
@@ -295,7 +296,7 @@ export function AiProviderHealthPanel() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/admin/ai/provider-health?hours=${windowHours}`)
+      const res = await fetch(`/api/admin/ai/provider-health?hours=${windowHours}`, { cache: "no-store" })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json() as ProviderHealthResponse
       setData(json)
@@ -307,6 +308,7 @@ export function AiProviderHealthPanel() {
   }, [windowHours])
 
   useEffect(() => { void load() }, [load])
+  useAdminRefresh(() => void load())
 
   return (
     <div className="space-y-6" data-testid="ai-provider-health-panel">

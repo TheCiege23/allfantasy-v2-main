@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useAdminRefresh } from "@/components/admin/adminRefreshSignal"
 
 /**
  * Admin closed-beta invite issuance (P0-1 BETA-GATE).
@@ -121,8 +122,10 @@ export function BetaInvitePanel() {
   const showEmailError = email.trim().length > 0 || submitAttempted ? emailError : null
   const showExpiryError = expiryError
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // `silent` is the background refresh: this panel swaps its list for a loading
+  // card, so a visible reload every minute would blank it each time.
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const res = await fetch("/api/admin/beta-invites", { cache: "no-store" })
@@ -150,6 +153,7 @@ export function BetaInvitePanel() {
   useEffect(() => {
     void load()
   }, [load])
+  useAdminRefresh(() => void load(true))
 
   const issue = useCallback(async () => {
     if (issuing) return // guard against duplicate submits

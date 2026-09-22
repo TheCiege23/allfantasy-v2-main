@@ -11,6 +11,7 @@
  *   <AiAuditLogsPanel />
  */
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useAdminRefresh } from "@/components/admin/adminRefreshSignal"
 import { RefreshCw, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react"
 
 type AuditRow = {
@@ -114,6 +115,7 @@ export function AiAuditLogsPanel() {
 
       const res = await fetch(`/api/admin/ai/audit-logs?${params.toString()}`, {
         signal: abortRef.current.signal,
+        cache: "no-store",
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = (await res.json()) as AuditResponse
@@ -128,6 +130,7 @@ export function AiAuditLogsPanel() {
   }, [])
 
   useEffect(() => { void load(filter) }, [filter, load])
+  useAdminRefresh(() => void load(filter))
 
   return (
     <div className="flex flex-col gap-4">
