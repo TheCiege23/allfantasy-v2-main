@@ -240,7 +240,13 @@ export async function syncEspnStandingsToDb(opts: {
     rows = entriesOf(payload)
     season = String(endYear - 1)
     const gamesPlayed = rows.reduce((sum, r) => sum + (stat(r.stats, 'wins') ?? 0) + (stat(r.stats, 'losses') ?? 0), 0)
-    if (rows.length === 0 || gamesPlayed === 0) {
+    /*
+     * ⚠ ONLY WHEN ESPN ANSWERED. A failed fetch also leaves zero rows, and treating a December
+     * timeout as "the offseason" would refresh LAST season's rows with a fresh TTL — readers that
+     * match on the `NBA:standings:` prefix without a season (Chimmy's digest) would then mix both
+     * seasons for six hours. A null payload writes nothing and reports the error instead.
+     */
+    if (payload != null && (rows.length === 0 || gamesPlayed === 0)) {
       const fallback = await fetchStandings(endYear - 1, 2)
       const fallbackRows = entriesOf(fallback)
       if (fallbackRows.length > 0) {

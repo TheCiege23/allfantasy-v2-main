@@ -81,6 +81,23 @@ describe("espn standings — split-year sports", () => {
     expect(keys()).toEqual(["NBA:standings:2025:ATL", "NBA:standings:2025:BOS"])
   })
 
+  it("a FAILED fetch mid-season is not the offseason: nothing is written, the error is reported", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as unknown as Response))
+    const { syncEspnStandingsToDb } = await import("@/lib/standings/espnStandings")
+    const r = await syncEspnStandingsToDb({ sport: "NBA", now: new Date("2026-12-15T12:00:00Z") })
+    expect(urls()).toHaveLength(1)
+    expect(upsert).not.toHaveBeenCalled()
+    expect(r.errors.join(" ")).toContain("503")
+  })
+
+  it("late-June finals still belong to the season ending that June; July starts the next one", async () => {
+    mockFetch({ "2027": payload([entry("BOS", 60, 22)]), "2028": payload([entry("BOS", 1, 0)]) })
+    const { syncEspnStandingsToDb } = await import("@/lib/standings/espnStandings")
+    await syncEspnStandingsToDb({ sport: "NHL", now: new Date("2027-06-30T23:00:00Z") })
+    await syncEspnStandingsToDb({ sport: "NHL", now: new Date("2027-07-01T01:00:00Z") })
+    expect(urls().map((u) => u.searchParams.get("season"))).toEqual(["2027", "2028"])
+  })
+
   it("an explicit backfill season is read in the repo's start-year convention", async () => {
     mockFetch({ "2025": payload([entry("DAL", 50, 32)]) })
     const { syncEspnStandingsToDb } = await import("@/lib/standings/espnStandings")

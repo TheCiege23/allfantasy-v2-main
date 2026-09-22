@@ -112,14 +112,30 @@ export async function resolvePlayoffSeedField(
   sport: PlayoffSport,
   seasonYear: number | string,
 ): Promise<PlayoffSeedField> {
-  const season = String(seasonYear)
-  const prefix = `${sport.toUpperCase()}:standings:${season}:`
   const warnings: string[] = []
 
-  const rows = await (prisma.sportsDataCache as any).findMany({
-    where: { cacheKey: { startsWith: prefix } },
-    select: { data: true },
-  })
+  /*
+   * ⚠ NBA AND NHL STANDINGS ARE KEYED BY THE YEAR THE SEASON STARTS, and a playoff challenge's
+   * `seasonYear` is the calendar year of the playoffs — so the 2027 NBA playoffs read the 2026-27
+   * regular season, filed as `NBA:standings:2026:*` (lib/standings/espnStandings split-year).
+   * Reading `2027` would find nothing until 2027-28 tips off, leaving every seed slot a
+   * placeholder for the whole postseason. The challenge's own year is still tried second, for a
+   * challenge created with the start-year convention. MLB seasons sit in one calendar year.
+   */
+  const candidates =
+    sport === "nba" || sport === "nhl"
+      ? [String(Number(seasonYear) - 1), String(seasonYear)]
+      : [String(seasonYear)]
+  let season = candidates[0]
+  let rows: unknown[] = []
+  for (const candidate of candidates) {
+    rows = await (prisma.sportsDataCache as any).findMany({
+      where: { cacheKey: { startsWith: `${sport.toUpperCase()}:standings:${candidate}:` } },
+      select: { data: true },
+    })
+    season = candidate
+    if (rows.length > 0) break
+  }
 
   const seeds = new Map<string, Map<number, string>>()
   const gamesPlayed: number[] = []
@@ -152,7 +168,8 @@ export async function resolvePlayoffSeedField(
   }
 
   if (rows.length === 0) {
-    warnings.push(`no standings rows cached under "${prefix}" — has import-standings run for ${sport}?`)
+    const tried = candidates.map((c) => `"${sport.toUpperCase()}:standings:${c}:"`).join(" or ")
+    warnings.push(`no standings rows cached under ${tried} — has import-standings run for ${sport}?`)
   }
 
   const minGamesPlayed = gamesPlayed.length > 0 ? Math.min(...gamesPlayed) : null

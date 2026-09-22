@@ -523,8 +523,11 @@ async function buildGenericSportReliabilityRow(input: {
    * cron (TheSportsDB, every sport) writes SportsGame; game_schedules is written only by the NFL
    * foundation sync and admin/lazy paths. Counting game_schedules alone reported schedules missing
    * for six sports whose Live scores cell — the same SportsGame rows — read Ready.
+   *
+   * MAX, NOT SUM: for NFL both tables hold the same games, and the admin page prints this figure
+   * beside Games — a sum would double it. The larger table is a floor on distinct games.
    */
-  const schedulesCount = (schedules ?? 0) + (games ?? 0)
+  const schedulesCount = Math.max(schedules ?? 0, games ?? 0)
   const lastSyncAtByType = {
     teams: teamsSync,
     players: playersSync,

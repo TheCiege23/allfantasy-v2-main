@@ -81,6 +81,31 @@ describe("resolvePlayoffSeedField", () => {
     expect(field.warnings).toEqual([])
   })
 
+  it("NBA/NHL read the regular season by its START year: the 2027 playoffs seed from 2026-27", async () => {
+    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) =>
+      where.cacheKey.startsWith === "NBA:standings:2026:"
+        ? [{ data: { conference: "Eastern Conference", position: 1, teamName: "Boston Celtics", won: 60, lost: 22 } }]
+        : []
+    )
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    const field = await resolvePlayoffSeedField("nba", 2027)
+    expect(field.season).toBe("2026")
+    expect(field.rowsRead).toBe(1)
+    expect(db.sportsDataCache.findMany).toHaveBeenCalledTimes(1)
+  })
+
+  it("NBA/NHL fall back to the challenge's own year when the start-year key is empty", async () => {
+    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) =>
+      where.cacheKey.startsWith === "NHL:standings:2027:"
+        ? [{ data: { conference: "Western Conference", position: 1, teamName: "Dallas Stars", won: 50, lost: 20 } }]
+        : []
+    )
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    const field = await resolvePlayoffSeedField("nhl", 2027)
+    expect(field.season).toBe("2027")
+    expect(field.rowsRead).toBe(1)
+  })
+
   it("says so when nothing has been ingested, rather than returning a silent empty field", async () => {
     db.sportsDataCache.findMany.mockResolvedValue([])
     const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")

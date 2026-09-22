@@ -377,9 +377,12 @@ describe("AdminProviderHealthService", () => {
   it("counts schedules, player stats and projections from the tables their writers actually use", async () => {
     // TheSportsDB import-schedules writes SportsGame, not game_schedules.
     prismaMock.sportsGame.count.mockImplementation(async ({ where }: { where?: { sport?: string; source?: unknown } }) =>
-      where?.sport === "MLB" && !where?.source ? 2430 : 0
+      where?.sport === "MLB" && !where?.source ? 2430 : where?.sport === "NFL" && !where?.source ? 272 : 0
     )
-    prismaMock.gameSchedule.count.mockResolvedValue(0)
+    // NFL holds the same games in both tables; the figure must not double.
+    prismaMock.gameSchedule.count.mockImplementation(async ({ where }: { where?: { sportType?: string } }) =>
+      where?.sportType === "NFL" ? 272 : 0
+    )
     // CFBD stat imports write fantasy_stat_lines; the RI /live sweep writes player_game_stats.
     prismaMock.fantasyStatLine.count.mockImplementation(async ({ where }: { where?: { sport?: string } }) =>
       where?.sport === "NCAAF" ? 13433 : 0
@@ -399,6 +402,7 @@ describe("AdminProviderHealthService", () => {
     const byId = (id: string) => rows.find((row) => row.id === id)
 
     expect(byId("mlb")?.counts.schedules).toBe(2430)
+    expect(byId("nfl")?.counts.schedules).toBe(272)
     expect(byId("ncaaf")?.counts.playerStats).toBe(13433)
     expect(byId("soccer")?.counts.playerStats).toBe(800)
     expect(byId("nfl")?.counts.projections).toBe(4200)
