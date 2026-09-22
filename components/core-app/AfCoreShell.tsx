@@ -26,7 +26,8 @@ import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
@@ -1246,6 +1247,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const [railSwings, setRailSwings] = useState<Record<string, number>>({})
   const previousMargins = useRef<Record<string, number>>({})
 
+  /*
+   * ⚠ A REFRESH CAN OUTLAST THE INTERVAL THAT SCHEDULED IT. Measured in prod Sentry
+   * (7d to 2026-09-22): a my-team render issues p95 105 queries with p95 7.7s of DB
+   * time, and home p95 16s, against a 20s game-day cadence — so a bare interval can
+   * start a second full-route read while the first is still in flight. Mirrored into
+   * a ref so the interval closure reads the live value without being re-created,
+   * which would reset the cadence on every state change.
+   */
+  const [shellRefreshPending, startShellRefresh] = useTransition()
+  const shellRefreshPendingRef = useRef(false)
+  shellRefreshPendingRef.current = shellRefreshPending
+
   /* The rail is a live surface. Refresh the server snapshot while games are on,
      then back off between slates. Hidden tabs never spend a refresh. */
   useEffect(() => {
@@ -1253,7 +1266,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
     const refreshMs = coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0)
     const refresh = window.setInterval(() => {
-      if (document.visibilityState === 'visible') router.refresh()
+      if (document.visibilityState !== 'visible') return
+      if (shellRefreshPendingRef.current) return
+      // The matchup board polls the same route on a better-informed cadence; two
+      // timers on one route paid for two full renders every period.
+      if (routeRefreshClaimed()) return
+      startShellRefresh(() => router.refresh())
     }, refreshMs)
     return () => {
       window.clearInterval(clock)

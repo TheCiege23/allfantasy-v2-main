@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 
 /**
  * Keeps "Where you stand" current while games are being played.
@@ -65,6 +66,9 @@ export function MatchupPulseRefresh({ inPlay }: MatchupPulseRefreshProps) {
    */
   const pendingRef = useRef(false)
   pendingRef.current = pending
+
+  // This board owns the route's refresh while mounted — see routeRefreshClaim.
+  useEffect(() => claimRouteRefresh(), [])
 
   useEffect(() => {
     setRefreshedAt(Date.now())
