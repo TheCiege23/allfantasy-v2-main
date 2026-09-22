@@ -6,7 +6,10 @@ import type {
 } from "@/lib/admin-dashboard/SportImportMatrixService"
 import type { LeagueFormatDefinition } from "@/lib/league/format-engine"
 import { getLeagueFormatDefinitions } from "@/lib/league/format-engine"
-import type { SportsIdentityHealthSnapshot } from "@/lib/sports-reporting/SportsIdentityHealthService"
+import type {
+  SportsIdentityHealthSnapshot,
+  SportsImageHealthRow,
+} from "@/lib/sports-reporting/SportsIdentityHealthService"
 
 export type SportsOsStatus = "ready" | "partial" | "missing"
 
@@ -154,7 +157,28 @@ const GENERIC_MISSING_DATA_KEYS = [
   "projectionsRankings",
 ] as const satisfies Array<keyof SportImportMatrixRow["cells"]>
 
-function buildSportsRows(rows: SportImportMatrixRow[]): SportsOsSportRow[] {
+/** At most this share of audited people without a photo still counts as images Ready. */
+const HEADSHOT_READY_MAX_MISSING_SHARE = 0.05
+
+/**
+ * Images/logos for one sport, from the MEASURED image health rather than a constant.
+ *
+ * ⚠ THIS WAS HARD-CODED "partial" FOR EVERY SPORT BUT WORLD CUP (`statusFromBooleans(false, …)`),
+ * on the reasoning that live CDN availability is not verified per request. That is still true
+ * and still not checked here — but a column that can never read Ready is not a status, and
+ * the per-person headshot count now says which sports actually have a gap.
+ */
+function imageLogoStatusFromHealth(
+  row: SportsImageHealthRow | undefined,
+  fallback: SportsOsStatus
+): SportsOsStatus {
+  if (!row) return fallback
+  if (row.playersAudited <= 0) return fallback
+  const missingShare = row.playersMissingHeadshots / row.playersAudited
+  return missingShare <= HEADSHOT_READY_MAX_MISSING_SHARE && row.teamsMissingLogos === 0 ? "ready" : "partial"
+}
+
+function buildSportsRows(rows: SportImportMatrixRow[], imageRows: SportsImageHealthRow[] = []): SportsOsSportRow[] {
   return rows.map((row) => {
     const teamsReady = isReady(row.cells.teams)
     const playersReady = isReady(row.cells.players)
@@ -176,7 +200,10 @@ function buildSportsRows(rows: SportImportMatrixRow[]): SportsOsSportRow[] {
     const imageLogoStatus =
       row.id === "world-cup"
         ? statusFromBooleans(teamsReady, isPartial(row.cells.teams))
-        : statusFromBooleans(false, teamsReady || playersReady)
+        : imageLogoStatusFromHealth(
+            imageRows.find((image) => image.id === row.id),
+            statusFromBooleans(false, teamsReady || playersReady)
+          )
 
     // World Cup only tracks teams/fixtures/standings — exclude optional enrichments
     // (players, injuries, news, playerStats, projectionsRankings) so they don't
@@ -235,7 +262,7 @@ function buildPhaseItems(
   | "bracketIntelligence"
   | "dataFreshness"
 > {
-  const sportsRows = buildSportsRows(rows)
+  const sportsRows = buildSportsRows(rows, identityHealth?.imageRows)
   const identityReady = sportsRows.filter((row) => row.identityStatus === "ready").length
   const historyReady = sportsRows.filter((row) => row.historicalStatus === "ready").length
   const currentFactsReady = sportsRows.filter((row) => row.currentFactsStatus === "ready").length
@@ -260,12 +287,29 @@ function buildPhaseItems(
       item({
         id: "external-provider-mappings",
         label: "External provider mapping coverage",
-        status: identityHealth ? "partial" : "missing",
+        /*
+         * ⚠ THIS CARD WAS HARD-CODED "partial", with a gap sentence saying the per-provider grid
+         * did not exist yet — long after the grid shipped directly below it. It now reads the
+         * grid: the gaps ARE the provider/sport pairs with unmapped players, largest first.
+         */
+        status: !identityHealth
+          ? "missing"
+          : identityHealth.summary.providerMappingProblems === 0
+            ? "ready"
+            : "partial",
         evidence: identityHealth
-          ? [`Admin identity health tracks ${identityHealth.summary.identityProblems} cached identity problem(s).`]
+          ? [
+              `${identityHealth.providerRows.filter((row) => row.status !== "not_applicable").length} provider/sport pairs hold data; ${identityHealth.summary.providerMappingProblems} mapping problem(s) across them.`,
+            ]
           : ["PlayerIdentityMap exists in Prisma and provider-specific import code exists."],
-        gaps: ["Per-provider mapping counts are still aggregated into problem totals instead of a full provider-by-provider grid."],
-        recommendation: "Use the cached identity health panel for launch triage, then expand it into provider-specific mapping counts.",
+        gaps: identityHealth
+          ? identityHealth.providerRows
+              .filter((row) => row.unmappedProviderPlayers > 0)
+              .sort((a, b) => b.unmappedProviderPlayers - a.unmappedProviderPlayers)
+              .slice(0, 4)
+              .map((row) => `${row.label} ${row.provider}: ${row.unmappedProviderPlayers} player rows not in PlayerIdentityMap.`)
+          : ["Identity health snapshot unavailable."],
+        recommendation: "Backfill PlayerIdentityMap provider ids for the pairs listed, largest first.",
       }),
     ],
     historicalDataFindings: [
@@ -282,9 +326,18 @@ function buildPhaseItems(
       item({
         id: "headshots-logos",
         label: "Player headshots and team logos",
-        status: imagePartial ? "partial" : "missing",
+        status: sportsRows.length > 0 && sportsRows.every((row) => row.imageLogoStatus === "ready")
+          ? "ready"
+          : imagePartial
+            ? "partial"
+            : "missing",
         evidence: identityHealth
-          ? [`Cached image/logo health reports ${identityHealth.summary.imageProblems} metadata problem(s).`]
+          ? [
+              `Cached image/logo health reports ${identityHealth.summary.imageProblems} problem(s).`,
+              ...identityHealth.imageRows
+                .filter((row) => row.playersMissingHeadshots > 0)
+                .map((row) => `${row.label}: ${row.playersMissingHeadshots} of ${row.playersAudited} people have no photo from any provider.`),
+            ]
           : imagePartial
             ? ["Some team/player rows exist that may carry image fields."]
             : [],
@@ -441,7 +494,7 @@ export function buildSportsOperatingSystemAudit(input: {
   identityHealth?: SportsIdentityHealthSnapshot
 }): SportsOperatingSystemAudit {
   const leagueFormats = buildLeagueFormatRows(input.leagueFormats ?? getLeagueFormatDefinitions())
-  const sports = buildSportsRows(input.importMatrix)
+  const sports = buildSportsRows(input.importMatrix, input.identityHealth?.imageRows)
   const phases = buildPhaseItems(input.importMatrix, input.aiToolAvailability, input.identityHealth)
   const chimmyIntentRoutes = buildIntentRoutes(input.aiToolAvailability)
   const statusList = [

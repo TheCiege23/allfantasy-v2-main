@@ -137,3 +137,99 @@ describe("Sports Operating System readiness audit", () => {
     expect(intents.start_sit?.targetEngine).toBe("Lineup Advisor")
   })
 })
+
+
+describe("Sports OS readiness — reads the measured identity health, not constants", () => {
+  function snapshot(overrides: {
+    imageRows?: Array<{ id: string; label: string; playersMissingHeadshots: number; playersAudited: number; teamsMissingLogos: number }>
+    providerRows?: Array<{ label: string; provider: string; unmappedProviderPlayers: number; status: string }>
+    providerMappingProblems?: number
+  }) {
+    return {
+      generatedAt: "2026-09-22T13:00:00.000Z",
+      summary: {
+        sportsAudited: 1,
+        totalPlayers: 100,
+        totalTeams: 32,
+        identityProblems: 0,
+        imageProblems: 0,
+        providerMappingProblems: overrides.providerMappingProblems ?? 0,
+        readySports: 1,
+        partialSports: 0,
+        missingSports: 0,
+      },
+      rows: [],
+      imageRows: (overrides.imageRows ?? []).map((row) => ({
+        sport: row.label,
+        duplicateHeadshotGroups: 0,
+        duplicateLogoGroups: 0,
+        invalidHeadshotUrlPatterns: 0,
+        invalidLogoUrlPatterns: 0,
+        status: "ready" as const,
+        topProblems: [],
+        ...row,
+      })),
+      providerRows: (overrides.providerRows ?? []).map((row, i) => ({
+        id: `p${i}`,
+        sport: row.label,
+        providerPlayerRows: 0,
+        mappedPlayerIds: 0,
+        providerTeamRows: 0,
+        mappedTeamRows: 0,
+        unmappedProviderTeams: 0,
+        teamMappingMeasured: true,
+        duplicatePlayerMappingGroups: 0,
+        duplicateTeamMappingGroups: 0,
+        ...row,
+      })),
+      topProblems: [],
+    } as never
+  }
+
+  function auditWith(identityHealth: ReturnType<typeof snapshot>) {
+    return buildSportsOperatingSystemAudit({
+      importMatrix: [row("nfl", "NFL")],
+      aiToolAvailability: tools,
+      identityHealth,
+    })
+  }
+
+  it("reads images Ready for a sport whose people nearly all have a photo and whose teams all have logos", () => {
+    const result = auditWith(
+      snapshot({ imageRows: [{ id: "nfl", label: "NFL", playersMissingHeadshots: 28, playersAudited: 12_218, teamsMissingLogos: 0 }] })
+    )
+    expect(result.sports.find((sport) => sport.id === "nfl")?.imageLogoStatus).toBe("ready")
+  })
+
+  it("keeps images Partial where a real share of people have no photo", () => {
+    const result = auditWith(
+      snapshot({ imageRows: [{ id: "nfl", label: "NFL", playersMissingHeadshots: 6_068, playersAudited: 7_314, teamsMissingLogos: 0 }] })
+    )
+    expect(result.sports.find((sport) => sport.id === "nfl")?.imageLogoStatus).toBe("partial")
+  })
+
+  it("lists the real unmapped provider pairs as the mapping card's gaps, largest first", () => {
+    const result = auditWith(
+      snapshot({
+        providerMappingProblems: 52_158,
+        providerRows: [
+          { label: "NFL", provider: "Sleeper", unmappedProviderPlayers: 2_996, status: "partial" },
+          { label: "NCAAF", provider: "Rolling Insights", unmappedProviderPlayers: 48_888, status: "partial" },
+          { label: "NFL", provider: "CFBD", unmappedProviderPlayers: 0, status: "not_applicable" },
+        ],
+      })
+    )
+    const card = result.identityFindings.find((item) => item.id === "external-provider-mappings")
+    expect(card?.status).toBe("partial")
+    expect(card?.gaps[0]).toMatch(/^NCAAF Rolling Insights: 48888/)
+    expect(card?.gaps.join(" ")).not.toMatch(/still aggregated/)
+    expect(card?.evidence[0]).toMatch(/^2 provider\/sport pairs hold data/)
+  })
+
+  it("reads the mapping card Ready when nothing is unmapped", () => {
+    const card = auditWith(snapshot({ providerMappingProblems: 0 })).identityFindings.find(
+      (item) => item.id === "external-provider-mappings"
+    )
+    expect(card?.status).toBe("ready")
+  })
+})

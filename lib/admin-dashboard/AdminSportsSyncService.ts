@@ -211,7 +211,8 @@ export async function runAdminSportsSync(input: {
   }
 
   if (shouldRun("identity_health")) {
-    const snapshot = await getSportsIdentityHealthSnapshot()
+    // An explicit refresh bypasses the /admin page's 10-minute snapshot cache.
+    const snapshot = await getSportsIdentityHealthSnapshot({ fresh: true })
     jobs.push({
       type: "identity_health",
       imported: 0,
@@ -222,7 +223,7 @@ export async function runAdminSportsSync(input: {
   }
 
   if (shouldRun("image_audit")) {
-    const snapshot = await getSportsIdentityHealthSnapshot()
+    const snapshot = await getSportsIdentityHealthSnapshot({ fresh: true })
     jobs.push({
       type: "image_audit",
       imported: 0,
