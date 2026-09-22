@@ -20,9 +20,20 @@ import {
  */
 const PERMANENT_EXCEPTIONS = [
   'lib/agents/workers/api-health-monitor.ts',
-  // Already self-documented, with `db-first-exception: live provider health probe`
-  // on each URL it probes.
-  'lib/admin-dashboard/SystemHealthResolver.ts',
+  /*
+   * ⚠ `lib/admin-dashboard/SystemHealthResolver.ts` WAS HERE AND IS NO LONGER AN AI BOUNDARY.
+   * It probed OpenAI and xAI at `/v1/models` with no key and counted the 401 as "active", so it
+   * called two dead accounts healthy (measured 2026-09-22). Its AI rows now come from
+   * `lib/admin-dashboard/aiProviderEntitlementProbe.ts`, so the scan correctly stopped seeing it.
+   *
+   * 🛑 AND THAT PROBE IS A REAL, DELIBERATELY UNGUARDED PROVIDER CALL THIS CENSUS CANNOT SEE.
+   * It resolves base URL and key through `lib/provider-config` getters, so it carries none of
+   * the three signals below — no provider host literal, no SDK construction, no `*_API_KEY`
+   * name. Unguarded for the reason this whole list exists: a liveness probe gated on the spend
+   * switch would report every provider down whenever spend is off. It is recorded here rather
+   * than listed, because listing it would fail the "still a boundary" check below — which is
+   * the scan's blind spot showing, not the probe being safe.
+   */
   /*
    * NOT a probe — a ROUTER, and excepted for a different reason. It only
    * chooses between clients that are themselves guarded, so guarding it would
