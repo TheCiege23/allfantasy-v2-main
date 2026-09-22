@@ -875,6 +875,10 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
 }
 
 function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealthSnapshot }) {
+  const activeProviderRows = snapshot.providerRows.flatMap((row) =>
+    row.status === "not_applicable" ? [] : [{ ...row, status: row.status }]
+  )
+  const notApplicableProviderCount = snapshot.providerRows.length - activeProviderRows.length
   return (
     <AccordionSection title="Sports OS Identity & Image Health" eyebrow="cached data quality">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -976,10 +980,20 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
             </p>
           </div>
           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-100">
-            {snapshot.providerRows.length} provider sport maps
+            {activeProviderRows.length} provider sport maps
           </span>
         </div>
-        {snapshot.providerRows.length > 0 ? (
+        {/*
+          ⚠ Pairs where the provider holds nothing for the sport (CFBD×NFL, Sleeper×MLB, the
+          league platforms MFL/Fleaflicker/Fantrax for player data) used to fill ~50 of 70 rows
+          with red "Missing". They are coverage, not defects, so they collapse to one line.
+        */}
+        {notApplicableProviderCount > 0 ? (
+          <p className="mt-2 text-[11px] text-white/42" data-testid="provider-not-applicable-note">
+            {notApplicableProviderCount} provider/sport pairs hold no data for that sport and are not shown.
+          </p>
+        ) : null}
+        {activeProviderRows.length > 0 ? (
           <table className="mt-3 w-full min-w-[1180px] text-left text-xs">
             <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
               <tr>
@@ -997,8 +1011,8 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
-              {snapshot.providerRows.map((row) => (
-                <tr key={row.id} className="align-top text-white/70">
+              {activeProviderRows.map((row) => (
+                <tr key={row.id} className="align-top text-white/70" data-provider-row={row.id}>
                   <td className="py-3 pr-3 font-black text-white">{row.label}</td>
                   <td className="py-3 pr-3">{row.provider}</td>
                   <td className="py-3 pr-3">
@@ -1010,8 +1024,13 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
                   <td className="py-3 pr-3">{row.mappedPlayerIds}</td>
                   <td className="py-3 pr-3">{row.unmappedProviderPlayers}</td>
                   <td className="py-3 pr-3">{row.providerTeamRows}</td>
-                  <td className="py-3 pr-3">{row.mappedTeamRows}</td>
-                  <td className="py-3 pr-3">{row.unmappedProviderTeams}</td>
+                  {/* No team reference to compare against: not a measurement, so no number. */}
+                  <td className="py-3 pr-3" title={row.teamMappingMeasured ? undefined : "No team reference (team_assets is empty) — not measured"}>
+                    {row.teamMappingMeasured ? row.mappedTeamRows : "—"}
+                  </td>
+                  <td className="py-3 pr-3" title={row.teamMappingMeasured ? undefined : "No team reference (team_assets is empty) — not measured"}>
+                    {row.teamMappingMeasured ? row.unmappedProviderTeams : "—"}
+                  </td>
                   <td className="py-3 pr-3">{row.duplicatePlayerMappingGroups}</td>
                   <td className="py-3 pr-3">{row.duplicateTeamMappingGroups}</td>
                 </tr>

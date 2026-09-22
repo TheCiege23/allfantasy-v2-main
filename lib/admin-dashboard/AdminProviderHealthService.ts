@@ -421,10 +421,23 @@ function providerEnvStatus(providerNames: string[]) {
   return { configured, missing }
 }
 
+/**
+ * Standings are written with a ~6h expiry each time the standings cron refreshes them; a key
+ * still past its expiry after this long means nothing has refreshed it in about two days.
+ */
+const STANDINGS_STALE_AFTER_EXPIRY_MS = 48 * 60 * 60 * 1000
+
 async function standingsCountForSport(sport: string): Promise<number | null> {
   const lower = sport.toLowerCase()
   return safeCount("sportsDataCache", {
     where: {
+      /*
+       * ⚠ PRESENCE IS NOT CURRENCY. Counted without this, SOCCER standings read present on
+       * 2026-09-22 from 20 keys whose expiry was 2026-04-25 — five months unrefreshed, shown
+       * as "no critical gaps". Rows are never evicted on expiry, so a dead writer's last
+       * output reads as live forever unless the expiry is consulted.
+       */
+      expiresAt: { gt: new Date(Date.now() - STANDINGS_STALE_AFTER_EXPIRY_MS) },
       OR: [
         { cacheKey: { contains: `${sport}:standings:` } },
         { cacheKey: { contains: `${lower}:standings:` } },

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
+import { normalizePlayerName } from "@/lib/player-assets/resolvePlayerHeadshot"
 
 export type SportsIdentityHealthStatus = "ready" | "partial" | "missing"
 
@@ -32,6 +33,8 @@ export type SportsImageHealthRow = {
   sport: string
   label: string
   playersMissingHeadshots: number
+  /** Denominator for playersMissingHeadshots: people when measured per person, else rows. */
+  playersAudited: number
   teamsMissingLogos: number
   duplicateHeadshotGroups: number
   duplicateLogoGroups: number
@@ -63,9 +66,19 @@ export type SportsProviderMappingHealthRow = {
   providerTeamRows: number
   mappedTeamRows: number
   unmappedProviderTeams: number
+  /**
+   * False when there is no team reference to compare against (team_assets is empty for the
+   * sport). The team columns are then NOT a measurement, and must render as such rather than
+   * as "every team unmapped".
+   */
+  teamMappingMeasured: boolean
   duplicatePlayerMappingGroups: number
   duplicateTeamMappingGroups: number
-  status: SportsIdentityHealthStatus
+  /**
+   * `not_applicable`: this provider holds nothing for this sport and never has (no player rows,
+   * no team rows, no mapped ids) — e.g. CFBD×NFL, Sleeper×MLB. That is coverage, not a defect.
+   */
+  status: SportsIdentityHealthStatus | "not_applicable"
 }
 
 export type SportsIdentityHealthSnapshot = {
@@ -95,6 +108,8 @@ export type SportsProviderMappingAggregate = {
   providerTeamRows?: number | null
   mappedTeamRows?: number | null
   unmappedProviderTeams?: number | null
+  /** See SportsProviderMappingHealthRow.teamMappingMeasured. Absent means measured. */
+  teamMappingMeasured?: boolean
   duplicatePlayerMappingGroups?: number | null
   duplicateTeamMappingGroups?: number | null
 }
@@ -124,6 +139,14 @@ export type SportsIdentityHealthAggregate = {
   teamMappingMismatches?: number | null
   playersMissingHeadshots?: number | null
   playerRecordsMissingHeadshots?: number | null
+  /**
+   * PEOPLE with no photo source anywhere, grouped by normalized name across every provider row
+   * and sports_players. When present it replaces the two per-row counts above, which counted a
+   * Rolling Insights row as "missing" even when TheSportsDB or Sleeper held that player's photo.
+   */
+  peopleMissingHeadshots?: number | null
+  /** People audited for the headshot count — its denominator. */
+  peopleCount?: number | null
   teamsMissingLogos?: number | null
   teamAssetsMissingLogos?: number | null
   duplicateHeadshotGroups?: number | null
@@ -292,7 +315,16 @@ export function buildSportsIdentityHealthSnapshot(input: {
 
   const imageRows: SportsImageHealthRow[] = input.rows.map((row) => {
     const playerCount = n(row.playerCount) + n(row.sportsPlayerRecordCount)
-    const playersMissingHeadshots = n(row.playersMissingHeadshots) + n(row.playerRecordsMissingHeadshots)
+    /*
+     * ⚠ PER PERSON, NOT PER PROVIDER ROW. The per-row sum reported 24,894 NFL players without a
+     * headshot on 2026-09-22; grouped by person across every source it is 28. Rolling Insights
+     * publishes almost no images, so every RI row read as "missing" even when TheSportsDB or
+     * Sleeper held that player's photo — which is exactly where the headshot resolver finds it.
+     */
+    const playersMissingHeadshots =
+      row.peopleMissingHeadshots != null
+        ? n(row.peopleMissingHeadshots)
+        : n(row.playersMissingHeadshots) + n(row.playerRecordsMissingHeadshots)
     const teamsMissingLogos = n(row.teamsMissingLogos) + n(row.teamAssetsMissingLogos)
     const problemCount =
       playersMissingHeadshots +
@@ -313,6 +345,7 @@ export function buildSportsIdentityHealthSnapshot(input: {
       sport: row.sport,
       label: row.label,
       playersMissingHeadshots,
+      playersAudited: row.peopleMissingHeadshots != null ? n(row.peopleCount) : playerCount,
       teamsMissingLogos,
       duplicateHeadshotGroups: n(row.duplicateHeadshotGroups),
       duplicateLogoGroups: n(row.duplicateLogoGroups),
@@ -326,17 +359,28 @@ export function buildSportsIdentityHealthSnapshot(input: {
   const providerRows: SportsProviderMappingHealthRow[] = input.rows.flatMap((row) => {
     const providerMappings = row.providerMappings ?? []
     return providerMappings.map((provider) => {
+      /*
+       * ⚠ `??`, NOT `||`. With `||` a MEASURED zero ("every row maps") fell through to the
+       * rows-minus-mapped estimate, so a provider that was fully mapped could still report
+       * unmapped rows. The estimate is only for a caller that did not measure at all.
+       */
       const unmappedProviderPlayers =
-        n(provider.unmappedProviderPlayers) ||
+        provider.unmappedProviderPlayers ??
         Math.max(0, n(provider.providerPlayerRows) - n(provider.mappedPlayerIds))
-      const unmappedProviderTeams =
-        n(provider.unmappedProviderTeams) ||
-        Math.max(0, n(provider.providerTeamRows) - n(provider.mappedTeamRows))
+      const teamMappingMeasured = provider.teamMappingMeasured !== false
+      const unmappedProviderTeams = teamMappingMeasured
+        ? (provider.unmappedProviderTeams ??
+          Math.max(0, n(provider.providerTeamRows) - n(provider.mappedTeamRows)))
+        : 0
       const problemCount =
         unmappedProviderPlayers +
         unmappedProviderTeams +
         n(provider.duplicatePlayerMappingGroups) +
         n(provider.duplicateTeamMappingGroups)
+      const holdsNothing =
+        n(provider.providerPlayerRows) === 0 &&
+        n(provider.providerTeamRows) === 0 &&
+        n(provider.mappedPlayerIds) === 0
 
       return {
         id: `${row.id}:${provider.provider.toLowerCase().replace(/\s+/g, "-")}`,
@@ -349,9 +393,12 @@ export function buildSportsIdentityHealthSnapshot(input: {
         providerTeamRows: n(provider.providerTeamRows),
         mappedTeamRows: n(provider.mappedTeamRows),
         unmappedProviderTeams,
+        teamMappingMeasured,
         duplicatePlayerMappingGroups: n(provider.duplicatePlayerMappingGroups),
         duplicateTeamMappingGroups: n(provider.duplicateTeamMappingGroups),
-        status: statusFor(n(provider.providerPlayerRows) + n(provider.providerTeamRows), problemCount),
+        status: holdsNothing
+          ? ("not_applicable" as const)
+          : statusFor(n(provider.providerPlayerRows) + n(provider.providerTeamRows), problemCount),
       }
     })
   })
@@ -431,9 +478,14 @@ export function buildSportsIdentityHealthSnapshot(input: {
           label: row.label,
           category: "image" as const,
           count: row.playersMissingHeadshots,
-          total: rows.find((identity) => identity.id === row.id)?.playerCount ?? 0,
-          message: "Players missing usable headshot URLs.",
-          recommendation: "Backfill from configured media providers or show deterministic initials fallback.",
+          // Per-person count → per-person denominator, or severity is judged on the wrong base.
+          total:
+            input.rows.find((aggregate) => aggregate.id === row.id)?.peopleCount ??
+            rows.find((identity) => identity.id === row.id)?.playerCount ??
+            0,
+          message: "Players with no photo from any provider (initials fallback shown).",
+          recommendation:
+            "Mostly players only Rolling Insights carries, which publishes almost no images. Add a media source for them, or accept the initials fallback.",
         }),
         topProblem({
           id: `${row.id}:missing-logos`,
@@ -685,7 +737,7 @@ export async function buildProviderMappingAggregate(
       .map((value) => value.trim().toLowerCase())
   )
   const unmappedProviderPlayers = playerRows.filter((row) => {
-    const externalId = typeof row.externalId === "string" ? row.externalId.trim().toLowerCase() : ""
+    const externalId = providerLocalId(row.externalId, mapping.aliases)
     return Boolean(externalId) && !mappedPlayerIds.has(externalId)
   }).length
 
@@ -712,9 +764,32 @@ export async function buildProviderMappingAggregate(
     providerTeamRows,
     mappedTeamRows,
     unmappedProviderTeams: Math.max(0, providerTeamRows - mappedTeamRows),
+    /*
+     * ⚠ NO REFERENCE, NO MEASUREMENT. team_assets held zero rows for every sport on 2026-09-22,
+     * so knownTeamKeys was empty and EVERY provider team read as unmapped — 32 NFL teams from
+     * Rolling Insights, 900 soccer teams from ClearSports. That is the reference table being
+     * empty, not the teams being wrong.
+     */
+    teamMappingMeasured: teamAssetRowCount > 0,
     duplicatePlayerMappingGroups,
     duplicateTeamMappingGroups,
   }
+}
+
+/**
+ * The provider's own id for a SportsPlayer row, as PlayerIdentityMap stores it.
+ *
+ * ⚠ SLEEPER ROWS ARE WRITTEN AS `sleeper:3694`; PlayerIdentityMap.sleeperId holds `3694`.
+ * Compared raw, not one NFL Sleeper player ever matched: the panel reported all 11,960 as
+ * unmapped while 8,964 of them were mapped (measured 2026-09-22). Only a prefix that names
+ * THIS provider is stripped — `name:` fallback ids stay as they are and stay unmatched.
+ */
+export function providerLocalId(externalId: unknown, aliases: readonly string[]): string {
+  const value = typeof externalId === "string" ? externalId.trim().toLowerCase() : ""
+  const colon = value.indexOf(":")
+  if (colon <= 0) return value
+  const prefix = value.slice(0, colon)
+  return aliases.includes(prefix) ? value.slice(colon + 1) : value
 }
 
 async function teamMappingMismatchCount(sport: string): Promise<number> {
@@ -764,6 +839,8 @@ async function teamMappingMismatchCount(sport: string): Promise<number> {
 
 async function buildAggregateForSport(row: (typeof SPORTS_TO_AUDIT)[number]): Promise<SportsIdentityHealthAggregate> {
   const sport = row.sport
+  // Started first so it overlaps the count batch below rather than following it.
+  const peopleWork = peopleHeadshotCoverage(sport)
   const missingProviderWhere = {
     sport,
     AND: [
@@ -859,7 +936,14 @@ async function buildAggregateForSport(row: (typeof SPORTS_TO_AUDIT)[number]): Pr
         status: { contains: "active", mode: "insensitive" },
         // ⚠ `contains: "active"` also matches "inactive", which counted every inactive
         // player without a team as an ACTIVE one missing its team.
-        NOT: { status: { contains: "inactive", mode: "insensitive" } },
+        // ⚠ AND SLEEPER'S "Active" WITH NO TEAM IS A FREE AGENT — that is Sleeper's model of
+        // an unsigned player, not a missing value. 5,295 of the 5,296 NFL rows this reported on
+        // 2026-09-22 were exactly that, under a "refresh rosters" recommendation that no roster
+        // refresh could ever satisfy.
+        AND: [
+          { NOT: { status: { contains: "inactive", mode: "insensitive" } } },
+          { NOT: { source: { equals: "sleeper", mode: "insensitive" } } },
+        ],
         OR: [{ team: null }, { team: "" }],
       },
     }),
@@ -895,9 +979,12 @@ async function buildAggregateForSport(row: (typeof SPORTS_TO_AUDIT)[number]): Pr
     safeCount("sportsTeam", { where: { sport, ...invalidUrl("logo") } }),
     safeCount("teamAsset", { where: { sport, ...invalidUrl("logoUrl") } }),
   ])
+  const people = await peopleWork
 
   return {
     ...row,
+    peopleCount: people?.people ?? null,
+    peopleMissingHeadshots: people?.missing ?? null,
     playerCount,
     sportsPlayerRecordCount,
     teamCount,
@@ -997,7 +1084,94 @@ async function buildAggregateForWorldCup(
   }
 }
 
-export async function getSportsIdentityHealthSnapshot(): Promise<SportsIdentityHealthSnapshot> {
+/**
+ * People (not provider rows) with no photo source, for one sport.
+ *
+ * Every SportsPlayer and sports_players row is grouped by the headshot resolver's own
+ * normalizePlayerName — the rule it uses to find a photo by name — so a person counts as
+ * covered when ANY source holds an image for them. For NFL a Sleeper id is itself a photo
+ * source: Sleeper's CDN serves a headshot for every player id, and the resolver uses it.
+ *
+ * ⚠ A GROUP IS A NAME, SO TWO DIFFERENT PEOPLE WHO SHARE ONE COUNT ONCE. That can only
+ * UNDER-report, and only among namesakes; the per-row count it replaces over-reported by
+ * three orders of magnitude for NFL. Team is deliberately not in the key: providers disagree
+ * on team codes ("KC" vs "Kansas City Chiefs"), which would split one person into several.
+ *
+ * Returns null when either read fails, so the caller falls back to the per-row count
+ * instead of presenting a partial read as a measurement.
+ */
+export async function peopleHeadshotCoverage(sport: string): Promise<{ people: number; missing: number } | null> {
+  const [playerTotal, recordTotal] = await Promise.all([
+    safeCount("sportsPlayer", { where: { sport } }),
+    safeCount("sportsPlayerRecord", { where: { sport } }),
+  ])
+  const [players, records] = await Promise.all([
+    safeFindManyAll(
+      "sportsPlayer",
+      { where: { sport }, select: { name: true, imageUrl: true, sleeperId: true, source: true } },
+      playerTotal
+    ),
+    safeFindManyAll(
+      "sportsPlayerRecord",
+      { where: { sport }, select: { name: true, headshotUrl: true, headshotUrlSm: true, headshotUrlLg: true } },
+      recordTotal
+    ),
+  ])
+  if (players.length < playerTotal || records.length < recordTotal) return null
+
+  const hasText = (value: unknown) => typeof value === "string" && value.trim().length > 0
+  const covered = new Map<string, boolean>()
+  const mark = (name: unknown, hasImage: boolean) => {
+    const key = normalizePlayerName(typeof name === "string" ? name : "")
+    if (!key) return
+    covered.set(key, (covered.get(key) ?? false) || hasImage)
+  }
+  for (const row of players) {
+    const sleeperPhoto =
+      sport === "NFL" && (hasText(row.sleeperId) || String(row.source ?? "").toLowerCase() === "sleeper")
+    mark(row.name, hasText(row.imageUrl) || sleeperPhoto)
+  }
+  for (const row of records) {
+    mark(row.name, hasText(row.headshotUrl) || hasText(row.headshotUrlSm) || hasText(row.headshotUrlLg))
+  }
+  let missing = 0
+  for (const hasImage of covered.values()) if (!hasImage) missing++
+  return { people: covered.size, missing }
+}
+
+/*
+ * ⚠ CACHED, BECAUSE /admin NOW REFRESHES EVERY MINUTE. This snapshot pages through every
+ * provider's player rows for eight sports (hundreds of thousands of rows) and ran on every
+ * render. It is a data-quality audit whose numbers move over hours; ten minutes of cache
+ * cannot change a verdict, and without it an open /admin tab re-ran the whole audit sixty
+ * times an hour.
+ */
+const SNAPSHOT_CACHE_MS = 10 * 60_000
+let snapshotCache: { at: number; value: Promise<SportsIdentityHealthSnapshot> } | null = null
+
+export async function getSportsIdentityHealthSnapshot(
+  options: { fresh?: boolean } = {}
+): Promise<SportsIdentityHealthSnapshot> {
+  const now = Date.now()
+  // `fresh` is for an operator's explicit "refresh identity health" action, which must not
+  // answer with a number up to ten minutes old.
+  if (!options.fresh && snapshotCache && now - snapshotCache.at < SNAPSHOT_CACHE_MS) return snapshotCache.value
+  // The PROMISE is cached, so concurrent renders share one audit rather than each starting one.
+  const value = computeSportsIdentityHealthSnapshot()
+  snapshotCache = { at: now, value }
+  // A failed audit is not kept: the next render retries instead of serving the failure for 10 min.
+  value.catch(() => {
+    if (snapshotCache?.value === value) snapshotCache = null
+  })
+  return value
+}
+
+/** Test seam. */
+export function resetSportsIdentityHealthSnapshotCache() {
+  snapshotCache = null
+}
+
+async function computeSportsIdentityHealthSnapshot(): Promise<SportsIdentityHealthSnapshot> {
   const rows = await Promise.all(
     SPORTS_TO_AUDIT.map((row) =>
       row.id === "world-cup" ? buildAggregateForWorldCup(row) : buildAggregateForSport(row)
