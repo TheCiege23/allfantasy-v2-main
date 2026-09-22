@@ -1,7 +1,7 @@
 import 'server-only'
 
 /**
- * ESPN standings ingestion — NFL and NCAAF, no API key required.
+ * ESPN standings ingestion — NFL, NCAAF, MLB, NBA and NHL, no API key required.
  *
  * WHY THIS EXISTS
  * `/api/cron/import-standings` runs every four hours and had written nothing since
@@ -55,6 +55,8 @@ const ESPN_STANDINGS_PATH: Record<string, string> = {
   NFL: 'football/nfl',
   NCAAF: 'football/college-football',
   MLB: 'baseball/mlb',
+  NBA: 'basketball/nba',
+  NHL: 'hockey/nhl',
 }
 
 /**
@@ -82,10 +84,30 @@ const ESPN_STANDINGS_PATH: Record<string, string> = {
  * is empty fall back to the previous one, which is the most recent real
  * standings and exactly what a postseason seeding source wants anyway.
  */
-const SEASON_SOURCE: Record<string, 'payload' | 'current-with-fallback'> = {
+/*
+ * 🛑 `split-year` — NBA and NHL seasons span two calendar years, and two separate things about
+ * ESPN's default request are wrong for them. Measured 2026-09-22:
+ *  - ESPN names a season by the year it ENDS (`2027` = 2026-27). This repo keys seasons by the
+ *    year they START (lib/sports-data/seasonLabel.ts `seasonStartYear`), so the cache key is the
+ *    ESPN year minus one.
+ *  - The un-parameterised request serves the PRESEASON (`seasonType 1`): NHL came back with 22
+ *    wins across the league in September, from exhibition games. `seasontype=2` is asked for
+ *    explicitly.
+ * And like MLB, a regular season with no games played yet (0 wins league-wide, every row 0-0) is
+ * the offseason signal: fall back to the previous season, the most recent real standings.
+ */
+const SEASON_SOURCE: Record<string, 'payload' | 'current-with-fallback' | 'split-year'> = {
   NFL: 'payload',
   NCAAF: 'payload',
   MLB: 'current-with-fallback',
+  NBA: 'split-year',
+  NHL: 'split-year',
+}
+
+/** ESPN's name for the split-year season in progress (or next up): the year it ends. */
+function espnSplitSeasonEndYear(now: Date): number {
+  // July onward belongs to the season that starts that autumn.
+  return now.getUTCMonth() >= 6 ? now.getUTCFullYear() + 1 : now.getUTCFullYear()
 }
 
 export function espnHasStandings(sport: string): boolean {
@@ -165,7 +187,7 @@ export async function syncEspnStandingsToDb(opts: {
   const expiresAt = new Date(now.getTime() + STANDINGS_TTL_MS)
 
   /* This module IS the ingestion boundary: provider fetch -> SportsDataCache upsert. */
-  async function fetchStandings(season?: string | number): Promise<Record<string, any> | null> {
+  async function fetchStandings(season?: string | number, seasonType?: number): Promise<Record<string, any> | null> {
     // db-first-exception: standings ingestion writer, not a read path
     const url = new URL(`${ESPN_V2_API_BASE}/${path}/standings`)
     /*
@@ -173,6 +195,7 @@ export async function syncEspnStandingsToDb(opts: {
      * football request stays byte-identical to the one verified live.
      */
     if (season != null) url.searchParams.set('season', String(season))
+    if (seasonType != null) url.searchParams.set('seasontype', String(seasonType))
     try {
       const res = await fetch(url.toString(), {
         headers: { accept: 'application/json' },
@@ -201,11 +224,31 @@ export async function syncEspnStandingsToDb(opts: {
   let rows: Array<{ team: any; stats: EspnStatEntry[]; group: string | null }>
   let season: string
 
-  if (opts.season != null) {
+  if (opts.season != null && seasonSource === 'split-year') {
+    // Backfill path, in THIS repo's start-year convention: `2025` means 2025-26, ESPN's 2026.
+    payload = await fetchStandings(Number(opts.season) + 1, 2)
+    rows = entriesOf(payload)
+    season = String(opts.season)
+  } else if (opts.season != null) {
     // An explicit season always wins, for every sport — this is the backfill path.
     payload = await fetchStandings(opts.season)
     rows = entriesOf(payload)
     season = String(opts.season)
+  } else if (seasonSource === 'split-year') {
+    const endYear = espnSplitSeasonEndYear(now)
+    payload = await fetchStandings(endYear, 2)
+    rows = entriesOf(payload)
+    season = String(endYear - 1)
+    const gamesPlayed = rows.reduce((sum, r) => sum + (stat(r.stats, 'wins') ?? 0) + (stat(r.stats, 'losses') ?? 0), 0)
+    if (rows.length === 0 || gamesPlayed === 0) {
+      const fallback = await fetchStandings(endYear - 1, 2)
+      const fallbackRows = entriesOf(fallback)
+      if (fallbackRows.length > 0) {
+        payload = fallback
+        rows = fallbackRows
+        season = String(endYear - 2)
+      }
+    }
   } else if (seasonSource === 'current-with-fallback') {
     const currentYear = now.getUTCFullYear()
     payload = await fetchStandings(currentYear)
@@ -251,6 +294,8 @@ export async function syncEspnStandingsToDb(opts: {
       won: stat(row.stats, 'wins'),
       lost: stat(row.stats, 'losses'),
       tied: stat(row.stats, 'ties'),
+      // NHL's third column. Null for every other sport, so no existing reader sees a change.
+      otLost: stat(row.stats, 'otLosses', 'OTLosses'),
       pointsFor: stat(row.stats, 'pointsFor', 'points for'),
       pointsAgainst: stat(row.stats, 'pointsAgainst', 'points against'),
       conference: row.group,

@@ -56,6 +56,8 @@ export type AdminSportDataReliabilityRow = {
     injuries: number | null
     news: number | null
     playerStats: number | null
+    /** AFProjectionSnapshot + fantasy_projections. Optional: World Cup has no projections. */
+    projections?: number | null
   }
   lastSyncAtByType: Record<string, string | null>
   staleWarnings: string[]
@@ -454,6 +456,10 @@ async function buildGenericSportReliabilityRow(input: {
     playerNews,
     playerStats,
     playerGameLogs,
+    statLines,
+    playerGameStats,
+    afProjections,
+    fantasyProjections,
     teamsSync,
     playersSync,
     schedulesSync,
@@ -464,6 +470,10 @@ async function buildGenericSportReliabilityRow(input: {
     playerNewsSync,
     playerStatsSync,
     playerGameLogsSync,
+    statLinesSync,
+    playerGameStatsSync,
+    afProjectionsSync,
+    fantasyProjectionsSync,
   ] = await Promise.all([
     safeCount("sportsTeam", { where: { sport } }),
     safeCount("sportsPlayer", { where: { sport } }),
@@ -477,6 +487,17 @@ async function buildGenericSportReliabilityRow(input: {
     safeCount("playerNewsRecord", { where: { sport } }),
     safeCount("playerSeasonStats", { where: { sport } }),
     safeCount("playerGameLogCache", { where: { sport } }),
+    /*
+     * ⚠ THE PLAYER-STAT AND PROJECTION WRITERS DO NOT WRITE THE TWO TABLES ABOVE. CFBD and Rolling
+     * Insights stat imports write `fantasy_stat_lines`; the RI /live sweep writes `player_game_stats`
+     * (soccer never reaches `playerGameLogCache`); projections live in `AFProjectionSnapshot` and
+     * `fantasy_projections`. Counting only the cache tables reported NCAAF/NCAAB/Soccer player stats
+     * missing while ~13k NCAAF stat lines sat in the table.
+     */
+    safeCount("fantasyStatLine", { where: { sport } }),
+    safeCount("playerGameStat", { where: { sportType: sport } }),
+    safeCount("aFProjectionSnapshot", { where: { sport } }),
+    safeCount("fantasyProjection", { where: { sport } }),
     latestFieldIso("sportsTeam", "fetchedAt", { where: { sport } }),
     latestFieldIso("sportsPlayer", "fetchedAt", { where: { sport } }),
     latestFieldIso("gameSchedule", "updatedAt", { where: { sportType: sport } }),
@@ -487,24 +508,37 @@ async function buildGenericSportReliabilityRow(input: {
     latestFieldIso("playerNewsRecord", "publishedAt", { where: { sport } }),
     latestFieldIso("playerSeasonStats", "updatedAt", { where: { sport } }),
     latestFieldIso("playerGameLogCache", "syncedAt", { where: { sport } }),
+    latestFieldIso("fantasyStatLine", "fetchedAt", { where: { sport } }),
+    latestFieldIso("playerGameStat", "updatedAt", { where: { sportType: sport } }),
+    latestFieldIso("aFProjectionSnapshot", "computedAt", { where: { sport } }),
+    latestFieldIso("fantasyProjection", "fetchedAt", { where: { sport } }),
   ])
 
   const injuryCount = (sportsInjuries ?? 0) + (injuryReports ?? 0)
   const newsCount = (sportsNews ?? 0) + (playerNews ?? 0)
-  const playerStatsCount = (playerStats ?? 0) + (playerGameLogs ?? 0)
+  const playerStatsCount = (playerStats ?? 0) + (playerGameLogs ?? 0) + (statLines ?? 0) + (playerGameStats ?? 0)
+  const projectionsCount = (afProjections ?? 0) + (fantasyProjections ?? 0)
+  /*
+   * ⚠ SCHEDULES ARE MOSTLY IN `sports_games`, NOT `game_schedules`. The scheduled import-schedules
+   * cron (TheSportsDB, every sport) writes SportsGame; game_schedules is written only by the NFL
+   * foundation sync and admin/lazy paths. Counting game_schedules alone reported schedules missing
+   * for six sports whose Live scores cell — the same SportsGame rows — read Ready.
+   */
+  const schedulesCount = (schedules ?? 0) + (games ?? 0)
   const lastSyncAtByType = {
     teams: teamsSync,
     players: playersSync,
-    schedules: schedulesSync,
+    schedules: latestIso([schedulesSync, gamesSync]),
     games: gamesSync,
     injuries: latestIso([injuriesSync, injuryReportsSync]),
     news: latestIso([newsSync, playerNewsSync]),
-    playerStats: latestIso([playerStatsSync, playerGameLogsSync]),
+    playerStats: latestIso([playerStatsSync, playerGameLogsSync, statLinesSync, playerGameStatsSync]),
+    projections: latestIso([afProjectionsSync, fantasyProjectionsSync]),
   }
   const staleWarnings = [
     teams === 0 ? "No teams imported" : null,
     players === 0 ? "No players imported" : null,
-    (schedules ?? 0) + (games ?? 0) === 0 ? "No schedules/games imported" : null,
+    schedulesCount === 0 ? "No schedules/games imported" : null,
     injuryCount === 0 ? "No injuries imported" : null,
     newsCount === 0 ? "No news imported" : null,
     isOlderThan(lastSyncAtByType.games, 24) && (games ?? 0) > 0 ? "Games data older than 24h" : null,
@@ -520,13 +554,14 @@ async function buildGenericSportReliabilityRow(input: {
     counts: {
       teams,
       players,
-      schedules,
+      schedules: schedulesCount,
       games,
       liveScores,
       standings,
       injuries: injuryCount,
       news: newsCount,
       playerStats: playerStatsCount,
+      projections: projectionsCount,
     },
     lastSyncAtByType,
     staleWarnings,

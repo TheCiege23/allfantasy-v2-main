@@ -54,6 +54,10 @@ const prismaMock = vi.hoisted(() => ({
   sportsDataCache: {
     count: vi.fn(),
   },
+  fantasyStatLine: { count: vi.fn(), findFirst: vi.fn() },
+  playerGameStat: { count: vi.fn(), findFirst: vi.fn() },
+  aFProjectionSnapshot: { count: vi.fn(), findFirst: vi.fn() },
+  fantasyProjection: { count: vi.fn(), findFirst: vi.fn() },
   worldCupTeam: {
     count: vi.fn(),
     findFirst: vi.fn(),
@@ -368,5 +372,35 @@ describe("AdminProviderHealthService", () => {
       configuredProviders: expect.arrayContaining(["CFBD", "NewsAPI", "OpenAI"]),
     })
     fetchSpy.mockRestore()
+  })
+
+  it("counts schedules, player stats and projections from the tables their writers actually use", async () => {
+    // TheSportsDB import-schedules writes SportsGame, not game_schedules.
+    prismaMock.sportsGame.count.mockImplementation(async ({ where }: { where?: { sport?: string; source?: unknown } }) =>
+      where?.sport === "MLB" && !where?.source ? 2430 : 0
+    )
+    prismaMock.gameSchedule.count.mockResolvedValue(0)
+    // CFBD stat imports write fantasy_stat_lines; the RI /live sweep writes player_game_stats.
+    prismaMock.fantasyStatLine.count.mockImplementation(async ({ where }: { where?: { sport?: string } }) =>
+      where?.sport === "NCAAF" ? 13433 : 0
+    )
+    prismaMock.playerGameStat.count.mockImplementation(async ({ where }: { where?: { sportType?: string } }) =>
+      where?.sportType === "SOCCER" ? 800 : 0
+    )
+    prismaMock.aFProjectionSnapshot.count.mockImplementation(async ({ where }: { where?: { sport?: string } }) =>
+      where?.sport === "NFL" ? 4000 : 0
+    )
+    prismaMock.fantasyProjection.count.mockImplementation(async ({ where }: { where?: { sport?: string } }) =>
+      where?.sport === "NFL" ? 200 : 0
+    )
+
+    const { getAdminPerSportDataReliabilityRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+    const rows = await getAdminPerSportDataReliabilityRows()
+    const byId = (id: string) => rows.find((row) => row.id === id)
+
+    expect(byId("mlb")?.counts.schedules).toBe(2430)
+    expect(byId("ncaaf")?.counts.playerStats).toBe(13433)
+    expect(byId("soccer")?.counts.playerStats).toBe(800)
+    expect(byId("nfl")?.counts.projections).toBe(4200)
   })
 })
