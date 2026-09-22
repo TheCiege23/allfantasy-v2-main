@@ -15,7 +15,7 @@ import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
-import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
+import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
@@ -1264,7 +1264,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   useEffect(() => {
     setRailClock(Date.now())
     const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
-    const refreshMs = coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0)
+    // Per SCREEN: a screen with no live value keeps the idle cadence on game days too.
+    const refreshMs = shellRouteRefreshMs(active, Boolean(props.gameDayActive), props.liveGameCount ?? 0)
     const refresh = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
       if (shellRefreshPendingRef.current) return
@@ -1277,7 +1278,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       window.clearInterval(clock)
       window.clearInterval(refresh)
     }
-  }, [props.gameDayActive, props.liveGameCount, router])
+  }, [active, props.gameDayActive, props.liveGameCount, router])
 
   /* Show the consequence of a scoring update, rather than making the manager
      compare two tiny totals from memory. In elimination leagues the survival
