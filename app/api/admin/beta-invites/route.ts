@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { requireAdmin } from "@/lib/adminAuth"
 import { resolveAdminAuditIdentity } from "@/lib/admin-audit-identity"
+import { getDeploymentIdentity } from "@/lib/admin-dashboard/deploymentIdentity"
 import { getServedOrigin } from "@/lib/http/served-origin"
 import { issueInvite, listInvites, revokeInvite } from "@/lib/beta-invite/betaAdmissionService"
 import { normalizeEmail } from "@/lib/beta-invite/betaAdmissionService"
@@ -37,8 +38,10 @@ function isMissingTableError(error: unknown): boolean {
 
 /** Non-sensitive deployment classification for the build marker + safe diagnostics. */
 function deploymentInfo() {
-  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown"
-  const commit = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "unknown"
+  // deploymentIdentity knows Railway, where production runs; the Vercel-only read here said "unknown".
+  const identity = getDeploymentIdentity()
+  const env = identity.environment
+  const commit = identity.commitShaShort ?? "unknown"
   let dbHost = "unset"
   try {
     const raw = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.DIRECT_URL || ""

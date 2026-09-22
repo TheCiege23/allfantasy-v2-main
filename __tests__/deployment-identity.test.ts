@@ -11,6 +11,16 @@ const ENV_KEYS = [
   "VERCEL_GIT_COMMIT_MESSAGE",
   "VERCEL_URL",
   "VERCEL_REGION",
+  "BUILD_SHA",
+  "RAILWAY_ENVIRONMENT_NAME",
+  "RAILWAY_DEPLOYMENT_ID",
+  "RAILWAY_SERVICE_NAME",
+  "RAILWAY_GIT_COMMIT_SHA",
+  "RAILWAY_GIT_BRANCH",
+  "RAILWAY_GIT_COMMIT_MESSAGE",
+  "RAILWAY_PUBLIC_DOMAIN",
+  "RAILWAY_REPLICA_REGION",
+  "NODE_ENV",
   "DATABASE_URL",
 ] as const
 
@@ -85,7 +95,26 @@ describe("getDeploymentIdentity — environment resolution", () => {
     process.env.NODE_ENV = "production"
     const identity = getDeploymentIdentity()
     expect(identity.environment).toBe("development")
-    expect(identity.environmentLabel).toBe("PRODUCTION BUILD (not on Vercel)")
+    expect(identity.environmentLabel).toBe("PRODUCTION BUILD (not deployed)")
+  })
+
+  it("reports production on Railway, which sets no VERCEL_ENV", () => {
+    // Production has run on Railway since 2026-09-02. Without this, the live deploy
+    // fell through to the local-build branch above and called itself DEVELOPMENT.
+    process.env.NODE_ENV = "production"
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production"
+    const identity = getDeploymentIdentity()
+    expect(identity.environment).toBe("production")
+    expect(identity.environmentLabel).toBe("PRODUCTION")
+    expect(identity.platform).toBe("railway")
+  })
+
+  it("reports any other Railway environment as preview, never production", () => {
+    process.env.NODE_ENV = "production"
+    process.env.RAILWAY_ENVIRONMENT_NAME = "staging"
+    const identity = getDeploymentIdentity()
+    expect(identity.environment).toBe("preview")
+    expect(identity.environmentLabel).toBe("PREVIEW (staging)")
   })
 
   it("marks an explicit override so a mislabeled environment is visible", () => {
@@ -117,6 +146,28 @@ describe("getDeploymentIdentity — build identity", () => {
     expect(identity.commitShaShort).toBe("e61a638")
     expect(identity.commitRef).toBe("main")
     expect(identity.commitMessageSubject).toBe("fix(decision-os): Truth Phase 1")
+  })
+
+  it("reads the Railway commit, so the admin header can prove which build is live", () => {
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production"
+    process.env.RAILWAY_DEPLOYMENT_ID = "e44233f0-aaac-4bdd-be28-37ded8e64576"
+    process.env.RAILWAY_SERVICE_NAME = "allfantasy-v2-main"
+    process.env.RAILWAY_GIT_COMMIT_SHA = "2a651a8c6e790dc3997190702c33ae23a4444ebe"
+    process.env.RAILWAY_GIT_BRANCH = "main"
+    process.env.RAILWAY_GIT_COMMIT_MESSAGE = "fix(admin): keep the Command Center current\n\nbody ignored"
+
+    const identity = getDeploymentIdentity()
+    expect(identity.commitShaShort).toBe("2a651a8")
+    expect(identity.deploymentId).toBe("e44233f0-aaac-4bdd-be28-37ded8e64576")
+    expect(identity.serviceName).toBe("allfantasy-v2-main")
+    expect(identity.commitRef).toBe("main")
+    expect(identity.commitMessageSubject).toBe("fix(admin): keep the Command Center current")
+  })
+
+  it("prefers BUILD_SHA like /api/af-debug/sha, so the two never disagree", () => {
+    process.env.BUILD_SHA = "1111111aaaaaaa"
+    process.env.RAILWAY_GIT_COMMIT_SHA = "2222222bbbbbbb"
+    expect(getDeploymentIdentity().commitShaShort).toBe("1111111")
   })
 
   it("reports null — not a plausible placeholder — when the build reported no commit", () => {

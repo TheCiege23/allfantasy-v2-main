@@ -24,7 +24,11 @@ export type DeploymentEnvironmentKey = "production" | "preview" | "development"
  * that reads as absence of a problem.
  */
 export type DeploymentIdentity = {
-  /** Vercel deployment id (dpl_…) — the join key back to the Vercel API/dashboard. */
+  /** Which host reported this identity; null when neither platform's variables are present. */
+  platform: "railway" | "vercel" | null
+  /** Railway service name (web and worker deploy from the same repo). Null off Railway. */
+  serviceName: string | null
+  /** Railway deployment id, or Vercel's dpl_… — the join key back to the host's dashboard. */
   deploymentId: string | null
   commitSha: string | null
   commitShaShort: string | null
@@ -82,14 +86,28 @@ function resolveEnvironment(): {
   const nodeEnv = normalize(process.env.NODE_ENV)
   const vercelEnv = normalize(process.env.VERCEL_ENV)
 
+  /*
+   * ⚠ PRODUCTION RUNS ON RAILWAY (since 2026-09-02), WHICH SETS NO VERCEL_ENV.
+   * Until this branch the real production deploy fell through to the
+   * "not deployed" case below and reported itself as DEVELOPMENT. Railway's
+   * environment name is the equivalent signal; any other Railway environment
+   * is a non-production deploy, which is what "preview" means here.
+   */
+  const railwayEnv = normalize(process.env.RAILWAY_ENVIRONMENT_NAME)?.toLowerCase()
+  if (railwayEnv) {
+    return railwayEnv === "production"
+      ? { key: "production", label: "PRODUCTION", overridden: false }
+      : { key: "preview", label: `PREVIEW (${railwayEnv})`, overridden: false }
+  }
+
   if (vercelEnv === "production") return { key: "production", label: "PRODUCTION", overridden: false }
   if (vercelEnv === "preview") return { key: "preview", label: "PREVIEW", overridden: false }
   if (vercelEnv === "development") return { key: "development", label: "DEVELOPMENT", overridden: false }
 
-  // No VERCEL_ENV: a production NODE_ENV build running outside Vercel is NOT production.
-  // Saying so plainly prevents a local `next build` from masquerading as the real thing.
+  // Neither host: a production NODE_ENV build is a local `next build`, NOT production.
+  // Saying so plainly prevents it from masquerading as the real thing.
   if (nodeEnv === "production") {
-    return { key: "development", label: "PRODUCTION BUILD (not on Vercel)", overridden: false }
+    return { key: "development", label: "PRODUCTION BUILD (not deployed)", overridden: false }
   }
   return { key: "development", label: "DEVELOPMENT", overridden: false }
 }
@@ -145,19 +163,28 @@ export function resolveDatabaseIdentity(rawUrl: string | undefined = process.env
 
 export function getDeploymentIdentity(): DeploymentIdentity {
   const { key, label, overridden } = resolveEnvironment()
-  const commitSha = normalize(process.env.VERCEL_GIT_COMMIT_SHA)
+  const env = process.env
+  const onRailway = Boolean(normalize(env.RAILWAY_ENVIRONMENT_NAME) || normalize(env.RAILWAY_DEPLOYMENT_ID))
+  const onVercel = Boolean(normalize(env.VERCEL_ENV) || normalize(env.VERCEL_DEPLOYMENT_ID))
+  // Same precedence as /api/af-debug/sha, so the two never disagree about the live build.
+  const commitSha =
+    normalize(env.BUILD_SHA) ?? normalize(env.RAILWAY_GIT_COMMIT_SHA) ?? normalize(env.VERCEL_GIT_COMMIT_SHA)
+  const message = normalize(env.RAILWAY_GIT_COMMIT_MESSAGE) ?? normalize(env.VERCEL_GIT_COMMIT_MESSAGE)
+  const publicDomain = normalize(env.RAILWAY_PUBLIC_DOMAIN)
 
   return {
-    deploymentId: normalize(process.env.VERCEL_DEPLOYMENT_ID),
+    platform: onRailway ? "railway" : onVercel ? "vercel" : null,
+    serviceName: normalize(env.RAILWAY_SERVICE_NAME),
+    deploymentId: normalize(env.RAILWAY_DEPLOYMENT_ID) ?? normalize(env.VERCEL_DEPLOYMENT_ID),
     commitSha,
     commitShaShort: commitSha ? commitSha.slice(0, 7) : null,
-    commitRef: normalize(process.env.VERCEL_GIT_COMMIT_REF),
-    commitMessageSubject: normalize(process.env.VERCEL_GIT_COMMIT_MESSAGE)?.split("\n")[0] ?? null,
+    commitRef: normalize(env.RAILWAY_GIT_BRANCH) ?? normalize(env.VERCEL_GIT_COMMIT_REF),
+    commitMessageSubject: message?.split("\n")[0] ?? null,
     environment: key,
     environmentLabel: label,
     environmentOverridden: overridden,
-    deploymentUrl: normalize(process.env.VERCEL_URL),
-    region: normalize(process.env.VERCEL_REGION),
+    deploymentUrl: publicDomain ? `https://${publicDomain}` : normalize(env.VERCEL_URL),
+    region: normalize(env.RAILWAY_REPLICA_REGION) ?? normalize(env.VERCEL_REGION),
     processStartedAt: PROCESS_STARTED_AT,
     database: resolveDatabaseIdentity(),
   }
