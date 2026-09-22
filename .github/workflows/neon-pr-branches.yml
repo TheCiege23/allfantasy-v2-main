@@ -1,5 +1,16 @@
-# Neon: create a database branch per pull request; delete when the PR closes; and sweep daily
-# for any that outlived their PR anyway.
+# Neon: delete a PR's preview database branch when the PR closes, and sweep daily for any that
+# outlived their PR.
+#
+# 🛑 IT NO LONGER CREATES THEM (2026-09-22). The `create_neon_branch` job made a
+# `preview/pr-<n>-*` branch on every PR open/push, and NOTHING EVER CONNECTED TO ONE: its
+# `db_url` outputs and the `prisma migrate deploy` step were commented out, and no workflow,
+# script or config read the branch. They were pure cost. The leak described below put ~50 extra
+# branches on the bill around the clock — "Extra branches: 39,471 hours, $82.23" in September to
+# the 21st — and the Launch plan includes 10 branches per project, not Scale's 25.
+#
+# Before bringing creation back, give the branch a consumer (migrations, an e2e lane) in the SAME
+# change. The delete job and the sweep stay, to clean up what earlier PRs left, and they are
+# harmless when there is nothing to find.
 #
 # Requires repository secrets/variables from Neon GitHub integration:
 #   - secrets.NEON_API_KEY
@@ -26,9 +37,8 @@ name: Neon — PR preview database branch
 on:
   pull_request:
     types:
-      - opened
-      - reopened
-      - synchronize
+      # Only `closed`: this workflow no longer CREATES branches (see header), it only removes the
+      # ones earlier PRs left behind.
       - closed
   schedule:
     # Daily. A sweep that runs after the leak has grown is still a sweep.
@@ -59,41 +69,6 @@ jobs:
         with:
           # Neon branch names must not rely on raw slashes from git (e.g. feature/foo).
           replace_slashes_with_hyphens: 'true'
-
-  create_neon_branch:
-    name: Create Neon branch
-    needs: setup
-    if: |
-      github.event_name == 'pull_request' && (
-        github.event.action == 'synchronize' ||
-        github.event.action == 'opened' ||
-        github.event.action == 'reopened'
-      )
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create Neon branch
-        id: create_neon_branch
-        uses: neondatabase/create-branch-action@v6
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          api_key: ${{ secrets.NEON_API_KEY }}
-          branch_name: preview/pr-${{ github.event.number }}-${{ needs.setup.outputs.head_branch }}
-
-      # Connection strings are available only in this job (do not log them).
-      # - steps.create_neon_branch.outputs.db_url
-      # - steps.create_neon_branch.outputs.db_url_pooled
-
-      # Uncomment to apply Prisma migrations to the new branch (same job required for outputs):
-      # - uses: actions/checkout@v4
-      # - uses: actions/setup-node@v4
-      #   with:
-      #     node-version: '20'
-      #     cache: 'npm'
-      # - run: npm ci
-      # - run: npx prisma migrate deploy
-      #   env:
-      #     DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_pooled }}
-      #     DIRECT_URL: ${{ steps.create_neon_branch.outputs.db_url }}
 
   delete_neon_branch:
     name: Delete Neon branch
