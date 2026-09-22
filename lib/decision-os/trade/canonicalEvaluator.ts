@@ -3,7 +3,7 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import type { TradeAssetSummary } from './dco'
 import { buildMovements, playerIdsFromMovements } from './canonicalShadow'
-import { resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
+import { pickMarketArgsFromWorld, resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
 import { resolveTradeWorld } from './tradeWorld'
 import { buildTradeMemo, type CanonicalTradeMemo } from './canonicalMemo'
 import { computeRosterImpact, type ImpactPlayer } from './rosterImpact'
@@ -134,6 +134,8 @@ export async function evaluateCanonicalTrade(
         format: world.league.isDynasty ? 'DYNASTY' : 'REDRAFT',
         qbFormat: detectQbFormat(world.league.rosterSettings.starterSlots),
       },
+      // Dynasty rookie-pick prices from the same market as the players (null otherwise).
+      pickMarket: pickMarketArgsFromWorld(world),
     })
   } catch {
     enrichment = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, idpValueResolved: 0, thinlyPricedIds: [], unresolvedIds: playerIds, warnings: ['enrichment_unavailable'] }

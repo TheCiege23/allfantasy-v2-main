@@ -314,4 +314,46 @@ describe('7.4 — projections and market, with the basis reported', () => {
     expect(out).toContain('draft position only')
     expect(out).toMatch(/Grade [A-F]/)
   })
+
+  /*
+   * 🛑 THE MARKET READ TOOK THE HIGHEST PRICE ACROSS EVERY `leagueConcept`. One player holds a
+   * dynasty row and a redraft row at genuinely different numbers; ordering by value and keeping
+   * the first per name priced a redraft trade off a rookie's dynasty value whenever that was the
+   * larger of the two. These pin the concept onto the query itself — asserting the rendered text
+   * would pass with the filter deleted, because the fixture only ever returns one row.
+   */
+  const conceptOf = () => mocks.marketFindMany.mock.calls[0]?.[0]?.where?.leagueConcept
+
+  it('reads only the DYNASTY rows in a dynasty league', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({ scoring: 'ppr', leagueVariant: 'dynasty_superflex' })
+    mocks.adpFindMany.mockResolvedValue([adp('Jamarr Chase', 2), adp('Jahmyr Gibbs', 6, 'RB')])
+
+    await buildDescribedTradeContext({
+      message: 'Jamarr Chase for Jahmyr Gibbs?', leagueId: 'lg1', sport: 'nfl',
+    })
+    expect(conceptOf()).toBe('dynasty')
+  })
+
+  it('reads only the REDRAFT rows anywhere else', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({ scoring: 'ppr', leagueVariant: 'redraft' })
+    mocks.adpFindMany.mockResolvedValue([adp('Jamarr Chase', 2), adp('Jahmyr Gibbs', 6, 'RB')])
+
+    await buildDescribedTradeContext({
+      message: 'Jamarr Chase for Jahmyr Gibbs?', leagueId: 'lg1', sport: 'nfl',
+    })
+    expect(conceptOf()).toBe('redraft')
+  })
+
+  it('reads no market row at all with no league, rather than guessing a concept', async () => {
+    mocks.adpFindMany.mockResolvedValue([adp('Jamarr Chase', 2), adp('Jahmyr Gibbs', 6, 'RB')])
+    mocks.marketFindMany.mockResolvedValue([
+      market('Jamarr Chase', 9000), market('Jahmyr Gibbs', 7000, 'RB'),
+    ])
+
+    const out = await buildDescribedTradeContext({
+      message: 'Jamarr Chase for Jahmyr Gibbs?', leagueId: null, sport: 'nfl',
+    })
+    expect(mocks.marketFindMany).not.toHaveBeenCalled()
+    expect(out).not.toMatch(/published market value/)
+  })
 })

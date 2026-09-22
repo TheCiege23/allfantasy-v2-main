@@ -19,6 +19,10 @@ export type TradeScenarioUnresolvedReason =
   | 'no_league_world'
   | 'no_viewer_roster'
   | 'includes_picks'
+  | 'pick_unclear'
+  | 'pick_season_unclear'
+  | 'pick_season_past'
+  | 'pick_partner_unclear'
   | 'players_not_rostered'
   | 'ambiguous_player'
   | 'sides_unclear'
@@ -54,6 +58,12 @@ export type ReadyTradeScenario = {
   give: ScenarioPlayer[]
   get: ScenarioPlayer[]
   partnerTeamName: string
+  /**
+   * How many draft picks the trade carried. Picks appear in `give` / `get` as entries named like
+   * "2027 1st-round pick" with no position; this count lets a renderer add the pricing caveat.
+   * Absent on scenarios sent before picks were supported.
+   */
+  picks?: number
   value: {
     given: number | null
     received: number | null

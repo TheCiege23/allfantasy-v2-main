@@ -189,10 +189,14 @@ describe('draft picks', () => {
     'Bijan Robinson for Puka Nacua and a first',
     'Bijan Robinson for Puka Nacua and two future firsts',
     'Bijan Robinson for Puka Nacua and a pick',
-  ])('refuses before loading the league: %s', async (message) => {
+  ])('refuses in a redraft league, where a pick has no market price: %s', async (message) => {
+    /*
+     * ⚠ CHANGED ON PURPOSE (2026-09-22). This used to refuse BEFORE loading the league; picks are now
+     * evaluated in DYNASTY leagues, so the league must be read to know which kind it is.
+     */
     const s = await run(message)
     expect(s).toMatchObject({ status: 'unresolved', reason: 'includes_picks' })
-    expect(resolveWorld).not.toHaveBeenCalled()
+    expect(evaluate).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -267,5 +271,72 @@ describe('the prompt block', () => {
     const block = renderTradeScenarioBlock(s!)
     expect(block).toMatch(/^TRADE SCENARIO: NOT COMPUTED\./)
     expect(block).toContain('Do not present a before/after comparison')
+  })
+})
+
+/*
+ * 🛑 DYNASTY TRADES ARE MOSTLY PICKS, AND EVERY ONE OF THEM WAS REFUSED. In a dynasty league a pick is
+ * now an asset on the side it is written on, priced by the evaluator off the dynasty pick market.
+ */
+describe('draft picks in a dynasty league', () => {
+  const DYNASTY = { ...WORLD, league: { ...WORLD.league, isDynasty: true } } as unknown as CanonicalWorld
+  beforeEach(() => resolveWorld.mockResolvedValue(DYNASTY))
+
+  it('adds a pick you give as your own pick, from you to the partner', async () => {
+    const s = await run('Should I trade Bijan Robinson and my 2027 1st for Puka Nacua?')
+    expect(s?.status).toBe('ready')
+    if (s?.status !== 'ready') return
+    const [args] = evaluate.mock.calls[0]!
+    expect(args.assets).toEqual([
+      expect.objectContaining({ playerId: 'p-bijan', fromRosterId: 'r1', toRosterId: 'r2' }),
+      expect.objectContaining({
+        assetType: 'draft_pick',
+        pickSeason: 2027,
+        pickRound: 1,
+        fromRosterId: 'r1',
+        toRosterId: 'r2',
+        pickOriginalRosterId: 'r1',
+      }),
+      expect.objectContaining({ playerId: 'p-puka', fromRosterId: 'r2', toRosterId: 'r1' }),
+    ])
+    expect(s.give.map((p) => p.name)).toEqual(['Bijan Robinson', '2027 1st-round pick'])
+    expect(s.picks).toBe(1)
+  })
+
+  it("adds a pick you receive as the partner's own pick, and orients by the players", async () => {
+    const s = await run('Would you do Puka Nacua and a 2028 2nd for Bijan Robinson?')
+    expect(s?.status).toBe('ready')
+    if (s?.status !== 'ready') return
+    const [args] = evaluate.mock.calls[0]!
+    expect(args.assets).toContainEqual(
+      expect.objectContaining({ assetType: 'draft_pick', pickSeason: 2028, pickRound: 2, fromRosterId: 'r2', toRosterId: 'r1', pickOriginalRosterId: 'r2' }),
+    )
+    expect(s.get.map((p) => p.name)).toEqual(['Puka Nacua', '2028 2nd-round pick'])
+  })
+
+  it('evaluates a pick-for-player trade (one name is enough when a pick is the other asset)', async () => {
+    const s = await run('my 2027 1st for Puka Nacua?')
+    expect(s?.status).toBe('ready')
+    if (s?.status !== 'ready') return
+    expect(s.give.map((p) => p.name)).toEqual(['2027 1st-round pick'])
+    expect(s.get.map((p) => p.playerId)).toEqual(['p-puka'])
+  })
+
+  it('tells the model the pick is priced at the round average, not a slot', async () => {
+    const s = await run('Should I trade Bijan Robinson and my 2027 1st for Puka Nacua?')
+    expect(renderTradeScenarioBlock(s!)).toMatch(/round's average dynasty market price/)
+  })
+
+  it.each([
+    ['Bijan Robinson for Puka Nacua and a 1st', 'pick_season_unclear'],
+    ['Bijan Robinson for Puka Nacua and a first-round pick', 'pick_season_unclear'],
+    ['Bijan Robinson for Puka Nacua and picks', 'pick_unclear'],
+    ['Bijan Robinson for Puka Nacua and two future firsts', 'pick_unclear'],
+    ['Bijan Robinson for Puka Nacua and a 2025 1st', 'pick_season_past'],
+    ['Bijan Robinson for a 2027 1st', 'pick_partner_unclear'],
+  ])('refuses %s (%s) instead of guessing', async (message, reason) => {
+    const s = await run(message)
+    expect(s).toMatchObject({ status: 'unresolved', reason })
+    expect(evaluate).not.toHaveBeenCalled()
   })
 })

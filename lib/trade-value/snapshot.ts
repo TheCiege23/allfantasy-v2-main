@@ -59,6 +59,7 @@ function internalValueFor(
   asset: EnrichedTradeAsset,
   currentSeason: number | null,
   scoring?: ScoringContext | null,
+  dynastyMarket = false,
 ): number {
   switch (asset.kind) {
     case 'player':
@@ -74,6 +75,8 @@ function internalValueFor(
         // Slice 16: real league scoring settings (superflex / TE premium / PPR).
         scoring,
         projectionScoringFormat: asset.sources.projectionScoringFormat,
+        // Dynasty: the dynasty market price decides, the projection is the fallback.
+        preferMarket: dynastyMarket,
       })
     case 'draft_pick':
       return normalizedPickValue({
@@ -84,6 +87,12 @@ function internalValueFor(
         slot: asset.pickSlot,
         slotProbability: asset.pickSlotProbability,
         classStrength: asset.pickClassStrength,
+        /*
+         * The pick's dynasty market price, when the enrichment loaded one. Only in a dynasty
+         * league: a redraft league has no pick market, and a price from the dynasty chart there
+         * would be a different asset's value.
+         */
+        marketValue: dynastyMarket ? asset.sources.fantasyCalcValue : null,
       })
     case 'faab':
       return situationalFaabValue({ amount: asset.faabAmount, ...(asset.faabContext ?? {}) }).value
@@ -128,8 +137,23 @@ export function buildTradeValueSnapshot(input: {
    * `rescoreKickerForLeague` sat with zero consumers under a comment claiming it ran.
    */
   assetStateByPlayerId?: Record<string, unknown> | null
+  /**
+   * The market prices in `sources.fantasyCalcValue` came from the DYNASTY chart.
+   *
+   * 🛑 A FACT ABOUT THE PRICES, NOT ABOUT THE LEAGUE — AND THAT DISTINCTION IS WHY THIS IS AN
+   * EXPLICIT INPUT RATHER THAN READ OFF `context.isDynasty`. When set, a player's dynasty market
+   * price decides his value ahead of the rest-of-season projection, and a pick takes its market
+   * price. Both are only right if the price really is the dynasty one. `captureSnapshot` sets
+   * `context.isDynasty` from the league row while ALWAYS loading the REDRAFT chart, so inferring
+   * this from the context would have priced a dynasty league off redraft market values. The
+   * producer that loaded the chart is the only one that knows which chart it was.
+   *
+   * Omitted ⇒ false ⇒ byte-identical to before.
+   */
+  dynastyMarketChart?: boolean
 }): TradeValueSnapshot {
   const currentSeason = input.currentSeason ?? null
+  const dynastyMarket = input.dynastyMarketChart === true
 
   /*
    * The format's opinion, asked once per asset and stored BESIDE the price rather than inside it.
@@ -158,11 +182,11 @@ export function buildTradeValueSnapshot(input: {
     faabAmount: a.faabAmount ?? null,
     faabContext: a.faabContext ?? null,
     sources: a.sources,
-    internalValue: internalValueFor(a, currentSeason, input.scoring),
+    internalValue: internalValueFor(a, currentSeason, input.scoring, dynastyMarket),
     /*
-     * ⚠ ONLY A PLAYER HAS A BASIS. A pick is priced off the curve and FAAB off its face amount —
-     * neither consults `sources`, so labelling them with a basis would name an input that had no
-     * part in the number.
+     * ⚠ A PLAYER ALWAYS HAS A BASIS; A PICK HAS ONE ONLY WHEN THE MARKET PRICED IT. A curve-priced
+     * pick and FAAB consult no `sources`, so labelling them would name an input that had no part
+     * in the number. A dynasty pick priced off its market row did consult one, and says so.
      */
     valuationBasis:
       a.kind === 'player'
@@ -170,8 +194,15 @@ export function buildTradeValueSnapshot(input: {
             projection: a.sources.projectionValue,
             marketValue: a.sources.fantasyCalcValue,
             idpValue: a.sources.idpValue,
+            preferMarket: dynastyMarket,
           })
-        : null,
+        : a.kind === 'draft_pick' &&
+            dynastyMarket &&
+            a.sources.fantasyCalcValue != null &&
+            Number.isFinite(a.sources.fantasyCalcValue) &&
+            a.sources.fantasyCalcValue > 0
+          ? 'market'
+          : null,
     formatFit:
       a.kind === 'player'
         ? applyFormatFit({
@@ -185,7 +216,7 @@ export function buildTradeValueSnapshot(input: {
             aliasTags: input.context.aliasTags ?? null,
             isDynasty: input.context.isDynasty ?? null,
             keeperCount: input.context.keeperCount ?? null,
-            base: internalValueFor(a, currentSeason, input.scoring),
+            base: internalValueFor(a, currentSeason, input.scoring, dynastyMarket),
             position: a.position,
             age: a.age ?? null,
             experience: a.experience ?? null,

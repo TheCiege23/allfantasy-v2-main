@@ -112,6 +112,41 @@ export interface TradeEnrichmentPort {
     numTeams: number
     isDynasty: boolean
   }) => Promise<RawIdpValueRow[]>
+  /**
+   * Dynasty rookie-pick market prices, `${season}:${round}` → FantasyCalc round average.
+   *
+   * 🛑 THE PRICES ALREADY EXISTED; THE TRADE ENGINE NEVER READ THEM. `marketValueService` parses
+   * FantasyCalc's own pick rows ("2026 Pick 1.01", "2027 Round 2") per format, through the
+   * DB-first read-through cache, and the trade console has used them for months. The canonical
+   * trade path priced picks off a curve anchored at 2,500 instead — a different currency from the
+   * dynasty market its players are priced in, which this repo's own fit over 771 dynasty trades
+   * puts nearer 950 for a first.
+   *
+   * Optional so a test port or an older caller that does not supply it keeps the curve.
+   */
+  loadPickMarketValues?: (args: {
+    qbFormat: 'ONE_QB' | 'SUPERFLEX'
+    numTeams: number
+    ppr: 0 | 0.5 | 1
+  }) => Promise<Record<string, number> | null>
+}
+
+/**
+ * `pickMarket` for a canonical world — the ONE derivation both trade producers use, so the
+ * evaluator and the shadow cannot disagree about which pick chart a league reads.
+ *
+ * Null for a non-dynasty league (no rookie-pick market) and for one whose reception format is
+ * unknown: guessing PPR would price its picks off a chart it may not play, so its picks stay on
+ * the curve and the memo says so.
+ */
+export function pickMarketArgsFromWorld(world: {
+  rosters: readonly unknown[]
+  league: { isDynasty: boolean; scoringPresetId: string | null }
+}): { numTeams: number; ppr: 0 | 0.5 | 1 } | null {
+  if (!world.league.isDynasty) return null
+  const format = scoringFormatFromPresetId(world.league.scoringPresetId)
+  if (!format) return null
+  return { numTeams: world.rosters.length, ppr: format === 'ppr' ? 1 : format === 'half_ppr' ? 0.5 : 0 }
 }
 
 export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
@@ -121,6 +156,19 @@ export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
   loadAfProjections: (sport, ids, season, week) => loadAfProjectionRows(sport, ids, season, week),
   loadMarketValue: (ids, format, qbFormat) => loadPlayerValueRows(ids, format, qbFormat),
   loadIdpValue: (args) => loadIdpValueRows(args),
+  loadPickMarketValues: async ({ qbFormat, numTeams, ppr }) => {
+    const { getMarketValues } = await import('@/lib/trade-intel/marketValueService')
+    /*
+     * ⚠ ONLY THE FIELDS `getMarketValues` READS: variant.dynasty / keeper / superflex / bestBall,
+     * scoring.format and teams. The rest of the envelope is irrelevant to a price lookup.
+     */
+    const payload = await getMarketValues({
+      variant: { dynasty: true, keeper: false, superflex: qbFormat === 'SUPERFLEX', bestBall: false, idp: false },
+      scoring: { format: ppr === 1 ? 'ppr' : ppr === 0.5 ? 'half_ppr' : 'std' },
+      teams: numTeams,
+    } as unknown as Parameters<typeof getMarketValues>[0])
+    return payload && payload.mode === 'dynasty' ? payload.pickByRound : null
+  },
 }
 
 export interface TradeEnrichmentResult {
@@ -190,6 +238,11 @@ export async function resolveTradeEnrichment(
      * that all look plausible and are all wrong. No format, no market value.
      */
     valueFormat?: { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' | 'SUPERFLEX' } | null
+    /**
+     * League size and reception weight for the pick market lookup. Only read with a DYNASTY
+     * `valueFormat` — a redraft league has no rookie-pick market.
+     */
+    pickMarket?: { numTeams: number; ppr: 0 | 0.5 | 1 } | null
     /**
      * The league itself, for the one value that cannot be looked up.
      *
@@ -413,6 +466,25 @@ export async function resolveTradeEnrichment(
   }
   if (marketValueResolved === 0) warnings.push('market_value_unavailable')
 
+  let pickMarketValueByKey: Record<string, number> | undefined
+  if (args.valueFormat?.format === 'DYNASTY' && args.pickMarket && port.loadPickMarketValues) {
+    try {
+      const byRound = await port.loadPickMarketValues({
+        qbFormat: args.valueFormat.qbFormat,
+        numTeams: args.pickMarket.numTeams,
+        ppr: args.pickMarket.ppr,
+      })
+      if (byRound && Object.keys(byRound).length > 0) {
+        pickMarketValueByKey = byRound
+        contributing.push('pick_market_value')
+      } else {
+        warnings.push('pick_market_value_unavailable')
+      }
+    } catch {
+      warnings.push('pick_market_value_unavailable')
+    }
+  }
+
   /*
    * IDP value — computed per league, because replacement level is a property of the league.
    * Gated on the league context being supplied at all, so an offensive league does no work.
@@ -454,6 +526,7 @@ export async function resolveTradeEnrichment(
       projectionScoringFormatByPlayerId,
       perGameProjectionByPlayerId,
       marketValueByPlayerId,
+      ...(pickMarketValueByKey ? { pickMarketValueByKey } : {}),
       idpValueByPlayerId,
       liquidityByPlayerId,
       trend30dByPlayerId,
