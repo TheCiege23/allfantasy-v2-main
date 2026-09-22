@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   getAdminAccessState: vi.fn(),
   getAdminCommandCenterMetrics: vi.fn(),
+  getAdminPipelineFreshness: vi.fn(async () => null),
   redirect: vi.fn((path: string) => {
     throw new Error(`redirect:${path}`)
   }),
@@ -21,6 +22,12 @@ vi.mock("@/lib/adminAuth", () => ({
 
 vi.mock("@/lib/admin-dashboard/AdminCommandCenterService", () => ({
   getAdminCommandCenterMetrics: mocks.getAdminCommandCenterMetrics,
+}))
+
+// The page reads pipeline freshness from Postgres; without this the real
+// prisma-backed service would run inside a render test.
+vi.mock("@/lib/admin-dashboard/AdminPipelineFreshnessService", () => ({
+  getAdminPipelineFreshness: mocks.getAdminPipelineFreshness,
 }))
 
 function metricsFixture() {
@@ -504,6 +511,70 @@ describe("/admin page render states", () => {
     // P0-1: the Closed-Beta Invitations panel renders on the healthy admin page.
     expect(screen.getByText(/Closed-Beta Invitations/i)).toBeInTheDocument()
     expect(mocks.getAdminCommandCenterMetrics).toHaveBeenCalledWith("ciege")
+  })
+
+  it("shows each pipeline's last write, and says so when one has stalled", async () => {
+    mocks.getAdminAccessState.mockResolvedValueOnce({
+      status: "admin",
+      source: "app_session",
+      user: { id: "admin-1", email: "founder@example.com", role: "admin" },
+    })
+    mocks.getAdminCommandCenterMetrics.mockResolvedValueOnce(metricsFixture())
+    mocks.getAdminPipelineFreshness.mockResolvedValueOnce({
+      overall: "failed",
+      measuredAt: "2026-09-22T13:00:00.000Z",
+      rows: [
+        {
+          id: "league-sync",
+          label: "League sync",
+          table: "league_sync_state",
+          cadence: "every 30 min",
+          lastWriteAt: "2026-09-22T12:50:00.000Z",
+          ageHours: 0.2,
+          status: "fresh",
+          trafficLight: "healthy",
+          summary: "League sync is current.",
+        },
+        {
+          id: "rosters",
+          label: "Rosters",
+          table: "rosters",
+          cadence: "every 30 min",
+          lastWriteAt: "2026-09-20T13:00:00.000Z",
+          ageHours: 48,
+          status: "very_stale",
+          trafficLight: "failed",
+          summary: "Rosters is very stale (synced 2d ago) — refresh overdue.",
+        },
+      ],
+    })
+    const { default: AdminPage } = await import("@/app/admin/page")
+
+    render(await AdminPage({ searchParams: {} }))
+
+    const panel = screen.getByTestId("pipeline-freshness")
+    expect(panel).toHaveAttribute("data-overall", "failed")
+    expect(screen.getByText("1 of 2 need a look")).toBeInTheDocument()
+    expect(panel.querySelector('[data-pipeline="rosters"]')).toHaveAttribute("data-light", "failed")
+    expect(screen.getByText(/Rosters is very stale/)).toBeInTheDocument()
+    // The Freshness tab must point at a rendered id.
+    expect(document.getElementById("pipeline-freshness")).not.toBeNull()
+  })
+
+  it("never renders a missing freshness answer as healthy", async () => {
+    mocks.getAdminAccessState.mockResolvedValueOnce({
+      status: "admin",
+      source: "app_session",
+      user: { id: "admin-1", email: "founder@example.com", role: "admin" },
+    })
+    mocks.getAdminCommandCenterMetrics.mockResolvedValueOnce(metricsFixture())
+    mocks.getAdminPipelineFreshness.mockRejectedValueOnce(new Error("pool exhausted"))
+    const { default: AdminPage } = await import("@/app/admin/page")
+
+    render(await AdminPage({ searchParams: {} }))
+
+    expect(screen.queryByTestId("pipeline-freshness")).toBeNull()
+    expect(screen.getByText(/did not answer within its time budget/i)).toBeInTheDocument()
   })
 
   it("renders a recovery shell when admin metrics fail to load", async () => {

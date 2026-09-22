@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import nextDynamic from "next/dynamic"
 import "./command-center.css"
 import { getAdminAccessState } from "@/lib/adminAuth"
+import { getDeploymentIdentity } from "@/lib/admin-dashboard/deploymentIdentity"
 import {
   getAdminCommandCenterMetrics,
   type AdminCommandCenterMetrics,
@@ -18,6 +19,10 @@ const VisitorAnalyticsPanel = nextDynamic(() =>
   import("@/components/admin/VisitorAnalyticsPanel").then((m) => m.VisitorAnalyticsPanel)
 )
 import { getAdminGrowthSeries } from "@/lib/admin-dashboard/AdminGrowthSeriesService"
+import {
+  getAdminPipelineFreshness,
+  type AdminPipelineFreshness,
+} from "@/lib/admin-dashboard/AdminPipelineFreshnessService"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
@@ -309,15 +314,29 @@ function AdminOverviewDeck({
 /**
  * Non-sensitive build marker: shows the deployment's abbreviated commit SHA + environment
  * (e.g. "build a1b2c3d · preview") so a deployed build is identifiable at a glance — you can
- * tell Preview from Production without guessing from appearance. Reads only Vercel-set system
- * vars; never renders secrets. Falls back gracefully when the vars are absent.
+ * tell Preview from Production without guessing from appearance. Never renders secrets.
+ *
+ * ⚠ IT USED TO READ ONLY VERCEL'S VARS, AND PRODUCTION HAS BEEN ON RAILWAY SINCE 2026-09-02,
+ * so the live console read "build dev · production" whatever was deployed — the one thing
+ * this marker exists to answer. It now reads deploymentIdentity, the same resolver behind
+ * /api/admin/status, which knows both hosts. A missing SHA renders as "no sha", not "dev":
+ * a deploy that reports no commit is a finding, not a local build.
  */
 function DeploymentMarker() {
-  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "local"
-  const commit = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "dev"
+  const identity = getDeploymentIdentity()
+  const commit = identity.commitShaShort ?? "no sha"
+  const env = identity.environment
   return (
     <span
       data-testid="admin-build-marker"
+      title={[
+        identity.commitMessageSubject,
+        identity.serviceName ? `service ${identity.serviceName}` : null,
+        identity.deploymentId ? `deployment ${identity.deploymentId}` : null,
+        `process started ${identity.processStartedAt}`,
+      ]
+        .filter(Boolean)
+        .join("\n")}
       className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100"
     >
       build {commit} · {env}
@@ -580,6 +599,80 @@ function ProductionReadinessPanel({ data }: { data: AdminProductionReadiness }) 
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </AccordionSection>
+  )
+}
+
+function formatPipelineAge(hours: number | null): string {
+  if (hours === null) return "never written"
+  if (hours < 1) return `${Math.max(0, Math.round(hours * 60))} min ago`
+  if (hours < 48) return `${Math.round(hours)}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
+
+/*
+ * "Is each pipeline still writing?" — judged by the newest row in its output table.
+ * Cron readiness above answers a different question (is a job SCHEDULED), and a job
+ * can be scheduled, return 200, and write nothing. See AdminPipelineFreshnessService.
+ */
+function PipelineFreshnessPanel({ data }: { data: AdminPipelineFreshness | null }) {
+  if (!data) {
+    return (
+      <AccordionSection id="pipeline-freshness" title="Pipeline Freshness" eyebrow="last write per pipeline">
+        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] p-4 text-sm text-amber-100">
+          Pipeline freshness did not answer within its time budget. This is not a clean bill of health — the
+          next refresh will try again.
+        </div>
+      </AccordionSection>
+    )
+  }
+  const late = data.rows.filter((row) => row.trafficLight !== "healthy")
+  return (
+    <AccordionSection id="pipeline-freshness" title="Pipeline Freshness" eyebrow="last write per pipeline">
+      <div className="af-cc-card" data-testid="pipeline-freshness" data-overall={data.overall}>
+        <div className="af-cc-card-head">
+          <div className="af-cc-card-title">
+            {late.length === 0 ? "Every pipeline wrote on schedule" : `${late.length} of ${data.rows.length} need a look`}
+          </div>
+          <div className="af-cc-card-scope">
+            measured{" "}
+            {new Date(data.measuredAt).toLocaleTimeString("en-US", {
+              timeZone: "America/New_York",
+              hour: "numeric",
+              minute: "2-digit",
+            })}{" "}
+            ET
+          </div>
+        </div>
+        <div className="af-cc-joblist">
+          {data.rows.map((row) => (
+            <div
+              key={row.id}
+              data-pipeline={row.id}
+              data-light={row.trafficLight}
+              className={
+                row.trafficLight === "healthy"
+                  ? "af-cc-job"
+                  : row.trafficLight === "failed"
+                    ? "af-cc-job af-cc-job--bad"
+                    : "af-cc-job af-cc-job--warn"
+              }
+            >
+              <span className="af-cc-job-tick" aria-hidden="true">
+                {row.trafficLight === "healthy" ? "✓" : row.trafficLight === "unknown" ? "?" : "·"}
+              </span>
+              <div className="af-cc-stack" style={{ flex: 1 }}>
+                <div className="af-cc-job-name">
+                  {row.label} — {row.status === "query_failed" ? "not measured" : formatPipelineAge(row.ageHours)}
+                </div>
+                <div className="af-cc-job-cadence">{row.cadence}</div>
+                {row.trafficLight === "healthy" ? null : <div className="af-cc-job-cadence">{row.summary}</div>}
+                <div className="af-cc-cell-time">{row.table}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </AccordionSection>
@@ -1589,9 +1682,21 @@ export default async function AdminPage({
    */
   const growthWork = getAdminGrowthSeries().catch(() => null)
   const growthBudget = new Promise<null>((resolve) => setTimeout(() => resolve(null), GROWTH_BUDGET_MS))
-  const growth: Awaited<ReturnType<typeof getAdminGrowthSeries>> | null = await Promise.race([
-    growthWork,
-    growthBudget,
+  /*
+   * Pipeline freshness gets the same treatment, in parallel with growth: it is a
+   * diagnosis panel, and a slow table scan must never be what holds /admin. Its own
+   * per-query budget is 5s, so 6s here only ever cuts off a stuck pool, and a null
+   * renders as "did not answer", never as healthy.
+   */
+  const PIPELINE_BUDGET_MS = 6000
+  const pipelineWork = getAdminPipelineFreshness().catch(() => null)
+  const pipelineBudget = new Promise<null>((resolve) => setTimeout(() => resolve(null), PIPELINE_BUDGET_MS))
+  const [growth, pipelineFreshness]: [
+    Awaited<ReturnType<typeof getAdminGrowthSeries>> | null,
+    AdminPipelineFreshness | null,
+  ] = await Promise.all([
+    Promise.race([growthWork, growthBudget]),
+    Promise.race([pipelineWork, pipelineBudget]),
   ])
 
   return (
@@ -1650,6 +1755,9 @@ export default async function AdminPage({
               <a className="af-cc-tab af-cc-tab--on" href="#overview">
                 Overview
               </a>
+              <a className="af-cc-tab" href="#pipeline-freshness">
+                Freshness
+              </a>
               <a className="af-cc-tab" href="#providers">
                 Providers
               </a>
@@ -1683,6 +1791,8 @@ export default async function AdminPage({
           this below anything undoes the fix.
         */}
         <AdminCommandCenterOverview metrics={data} />
+
+        <PipelineFreshnessPanel data={pipelineFreshness} />
 
         {/*
           Growth sits directly under the verdict and the metric groups: those
