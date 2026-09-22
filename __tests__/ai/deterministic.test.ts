@@ -70,6 +70,16 @@ const mockSportsGameFindMany = (prisma as any).sportsGame.findMany as ReturnType
 const mockSportsInjuryFindMany = (prisma as any).sportsInjury.findMany as ReturnType<typeof vi.fn>
 const mockWorldCupMatchFindFirst = (prisma as any).worldCupBracketMatch.findFirst as ReturnType<typeof vi.fn>
 
+/*
+ * Injury answers now read through `listInjuryFacts`, which needs the two clocks every real
+ * row carries: `fetchedAt` (our ingest) and `date` (the provider's report). A fixture without
+ * them is not a row the port can ever receive.
+ */
+function freshInjury(hoursAgo = 2) {
+  const at = new Date(Date.now() - hoursAgo * 3_600_000)
+  return { source: 'rolling_insights', type: null, description: null, week: null, position: null, date: at, fetchedAt: at }
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
   mockSportsGameFindMany.mockResolvedValue([])
@@ -445,6 +455,7 @@ describe('tryDeterministicAnswer', () => {
   it('answers cached injury reports from SportsInjury rows', async () => {
     mockSportsInjuryFindMany.mockResolvedValueOnce([
       {
+        ...freshInjury(),
         playerName: 'Patrick Mahomes',
         team: 'KC',
         status: 'Questionable',
@@ -479,6 +490,7 @@ describe('tryDeterministicAnswer', () => {
   it('yields a cached MISS to the unsupported-live-data refusal but never a cached HIT', async () => {
     mockSportsInjuryFindMany.mockResolvedValueOnce([
       {
+        ...freshInjury(),
         playerName: 'Kylian Mbappe',
         team: 'France',
         status: 'Questionable',
@@ -721,7 +733,7 @@ describe('tryDeterministicAnswer', () => {
     /* The control: real cached data must still be an answer. */
     it('still types a cached HIT as an answer', async () => {
       mockSportsInjuryFindMany.mockResolvedValueOnce([
-        { playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' },
+        { ...freshInjury(), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' },
       ])
       const r = await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
       expect(r?.kind).toBe('answer')
@@ -841,5 +853,121 @@ describe('DETERMINISTIC_SOURCE', () => {
   it('is a non-empty string literal', () => {
     expect(typeof DETERMINISTIC_SOURCE).toBe('string')
     expect(DETERMINISTIC_SOURCE.length).toBeGreaterThan(0)
+  })
+})
+
+// ── Injury short-circuit: scope, trigger words, freshness ─────────────────────
+
+/*
+ * 🛑 THE INJURY BUILDER ANSWERED QUESTIONS IT HAS NO DATA FOR.
+ *
+ * It matched a bare `out`, so phrasal verbs ("figure out", "check out") became injury
+ * questions, and it answered first-person roster questions with sport-wide rows — the six
+ * newest NFL injuries, nobody's roster in particular — as a finished `answer`, before the
+ * tool loop that can read the asker's roster ever ran. Each case below was a wrong answer.
+ */
+describe('injury short-circuit', () => {
+  const sampleRow = () => ({ ...freshInjury(), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' })
+
+  describe('does not treat "out" as a verb particle', () => {
+    it.each([
+      'help me figure out my flex spot',
+      'check out this trade offer',
+      'can you break out the scoring for week 3',
+      'who should I pick up if I sell out on RBs',
+    ])('%s', async (q) => {
+      mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+      const r = await tryDeterministicAnswerDetailed(q)
+      expect(r?.text ?? '').not.toContain('injury report')
+      expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('still treats "out" as a status', () => {
+    it.each([
+      'Is Patrick Mahomes out this week?',
+      "who's out for the Chiefs",
+      'Chiefs players ruled out',
+      'is anyone on the Chiefs out tonight',
+    ])('%s', async (q) => {
+      mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+      await tryDeterministicAnswerDetailed(q)
+      expect(mockSportsInjuryFindMany).toHaveBeenCalled()
+    })
+  })
+
+  describe("yields a question about the asker's own roster", () => {
+    it.each([
+      "who's out in my leagues",
+      'any injuries on my team?',
+      'injury updates for my roster',
+      'who should I pick up since my RB is out',
+      'are any of my starters hurt',
+      'which of my players are questionable',
+    ])('%s', async (q) => {
+      mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+      const r = await tryDeterministicAnswerDetailed(q)
+      /* Null lets the pipeline answer from the user's rosters; the sport-wide list must never stand in. */
+      expect(r?.text ?? '').not.toContain('Patrick Mahomes')
+      expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
+    })
+  })
+
+  it('does not hand an own-roster question to the sport-wide NEWS feed either', async () => {
+    getEnrichedNewsFeedMock.mockResolvedValue([
+      { headline: 'League-wide headline', source: 'x', publishedAt: new Date().toISOString() },
+    ])
+    const r = await tryDeterministicAnswerDetailed('injury updates for my roster')
+    expect(r?.text ?? '').not.toContain('League-wide headline')
+    expect(getEnrichedNewsFeedMock).not.toHaveBeenCalled()
+  })
+
+  it('still answers a NAMED player asked about in the first person', async () => {
+    mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+    const r = await tryDeterministicAnswerDetailed('is my guy Patrick Mahomes hurt?')
+    expect(r?.kind).toBe('answer')
+    expect(r?.text).toContain('Patrick Mahomes')
+  })
+
+  it('reads only unexpired rows', async () => {
+    mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+    await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
+    const where = mockSportsInjuryFindMany.mock.calls[0]?.[0]?.where
+    expect(where?.expiresAt?.gt).toBeInstanceOf(Date)
+  })
+
+  it('dates every line and flags a stale claim', async () => {
+    mockSportsInjuryFindMany.mockResolvedValue([
+      { ...freshInjury(2), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' },
+      { ...freshInjury(24 * 5), playerName: 'Travis Kelce', team: 'KC', status: 'Out' },
+    ])
+    const r = await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
+    const lines = (r?.text ?? '').split('\n').filter((l) => l.startsWith('- '))
+    expect(lines).toHaveLength(2)
+    for (const line of lines) expect(line).toMatch(/\(reported \d{4}-\d{2}-\d{2}/)
+    expect(lines.find((l) => l.includes('Kelce'))).toContain('may be out of date')
+    expect(lines.find((l) => l.includes('Mahomes'))).not.toContain('may be out of date')
+  })
+
+  it('says a sport-wide list is not filtered to the rosters', async () => {
+    mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+    const r = await tryDeterministicAnswerDetailed('any NFL injuries today?')
+    expect(r?.text).toContain('not filtered to your rosters')
+  })
+
+  it('says the feed is behind when nothing has been fetched recently', async () => {
+    mockSportsInjuryFindMany.mockResolvedValue([
+      { ...freshInjury(24 * 4), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' },
+    ])
+    const r = await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
+    expect(r?.text).toContain('has not refreshed since')
+  })
+
+  it('says "we cannot know" for a sport with no injury source, without querying', async () => {
+    mockSportsInjuryFindMany.mockResolvedValue([sampleRow()])
+    const r = await tryDeterministicAnswerDetailed('any college football injuries?')
+    expect(r?.kind).toBe('refusal')
+    expect(r?.text).toContain('No live college injury source')
+    expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
   })
 })
