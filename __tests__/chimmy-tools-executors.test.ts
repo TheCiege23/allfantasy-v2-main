@@ -107,6 +107,11 @@ describe('tool specs', () => {
        * `listMemberLeagues`, never from anything the model supplied.
        */
       'get_my_starters_playing',
+      /*
+       * Cross-league injury designations for the user's OWN rosters. Read-only, session-scoped
+       * through `listMemberLeagues` like the tool above, and takes only an optional sport.
+       */
+      'get_my_injuries',
       'get_stat_leaders',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)

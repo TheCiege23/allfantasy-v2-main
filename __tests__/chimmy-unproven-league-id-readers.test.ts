@@ -105,6 +105,8 @@ vi.mock('@/lib/ai-simulation-integration', () => ({ getInsightBundle: getInsight
  * elsewhere, so the mock surface is kept honest to the real module here.
  */
 vi.mock('@/lib/ai/deterministic', () => ({
+  /* The route gates its cross-league injury scan on this; false keeps these tests on their own path. */
+  isOwnRosterInjuryQuestion: () => false,
   tryDeterministicAnswerDetailed: tryDeterministicAnswerDetailedMock,
   DETERMINISTIC_SOURCE: 'deterministic' as const,
 }))

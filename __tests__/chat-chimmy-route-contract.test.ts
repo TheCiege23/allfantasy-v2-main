@@ -6,6 +6,7 @@ const runAiProtectionMock = vi.fn()
 const enrichChatWithDataMock = vi.fn()
 const runUnifiedOrchestrationMock = vi.fn()
 const requestContractToUnifiedMock = vi.fn()
+const buildMyRosterInjuriesMock = vi.hoisted(() => vi.fn())
 const unifiedResponseToContractMock = vi.fn()
 const validateToolRequestMock = vi.fn()
 const buildChimmyConversationIdMock = vi.fn()
@@ -38,6 +39,10 @@ const prismaLeagueTeamFindFirstMock = vi.fn()
 const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
+vi.mock("@/lib/chimmy/tools/myRosterInjuriesTool", () => ({
+  buildMyRosterInjuriesContext: buildMyRosterInjuriesMock,
+}))
+
 vi.mock("next-auth", () => ({
   getServerSession: getServerSessionMock,
 }))
@@ -581,6 +586,55 @@ describe("POST /api/chat/chimmy contract", () => {
       leagueId: "league-1",
       leagueName: "Kings League",
     })
+  })
+
+  /*
+   * "Who's out in my leagues" had no answer on this path: the tool loop that could call
+   * get_my_injuries runs only on xAI, and when xAI was unfunded every answer came through here.
+   * The report has to reach the prompt, and only for the questions it exists for.
+   */
+  it("pushes the cross-league roster injury report for an own-roster injury question", async () => {
+    previewSpendMock.mockResolvedValueOnce({
+      ruleCode: "ai_chimmy_chat_message",
+      tokenCost: 0,
+      canSpend: true,
+      currentBalance: 999999999,
+      requiresConfirmation: false,
+    })
+    buildMyRosterInjuriesMock.mockResolvedValueOnce(
+      "CROSS-LEAGUE INJURY CHECK of the user's OWN rosters\n- Christian McCaffrey RB SF: Out [reported 2026-09-21] — on: KBFL (STARTING)",
+    )
+
+    const formData = new FormData()
+    formData.append("message", "who's out in my leagues")
+    formData.append("leagueId", "league-1")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    expect(res.status).toBe(200)
+    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1" })
+    const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
+    expect(request?.userMessage).toContain("MY ROSTER INJURIES (ALL LEAGUES)")
+    expect(request?.userMessage).toContain("Christian McCaffrey")
+    const body = await res.json()
+    expect(body.meta?.dataSources).toContain("cross_league_roster_injuries")
+  })
+
+  it("does not run the 40-league injury scan for a question that is not about injuries", async () => {
+    previewSpendMock.mockResolvedValueOnce({
+      ruleCode: "ai_chimmy_chat_message",
+      tokenCost: 0,
+      canSpend: true,
+      currentBalance: 999999999,
+      requiresConfirmation: false,
+    })
+    const formData = new FormData()
+    formData.append("message", "Should I trade this player?")
+    formData.append("leagueId", "league-1")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    await POST(buildMultipartRequest(formData) as any)
+    expect(buildMyRosterInjuriesMock).not.toHaveBeenCalled()
   })
 
   it("sends the connected rosters the user selected after league authorization", async () => {
