@@ -298,6 +298,8 @@ export function normalizedPlayerValue(input: {
   scoring?: ScoringContext | null
   /** Reception format `projection` was scored in. See {@link pprConversionFactor}. */
   projectionScoringFormat?: ReceptionScoringFormat | null
+  /** Dynasty: the market price is the primary basis. See {@link valueBasisFor}. */
+  preferMarket?: boolean | null
 }): number {
   /*
    * The IDP value is checked FIRST and returns immediately. It is already the output of a
@@ -341,6 +343,7 @@ export function explainPlayerValue(input: {
   idpValue?: number | null
   scoring?: ScoringContext | null
   projectionScoringFormat?: ReceptionScoringFormat | null
+  preferMarket?: boolean | null
 }): ValueDerivation {
   const basis = valueBasisFor(input)
   const steps: ValueDerivationStep[] = []
@@ -364,9 +367,10 @@ export function explainPlayerValue(input: {
   if (basis === 'market') {
     const v = clamp(Math.round(input.marketValue as number), 0, 10000)
     steps.push({
-      label: 'Market value',
-      detail:
-        'No usable projection, so this falls back to the market price. Positional scarcity is NOT applied: a market value already embeds positional demand, and multiplying again would count it twice.',
+      label: input.preferMarket ? 'Dynasty market value' : 'Market value',
+      detail: input.preferMarket
+        ? "Dynasty league, so the dynasty market price decides — it already reflects age, contract years and long-term outlook, which a rest-of-season projection cannot see. Positional scarcity is NOT applied: the market already embeds positional demand."
+        : 'No usable projection, so this falls back to the market price. Positional scarcity is NOT applied: a market value already embeds positional demand, and multiplying again would count it twice.',
       value: v,
     })
     return { value: v, basis, steps }
@@ -474,6 +478,21 @@ export function valueBasisFor(input: {
   projection?: number | null
   marketValue?: number | null
   idpValue?: number | null
+  /**
+   * 🛑 DYNASTY: THE MARKET PRICE DECIDES, NOT THIS SEASON'S PROJECTION.
+   *
+   * The precedence below — projection first, market as fallback — is right for redraft, where
+   * the question is "who scores more this season". In a dynasty league it priced a 22-year-old
+   * and a 31-year-old with equal rest-of-season projections as the same asset, because the
+   * dynasty market value the enrichment had already loaded (FantasyCalc DYNASTY chart, matched
+   * to 1QB/superflex) was only ever consulted when the projection was missing. That market price
+   * is the one input that embeds age and long-term outlook, and it is built from real trades.
+   *
+   * So when set, the order is IDP → market → projection. The projection stays the fallback for a
+   * player the market does not price (a fresh rookie), which is when a projection is all there is.
+   * Unset ⇒ the redraft order, byte-identical to before.
+   */
+  preferMarket?: boolean | null
 }): ValueBasis {
   /*
    * IDP first and unconditionally, mirroring the engine: it is already the output of a scarcity
@@ -483,15 +502,12 @@ export function valueBasisFor(input: {
 
   const hasProjection =
     Number.isFinite(input.projection as number) && (input.projection as number) > 0
-  if (hasProjection) return 'projection'
+  const hasMarket =
+    input.marketValue != null && Number.isFinite(input.marketValue) && input.marketValue > 0
 
-  if (
-    input.marketValue != null &&
-    Number.isFinite(input.marketValue) &&
-    input.marketValue > 0
-  ) {
-    return 'market'
-  }
+  if (input.preferMarket && hasMarket) return 'market'
+  if (hasProjection) return 'projection'
+  if (hasMarket) return 'market'
 
   /*
    * ⚠ `none` MEANS THE ENGINE PRICED HIM AT ZERO FROM NO USABLE INPUT — which is a refusal, not a
@@ -521,7 +537,21 @@ export function normalizedPickValue(input: {
   slotProbability?: { early: number; middle: number; late: number } | null
   /** 0.85..1.15 multiplier from a separately sourced draft-class assessment. */
   classStrength?: number | null
+  /**
+   * The pick's own MARKET price, in the same FantasyCalc units a dynasty player is priced in.
+   *
+   * 🛑 WITHOUT IT, A DYNASTY TRADE MIXED TWO SCALES. With dynasty players priced off the market
+   * (see `valueBasisFor`), a pick priced off this curve — anchored at a first worth 2,500 — is in
+   * a different currency: this repo's own fit over 771 dynasty trades puts a first nearer 950
+   * market units. So when the market prices the pick, that price is used as-is. It is already
+   * season-specific ("2027 Round 2" is its own row), so the future-season discount below is NOT
+   * applied on top — that would discount the same wait twice.
+   */
+  marketValue?: number | null
 }): number {
+  if (input.marketValue != null && Number.isFinite(input.marketValue) && input.marketValue > 0) {
+    return clamp(Math.round(input.marketValue), 0, 10000)
+  }
   const round = Number.isFinite(input.round as number) ? Math.max(1, Math.round(input.round as number)) : 5
   /*
    * ⚠ THIS ALSO RETIRES THE `?? 100` FLOOR, WHICH WAS A SECOND BUG. `PICK_ROUND_BASE` holds five

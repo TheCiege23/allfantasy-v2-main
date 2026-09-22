@@ -45,6 +45,14 @@ export interface TradeMovement {
  * canonical player id. Every entry is honest-optional — absent ⇒ the engine input is null, never guessed.
  */
 export interface CanonicalMemoEnrichment {
+  /**
+   * Dynasty rookie-pick MARKET prices, keyed `${season}:${round}` (FantasyCalc round average).
+   *
+   * Loaded only for a league priced off the DYNASTY chart — the same chart its players come from,
+   * which is the whole point: a pick and a player on one scale. A pick with no row here falls back
+   * to the engine's curve and says so in the memo notes.
+   */
+  pickMarketValueByKey?: Record<string, number | null | undefined>
   /** ADP per player — from the provider-neutral `AdpDataRecord` (same source the redraft harness reads). */
   adpByPlayerId?: Record<string, number | null | undefined>
   /**
@@ -207,12 +215,30 @@ export function toEnrichedAsset(
   const adp = playerId ? enrich.adpByPlayerId?.[playerId] ?? null : null
   const projection = playerId ? enrich.projectionByPlayerId?.[playerId] ?? null : null
   const position = (playerId ? enrich.positionByPlayerId?.[playerId] : null) ?? asset.metadata.player?.position ?? null
-  const marketValue = playerId ? enrich.marketValueByPlayerId?.[playerId] ?? null : null
+  const pickMeta = asset.metadata.pick
+  const pickKey =
+    kind === 'draft_pick' && pickMeta?.season != null && pickMeta?.round != null
+      ? `${pickMeta.season}:${pickMeta.round}`
+      : null
+  const marketValue = playerId
+    ? enrich.marketValueByPlayerId?.[playerId] ?? null
+    : pickKey
+      ? enrich.pickMarketValueByKey?.[pickKey] ?? null
+      : null
   const idpValue = playerId ? enrich.idpValueByPlayerId?.[playerId] ?? null : null
 
   if (kind === 'future_consideration' && asset.assetType !== 'future_consideration') {
     notes.push(
       `Asset class "${asset.assetType}" is not yet valued by the deterministic engine — modeled as a 0-value future_consideration.`,
+    )
+  }
+  /*
+   * Only when pick prices were loaded at all (a dynasty chart): a redraft league has no pick
+   * market, and saying "no market price" there would describe an absence nobody expected.
+   */
+  if (kind === 'draft_pick' && enrich.pickMarketValueByKey && marketValue == null) {
+    notes.push(
+      `No market price for ${pickMeta?.label ?? 'this pick'} — valued off the pick curve instead, so its weight against the players is an estimate.`,
     )
   }
   if (kind === 'player' && projection == null) {
@@ -465,6 +491,12 @@ export function buildCanonicalTradeMemo(input: BuildCanonicalTradeMemoInput): Ca
      * the previous behaviour rather than to a guess.
      */
     scoring: scoringContextFromCanonicalWorld(input.world),
+    /*
+     * The trade producers (canonicalEvaluator, canonicalShadow) load the DYNASTY market chart
+     * exactly when `world.league.isDynasty`, so that is the fact this flag states. See the note on
+     * `dynastyMarketChart` in the snapshot builder for why it is not inferred there.
+     */
+    dynastyMarketChart: input.world.league.isDynasty === true,
   })
 
   const uncertainty = dedupe([
@@ -510,6 +542,7 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
     positionByPlayerId: tradeWorld.marketContext.positionByPlayerId,
     marketValueByPlayerId: tradeWorld.marketContext.marketValueByPlayerId,
     idpValueByPlayerId: tradeWorld.marketContext.idpValueByPlayerId,
+    pickMarketValueByKey: tradeWorld.marketContext.pickMarketValueByKey,
     liquidityByPlayerId: tradeWorld.marketContext.liquidityByPlayerId,
     trend30dByPlayerId: tradeWorld.marketContext.trend30dByPlayerId,
     thinlyPricedIds: tradeWorld.marketContext.thinlyPricedIds,
@@ -553,6 +586,7 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
     profiles,
     // Same wire as the E.2 path above; a byte-identity test pins the two together.
     scoring: tradeWorld.scoringContext,
+    dynastyMarketChart: tradeWorld.leagueContext.isDynasty === true,
   })
 
   // Reproduce the E.2 uncertainty composition EXACTLY (same sources, same order). `positionsResolved`

@@ -43,7 +43,7 @@ import {
   type TradeMovement,
 } from './canonicalMemo'
 import { deriveParticipants, type TradeAssetSummary } from './dco'
-import { resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
+import { pickMarketArgsFromWorld, resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
 import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import {
   resolveRosterIdentityJoin,
@@ -118,6 +118,9 @@ export interface CanonicalTradeShadowDeps {
     scoringPresetId?: string | null
     idpLeague?: { leagueId: string; starterSlots: string[] | null; numTeams: number; isDynasty: boolean } | null
     valueFormat?: { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' | 'SUPERFLEX' } | null
+    /* Dynasty rookie-pick prices, from `pickMarketArgsFromWorld`. Null outside dynasty — there is
+     * no rookie-pick market to read there, and the port declines to load one. */
+    pickMarket?: { numTeams: number; ppr: 0 | 0.5 | 1 } | null
   }) => Promise<TradeEnrichmentResult>
   /**
    * E.5 — OPTIONAL read-only roster-identity resolver mapping proposal-space roster ids to canonical join
@@ -336,14 +339,18 @@ export async function runCanonicalTradeShadowAttempt(
          * waiting — Tyreek Hill at 717, Ricky Pearsall at 1,372. The remaining 1,322 have no
          * market row either and honestly stay at zero.
          *
-         * Strictly additive: `normalizedPlayerValue` consults market value ONLY when there is
-         * no usable projection, so this can lift an asset off zero and can never move one that
-         * the engine could already price.
+         * Strictly additive IN REDRAFT: there `normalizedPlayerValue` consults market value only
+         * when there is no usable projection, so this can lift an asset off zero and can never
+         * move one the engine could already price. ⚠ In a DYNASTY league that is no longer true,
+         * on purpose: the dynasty market price now decides ahead of the rest-of-season projection
+         * (`dynastyMarketChart` in the snapshot builder), because it is the one input that sees age.
          */
         valueFormat: {
           format: world.league.isDynasty ? 'DYNASTY' : 'REDRAFT',
           qbFormat: detectQbFormat(world.league.rosterSettings.starterSlots),
         },
+        // Dynasty rookie-pick prices from the same market as the players (null otherwise).
+        pickMarket: pickMarketArgsFromWorld(world),
       })
     } catch {
       enrichmentResult = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, idpValueResolved: 0, thinlyPricedIds: [], unresolvedIds: [], warnings: ['enrichment_unavailable'] }

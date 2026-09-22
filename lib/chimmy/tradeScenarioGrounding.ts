@@ -4,6 +4,7 @@ import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
+import { extractPickMentions, pickLabel, type PickMention } from './tradePickMentions'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -72,10 +73,9 @@ export const PLAYOFF_ODDS_UNAVAILABLE =
   'Playoff odds are not computed for a hypothetical trade: no engine here prices every team\'s real lineup against the real remaining schedule.'
 
 /*
- * A draft pick in the sentence. Picks are priced by the evaluator, but turning "a 2027 1st" into
- * a pick asset needs the original owner and season resolved, which this does not do yet — so a
- * trade that includes one is refused rather than evaluated without it, which would misstate the
- * value on that side.
+ * A draft pick anywhere in the sentence — the BROAD detector. Parsing into (season, round) is
+ * `extractPickMentions`; this stays as its backstop, so a pick the parser could not read makes the
+ * trade refuse instead of being evaluated without it (which would misstate that side's value).
  */
 const ORDINAL_NOT_A_PICK = String.raw`(?![\s-]+(?:place|down|quarter|half|string|team|time|look|and\s+goal))`
 const PICK_MENTION = new RegExp(
@@ -113,19 +113,35 @@ export async function buildTradeScenario(
   const sides = splitSides(args.message)
   if (!sides) return null
   const candidates = extractPlayerNameCandidates(args.message)
-  if (candidates.length < 2) return null
-
-  if (PICK_MENTION.test(args.message)) {
-    return {
-      status: 'unresolved',
-      reason: 'includes_picks',
-      detail: 'This trade includes a draft pick, and draft picks are not included in scenario comparisons yet.',
-    }
-  }
+  /*
+   * Picks per SIDE, because a pick belongs to whoever's side of "for" it is written on. A pick counts
+   * toward "is this a trade at all", so "my 2027 1st for Puka Nacua" (one name) still qualifies.
+   */
+  const leftPicks = extractPickMentions(sides.left)
+  const rightPicks = extractPickMentions(sides.right)
+  const pickCount = leftPicks.picks.length + rightPicks.picks.length
+  const mentionsPicks = pickCount > 0 || leftPicks.unclear || rightPicks.unclear || PICK_MENTION.test(args.message)
+  if (candidates.length + pickCount < 2) return null
 
   const world = await deps.resolveWorld(args.leagueId).catch(() => null)
   if (!world) {
     return { status: 'unresolved', reason: 'no_league_world', detail: 'The league could not be loaded to compare rosters.' }
+  }
+
+  /*
+   * 🛑 PICKS ARE PRICED ONLY WHERE A PICK MARKET EXISTS — A DYNASTY LEAGUE. There the evaluator
+   * reads FantasyCalc's own dynasty pick prices, on the same scale as the players. Anywhere else a
+   * pick would be priced off a curve in a different currency from the players beside it, so the
+   * trade is refused as before rather than graded on a guess.
+   */
+  if (mentionsPicks) {
+    /*
+     * ⚠ THE OLD DETECTOR IS KEPT AS A BACKSTOP. If it sees a pick the parser turned into nothing,
+     * evaluating would silently drop that asset from its side — so that case is "unclear" too.
+     */
+    const detectorOnly = pickCount === 0 && !leftPicks.unclear && !rightPicks.unclear
+    const refusal = refusePicks(world, leftPicks, detectorOnly ? { ...rightPicks, unclear: true } : rightPicks)
+    if (refusal) return refusal
   }
 
   const viewerRoster = viewerRosterOf(world, args.userId)
@@ -168,9 +184,23 @@ export async function buildTradeScenario(
    * Allen and the quarterback) is narrowed by which roster that side needs, and refused if that
    * still leaves more than one.
    */
-  type Oriented = { give: Located[]; get: Located[]; partnerRosterId: string } | { error: TradeScenarioUnresolvedReason }
-  const orient = (giveSide: Located[][], getSide: Located[][]): Oriented => {
-    if (giveSide.length === 0 || getSide.length === 0) return { error: 'players_not_rostered' }
+  type Oriented =
+    | { give: Located[]; get: Located[]; givePicks: PickMention[]; getPicks: PickMention[]; partnerRosterId: string }
+    | { error: TradeScenarioUnresolvedReason }
+  const orient = (
+    giveSide: Located[][],
+    getSide: Located[][],
+    givePicks: PickMention[],
+    getPicks: PickMention[],
+  ): Oriented => {
+    if (giveSide.length + givePicks.length === 0 || getSide.length + getPicks.length === 0) {
+      return { error: 'players_not_rostered' }
+    }
+    /*
+     * The partner is identified by the players you would RECEIVE. With only picks on that side
+     * there is no way to know whose picks they are — refused, and the reply asks for a name.
+     */
+    if (getSide.length === 0) return { error: 'pick_partner_unclear' }
     const give: Located[] = []
     for (const hits of giveSide) {
       const mine = hits.filter((h) => h.rosterId === viewerRoster.rosterId)
@@ -187,11 +217,11 @@ export async function buildTradeScenario(
       partnerIds.add(theirs[0]!.rosterId)
     }
     if (partnerIds.size !== 1) return { error: 'multiple_partners' }
-    return { give, get, partnerRosterId: [...partnerIds][0]! }
+    return { give, get, givePicks, getPicks, partnerRosterId: [...partnerIds][0]! }
   }
 
-  const forward = orient(left, right)
-  const backward = orient(right, left)
+  const forward = orient(left, right, leftPicks.picks, rightPicks.picks)
+  const backward = orient(right, left, rightPicks.picks, leftPicks.picks)
   const chosen = 'give' in forward ? forward : 'give' in backward ? backward : null
   if (!chosen) {
     const reason = ('error' in forward ? forward.error : 'sides_unclear') as TradeScenarioUnresolvedReason
@@ -208,9 +238,30 @@ export async function buildTradeScenario(
     position: p.position,
     faabAmount: null,
   })
+  /*
+   * ⚠ ASSUMED TO BE THE GIVING TEAM'S OWN PICK, AND THE PROMPT SAYS SO. "My 2027 1st" is almost
+   * always that, but a traded-in pick has a different original owner and so a different likely
+   * slot. The value is the round AVERAGE either way, which is exactly the uncertainty an unknown
+   * slot carries.
+   */
+  const toPickAsset = (p: PickMention, from: string, to: string): TradeAssetSummary => ({
+    fromRosterId: from,
+    toRosterId: to,
+    assetType: 'draft_pick',
+    playerId: null,
+    playerName: null,
+    faabAmount: null,
+    itemReference: `pick:${p.season}:${p.round}:${from}`,
+    pickSeason: p.season,
+    pickRound: p.round,
+    pickOriginalRosterId: from,
+    pickLabel: pickLabel(p),
+  })
   const assets = [
     ...chosen.give.map((p) => toAsset(p, viewerRoster.rosterId, chosen.partnerRosterId)),
+    ...chosen.givePicks.map((p) => toPickAsset(p, viewerRoster.rosterId, chosen.partnerRosterId)),
     ...chosen.get.map((p) => toAsset(p, chosen.partnerRosterId, viewerRoster.rosterId)),
+    ...chosen.getPicks.map((p) => toPickAsset(p, chosen.partnerRosterId, viewerRoster.rosterId)),
   ]
 
   let evaluation: CanonicalTradeEvaluation
@@ -255,12 +306,19 @@ export async function buildTradeScenario(
       : null
 
   const strip = (p: Located): ScenarioPlayer => ({ playerId: p.playerId, name: p.name, position: p.position })
+  const stripPick = (p: PickMention, owner: string): ScenarioPlayer => ({
+    playerId: `pick:${p.season}:${p.round}:${owner}`,
+    name: pickLabel(p),
+    position: null,
+  })
+  const tradedPicks = chosen.givePicks.length + chosen.getPicks.length
   return {
     kind: 'trade',
     status: 'ready',
-    give: chosen.give.map(strip),
-    get: chosen.get.map(strip),
+    give: [...chosen.give.map(strip), ...chosen.givePicks.map((p) => stripPick(p, viewerRoster.rosterId))],
+    get: [...chosen.get.map(strip), ...chosen.getPicks.map((p) => stripPick(p, chosen.partnerRosterId))],
     partnerTeamName: partnerTeam?.displayName || partnerTeam?.ownerName || 'the other team',
+    ...(tradedPicks > 0 ? { picks: tradedPicks } : {}),
     value: {
       given: evaluation.valueGiven,
       received: evaluation.valueReceived,
@@ -276,6 +334,46 @@ export async function buildTradeScenario(
   }
 }
 
+/** Why a trade that names picks cannot be evaluated, or null when every pick is usable. */
+function refusePicks(
+  world: CanonicalWorld,
+  left: { picks: PickMention[]; unclear: boolean },
+  right: { picks: PickMention[]; unclear: boolean },
+): TradeScenario | null {
+  if (!world.league.isDynasty) {
+    return {
+      status: 'unresolved',
+      reason: 'includes_picks',
+      detail:
+        'This trade includes a draft pick. Picks are only compared in dynasty leagues, where they have a market price on the same scale as the players; in this league one would be a guess.',
+    }
+  }
+  if (left.unclear || right.unclear) {
+    return {
+      status: 'unresolved',
+      reason: 'pick_unclear',
+      detail: 'A draft pick is mentioned but I could not tell which one — name each pick with its year and round, like "2027 1st".',
+    }
+  }
+  const all = [...left.picks, ...right.picks]
+  if (all.some((p) => p.season == null)) {
+    return {
+      status: 'unresolved',
+      reason: 'pick_season_unclear',
+      detail: 'A draft pick is named without its year, and picks from different drafts do not price the same — say which year, like "2027 1st".',
+    }
+  }
+  const season = world.league.season
+  if (season != null && all.some((p) => (p.season as number) < season)) {
+    return {
+      status: 'unresolved',
+      reason: 'pick_season_past',
+      detail: `A draft pick named is from a draft before the ${season} season, so it has already been used.`,
+    }
+  }
+  return null
+}
+
 function describeUnresolved(reason: TradeScenarioUnresolvedReason, notRostered: string[]): string {
   switch (reason) {
     case 'players_not_rostered':
@@ -286,6 +384,8 @@ function describeUnresolved(reason: TradeScenarioUnresolvedReason, notRostered: 
       return 'A player name matches more than one rostered player in this league, so the trade is ambiguous.'
     case 'multiple_partners':
       return 'The players you would receive are on more than one team; only two-team trades are compared.'
+    case 'pick_partner_unclear':
+      return 'Everything you would receive is a draft pick, so it is not clear whose picks they are — name at least one player from the other team.'
     default:
       return 'It is not clear which players you would give and which you would get — one side must be on your roster and the other on one other team.'
   }
@@ -321,6 +421,11 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
     `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
+    ...(s.picks
+      ? [
+          "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
+        ]
+      : []),
   ]
   return lines.join('\n')
 }

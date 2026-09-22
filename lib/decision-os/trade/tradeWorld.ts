@@ -86,6 +86,11 @@ export interface MarketContext {
   adpByPlayerId: Record<string, number | null | undefined>
   /** Market value per player — Phase F enrichment; honest-empty today. */
   marketValueByPlayerId: Record<string, number | null | undefined>
+  /**
+   * Dynasty pick market prices, `${season}:${round}`. Undefined — not `{}` — when none were loaded,
+   * so the memo can tell "this league has no pick market" from "this pick is missing from it".
+   */
+  pickMarketValueByKey?: Record<string, number | null | undefined>
   /** League-specific defender values; separate from market quotes. */
   idpValueByPlayerId: Record<string, number | null | undefined>
   liquidityByPlayerId: Record<string, number | null | undefined>
@@ -197,6 +202,7 @@ function buildMarketContext(movements: TradeMovement[], enrich: CanonicalMemoEnr
   return {
     adpByPlayerId: enrich.adpByPlayerId ?? {},
     marketValueByPlayerId: enrich.marketValueByPlayerId ?? {},
+    ...(enrich.pickMarketValueByKey ? { pickMarketValueByKey: enrich.pickMarketValueByKey } : {}),
     idpValueByPlayerId: enrich.idpValueByPlayerId ?? {},
     liquidityByPlayerId: enrich.liquidityByPlayerId ?? {},
     trend30dByPlayerId: enrich.trend30dByPlayerId ?? {},

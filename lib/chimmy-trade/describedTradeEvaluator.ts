@@ -81,6 +81,11 @@ export interface DescribedTradeLeague {
   teamCount?: number | null
 }
 
+/** The ONE reading of "is this a dynasty league" in this module — ADP slice and market concept share it. */
+function isDynastyVariant(league: DescribedTradeLeague | null): boolean {
+  return Boolean(league?.leagueVariant?.toLowerCase().includes('dynasty'))
+}
+
 /**
  * The league's scarcity context, from ROSTER SLOTS when they exist and from the scoring LABEL only
  * when they do not.
@@ -264,9 +269,7 @@ export async function buildDescribedTradeContext(args: {
      * across the two sides of one trade, which would price them on different
      * scales and call the result fair.
      */
-    const preferredFormat = league?.leagueVariant?.toLowerCase().includes('dynasty')
-      ? 'dynasty'
-      : FALLBACK_FORMAT
+    const preferredFormat = isDynastyVariant(league) ? 'dynasty' : FALLBACK_FORMAT
     const preferredScoring = (league?.scoring ?? '').toLowerCase().includes('ppr')
       ? 'ppr'
       : FALLBACK_SCORING
@@ -311,6 +314,15 @@ export async function buildDescribedTradeContext(args: {
     return m
   }
 
+  /*
+   * 🛑 THE MARKET ROW WAS THE HIGHEST PRICE ACROSS EVERY FORMAT. One player holds a row per
+   * `leagueConcept` (dynasty and redraft at genuinely different numbers), and this read took all of
+   * them `orderBy marketValue desc` and kept the first per name — so a redraft trade was priced off
+   * a rookie's DYNASTY value, and vice versa, whichever was larger. Now only the league's own
+   * concept is read. With no league there is no concept to read, so no market value is used at all:
+   * guessing one is the bug, and the projection / ADP bases below still apply.
+   */
+  const marketConcept = league ? (isDynastyVariant(league) ? 'dynasty' : 'redraft') : null
   const projSeason = await newestProjectionSeason(sport).catch(() => null)
   const [projRows, marketRows] = await Promise.all([
     projSeason == null
@@ -323,14 +335,16 @@ export async function buildDescribedTradeContext(args: {
             take: MAX_CANDIDATES * 6,
           })
           .catch(() => []),
-    prisma.allFantasyMarketPlayerValue
-      .findMany({
-        where: { published: true, sport, playerName: { in: candidates } },
-        select: { playerName: true, position: true, marketValue: true },
-        orderBy: { marketValue: 'desc' },
-        take: MAX_CANDIDATES * 4,
-      })
-      .catch(() => []),
+    marketConcept == null
+      ? Promise.resolve([])
+      : prisma.allFantasyMarketPlayerValue
+          .findMany({
+            where: { published: true, sport, leagueConcept: marketConcept, playerName: { in: candidates } },
+            select: { playerName: true, position: true, marketValue: true },
+            orderBy: { marketValue: 'desc' },
+            take: MAX_CANDIDATES * 4,
+          })
+          .catch(() => []),
   ])
 
   const projByName = byName(projRows)
