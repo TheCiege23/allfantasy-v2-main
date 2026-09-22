@@ -25,6 +25,7 @@ import { deriveValueFormat, deriveLeagueSizeAndPpr } from '@/lib/decision-os/gro
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { looksLikeTradeTargetQuestion, namesBothSidesOfTrade } from '@/lib/chimmy/tradeTargetQuestion'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
@@ -269,8 +270,54 @@ function detectNewsQuestion(message: string): boolean {
   return /\b(news|latest|updates?|headlines?|report|reports|what happened|breaking)\b/i.test(message)
 }
 
+/*
+ * 🛑 A BARE `out` MADE EVERY PHRASAL VERB AN INJURY QUESTION.
+ *
+ * This matched `\bout\b` anywhere, so "help me figure out my flex spot" and "check out this
+ * trade offer" were answered with the six newest league-wide NFL injury rows, signed as a
+ * sourced report and returned as `kind: 'answer'` — which short-circuits the pipeline before
+ * the tool loop that could actually have read the asker's roster.
+ *
+ * "out" is an injury word only as a STATUS: "is he out", "who's out", "ruled out",
+ * "out for the season". Those are matched by shape below; the verb particle is not.
+ */
+const INJURY_WORD_PATTERN =
+  /\b(injur(?:y|ies|ed)|hurt|questionable|doubtful|suspension|suspended|availability|inactives?|ruled\s+out|day[- ]to[- ]day)\b/i
+const OUT_STATUS_PATTERNS: RegExp[] = [
+  /* "is Mahomes out", "who's out", "are any of them out" — a copula before `out`, not "of" after it. */
+  /\b(?:is|are|was|were|be|been|being|who's|whos|he's|she's|anyone|anybody)\s+(?:[\w'.-]+\s+){0,2}out\b(?!\s+(?:of|there|here)\b)/i,
+  /\bout\s+for\s+(?:the\s+)?(?:season|year|week|game|month|playoffs|tonight|sunday|monday|thursday)\b/i,
+  /\bout\s+(?:this|next)\s+week\b/i,
+  /\bout\s+(?:tonight|today|indefinitely)\b/i,
+]
+
 function detectInjuryQuestion(message: string): boolean {
-  return /\b(injur(?:y|ies|ed)|hurt|questionable|doubtful|out|suspension|suspended|availability)\b/i.test(message)
+  return INJURY_WORD_PATTERN.test(message) || OUT_STATUS_PATTERNS.some((p) => p.test(message))
+}
+
+/*
+ * 🛑 "WHO'S OUT IN MY LEAGUES" WAS ANSWERED WITH SOMEBODY ELSE'S PLAYERS.
+ *
+ * The injury builder has no user and no league — it can only list sport-wide rows. A
+ * first-person roster question ("any injuries on my team", "my RB is out, who do I pick up")
+ * therefore got the six newest NFL injuries across the whole league, none necessarily on the
+ * asker's roster, stated as the answer. That is a confident false answer, not a partial one.
+ *
+ * So these yield (return null) and the pipeline answers from the user's own rosters. A
+ * NAMED player still gets the cached row even in the first person ("is my guy Josh Allen
+ * hurt") — that lookup is about the player, and the cache answers it correctly.
+ *
+ * ⚠ Broader than `isPersonalRosterScoped` on purpose, and kept separate from it: that
+ * predicate gates the SCHEDULE builders, where "my team" can legitimately mean a real-world
+ * team the user follows. Here there is no reading of "injuries on my team" the cache answers.
+ */
+const OWN_ROSTER_PATTERNS: RegExp[] = [
+  /\b(?:my|our)\s+(?:[\w'-]+\s+){0,2}(?:teams?|players?|guys|squads?|rosters?|lineups?|starters?|bench|leagues?|rb|rbs|wr|wrs|qb|qbs|te|tes|flex|kicker|dst|def|defense)\b/i,
+  /\bon\s+my\s+(?:[\w'-]+\s+){0,2}(?:team|roster)\b/i,
+]
+
+function isOwnRosterQuestion(message: string): boolean {
+  return isPersonalRosterScoped(message) || OWN_ROSTER_PATTERNS.some((p) => p.test(message))
 }
 
 function detectWeatherQuestion(message: string): boolean {
@@ -842,6 +889,12 @@ async function buildCachedNewsAnswer(message: string, locale?: string): Promise<
   if (!detectNewsQuestion(message) && !/\bwhat'?s new\b/i.test(message)) return null
   const sport = resolveSportFromMessage(message) ?? 'NFL'
   const playerName = extractLikelyPlayerName(message)
+  /*
+   * Same reason as the injury builder: a sport-wide feed is never the answer to "news on my
+   * players". Without this, "injury updates for my roster" skipped the injury builder only to
+   * be caught here by the word "updates" and answered with league-wide headlines.
+   */
+  if (!playerName && isOwnRosterQuestion(message)) return null
   const team = resolveTeamAlias(message, sport)
 
   try {
@@ -869,33 +922,83 @@ async function buildCachedNewsAnswer(message: string, locale?: string): Promise<
   }
 }
 
+const INJURY_ANSWER_MAX_ROWS = 6
+
+function isoDay(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+/*
+ * 🛑 THIS READ `sportsInjury` DIRECTLY, AND SO SERVED ROWS THE REST OF THE APP HAD RETIRED.
+ *
+ * It ran its own findMany with no `expiresAt` filter, no report-age bound and no per-player
+ * dedupe, ordered by `date` — exactly the ad-hoc read `injuryReadPort` was written to end.
+ * Production holds ~2,953 NFL rows frozen at 2026-07-24 from the retired api_sports feed; the
+ * port drops them as expired, this builder did not. And it printed no date at all, so a July
+ * status read as today's.
+ *
+ * Now it goes through `listInjuryFacts` (TTL, one row per player, report-age horizon, the
+ * no-source verdict) and every line carries its report date, with stale claims flagged.
+ */
 async function buildCachedInjuryAnswer(message: string, locale?: string): Promise<string | null> {
   if (!detectInjuryQuestion(message)) return null
   const sport = resolveSportFromMessage(message) ?? 'NFL'
   const playerName = extractLikelyPlayerName(message)
+  /* See OWN_ROSTER_PATTERNS: the cache cannot answer about the asker's roster. */
+  if (!playerName && isOwnRosterQuestion(message)) return null
   const team = resolveTeamAlias(message, sport)
+  const scope = playerName ? ` for ${playerName}` : team ? ` for ${team.canonical}` : ''
 
   try {
-    const rows = await (prisma as any).sportsInjury?.findMany?.({
-      where: {
-        sport,
-        ...(playerName ? { playerName: { contains: playerName, mode: 'insensitive' as const } } : {}),
-        ...(!playerName && team ? {
-          OR: team.aliases.map((alias) => ({ team: { contains: alias, mode: 'insensitive' as const } })),
-        } : {}),
-      },
-      orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
-      take: 6,
-    }).catch(() => []) ?? []
+    const list = await listInjuryFacts({
+      sport,
+      playerNameContains: playerName,
+      limit: playerName ? INJURY_ANSWER_MAX_ROWS : 1000,
+    })
 
-    if (!rows.length) {
-      return `${reliableUnavailable(locale)} I do not have cached ${sport} injury data${playerName ? ` for ${playerName}` : team ? ` for ${team.canonical}` : ''} right now.`
+    if (!list.coverage.sourceAvailable) {
+      return `${reliableUnavailable(locale)} ${list.coverage.reason ?? `No ${sport} injury source is connected.`}`
     }
 
-    const lines = rows.map((row: any) =>
-      `- ${row.playerName}${row.team ? ` (${row.team})` : ''}: ${row.status ?? row.type ?? 'status unknown'}${row.description ? ` - ${String(row.description).slice(0, 140)}` : ''}`
-    )
-    return `Cached ${sport} injury report:\n${lines.join('\n')}\nSource: AllFantasy SportsInjury cache.`
+    /*
+     * Team filtering stays alias-substring, the rule the old query used — stored `team`
+     * is an abbreviation from one provider and a full name from another, so the port's
+     * exact-match `team` argument would miss half of them.
+     */
+    const facts = (!playerName && team
+      ? list.facts.filter((f) => {
+          const stored = (f.team ?? '').toLowerCase()
+          return stored.length > 0 && team.aliases.some((alias) => stored.includes(alias))
+        })
+      : list.facts
+    ).slice(0, INJURY_ANSWER_MAX_ROWS)
+
+    if (!facts.length) {
+      return `${reliableUnavailable(locale)} I do not have current cached ${sport} injury data${scope} right now.`
+    }
+
+    const lines = facts.map((f) => {
+      const status = f.status ?? f.type ?? 'status unknown'
+      const note = f.description ? ` - ${String(f.description).slice(0, 140)}` : ''
+      const staleNote = f.stale ? ', may be out of date' : ''
+      return `- ${f.playerName}${f.team ? ` (${f.team})` : ''}: ${status}${note} (reported ${isoDay(f.reportedAt)}${staleNote})`
+    })
+
+    const caveats: string[] = []
+    if (list.feedStale && list.newestFetchedAt) {
+      caveats.push(`The injury feed has not refreshed since ${isoDay(list.newestFetchedAt)}, so statuses may have changed.`)
+    }
+    /* A sport-wide list is not about the asker's players, and must not read as if it were. */
+    if (!playerName && !team) {
+      caveats.push(`These are the most recent league-wide ${sport} reports, not filtered to your rosters.`)
+    }
+
+    return [
+      `Cached ${sport} injury report${scope}:`,
+      ...lines,
+      ...caveats,
+      `Source: AllFantasy SportsInjury cache.`,
+    ].join('\n')
   } catch {
     return `${reliableUnavailable(locale)} The injury cache could not be read safely.`
   }
