@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useAdminRefresh } from "@/components/admin/adminRefreshSignal"
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -81,6 +82,7 @@ export function VisitorAnalyticsPanel() {
   useEffect(() => {
     void load(window)
   }, [window, load])
+  useAdminRefresh(() => void load(window))
 
   const selected = data?.windows.find((w) => w.key === window)
 

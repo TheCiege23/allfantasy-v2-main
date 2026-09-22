@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useAdminRefresh } from "@/components/admin/adminRefreshSignal"
 
 import type {
   CampaignAttributionReport,
@@ -92,8 +93,10 @@ export function CampaignAttributionPanel() {
   const [windowDays, setWindowDays] = useState(30)
   const [platform, setPlatform] = useState("")
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // `silent` is the background refresh: this panel swaps its whole body for a
+  // loading card, so a visible reload every minute would blank it each time.
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ windowDays: String(windowDays) })
@@ -117,6 +120,7 @@ export function CampaignAttributionPanel() {
   useEffect(() => {
     void load()
   }, [load])
+  useAdminRefresh(() => void load(true))
 
   // Lead with what needs attention: unbuilt stages are the actionable exception here.
   const unbuilt = useMemo(
