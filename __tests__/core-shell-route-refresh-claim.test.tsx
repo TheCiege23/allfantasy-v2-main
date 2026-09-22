@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -58,6 +58,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Unmount even when an assertion threw, so a held claim cannot leak into the next test.
+  cleanup()
   vi.useRealTimers()
 })
 
@@ -96,17 +98,39 @@ describe('the shell poll and the matchup board', () => {
     expect(routeRefreshClaimed()).toBe(false)
   })
 
-  it('the shell resumes once the board unmounts', () => {
-    const { rerender, unmount } = render(
+  it("an idle board does not claim — the shell's cadence is what notices kickoff", () => {
+    const { unmount } = render(
       <Shell>
         <MatchupPulseRefresh inPlay={false} />
       </Shell>,
     )
-    // Board idles at 120s; the shell must stay silent at its 20s tick.
+    // Board idles at 120s; the shell's 20s game-day tick must still fire.
     act(() => void vi.advanceTimersByTime(20_000))
-    expect(nav.router.refresh).not.toHaveBeenCalled()
+    expect(nav.router.refresh).toHaveBeenCalledTimes(1)
+    expect(routeRefreshClaimed()).toBe(false)
+    unmount()
+  })
 
+  it('the shell resumes when play ends and when the board unmounts', () => {
+    const { rerender, unmount } = render(
+      <Shell>
+        <MatchupPulseRefresh inPlay />
+      </Shell>,
+    )
+    expect(routeRefreshClaimed()).toBe(true)
+    rerender(
+      <Shell>
+        <MatchupPulseRefresh inPlay={false} />
+      </Shell>,
+    )
+    expect(routeRefreshClaimed()).toBe(false)
+    rerender(
+      <Shell>
+        <MatchupPulseRefresh inPlay />
+      </Shell>,
+    )
     rerender(<Shell />)
+    expect(routeRefreshClaimed()).toBe(false)
     act(() => void vi.advanceTimersByTime(20_000))
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
     unmount()

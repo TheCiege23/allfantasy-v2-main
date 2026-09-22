@@ -67,8 +67,14 @@ export function MatchupPulseRefresh({ inPlay }: MatchupPulseRefreshProps) {
   const pendingRef = useRef(false)
   pendingRef.current = pending
 
-  // This board owns the route's refresh while mounted — see routeRefreshClaim.
-  useEffect(() => claimRouteRefresh(), [])
+  /*
+   * This board owns the route's refresh while a row is IN PLAY — see routeRefreshClaim.
+   * ⚠ NOT WHILE IDLE. Idle, this board polls every 120s, and it is the shell's 20s
+   * game-day refresh that notices kickoff and flips `inPlay`; claiming then would hold
+   * a kicked-off board on projections for up to two minutes, and the rail's non-Sleeper
+   * margins (server snapshot only) with it.
+   */
+  useEffect(() => (inPlay ? claimRouteRefresh() : undefined), [inPlay])
 
   useEffect(() => {
     setRefreshedAt(Date.now())
