@@ -645,6 +645,7 @@ function EmailCenterPanel({ status }: { status: AdminEmailStatus }) {
 
 function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAudit }) {
   const phaseGroups = [
+    { title: "AI Providers", rows: audit.aiProviders ?? [] },
     { title: "Identity", rows: audit.identityFindings },
     { title: "Historical Data", rows: audit.historicalDataFindings },
     { title: "Images / Logos", rows: audit.imageLogoFindings },

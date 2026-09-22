@@ -137,3 +137,63 @@ describe("Sports Operating System readiness audit", () => {
     expect(intents.start_sit?.targetEngine).toBe("Lineup Advisor")
   })
 })
+
+/*
+ * 🛑 THE PANEL SHOWED "READY" FOR A TRADE ANALYZER THAT COULD PRICE ONE SPORT, AND HAD NO ROW AT
+ * ALL FOR THE AI PROVIDERS — WHILE TWO OF THREE WERE OUT OF CREDIT (measured 2026-09-22).
+ */
+describe("readiness is per-sport, and AI providers are measured", () => {
+  const nflAndNba = () =>
+    buildSportsOperatingSystemAudit({
+      importMatrix: [row("nfl", "NFL"), row("nba", "NBA"), row("world-cup", "World Cup")],
+      aiToolAvailability: tools,
+    })
+
+  it("does not call the trade analyzer Ready when it covers only some fantasy sports", () => {
+    const trade = nflAndNba().tradeAnalyzer[0]
+    expect(trade.status).toBe("partial")
+    expect(trade.gaps.join(" ")).toMatch(/Ready only for NFL; not for NBA/)
+    /* The bracket product is not a fantasy sport and must not count against coverage. */
+    expect(trade.gaps.join(" ")).not.toMatch(/World Cup/)
+  })
+
+  it("still calls it Ready when every fantasy sport is covered", () => {
+    expect(audit().tradeAnalyzer[0].status).toBe("ready")
+  })
+
+  it("states the grading limits the data matrix cannot see", () => {
+    const gaps = audit().tradeAnalyzer[0].gaps.join(" ")
+    expect(gaps).toMatch(/Dynasty trades are priced on rest-of-season projection/)
+    expect(gaps).toMatch(/draft pick are refused/)
+    expect(audit().fantasyValueEngine[0].gaps.join(" ")).toMatch(/NFL only/)
+  })
+
+  it("shows AI providers as NOT MEASURED, never healthy, when no probe ran", () => {
+    const rows = audit().aiProviders
+    expect(rows).toHaveLength(1)
+    expect(rows[0].status).toBe("missing")
+    expect(rows[0].gaps.join(" ")).toMatch(/key being set does not mean/)
+  })
+
+  it("reports the measured provider state, and the xAI-only features separately", () => {
+    const checkedAt = "2026-09-22T12:00:00.000Z"
+    const result = buildSportsOperatingSystemAudit({
+      importMatrix: [row("nfl", "NFL")],
+      aiToolAvailability: tools,
+      aiProviders: [
+        { id: "openai", label: "OpenAI", state: "billing", model: "gpt-4o", httpStatus: 429, detail: "billing_not_active", checkedAt },
+        { id: "xai", label: "xAI (Grok)", state: "billing", model: "grok-4.5", httpStatus: 403, detail: "used all available credits", checkedAt },
+        { id: "deepseek", label: "DeepSeek", state: "answering", model: "deepseek-chat", httpStatus: 200, detail: null, checkedAt },
+      ],
+    })
+    const byId = Object.fromEntries(result.aiProviders.map((r) => [r.id, r]))
+    expect(byId["ai-chimmy-can-answer"].status).toBe("partial")
+    expect(byId["ai-chimmy-can-answer"].gaps.join(" ")).toMatch(/only DeepSeek is answering/)
+    expect(byId["ai-chimmy-tools"].status).toBe("missing")
+    expect(byId["ai-provider-openai"].status).toBe("missing")
+    expect(byId["ai-provider-openai"].recommendation).toMatch(/rotating the key will not help/)
+    expect(byId["ai-provider-deepseek"].status).toBe("ready")
+    /* And they count in the summary like every other signal. */
+    expect(result.summary.missing).toBeGreaterThanOrEqual(3)
+  })
+})
