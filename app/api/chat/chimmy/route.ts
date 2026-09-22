@@ -117,6 +117,7 @@ import { applyGroundingBudget } from '@/lib/chimmy/groundingBudget'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
+import { judgeChimmyDelivery } from '@/lib/chimmy/chargeOnDelivery'
 import {
   buildChimmyResponseForAssistantMode,
   normalizeChimmyAssistantMode,
@@ -189,6 +190,9 @@ type ChimmyPECRExecutionOutput = {
     model?: string
     modelName?: string
     skipped?: boolean
+    /** What the model returned — read by `judgeChimmyDelivery` to decide whether the charge stands. */
+    raw?: string
+    error?: string
     tokensPrompt?: number
     tokensCompletion?: number
   }>
@@ -3793,6 +3797,40 @@ ${describedTradeCtx}`
       }
     }
 
+    /*
+     * 🛑 CHARGE ON DELIVERY. The spend above happens before any model runs, and the only refund
+     * used to be the catch below — for a request that THREW. When every provider failed,
+     * orchestration returned the deterministic fallback as a normal success and the user paid for
+     * "AI explanation is temporarily unavailable". The turn is judged on what the models actually
+     * returned; a non-answer is refunded here, before the response or the history row is written,
+     * so the cost the drawer shows is the cost the user bore.
+     */
+    const delivery = judgeChimmyDelivery({ modelOutputs: pecrOutput.modelOutputs, answer: modeAdjustedAnswer })
+    let chargeRefund: { balanceAfter: number; reason: string } | null = null
+    if (!delivery.delivered && spendLedger?.id) {
+      const refund = await spendService
+        .refundSpendByLedger({
+          userId,
+          spendLedgerId: spendLedger.id,
+          refundRuleCode: 'feature_execution_failed',
+          sourceType: 'chimmy_chat_refund',
+          sourceId: spendLedger.id,
+          /* Same key as the catch-path refund: one ledger entry can only ever be refunded once. */
+          idempotencyKey: `refund:chimmy_chat:${spendLedger.id}`,
+          description: 'Auto refund: Chimmy could not deliver an answer.',
+          metadata: { conversationId, leagueId: leagueId ?? null, reason: delivery.reason },
+        })
+        .catch((err: unknown) => {
+          console.warn('[chimmy] charge-on-delivery refund failed', {
+            ledgerId: spendLedger?.id,
+            reason: delivery.reason,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          return null
+        })
+      if (refund) chargeRefund = { balanceAfter: refund.balanceAfter, reason: delivery.reason }
+    }
+
     const meta = {
       assistant: 'Chimmy',
       conversationId,
@@ -3872,9 +3910,11 @@ ${describedTradeCtx}`
       tokenSpend: spendLedger && tokenPreview
         ? {
             ruleCode: tokenPreview.ruleCode,
-            tokenCost: tokenPreview.tokenCost,
-            balanceAfter: spendLedger.balanceAfter,
+            /* What the user actually bore: nothing, when the charge was refunded for a non-answer. */
+            tokenCost: chargeRefund ? 0 : tokenPreview.tokenCost,
+            balanceAfter: chargeRefund ? chargeRefund.balanceAfter : spendLedger.balanceAfter,
             ledgerId: spendLedger.id,
+            ...(chargeRefund ? { refunded: true as const, refundReason: chargeRefund.reason } : {}),
           }
         : undefined,
       quantData: pecrOutput.quantData,

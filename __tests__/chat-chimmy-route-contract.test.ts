@@ -495,6 +495,69 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(spendTokensForRuleMock).not.toHaveBeenCalled()
   })
 
+  /*
+   * 🛑 CHARGE ON DELIVERY. The route charged before any model ran and refunded only on a THROWN
+   * error — but when every provider fails, orchestration returns the deterministic fallback as a
+   * normal success, so the user paid for "AI explanation is temporarily unavailable".
+   */
+  it("refunds the charge when no AI provider answered, and reports it as not charged", async () => {
+    runUnifiedOrchestrationMock.mockResolvedValueOnce({
+      ok: true,
+      response: {
+        modelOutputs: [
+          { model: "openai", raw: "", error: "429 billing_not_active", skipped: true },
+          { model: "grok", raw: "", error: "403 used all available credits", skipped: true },
+        ],
+      },
+    })
+    unifiedResponseToContractMock.mockReturnValueOnce({
+      aiExplanation: "Deterministic guidance from NFL context: week: 7. AI explanation is temporarily unavailable.",
+      actionPlan: null,
+      confidence: 30,
+      uncertainty: null,
+      providerResults: [],
+      reliability: null,
+      debugTrace: {},
+    })
+    refundSpendByLedgerMock.mockResolvedValueOnce({ balanceAfter: 20 })
+
+    const formData = new FormData()
+    formData.append("message", "Should I trade this player?")
+    formData.append("leagueId", "league-1")
+    formData.append("confirmTokenSpend", "true")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    expect(res.status).toBe(200)
+    expect(spendTokensForRuleMock).toHaveBeenCalled()
+    expect(refundSpendByLedgerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spendLedgerId: "ledger-1",
+        idempotencyKey: "refund:chimmy_chat:ledger-1",
+        metadata: expect.objectContaining({ reason: "no_model_answered" }),
+      }),
+    )
+    const body = await res.json()
+    expect(body.meta?.tokenSpend).toMatchObject({ tokenCost: 0, balanceAfter: 20, refunded: true, refundReason: "no_model_answered" })
+  })
+
+  it("keeps the charge when a model answered", async () => {
+    const formData = new FormData()
+    formData.append("message", "Should I trade this player?")
+    formData.append("leagueId", "league-1")
+    formData.append("confirmTokenSpend", "true")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    expect(res.status).toBe(200)
+    expect(refundSpendByLedgerMock).not.toHaveBeenCalled()
+    const body = await res.json()
+    expect(body.meta?.tokenSpend).toMatchObject({ tokenCost: 15, balanceAfter: 5 })
+    expect(body.meta?.tokenSpend?.refunded).toBeUndefined()
+  })
+
   it("reports what it grounded on so the UI can show it", async () => {
     previewSpendMock.mockResolvedValueOnce({
       ruleCode: "ai_chimmy_chat_message",
