@@ -320,6 +320,16 @@ function isOwnRosterQuestion(message: string): boolean {
   return isPersonalRosterScoped(message) || OWN_ROSTER_PATTERNS.some((p) => p.test(message))
 }
 
+/**
+ * "Who's out in my leagues" — an injury question about the asker's OWN rosters, with no named
+ * player. The ONE rule for it: the injury builder below yields on it, and the chat route uses it
+ * to decide when to run the cross-league roster injury check (myRosterInjuriesTool.ts). Two
+ * copies of this would drift, and the two callers must agree on which questions they own.
+ */
+export function isOwnRosterInjuryQuestion(message: string): boolean {
+  return detectInjuryQuestion(message) && !extractLikelyPlayerName(message) && isOwnRosterQuestion(message)
+}
+
 function detectWeatherQuestion(message: string): boolean {
   return /\b(weather|forecast|wind|rain|snow|temperature|temp|cold|hot|dome|outdoor)\b/i.test(message)
 }
@@ -945,7 +955,7 @@ async function buildCachedInjuryAnswer(message: string, locale?: string): Promis
   const sport = resolveSportFromMessage(message) ?? 'NFL'
   const playerName = extractLikelyPlayerName(message)
   /* See OWN_ROSTER_PATTERNS: the cache cannot answer about the asker's roster. */
-  if (!playerName && isOwnRosterQuestion(message)) return null
+  if (isOwnRosterInjuryQuestion(message)) return null
   const team = resolveTeamAlias(message, sport)
   const scope = playerName ? ` for ${playerName}` : team ? ` for ${team.canonical}` : ''
 

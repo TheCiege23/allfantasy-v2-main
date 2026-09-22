@@ -135,7 +135,7 @@ import { classifyPecrIntent, requiresLeagueGrounding } from '@/lib/chimmy-chat/q
 import { buildChimmyAnswerContract } from '@/lib/chimmy-chat/response-contract'
 import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-events'
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
-import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
+import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE, isOwnRosterInjuryQuestion } from '@/lib/ai/deterministic'
 import { grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
 
 /** Provenance for an answer that came from the web, not from our rows. */
@@ -146,6 +146,7 @@ import {
   serializeLeagueGroundingForPrompt,
 } from '@/lib/ai/leagueSportsGroundingPacket'
 import { buildPortfolioPlayerGrounding } from '@/lib/chimmy/chimmyPortfolioPlayerGrounding'
+import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjuriesTool'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
@@ -413,6 +414,7 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
    * paraphrase, and a paraphrase is exactly what a system prompt is for.
    */
   'If the question names a league — "KBFL", "my dynasty league" — call find_league_by_name FIRST, then the league tools. Without it nothing is selected and they read nothing.',
+  'For "who is out / hurt / injured on my teams" questions, call get_my_injuries — it checks every league at once. Report only the designations it returns, with their dates, and never add an injury from memory.',
   'For start/sit, drop, or "where am I weak" questions, call get_my_roster. It returns roster FACTS only — positions, teams, injury status — and NO projections or points, so reason about roles and health and never state projected scores or a ranking you did not receive.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
   'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
@@ -2131,6 +2133,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ])
       : Promise.resolve(null)
 
+  /*
+   * ── MY ROSTER INJURIES — "who's out in my leagues" on the push path ─────────────────────────
+   *
+   * The same report the tool loop's `get_my_injuries` returns. It is pushed here too because the
+   * tool loop runs ONLY on xAI: measured 2026-09-22, the xAI account was out of credits, so every
+   * answer came through this path with no way to call a tool — and no path here could answer the
+   * question at all. Gated on the ONE predicate the deterministic injury builder yields on, so
+   * the two agree on who owns the question and the 40-league scan runs only when it is asked.
+   *
+   * ⚠ Own race, for the reason given on `portfolioPlayerGroundingTask`: a timeout costs this
+   * section, never the answer.
+   */
+  const myRosterInjuriesTask: Promise<string | null> =
+    userId && isOwnRosterInjuryQuestion(message)
+      ? Promise.race([
+          buildMyRosterInjuriesContext({ userId }).catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ])
+      : Promise.resolve(null)
+
   const [
     screenshotResult,
     insightResult,
@@ -2138,6 +2160,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     leagueSportsGroundingResult,
     decisionOsGroundingResult,
     portfolioPlayerGroundingResult,
+    myRosterInjuriesResult,
   ] =
     await Promise.allSettled([
       screenshotTask,
@@ -2146,6 +2169,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       leagueSportsGroundingTask,
       decisionOsGroundingTask,
       portfolioPlayerGroundingTask,
+      myRosterInjuriesTask,
     ])
   const [personalizationResult, profileClock] = await Promise.all([
     resolveChimmyPersonalizationProfile(userId).catch(() => null),
@@ -2186,6 +2210,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     decisionOsGroundingResult.status === 'fulfilled' ? decisionOsGroundingResult.value : null
   const portfolioPlayerGrounding =
     portfolioPlayerGroundingResult.status === 'fulfilled' ? portfolioPlayerGroundingResult.value : null
+  const myRosterInjuries = myRosterInjuriesResult.status === 'fulfilled' ? myRosterInjuriesResult.value : null
 
   const recentUserSnippet = conversation
     .filter((t) => t.role === 'user')
@@ -2261,6 +2286,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     portfolioPlayerGrounding
       ? `## CROSS-LEAGUE PLAYER LOOKUP\n${portfolioPlayerGrounding}`
       : undefined,
+    myRosterInjuries ? `## MY ROSTER INJURIES (ALL LEAGUES)\n${myRosterInjuries}` : undefined,
     leagueSportsGrounding
       ? `## NFL/NCAAF LEAGUE SPORTS GROUNDING\n${leagueSportsGrounding.serialized}`
       : undefined,
@@ -2297,6 +2323,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (coreSurfaceBlock) dataSources.push('core_surface_context')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
   if (portfolioPlayerGrounding) dataSources.push('cross_league_player_lookup')
+  if (myRosterInjuries) dataSources.push('cross_league_roster_injuries')
   if (connectedFranchiseGrounding) dataSources.push('connected_franchise_rosters')
   // Declared so a response can be attributed. A grounding source the answer used but does not
   // name is untraceable afterwards, which is the whole reason dataSources exists.

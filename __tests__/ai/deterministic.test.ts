@@ -63,6 +63,7 @@ import {
   tryDeterministicAnswer,
   tryDeterministicAnswerDetailed,
   DETERMINISTIC_SOURCE,
+  isOwnRosterInjuryQuestion,
 } from '@/lib/ai/deterministic'
 
 const mockCount = prisma.gameSchedule.count as ReturnType<typeof vi.fn>
@@ -970,4 +971,29 @@ describe('injury short-circuit', () => {
     expect(r?.text).toContain('No live college injury source')
     expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
   })
+})
+
+/*
+ * The ONE predicate two callers share: the injury builder yields on it, and the chat route runs
+ * the cross-league roster injury check on it. If they disagreed, a question could be yielded by
+ * one and never picked up by the other — answered by nobody.
+ */
+describe('isOwnRosterInjuryQuestion', () => {
+  it.each([
+    "who's out in my leagues",
+    'any injuries on my team?',
+    'is anyone on my roster hurt',
+    'which of my starters are questionable',
+  ])('true: %s', (q) => expect(isOwnRosterInjuryQuestion(q)).toBe(true))
+
+  it.each([
+    /* A named player is a question about that player; the cache answers it. */
+    'is my guy Patrick Mahomes hurt?',
+    /* World questions. */
+    'any NFL injuries today?',
+    'Chiefs players ruled out',
+    /* Own-roster, but not about injuries. */
+    'help me figure out my flex spot',
+    'who should I start on my team',
+  ])('false: %s', (q) => expect(isOwnRosterInjuryQuestion(q)).toBe(false))
 })
