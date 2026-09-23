@@ -28,6 +28,8 @@ import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
+import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
+import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
@@ -242,6 +244,8 @@ export type AfCoreShellProps = {
    * Off leaves every existing behaviour exactly as it was.
    */
   leagueFirst?: boolean
+  /** League-first: the newest line of the selected league's chat, for the pull-up chat bar. */
+  leagueChatPreview?: LeagueChatPreview | null
   leagues: RailLeague[]
   /**
    * This week's matchup per league id, for the expanded rail.
@@ -1945,6 +1949,31 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
             </button>
           ) : null}
+          {/*
+            League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
+            from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
+            the notifications centre was two taps deep in Me. Account-wide on purpose: an inbox that
+            silently filters to the open league hides the trade offer from the other one.
+          */}
+          {props.leagueFirst ? (
+            <Link
+              href="/core/notifications"
+              className="af-lf-inbox-btn"
+              aria-label={
+                props.notificationCount && props.notificationCount > 0
+                  ? `Inbox, ${props.notificationCount} unread`
+                  : 'Inbox'
+              }
+              data-active={active === 'notifications'}
+            >
+              <span aria-hidden>✉</span>
+              {props.notificationCount && props.notificationCount > 0 ? (
+                <span className="af-lf-inbox-badge af-num" aria-hidden>
+                  {props.notificationCount > 99 ? '99+' : props.notificationCount}
+                </span>
+              ) : null}
+            </Link>
+          ) : null}
           <TopSearch leagues={leagues} />
 
           <div className="af-topbar-right">
@@ -2052,6 +2081,14 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         and a per-screen mount would unmount it on every link. Same placement
         reasoning as GeoRestrictionNotice above.
       */}
+      {/* ── League-first: the league's chat, pinned above the bottom bar ── */}
+      {props.leagueFirst && props.selectedLeagueId ? (
+        <LeagueChatBar
+          leagueId={props.selectedLeagueId}
+          leagueName={selectedLeagueName}
+          preview={props.leagueChatPreview ?? null}
+        />
+      ) : null}
       {/* ── Phone bottom bar ────────────────────────────────────────── */}
       {props.leagueFirst ? (
         <nav className="af-tabbar" aria-label="Main">

@@ -77,6 +77,23 @@
   background: var(--warn-soft);
   color: var(--warn);
 }
+/*
+  Upcoming is not a caution either — nothing is wrong before kickoff. It was
+  warn-toned under the old "Not scored" label and read as an error on a phone.
+  Live keeps the warn tone: points are moving and the numbers are provisional.
+*/
+.af-mu-week-state[data-state='upcoming'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The provider hand-offs, in their own row under the banner. */
+.af-mu-handoff {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 /* ── Head to head ────────────────────────────────────────────────────── */
 

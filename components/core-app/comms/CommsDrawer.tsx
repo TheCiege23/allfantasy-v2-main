@@ -147,6 +147,12 @@ export type CommsDrawerProps = {
    * public composer is a different act from putting them in a private one.
    */
   initialDraft?: string | null
+  /**
+   * The latest explicit open request, numbered so a repeat of the same request still applies.
+   * `initialTab` follows only a CHANGE of tab, so asking twice for the tab the user has since
+   * left did nothing; `seq` changes every time. `leagueId` rescopes the drawer.
+   */
+  openRequest?: { seq: number; tab: CommsTab | null; leagueId: string | null } | null
 }
 
 const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.'
@@ -2013,6 +2019,7 @@ export function CommsDrawer({
   pageSurface = null,
   initialTab = 'chimmy',
   initialDraft = null,
+  openRequest = null,
   userId,
 }: CommsDrawerProps) {
   const [tab, setTab] = useState<CommsTab>(initialTab)
@@ -2051,6 +2058,17 @@ export function CommsDrawer({
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab])
+
+  const openRequestSeq = openRequest?.seq ?? 0
+  useEffect(() => {
+    if (!openRequest) return
+    if (openRequest.tab) setTab(openRequest.tab)
+    if (openRequest.leagueId && leagues.some((l) => l.id === openRequest.leagueId)) {
+      setScopeId(openRequest.leagueId)
+    }
+    // Keyed on the sequence number alone: each request applies once, when it is made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequestSeq])
 
   /*
    * Full-screen overlay hygiene, from the one place that owns it: Escape, the

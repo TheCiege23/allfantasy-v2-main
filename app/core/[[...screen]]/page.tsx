@@ -120,6 +120,9 @@ import {
   resolveLeagueFirstLanding,
 } from '@/lib/core-app/leagueFirst'
 import { readLastLeague, rememberLastLeague } from '@/lib/core-app/leagueFirstStore'
+import { readLeagueChatPreview } from '@/lib/core-app/leagueChatPreview'
+import { composeChimmyMoves, type ChimmyMoves } from '@/lib/core-app/chimmyMoves'
+import { ChimmyMovesCard } from '@/components/core-app/ChimmyMovesCard'
 import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
 import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
 import { toShareCard } from '@/lib/core-app/shareCard'
@@ -716,6 +719,26 @@ export default async function AfCorePage({
   const leagueFirstLanding =
     leagueFirst && segment === '' && !selectedLeagueId && sp.view !== LEAGUE_FIRST_ALL_VIEW
   const lastLeagueRead = leagueFirstLanding ? readLastLeague(userId) : Promise.resolve(null)
+  // The chat bar's newest line (phase 2). Started here, awaited just before the shell renders.
+  const leagueChatPreviewRead =
+    leagueFirst && selectedLeagueRow ? readLeagueChatPreview(selectedLeagueRow.id, userId) : Promise.resolve(null)
+  // Chimmy's one-tap moves (phase 2): this league's flagged starters, from the same DB-only triage
+  // the game-plan screen uses. Only where the card renders — the matchup and the league home.
+  const chimmyMovesRead =
+    leagueFirst && selectedLeagueRow && (activeKey === 'matchup' || activeKey === 'home')
+      ? loadGameDayTriage(userId, [selectedLeagueRow.id])
+          .then((triage) =>
+            triage.available
+              ? composeChimmyMoves({
+                  triage: triage.data,
+                  leagueId: selectedLeagueRow.id,
+                  leagueName: selectedLeagueRow.name,
+                  nowIso: new Date().toISOString(),
+                })
+              : null,
+          )
+          .catch(() => null)
+      : Promise.resolve(null)
 
   const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,
@@ -1322,6 +1345,7 @@ export default async function AfCorePage({
   const body = (
     <CoreScreenBody
       ctx={{
+        chimmyMovesRead,
         screen,
         sp,
         segment,
@@ -1375,6 +1399,7 @@ export default async function AfCorePage({
    * would keep the old league's screen up until the new one had finished loading.
    */
   const screenKey = `${segment}|${selectedLeagueId ?? ''}`
+  const leagueChatPreview = await leagueChatPreviewRead
 
   // ONE read shared by the bar's two streamed slots (the promise, not two calls).
   const leagueOs =
@@ -1384,6 +1409,7 @@ export default async function AfCorePage({
     <AfCoreShell
       active={activeKey}
       leagueFirst={leagueFirst}
+      leagueChatPreview={leagueChatPreview}
       leagues={rail}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}
@@ -1606,6 +1632,8 @@ async function ScreenShellSignals({
  * read. Everything else a screen needs, it loads itself, inside its streamed boundary.
  */
 type CoreScreenContext = {
+  /** League-first: Chimmy's one-tap moves for the selected league, started beside the shell reads. */
+  chimmyMovesRead: Promise<ChimmyMoves | null>
   screen: string[] | undefined
   sp: Record<string, string | string[] | undefined>
   segment: string
@@ -1664,6 +1692,7 @@ type CoreScreenContext = {
  */
 async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const {
+    chimmyMovesRead,
     screen,
     sp,
     segment,
@@ -1695,6 +1724,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     homeScope,
     favoriteIds,
   } = ctx
+
+  // Rendered above the matchup and the league home (league-first only; null everywhere else).
+  const chimmyMoves = await chimmyMovesRead
+  const chimmyMovesCard = chimmyMoves ? (
+    <ChimmyMovesCard
+      data={chimmyMoves}
+      leagueName={playedLeagues.find((l) => l.id === selectedLeagueId)?.name ?? 'this league'}
+    />
+  ) : null
 
   // Screen 2 is the same route with a league selected — the handoff describes it
   // as the main column becoming "that league's world", not a separate page.
@@ -3525,6 +3563,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           </div>
         )
       ) : leagueHome ? (
+        <>
+        {chimmyMovesCard}
         <LeagueHome
           data={leagueHome}
           identityInShell={leagueHeaderShown}
@@ -3554,6 +3594,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           // the row the screen shows.
           issues={issues.filter((i) => i.leagueId === leagueHome.league.id)}
         />
+        </>
       ) : segment === 'model-admin' ? (
         /*
          * Model Admin, moved off `/leagues/[leagueId]/admin/model` so it runs on
@@ -3642,7 +3683,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'matchup' ? (
         matchup ? (
-          <Matchup data={matchup} />
+          <>
+            {chimmyMovesCard}
+            <Matchup data={matchup} />
+          </>
         ) : matchupLoadFailed ? (
           <ScreenLoadError screen="Matchup" retryHref={retryHref} />
         ) : showAllLeagues || !matchupPulse ? (
