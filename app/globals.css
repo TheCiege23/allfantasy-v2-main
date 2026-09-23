@@ -3160,3 +3160,41 @@ select, option {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── iOS zoom floor, app-wide ──────────────────────────────────────────
+ *
+ * 🛑 iOS SAFARI ZOOMS THE PAGE IN WHEN A TEXT FIELD UNDER 16px TAKES FOCUS, AND
+ * DOES NOT ZOOM BACK OUT. af-core.css floors every field inside `.af-core`, and
+ * its own note leaves "the landing, auth, recovery, import, business, espn and
+ * my-leagues surfaces" as a separate pass. This is that pass, for every route.
+ *
+ * Census 2026-09-23, parsing every .tsx under app/ and components/: 1,618
+ * caret-taking fields, 1,087 carrying an unprefixed sub-16px Tailwind size
+ * (text-sm 629, text-xs 206, text-[10–15px] 252), plus ~30 stylesheet rules
+ * outside the shell at 12–15px — `.nocturne .n-input` (the landing import box),
+ * `.nocturne-auth .input`, `.af-lp-field input`, `.at-select` and others. Many
+ * fields get their class through a variable or cn(), so this keys on the ELEMENT,
+ * not on class names: a class-keyed floor misses /forgot-password, whose `text-sm`
+ * lives in `recoveryInputClassName`.
+ *
+ * ⚠ IT SETS RATHER THAN RAISES, SO IT WAS CHECKED THAT IT CANNOT SHRINK. The same
+ * census found no stylesheet rule sizing a field above 16px, and three Tailwind
+ * fields that ask for more (text-lg ×2, text-2xl) — the second :not() leaves those
+ * alone. `~=` matches a whole class token, so `md:text-lg` is deliberately NOT
+ * excluded: it does not apply at phone width. None of the 1,087 small fields
+ * carries a larger responsive size. Re-run that check before widening the query.
+ *
+ * ⚠ SPECIFICITY IS (0,2,1) — each :not() counts its most specific argument. That
+ * beats every Tailwind utility (0,1,0) and `.x input` / `.a .b` rules. It loses to
+ * inline styles and to (0,2,1)+ rules, which is why nocturne-settings.css carries
+ * its own floor for a (0,7,1) selector. Checkbox, radio, range, color and the
+ * button-like types take no caret, so they cannot trigger the zoom.
+ *
+ * Portrait phones use the shell floor's 720px breakpoint; landscape phones are a
+ * coarse pointer on a short viewport. iPads are left as they were.
+ */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  :is(input, textarea, select):not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='submit'], [type='button'], [type='reset'], [type='image'], [type='file'], [type='hidden']):not([class~='text-lg'], [class~='text-xl'], [class~='text-2xl'], [class~='text-3xl'], [class~='text-4xl'], [class~='text-5xl'], [class~='text-6xl']) {
+    font-size: 16px;
+  }
+}
