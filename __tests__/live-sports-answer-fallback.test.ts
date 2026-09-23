@@ -47,6 +47,8 @@ function payload(text: string, urls: Array<{ url: string; title?: string }>) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // These cases are the GROK path; with an Anthropic key the search runs on Claude instead.
+  vi.stubEnv('ANTHROPIC_API_KEY', '')
 })
 
 describe('isSearchableSportsQuestion', () => {

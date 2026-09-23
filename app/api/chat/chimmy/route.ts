@@ -1716,7 +1716,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
              * not write, and saying otherwise would make the two look alike.
              */
             confidencePct: 70,
-            providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+            providerStatus:
+              searched.provider === 'claude'
+                ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
+                : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+            ...(searched.model ? { model: searched.model } : {}),
             dataSources: [LIVE_SEARCH_SOURCE],
             responseStructure: {
               shortAnswer: searched.text,

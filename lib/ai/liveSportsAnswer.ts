@@ -7,6 +7,13 @@ import {
   type XaiTool,
 } from '@/lib/xai-client'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
+import Anthropic from '@anthropic-ai/sdk'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
+import {
+  CHIMMY_CLAUDE_FALLBACK_BETA,
+  hasAnthropicKey,
+  resolveChimmyClaudeModel,
+} from '@/lib/ai/chimmyClaudeConfig'
 
 /**
  * THE LAST RESORT FOR A SPORTS QUESTION WE HOLD NO DATA FOR.
@@ -44,6 +51,10 @@ export type LiveSportsAnswer = {
   text: string
   /** Sources consulted. Never map one to a specific sentence — see below. */
   citations: LiveSportsCitation[]
+  /** Which provider searched and answered. */
+  provider?: 'claude' | 'grok'
+  /** The model id that answered. */
+  model?: string
 }
 
 /** Wall-clock ceiling. A chat reply that arrives after this is not a reply. */
@@ -173,9 +184,151 @@ function toCitations(
   return out
 }
 
+/*
+ * ── CLAUDE (the main model, user decision 2026-09-23) ─────────────────────────────────────────────
+ *
+ * Anthropic's server-side `web_search` tool: Claude searches, reads and answers inside ONE request.
+ * There is no X search on this path — web results reach box scores and schedule pages, which is
+ * what a stat question needs; X is people talking about them.
+ *
+ * ⚠ THE CITATION GATE IS STRONGER HERE, NOT WEAKER. Claude's citations are attached to the text
+ * block they support (`web_search_result_location`, carrying the url and the cited text), so an
+ * answer with no citation on any block used no search result at all — and is discarded exactly as
+ * the Grok path discards an unannotated one. We still render them as a "consulted" list, not
+ * per sentence, because the chat bubble has nowhere to put a span.
+ */
+
+/**
+ * 🛑 THE BASIC `web_search_20250305`, NOT THE NEWER `web_search_20260209` — ON PURPOSE, AND MEASURED.
+ *
+ * The newer tool filters results through code execution before the model reads them, and its final
+ * text comes back with NO citations attached. Measured live 2026-09-23 on claude-opus-5 with the
+ * same prompt ("most recent Super Bowl winner and score"):
+ *
+ *     web_search_20260209   9 results, correct answer,  0 text citations   7.7s
+ *     web_search_20250305  10 results, correct answer,  5 text citations   5.6s
+ *
+ * With the newer tool the gate below would discard EVERY answer — correct ones included — and the
+ * mocked tests could never have shown it. Upgrading this tool means re-proving that citations still
+ * arrive, against the live API, before relaxing anything.
+ */
+const CLAUDE_WEB_SEARCH_TOOL = 'web_search_20250305' as const
+
+/** Wall-clock for a Claude search turn: a search, a read and a short answer. */
+const CLAUDE_SEARCH_TIMEOUT_MS = 35_000
+
+/** Searches per question. Each is billed; three reaches a box score and a cross-check. */
+const CLAUDE_MAX_SEARCHES = 3
+
+/**
+ * A server-tool turn can come back `pause_turn` (the server hit its own iteration limit) and must be
+ * re-sent to continue. Bounded, because each continuation is another billed request.
+ */
+const CLAUDE_MAX_CONTINUATIONS = 2
+
+type ClaudeCitation = { type?: string; url?: string; title?: string | null }
+
+/** Sources Claude actually cited, de-duplicated, in order. */
+export function claudeCitations(content: Anthropic.ContentBlock[]): LiveSportsCitation[] {
+  const seen = new Set<string>()
+  const out: LiveSportsCitation[] = []
+  for (const block of content) {
+    if (block.type !== 'text') continue
+    for (const c of (block.citations ?? []) as ClaudeCitation[]) {
+      if (c.type !== 'web_search_result_location') continue
+      const url = c.url
+      if (typeof url !== 'string' || !/^https?:\/\//i.test(url) || seen.has(url)) continue
+      seen.add(url)
+      let label = typeof c.title === 'string' && c.title.trim() ? c.title.trim() : ''
+      if (!label) {
+        try {
+          label = new URL(url).hostname.replace(/^www\./, '')
+        } catch {
+          label = url
+        }
+      }
+      out.push({ label, url })
+      if (out.length >= MAX_CITATIONS) return out
+    }
+  }
+  return out
+}
+
+async function answerWithClaude(question: string): Promise<LiveSportsAnswer | null> {
+  // A provider boundary in its own right: a disabled kill switch must look like "no answer".
+  if (!isAiSpendEnabled()) return null
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  if (!apiKey) return null
+
+  const client = new Anthropic({ apiKey, maxRetries: 0 })
+  const model = resolveChimmyClaudeModel()
+  const deadline = Date.now() + CLAUDE_SEARCH_TIMEOUT_MS
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: question }]
+  let useFallbacks = true
+
+  const call = () => {
+    const params = {
+      model,
+      max_tokens: 4000,
+      system: SYSTEM_PROMPT,
+      // A fact lookup, not a judgement call: low effort keeps a chat reply fast.
+      thinking: { type: 'adaptive' as const },
+      output_config: { effort: 'low' as const },
+      tools: [{ type: CLAUDE_WEB_SEARCH_TOOL, name: 'web_search' as const, max_uses: CLAUDE_MAX_SEARCHES }],
+      messages,
+      ...(useFallbacks ? { fallbacks: 'default' } : {}),
+    } as Anthropic.MessageCreateParamsNonStreaming
+    return client.messages.create(params, {
+      timeout: Math.max(5_000, deadline - Date.now()),
+      ...(useFallbacks ? { headers: { 'anthropic-beta': CHIMMY_CLAUDE_FALLBACK_BETA } } : {}),
+    })
+  }
+
+  try {
+    let response: Anthropic.Message | null = null
+    for (let attempt = 0; attempt <= CLAUDE_MAX_CONTINUATIONS; attempt += 1) {
+      if (Date.now() >= deadline) return null
+      try {
+        response = await call()
+      } catch (err) {
+        // The refusal-fallback beta is an add-on; it must never be why search fails.
+        if (useFallbacks && err instanceof Anthropic.BadRequestError) {
+          useFallbacks = false
+          response = await call()
+        } else {
+          throw err
+        }
+      }
+      if (response.stop_reason !== 'pause_turn') break
+      messages.push({ role: 'assistant', content: response.content })
+    }
+    if (!response || response.stop_reason === 'pause_turn') return null
+    if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') return null
+
+    const text = stripMarkdown(
+      response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join(''),
+    )
+    if (!text) return null
+
+    const citations = claudeCitations(response.content)
+    // THE GATE — see the header. No citation means no search result was used.
+    if (citations.length === 0) return null
+
+    return { text, citations, provider: 'claude', model: response.model || model }
+  } catch (err) {
+    const e = err as { status?: number; message?: string } | null
+    reportProviderFailure({ provider: 'anthropic', status: e?.status, detail: e?.message, surface: 'chimmy_live_search' })
+    return null
+  }
+}
+
 /**
  * Try to answer a sports question from live search.
  *
+ * Claude when `ANTHROPIC_API_KEY` is set (the main model); Grok only for a deployment without one.
  * Returns null for every failure — spend disabled, no key, provider error,
  * timeout, empty text, and above all NO CITATIONS. A null here means the caller
  * should keep whatever honest refusal it already had.
@@ -184,7 +337,11 @@ export async function answerSportsQuestionFromSearch(
   question: string,
 ): Promise<LiveSportsAnswer | null> {
   if (!isSearchableSportsQuestion(question)) return null
+  if (hasAnthropicKey()) return answerWithClaude(question)
+  return answerWithGrok(question)
+}
 
+async function answerWithGrok(question: string): Promise<LiveSportsAnswer | null> {
   try {
     const result = await Promise.race([
       xaiResponsesJson({
@@ -219,7 +376,7 @@ export async function answerSportsQuestionFromSearch(
      */
     if (citations.length === 0) return null
 
-    return { text, citations }
+    return { text, citations, provider: 'grok', model: MODEL }
   } catch {
     /*
      * Includes AiSpendDisabledError. A disabled kill switch must look exactly
