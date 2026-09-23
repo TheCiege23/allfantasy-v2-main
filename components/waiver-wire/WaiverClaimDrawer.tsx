@@ -80,7 +80,7 @@ export default function WaiverClaimDrawer({
   }
 
   const content = (
-    <div className="w-full max-w-md rounded-t-2xl border border-white/15 bg-black/95 p-4 shadow-2xl sm:h-full sm:max-w-md sm:rounded-none sm:border-l sm:p-5">
+    <div className="w-full max-w-md rounded-t-2xl border border-white/15 bg-black/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:h-full sm:max-w-md sm:rounded-none sm:border-l sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs uppercase tracking-wide text-white/50">Waiver claim</p>

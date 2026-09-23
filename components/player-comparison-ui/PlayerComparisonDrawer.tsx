@@ -105,7 +105,7 @@ export function PlayerComparisonDrawer({ open, onClose, initialPayload }: Player
     <>
       <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm" aria-hidden onClick={onClose} />
       <div
-        className="fixed inset-x-0 bottom-0 z-[100] flex max-h-[94vh] flex-col rounded-t-2xl border border-white/10 bg-[#040915] shadow-2xl sm:inset-y-4 sm:right-4 sm:left-auto sm:max-h-[none] sm:w-full sm:max-w-lg sm:rounded-2xl"
+        className="fixed inset-x-0 bottom-0 z-[100] flex max-h-[94vh] flex-col rounded-t-2xl border border-white/10 bg-[#040915] pb-[env(safe-area-inset-bottom)] shadow-2xl sm:inset-y-4 sm:right-4 sm:left-auto sm:max-h-[none] sm:w-full sm:max-w-lg sm:rounded-2xl sm:pb-0"
         role="dialog"
         aria-label="Player comparison"
         data-testid="player-comparison-drawer"

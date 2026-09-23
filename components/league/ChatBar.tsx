@@ -8,7 +8,8 @@ export default function ChatBar({
   chat: LeagueChatPreview
 }) {
   return (
-    <div className="fixed bottom-[72px] left-0 right-0 z-40 px-3">
+    // Sits on top of BottomNav, which grows by the home indicator; move with it.
+    <div className="fixed bottom-[calc(72px+env(safe-area-inset-bottom))] left-0 right-0 z-40 px-3">
       <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-white/10 bg-[#1C2539]/95 px-4 py-3 shadow-2xl backdrop-blur">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0F3D35] text-[#00D4AA]">
           <Shield className="h-4.5 w-4.5" />

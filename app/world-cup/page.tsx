@@ -761,7 +761,7 @@ export default function WorldCupAdLandingPage() {
       </section>
 
       {/* ── Sticky mobile CTA ────────────────────────────────────────────── */}
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/95 p-4 backdrop-blur-xl sm:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:hidden">
         <Link
           href={createHref}
           onClick={() => trackWcFunnelEvent("WorldCupCreatePoolClicked", { source: "sticky_mobile" })}

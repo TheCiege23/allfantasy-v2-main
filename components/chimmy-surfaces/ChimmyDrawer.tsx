@@ -50,7 +50,7 @@ export default function ChimmyDrawer({
 
       {/* Drawer panel */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl border-t border-white/10 bg-slate-900 overflow-y-auto ${HEIGHT_CLASS[height]} ${className}`}
+        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl border-t border-white/10 bg-slate-900 overflow-y-auto pb-[env(safe-area-inset-bottom)] ${HEIGHT_CLASS[height]} ${className}`}
         role="dialog"
         aria-modal="true"
         aria-label={title ?? 'Chimmy Drawer'}

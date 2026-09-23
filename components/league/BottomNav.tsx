@@ -15,7 +15,7 @@ export default function BottomNav({
   active?: (typeof NAV_ITEMS)[number]['id']
 }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#0B0F1E]/98 px-2 py-2 backdrop-blur">
+    <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#0B0F1E]/98 px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur">
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon

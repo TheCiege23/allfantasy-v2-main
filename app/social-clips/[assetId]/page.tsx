@@ -756,7 +756,7 @@ export default function SocialClipDetailPage() {
         Regenerate new clip
       </Button>
 
-      <div className="fixed bottom-4 left-0 right-0 z-20 px-4 sm:hidden">
+      <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 z-20 px-4 sm:hidden">
         <div className="mx-auto flex max-w-xl items-center gap-2 rounded-xl border border-white/10 bg-black/70 p-2 backdrop-blur">
           <Button
             className="flex-1"

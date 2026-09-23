@@ -32,7 +32,7 @@ export default function LeagueChatDock({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full border px-3 py-2.5 text-xs font-semibold shadow-lg md:bottom-6 md:right-6"
+          className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-30 flex items-center gap-2 rounded-full border px-3 py-2.5 text-xs font-semibold shadow-lg md:bottom-6 md:right-6"
           style={{
             borderColor: "var(--border)",
             background: "var(--panel)",
@@ -46,7 +46,7 @@ export default function LeagueChatDock({
       )}
       {open && (
         <div
-          className="fixed bottom-4 right-4 z-40 w-[min(100vw-2rem,400px)] md:bottom-6 md:right-6 md:max-h-[calc(100vh-8rem)]"
+          className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-40 w-[min(100vw-2rem,400px)] md:bottom-6 md:right-6 md:max-h-[calc(100vh-8rem)]"
           role="dialog"
           aria-label="League chat"
         >

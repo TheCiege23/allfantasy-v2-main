@@ -78,7 +78,7 @@ export function ZombieToastContainer() {
 
   return (
     <div
-      className="fixed bottom-20 right-4 z-50 flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2 md:bottom-4"
+      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2 md:bottom-4"
       aria-live="polite"
       role="log"
     >
