@@ -14,7 +14,7 @@ export type OrchestrationMode =
   | "unified_brain"  // Deterministic + DeepSeek + Grok + OpenAI → one response
 
 /** Which model(s) to use. */
-export type AIModelRole = "openai" | "deepseek" | "grok"
+export type AIModelRole = "openai" | "deepseek" | "grok" | "anthropic"
 /** Assistant routing target (non-core 3-model orchestration surfaces). */
 export type AIAssistantRole =
   | "chimmy"

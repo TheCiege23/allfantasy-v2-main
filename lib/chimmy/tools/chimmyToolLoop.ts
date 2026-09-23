@@ -4,6 +4,13 @@ import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
+import {
+  CHIMMY_CLAUDE_EFFORT,
+  CHIMMY_CLAUDE_FALLBACK_BETA,
+  CHIMMY_CLAUDE_MAX_TOKENS,
+  hasAnthropicKey,
+  resolveChimmyClaudeModel,
+} from '@/lib/ai/chimmyClaudeConfig'
 
 /**
  * CLAUDE IS THE MAIN MODEL (2026-09-23, user's decision). When `ANTHROPIC_API_KEY` is set the
@@ -52,32 +59,19 @@ const TURN_TIMEOUT_MS = 20_000
 const XAI_BASE_URL = 'https://api.x.ai/v1'
 const DEFAULT_MODEL = 'grok-4-0709'
 
-/**
- * Claude Opus 5 unless `CHIMMY_CLAUDE_MODEL` names another. Changing the default is a cost
- * decision for the owner: `claude-sonnet-5` is roughly 40% of the per-token price.
+/*
+ * Model, effort, token room and the refusal-fallback beta are shared with the push path's Claude
+ * provider through `lib/ai/chimmyClaudeConfig.ts`, so both halves of Chimmy run the same Claude.
  */
-const DEFAULT_CLAUDE_MODEL = 'claude-opus-5'
-
-/**
- * Thinking is on (adaptive — the Opus 5 default), and this is a chat turn, so `medium` effort:
- * enough reasoning for a start/sit or trade call without the latency of `high`.
- */
-const CLAUDE_EFFORT = 'medium' as const
-
-/** Room for adaptive thinking plus the answer; hitting it truncates, so do not lowball it. */
-const CLAUDE_MAX_TOKENS = 8000
+const CLAUDE_EFFORT = CHIMMY_CLAUDE_EFFORT
+const CLAUDE_MAX_TOKENS = CHIMMY_CLAUDE_MAX_TOKENS
+const CLAUDE_FALLBACK_BETA = CHIMMY_CLAUDE_FALLBACK_BETA
 
 /** Per round trip; thinking makes a Claude turn slower than a Grok one. */
 const CLAUDE_TURN_TIMEOUT_MS = 40_000
 
 /** Whole-loop ceiling, so three slow turns cannot hold a request for two minutes. */
 const CLAUDE_LOOP_BUDGET_MS = 75_000
-
-/**
- * Server-side refusal fallback: on a policy decline the API re-runs the same request on a
- * fallback model inside the same call, instead of the turn just stopping.
- */
-const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01'
 
 export type ChimmyToolLoopProvider = 'claude' | 'grok'
 
@@ -91,10 +85,6 @@ export type ChimmyToolLoopResult = {
   provider?: ChimmyToolLoopProvider
   /** The model id the answering provider ran. */
   model?: string
-}
-
-function hasAnthropicKey(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY?.trim())
 }
 
 function hasXaiKey(): boolean {
@@ -198,7 +188,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   if (!apiKey) return null
 
   const client = new Anthropic({ apiKey, maxRetries: 1 })
-  const model = args.model?.trim() || process.env.CHIMMY_CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL
+  const model = resolveChimmyClaudeModel(args.model)
   const tools = chimmyToolsForClaude()
   const system: Anthropic.TextBlockParam[] = [
     // Tools render before system, so this one breakpoint caches tools + instructions together.

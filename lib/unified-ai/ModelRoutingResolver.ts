@@ -22,6 +22,11 @@ export const MODEL_RESPONSIBILITIES: Record<
     primary: "Trend interpretation, narrative framing, social/summary, league story, engagement.",
     bestFor: ["trends", "narrative", "social", "story", "engagement"],
   },
+  anthropic: {
+    primary:
+      "Chimmy's main model (2026-09-23): answers first in the tool loop and on the push path; the other three are Chimmy's fallback. Not routed to by other features.",
+    bestFor: ["chat", "explanation", "analysis", "synthesis", "tool_use"],
+  },
 }
 
 /** Assistant responsibilities outside core 3-model execution. */

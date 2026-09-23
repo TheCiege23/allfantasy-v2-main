@@ -43,6 +43,9 @@ import {
 } from '@/lib/ai-context-envelope'
 import { resolveChimmyRoutingPlan, runChimmyOrchestrator } from '@/lib/chimmy-orchestration'
 import { getChimmyPromptStyleBlock } from '@/lib/chimmy-interface/ChimmyPromptStyleResolver'
+
+/** Per-call ceiling for Claude on the Chimmy push path; see `callRole` in `runUnifiedOrchestration`. */
+const CHIMMY_CLAUDE_TIMEOUT_MS = 45_000
 import { createHash } from 'crypto'
 
 function getDefaultTimeoutMs(): number {
@@ -726,13 +729,25 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
   const maxRetries = req.options?.maxRetries ?? getDefaultMaxRetries()
 
   let modelsToCall: AIModelRole[]
+  /*
+   * CHIMMY ASKS CLAUDE FIRST, AND ALONE (user decision 2026-09-23: Claude is the main model, fallback
+   * path included). The keyword router below still picks the legacy OpenAI/DeepSeek/Grok set, but that
+   * set is only called if Claude fails — kept here as `chimmyLegacyModels`. Calling Claude ALONE is the
+   * point: fanning out to all four would bill four providers for one charged message.
+   */
+  let chimmyLegacyModels: AIModelRole[] | null = null
   const normalizedFeatureKey = normalizeOrchestrationToolKey(envelope.featureType)
   if (normalizedFeatureKey === 'chimmy_chat') {
     const routingPlan = resolveChimmyRoutingPlan({
       envelope,
       availableProviders: getAvailableProviders(),
     })
-    modelsToCall = routingPlan.models
+    if (getProvider('anthropic').isAvailable()) {
+      modelsToCall = ['anthropic']
+      chimmyLegacyModels = routingPlan.models
+    } else {
+      modelsToCall = routingPlan.models
+    }
   } else {
     switch (effectiveMode) {
       case 'single_model':
@@ -818,11 +833,32 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
     : undefined
   const messages = buildMessages(envelope, providerInput)
 
-  const results = await Promise.all(
-    available.map((role) =>
-      callProviderWithRetry(role, messages, timeoutMs, maxRetries, Boolean(req.options?.skipCache))
+  const callRole = (role: AIModelRole) =>
+    callProviderWithRetry(
+      role,
+      messages,
+      // Adaptive thinking makes a Claude turn slower than the 25s the legacy providers get.
+      role === 'anthropic' ? Math.max(timeoutMs, CHIMMY_CLAUDE_TIMEOUT_MS) : timeoutMs,
+      maxRetries,
+      Boolean(req.options?.skipCache)
     )
-  )
+  const results = await Promise.all(available.map(callRole))
+
+  /*
+   * Claude failed (credit, outage, refusal, timeout): only NOW call the legacy set, so the user still
+   * gets an answer. Both attempts stay in `results`/`available`, so the diagnostics, the outage alert
+   * and `providerStatus` below report Claude's failure as well as whichever provider answered.
+   */
+  if (chimmyLegacyModels && results.every((r) => r.result.status !== 'ok')) {
+    const requestedLegacy = getAvailableFromRequested(chimmyLegacyModels)
+    const legacy = (requestedLegacy.length > 0 ? requestedLegacy : getAvailableProviders()).filter(
+      (role) => !available.includes(role)
+    )
+    if (legacy.length > 0) {
+      results.push(...(await Promise.all(legacy.map(callRole))))
+      available = [...available, ...legacy]
+    }
+  }
 
   for (let i = 0; i < results.length; i++) {
     const role = available[i] as ProviderId
