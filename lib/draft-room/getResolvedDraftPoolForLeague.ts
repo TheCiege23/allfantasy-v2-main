@@ -47,6 +47,7 @@ import {
   isFreeAgentTeam,
   strictIdentityKey,
   strictIdentityKeyWithTeam,
+  suffixlessCanonicalName,
 } from '@/lib/draft-room/player-canonical-identity'
 import { normalizeDraftPoolInjuryStatus } from '@/lib/draft-room/injury-status-normalization'
 import { compareDraftEntriesByStableRank, resolvePreferredAdp } from '@/lib/draft-room/adp-ordering'
@@ -831,6 +832,33 @@ export async function getResolvedDraftPoolForLeague(
   perfPlayerPool()
   const poolByStrictKey = new Map<string, (typeof poolRows)[number]>()
   const poolByLooseKey = new Map<string, (typeof poolRows)[number]>()
+  /*
+   * 🛑 THOSE TWO KEYS ARE RAW `trim().toLowerCase()`, AND THAT IS HOW A DRAFTED PLAYER ENDS UP
+   * WITH AN ID NO FEED CAN EVER MATCH.
+   *
+   * An ADP-seeded pool row carries no provider id (`buildAdpSeedRowsForSport` sets
+   * `playerId: null`), so its id comes from THIS match. When the match misses,
+   * `normalizeDraftPlayer` mints `name:<Name>:<POS>:<TEAM>` — and the draft writes that
+   * synthetic id onto the roster permanently. Measured on production 2026-09-22: 23 of the 90
+   * starters in the one native league that has played carry such ids, including
+   * `name:Aaron Jones Sr.:RB:MIN`, whose pool row holds `sleeperId 4199`. Those starters can
+   * never be scored, which pinned the league's stat coverage at 60% and kept the week finalizer
+   * refusing to close a week.
+   *
+   * The raw key misses on spelling alone — "Ja'Marr" vs "JaMarr", "A.J." vs "AJ", accents, and
+   * a suffix the feeds disagree about. Every other identity path in this file already goes
+   * through `canonicalName`, which handles all of that; the pool-id match simply never did.
+   *
+   * Two further tiers are indexed here, in descending confidence:
+   *   - canonical (suffix-PRESERVING): fixes punctuation, accents and initials with no risk of
+   *     merging father and son, because `canonicalName` keeps `jr`/`sr`/`iii`;
+   *   - suffixless: the last bridge, and the only risky one, so it records how many DISTINCT
+   *     identities share each base name. A key claimed by more than one is never used.
+   */
+  const poolByCanonicalKey = new Map<string, (typeof poolRows)[number]>()
+  const poolByCanonicalNamePos = new Map<string, (typeof poolRows)[number]>()
+  const poolBySuffixlessKey = new Map<string, (typeof poolRows)[number]>()
+  const suffixlessIdentities = new Map<string, Set<string>>()
   for (const row of poolRows) {
     const nameKey = normalizeKeyPart(row.full_name)
     const posKey = normalizeKeyPart(row.position)
@@ -840,6 +868,22 @@ export async function getResolvedDraftPoolForLeague(
     const loose = `${nameKey}|${posKey}`
     if (!poolByStrictKey.has(strict)) poolByStrictKey.set(strict, row)
     if (!poolByLooseKey.has(loose)) poolByLooseKey.set(loose, row)
+
+    const canonicalStrict = strictIdentityKeyWithTeam(row.full_name, row.position, row.team_abbreviation)
+    const canonicalLoose = strictIdentityKey(row.full_name, row.position)
+    if (!poolByCanonicalKey.has(canonicalStrict)) poolByCanonicalKey.set(canonicalStrict, row)
+    if (!poolByCanonicalNamePos.has(canonicalLoose)) poolByCanonicalNamePos.set(canonicalLoose, row)
+
+    const baseName = suffixlessCanonicalName(row.full_name)
+    if (baseName) {
+      const suffixless = `${baseName}|${canonicalPosition(row.position)}`
+      if (!poolBySuffixlessKey.has(suffixless)) poolBySuffixlessKey.set(suffixless, row)
+      const identities = suffixlessIdentities.get(suffixless) ?? new Set<string>()
+      // The suffix-PRESERVING identity is what is counted: "marvin harrison" and
+      // "marvin harrison jr" are two entries under one base key, which disqualifies it.
+      identities.add(strictIdentityKey(row.full_name, row.position))
+      suffixlessIdentities.set(suffixless, identities)
+    }
   }
 
   const injuryByPlayerId = new Map<string, InjuryLookupRow>()
@@ -1469,7 +1513,21 @@ export async function getResolvedDraftPoolForLeague(
     const inJrAliasConflict = jrAliasConflictKeys.has(jrAliasConflictKey)
     const strict = `${normalizeKeyPart(name)}|${normalizeKeyPart(position)}|${normalizeKeyPart(team)}`
     const loose = `${normalizeKeyPart(name)}|${normalizeKeyPart(position)}`
-    const poolMatch = poolByStrictKey.get(strict) ?? poolByLooseKey.get(loose)
+
+    /*
+     * Descending confidence, and the last tier refuses rather than guesses. A match here decides
+     * the player's ID for the life of the league (see the note where these maps are built), so a
+     * wrong one is worse than none: it would attribute another man's stats to this roster slot.
+     */
+    const suffixlessKey = `${suffixlessCanonicalName(name)}|${canonicalPosition(position)}`
+    const suffixlessIsUnambiguous =
+      !inJrAliasConflict && (suffixlessIdentities.get(suffixlessKey)?.size ?? 0) === 1
+    const poolMatch =
+      poolByStrictKey.get(strict) ??
+      poolByLooseKey.get(loose) ??
+      poolByCanonicalKey.get(strictIdentityKeyWithTeam(name, position, team)) ??
+      poolByCanonicalNamePos.get(strictIdentityKey(name, position)) ??
+      (suffixlessIsUnambiguous ? poolBySuffixlessKey.get(suffixlessKey) : undefined)
 
     const poolExternalId = poolMatch?.external_source_id ? String(poolMatch.external_source_id).trim() : null
     const poolExternalIdAmbiguous = Boolean(

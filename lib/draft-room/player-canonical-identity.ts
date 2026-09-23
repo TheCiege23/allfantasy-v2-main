@@ -153,6 +153,35 @@ export function getCanonicalPlayerKey(player: CanonicalPlayerKeyInput): string {
   return `name:${canonicalName(player.name)}|${canonicalPosition(player.position)}|${canonicalTeam(player.team)}`
 }
 
+/** Generational suffix tokens. Kept by `canonicalName`; stripped only by the helper below. */
+const GENERATIONAL_SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v'])
+
+/**
+ * `canonicalName` with generational suffixes REMOVED — "aaron jones sr" → "aaron jones".
+ *
+ * 🛑 THIS KEY CANNOT IDENTIFY A PLAYER ON ITS OWN AND MUST NEVER BE USED AS IF IT COULD.
+ * Collapsing the suffix is precisely what `canonicalName` refuses to do, because Marvin
+ * Harrison Jr. and Marvin Harrison Sr. are two people and merging them attributes one man's
+ * season to the other.
+ *
+ * It exists for ONE job: a last-tier bridge when a feed spells a name with a suffix and the
+ * player table spells it without. Measured 2026-09-22 — the ADP seed carries "Aaron Jones Sr.",
+ * the pool row carries "Aaron Jones" with `sleeperId 4199`, every suffix-preserving key missed,
+ * and the draft pool therefore minted the synthetic id `name:Aaron Jones Sr.:RB:MIN` for a
+ * player who had a real one. That id then matches no provider feed for the life of the league.
+ *
+ * A caller may act on this key ONLY after proving the base name resolves to exactly one
+ * identity in the data being matched. `getResolvedDraftPoolForLeague` does that with a
+ * per-key identity count plus the existing father/son conflict set.
+ */
+export function suffixlessCanonicalName(input: string | null | undefined): string {
+  const tokens = canonicalName(input).split(' ').filter(Boolean)
+  while (tokens.length > 1 && GENERATIONAL_SUFFIXES.has(tokens[tokens.length - 1]!)) {
+    tokens.pop()
+  }
+  return tokens.join(' ')
+}
+
 /** Returns true when the image URL is a real provider image, not a placeholder. */
 export function isProviderImage(url: string | null | undefined): boolean {
   if (!url) return false
