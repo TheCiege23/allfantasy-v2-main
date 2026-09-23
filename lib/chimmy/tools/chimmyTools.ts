@@ -268,7 +268,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_stat_leaders',
       description:
-        "Who leads a stat in the live play-by-play from the last few hours. Use for 'who has the most TDs today'. This is a short rolling window of live plays, NOT season totals, and it is empty when no games are on.",
+        "Who leads a stat in the live play-by-play from the last few hours. Use ONLY for 'who has the most TDs today / right now'. This is a short rolling window of live plays, NOT season totals, and it is empty when no games are on. For season leaders ('who leads the NFL in rushing') use get_season_stat_leaders.",
       parameters: {
         type: 'object',
         properties: {
@@ -279,6 +279,84 @@ export const CHIMMY_TOOL_SPECS = [
           },
         },
         required: ['stat'],
+      },
+    },
+  },
+  /*
+   * REAL-WORLD STATS (Phase 1: NFL + college football) — lib/chimmy/tools/realStatsTools.ts.
+   * No league gate: these describe the world, not the user's league, and take no league id.
+   */
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_player_season_stats',
+      description:
+        "A real player's season-to-date stats (yards, TDs, receptions, tackles, games played…) for NFL or college football. Use for 'what are X's stats this season', 'how many TDs does X have', 'how is X doing this year'. Takes a NAME. Returns provider totals with the time they were refreshed — real stats, not fantasy points and not projections.",
+      parameters: {
+        type: 'object',
+        properties: {
+          player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
+          sport: { type: 'string', description: 'NFL or NCAAF (college football). Defaults to NFL.' },
+          season: { type: 'number', description: 'A year, only if the user named one (e.g. 2025). Omit for the current season.' },
+        },
+        required: ['player'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_player_game_log',
+      description:
+        "A real NFL player's game-by-game stat lines. Use for 'how many yards did X have last week', 'X's last 3 games', 'what did X do in week 4'. Takes a NAME. NFL only — for college football offer season totals instead. If it warns that the lines are from an earlier season, do NOT present them as this season.",
+      parameters: {
+        type: 'object',
+        properties: {
+          player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
+          week: { type: 'number', description: 'A specific week, only if the user named one. Do not guess the current week.' },
+          last_n: { type: 'number', description: 'How many recent games (1-10). Defaults to 5.' },
+          season: { type: 'number', description: 'A year, only if the user named one.' },
+        },
+        required: ['player'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_season_stat_leaders',
+      description:
+        "Who leads the NFL or college football in a stat this season. Use for 'who leads the NFL in rushing', 'top passers in college football', 'most sacks this year'. Season-to-date totals.",
+      parameters: {
+        type: 'object',
+        properties: {
+          stat: {
+            type: 'string',
+            description:
+              'One of: passing_yards, passing_touchdowns, passing_interceptions, completions, rushing_yards, rushing_touchdowns, rushing_attempts, receiving_yards, receptions, receiving_touchdowns, targets, sacks, tackles, interceptions, forced_fumbles, field_goals_made.',
+          },
+          sport: { type: 'string', description: 'NFL or NCAAF. Defaults to NFL.' },
+          limit: { type: 'number', description: 'How many leaders (1-10). Defaults to 5.' },
+          season: { type: 'number', description: 'A year, only if the user named one.' },
+        },
+        required: ['stat'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_real_standings',
+      description:
+        "The real NFL or college football standings — win/loss records by conference. Use for 'NFL standings', 'who leads the AFC', 'SEC standings', 'what's the Bengals' record'. NOT fantasy league standings (that is get_league_standings).",
+      parameters: {
+        type: 'object',
+        properties: {
+          sport: { type: 'string', description: 'NFL or NCAAF. Defaults to NFL.' },
+          group: { type: 'string', description: 'Optional conference to narrow to, e.g. AFC, NFC, SEC, Big Ten, ACC.' },
+          season: { type: 'number', description: 'A year, only if the user named one.' },
+        },
+        required: [],
       },
     },
   },
@@ -569,6 +647,36 @@ export async function executeChimmyTool(
             (l, i) => `${i + 1}. ${l.playerName}${l.team ? ` (${l.team})` : ''} — ${l.total}`,
           ),
         ].join('\n')
+      }
+
+      case 'get_player_season_stats': {
+        const { buildPlayerSeasonStatsContext } = await import('@/lib/chimmy/tools/realStatsTools')
+        return await buildPlayerSeasonStatsContext({
+          playerName: typeof args.player === 'string' ? args.player : '',
+          sport: args.sport,
+          season: args.season,
+        })
+      }
+
+      case 'get_player_game_log': {
+        const { buildPlayerGameLogContext } = await import('@/lib/chimmy/tools/realStatsTools')
+        return await buildPlayerGameLogContext({
+          playerName: typeof args.player === 'string' ? args.player : '',
+          sport: args.sport,
+          season: args.season,
+          week: args.week,
+          lastN: args.last_n,
+        })
+      }
+
+      case 'get_season_stat_leaders': {
+        const { buildSeasonLeadersContext } = await import('@/lib/chimmy/tools/realStatsTools')
+        return await buildSeasonLeadersContext({ stat: args.stat, sport: args.sport, season: args.season, limit: args.limit })
+      }
+
+      case 'get_real_standings': {
+        const { buildRealStandingsContext } = await import('@/lib/chimmy/tools/realStatsTools')
+        return await buildRealStandingsContext({ sport: args.sport, season: args.season, group: args.group })
       }
 
       default:

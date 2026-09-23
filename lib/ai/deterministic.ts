@@ -354,6 +354,40 @@ function detectUnsupportedStatEventQuestion(message: string): boolean {
   )
 }
 
+/*
+ * ── WHICH STAT QUESTIONS THE STORED-STATS TOOLS OWN (2026-09-23) ─────────────────────────────
+ *
+ * Chimmy now has tools over our stored NFL and college football stats (season totals, NFL game
+ * logs, season leaders, standings — lib/chimmy/tools/realStatsTools.ts). They run in the tool
+ * loop, which runs AFTER this module — so anything this module answers or refuses never reaches
+ * them. Two things intercepted them:
+ *
+ *   - the live-window builders answered "who leads the NFL in rushing" / "how many TDs does Allen
+ *     have this season" from the last few hours of plays (correctly caveated, still the wrong
+ *     question), and
+ *   - the blanket stat refusal turned every season question into a paid web search while the
+ *     answer sat in fantasy_stat_lines.
+ *
+ * So the live window answers only questions about NOW, and the refusal yields for football
+ * questions about a SEASON or a WEEK. Other sports keep the refusal (and its web-search
+ * escalation): we do not store their stats yet, and a football-only tool must not claim them.
+ */
+const LIVE_WINDOW_CUE = /\b(today|tonight|right now|currently|live|in the game|this game)\b/i
+
+const SEASON_OR_WEEK_CUE =
+  /\b(this season|season|this year|so far|last week|week\s*\d+|last \d+ games?|last game|career|leads? the (nfl|league|nation|country)|in the nfl|college football|ncaa|cfb)\b/i
+
+const NON_FOOTBALL_STAT_CUE =
+  /\b(mlb|nba|nhl|wnba|mls|soccer|baseball|basketball|hockey|home runs?|homers?|hrs?|rbis?|batting|strikeouts?|rebounds?|three[- ]pointers?|goals?|goalscorers?|saves?)\b/i
+
+export function isLiveWindowStatQuestion(message: string): boolean {
+  return LIVE_WINDOW_CUE.test(message)
+}
+
+export function isStoredFootballStatsQuestion(message: string): boolean {
+  return SEASON_OR_WEEK_CUE.test(message) && !NON_FOOTBALL_STAT_CUE.test(message) && !LIVE_WINDOW_CUE.test(message)
+}
+
 function resolveNflTeamForWeather(message: string): { abbrev: string; label: string } | null {
   const lower = message.toLowerCase()
   for (const team of NFL_TEAM_ABBREV_ALIASES) {
@@ -1284,12 +1318,18 @@ export async function tryDeterministicAnswerDetailed(
    * only outcome — even while the feed held the answer. Data first, refusal as
    * the fallback, never the other way round.
    */
-  const statLeaders = await buildStatLeaderAnswer(message, safeLocale)
-  if (statLeaders) return classify(statLeaders)
-  /* One named player, before the blanket refusal that used to swallow these. */
-  const playerStat = await buildPlayerStatAnswer(message, safeLocale)
-  if (playerStat) return classify(playerStat)
-  const unsupportedStatEvent = buildUnsupportedStatEventAnswer(message, safeLocale)
+  /* Live-window answers only for questions about NOW — see LIVE_WINDOW_CUE. */
+  if (isLiveWindowStatQuestion(message)) {
+    const statLeaders = await buildStatLeaderAnswer(message, safeLocale)
+    if (statLeaders) return classify(statLeaders)
+    /* One named player, before the blanket refusal that used to swallow these. */
+    const playerStat = await buildPlayerStatAnswer(message, safeLocale)
+    if (playerStat) return classify(playerStat)
+  }
+  /* A football season/week stat question belongs to the stored-stats tools downstream. */
+  const unsupportedStatEvent = isStoredFootballStatsQuestion(message)
+    ? null
+    : buildUnsupportedStatEventAnswer(message, safeLocale)
   if (unsupportedStatEvent) return refusal(unsupportedStatEvent)
   /* Forward-looking first: the cached path below only knows about today. */
   const upcoming = await buildUpcomingGamesAnswer(message, safeLocale)
