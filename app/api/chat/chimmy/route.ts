@@ -2770,7 +2770,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null }
     const loop = await runChimmyToolLoop({
       question: message,
-      systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
+      /*
+       * The PECR path has always carried the user's clock; the tool loop — the path that answers
+       * first — did not, so "tonight", "this week" and "last Sunday" were resolved against the
+       * model's training cutoff. Same line, same authority, both paths.
+       */
+      systemPrompt: [userTemporalContext.promptLine, CHIMMY_TOOL_LOOP_SYSTEM_PROMPT]
+        .filter(Boolean)
+        .join('\n\n'),
       conversation: conversation.slice(-6).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
@@ -3721,11 +3728,23 @@ ${describedTradeCtx}`
     }
     // Use potentially annotated/replaced display text going forward.
     const guardedAnswer = hallucinationCheck.displayText
-    const modeAdjustedAnswer = buildChimmyResponseForAssistantMode({
+    /*
+     * ⚠ FAST TAKE IS THE DEFAULT MODE, AND IT USED TO BYPASS THE GUARD ABOVE. It returns
+     * `shortAnswer` verbatim when one exists, and `shortAnswer` was parsed from the model's
+     * UNGUARDED text — so a replaced or annotated answer reached the user in its original form,
+     * and the freshness warning appended to `finalAnswer` was dropped with it. When the guard
+     * changed anything, fall back to trimming the guarded text; and never drop the warning.
+     */
+    const guardChangedAnswer = guardedAnswer !== finalAnswer
+    const fastTakeBody = buildChimmyResponseForAssistantMode({
       mode: selectedAssistantMode,
       fullResponse: guardedAnswer,
-      shortAnswer: pecrOutput.responseStructure.shortAnswer,
+      shortAnswer: guardChangedAnswer ? null : pecrOutput.responseStructure.shortAnswer,
     })
+    const modeAdjustedAnswer =
+      staleness.warning && !fastTakeBody.includes(staleness.warning)
+        ? `${fastTakeBody}\n\nData freshness: ${staleness.warning}`
+        : fastTakeBody
 
     const builtInRuleCheck = checkBehaviorRules(modeAdjustedAnswer, {
       input: message,

@@ -2154,3 +2154,18 @@
    * carries both, at the bar's own breakpoint. See af-core.css.
    */
 }
+
+/*
+ * Chimmy's reply rendered as formatted text (ChimmyRichText). Top level on purpose and last in
+ * the file: `.af-cm-turn .af-cm-turn-text` above sets `white-space: pre-wrap`, which would
+ * double every line break now that breaks are real <br>/<p> elements.
+ */
+.af-cm-turn .af-cm-rich { white-space: normal; }
+.af-cm-rich > * { margin: 0 0 8px; }
+.af-cm-rich > :last-child { margin-bottom: 0; }
+.af-cm-rich ul, .af-cm-rich ol { padding-left: 18px; }
+.af-cm-rich li { margin: 2px 0; }
+.af-cm-rich strong { color: var(--text); font-weight: 700; }
+.af-cm-rich .af-cm-rich-h { color: var(--text); }
+.af-cm-rich code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--surface2, rgba(255,255,255,.06)); }
+.af-cm-rich .af-cm-rich-hr { border: 0; border-top: 1px solid var(--line2, var(--line)); margin: 10px 0; }

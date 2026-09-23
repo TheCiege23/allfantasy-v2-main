@@ -22,6 +22,7 @@ import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { MessageReactions } from './MessageReactions'
 import { QuotedMessage } from './QuotedMessage'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
+import { ChimmyRichText } from './ChimmyRichText'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import {
@@ -935,7 +936,11 @@ function ChimmyPanel({
                 {t.role === 'chimmy' ? 'Chimmy' : 'You'}
                 {t.carried ? ' · earlier' : ''}
               </span>
-              <p className="af-cm-turn-text">{t.text}</p>
+              {t.role === 'chimmy' ? (
+                <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
+              ) : (
+                <p className="af-cm-turn-text">{t.text}</p>
+              )}
 
               {t.role === 'chimmy' && t.choices?.length && t.retryQuestion ? (
                 <div className="af-cm-quick af-cm-choices" role="group" aria-label="Ask in one of these leagues">
