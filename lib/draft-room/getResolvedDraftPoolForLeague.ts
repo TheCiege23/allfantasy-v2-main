@@ -162,6 +162,12 @@ type SportPoolRow = {
   position: string
   team_abbreviation: string | null
   external_source_id: string | null
+  /**
+   * The Sleeper id when this row has one. NOT interchangeable with
+   * `external_source_id`, which is `sleeperId ?? externalId` and so can carry a
+   * Rolling Insights number that looks identical to a Sleeper one.
+   */
+  sleeper_id?: string | null
   injury_status: string | null
   secondary_positions?: string[]
   image_url?: string | null
@@ -540,6 +546,53 @@ function hasJrSuffix(name: string | null | undefined): boolean {
   return /(^|\s)jr$/.test(canonicalName(name))
 }
 
+/**
+ * The Sleeper id a pool row genuinely carries, or `null`.
+ *
+ * 🛑 DO NOT SUBSTITUTE `external_source_id` FOR THIS. That field is
+ * `sleeperId ?? externalId`, so a Rolling Insights player number lands in it looking
+ * exactly like a Sleeper one — measured 2026-09-23: `SportsPlayer` holds
+ * `Clay Johnston ext=5850 src=rolling_insights` while 5850 is Josh Jacobs' SLEEPER id,
+ * and `Tyjon Lindsey ext=7564` against Ja'Marr Chase's 7564. Reading the coalesced
+ * field to decide identity is how a roster slot ends up scored from another man's week.
+ */
+function poolRowSleeperId(row: SportPoolRow): string | null {
+  const raw = String(row.sleeper_id ?? '').trim()
+  return raw === '' ? null : raw
+}
+
+/**
+ * May this id be assigned to this player?
+ *
+ * 🛑 THE TEST IS POSITIVE — THE POOL MUST CONFIRM THE ID, NOT MERELY FAIL TO REFUTE IT.
+ *
+ * For NFL a Sleeper-SHAPED number proves nothing: Rolling Insights numbers its players in the
+ * same range, and the scoring path reads the id as a Sleeper id either way. Measured
+ * 2026-09-23 on a 1,929-entry board, 443 of the 1,713 numeric ids resolved to a DIFFERENT man
+ * — A.J. Brown carried 4876 (sleeper 4876 is Bradley Northnagel, a long snapper), DK Metcalf
+ * 4843 (Willie Mays, LB), Marvin Harrison Jr. 8563 (Jordan Tucker, T).
+ *
+ * ⚠ "NOT PROVABLY SOMEBODY ELSE'S" WAS TRIED FIRST AND LEFT 168 OF THEM, because the pool
+ * cannot attribute an id whose owner is outside it — `4822` survived as Deebo Samuel purely
+ * because Malik Foreman, who holds sleeper 4822, is not fantasy-relevant and so is absent from
+ * the pool. Requiring confirmation costs nothing real: an id the pool cannot vouch for is an id
+ * the scoring path could not have used.
+ *
+ * Scoped to NFL and to NUMERIC ids, so `nfl:def:KC` and the UUIDs every other sport uses are
+ * never questioned.
+ */
+export function providerIdIsUsableForPlayer(args: {
+  id: string
+  playerName: string
+  sport: string
+  baseNameBySleeperId: ReadonlyMap<string, string>
+}): boolean {
+  const id = args.id.trim()
+  if (!id) return false
+  if (args.sport !== 'NFL' || !looksLikeSleeperNumericId(id)) return true
+  return args.baseNameBySleeperId.get(id) === suffixlessCanonicalName(args.playerName)
+}
+
 function jrAliasBaseKey(name: string, position: string, team: string | null | undefined): string {
   const n = canonicalName(name).replace(/(^|\s)jr$/, '').trim()
   return `${n}|${canonicalPosition(position)}|${canonicalTeam(team)}`
@@ -562,12 +615,50 @@ function jrAliasBaseKey(name: string, position: string, team: string | null | un
  *   +20   ADP is in the realistic range (â¤ 400)
  *   +5    longer display name (tiebreaker â prefers "A.J. Brown" over "AJ Brown")
  */
+/**
+ * A resolved row's Sleeper id, or `null`.
+ *
+ * Only a value that LOOKS like a Sleeper id counts: every other sport's ids are UUIDs, so
+ * this returns null for them and callers fall back to the name key they used before.
+ */
+function rawRowSleeperId(row: DraftPoolRawRow): string | null {
+  const id = String(row.playerId ?? row.sleeperId ?? '').trim()
+  return looksLikeSleeperNumericId(id) ? id : null
+}
+
+/**
+ * Who a row is about, by NAME alone — base name with the generational suffix removed,
+ * plus canonical position.
+ *
+ * 🛑 DELIBERATELY IGNORES THE ROW'S ID, AND THAT IS NOT AN OVERSIGHT. Its one caller
+ * groups rows that ALREADY share an id, so a key that consulted the id would return the
+ * same value for every member and the guard could never fire — a check that cannot fail.
+ *
+ * ⚠ `strictIdentityKey` answers a different question: it keeps the suffix on purpose, so
+ * it separates a father from a son, and equally separates one man from himself when two
+ * feeds disagree about his suffix. Measured 2026-09-23, the ADP list carries "James Cook
+ * III" (Rolling Insights' spelling) and "James Cook" (Sleeper's), both correctly resolved
+ * to sleeper 8138, and the suffix-preserving key read them as two claimants.
+ */
+function suffixlessPersonNameKey(row: DraftPoolRawRow): string {
+  const name = row.name ?? row.playerName ?? row.full_name ?? ''
+  const pos = row.position ?? row.pos ?? ''
+  return `${suffixlessCanonicalName(name)}|${canonicalPosition(pos)}`
+}
+
 function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
   const bestByKey = new Map<string, DraftPoolRawRow>()
   for (const row of rows) {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const pos = row.position ?? row.pos ?? ''
-    const key = strictIdentityKey(name, pos)
+    /*
+     * Two rows that resolved to the SAME Sleeper id are one player, whatever the feeds call
+     * him — merging them here is what stops "James Cook III" and "James Cook" both reaching
+     * the board as separately draftable entries carrying one id. Without a Sleeper id the
+     * key is unchanged, suffix and all, so no father is merged into his son.
+     */
+    const sleeperId = rawRowSleeperId(row)
+    const key = sleeperId ? `sleeper:${sleeperId}` : strictIdentityKey(name, pos)
     if (!key || key === '|') continue
 
     const current = bestByKey.get(key)
@@ -605,7 +696,16 @@ function scoreDraftPoolRow(row: DraftPoolRawRow): number {
  * If one playerId/sleeperId resolves to multiple canonical identities, keep the
  * id only on the highest-confidence row and clear it on the others.
  */
-function resolveConflictingExternalIds(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
+function resolveConflictingExternalIds(
+  rows: DraftPoolRawRow[],
+  /**
+   * ⚠ REQUIRED, AND THE REASON IS THE ORDER THIS RUNS IN. The loser of a conflict has its
+   * id reset to `sourcePlayerId` — the raw id the ranking feed supplied — which is exactly
+   * the Rolling Insights number the enrichment above already refused. Without re-checking
+   * it here, a rejected id is quietly restored after the check that rejected it.
+   */
+  isUsableId: (row: DraftPoolRawRow, id: string) => boolean,
+): DraftPoolRawRow[] {
   const byExternal = new Map<string, DraftPoolRawRow[]>()
   const keyFor = (r: DraftPoolRawRow) => {
     const id = String(r.playerId ?? r.sleeperId ?? '').trim()
@@ -634,15 +734,25 @@ function resolveConflictingExternalIds(rows: DraftPoolRawRow[]): DraftPoolRawRow
   }
 
   for (const [id, group] of byExternal.entries()) {
-    const identityCount = new Set(group.map((r) => strictIdentityKey(r.name ?? r.playerName ?? r.full_name ?? '', r.position ?? r.pos ?? ''))).size
+    /*
+     * ⚠ COUNT PEOPLE. This guard exists to stop two DIFFERENT players sharing one provider
+     * id, and it read a suffix disagreement as exactly that — "James Cook III" and
+     * "James Cook", both correctly resolved to sleeper 8138, looked like two claimants, so
+     * it stripped the id from one and the draft wrote `name:James Cook III:RB:BUF` onto a
+     * roster instead. The suffixless base name plus canonical position still separates
+     * genuinely different names, which is the case this was written for.
+     */
+    const identityCount = new Set(group.map(suffixlessPersonNameKey)).size
     if (identityCount <= 1) continue
     const winner = chooseBest(id, group)
     for (const row of group) {
       if (row === winner) continue
-      row.playerId = row.sourcePlayerId ?? null
-      row.sleeperId = row.sourceSleeperId ?? null
-      if (String(row.playerId ?? '').trim() === id) row.playerId = null
-      if (String(row.sleeperId ?? '').trim() === id) row.sleeperId = null
+      const restore = (value: unknown): string | null => {
+        const v = String(value ?? '').trim()
+        return v && v !== id && isUsableId(row, v) ? v : null
+      }
+      row.playerId = restore(row.sourcePlayerId)
+      row.sleeperId = restore(row.sourceSleeperId)
       if (String(row.id ?? '').trim() === id) row.id = null
     }
   }
@@ -854,11 +964,30 @@ export async function getResolvedDraftPoolForLeague(
    *     merging father and son, because `canonicalName` keeps `jr`/`sr`/`iii`;
    *   - suffixless: the last bridge, and the only risky one, so it records how many DISTINCT
    *     identities share each base name. A key claimed by more than one is never used.
+   *
+   * 🛑 COUNTING SPELLINGS COUNTS ONE MAN TWICE, AND THAT IS WHY REAL STARTERS KEPT
+   * SYNTHETIC IDS. Measured 2026-09-23 against `SportsPlayer` for NFL: the suffixed
+   * spelling is what Rolling Insights and TheSportsDB write, the bare one is what Sleeper
+   * writes, and only the Sleeper row carries a `sleeperId`:
+   *
+   *     James Cook       RB BUF            sleeper=8138   ext=sleeper:8138    sleeper
+   *     James Cook III   RB Buffalo Bills  sleeper=-      ext=6572            rolling_insights
+   *
+   * One person, two rows, so the spelling count said 2 and the tier refused — leaving
+   * `name:James Cook III:RB:BUF`, an id no feed can ever answer for. 9 of the 10
+   * ambiguous base names sampled were this shape.
+   *
+   * So distinct SLEEPER IDS are counted as well, and a row without one is not evidence of
+   * a second person: it carries no id the scoring path can address, so it can never be the
+   * answer either. The tenth sample is why the count still has to happen — "Kenneth Walker"
+   * really is two men (RB 8151 and WR 4634), and two ids under one base name still refuse.
+   * The spelling count is kept as an OR so nothing that resolves today stops resolving.
    */
   const poolByCanonicalKey = new Map<string, (typeof poolRows)[number]>()
   const poolByCanonicalNamePos = new Map<string, (typeof poolRows)[number]>()
   const poolBySuffixlessKey = new Map<string, (typeof poolRows)[number]>()
   const suffixlessIdentities = new Map<string, Set<string>>()
+  const suffixlessSleeperIds = new Map<string, Set<string>>()
   for (const row of poolRows) {
     const nameKey = normalizeKeyPart(row.full_name)
     const posKey = normalizeKeyPart(row.position)
@@ -877,13 +1006,45 @@ export async function getResolvedDraftPoolForLeague(
     const baseName = suffixlessCanonicalName(row.full_name)
     if (baseName) {
       const suffixless = `${baseName}|${canonicalPosition(row.position)}`
-      if (!poolBySuffixlessKey.has(suffixless)) poolBySuffixlessKey.set(suffixless, row)
+      /*
+       * Prefer the row that HAS a Sleeper id. First-wins otherwise picks by pool order,
+       * and the suffixed spelling is the one that comes from Rolling Insights /
+       * TheSportsDB — i.e. the row whose id the NFL scoring path cannot address.
+       */
+      const incumbent = poolBySuffixlessKey.get(suffixless)
+      if (!incumbent || (!poolRowSleeperId(incumbent) && poolRowSleeperId(row))) {
+        poolBySuffixlessKey.set(suffixless, row)
+      }
       const identities = suffixlessIdentities.get(suffixless) ?? new Set<string>()
       // The suffix-PRESERVING identity is what is counted: "marvin harrison" and
       // "marvin harrison jr" are two entries under one base key, which disqualifies it.
       identities.add(strictIdentityKey(row.full_name, row.position))
       suffixlessIdentities.set(suffixless, identities)
+
+      const sleeperId = poolRowSleeperId(row)
+      if (sleeperId) {
+        const ids = suffixlessSleeperIds.get(suffixless) ?? new Set<string>()
+        ids.add(sleeperId)
+        suffixlessSleeperIds.set(suffixless, ids)
+      }
     }
+  }
+
+  /**
+   * Which player each Sleeper id actually belongs to, by base name. NFL only — no other
+   * sport's pool carries Sleeper ids, so the map stays empty and every check below is a
+   * no-op for them.
+   *
+   * This is the evidence that lets a numeric id be REFUSED rather than merely doubted:
+   * `looksLikeSleeperNumericId` says an id is Sleeper-SHAPED, which Rolling Insights ids
+   * also are. Only the pool knows who actually owns one.
+   */
+  const nflBaseNameBySleeperId = new Map<string, string>()
+  for (const row of poolRows) {
+    const sleeperId = poolRowSleeperId(row)
+    if (!sleeperId || nflBaseNameBySleeperId.has(sleeperId)) continue
+    const baseName = suffixlessCanonicalName(row.full_name)
+    if (baseName) nflBaseNameBySleeperId.set(sleeperId, baseName)
   }
 
   const injuryByPlayerId = new Map<string, InjuryLookupRow>()
@@ -1520,23 +1681,92 @@ export async function getResolvedDraftPoolForLeague(
      * wrong one is worse than none: it would attribute another man's stats to this roster slot.
      */
     const suffixlessKey = `${suffixlessCanonicalName(name)}|${canonicalPosition(position)}`
+    /*
+     * Either count settles it, and they answer different questions. One distinct
+     * SLEEPER ID means one addressable person however many ways the feeds spell him.
+     * One distinct SPELLING is the older test, kept so nothing that resolves today
+     * stops resolving when the pool has no Sleeper ids at all (every non-NFL sport).
+     */
     const suffixlessIsUnambiguous =
-      !inJrAliasConflict && (suffixlessIdentities.get(suffixlessKey)?.size ?? 0) === 1
-    const poolMatch =
-      poolByStrictKey.get(strict) ??
-      poolByLooseKey.get(loose) ??
-      poolByCanonicalKey.get(strictIdentityKeyWithTeam(name, position, team)) ??
-      poolByCanonicalNamePos.get(strictIdentityKey(name, position)) ??
-      (suffixlessIsUnambiguous ? poolBySuffixlessKey.get(suffixlessKey) : undefined)
+      !inJrAliasConflict &&
+      ((suffixlessSleeperIds.get(suffixlessKey)?.size ?? 0) === 1 ||
+        (suffixlessIdentities.get(suffixlessKey)?.size ?? 0) === 1)
+    const poolCandidates = [
+      poolByStrictKey.get(strict),
+      poolByLooseKey.get(loose),
+      poolByCanonicalKey.get(strictIdentityKeyWithTeam(name, position, team)),
+      poolByCanonicalNamePos.get(strictIdentityKey(name, position)),
+      suffixlessIsUnambiguous ? poolBySuffixlessKey.get(suffixlessKey) : undefined,
+    ].filter((c): c is SportPoolRow => Boolean(c))
+    /*
+     * 🛑 CONFIDENCE IN THE NAME IS NOT CONFIDENCE IN THE ID, AND TAKING THE FIRST TIER
+     * TO HIT CONFLATES THEM.
+     *
+     * Every candidate here already agrees with this row on canonical position and on the
+     * name down to its generational suffix, so they differ only in how the feeds spell the
+     * team. What they do NOT share is whether their id is addressable: the suffixed
+     * spelling comes from Rolling Insights, whose row carries an id from a DIFFERENT
+     * numbering. Measured 2026-09-23, the strict/loose tiers hit that row and the run ended
+     * with a synthetic id, because the id it offered is somebody else's Sleeper id:
+     *
+     *     ext=6572  James Cook III (RI)     AND  Aaron Monteiro OT (sleeper 6572)
+     *     ext=8735  Ollie Gordon II (RI)    AND  Jairon McVea DB  (sleeper 8735)
+     *     ext=6943  Kenneth Walker III (RI) AND  Gabe Davis WR    (sleeper 6943)
+     *
+     * So a candidate that carries a real Sleeper id wins over one that does not. The
+     * ambiguity guard below still has the final say — this only changes WHICH row is
+     * offered to it, never whether a colliding id may be assigned.
+     */
+    const poolMatch = poolCandidates.find((c) => poolRowSleeperId(c)) ?? poolCandidates[0]
 
-    const poolExternalId = poolMatch?.external_source_id ? String(poolMatch.external_source_id).trim() : null
+    const poolMatchExternalId = poolMatch?.external_source_id ? String(poolMatch.external_source_id).trim() : null
+    /*
+     * 🛑 FOR NFL, A SLEEPER-SHAPED ID THAT IS NOT A SLEEPER ID IS ANOTHER MAN'S. REFUSE IT.
+     *
+     * `external_source_id` is `sleeperId ?? externalId`, so when a Rolling Insights or
+     * TheSportsDB row wins the match its provider number lands here indistinguishable from a
+     * Sleeper one — and the NFL scoring path reads this column AS a Sleeper id. Measured
+     * 2026-09-23 on a 1,929-entry board: 443 of the 1,713 numeric ids resolved to a
+     * DIFFERENT player when looked up in `SportsPlayer.sleeperId`.
+     *
+     *     A.J. Brown          assigned 4876 (his RI id)  -> sleeper 4876 is Bradley Northnagel, LS
+     *     DK Metcalf          assigned 4843              -> sleeper 4843 is Willie Mays, LB
+     *     Marvin Harrison Jr. assigned 8563              -> sleeper 8563 is Jordan Tucker, T
+     *
+     * A synthetic `name:` id scores zero and says so. A colliding id scores somebody else's
+     * week and says nothing, which is the failure this file's own note calls worse than no
+     * match at all. ⚠ Scoped to NUMERIC ids: `nfl:def:KC` and the UUID ids other sports use
+     * are not in Sleeper's space and are left exactly as they were.
+     */
+    const poolExternalId =
+      sport === 'NFL' &&
+      poolMatchExternalId &&
+      looksLikeSleeperNumericId(poolMatchExternalId) &&
+      !poolRowSleeperId(poolMatch!)
+        ? null
+        : poolMatchExternalId
+    /*
+     * ⚠ COUNT PEOPLE, NOT ROWS. `strictIdentityKeyWithTeam` alone counted one man twice
+     * whenever two sources spelled his team or position differently — `James Cook RB BUF`
+     * and `James Cook RUNNING BACK Buffalo Bills`, both carrying sleeper 8138, read as two
+     * identities and disqualified an id that was never in doubt. Rows agreeing on a Sleeper
+     * id are one person; a row without one still counts separately, which is what keeps the
+     * genuine cross-space collisions above refused.
+     */
     const poolExternalIdAmbiguous = Boolean(
       poolExternalId &&
       looksLikeSleeperNumericId(poolExternalId) &&
-      poolRows.filter((p) => String(p.external_source_id ?? '').trim() === poolExternalId)
-        .map((p) => strictIdentityKeyWithTeam(p.full_name ?? '', p.position ?? '', p.team_abbreviation ?? null))
-        .filter(Boolean)
-        .filter((v, i, arr) => arr.indexOf(v) === i).length > 1,
+      new Set(
+        poolRows
+          .filter((p) => String(p.external_source_id ?? '').trim() === poolExternalId)
+          .map((p) => {
+            const sleeperId = poolRowSleeperId(p)
+            return sleeperId
+              ? `sleeper:${sleeperId}`
+              : `name:${strictIdentityKeyWithTeam(p.full_name ?? '', p.position ?? '', p.team_abbreviation ?? null)}`
+          })
+          .filter((v) => v !== 'name:'),
+      ).size > 1,
     )
     const poolExternalIdForAssign = poolExternalIdAmbiguous ? null : poolExternalId
 
@@ -1775,17 +2005,57 @@ export async function getResolvedDraftPoolForLeague(
       resolvedRawGameStatus,
     )
 
+    /**
+     * 🛑 AN ID THE POOL SAYS BELONGS TO SOMEBODY ELSE IS NOT A FALLBACK, IT IS A WRONG
+     * ANSWER — SKIP IT AND TRY THE NEXT CANDIDATE.
+     *
+     * The ranking sources hand us a `playerId` already, and for a Rolling Insights row that
+     * id is from RI's numbering. It is Sleeper-SHAPED, so nothing downstream questions it,
+     * and the NFL scoring path looks it up as a Sleeper id. Measured 2026-09-23 on a
+     * 1,929-entry board: 443 of 1,713 numeric ids resolved to a DIFFERENT man —
+     * A.J. Brown carried 4876 (sleeper 4876 is Bradley Northnagel, a long snapper),
+     * DK Metcalf 4843 (Willie Mays, LB), Marvin Harrison Jr. 8563 (Jordan Tucker, T).
+     *
+     * ⚠ AND THE TEST IS POSITIVE, NOT NEGATIVE — "not provably somebody else's" was tried
+     * first and left 168 wrong ids, because the pool cannot attribute an id whose owner is
+     * outside it: `4822` reached the board as Deebo Samuel purely because Malik Foreman,
+     * who holds sleeper 4822, is not a fantasy-relevant player and so is absent from the
+     * 16,000 rows. Requiring the pool to CONFIRM an id is what closes that, and it costs
+     * nothing real — an id the pool cannot vouch for is an id the scoring path could not
+     * have used either.
+     *
+     * Scoped to NFL and to NUMERIC ids: `nfl:def:KC` and the UUIDs every other sport uses
+     * are not in Sleeper's space, are never checked, and pass through untouched.
+     */
+    const firstUsableId = (candidates: unknown[]): string | null =>
+      candidates
+        .map((c) => (c == null ? null : String(c).trim() || null))
+        .find(
+          (c): c is string =>
+            Boolean(c) &&
+            providerIdIsUsableForPlayer({
+              id: c as string,
+              playerName: name,
+              sport,
+              baseNameBySleeperId: nflBaseNameBySleeperId,
+            }),
+        ) ?? null
+
     const base = poolMatch
       ? {
           ...row,
           team: row.team ?? row.teamAbbr ?? poolMatch.team_abbreviation ?? null,
           teamAbbr: row.teamAbbr ?? row.team ?? poolMatch.team_abbreviation ?? null,
-          playerId: row.playerId ?? row.sleeperId ?? row.id ?? poolExternalIdForAssign ?? null,
-          sleeperId:
-            row.sleeperId ??
-            (looksLikeSleeperNumericId(poolExternalIdForAssign) ? poolExternalIdForAssign : null) ??
-            backfilledSleeperId ??
-            null,
+          playerId: firstUsableId([row.playerId, row.sleeperId, row.id, poolExternalIdForAssign]),
+          sleeperId: firstUsableId([
+            row.sleeperId,
+            looksLikeSleeperNumericId(poolExternalIdForAssign) ? poolExternalIdForAssign : null,
+            backfilledSleeperId,
+          ]),
+          // ⚠ `id` HAS TO BE FILTERED TOO, OR THE REFUSAL ABOVE IS DECORATION.
+          // `normalizeDraftPlayer` reads `playerId ?? sleeperId ?? id`, so clearing the first
+          // two just hands the board the third — which is the same unvouched number.
+          id: firstUsableId([row.id]),
           injuryStatus: normalizedInjuryStatus,
           status: dbInjuryHit?.gameStatus ?? row.status ?? poolMatch.status ?? null,
           secondaryPositions: Array.isArray(poolMatch.secondary_positions) ? poolMatch.secondary_positions : undefined,
@@ -1802,11 +2072,15 @@ export async function getResolvedDraftPoolForLeague(
         }
       : {
           ...row,
-          sleeperId:
-            row.sleeperId ??
-            (looksLikeSleeperNumericId(String(row.playerId ?? '')) ? String(row.playerId) : null) ??
-            backfilledSleeperId ??
-            null,
+          // Same refusal with no pool match to fall back on: a provably wrong id is worse
+          // than none, and none becomes a `name:` id that scores zero visibly.
+          playerId: firstUsableId([row.playerId]),
+          sleeperId: firstUsableId([
+            row.sleeperId,
+            looksLikeSleeperNumericId(String(row.playerId ?? '')) ? String(row.playerId) : null,
+            backfilledSleeperId,
+          ]),
+          id: firstUsableId([row.id]),
           injuryStatus: normalizedInjuryStatus,
           status: dbInjuryHit?.gameStatus ?? row.status ?? null,
           adp: resolvedAdp,
@@ -1916,7 +2190,14 @@ export async function getResolvedDraftPoolForLeague(
   await mismatchCollector.flush()
   perfMismatchFlush()
 
-  resolveConflictingExternalIds(enrichedList as DraftPoolRawRow[])
+  resolveConflictingExternalIds(enrichedList as DraftPoolRawRow[], (row, id) =>
+    providerIdIsUsableForPlayer({
+      id,
+      playerName: row.name ?? row.playerName ?? row.full_name ?? '',
+      sport,
+      baseNameBySleeperId: nflBaseNameBySleeperId,
+    }),
+  )
 
   // Jr/non-Jr disambiguation guard: if both variants share the same team/pos and
   // currently point at the exact same non-Sleeper image URL, clear imageUrl so

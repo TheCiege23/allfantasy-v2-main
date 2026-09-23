@@ -371,6 +371,9 @@ async function buildPlayerPoolForSport(
     status: r.status ?? null,
     injury_status: deriveInjuryStatus(r.status),
     external_source_id: r.sleeperId ?? r.externalId ?? null,
+    // Kept SEPARATE from `external_source_id`, which is the coalesce above and so
+    // cannot tell a Sleeper id from a provider id that merely looks like one.
+    sleeper_id: r.sleeperId ?? null,
     age: r.age ?? null,
     experience: null,
     secondary_positions: [],
@@ -404,6 +407,8 @@ async function buildPlayerPoolForSport(
         status: null,
         injury_status: null,
         external_source_id: `nfl:def:${abbr}`,
+        // Synthetic team defense — Sleeper has no player id for it.
+        sleeper_id: null,
         age: null,
         experience: null,
         secondary_positions: [],
@@ -470,6 +475,9 @@ async function buildPlayerPoolForSport(
       status: row.status ?? null,
       injury_status: deriveInjuryStatus(row.status ?? null),
       external_source_id: String(externalId),
+      // `externalId` above falls back through apiSports/fantasyCalc/row id, so only
+      // the Sleeper column answers "is this addressable by the NFL scoring path".
+      sleeper_id: row.sleeperId ?? null,
       age: null,
       experience: null,
       secondary_positions: [],

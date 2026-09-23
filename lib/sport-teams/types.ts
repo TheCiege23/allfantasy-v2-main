@@ -38,6 +38,18 @@ export interface PoolPlayerRecord {
   status: string | null
   injury_status: string | null
   external_source_id: string | null
+  /**
+   * The Sleeper id, when this row actually has one — NOT the same question as
+   * `external_source_id`.
+   *
+   * 🛑 `external_source_id` IS `sleeperId ?? externalId`, SO A NUMERIC VALUE IN IT
+   * CANNOT BE ATTRIBUTED TO AN ID SPACE. Rolling Insights numbers its players in the
+   * same range Sleeper does and the two collide: `SportsPlayer` holds
+   * `Clay Johnston ext=5850 src=rolling_insights`, and 5850 is Josh Jacobs' SLEEPER id.
+   * A consumer that needs the id the NFL scoring path can actually address has to read
+   * this field; reading `external_source_id` and hoping gets it a different man's stats.
+   */
+  sleeper_id?: string | null
   age?: number | null
   experience?: number | null
   secondary_positions?: string[]
