@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { isSpeculativeRequestHeaders } from "@/lib/http/speculativeRequest"
+import { LEAGUE_FIRST_COOKIE, LEAGUE_FIRST_PARAM, parseLeagueFirstToggle } from "@/lib/core-app/leagueFirst"
 import { SELECTABLE_LANGUAGES } from "@/lib/i18n/constants"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
@@ -456,6 +457,31 @@ export function nextWithRouteHeaders(request: NextRequest, pathname: string): Ne
  * and writing a small copy there is how two implementations of one rule start. The behaviour is
  * unchanged and `__tests__/middleware-lang-prefetch.test.ts` still pins it from this side.
  */
+/**
+ * `/core?leagueFirst=on|off` — the per-browser switch for the league-first phone shell
+ * (lib/core-app/leagueFirst.ts). Stores the choice in a cookie and redirects to the same URL
+ * without the parameter, so the switch is not left in a shareable link.
+ *
+ * ⚠ NEVER ON A PREFETCH — the af_lang lesson above: a prefetched `?leagueFirst=on` link would
+ * flip the shell for someone who only scrolled past it. A prefetch gets no cookie and no redirect.
+ */
+function leagueFirstToggleRedirect(request: NextRequest): NextResponse | null {
+  const { pathname, searchParams } = request.nextUrl
+  if (pathname !== "/core" && !pathname.startsWith("/core/")) return null
+  const toggle = parseLeagueFirstToggle(searchParams.get(LEAGUE_FIRST_PARAM))
+  if (!toggle || isSpeculativeRequest(request)) return null
+  const url = request.nextUrl.clone()
+  url.searchParams.delete(LEAGUE_FIRST_PARAM)
+  const response = NextResponse.redirect(url)
+  response.cookies.set(LEAGUE_FIRST_COOKIE, toggle, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  })
+  return response
+}
+
 function isSpeculativeRequest(request: NextRequest): boolean {
   return isSpeculativeRequestHeaders(request.headers)
 }
@@ -494,6 +520,11 @@ async function routeMiddleware(request: NextRequest) {
   const hostRedirect = canonicalProductionHostRedirect(request)
   if (hostRedirect) {
     return hostRedirect
+  }
+
+  const leagueFirstToggle = leagueFirstToggleRedirect(request)
+  if (leagueFirstToggle) {
+    return leagueFirstToggle
   }
 
   const legacyRedirect = redirectLegacyMarketingRoutes(request)

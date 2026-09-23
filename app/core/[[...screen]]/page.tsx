@@ -113,6 +113,13 @@ import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import {
+  LEAGUE_FIRST_ALL_VIEW,
+  LEAGUE_FIRST_COOKIE,
+  isLeagueFirstEnabled,
+  resolveLeagueFirstLanding,
+} from '@/lib/core-app/leagueFirst'
+import { readLastLeague, rememberLastLeague } from '@/lib/core-app/leagueFirstStore'
 import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
 import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
 import { toShareCard } from '@/lib/core-app/shareCard'
@@ -695,6 +702,21 @@ export default async function AfCorePage({
   // lane. The helper ignores prefetches and swallows write failures.
   if (selectedLeagueRow) void touchLeagueViewed(selectedLeagueRow.id)
 
+  /*
+   * League-first (lib/core-app/leagueFirst.ts). Opening a league remembers it; bare /core then
+   * reopens it below, once the rail matchups say whether it has a head-to-head this week.
+   * Started here so the read runs beside the shell reads rather than after them.
+   */
+  const leagueFirst = isLeagueFirstEnabled({
+    userId,
+    cookieValue: cookies().get(LEAGUE_FIRST_COOKIE)?.value,
+    rolloutEnv: process.env.AF_LEAGUE_FIRST_ROLLOUT,
+  })
+  if (leagueFirst && selectedLeagueRow) void rememberLastLeague(userId, selectedLeagueRow.id)
+  const leagueFirstLanding =
+    leagueFirst && segment === '' && !selectedLeagueId && sp.view !== LEAGUE_FIRST_ALL_VIEW
+  const lastLeagueRead = leagueFirstLanding ? readLastLeague(userId) : Promise.resolve(null)
+
   const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
@@ -1064,6 +1086,24 @@ export default async function AfCorePage({
     railMatchups,
     access,
   ] = await shellReads
+
+  /*
+   * The league-first landing. A redirect, so it must stay in AfCorePage ahead of the shell render
+   * (see "NOTHING HERE MAY REDIRECT" on CoreScreenBody). Only a league still in `playedLeagues` can
+   * be the target — the same list the `?league=` authorisation check above uses.
+   */
+  if (leagueFirstLanding) {
+    const landing = resolveLeagueFirstLanding({
+      lastLeagueId: await lastLeagueRead,
+      playedLeagueIds: playedLeagues.map((l) => l.id),
+      headToHeadLeagueIds: new Set(
+        Object.values(railMatchups?.byLeague ?? {})
+          .filter((m) => !m.unpaired)
+          .map((m) => m.leagueId),
+      ),
+    })
+    if (landing) redirect(landing)
+  }
   const devySlotCount = devyNav.devySlotCount
   /*
    * 🛑 THE DEVY HUB ENTRY SHOWED FOR EVERY LEAGUE. In a league it now shows only for a devy or C2C
@@ -1343,6 +1383,7 @@ export default async function AfCorePage({
   return (
     <AfCoreShell
       active={activeKey}
+      leagueFirst={leagueFirst}
       leagues={rail}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}

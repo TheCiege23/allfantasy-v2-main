@@ -13,7 +13,7 @@ import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
-import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
@@ -235,6 +235,13 @@ type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
   active: CoreNavKey
+  /**
+   * League-first phone shell (lib/core-app/leagueFirst.ts): the bottom bar becomes
+   * Leagues · Live · Chimmy · Play · Me, the league name in the top bar opens the league
+   * switcher, and a rail tile opens its league's matchup when there is one this week.
+   * Off leaves every existing behaviour exactly as it was.
+   */
+  leagueFirst?: boolean
   leagues: RailLeague[]
   /**
    * This week's matchup per league id, for the expanded rail.
@@ -835,6 +842,16 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  */
 const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']
 
+/** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
+const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
+  { href: '/create-league', label: 'Create a league', glyph: '＋' },
+  { href: '/find-league', label: 'Find a league', glyph: '⌕' },
+  { href: '/import', label: 'Import a league', glyph: '⇣' },
+  { href: '/mock-draft', label: 'Mock draft', glyph: '◷' },
+  { href: '/brackets', label: "Brackets and pick'em", glyph: '⚑' },
+  { href: '/leaderboards', label: 'Leaderboards', glyph: '▲' },
+]
+
 type PlayerSearchHit = {
   kind: 'player'
   id: string
@@ -1240,6 +1257,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    */
   const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  /* League-first reuses the More sheet (and its focus handling) for two menus: Me and Play. */
+  const [mobileSheet, setMobileSheet] = useState<'me' | 'play'>('me')
   const mobileMoreRef = useRef<HTMLElement | null>(null)
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null)
   const mobileMoreScrimRef = useRef<HTMLButtonElement | null>(null)
@@ -1465,6 +1484,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   return (
     <div
       className="af-core af-shell"
+      data-league-first={props.leagueFirst ? 'true' : undefined}
       /*
        * ⚠ THE ABSENT ATTRIBUTE IS A MEANINGFUL THIRD VALUE, NOT A FALSY 'false'.
        * Desktop CSS expands on `:not([data-rail-open='false'])`, so absent reads
@@ -1595,10 +1615,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
               ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
               : null
+            /* League-first opens a league on its matchup when it has a head-to-head this week —
+               the same rule the /core landing uses (resolveLeagueFirstLanding). */
+            const leagueHref = props.leagueFirst && m && !m.unpaired
+              ? `/core/matchup?league=${encodeURIComponent(l.id)}`
+              : `/core?league=${encodeURIComponent(l.id)}`
             return (
               <Link
                 key={l.id}
-                href={`/core?league=${encodeURIComponent(l.id)}`}
+                href={leagueHref}
                 /*
                  * ⚠ OFF ON A LONG RAIL, LEFT ALONE ON A SHORT ONE — the asymmetry is the
                  * point. Next's automatic prefetch stops at this route's `loading.tsx`, so it
@@ -1647,7 +1672,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                        closes the tray and opens the selected league. */
                     event.preventDefault()
                     setRailChoice('closed')
-                    router.push(`/core?league=${encodeURIComponent(l.id)}`)
+                    router.push(leagueHref)
                   }
                 }}
               >
@@ -1877,6 +1902,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <AfCrest size={26} />
           </Link>
           {/*
+            League-first: the league name IS the switcher (phone only, af-core-shell.css). It replaces
+            the floating "Leagues" pill, and it is one large target rather than an edge swipe — on a
+            website a swipe from the left edge is the browser's own Back gesture.
+          */}
+          {props.leagueFirst ? (
+            <button
+              type="button"
+              className="af-lf-switch"
+              aria-expanded={railOpen}
+              aria-controls="af-rail"
+              onClick={toggleRail}
+            >
+              <span className="af-lf-switch-name">{selectedLeagueName ?? 'Your leagues'}</span>
+              <span aria-hidden>▾</span>
+            </button>
+          ) : null}
+          {/*
             The scope, stated on every screen and changeable from it — ahead of the search, because
             it qualifies everything below it. See ScopeSwitcher's header.
           */}
@@ -1998,37 +2040,97 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         reasoning as GeoRestrictionNotice above.
       */}
       {/* ── Phone bottom bar ────────────────────────────────────────── */}
-      <nav className="af-tabbar" aria-label="Main">
-        {mobileItems.map((item) => (
+      {props.leagueFirst ? (
+        <nav className="af-tabbar" aria-label="Main">
           <Link
-            key={item.key}
-            href={item.href}
+            href="/core"
             className="af-tabbar-item"
-            data-active={item.key === active}
-            aria-current={item.key === active ? 'page' : undefined}
+            data-active={active !== 'live' && !mobileMoreOpen}
+            aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
+          >
+            <span className="af-tabbar-glyph" aria-hidden>▣</span>
+            <span className="af-tabbar-label">Leagues</span>
+          </Link>
+          <Link
+            href="/core/live"
+            className="af-tabbar-item"
+            data-active={active === 'live' && !mobileMoreOpen}
+            aria-current={active === 'live' && !mobileMoreOpen ? 'page' : undefined}
+          >
+            <span className="af-tabbar-glyph" aria-hidden>●</span>
+            <span className="af-tabbar-label">Live</span>
+          </Link>
+          <button
+            type="button"
+            className="af-tabbar-item af-tabbar-chimmy"
+            onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'chimmy' } }))}
+          >
+            <span className="af-tabbar-glyph" aria-hidden>✦</span>
+            <span className="af-tabbar-label">Chimmy</span>
+          </button>
+          <button
+            type="button"
+            className="af-tabbar-item"
+            data-active={mobileMoreOpen && mobileSheet === 'play'}
+            aria-expanded={mobileMoreOpen && mobileSheet === 'play'}
+            aria-controls="af-mobile-more"
+            onClick={() => {
+              setMobileSheet('play')
+              setMobileMoreOpen((open) => !(open && mobileSheet === 'play'))
+            }}
+          >
+            <span className="af-tabbar-glyph" aria-hidden>⊕</span>
+            <span className="af-tabbar-label">Play</span>
+          </button>
+          <button
+            type="button"
+            ref={mobileMoreButtonRef}
+            className="af-tabbar-item"
+            data-active={mobileMoreOpen && mobileSheet === 'me'}
+            aria-expanded={mobileMoreOpen && mobileSheet === 'me'}
+            aria-controls="af-mobile-more"
+            onClick={() => {
+              setMobileSheet('me')
+              setMobileMoreOpen((open) => !(open && mobileSheet === 'me'))
+            }}
+          >
+            <span className="af-tabbar-glyph" aria-hidden>◉</span>
+            <span className="af-tabbar-label">Me</span>
+          </button>
+        </nav>
+      ) : (
+        <nav className="af-tabbar" aria-label="Main">
+          {mobileItems.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              className="af-tabbar-item"
+              data-active={item.key === active}
+              aria-current={item.key === active ? 'page' : undefined}
+            >
+              <span className="af-tabbar-glyph" aria-hidden>
+                {item.glyph}
+                {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
+              </span>
+              <span className="af-tabbar-label">{item.label}</span>
+            </Link>
+          ))}
+          <button
+            type="button"
+            ref={mobileMoreButtonRef}
+            className="af-tabbar-item"
+            data-active={!activeInBar || mobileMoreOpen}
+            aria-expanded={mobileMoreOpen}
+            aria-controls="af-mobile-more"
+            onClick={() => setMobileMoreOpen((open) => !open)}
           >
             <span className="af-tabbar-glyph" aria-hidden>
-              {item.glyph}
-              {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
+              ⋯
             </span>
-            <span className="af-tabbar-label">{item.label}</span>
-          </Link>
-        ))}
-        <button
-          type="button"
-          ref={mobileMoreButtonRef}
-          className="af-tabbar-item"
-          data-active={!activeInBar || mobileMoreOpen}
-          aria-expanded={mobileMoreOpen}
-          aria-controls="af-mobile-more"
-          onClick={() => setMobileMoreOpen((open) => !open)}
-        >
-          <span className="af-tabbar-glyph" aria-hidden>
-            ⋯
-          </span>
-          <span className="af-tabbar-label">More</span>
-        </button>
-      </nav>
+            <span className="af-tabbar-label">More</span>
+          </button>
+        </nav>
+      )}
 
       {mobileMoreOpen ? (
         <>
@@ -2051,15 +2153,28 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             id="af-mobile-more"
             role="dialog"
             aria-modal="true"
-            aria-label="More screens"
+            aria-label={props.leagueFirst && mobileSheet === 'play' ? 'Play' : 'More screens'}
           >
             <header className="af-mobile-more-head">
               <span>
-                <span className="af-label">More</span>
+                <span className="af-label">{props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More'}</span>
                 <strong>{selectedLeagueName ?? props.scope?.label ?? 'All leagues'}</strong>
               </span>
               <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
             </header>
+            {props.leagueFirst && mobileSheet === 'play' ? (
+              <div className="af-mobile-more-list">
+                <div className="af-mobile-more-group">
+                  <span className="af-label">Start something</span>
+                  {LEAGUE_FIRST_PLAY_LINKS.map((item) => (
+                    <Link key={item.href} href={item.href} className="af-mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                      <span className="af-mobile-more-icon" aria-hidden>{item.glyph}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : (
             <div className="af-mobile-more-list">
               {sections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
@@ -2132,6 +2247,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 </button>
               </div>
             </div>
+            )}
           </section>
         </>
       ) : null}
