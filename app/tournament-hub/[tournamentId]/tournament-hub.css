@@ -92,6 +92,7 @@
    * Without this the dark cards sit on the shell's light body in light mode.
    */
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: var(--afth-bg);
   color: var(--afth-text);

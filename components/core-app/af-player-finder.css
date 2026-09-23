@@ -545,6 +545,7 @@
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /*
@@ -571,6 +572,7 @@
   position: sticky;
   top: 0;
   max-height: 100vh;
+  max-height: 100dvh;
   overflow-y: auto;
 }
 
@@ -612,6 +614,7 @@
   position: sticky;
   top: 0;
   max-height: 100vh;
+  max-height: 100dvh;
   overflow-y: auto;
 }
 
@@ -874,6 +877,7 @@
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 20px 22px 60px;
 }
 

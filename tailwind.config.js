@@ -234,6 +234,22 @@ const config = {
       ringColor: {
         focus: 'var(--color-primary)',
       },
+      // `*-screen` is 100vh, and on iOS Safari 100vh is the height with the
+      // toolbar HIDDEN — taller than what is visible on load. So a min-h-screen
+      // page scrolls when its content fits, a centred card sits low, and an
+      // h-screen shell parks its bottom row under the toolbar. dvh tracks the
+      // visible height; on desktop it equals vh. Arrays emit both declarations
+      // in order, so a browser without dvh keeps the 100vh line (the same
+      // fallback af-core-shell.css writes by hand).
+      minHeight: {
+        screen: ['100vh', '100dvh'],
+      },
+      height: {
+        screen: ['100vh', '100dvh'],
+      },
+      maxHeight: {
+        screen: ['100vh', '100dvh'],
+      },
     },
   },
   plugins: [

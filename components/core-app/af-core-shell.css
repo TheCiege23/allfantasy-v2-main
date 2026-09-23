@@ -11,6 +11,7 @@
   display: grid;
   grid-template-columns: 68px 232px minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   background-image: var(--hero);
   background-repeat: no-repeat;

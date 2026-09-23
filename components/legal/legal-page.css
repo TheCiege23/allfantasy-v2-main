@@ -80,6 +80,7 @@ html[data-mode='light'] .mode-readable .af-legal [class*='bg-slate-'] {
   --lg-warn: #fbbf24;
 
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 40px 20px 64px;
   background: var(--lg-bg);
   color: var(--lg-body);
