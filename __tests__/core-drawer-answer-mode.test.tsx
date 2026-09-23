@@ -82,22 +82,23 @@ afterEach(() => {
 })
 
 describe('the Answer toggle', () => {
-  it('starts on Fast and sends it', async () => {
+  // The full answer is the default (user decision 2026-09-23); Fast is opt-in.
+  it('starts on Deep (the full answer) and sends it', async () => {
     openDrawer()
-    expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Deep' }).getAttribute('aria-pressed')).toBe('false')
-    ask('Who should I start?')
-    await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
-    expect(sentMode(0)).toBe('fast_take')
-  })
-
-  it('sends Deep once chosen', async () => {
-    openDrawer()
-    fireEvent.click(screen.getByRole('button', { name: 'Deep' }))
     expect(screen.getByRole('button', { name: 'Deep' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('false')
     ask('Who should I start?')
     await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
     expect(sentMode(0)).toBe('deep_analysis')
+  })
+
+  it('sends Fast once chosen', async () => {
+    openDrawer()
+    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
+    expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('true')
+    ask('Who should I start?')
+    await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
+    expect(sentMode(0)).toBe('fast_take')
   })
 
   /*
@@ -110,24 +111,24 @@ describe('the Answer toggle', () => {
     openDrawer()
     ask('First question')
     await waitFor(() => expect(screen.getByText('Start him.')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: 'Deep' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
     ask('Second question')
     await waitFor(() => expect(chimmyPosts()).toHaveLength(2))
-    expect(sentMode(0)).toBe('fast_take')
-    expect(sentMode(1)).toBe('deep_analysis')
+    expect(sentMode(0)).toBe('deep_analysis')
+    expect(sentMode(1)).toBe('fast_take')
   })
 
   it('remembers the choice for that user only', async () => {
     const first = openDrawer('u1')
-    fireEvent.click(screen.getByRole('button', { name: 'Deep' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
     first.unmount()
 
     const again = openDrawer('u1')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Deep' }).getAttribute('aria-pressed')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('true'))
     again.unmount()
 
     openDrawer('u2')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Deep' }).getAttribute('aria-pressed')).toBe('true'))
   })
 
   it('never implies Deep costs more', () => {

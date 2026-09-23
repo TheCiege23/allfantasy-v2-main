@@ -24,12 +24,18 @@ export function aggregateChimmyResponse(input: {
   preferredFinalModel: AIModelRole
 }): ChimmyAggregationResult {
   const { deterministicLayer, modelOutputs, confidence, preferredFinalModel } = input
-  const preferredOrder: AIModelRole[] =
+  /*
+   * Claude first, whatever the router preferred (user decision 2026-09-23: Claude is Chimmy's main
+   * model). The orchestrator only calls the legacy providers when Claude failed, so in practice a
+   * usable Claude output is the only kind this ever has to choose over.
+   */
+  const legacyOrder: AIModelRole[] =
     preferredFinalModel === 'openai'
       ? ['openai', 'deepseek', 'grok']
       : preferredFinalModel === 'deepseek'
         ? ['deepseek', 'openai', 'grok']
         : ['grok', 'openai', 'deepseek']
+  const preferredOrder: AIModelRole[] = ['anthropic', ...legacyOrder]
 
   const primary = firstUsableOutput(modelOutputs, preferredOrder)
   const deterministicSummary = buildDeterministicSummaryLine(deterministicLayer)

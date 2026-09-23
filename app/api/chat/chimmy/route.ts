@@ -1716,7 +1716,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
              * not write, and saying otherwise would make the two look alike.
              */
             confidencePct: 70,
-            providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+            providerStatus:
+              searched.provider === 'claude'
+                ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
+                : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+            ...(searched.model ? { model: searched.model } : {}),
             dataSources: [LIVE_SEARCH_SOURCE],
             responseStructure: {
               shortAnswer: searched.text,
@@ -2745,7 +2749,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   /*
-   * ⚠ TOOL LOOP: OPTIONAL, GROK-ONLY, AND SILENT WHEN IT DOES NOT RUN.
+   * ⚠ TOOL LOOP: CLAUDE FIRST (Grok when no Anthropic key), AND SILENT WHEN IT DOES NOT RUN.
+   * This is where Chimmy's main model is chosen — see `lib/chimmy/tools/chimmyToolLoop.ts`.
    *
    * Placed HERE on purpose — after the spend is settled, before PECR. It is an
    * ALTERNATIVE to the push path, not an addition: running both would make two
@@ -2770,7 +2775,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null }
     const loop = await runChimmyToolLoop({
       question: message,
+      /*
+       * The PECR path has always carried the user's clock; the tool loop — the path that answers
+       * first — did not, so "tonight", "this week" and "last Sunday" were resolved against the
+       * model's training cutoff. Same line, same authority, both paths. Passed separately from
+       * the instructions because it changes every minute and Claude caches the instructions.
+       */
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
+      clockLine: userTemporalContext.promptLine,
       conversation: conversation.slice(-6).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
@@ -2840,7 +2852,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                   ledgerId: spendLedger.id,
                 }
               : undefined,
-          providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          providerStatus:
+            loop.provider === 'claude'
+              ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
+              : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          /* The model that actually answered — the one thing a quality complaint needs first. */
+          ...(loop.model ? { model: loop.model } : {}),
           leagueGrounding: boundLeague
             ? {
                 grounded: true as const,
@@ -3721,11 +3738,23 @@ ${describedTradeCtx}`
     }
     // Use potentially annotated/replaced display text going forward.
     const guardedAnswer = hallucinationCheck.displayText
-    const modeAdjustedAnswer = buildChimmyResponseForAssistantMode({
+    /*
+     * ⚠ FAST TAKE IS THE DEFAULT MODE, AND IT USED TO BYPASS THE GUARD ABOVE. It returns
+     * `shortAnswer` verbatim when one exists, and `shortAnswer` was parsed from the model's
+     * UNGUARDED text — so a replaced or annotated answer reached the user in its original form,
+     * and the freshness warning appended to `finalAnswer` was dropped with it. When the guard
+     * changed anything, fall back to trimming the guarded text; and never drop the warning.
+     */
+    const guardChangedAnswer = guardedAnswer !== finalAnswer
+    const fastTakeBody = buildChimmyResponseForAssistantMode({
       mode: selectedAssistantMode,
       fullResponse: guardedAnswer,
-      shortAnswer: pecrOutput.responseStructure.shortAnswer,
+      shortAnswer: guardChangedAnswer ? null : pecrOutput.responseStructure.shortAnswer,
     })
+    const modeAdjustedAnswer =
+      staleness.warning && !fastTakeBody.includes(staleness.warning)
+        ? `${fastTakeBody}\n\nData freshness: ${staleness.warning}`
+        : fastTakeBody
 
     const builtInRuleCheck = checkBehaviorRules(modeAdjustedAnswer, {
       input: message,

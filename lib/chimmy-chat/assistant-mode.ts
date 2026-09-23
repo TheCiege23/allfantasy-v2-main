@@ -8,7 +8,12 @@ export const CHIMMY_ASSISTANT_MODE_VALUES = [
 
 export type ChimmyAssistantMode = (typeof CHIMMY_ASSISTANT_MODE_VALUES)[number]
 
-export const DEFAULT_CHIMMY_ASSISTANT_MODE: ChimmyAssistantMode = 'fast_take'
+/*
+ * The full answer unless a caller asks for Fast Take (user decision 2026-09-23). `fast_take` trims a
+ * reply to its first paragraph (≤280 chars), and as the default it applied to every caller that sent
+ * no mode — and to any mode string this function did not recognise.
+ */
+export const DEFAULT_CHIMMY_ASSISTANT_MODE: ChimmyAssistantMode = 'deep_analysis'
 
 export const CHIMMY_ASSISTANT_MODE_LABELS: Record<ChimmyAssistantMode, string> = {
   fast_take: 'Fast Take',

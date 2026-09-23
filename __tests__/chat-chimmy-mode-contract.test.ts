@@ -6,14 +6,15 @@ import {
 } from '@/lib/chimmy-chat/assistant-mode'
 
 describe('Chimmy assistant mode contract', () => {
-  it('normalizes missing mode to fast_take', () => {
-    expect(normalizeChimmyAssistantMode(undefined)).toBe('fast_take')
-    expect(normalizeChimmyAssistantMode(null)).toBe('fast_take')
-    expect(normalizeChimmyAssistantMode('')).toBe('fast_take')
+  // The default is the FULL answer (user decision 2026-09-23); Fast Take must be asked for.
+  it('normalizes missing mode to deep_analysis', () => {
+    expect(normalizeChimmyAssistantMode(undefined)).toBe('deep_analysis')
+    expect(normalizeChimmyAssistantMode(null)).toBe('deep_analysis')
+    expect(normalizeChimmyAssistantMode('')).toBe('deep_analysis')
   })
 
-  it('normalizes invalid mode to fast_take', () => {
-    expect(normalizeChimmyAssistantMode('invalid_mode')).toBe('fast_take')
+  it('normalizes invalid mode to deep_analysis', () => {
+    expect(normalizeChimmyAssistantMode('invalid_mode')).toBe('deep_analysis')
   })
 
   it('accepts canonical modes unchanged', () => {

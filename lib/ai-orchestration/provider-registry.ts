@@ -9,13 +9,21 @@ import type { ProviderHealthEntry } from './types'
 import { createOpenAIProvider } from './providers/openai-provider'
 import { createDeepSeekProvider } from './providers/deepseek-provider'
 import { createGrokProvider } from './providers/grok-provider'
+import { createAnthropicProvider } from './providers/anthropic-provider'
 import { sanitizeProviderError } from './provider-utils'
 
+/*
+ * ⚠ 'anthropic' IS DELIBERATELY NOT IN THIS LIST. `getAvailableProviders` feeds every AI feature's
+ * fallback selection, and adding Claude here would start routing other tools to it by accident.
+ * Chimmy asks for 'anthropic' by name (see `runUnifiedOrchestration`); `getProvider` and
+ * `getAvailableFromRequested` serve it like any other role.
+ */
 const ROLES: AIModelRole[] = ['openai', 'deepseek', 'grok']
 
 let _openai: IProviderClient | null = null
 let _deepseek: IProviderClient | null = null
 let _grok: IProviderClient | null = null
+let _anthropic: IProviderClient | null = null
 
 function getHealthCheckTimeoutMs(): number {
   const raw = process.env.AI_PROVIDER_HEALTHCHECK_TIMEOUT_MS
@@ -54,6 +62,11 @@ function getGrok(): IProviderClient {
   return _grok
 }
 
+function getAnthropic(): IProviderClient {
+  if (!_anthropic) _anthropic = createAnthropicProvider()
+  return _anthropic
+}
+
 /**
  * Get provider client for a given role. Returns client even if not configured (isAvailable may be false).
  */
@@ -65,6 +78,8 @@ export function getProvider(role: AIModelRole): IProviderClient {
       return getDeepSeek()
     case 'grok':
       return getGrok()
+    case 'anthropic':
+      return getAnthropic()
     default:
       return getOpenAI()
   }
@@ -81,8 +96,8 @@ export function getAvailableProviders(): AIModelRole[] {
  * Get providers that are both requested (in roles) and available. No dead provider states.
  */
 export function getAvailableFromRequested(roles: AIModelRole[]): AIModelRole[] {
-  const available = new Set(getAvailableProviders())
-  return roles.filter((r) => available.has(r))
+  // Per role rather than through ROLES, so a role kept out of ROLES ('anthropic') can still be asked for.
+  return roles.filter((r) => getProvider(r).isAvailable())
 }
 
 /**
@@ -93,6 +108,7 @@ export function checkProviderAvailability(): Record<AIModelRole, boolean> {
     openai: getOpenAI().isAvailable(),
     deepseek: getDeepSeek().isAvailable(),
     grok: getGrok().isAvailable(),
+    anthropic: getAnthropic().isAvailable(),
   }
 }
 
@@ -141,10 +157,12 @@ async function checkOneProviderHealth(role: AIModelRole): Promise<ProviderHealth
  * Active provider health checks (config + lightweight health probe where available).
  */
 export async function checkProviderHealth(): Promise<Record<AIModelRole, ProviderHealthEntry>> {
-  const [openai, deepseek, grok] = await Promise.all([
+  const [openai, deepseek, grok, anthropic] = await Promise.all([
     checkOneProviderHealth('openai'),
     checkOneProviderHealth('deepseek'),
     checkOneProviderHealth('grok'),
+    // Chimmy's main model — the health route should say whether it is configured.
+    checkOneProviderHealth('anthropic'),
   ])
-  return { openai, deepseek, grok }
+  return { openai, deepseek, grok, anthropic }
 }

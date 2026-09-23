@@ -43,6 +43,9 @@ import {
 } from '@/lib/ai-context-envelope'
 import { resolveChimmyRoutingPlan, runChimmyOrchestrator } from '@/lib/chimmy-orchestration'
 import { getChimmyPromptStyleBlock } from '@/lib/chimmy-interface/ChimmyPromptStyleResolver'
+
+/** Per-call ceiling for Claude on the Chimmy push path; see `callRole` in `runUnifiedOrchestration`. */
+const CHIMMY_CLAUDE_TIMEOUT_MS = 45_000
 import { createHash } from 'crypto'
 
 function getDefaultTimeoutMs(): number {
@@ -125,6 +128,44 @@ function pruneProviderResponseCache(now: number) {
   }
 }
 
+/*
+ * 🛑 THE CHIMMY GROUNDING WAS CUT AT 4,000 CHARACTERS HERE, MID-BLOCK, AFTER THE ROUTE HAD
+ * CAREFULLY BUDGETED IT TO 30,000 IN WHOLE BLOCKS.
+ *
+ * `/api/chat/chimmy` nests its grounding text (`pecrContext.legacyEnrichmentContext`, already
+ * passed through `applyGroundingBudget`, and `legacyMemorySection`, already capped at 4,000) at
+ * the END of `deterministicPayload`. This function then JSON-stringified the whole payload and
+ * sliced it to 4,000 — so the model saw the first few blocks at most, escaped onto one line, and
+ * the cut landed wherever it landed: keeping a block's data while losing its closing constraint
+ * line, the outcome `lib/chimmy/groundingBudget.ts` exists to prevent. It is a strong (not yet
+ * proven) candidate for the 2026-09-20 KBFL answer that "the league's trade history isn't
+ * itemized" while 27 trades were on file — that block is appended ~19th.
+ *
+ * So those two text fields are lifted out and sent as plain text under their own caps, and the
+ * remaining JSON keeps its old limit. The payload object itself is not modified.
+ */
+const DATA_CONTEXT_JSON_MAX_CHARS = 4000
+/** A little over `DEFAULT_GROUNDING_BUDGET` (30k): the route has already trimmed it in whole blocks. */
+const GROUNDING_TEXT_MAX_CHARS = 32_000
+const MEMORY_TEXT_MAX_CHARS = 4000
+
+export function liftGroundingText(source: Record<string, unknown>): {
+  payload: Record<string, unknown>
+  grounding: string | null
+  memory: string | null
+} {
+  const pecr = source.pecrContext
+  if (!pecr || typeof pecr !== 'object' || Array.isArray(pecr)) {
+    return { payload: source, grounding: null, memory: null }
+  }
+  const { legacyEnrichmentContext, legacyMemorySection, ...restPecr } = pecr as Record<string, unknown>
+  const grounding =
+    typeof legacyEnrichmentContext === 'string' && legacyEnrichmentContext.trim() ? legacyEnrichmentContext : null
+  const memory = typeof legacyMemorySection === 'string' && legacyMemorySection.trim() ? legacyMemorySection : null
+  if (!grounding && !memory) return { payload: source, grounding: null, memory: null }
+  return { payload: { ...source, pecrContext: restPecr }, grounding, memory }
+}
+
 function buildMessages(
   envelope: AIContextEnvelope,
   providerInput?: ProviderInputContract
@@ -156,7 +197,10 @@ function buildMessages(
   }
   const userParts: string[] = []
   if (envelope.deterministicPayload && typeof envelope.deterministicPayload === 'object') {
-    userParts.push('Data context:\n' + JSON.stringify(envelope.deterministicPayload).slice(0, 4000))
+    const { payload, grounding, memory } = liftGroundingText(envelope.deterministicPayload)
+    userParts.push('Data context:\n' + JSON.stringify(payload).slice(0, DATA_CONTEXT_JSON_MAX_CHARS))
+    if (memory) userParts.push('Chimmy memory for this user:\n' + memory.slice(0, MEMORY_TEXT_MAX_CHARS))
+    if (grounding) userParts.push('Grounding (league, roster and sports data):\n' + grounding.slice(0, GROUNDING_TEXT_MAX_CHARS))
   }
   if (envelope.statisticsPayload && typeof envelope.statisticsPayload === 'object') {
     const stats = envelope.statisticsPayload
@@ -685,13 +729,25 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
   const maxRetries = req.options?.maxRetries ?? getDefaultMaxRetries()
 
   let modelsToCall: AIModelRole[]
+  /*
+   * CHIMMY ASKS CLAUDE FIRST, AND ALONE (user decision 2026-09-23: Claude is the main model, fallback
+   * path included). The keyword router below still picks the legacy OpenAI/DeepSeek/Grok set, but that
+   * set is only called if Claude fails — kept here as `chimmyLegacyModels`. Calling Claude ALONE is the
+   * point: fanning out to all four would bill four providers for one charged message.
+   */
+  let chimmyLegacyModels: AIModelRole[] | null = null
   const normalizedFeatureKey = normalizeOrchestrationToolKey(envelope.featureType)
   if (normalizedFeatureKey === 'chimmy_chat') {
     const routingPlan = resolveChimmyRoutingPlan({
       envelope,
       availableProviders: getAvailableProviders(),
     })
-    modelsToCall = routingPlan.models
+    if (getProvider('anthropic').isAvailable()) {
+      modelsToCall = ['anthropic']
+      chimmyLegacyModels = routingPlan.models
+    } else {
+      modelsToCall = routingPlan.models
+    }
   } else {
     switch (effectiveMode) {
       case 'single_model':
@@ -777,11 +833,32 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
     : undefined
   const messages = buildMessages(envelope, providerInput)
 
-  const results = await Promise.all(
-    available.map((role) =>
-      callProviderWithRetry(role, messages, timeoutMs, maxRetries, Boolean(req.options?.skipCache))
+  const callRole = (role: AIModelRole) =>
+    callProviderWithRetry(
+      role,
+      messages,
+      // Adaptive thinking makes a Claude turn slower than the 25s the legacy providers get.
+      role === 'anthropic' ? Math.max(timeoutMs, CHIMMY_CLAUDE_TIMEOUT_MS) : timeoutMs,
+      maxRetries,
+      Boolean(req.options?.skipCache)
     )
-  )
+  const results = await Promise.all(available.map(callRole))
+
+  /*
+   * Claude failed (credit, outage, refusal, timeout): only NOW call the legacy set, so the user still
+   * gets an answer. Both attempts stay in `results`/`available`, so the diagnostics, the outage alert
+   * and `providerStatus` below report Claude's failure as well as whichever provider answered.
+   */
+  if (chimmyLegacyModels && results.every((r) => r.result.status !== 'ok')) {
+    const requestedLegacy = getAvailableFromRequested(chimmyLegacyModels)
+    const legacy = (requestedLegacy.length > 0 ? requestedLegacy : getAvailableProviders()).filter(
+      (role) => !available.includes(role)
+    )
+    if (legacy.length > 0) {
+      results.push(...(await Promise.all(legacy.map(callRole))))
+      available = [...available, ...legacy]
+    }
+  }
 
   for (let i = 0; i < results.length; i++) {
     const role = available[i] as ProviderId

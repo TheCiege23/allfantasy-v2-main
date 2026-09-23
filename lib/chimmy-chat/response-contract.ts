@@ -2,8 +2,28 @@ import { z } from 'zod'
 import {
   computeChimmyConfidenceRubric,
   buildConfidenceBlockFromRubric,
+  confidenceLevelFor,
   type ChimmyTrackRecord,
 } from './confidence-rubric'
+
+const LEVEL_RANK = { low: 0, medium: 1, high: 2 } as const
+
+/**
+ * The drawer renders `{level} confidence · {confidencePct}%` side by side, but the
+ * level comes from the rubric and the percent is the orchestrator's own number.
+ * They disagreed in production — "HIGH CONFIDENCE · 26%" — most visibly when every
+ * provider failed: the fallback caps the percent at 20-35 while the rubric barely
+ * moves. A label may never claim more than the number printed next to it, so the
+ * level is capped at the band that number falls in. It is only ever LOWERED.
+ */
+export function capConfidenceLevelToShownPct(
+  block: ChimmyConfidenceBlock,
+  shownPct: number | null | undefined,
+): ChimmyConfidenceBlock {
+  if (typeof shownPct !== 'number' || !Number.isFinite(shownPct)) return block
+  const ceiling = confidenceLevelFor(shownPct)
+  return LEVEL_RANK[ceiling] < LEVEL_RANK[block.level] ? { ...block, level: ceiling } : block
+}
 
 export type ChimmyAnswerType =
   | 'trade'
@@ -340,9 +360,9 @@ export function buildChimmyAnswerContract(args: {
     trackRecord: args.trackRecords?.[answerType] ?? null,
   })
   const score = rubricResult.score
-  const confidence = buildConfidenceBlockFromRubric(
-    rubricResult,
-    args.dataSources?.filter(Boolean) ?? [],
+  const confidence = capConfidenceLevelToShownPct(
+    buildConfidenceBlockFromRubric(rubricResult, args.dataSources?.filter(Boolean) ?? []),
+    args.confidencePct,
   )
 
   const followUps =

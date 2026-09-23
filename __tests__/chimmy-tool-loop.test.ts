@@ -51,6 +51,8 @@ const base = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('XAI_API_KEY', 'test-key')
+  // These cases are the GROK path; with an Anthropic key the loop would run on Claude instead.
+  vi.stubEnv('ANTHROPIC_API_KEY', '')
   h.execute.mockResolvedValue('Leaders: 1. Josh Allen — 2')
 })
 
