@@ -29,6 +29,12 @@ export const COMMS_OPEN_EVENT = 'af-comms-open'
 export type CommsOpenDetail = {
   tab?: 'league' | 'chimmy' | 'huddle' | 'dms'
   prefill?: string
+  /**
+   * Scope the drawer to this league, even when the user picked another one by hand earlier.
+   * The league-first chat bar sends it: the bar names one league, so the chat it opens must be
+   * that league's and not whichever the drawer was last left on.
+   */
+  leagueId?: string
 }
 
 /** Opens the support modal. */

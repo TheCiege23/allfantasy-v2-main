@@ -309,6 +309,13 @@ export function Matchup({ data }: MatchupProps) {
     ? { you: data.projectedFinal.data.you, opponent: data.projectedFinal.data.opponent }
     : null
   const compared = scored ?? projected
+  const weekState: 'final' | 'live' | 'upcoming' = !data.week.available
+    ? 'upcoming'
+    : data.week.data.isFinal
+      ? 'final'
+      : scored
+        ? 'live'
+        : 'upcoming'
 
   const leader =
     compared && compared.you !== compared.opponent
@@ -363,45 +370,65 @@ export function Matchup({ data }: MatchupProps) {
             <span className="af-label af-mu-week-label">
               Week {data.week.data.week} · {data.week.data.season}
             </span>
-            <span className="af-mu-week-state af-num" data-final={data.week.data.isFinal}>
-              {data.week.data.isFinal ? 'Final' : 'Not scored'}
+            {/*
+              ⚠ "NOT SCORED" READ AS BROKEN. Before kickoff nothing is wrong: the
+              week simply has not started, and the board below is a projection of
+              it. Three states, named for what the manager is looking at.
+            */}
+            <span
+              className="af-mu-week-state af-num"
+              data-final={data.week.data.isFinal}
+              data-state={weekState}
+            >
+              {weekState === 'final' ? 'Final' : weekState === 'live' ? 'Live' : 'Upcoming'}
             </span>
           </>
         ) : (
           <span className="af-mu-unavailable">{data.week.reason}</span>
         )}
 
-        {/*
-          ⚠ THE ONLY PLACE ANYTHING CAN ACTUALLY CHANGE. AllFantasy is read-only
-          for an imported league, so a screen that shows a losing matchup and no
-          way to act on it is a dead end. The href is resolved server-side
-          through one hardened resolver — never built here — and the component
-          renders nothing at all for a native league.
-        */}
-        {data.league.sourceLink ? (
-          <SourceActionLink
-            link={data.league.sourceLink}
-            className="af-btn af-mu-source"
-          />
-        ) : null}
-
-        {/*
-          The one tap from a swing alert to the fix (2026-09-14): the provider's lineup
-          screen for YOUR team. Resolved server-side and only when that format is
-          verified — see MatchupData.league.lineupLink.
-        */}
-        {data.league.lineupLink ? (
-          <a
-            className="af-btn af-mu-source"
-            data-handoff="lineup"
-            href={data.league.lineupLink.href}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Set lineup in {data.league.lineupLink.platformLabel} <span aria-hidden>↗</span>
-          </a>
-        ) : null}
       </header>
+
+      {/*
+        The provider hand-offs sit in their own row rather than inside the banner, so the
+        league-first phone layout can drop them BELOW the lineup board (order in
+        af-core-shell.css) — the score and both lineups first, "open it in Sleeper" after.
+        Rendered only when there is a link: a native league has nothing to hand off to.
+      */}
+      {data.league.sourceLink || data.league.lineupLink ? (
+        <div className="af-mu-handoff">
+          {/*
+            ⚠ THE ONLY PLACE ANYTHING CAN ACTUALLY CHANGE. AllFantasy is read-only
+            for an imported league, so a screen that shows a losing matchup and no
+            way to act on it is a dead end. The href is resolved server-side
+            through one hardened resolver — never built here — and the component
+            renders nothing at all for a native league.
+          */}
+          {data.league.sourceLink ? (
+            <SourceActionLink
+              link={data.league.sourceLink}
+              className="af-btn af-mu-source"
+            />
+          ) : null}
+
+          {/*
+            The one tap from a swing alert to the fix (2026-09-14): the provider's lineup
+            screen for YOUR team. Resolved server-side and only when that format is
+            verified — see MatchupData.league.lineupLink.
+          */}
+          {data.league.lineupLink ? (
+            <a
+              className="af-btn af-mu-source"
+              data-handoff="lineup"
+              href={data.league.lineupLink.href}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Set lineup in {data.league.lineupLink.platformLabel} <span aria-hidden>↗</span>
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ── Head to head ────────────────────────────────────────────── */}
       <section className="af-frame af-mu-h2h">

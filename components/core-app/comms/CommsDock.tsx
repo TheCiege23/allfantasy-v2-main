@@ -78,6 +78,11 @@ export function CommsDock({
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
   const [prefill, setPrefill] = useState<string | null>(null)
+  const [openRequest, setOpenRequest] = useState<{
+    seq: number
+    tab: CommsTab | null
+    leagueId: string | null
+  } | null>(null)
   const [supportOpen, setSupportOpen] = useState(false)
   const [wide, setWide] = useState(false)
 
@@ -104,6 +109,11 @@ export function CommsDock({
        * leaving a stale sentence in the box.
        */
       setPrefill(detail?.prefill ?? null)
+      setOpenRequest((prev) => ({
+        seq: (prev?.seq ?? 0) + 1,
+        tab: detail?.tab ?? null,
+        leagueId: detail?.leagueId ?? null,
+      }))
       setOpen(true)
     }
     const openSupport = () => setSupportOpen(true)
@@ -181,6 +191,7 @@ export function CommsDock({
         pageSurface={pageSurface}
         initialTab={tab}
         initialDraft={prefill}
+        openRequest={openRequest}
       />
 
       <SupportModal
