@@ -32,6 +32,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { ingestSportStats } from '@/lib/schedule-stats'
 import { generateGameFactsFromExistingStats } from '@/lib/data-warehouse/HistoricalFactGenerator'
+import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 
 export interface ProviderWeekStatRow {
   playerId: string
@@ -259,10 +260,49 @@ export interface WeekWorkPlan {
  * explicitly NOT completion: that heuristic is what let a pilot-limited week 1 and a
  * facts-missing week 16 read as "done" during the release.
  */
-export async function findWeeksNeedingWork(season: number): Promise<WeekWorkPlan> {
-  const [ledgerCompleted, statWeeks, factWeeks] = await Promise.all([
+/**
+ * How long after a week's LAST kickoff its stats are treated as settled: the game itself
+ * (~4h), then the provider's corrections. A ledger `completed` row written before this point
+ * describes a week that was still being played.
+ */
+export const NFL_WEEK_SETTLE_MS = 36 * 60 * 60 * 1000
+
+/**
+ * The last regular-season kickoff of each week, from the schedule feed. Empty on any failure,
+ * which callers must read as "unknown" — never as "no games".
+ */
+async function loadNflWeekLastKickoffs(season: number): Promise<Map<number, number>> {
+  try {
+    const rows = await prisma.sportsGame.findMany({
+      where: { sport: 'NFL', season, week: { not: null }, startTime: { not: null } },
+      select: { week: true, startTime: true, seasonType: true },
+    })
+    const byWeek = new Map<number, number>()
+    for (const row of rows) {
+      // Preseason week 1 and regular week 1 share a number; only regular weeks are imported.
+      if (normalizeSeasonType(row.seasonType) !== 'regular') continue
+      if (row.week == null || row.startTime == null) continue
+      const t = row.startTime.getTime()
+      if (t > (byWeek.get(row.week) ?? -Infinity)) byWeek.set(row.week, t)
+    }
+    return byWeek
+  } catch {
+    return new Map()
+  }
+}
+
+export async function findWeeksNeedingWork(
+  season: number,
+  deps: { now?: Date } = {},
+): Promise<WeekWorkPlan> {
+  const now = (deps.now ?? new Date()).getTime()
+  const [ledgerCompleted, ledgerAny, statWeeks, factWeeks, lastKickoffs] = await Promise.all([
     prisma.statIngestionJob.findMany({
       where: { sportType: 'NFL', season, source: LEDGER_SOURCE, status: 'completed' },
+      select: { weekOrRound: true, completedAt: true },
+    }),
+    prisma.statIngestionJob.findMany({
+      where: { sportType: 'NFL', season, source: LEDGER_SOURCE },
       select: { weekOrRound: true },
     }),
     prisma.playerGameStat.groupBy({
@@ -275,11 +315,12 @@ export async function findWeeksNeedingWork(season: number): Promise<WeekWorkPlan
       where: { sport: 'NFL', season },
       _count: { _all: true },
     }),
+    loadNflWeekLastKickoffs(season),
   ])
 
-  const ledgerDone = new Set(ledgerCompleted.map((row) => row.weekOrRound))
   const statCounts = new Map(statWeeks.map((row) => [row.weekOrRound, row._count._all]))
   const factCounts = new Map(factWeeks.map((row) => [row.weekOrRound ?? -1, row._count._all]))
+  const weeksWithLedger = new Set(ledgerAny.map((row) => row.weekOrRound))
 
   const missing: number[] = []
   const partial: number[] = []
@@ -287,7 +328,38 @@ export async function findWeeksNeedingWork(season: number): Promise<WeekWorkPlan
   for (let week = 1; week <= MAX_NFL_WEEK; week += 1) {
     const stats = statCounts.get(week) ?? 0
     const facts = factCounts.get(week) ?? 0
-    if (ledgerDone.has(week) || (stats > 0 && facts === stats)) completed.push(week)
+    const lastKickoff = lastKickoffs.get(week)
+
+    /*
+     * 🛑 A WEEK IS NOT COMPLETE UNTIL ITS GAMES ARE. Measured on production 2026-09-23: 2026
+     * week 1 was imported the morning of opening night and week 2 the morning after Thursday
+     * Night Football, each ledgered `completed` (147 and 139 rows, against ~2,250 a week in
+     * 2025) — and a `completed` week is never fetched again, so the Sunday and Monday games
+     * were never imported at all. Both checks below ("the counts reconcile", "the ledger says
+     * completed") describe the ROWS, not the WEEK, and both were true of a week one game in.
+     *
+     * So where the schedule gives the week's last kickoff, completion also requires that the
+     * week has settled AND that the ledger row was written after it did. An earlier
+     * `completed` row sends the week back for a full provider fetch — which also self-heals
+     * the weeks already stamped too early. The reconcile-only grandfather clause survives
+     * solely for weeks with no ledger row at all (data ingested before the ledger existed).
+     * With no schedule row for the week, there is nothing to judge by and the old rules apply.
+     */
+    if (lastKickoff != null) {
+      const settledAt = lastKickoff + NFL_WEEK_SETTLE_MS
+      const settled = now >= settledAt
+      const completedAfterSettle = ledgerCompleted.some(
+        (row) => row.weekOrRound === week && row.completedAt != null && row.completedAt.getTime() >= settledAt,
+      )
+      const grandfathered = !weeksWithLedger.has(week) && stats > 0 && facts === stats
+      if (settled && (completedAfterSettle || grandfathered)) completed.push(week)
+      else if (stats > 0 && facts !== stats) partial.push(week)
+      else missing.push(week)
+      continue
+    }
+
+    const ledgerDone = ledgerCompleted.some((row) => row.weekOrRound === week)
+    if (ledgerDone || (stats > 0 && facts === stats)) completed.push(week)
     else if (stats > 0) partial.push(week)
     else missing.push(week)
   }
