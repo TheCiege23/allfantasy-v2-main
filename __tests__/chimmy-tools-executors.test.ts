@@ -113,6 +113,15 @@ describe('tool specs', () => {
        */
       'get_my_injuries',
       'get_stat_leaders',
+      /*
+       * Real-world NFL / college football stats (lib/chimmy/tools/realStatsTools.ts). SELECT-only
+       * over fantasy_stat_lines, player_game_stats, PlayerIdentityMap and the standings cache;
+       * no league id, no session scope, and model text reaches SQL only as bound parameters.
+       */
+      'get_player_season_stats',
+      'get_player_game_log',
+      'get_season_stat_leaders',
+      'get_real_standings',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })
