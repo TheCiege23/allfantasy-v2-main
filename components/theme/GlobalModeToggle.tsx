@@ -72,6 +72,7 @@ export function GlobalModeToggle() {
 
   return (
     <div
+      data-af-mode-toggle=""
       className={
         createLeagueRoute
           ? 'fixed right-4 top-4 z-40 sm:top-5'

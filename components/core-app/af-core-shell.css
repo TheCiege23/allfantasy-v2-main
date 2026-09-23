@@ -2665,3 +2665,108 @@ html[data-mode='light'] .af-core {
     color: var(--accent);
   }
 }
+
+/* ── League-first, phase 1.5: one menu, a clean header, nothing floating ─────
+ *
+ * Phone only, league-first only. Each thing hidden here stays reachable:
+ * - `.af-nav` (the Home · My team · Matchup strip) duplicates the bottom bar; every entry is in Me.
+ * - `.af-topbar-right` (Admin, Read-only, week, sync, plan) — Admin and Sync are in Me.
+ * - The full-width search folds into an icon (`.af-lf-search-btn`) and opens on tap.
+ * - The chat bubble (`.af-cm-launch`) floated over scores; the Chimmy tab opens the same drawer,
+ *   League chat included. Phase 2 replaces both with the pull-up chat bar.
+ * - The theme pill lives outside the shell, so it is matched with :has(); Appearance is in
+ *   Me › Settings.
+ */
+.af-core .af-lf-search-btn {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .af-core.af-shell[data-league-first='true'] .af-nav,
+  .af-core.af-shell[data-league-first='true'] .af-topbar-right,
+  .af-core.af-shell[data-league-first='true'] .af-cm-launch,
+  body:has(.af-core.af-shell[data-league-first='true']) [data-af-mode-toggle] {
+    display: none !important;
+  }
+
+  .af-core.af-shell[data-league-first='true'] .af-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-topbar .af-search-wrap {
+    display: none;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-topbar[data-lf-search-open='true'] .af-search-wrap {
+    display: block;
+    flex-basis: 100%;
+    order: 10;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text2);
+    font: inherit;
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  /* The league list's close row read as a dim caption; it is the way out of a full-screen tray. */
+  .af-core.af-shell[data-league-first='true'] .af-rail-toggle {
+    min-height: 48px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+}
+
+/* League-first compact league tabs (LeagueTabs `compact`): five that fit, plus More. Any width. */
+.af-core .af-lt-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-core .af-lt-compact-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.af-core .af-lt-compact-row .af-lt-tab,
+.af-core .af-lt-more > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 14px;
+  white-space: nowrap;
+  text-align: center;
+}
+.af-core .af-lt-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.af-core .af-lt-more > summary::-webkit-details-marker {
+  display: none;
+}
+.af-core .af-lt-more-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 4px;
+}
+.af-core .af-lt-more-list .af-lt-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+}
