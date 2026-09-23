@@ -12,6 +12,7 @@
   align-items: center;
   gap: 18px;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 48px 16px;
   background: var(--bg);
   background-image: var(--hero);
@@ -386,6 +387,7 @@
  */
 .af-au-boot {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -190,6 +190,7 @@
   background: var(--surface);
   border-right: 1px solid var(--line);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .af-core .af-d2-panel-head {
@@ -517,6 +518,7 @@
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /*
@@ -1657,6 +1659,7 @@
  */
 .af-core .af-d2-panel {
   max-height: 100vh;
+  max-height: 100dvh;
   overflow-y: auto;
   position: sticky;
   top: 0;

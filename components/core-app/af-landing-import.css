@@ -9,6 +9,7 @@
 
 .af-core.af-lp {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   background-image: var(--hero);
   background-repeat: no-repeat;
