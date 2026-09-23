@@ -1482,6 +1482,7 @@ export default async function AfCorePage({
            * "AllFantasy" rather than printing a raw enum at the reader.
            */
           platform={platformLabel(selectedLeaguePlatform)}
+          compact={leagueFirst}
         />
       ) : null}
 

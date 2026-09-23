@@ -1259,6 +1259,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   /* League-first reuses the More sheet (and its focus handling) for two menus: Me and Play. */
   const [mobileSheet, setMobileSheet] = useState<'me' | 'play'>('me')
+  /* League-first phones fold the full-width search into an icon; this opens it. */
+  const [lfSearchOpen, setLfSearchOpen] = useState(false)
   const mobileMoreRef = useRef<HTMLElement | null>(null)
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null)
   const mobileMoreScrimRef = useRef<HTMLButtonElement | null>(null)
@@ -1882,7 +1884,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
-        <header className="af-topbar">
+        <header className="af-topbar" data-lf-search-open={props.leagueFirst && lfSearchOpen ? 'true' : undefined}>
           {/*
             ⚠ THE CREST, PHONE ONLY — `display: none` above 720px.
 
@@ -1931,6 +1933,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               favoriteIds={props.scope.favoriteIds}
               leagueScreen={isLeagueScreen(active)}
             />
+          ) : null}
+          {props.leagueFirst ? (
+            <button
+              type="button"
+              className="af-lf-search-btn"
+              aria-label={lfSearchOpen ? 'Close search' : 'Search players and leagues'}
+              aria-expanded={lfSearchOpen}
+              onClick={() => setLfSearchOpen((open) => !open)}
+            >
+              <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
+            </button>
           ) : null}
           <TopSearch leagues={leagues} />
 

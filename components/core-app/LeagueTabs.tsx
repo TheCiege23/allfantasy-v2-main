@@ -39,7 +39,22 @@ export type LeagueTabsProps = {
    * history" is the truth and is something the reader can act on.
    */
   platform?: string | null
+  /**
+   * League-first phone shell: five tabs (Match · Team · Players · Trades · League) and the rest
+   * under a "More" disclosure, instead of a twelve-tab scroller. A native <details>, so it
+   * needs no client state.
+   */
+  compact?: boolean
 }
+
+/** The compact strip's five, in order, with their short labels. `''` is the league home. */
+const COMPACT_PRIMARY: Array<{ key: string; label: string }> = [
+  { key: 'matchup', label: 'Match' },
+  { key: 'my-team', label: 'Team' },
+  { key: 'players', label: 'Players' },
+  { key: 'trades', label: 'Trades' },
+  { key: '', label: 'League' },
+]
 
 type TabRequirement = 'scores' | 'trades' | 'draft'
 
@@ -70,6 +85,7 @@ export function LeagueTabs({
   tradeSupported = true,
   draftSupported = true,
   platform = null,
+  compact = false,
 }: LeagueTabsProps) {
   const q = `?league=${encodeURIComponent(leagueId)}`
   const hiddenFor = (requires: TabRequirement): boolean =>
@@ -95,24 +111,57 @@ export function LeagueTabs({
         availableKeys={visibleTabs.map((tab) => tab.key)}
       />
 
-      <LeagueTabsScroller activeKey={activeKey}>
-        {visibleTabs.map((t) => {
-          const active = t.key ? t.key === activeKey : activeKey === 'home'
-          const href = t.key ? `/core/${t.key}${q}` : `/core${q}`
+      {compact ? (() => {
+        const visibleKeys = new Set(visibleTabs.map((t) => t.key))
+        const primary = COMPACT_PRIMARY.filter((t) => visibleKeys.has(t.key))
+        const primaryKeys = new Set(primary.map((t) => t.key))
+        const rest = visibleTabs.filter((t) => !primaryKeys.has(t.key))
+        const tab = (key: string, label: string) => {
+          const active = key ? key === activeKey : activeKey === 'home'
           return (
-            <span key={t.key || 'overview'} role="listitem">
-              <Link
-                href={href}
-                className="af-lt-tab"
-                data-active={active}
-                aria-current={active ? 'page' : undefined}
-              >
-                {t.label}
-              </Link>
-            </span>
+            <Link
+              key={key || 'overview'}
+              href={key ? `/core/${key}${q}` : `/core${q}`}
+              className="af-lt-tab"
+              data-active={active}
+              aria-current={active ? 'page' : undefined}
+            >
+              {label}
+            </Link>
           )
-        })}
-      </LeagueTabsScroller>
+        }
+        const restActive = rest.some((t) => t.key === activeKey)
+        return (
+          <div className="af-lt-compact">
+            <div className="af-lt-compact-row">{primary.map((t) => tab(t.key, t.label))}</div>
+            {rest.length ? (
+              <details className="af-lt-more" open={restActive || undefined}>
+                <summary className="af-lt-tab" data-active={restActive}>More</summary>
+                <div className="af-lt-more-list">{rest.map((t) => tab(t.key, t.label))}</div>
+              </details>
+            ) : null}
+          </div>
+        )
+      })() : (
+        <LeagueTabsScroller activeKey={activeKey}>
+          {visibleTabs.map((t) => {
+            const active = t.key ? t.key === activeKey : activeKey === 'home'
+            const href = t.key ? `/core/${t.key}${q}` : `/core${q}`
+            return (
+              <span key={t.key || 'overview'} role="listitem">
+                <Link
+                  href={href}
+                  className="af-lt-tab"
+                  data-active={active}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {t.label}
+                </Link>
+              </span>
+            )
+          })}
+        </LeagueTabsScroller>
+      )}
 
       {/*
         🛑 A TAB THAT VANISHES WITHOUT A REASON IS THE BUG THIS GATING CREATED.
