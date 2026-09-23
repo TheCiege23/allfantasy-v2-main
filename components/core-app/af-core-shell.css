@@ -2613,3 +2613,55 @@ html[data-mode='light'] .af-core {
     cursor: pointer;
   }
 }
+
+/* ── League-first phone shell (lib/core-app/leagueFirst.ts) ─────────────────
+ *
+ * Only under `[data-league-first='true']`, which AfCoreShell sets from the rollout/cookie, so the
+ * shell everyone else sees is untouched. Its own top-level @media, not an edit inside another one.
+ *
+ * - The league name in the top bar is the switcher; the floating "Leagues" pill it replaces is hidden.
+ * - The scope picker yields its space to that name on a phone: in league-first you are always in a
+ *   league or choosing one, and two league pickers side by side is one too many.
+ * - Five tabs, not six: Leagues · Live · Chimmy · Play · Me.
+ */
+.af-core .af-lf-switch {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .af-core.af-shell[data-league-first='true'] .af-rail-handle,
+  .af-core.af-shell[data-league-first='true'] .af-topbar .af-scope {
+    display: none;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 58vw;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-switch > span:last-child {
+    color: var(--accent);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-switch-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-tabbar {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-tabbar-chimmy .af-tabbar-glyph {
+    color: var(--accent);
+  }
+}
