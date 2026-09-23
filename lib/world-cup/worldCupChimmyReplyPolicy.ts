@@ -900,7 +900,11 @@ function promptTeamMatch(prompt: string, matches: NonNullable<WorldCupChimmyCont
   return [...candidates].find((team) => p.includes(team.toLowerCase())) ?? null
 }
 
-function buildScheduleReply(ctx: WorldCupChimmyContext | null | undefined, prompt: string): string {
+function buildScheduleReply(
+  ctx: WorldCupChimmyContext | null | undefined,
+  prompt: string,
+  now: Date = new Date(),
+): string {
   const matches = allCachedMatches(ctx)
   if (!ctx || matches.length === 0) {
     return [
@@ -911,7 +915,6 @@ function buildScheduleReply(ctx: WorldCupChimmyContext | null | undefined, promp
   }
 
   const requestedTeam = promptTeamMatch(prompt, matches)
-  const now = new Date()
   const relevant = requestedTeam
     ? matches
         .filter((match) =>
@@ -1029,6 +1032,12 @@ export function reliableDataUnavailableMessage(locale: string | null | undefined
 export function tryDeterministicWorldCupChimmyReply(input: {
   prompt: string
   context: WorldCupChimmyContext | null | undefined
+  /**
+   * The clock "upcoming" is judged against. Defaults to the real time; tests pass one that matches
+   * their fixture dates. It was a bare `new Date()` inside the schedule reply, so a test whose
+   * fixtures kick off 2026-06-15 started failing once that date passed — a time bomb, not a regression.
+   */
+  now?: Date
   locale?: string | null
 }): string | null {
   const prompt = input.prompt.trim()
@@ -1110,7 +1119,7 @@ export function tryDeterministicWorldCupChimmyReply(input: {
   }
 
   if (isScheduleQuestion(prompt)) {
-    return buildScheduleReply(context, prompt)
+    return buildScheduleReply(context, prompt, input.now ?? new Date())
   }
 
   if (!isLiveScoreQuestion(prompt)) return null
