@@ -77,7 +77,7 @@ export default function LeagueHomeClient({
       <LeagueHeader league={data.league} />
       <LeagueTabs activeTab={resolvedTab} onChange={updateTab} showTeamDot={needsTeamDot} />
 
-      <main className="mx-auto max-w-md px-4 pb-[148px] pt-5">
+      <main className="mx-auto max-w-md px-4 pb-[calc(148px+env(safe-area-inset-bottom))] pt-5">
         <LeagueStatusBar snapshot={lifecycleLive} currentWeek={data.league.currentWeek} />
         <LeagueTypeConfirm leagueId={data.league.id} className="mb-3" />
         <CommissionerControlsPanel

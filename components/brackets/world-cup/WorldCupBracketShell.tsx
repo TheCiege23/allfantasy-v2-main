@@ -4719,7 +4719,7 @@ export default function WorldCupBracketShell({
         data-testid="world-cup-back-to-top"
         type="button"
         onClick={() => scrollToAnchor("world-cup-top")}
-        className="fixed bottom-16 right-4 z-50 inline-flex items-center gap-1 rounded-full border border-white/20 bg-zinc-900/90 px-3 py-2 text-xs font-black text-white shadow-xl backdrop-blur sm:bottom-6"
+        className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-4 z-50 inline-flex items-center gap-1 rounded-full border border-white/20 bg-zinc-900/90 px-3 py-2 text-xs font-black text-white shadow-xl backdrop-blur sm:bottom-6"
       >
         <ArrowUp className="h-3.5 w-3.5" />
         Top

@@ -76,7 +76,7 @@ export function GlobalModeToggle() {
         createLeagueRoute
           ? 'fixed right-4 top-4 z-40 sm:top-5'
           : marketingLanding
-            ? 'fixed right-4 bottom-4 z-40'
+            ? 'fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40'
             : 'fixed z-40'
       }
       style={

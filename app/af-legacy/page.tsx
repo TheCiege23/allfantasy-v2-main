@@ -4737,7 +4737,7 @@ function AFLegacyContent() {
   const mobileAlertsActive = mobileMainTab === 'alerts'
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/50 to-slate-900 pb-20 lg:pb-0 overflow-x-hidden">
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/50 to-slate-900 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0 overflow-x-hidden">
       <div className="container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <Link
@@ -18215,7 +18215,7 @@ function AFLegacyContent() {
       </div>
 
       {/* Floating Buttons */}
-      <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40 flex flex-col gap-3">
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 right-4 sm:right-6 z-40 flex flex-col gap-3">
         <button
           onClick={() => setShowTutorial(true)}
           className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-sm text-white/70 hover:text-white hover:bg-white/20 shadow-lg transition-all hover:scale-105"
@@ -18352,7 +18352,7 @@ function AFLegacyContent() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-emerald-500/90 px-4 py-3 text-sm text-white shadow-lg transition-all duration-500">
+        <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-6 z-50 rounded-xl bg-emerald-500/90 px-4 py-3 text-sm text-white shadow-lg transition-all duration-500 sm:bottom-6">
           {toast}
         </div>
       )}

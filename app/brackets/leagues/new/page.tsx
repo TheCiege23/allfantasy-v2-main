@@ -572,7 +572,7 @@ export default function NewBracketLeaguePage() {
             </div>
           )}
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 sm:static sm:p-0">
+          <div className="fixed bottom-0 left-0 right-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:static sm:p-0">
             <button
               type="submit"
               disabled={!name.trim() || loading}

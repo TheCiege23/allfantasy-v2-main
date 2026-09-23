@@ -142,7 +142,7 @@ export function SpotifyMiniPlayer() {
    */
   if (playbackBlock && !dismissed) {
     return (
-      <div className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a1220]/95 backdrop-blur-md">
+      <div className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a1220]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
         <div className="mx-auto flex max-w-screen-xl items-center gap-3 px-4 py-2">
           <span className="text-xs text-white/70">{playbackBlock}</span>
           {needsReauth && (
@@ -178,7 +178,7 @@ export function SpotifyMiniPlayer() {
   }
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a1220]/95 backdrop-blur-md">
+    <div className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a1220]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
       <div className="mx-auto flex max-w-screen-xl items-center gap-3 px-4 py-2">
         {playback?.albumArt && (
           <Image

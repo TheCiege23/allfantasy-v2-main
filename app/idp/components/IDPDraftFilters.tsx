@@ -225,7 +225,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
         </p>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0a1228]/95 px-4 py-3 backdrop-blur-md sm:static sm:z-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-0">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0a1228]/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:static sm:z-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-0">
         <div className="mx-auto flex max-w-lg flex-col gap-2 sm:max-w-none sm:flex-row sm:items-center sm:justify-between sm:rounded-lg sm:border sm:border-[color:var(--cap-contract)]/25 sm:bg-black/35 sm:px-3 sm:py-2">
           <div className="flex items-center justify-between gap-3 text-[11px] sm:justify-start">
             <span className="font-semibold text-white/80">Your cap remaining</span>

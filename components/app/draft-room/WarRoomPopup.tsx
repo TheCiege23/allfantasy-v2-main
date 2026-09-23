@@ -146,7 +146,7 @@ export function WarRoomPopup({
           role="dialog"
           aria-label={triggerLabel}
           data-testid={testIdBase}
-          className={`fixed inset-x-0 bottom-0 z-[55] flex h-[80vh] flex-col overflow-hidden border-t border-cyan-400/20 bg-[linear-gradient(180deg,#0a1228_0%,#060f20_100%)] shadow-2xl shadow-black/60 sm:inset-x-auto sm:h-[min(560px,80vh)] sm:w-[min(380px,calc(100vw-2rem))] sm:rounded-xl sm:border ${panelCorner}`}
+          className={`fixed inset-x-0 bottom-0 z-[55] flex h-[80vh] flex-col overflow-hidden border-t border-cyan-400/20 bg-[linear-gradient(180deg,#0a1228_0%,#060f20_100%)] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/60 sm:inset-x-auto sm:pb-0 sm:h-[min(560px,80vh)] sm:w-[min(380px,calc(100vw-2rem))] sm:rounded-xl sm:border ${panelCorner}`}
         >
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-cyan-400/15 bg-[linear-gradient(90deg,rgba(8,18,40,0.95),rgba(6,14,30,0.92))] px-3 py-2">
             <div className="flex items-center gap-2">

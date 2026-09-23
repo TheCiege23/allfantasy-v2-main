@@ -1781,7 +1781,7 @@ export default function MessagesContent() {
 
       {reportSuccess && (
         <div
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 rounded-lg border px-4 py-2 text-sm shadow-lg"
+          className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 rounded-lg border px-4 py-2 text-sm shadow-lg"
           style={{ background: "var(--panel)", borderColor: "var(--border)", color: "var(--text)" }}
         >
           Report submitted. Thank you.

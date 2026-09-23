@@ -143,7 +143,7 @@ export function AFCrestButton(props: AFCrestButtonProps) {
           />
           <div
             ref={panelRef}
-            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-slate-800/98 border-t border-white/10 shadow-2xl p-4 pb-8"
+            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-slate-800/98 border-t border-white/10 shadow-2xl p-4 pb-[max(2rem,calc(1rem+env(safe-area-inset-bottom)))]"
             role="dialog"
             aria-label="AF projection details"
           >

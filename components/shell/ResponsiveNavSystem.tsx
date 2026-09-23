@@ -311,11 +311,16 @@ export function ResponsiveNavSystem({
         onOpenSearch={() => setSearchOpen(true)}
       />
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <div className={isAuthenticated && !hideHeader ? "pb-20 lg:pb-0" : undefined}>{children}</div>
+      {/* MobileBottomTabs pads its bottom by max(0.5rem, home indicator), so on an
+          iPhone with an indicator it is ~26px taller than the 5rem reserved here;
+          without the env() term the last line of every page sits under the bar. */}
+      <div className={isAuthenticated && !hideHeader ? "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0" : undefined}>{children}</div>
       {isAuthenticated ? (
         <>
+          {/* Keyboard shortcuts only — `hidden lg:block` keeps it off phones, where
+              there is no "/" or Ctrl/Cmd+Shift+K to press. */}
           {showShortcutHint && !suppressShortcutHintOnLaunchSurface ? (
-            <div className="fixed bottom-[8.2rem] right-4 z-40 w-[13.5rem] rounded-lg border border-white/15 bg-slate-900/95 px-3 py-2 text-xs text-white shadow-2xl lg:bottom-20 lg:right-6">
+            <div className="fixed bottom-[8.2rem] right-4 z-40 hidden w-[13.5rem] rounded-lg border border-white/15 bg-slate-900/95 px-3 py-2 text-xs text-white shadow-2xl lg:bottom-20 lg:right-6 lg:block">
               <p className="font-semibold text-white/90">Chimmy shortcuts</p>
               <p className="mt-1 text-white/70">Press <span className="rounded border border-white/20 px-1 py-0.5">/</span> or <span className="rounded border border-white/20 px-1 py-0.5">Ctrl/Cmd+Shift+K</span></p>
               <button
@@ -339,7 +344,7 @@ export function ResponsiveNavSystem({
             label={isAdmin ? "Open Admin AI" : isCommissionerInLeague ? "Open Commissioner Chimmy" : "Open Chimmy"}
             hasNotification={hasUnreadAiAlerts}
             onClick={openChimmy}
-            positionClass="fixed bottom-24 right-4 z-40 lg:bottom-6 lg:right-6"
+            positionClass="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 lg:bottom-6 lg:right-6"
             className="shadow-2xl"
           />
           ) : null}
