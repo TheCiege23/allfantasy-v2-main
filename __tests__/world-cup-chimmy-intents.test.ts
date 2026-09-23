@@ -112,6 +112,11 @@ describe("World Cup Chimmy deterministic intents", () => {
       prompt: "Who does Brazil play next?",
       context: context(),
       locale: "en",
+      /*
+       * The clock the fixtures were captured at (synced 2026-06-05, kickoff 2026-06-15). Without it the
+       * reply judged "upcoming" against the real date, and this test began failing once 06-15 passed.
+       */
+      now: new Date("2026-06-05T13:00:00.000Z"),
     })
 
     expect(reply).toContain("Brazil fixture from cache")
