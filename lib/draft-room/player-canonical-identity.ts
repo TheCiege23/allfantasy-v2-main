@@ -182,6 +182,44 @@ export function suffixlessCanonicalName(input: string | null | undefined): strin
   return tokens.join(' ')
 }
 
+/** A Sleeper-SHAPED id: three or more digits. Shape only — see the warning below. */
+export function looksLikeSleeperNumericId(value: string | null | undefined): boolean {
+  return /^\d{3,}$/.test(String(value ?? '').trim())
+}
+
+/**
+ * May this id be assigned to this player?
+ *
+ * 🛑 THE TEST IS POSITIVE — THE EVIDENCE MUST CONFIRM THE ID, NOT MERELY FAIL TO REFUTE IT.
+ *
+ * For NFL a Sleeper-SHAPED number proves nothing: Rolling Insights numbers its players in the
+ * same range, `SportsPlayer.externalId` holds whichever the source supplied, and the scoring
+ * path reads a roster row's id as a Sleeper id either way. Measured 2026-09-23 on a
+ * 1,929-entry draft board, 443 of the 1,713 numeric ids resolved to a DIFFERENT man —
+ * A.J. Brown carried 4876 (sleeper 4876 is Bradley Northnagel, a long snapper), DK Metcalf
+ * 4843 (Willie Mays, LB), Marvin Harrison Jr. 8563 (Jordan Tucker, T).
+ *
+ * ⚠ "NOT PROVABLY SOMEBODY ELSE'S" WAS TRIED FIRST AND LEFT 168 OF THEM, because the evidence
+ * cannot attribute an id whose owner is outside it — `4822` survived as Deebo Samuel purely
+ * because Malik Foreman, who holds sleeper 4822, is not fantasy-relevant and so was absent
+ * from the pool. Requiring confirmation costs nothing real: an id nothing can vouch for is an
+ * id the scoring path could not have used.
+ *
+ * Scoped to NFL and to NUMERIC ids, so `nfl:def:KC` and the UUIDs every other sport uses are
+ * never questioned.
+ */
+export function providerIdIsUsableForPlayer(args: {
+  id: string
+  playerName: string
+  sport: string
+  baseNameBySleeperId: ReadonlyMap<string, string>
+}): boolean {
+  const id = args.id.trim()
+  if (!id) return false
+  if (args.sport !== 'NFL' || !looksLikeSleeperNumericId(id)) return true
+  return args.baseNameBySleeperId.get(id) === suffixlessCanonicalName(args.playerName)
+}
+
 /** Returns true when the image URL is a real provider image, not a placeholder. */
 export function isProviderImage(url: string | null | undefined): boolean {
   if (!url) return false

@@ -45,6 +45,8 @@ import {
   canonicalPosition,
   canonicalTeam,
   isFreeAgentTeam,
+  looksLikeSleeperNumericId,
+  providerIdIsUsableForPlayer,
   strictIdentityKey,
   strictIdentityKeyWithTeam,
   suffixlessCanonicalName,
@@ -306,11 +308,6 @@ function poolMergeCap(limit: number): number {
   return Math.min(25_000, Math.max(limit * 14, 6000))
 }
 
-function looksLikeSleeperNumericId(value: string | null | undefined): boolean {
-  const t = String(value ?? '').trim()
-  return /^\d{3,}$/.test(t)
-}
-
 function adpLookupKey(name: string, position: string, team?: string | null): string {
   return `${normalizeDraftPoolNameForDedupe(name)}|${normalizeKeyPart(position)}|${normalizeKeyPart(team)}`
 }
@@ -561,37 +558,6 @@ function poolRowSleeperId(row: SportPoolRow): string | null {
   return raw === '' ? null : raw
 }
 
-/**
- * May this id be assigned to this player?
- *
- * 🛑 THE TEST IS POSITIVE — THE POOL MUST CONFIRM THE ID, NOT MERELY FAIL TO REFUTE IT.
- *
- * For NFL a Sleeper-SHAPED number proves nothing: Rolling Insights numbers its players in the
- * same range, and the scoring path reads the id as a Sleeper id either way. Measured
- * 2026-09-23 on a 1,929-entry board, 443 of the 1,713 numeric ids resolved to a DIFFERENT man
- * — A.J. Brown carried 4876 (sleeper 4876 is Bradley Northnagel, a long snapper), DK Metcalf
- * 4843 (Willie Mays, LB), Marvin Harrison Jr. 8563 (Jordan Tucker, T).
- *
- * ⚠ "NOT PROVABLY SOMEBODY ELSE'S" WAS TRIED FIRST AND LEFT 168 OF THEM, because the pool
- * cannot attribute an id whose owner is outside it — `4822` survived as Deebo Samuel purely
- * because Malik Foreman, who holds sleeper 4822, is not fantasy-relevant and so is absent from
- * the pool. Requiring confirmation costs nothing real: an id the pool cannot vouch for is an id
- * the scoring path could not have used.
- *
- * Scoped to NFL and to NUMERIC ids, so `nfl:def:KC` and the UUIDs every other sport uses are
- * never questioned.
- */
-export function providerIdIsUsableForPlayer(args: {
-  id: string
-  playerName: string
-  sport: string
-  baseNameBySleeperId: ReadonlyMap<string, string>
-}): boolean {
-  const id = args.id.trim()
-  if (!id) return false
-  if (args.sport !== 'NFL' || !looksLikeSleeperNumericId(id)) return true
-  return args.baseNameBySleeperId.get(id) === suffixlessCanonicalName(args.playerName)
-}
 
 function jrAliasBaseKey(name: string, position: string, team: string | null | undefined): string {
   const n = canonicalName(name).replace(/(^|\s)jr$/, '').trim()
