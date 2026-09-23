@@ -1,10 +1,18 @@
 import 'server-only'
+import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 
 /**
+ * CLAUDE IS THE MAIN MODEL (2026-09-23, user's decision). When `ANTHROPIC_API_KEY` is set the
+ * loop runs on Claude through the Anthropic SDK; Grok below is now only the fallback for a
+ * deployment with no Anthropic key, or one that pins `CHIMMY_TOOL_LOOP_PROVIDER=grok`. This loop
+ * answers first in the /core drawer, so it is where "which model is Chimmy" is decided.
+ *
+ * The notes below describe the original Grok-only loop and still hold for the Grok path.
+ *
  * A BOUNDED TOOL LOOP FOR CHIMMY, GROK ONLY, OFF BY DEFAULT.
  *
  * The rest of this assistant assembles context up front and refuses when it is
@@ -44,12 +52,78 @@ const TURN_TIMEOUT_MS = 20_000
 const XAI_BASE_URL = 'https://api.x.ai/v1'
 const DEFAULT_MODEL = 'grok-4-0709'
 
+/**
+ * Claude Opus 5 unless `CHIMMY_CLAUDE_MODEL` names another. Changing the default is a cost
+ * decision for the owner: `claude-sonnet-5` is roughly 40% of the per-token price.
+ */
+const DEFAULT_CLAUDE_MODEL = 'claude-opus-5'
+
+/**
+ * Thinking is on (adaptive — the Opus 5 default), and this is a chat turn, so `medium` effort:
+ * enough reasoning for a start/sit or trade call without the latency of `high`.
+ */
+const CLAUDE_EFFORT = 'medium' as const
+
+/** Room for adaptive thinking plus the answer; hitting it truncates, so do not lowball it. */
+const CLAUDE_MAX_TOKENS = 8000
+
+/** Per round trip; thinking makes a Claude turn slower than a Grok one. */
+const CLAUDE_TURN_TIMEOUT_MS = 40_000
+
+/** Whole-loop ceiling, so three slow turns cannot hold a request for two minutes. */
+const CLAUDE_LOOP_BUDGET_MS = 75_000
+
+/**
+ * Server-side refusal fallback: on a policy decline the API re-runs the same request on a
+ * fallback model inside the same call, instead of the turn just stopping.
+ */
+const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01'
+
+export type ChimmyToolLoopProvider = 'claude' | 'grok'
+
 export type ChimmyToolLoopResult = {
   text: string
   /** Tool names actually invoked, in order — surfaced so the UI can show sourcing. */
   toolsUsed: string[]
   /** Provider round trips spent. 1 means the model answered without a tool. */
   turns: number
+  /** Which provider answered. */
+  provider?: ChimmyToolLoopProvider
+  /** The model id the answering provider ran. */
+  model?: string
+}
+
+function hasAnthropicKey(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY?.trim())
+}
+
+function hasXaiKey(): boolean {
+  return Boolean((process.env.XAI_API_KEY || process.env.GROK_API_KEY)?.trim())
+}
+
+/**
+ * Claude when its key is present, Grok otherwise; null when neither can run. Read at call time,
+ * never at import, so a key rotated into the environment takes effect without a rebuild.
+ */
+export function resolveChimmyToolLoopProvider(): ChimmyToolLoopProvider | null {
+  const pinned = process.env.CHIMMY_TOOL_LOOP_PROVIDER?.trim().toLowerCase()
+  if (pinned === 'grok') return hasXaiKey() ? 'grok' : null
+  if (hasAnthropicKey()) return 'claude'
+  return hasXaiKey() ? 'grok' : null
+}
+
+/**
+ * The same tools, in Anthropic's shape. `CHIMMY_TOOL_SPECS` stays in the OpenAI function format
+ * the Grok path sends; this is a mechanical rename (`parameters` → `input_schema`), not a second
+ * list to keep in sync.
+ */
+export function chimmyToolsForClaude(): Anthropic.Tool[] {
+  return CHIMMY_TOOL_SPECS.map((spec) => ({
+    name: spec.function.name,
+    description: spec.function.description,
+    // The specs are `as const` (readonly arrays); the SDK type wants mutable ones. Same JSON.
+    input_schema: spec.function.parameters as unknown as Anthropic.Tool.InputSchema,
+  }))
 }
 
 function grokClient(): OpenAI | null {
@@ -77,11 +151,7 @@ function grokClient(): OpenAI | null {
  * instead — the same graceful degradation a missing key already produces.
  */
 export function canRunChimmyToolLoop(enabled: boolean): boolean {
-  return (
-    enabled &&
-    isAiSpendEnabled() &&
-    Boolean((process.env.XAI_API_KEY || process.env.GROK_API_KEY)?.trim())
-  )
+  return enabled && isAiSpendEnabled() && resolveChimmyToolLoopProvider() !== null
 }
 
 /**
@@ -91,20 +161,152 @@ export function canRunChimmyToolLoop(enabled: boolean): boolean {
  * disabled, no key is configured, the provider fails, or the loop runs out of turns without
  * producing text. Every one of those means "use the push path instead".
  */
-export async function runChimmyToolLoop(args: {
+type ChimmyToolLoopArgs = {
   question: string
+  /** The stable instructions. Kept byte-identical across turns so Claude can cache it. */
   systemPrompt: string
+  /**
+   * The user's clock ("today is …"). Separate from `systemPrompt` because it changes every
+   * minute: sent AFTER the cached block on Claude so it does not invalidate the cache.
+   */
+  clockLine?: string | null
   conversation?: Array<{ role: 'user' | 'assistant'; content: string }>
   context: ChimmyToolContext
   enabled: boolean
   model?: string
-}): Promise<ChimmyToolLoopResult | null> {
+}
+
+export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
   if (!canRunChimmyToolLoop(args.enabled)) return null
+  return resolveChimmyToolLoopProvider() === 'claude' ? runClaudeToolLoop(args) : runGrokToolLoop(args)
+}
+
+/**
+ * History as Claude requires it: must open on a user turn, and same-role neighbours are merged
+ * by the API anyway, so an opening assistant turn (a greeting carried over) is dropped.
+ */
+function claudeHistory(conversation: ChimmyToolLoopArgs['conversation']): Anthropic.MessageParam[] {
+  const turns = (conversation ?? []).filter((t) => t.content?.trim())
+  while (turns.length > 0 && turns[0].role !== 'user') turns.shift()
+  return turns.map((t) => ({ role: t.role, content: t.content }))
+}
+
+async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
+  // Defence in depth, as for grokClient: this is a provider boundary in its own right.
+  if (!isAiSpendEnabled()) return null
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  if (!apiKey) return null
+
+  const client = new Anthropic({ apiKey, maxRetries: 1 })
+  const model = args.model?.trim() || process.env.CHIMMY_CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL
+  const tools = chimmyToolsForClaude()
+  const system: Anthropic.TextBlockParam[] = [
+    // Tools render before system, so this one breakpoint caches tools + instructions together.
+    { type: 'text', text: args.systemPrompt, cache_control: { type: 'ephemeral' } },
+  ]
+  if (args.clockLine?.trim()) system.push({ type: 'text', text: args.clockLine.trim() })
+
+  const messages: Anthropic.MessageParam[] = [
+    ...claudeHistory(args.conversation),
+    { role: 'user', content: args.question },
+  ]
+  const toolsUsed: string[] = []
+  const deadline = Date.now() + CLAUDE_LOOP_BUDGET_MS
+  let useFallbacks = true
+
+  const call = async (): Promise<Anthropic.Message> => {
+    const timeout = Math.max(5_000, Math.min(CLAUDE_TURN_TIMEOUT_MS, deadline - Date.now()))
+    const params = {
+      model,
+      max_tokens: CLAUDE_MAX_TOKENS,
+      system,
+      tools,
+      // The model decides; forcing a call would fetch on questions that need nothing.
+      tool_choice: { type: 'auto' as const },
+      thinking: { type: 'adaptive' as const },
+      output_config: { effort: CLAUDE_EFFORT },
+      messages,
+      /*
+       * Not in this SDK version's types, so it is spread in; the SDK sends the body as given.
+       * See CLAUDE_FALLBACK_BETA.
+       */
+      ...(useFallbacks ? { fallbacks: 'default' } : {}),
+    } as Anthropic.MessageCreateParamsNonStreaming
+    return client.messages.create(params, {
+      timeout,
+      headers: useFallbacks ? { 'anthropic-beta': CLAUDE_FALLBACK_BETA } : undefined,
+    })
+  }
+
+  try {
+    for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
+      if (Date.now() >= deadline) return null
+
+      let response: Anthropic.Message
+      try {
+        response = await call()
+      } catch (err) {
+        /*
+         * The refusal-fallback beta is an ADD-ON. If this account or model rejects it, a 400
+         * would take the whole Claude path down with it — so retry once without it, and keep it
+         * off for the rest of this loop.
+         */
+        if (useFallbacks && err instanceof Anthropic.BadRequestError) {
+          useFallbacks = false
+          response = await call()
+        } else {
+          throw err
+        }
+      }
+
+      // A refusal or a truncated answer is not an answer: fall back to the push path.
+      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') return null
+
+      // Keep the FULL content, thinking blocks included — they must go back unchanged.
+      messages.push({ role: 'assistant', content: response.content })
+
+      const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+      if (response.stop_reason !== 'tool_use' || toolUses.length === 0) {
+        const text = response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('')
+          .trim()
+        return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model } : null
+      }
+
+      // See the Grok loop: the last turn must not end on a tool call.
+      if (turn === MAX_TOOL_TURNS) return null
+
+      /*
+       * Sequential on purpose: `find_league_by_name` rebinds `context.leagueId`, and the league
+       * tools called after it in the same turn must read the rebound league. Every result goes
+       * back in ONE user message — splitting them teaches the model to stop calling in parallel.
+       */
+      const results: Anthropic.ToolResultBlockParam[] = []
+      for (const use of toolUses) {
+        const result = await executeChimmyTool(use.name, use.input ?? {}, args.context)
+        toolsUsed.push(use.name)
+        results.push({ type: 'tool_result', tool_use_id: use.id, content: result })
+      }
+      messages.push({ role: 'user', content: results })
+    }
+    return null
+  } catch (err) {
+    // As for Grok: the user falls back quietly; the owner hears about billing/credential failures.
+    const e = err as { status?: number; message?: string } | null
+    reportProviderFailure({ provider: 'anthropic', status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
+    return null
+  }
+}
+
+async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
   const client = grokClient()
   if (!client) return null
+  const model = args.model?.trim() || DEFAULT_MODEL
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: args.systemPrompt },
+    { role: 'system', content: [args.clockLine, args.systemPrompt].filter((s) => s?.trim()).join('\n\n') },
     ...(args.conversation ?? []).map((t) => ({ role: t.role, content: t.content }) as const),
     { role: 'user', content: args.question },
   ]
@@ -115,7 +317,7 @@ export async function runChimmyToolLoop(args: {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
       const response = await client.chat.completions.create(
         {
-          model: args.model?.trim() || DEFAULT_MODEL,
+          model,
           messages,
           tools: CHIMMY_TOOL_SPECS as unknown as OpenAI.ChatCompletionTool[],
           /*
@@ -137,7 +339,7 @@ export async function runChimmyToolLoop(args: {
       const calls = message.tool_calls ?? []
       if (calls.length === 0) {
         const text = typeof message.content === 'string' ? message.content.trim() : ''
-        return text ? { text, toolsUsed, turns: turn } : null
+        return text ? { text, toolsUsed, turns: turn, provider: 'grok', model } : null
       }
 
       /*

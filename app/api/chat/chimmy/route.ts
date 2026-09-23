@@ -2745,7 +2745,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   /*
-   * ⚠ TOOL LOOP: OPTIONAL, GROK-ONLY, AND SILENT WHEN IT DOES NOT RUN.
+   * ⚠ TOOL LOOP: CLAUDE FIRST (Grok when no Anthropic key), AND SILENT WHEN IT DOES NOT RUN.
+   * This is where Chimmy's main model is chosen — see `lib/chimmy/tools/chimmyToolLoop.ts`.
    *
    * Placed HERE on purpose — after the spend is settled, before PECR. It is an
    * ALTERNATIVE to the push path, not an addition: running both would make two
@@ -2773,11 +2774,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       /*
        * The PECR path has always carried the user's clock; the tool loop — the path that answers
        * first — did not, so "tonight", "this week" and "last Sunday" were resolved against the
-       * model's training cutoff. Same line, same authority, both paths.
+       * model's training cutoff. Same line, same authority, both paths. Passed separately from
+       * the instructions because it changes every minute and Claude caches the instructions.
        */
-      systemPrompt: [userTemporalContext.promptLine, CHIMMY_TOOL_LOOP_SYSTEM_PROMPT]
-        .filter(Boolean)
-        .join('\n\n'),
+      systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
+      clockLine: userTemporalContext.promptLine,
       conversation: conversation.slice(-6).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
@@ -2847,7 +2848,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                   ledgerId: spendLedger.id,
                 }
               : undefined,
-          providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          providerStatus:
+            loop.provider === 'claude'
+              ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
+              : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          /* The model that actually answered — the one thing a quality complaint needs first. */
+          ...(loop.model ? { model: loop.model } : {}),
           leagueGrounding: boundLeague
             ? {
                 grounded: true as const,
