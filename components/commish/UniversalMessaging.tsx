@@ -112,7 +112,9 @@ export function UniversalMessaging({ scope }: { scope: MessagingScope }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             <textarea
               className="af-cm-numinput"
-              style={{ width: '100%', minHeight: 88, textAlign: 'left', padding: 11, fontSize: 14, fontWeight: 400 }}
+              // fontSize 16: inline beats every stylesheet floor, and under 16px
+              // iOS Safari zooms the page when this field takes focus.
+              style={{ width: '100%', minHeight: 88, textAlign: 'left', padding: 11, fontSize: 16, fontWeight: 400 }}
               maxLength={500}
               value={draft}
               placeholder={`This goes to every member of all ${leagueCount} league${leagueCount === 1 ? '' : 's'}.`}

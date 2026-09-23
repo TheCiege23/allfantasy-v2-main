@@ -201,7 +201,9 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             data-testid="nocturne-import-full-input"
-            style={{ flex: 1, minWidth: 220, minHeight: 48, fontSize: 15 }}
+            // 16, not 15: an inline size outranks every stylesheet floor, and iOS
+            // Safari zooms the page on focus for any field under 16px.
+            style={{ flex: 1, minWidth: 220, minHeight: 48, fontSize: 16 }}
           />
         ) : null}
         <button

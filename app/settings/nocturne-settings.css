@@ -697,6 +697,14 @@
   border-radius: 9px;
   font-size: 13px;
 }
+/* 13px zooms iOS Safari on focus. This selector is (0,7,1), which outranks the
+   app-wide (0,2,1) phone floor at the end of globals.css, so it carries its own:
+   same selector, later in this file, same media query as that floor. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .nocturne-settings[data-view='tab'] .ns-content-card :is(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea):is(.rounded-lg, .rounded-xl) {
+    font-size: 16px;
+  }
+}
 .nocturne-settings[data-view='tab'] .ns-content-card input:is([type='checkbox'], [type='radio'], [type='range']) {
   accent-color: var(--ns-accent);
 }
