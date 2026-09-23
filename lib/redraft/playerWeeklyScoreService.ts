@@ -335,6 +335,28 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     }
   }
 
+  /**
+   * The stats `playerGameLogCache` can answer with for THIS week — `{}` when it cannot.
+   *
+   * 🛑 A CACHE *ROW* IS NOT A CACHE *HIT*, AND CONFLATING THEM SILENTLY DISABLES THE
+   * PROVIDER FALLBACK BELOW. The cache is per-player and season-wide, so a row can exist
+   * while holding nothing for the week being reconciled. Measured 2026-09-23 on a freshly
+   * drafted league: A.J. Brown and Ja'Marr Chase both had rows synced in May/June with no
+   * week-1 entry, so a `cacheByPlayer.has(id)` filter dropped them from the fetch and they
+   * were reported `missingWeek` while Sleeper held their week-1 lines. Two of 26 starters —
+   * the difference between 77% and 85% coverage, i.e. between a week that seals and a week
+   * that never does. Nothing failed; the sync reported itself healthy.
+   *
+   * The fetch filter and the scoring loop below BOTH read this, so the question "can the
+   * cache answer for this week" has one implementation. Asking it twice is what let the
+   * two drift apart in the first place.
+   */
+  const cachedWeekStatsFor = (playerId: string): Record<string, number> => {
+    const cached = cacheByPlayer.get(playerId)
+    const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
+    return weekPayload ? normalizeNflWeeklyStats(weekPayload) : {}
+  }
+
   /*
    * The week-wide NFL payload, fetched ONCE for the rostered offensive players the cache
    * cannot answer for (see `fetchNflWeekStatsFromLiveProvider` above for why the cache
@@ -344,7 +366,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const weekStatsByPlayer = new Map<string, Record<string, number>>()
   if (!isDailySport && candidateSportKeys(sport).includes('NFL')) {
     const uncachedOffensiveIds = playerIds.filter(
-      (id) => !isTeamDefenseRow(id, positionByPlayer.get(id) ?? null) && !cacheByPlayer.has(id),
+      (id) =>
+        !isTeamDefenseRow(id, positionByPlayer.get(id) ?? null) &&
+        Object.keys(cachedWeekStatsFor(id)).length === 0,
     )
     if (uncachedOffensiveIds.length > 0) {
       const fetcher = params.fetchNflWeekStats ?? fetchNflWeekStatsFromLiveProvider
@@ -464,8 +488,10 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
      * what it meant; only the outcome changes, from "unscored" to "scored from the week feed".
      */
     const cached = cacheByPlayer.get(playerId)
+    // `cached` and `weekPayload` survive only to classify a MISS; what the cache can
+    // actually answer with comes from the one helper the fetch filter also used.
     const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
-    const cachedStats = weekPayload ? normalizeNflWeeklyStats(weekPayload) : {}
+    const cachedStats = cachedWeekStatsFor(playerId)
     const providerStats = weekStatsByPlayer.get(playerId) ?? {}
     const usedProvider = Object.keys(cachedStats).length === 0 && Object.keys(providerStats).length > 0
     const stats = Object.keys(cachedStats).length > 0 ? cachedStats : providerStats

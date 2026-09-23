@@ -121,6 +121,47 @@ describe('NFL weekly score sync — week-wide provider fallback', () => {
     expect(fetcher).toHaveBeenCalledWith({ season: 2026, week: 2, playerIds: ['4034'] })
   })
 
+  /**
+   * 🛑 A CACHE ROW IS NOT A CACHE HIT FOR THE WEEK BEING RECONCILED.
+   *
+   * The first cut of this fallback skipped any player `cacheByPlayer.has(id)` answered for,
+   * which is a different question — the cache is season-wide, so a row written in May holds
+   * nothing for week 1 of the season that follows. Measured 2026-09-23 on a freshly drafted
+   * league: A.J. Brown and Ja'Marr Chase were reported `missingWeek` while Sleeper held their
+   * week-1 lines, and coverage stalled at 77% against a 0.8 floor — a week that can never
+   * seal, from a sync that reported itself healthy.
+   */
+  it('asks the provider for a player whose cache row does not hold this week', async () => {
+    prismaMock.playerGameLogCache.findMany.mockResolvedValue([
+      // A row exists, but for week 1 — this run is reconciling week 2.
+      { playerId: '4034', payload: { weeks: [{ week: 1, stats: { pass_yds: 111, pass_td: 1 } }] } },
+    ])
+    const fetcher = vi.fn(async () => new Map([['4034', { pass_yds: 240, pass_td: 2 }]]))
+
+    const summary = await runSync(fetcher)
+
+    expect(fetcher).toHaveBeenCalledWith({ season: 2026, week: 2, playerIds: ['4034'] })
+    expect(summary.scoresUpserted).toBe(1)
+    expect(summary.weekStatsFromProvider).toBe(1)
+    expect(summary.missingWeekPlayerIds).toEqual([])
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0]?.[0]
+    expect(written.create.stats).toEqual({ pass_yds: 240, pass_td: 2 })
+  })
+
+  it('still classifies the miss as missingWeek when the provider cannot answer either', async () => {
+    prismaMock.playerGameLogCache.findMany.mockResolvedValue([
+      { playerId: '4034', payload: { weeks: [{ week: 1, stats: { pass_yds: 111 } }] } },
+    ])
+    const fetcher = vi.fn(async () => new Map())
+
+    const summary = await runSync(fetcher)
+
+    // Asking a second source does not change WHY the cache could not answer.
+    expect(summary.missingWeekPlayerIds).toEqual(['4034'])
+    expect(summary.missingCachePlayerIds).toEqual([])
+    expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+  })
+
   it('a provider failure leaves the player unscored rather than zeroed', async () => {
     const fetcher = vi.fn(async () => {
       throw new Error('sleeper down')
