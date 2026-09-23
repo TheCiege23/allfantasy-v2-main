@@ -25,7 +25,12 @@ export const CORE_ANSWER_MODES = [
 
 export type CoreAnswerMode = (typeof CORE_ANSWER_MODES)[number]['id']
 
-export const DEFAULT_CORE_ANSWER_MODE: CoreAnswerMode = 'fast_take'
+/*
+ * The FULL answer by default (user decision 2026-09-23, when Claude became Chimmy's main model).
+ * Fast used to be the default and cut every reply to its first paragraph, at most 280 characters —
+ * which threw away most of what the model wrote. Fast stays one tap away for anyone who wants it.
+ */
+export const DEFAULT_CORE_ANSWER_MODE: CoreAnswerMode = 'deep_analysis'
 
 export function isCoreAnswerMode(value: unknown): value is CoreAnswerMode {
   return CORE_ANSWER_MODES.some((m) => m.id === value)

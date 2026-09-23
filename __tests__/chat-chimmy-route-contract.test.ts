@@ -711,10 +711,10 @@ describe("POST /api/chat/chimmy contract", () => {
     )
     const body = await res.json()
     expect(body.response).toContain("Accept the trade.")
-    expect(body.meta?.mode).toBe("fast_take")
+    expect(body.meta?.mode).toBe("deep_analysis")
   })
 
-  it("normalizes invalid mode inputs to fast_take and returns mode metadata", async () => {
+  it("normalizes invalid mode inputs to the full answer (deep_analysis) and returns mode metadata", async () => {
     const formData = new FormData()
     formData.append("message", "Should I trade this player?")
     formData.append("confirmTokenSpend", "true")
@@ -726,7 +726,7 @@ describe("POST /api/chat/chimmy contract", () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.meta?.mode).toBe("fast_take")
+    expect(body.meta?.mode).toBe("deep_analysis")
   })
 
   it("strips raw JSON context blobs from the displayed response text", async () => {
