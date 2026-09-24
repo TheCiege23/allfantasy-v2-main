@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { signOutAndPurge } from '@/lib/pwa/signOutAndPurge'
 import { useEffect, useState } from 'react'
 import { useResendCooldown } from '@/hooks/useResendCooldown'
+import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   BangGlyph,
@@ -84,6 +85,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneSending, setPhoneSending] = useState(false)
   const [phoneCodeSent, setPhoneCodeSent] = useState(false)
+  const [smsConsent, setSmsConsent] = useState(false)
   const [phoneCode, setPhoneCode] = useState('')
   const [phoneVerifying, setPhoneVerifying] = useState(false)
   const [phoneVerified, setPhoneVerified] = useState(false)
@@ -232,14 +234,14 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   }
 
   async function handleSendPhoneCode() {
-    if (!phoneNumber.trim()) return
+    if (!phoneNumber.trim() || !smsConsent) return
     setPhoneSending(true)
     setPhoneError(null)
     try {
       const res = await fetch('/api/verify/phone/start', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone: phoneNumber.trim() }),
+        body: JSON.stringify({ phone: phoneNumber.trim(), smsConsent: true, consentSource: 'verify-page' }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
@@ -719,6 +721,8 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
                 />
               </label>
 
+              <SmsConsentCheckbox id="verify-sms-consent" checked={smsConsent} onChange={setSmsConsent} />
+
               {phoneCodeSent ? (
                 <>
                   <label className="af-rc-field">
@@ -755,7 +759,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
                   type="button"
                   className="af-rc-btn"
                   onClick={handleSendPhoneCode}
-                  disabled={phoneSending || !phoneNumber.trim()}
+                  disabled={phoneSending || !phoneNumber.trim() || !smsConsent}
                 >
                   {phoneSending ? 'Sending…' : 'Text me a code'}
                 </button>

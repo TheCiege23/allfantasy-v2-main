@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getSessionAndProfile } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { SMS_CONSENT_TEXT, SMS_CONSENT_VERSION } from "@/lib/legal/smsProgram"
 
 export const runtime = "nodejs"
 
@@ -42,6 +43,40 @@ export async function POST(req: Request) {
     where: { userId },
     data: { phone },
   }).catch(() => null)
+
+  // SMS opt-in record for A2P 10DLC. The web UIs only enable "send code" once the
+  // unchecked-by-default consent box is ticked, and send smsConsent: true. Stored in
+  // the notificationPreferences JSON (merged, never overwritten) so no migration is
+  // needed; keeps who/when/which-number/which-wording as proof of consent.
+  // Not enforced as a hard 400 here: /api/shared/verification/phone/send proxies to
+  // this route for other clients that do not send the flag yet.
+  if (body?.smsConsent === true) {
+    try {
+      const current = await (prisma as any).userProfile.findUnique({
+        where: { userId },
+        select: { notificationPreferences: true },
+      })
+      const prev = (current?.notificationPreferences ?? {}) as Record<string, unknown>
+      await (prisma as any).userProfile.update({
+        where: { userId },
+        data: {
+          notificationPreferences: {
+            ...prev,
+            smsConsent: {
+              consentedAt: new Date().toISOString(),
+              phone,
+              ip,
+              source: typeof body?.consentSource === "string" ? body.consentSource.slice(0, 64) : "web",
+              version: SMS_CONSENT_VERSION,
+              text: SMS_CONSENT_TEXT,
+            },
+          },
+        },
+      })
+    } catch (err: any) {
+      console.error("[phone/start] failed to record SMS consent:", err?.message || err)
+    }
+  }
 
   try {
     const { getTwilioClient } = await import("@/lib/twilio-client")
