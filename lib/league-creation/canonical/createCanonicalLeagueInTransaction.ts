@@ -271,6 +271,25 @@ export async function createCanonicalLeagueInTransaction(
     }
   }
 
+  /**
+   * Privacy and the invite code are written onto the league row itself, because that is where
+   * everything that reads them looks. Before, the choice lived only in `conceptSetup` and the
+   * finder listing — so discovery and the privacy resolver saw every league as private — and
+   * `settings.inviteCode` was left unset, so the `/join?code=` link the league page shows right
+   * after creation (built from this invite's token) matched no league: "invalid code" until the
+   * commissioner happened to open the invite panel, which minted a different code.
+   */
+  const conceptSetupForPrivacy = (body.conceptSetup ?? {}) as Record<string, unknown>
+  const leagueVisibility: 'public' | 'private' =
+    bestBallSettings?.visibility === 'public' ||
+    conceptSetupForPrivacy.visibility === 'public' ||
+    conceptSetupForPrivacy.isPublic === true
+      ? 'public'
+      : 'private'
+  const inviteToken = randomUUID()
+  mergedSettings.league_privacy_visibility = leagueVisibility
+  mergedSettings.inviteCode = inviteToken
+
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
   /** Calendar season year for list badges / filters (must not rely on Prisma's static default). */
@@ -386,7 +405,10 @@ export async function createCanonicalLeagueInTransaction(
           ? 1
           : playoffWeeksPerRoundDefault,
       playoffLowerBracket: playoffLowerBracketDefault,
-      ...(keeperBootstrap ? keeperBootstrap.league : {}),
+      // `keeperCount` defaults to 3 in the schema, so a league that says nothing reads as a
+      // three-keeper league to every consumer that trusts the column. A league created here
+      // without keepers has decided: none.
+      ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
       ...(isGuillotine
         ? {
             playoffStartWeek: null,
@@ -686,7 +708,7 @@ export async function createCanonicalLeagueInTransaction(
       rosterPresetKey: `default-${sport}-${formatId}`,
       playoffPresetKey: 'default',
       draftTimerSecondsDefault: timerSeconds,
-      isPublic: bestBallSettings?.visibility === 'public',
+      isPublic: leagueVisibility === 'public',
       allowInviteLinks: true,
       allowMemberInviteRankBypass: false,
       settingsJson: {
@@ -978,6 +1000,7 @@ export async function createCanonicalLeagueInTransaction(
 
   const invite = await tx.leagueInvite.create({
     data: {
+      token: inviteToken,
       leagueId: league.id,
       createdBy: appUserId,
       createdByRole: 'COMMISSIONER',
@@ -988,13 +1011,7 @@ export async function createCanonicalLeagueInTransaction(
   })
   const inviteUrl = `/join/${invite.token}`
 
-  const conceptSetup = (body.conceptSetup ?? {}) as Record<string, unknown>
-  const visibility =
-    bestBallSettings?.visibility === 'public' ||
-    conceptSetup.visibility === 'public' ||
-    conceptSetup.isPublic === true
-      ? 'public'
-      : 'private'
+  const visibility = leagueVisibility
   const isFinderListingActive = visibility === 'public'
   const finderListingHeadline = `${body.leagueName.trim()} | Rank ${minRankLevel}-${maxRankLevel}`
   const finderListingBody = JSON.stringify({

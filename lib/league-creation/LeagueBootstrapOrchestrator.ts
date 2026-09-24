@@ -2,7 +2,7 @@
  * Runs all sport-specific bootstrap steps after league creation so the league
  * has correct roster, scoring, waiver, settings, and context for its sport.
  */
-import type { LeagueSport } from '@prisma/client'
+import type { LeagueSport, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { bootstrapLeagueRoster } from '@/lib/roster-defaults/LeagueRosterBootstrapService'
 import { initializeLeagueWithSportDefaults } from '@/lib/sport-defaults/LeagueCreationInitializer'
@@ -17,6 +17,28 @@ import { getDefaultScheduleConfig, type ScheduleSport } from '@/lib/fantasy-sche
 import { updateScheduleConfigForLeague } from '@/lib/fantasy-schedule/ScheduleConfigService'
 import { createDefaultLeagueRosterConfig, getRosterEngineRegistry, type SupportedRosterSport } from '@/lib/roster-engine'
 import { warmLeagueSportsDataAfterCreate } from '@/lib/league-creation/warmLeagueSportsData'
+import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+
+/**
+ * Tell the live scorer the league's reception value. `calculateScoreFromSportConfig` falls back
+ * to `sportConfig.scoringPreset` — defaulting to full PPR — whenever no scoring store overrides
+ * `rec`, and nothing wrote it at create. College football has no store the scorer reads, so every
+ * NCAAF league scored full PPR, including the half-PPR default.
+ */
+async function seedFootballReceptionPreset(leagueId: string, receptionPoints: number | null): Promise<void> {
+  if (receptionPoints == null) return
+  const scoringPreset = receptionPoints === 1 ? 'PPR' : receptionPoints === 0 ? 'STANDARD' : 'HALF_PPR'
+  const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const current = (row?.settings as Record<string, unknown> | null) ?? {}
+  const sportConfig =
+    current.sportConfig && typeof current.sportConfig === 'object' && !Array.isArray(current.sportConfig)
+      ? (current.sportConfig as Record<string, unknown>)
+      : {}
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: { settings: { ...current, sportConfig: { ...sportConfig, scoringPreset } } as Prisma.InputJsonValue },
+  })
+}
 
 export interface BootstrapResult {
   roster: { templateId: string }
@@ -40,9 +62,13 @@ export async function runLeagueBootstrap(
   scoringFormat?: string
 ): Promise<BootstrapResult> {
   const config = resolveSportConfigForLeague(leagueSport)
-  const settings = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { settings: true } })
-    .then((l) => (l?.settings as Record<string, unknown>) ?? {})
+  const leagueRow = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { settings: true, scoringPresetId: true },
+  })
+  const settings = (leagueRow?.settings as Record<string, unknown>) ?? {}
+  // Points per reception of the preset the manager picked (football only; null otherwise).
+  const receptionPoints = receptionPointsForScoringPresetId(leagueRow?.scoringPresetId)
   const rosterFormat =
     (settings.roster_format_type as string) ?? (settings.roster_format as string) ?? scoringFormat ?? config.defaultFormat
   const scoringFormatResolved =
@@ -128,8 +154,8 @@ export async function runLeagueBootstrap(
   }
   if (leagueSport === 'NFL') {
     try {
-      const { applyDefaultNflScoringOnCreate } = await import('@/lib/nfl-scoring')
-      await applyDefaultNflScoringOnCreate(leagueId)
+      const { applyDefaultNflScoringOnCreate, nflScoringPresetKeyForReceptionPoints } = await import('@/lib/nfl-scoring')
+      await applyDefaultNflScoringOnCreate(leagueId, nflScoringPresetKeyForReceptionPoints(receptionPoints))
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAF') {
@@ -148,6 +174,12 @@ export async function runLeagueBootstrap(
     try {
       const { applyDefaultSoccerScoringOnCreate } = await import('@/lib/soccer-scoring')
       await applyDefaultSoccerScoringOnCreate(leagueId)
+    } catch { /* non-fatal */ }
+  }
+
+  if (leagueSport === 'NFL' || leagueSport === 'NCAAF') {
+    try {
+      await seedFootballReceptionPreset(leagueId, receptionPoints)
     } catch { /* non-fatal */ }
   }
 

@@ -1,5 +1,6 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
+import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 
 export type CreateMode = 'quick' | 'advanced'
 
@@ -28,6 +29,13 @@ const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAA
 const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = ['NFL', 'NCAAF']
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
+
+function guillotineTeamCounts(sport: SupportedSport): number[] {
+  const profile = getGuillotineSportConfig(sport)
+  const min = Math.max(4, profile?.minTeams ?? 8)
+  const max = Math.max(min, profile?.maxTeams ?? 18)
+  return Array.from({ length: max - min + 1 }, (_, index) => min + index)
+}
 
 export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   version: 1,
@@ -157,12 +165,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   allowedScoringPresetsByConceptSport: {
     redraft: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
-      NBA: ['nba_points', 'nba_categories'],
-      MLB: ['mlb_roto_5x5', 'mlb_points'],
-      NHL: ['nhl_points', 'nhl_category'],
+      NBA: ['nba_points'],
+      MLB: ['mlb_points'],
+      NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
-      NCAAB: ['ncaab_points', 'ncaab_categories'],
-      SOCCER: ['soccer_classic', 'soccer_draft'],
+      NCAAB: ['ncaab_points'],
+      SOCCER: ['soc_points'],
     },
     dynasty: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex'],
@@ -171,16 +179,16 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr'],
       NCAAB: ['ncaab_points'],
-      SOCCER: ['soccer_classic'],
+      SOCCER: ['soc_points'],
     },
     keeper: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
       NBA: ['nba_points'],
-      MLB: ['mlb_roto_5x5', 'mlb_points'],
+      MLB: ['mlb_points'],
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
-      SOCCER: ['soccer_classic'],
+      SOCCER: ['soc_points'],
     },
     best_ball: {
       NFL: ['fb_half_ppr', 'fb_ppr'],
@@ -189,10 +197,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr'],
       NCAAB: ['ncaab_points'],
-      SOCCER: ['soccer_draft'],
+      SOCCER: ['soc_points'],
     },
     idp: {
-      NFL: ['idp_balanced', 'idp_heavy'],
+      NFL: ['idp_balanced'],
       NCAAF: ['idp_balanced'],
     },
     salary_cap: {
@@ -202,7 +210,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr'],
       NCAAB: ['ncaab_points'],
-      SOCCER: ['soccer_draft'],
+      SOCCER: ['soc_points'],
     },
     devy: {
       NFL: ['fb_half_ppr', 'fb_superflex'],
@@ -237,7 +245,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr'],
       NCAAB: ['ncaab_points'],
-      SOCCER: ['soccer_classic'],
+      SOCCER: ['soc_points'],
     },
     big_brother: {
       NFL: ['fb_half_ppr'],
@@ -246,7 +254,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr'],
       NCAAB: ['ncaab_points'],
-      SOCCER: ['soccer_classic'],
+      SOCCER: ['soc_points'],
     },
   },
   teamCountOptionsByConceptSport: {
@@ -308,12 +316,14 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAF: [8, 10, 12, 14, 16],
       NCAAB: [8, 10, 12, 14, 16],
     },
+    // One chop per scoring period, so the sport's schedule decides how many teams fit. The
+    // hand-written even list here allowed an 18-team NFL guillotine that 17 chops cannot finish.
     guillotine: {
-      NFL: [8, 10, 12, 14, 16, 18],
-      NCAAF: [8, 10, 12, 14, 16, 18],
-      NBA: [8, 10, 12, 14, 16, 18],
-      NHL: [8, 10, 12, 14, 16, 18],
-      MLB: [8, 10, 12, 14, 16, 18],
+      NFL: guillotineTeamCounts('NFL'),
+      NCAAF: guillotineTeamCounts('NCAAF'),
+      NBA: guillotineTeamCounts('NBA'),
+      NHL: guillotineTeamCounts('NHL'),
+      MLB: guillotineTeamCounts('MLB'),
     },
     zombie: {
       NFL: [8, 10, 12, 14],
