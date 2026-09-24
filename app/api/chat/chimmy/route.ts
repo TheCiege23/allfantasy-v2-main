@@ -10,6 +10,7 @@ import { CORE_SURFACE_KEYS, renderCoreSurfacePrompt } from '@/lib/core-app/coreS
 import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
+import { CHIMMY_IDENTITY, getChimmyPromptStyleBlock } from '@/lib/chimmy-interface/ChimmyPromptStyleResolver'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
 import {
@@ -411,7 +412,7 @@ const TRADE_BLOCK_WORDS = /\b(?:trade|trading)\s+block\b|\bon\s+the\s+block\b|\b
  * becomes the one path in this assistant that guesses.
  */
 const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
-  'You are Chimmy, the calm, analytical fantasy sports assistant for AllFantasy.',
+  CHIMMY_IDENTITY,
   "You have tools that read this app's own data. Call them when a question needs league, schedule or live-stat facts.",
   'NEVER invent player stats, scores, standings, records or schedules. If a tool says it has no data, say that plainly and stop — do not fall back on general knowledge.',
   'A tool reporting an empty live feed means no games were polled, NOT that nobody scored. Never report that as a zero.',
@@ -433,17 +434,24 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
    */
   'For "who should I start", "set my lineup" or "is my lineup right", call optimize_my_lineup: it prices the whole roster for this week under the league\'s own scoring and flags starters on a bye, injured or missing. For "A or B?" between two named players call compare_start_options. get_my_roster is roster FACTS only — it carries NO projections — so never quote projected points from it.',
   'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
+  'For "find me a trade", "who should I trade with", "who has a running back I can get" or "what can I get for X", call find_trade_ideas — with position or trade_away when they named one. It searches every roster in the league; present its ideas with its names and numbers, lead with the first, and offer to grade one with evaluate_trade.',
   'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
   'For playoff chances, what record they need, or who to root for, call get_playoff_outlook. For this week\'s opponent, win probability or which games are close, call get_my_matchup. Both also work with no league selected — they then cover every league the user is in.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
   'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
+  'Quote numbers exactly as the tools give them. The voice below never licenses a number, player or fact no tool returned.',
+].join(' ') +
   /*
    * ⚠ "A FEW SENTENCES" MADE THE PAID ANSWER READ LIKE THE FREE ONE. The engines return a best
    * lineup, a swing game, magic numbers — a two-sentence cap threw most of that away. Decisive
-   * first, then the evidence, then one move: the shape an analyst writes, still short.
+   * first, then the evidence, then one move, still short.
+   *
+   * The voice and that shape now come from `getChimmyPromptStyleBlock()`, the same block the
+   * orchestration fallback reads, so the two paths cannot answer in two personalities. Owner's call
+   * 2026-09-24: smart, fun and informational — see ChimmyPromptStyleResolver.ts.
    */
-  'Answer like a sharp analyst: lead with the recommendation and its key number, then two to four short bullet reasons drawn from the tool data, then one concrete next step. Quote numbers exactly as the tools give them and name the data you used. No filler.',
-].join(' ')
+  '\n\n' +
+  getChimmyPromptStyleBlock()
 
 const SPORTS_KEYWORDS = [
   'trade', 'waiver', 'draft', 'player', 'pick', 'roster', 'lineup',
@@ -2622,7 +2630,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let tokenPreview = null as TokenSpendPreview | null
   let tokenPreviewFailed = false as boolean
   /** The token preflight: preview the price, and ask for consent when the rule needs it. */
-  const runTokenGate = async (): Promise<NextResponse | null> => {
+  /*
+   * `plan` rides the 409 so the drawer can tell a subscriber whose day's answers are used from an
+   * account with no plan — it decides whether an out-of-tokens card offers AF Pro or only tokens.
+   */
+  const runTokenGate = async (plan: ChimmyPlanAllowanceMeta | null): Promise<NextResponse | null> => {
     try {
       tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
     } catch (error) {
@@ -2647,6 +2659,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           error: 'Token spend confirmation required before sending to Chimmy.',
           code: 'token_confirmation_required',
           preview: tokenPreview,
+          planAllowance: plan,
         },
         { status: 409 }
       )
@@ -2663,8 +2676,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    */
   const planState = await readPlanAllowance()
   const planCovers = Boolean(planState && planState.remaining > 0)
+  /* The allowance as it stands when this turn has to be paid for in tokens: used up, not included. */
+  const exhaustedPlanMeta: ChimmyPlanAllowanceMeta | null = planState
+    ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
+    : null
   if (!planCovers) {
-    const blocked = await runTokenGate()
+    const blocked = await runTokenGate(exhaustedPlanMeta)
     if (blocked) return blocked
   }
 
@@ -2750,7 +2767,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (planCovers && planState && userId) {
     planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
     if (!planIncluded) {
-      const blocked = await runTokenGate()
+      const blocked = await runTokenGate(exhaustedPlanMeta)
       if (blocked) return blocked
     }
   }
@@ -2758,11 +2775,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * What this turn did with the allowance, for `meta.planAllowance`: included, or (for a plan holder
    * past the allowance) charged in tokens because the day's answers were used.
    */
-  let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded
-    ? planAllowanceMeta(planIncluded, true)
-    : planState
-      ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
-      : null
+  let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded ? planAllowanceMeta(planIncluded, true) : exhaustedPlanMeta
 
   let spendLedger: { id: string; balanceAfter: number } | null = null
   if (!planIncluded && !tokenPreviewFailed) {
@@ -2794,6 +2807,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             code: 'insufficient_token_balance',
             requiredTokens: error.requiredTokens,
             currentBalance: error.currentBalance,
+            planAllowance: planMeta,
           },
           { status: 402 }
         )
@@ -2894,6 +2908,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
        */
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
       clockLine: userTemporalContext.promptLine,
+      /*
+       * The user's saved Chimmy preferences (explanation style, risk, humor…). The fallback path has
+       * always read them; the tool loop — the path that answers first — never did, so "keep it
+       * short" in Settings changed nothing for most answers. The voice block defers to them.
+       */
+      styleLine: personalizationDirectives ?? null,
       conversation: conversation.slice(-6).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,

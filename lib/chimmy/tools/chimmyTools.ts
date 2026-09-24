@@ -429,6 +429,29 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'find_trade_ideas',
+      description:
+        "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
+      parameters: {
+        type: 'object',
+        properties: {
+          position: {
+            type: 'string',
+            enum: ['QB', 'RB', 'WR', 'TE'],
+            description: 'The position the user wants to GET, when they named one.',
+          },
+          trade_away: {
+            type: 'string',
+            description: 'Full name of a player on the USER\'s roster they want to move, when they named one.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'evaluate_waiver_move',
       description:
         "Prices a waiver pickup for the user in the league in scope: the player to add (and optionally drop), this week's projection for each under the league's scoring, and the starting lineup total before and after. Use after get_available_players, for 'should I pick up X', 'add X and drop Y'. The added player must be unrostered in this league.",
@@ -797,6 +820,17 @@ export async function executeChimmyTool(
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
         return await runTradeScenarioTool({ give: args.give, get: args.get, leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'find_trade_ideas': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildTradeFinderContext, readTradeFinderPosition } = await import('@/lib/chimmy/tradeFinderGrounding')
+        return await buildTradeFinderContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          position: readTradeFinderPosition(args.position),
+          tradeAway: typeof args.trade_away === 'string' && args.trade_away.trim() ? args.trade_away.trim().slice(0, 80) : null,
+        })
       }
 
       case 'evaluate_waiver_move': {

@@ -1436,6 +1436,56 @@
 
 .af-cm-error { color: var(--bad); }
 
+/* Out of tokens: a choice, not an error — see lib/chimmy/outOfAnswers.ts. */
+.af-cm-outofanswers {
+  margin: 4px 0 0;
+  padding: 12px 13px;
+  border: 1px solid var(--accent-line);
+  border-radius: 11px;
+  background: var(--surface2);
+}
+
+.af-cm-outofanswers-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-cm-outofanswers-body {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-cm-outofanswers-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.af-cm-outofanswers-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.af-cm-outofanswers-btn[data-primary='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 .af-cm-empty {
   padding: 20px 4px;
   text-align: center;

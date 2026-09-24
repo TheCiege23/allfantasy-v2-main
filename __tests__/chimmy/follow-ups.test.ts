@@ -12,6 +12,19 @@ describe('suggestChimmyFollowUps', () => {
     ])
   })
 
+  it('offers to grade a trade idea after a trade search, and a search after a graded trade', () => {
+    expect(suggestChimmyFollowUps({ toolsUsed: ['find_trade_ideas'], leagueScoped: true })[0]).toBe(
+      'Grade the first trade idea for my lineup',
+    )
+    expect(suggestChimmyFollowUps({ toolsUsed: ['evaluate_trade'], leagueScoped: true })).toContain(
+      'Find me a trade that fills my weakest spot',
+    )
+    /* Both are about ONE league's rosters: never offered with none in scope. */
+    const global = suggestChimmyFollowUps({ toolsUsed: ['find_trade_ideas'], leagueScoped: false })
+    expect(global).not.toContain('Grade the first trade idea for my lineup')
+    expect(global).not.toContain('Find me a trade that fills my weakest spot')
+  })
+
   it('never suggests re-running a tool the answer already used', () => {
     const out = suggestChimmyFollowUps({ toolsUsed: ['get_playoff_outlook', 'get_my_matchup'], leagueScoped: true })
     expect(out).not.toContain('What are my playoff odds?')

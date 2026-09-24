@@ -133,6 +133,12 @@ describe('tool specs', () => {
       'optimize_my_lineup',
       'compare_start_options',
       'evaluate_trade',
+      /*
+       * Trade IDEAS across the league in scope (lib/chimmy/tradeFinderGrounding.ts): every roster
+       * priced as the player card prices it, partners and packages from the deterministic finder.
+       * Proposes nothing to anyone — it returns prose, like evaluate_trade.
+       */
+      'find_trade_ideas',
       'evaluate_waiver_move',
       'get_playoff_outlook',
       'get_my_matchup',

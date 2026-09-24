@@ -26,6 +26,8 @@ const PICKUP: Suggestion = {
 const COUNTER: Suggestion = { text: 'What counter-offer would make this trade better for me?', repeats: [] }
 const ROOT_FOR: Suggestion = { text: 'Who should I root against this week?', repeats: [] }
 const INJURIES: Suggestion = { text: "Who's hurt on my teams?", repeats: ['get_my_injuries'] }
+const FIND_TRADE: Suggestion = { text: 'Find me a trade that fills my weakest spot', repeats: ['find_trade_ideas'] }
+const GRADE_IDEA: Suggestion = { text: 'Grade the first trade idea for my lineup', repeats: ['evaluate_trade'] }
 
 const ACROSS_ODDS: Suggestion = { text: 'How are my playoff odds across all my leagues?', repeats: ['get_playoff_outlook'] }
 const ACROSS_CLOSE: Suggestion = { text: 'Which of my matchups are coin flips this week?', repeats: ['get_my_matchup'] }
@@ -34,7 +36,8 @@ const ACROSS_CLOSE: Suggestion = { text: 'Which of my matchups are coin flips th
 const AFTER: Record<string, readonly Suggestion[]> = {
   optimize_my_lineup: [MATCHUP, PICKUP, PLAYOFFS],
   compare_start_options: [LINEUP, MATCHUP, PICKUP],
-  evaluate_trade: [COUNTER, LINEUP, PLAYOFFS],
+  evaluate_trade: [COUNTER, FIND_TRADE, LINEUP],
+  find_trade_ideas: [GRADE_IDEA, LINEUP, PLAYOFFS],
   get_league_trade_activity: [COUNTER, LINEUP, PLAYOFFS],
   get_player_value: [COUNTER, LINEUP, PLAYOFFS],
   evaluate_waiver_move: [LINEUP, MATCHUP, PLAYOFFS],
@@ -42,7 +45,7 @@ const AFTER: Record<string, readonly Suggestion[]> = {
   get_playoff_outlook: [RAISE_ODDS, ROOT_FOR, LINEUP],
   get_my_matchup: [LINEUP, PLAYOFFS, INJURIES],
   get_my_injuries: [LINEUP, PICKUP, MATCHUP],
-  get_my_roster: [LINEUP, PICKUP, PLAYOFFS],
+  get_my_roster: [LINEUP, FIND_TRADE, PICKUP],
   get_league_standings: [PLAYOFFS, MATCHUP, LINEUP],
 }
 
@@ -66,7 +69,8 @@ export function suggestChimmyFollowUps(args: { toolsUsed: readonly string[]; lea
   const pool = args.leagueScoped
     ? candidates
     : candidates.map((s) => (s === PLAYOFFS ? ACROSS_ODDS : s === MATCHUP ? ACROSS_CLOSE : s)).filter(
-        (s) => s !== LINEUP && s !== PICKUP && s !== COUNTER && s !== RAISE_ODDS && s !== ROOT_FOR,
+        (s) =>
+          s !== LINEUP && s !== PICKUP && s !== COUNTER && s !== RAISE_ODDS && s !== ROOT_FOR && s !== FIND_TRADE && s !== GRADE_IDEA,
       )
   const out: string[] = []
   for (const s of [...pool, ...(args.leagueScoped ? DEFAULT_SCOPED : DEFAULT_GLOBAL)]) {

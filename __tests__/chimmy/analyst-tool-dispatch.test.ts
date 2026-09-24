@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   waiver: vi.fn(),
   outlook: vi.fn(),
   matchup: vi.fn(),
+  tradeIdeas: vi.fn(),
 }))
 
 vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ buildLineupOptimizerContext: h.optimizer }))
@@ -17,6 +18,10 @@ vi.mock('@/lib/chimmy/tools/scenarioTools', () => ({
 }))
 vi.mock('@/lib/chimmy/playoffOutlookGrounding', () => ({ buildPlayoffOutlookContext: h.outlook }))
 vi.mock('@/lib/chimmy/matchupPreviewGrounding', () => ({ buildMatchupPreviewContext: h.matchup }))
+vi.mock('@/lib/chimmy/tradeFinderGrounding', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/chimmy/tradeFinderGrounding')>('@/lib/chimmy/tradeFinderGrounding')
+  return { ...actual, buildTradeFinderContext: h.tradeIdeas }
+})
 
 import { CHIMMY_TOOL_SPECS, executeChimmyTool } from '@/lib/chimmy/tools/chimmyTools'
 
@@ -32,7 +37,7 @@ beforeEach(() => {
   for (const fn of Object.values(h)) fn.mockResolvedValue('BLOCK')
 })
 
-const LEAGUE_GATED = ['optimize_my_lineup', 'compare_start_options', 'evaluate_trade', 'evaluate_waiver_move'] as const
+const LEAGUE_GATED = ['optimize_my_lineup', 'compare_start_options', 'evaluate_trade', 'find_trade_ideas', 'evaluate_waiver_move'] as const
 
 describe('league-gated analyst tools', () => {
   it.each(LEAGUE_GATED)('%s refuses with no league in scope and runs nothing', async (name) => {
@@ -51,6 +56,13 @@ describe('league-gated analyst tools', () => {
   it('passes the structured trade sides through to the evaluator', async () => {
     await executeChimmyTool('evaluate_trade', { give: ["Ja'Marr Chase"], get: ['Justin Jefferson'] }, CTX)
     expect(h.trade).toHaveBeenCalledWith({ give: ["Ja'Marr Chase"], get: ['Justin Jefferson'], leagueId: 'L1', userId: 'u1' })
+  })
+
+  it('passes a trade-idea search its position and player, and nothing it cannot use', async () => {
+    await executeChimmyTool('find_trade_ideas', { position: 'running backs', trade_away: '  Tony Pollard ' }, CTX)
+    expect(h.tradeIdeas).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', position: 'RB', tradeAway: 'Tony Pollard' })
+    await executeChimmyTool('find_trade_ideas', { position: 'kicker', trade_away: 7 }, CTX)
+    expect(h.tradeIdeas).toHaveBeenLastCalledWith({ leagueId: 'L1', userId: 'u1', position: null, tradeAway: null })
   })
 })
 
@@ -83,7 +95,7 @@ describe('analyst tool specs', () => {
     const analyst = CHIMMY_TOOL_SPECS.filter((s) =>
       [...LEAGUE_GATED, 'get_playoff_outlook', 'get_my_matchup'].includes(s.function.name as never),
     )
-    expect(analyst).toHaveLength(6)
+    expect(analyst).toHaveLength(7)
     for (const spec of analyst) {
       expect(Object.keys((spec.function.parameters as { properties: object }).properties)).not.toContain('leagueId')
     }
