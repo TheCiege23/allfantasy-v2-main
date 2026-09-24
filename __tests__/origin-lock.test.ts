@@ -97,6 +97,118 @@ describe("enforce: a direct hit is refused, Cloudflare traffic is not", () => {
   })
 })
 
+/**
+ * Why a page is REDIRECTED rather than refused.
+ *
+ * Measured 2026-09-24 in Railway's http logs, the full 24 hours of requests to
+ * the origin's own `.up.railway.app` host: no cron, webhook or provider callback
+ * — but Googlebot on /robots.txt and AdsBot-Google on /brackets/leagues/new and
+ * its assets. AdsBot only fetches AD LANDING PAGES, so a Google Ads final URL
+ * points at the origin host, and a 403 there is how an ad gets disapproved.
+ * A 308 to the canonical host sends the same request back through Cloudflare,
+ * which sets its own location headers over any forged ones — no less secure.
+ */
+describe("enforce: a direct PAGE request is sent to the canonical host", () => {
+  const ORIGIN_HOST = "example-origin.up.railway.app"
+  let savedSiteUrl: string | undefined
+
+  beforeEach(() => {
+    process.env.CF_ORIGIN_AUTH_SECRET = SECRET
+    process.env.CF_ORIGIN_LOCK_MODE = "enforce"
+    savedSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.allfantasy.ai"
+  })
+
+  afterEach(() => {
+    if (savedSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL
+    else process.env.NEXT_PUBLIC_SITE_URL = savedSiteUrl
+  })
+
+  /** A direct hit, with the Host header the origin actually receives. */
+  function direct(path: string, method = "GET", host = ORIGIN_HOST, headers: Record<string, string> = {}) {
+    return new NextRequest(new URL(`https://${host}${path}`), { method, headers: { host, ...headers } })
+  }
+
+  it("308s an ad landing page on the origin host to www, keeping path and query", async () => {
+    const res = await middleware(direct("/brackets/leagues/new?utm_source=google&gclid=abc"))
+    expect(res.status).toBe(308)
+    expect(res.headers.get("location")).toBe("https://www.allfantasy.ai/brackets/leagues/new?utm_source=google&gclid=abc")
+  })
+
+  it("308s HEAD too — link checkers and crawlers use it", async () => {
+    const res = await middleware(direct("/brackets/leagues/new", "HEAD"))
+    expect(res.status).toBe(308)
+  })
+
+  it("still 403s an API call — a machine gets a clear refusal, never a redirect", async () => {
+    const res = await middleware(direct("/api/geo/check"))
+    expect(res.status).toBe(403)
+    expect(res.headers.get("location")).toBeNull()
+  })
+
+  it("still 403s a POST — a redirect would change what the request means", async () => {
+    const res = await middleware(direct("/pricing", "POST"))
+    expect(res.status).toBe(403)
+  })
+
+  it("403s — does NOT redirect — a direct request that already claims the canonical host", async () => {
+    // Host: www.allfantasy.ai sent straight to Railway's IP. Redirecting to itself
+    // would loop, and if the Cloudflare rule were ever removed, EVERY visitor would
+    // hit ERR_TOO_MANY_REDIRECTS instead of a clear 403.
+    const res = await middleware(direct("/core", "GET", "www.allfantasy.ai"))
+    expect(res.status).toBe(403)
+    expect(res.headers.get("location")).toBeNull()
+  })
+
+  it("is not an open redirect: a path of //evil.example stays on our host", async () => {
+    const res = await middleware(direct("//evil.example/x"))
+    expect(res.status).toBe(308)
+    expect(new URL(res.headers.get("location")!).hostname).toBe("www.allfantasy.ai")
+  })
+
+  it("does not follow a forged forwarded-host header anywhere", async () => {
+    const res = await middleware(direct("/core", "GET", ORIGIN_HOST, { "x-forwarded-host": "evil.example" }))
+    expect(new URL(res.headers.get("location")!).hostname).toBe("www.allfantasy.ai")
+  })
+
+  it("403s when the configured canonical host IS the origin host — the loop guard", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = `https://${ORIGIN_HOST}`
+    const res = await middleware(direct("/core"))
+    expect(res.status).toBe(403)
+    expect(res.headers.get("location")).toBeNull()
+  })
+
+  it("403s when the canonical host is ANY Railway origin host — it bypasses Cloudflare too", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://some-other-service.up.railway.app"
+    const res = await middleware(direct("/core"))
+    expect(res.status).toBe(403)
+  })
+
+  it("403s when there is no Host header to reason about", async () => {
+    const res = await middleware(new NextRequest(new URL(`https://${ORIGIN_HOST}/core`)))
+    expect(res.status).toBe(403)
+  })
+
+  it("logs a redirect as a redirect, and never the secret", async () => {
+    await middleware(direct("/brackets/leagues/new"))
+    const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n")
+    expect(logged).toMatch(/origin-lock.*redirected/)
+    expect(logged).toMatch(/\/brackets\/leagues\/new/)
+    expect(logged).not.toContain(SECRET)
+  })
+
+  it("lets Cloudflare traffic straight through — no redirect for a request carrying the secret", async () => {
+    const res = await middleware(direct("/brackets/leagues/new", "GET", "www.allfantasy.ai", { [ORIGIN_AUTH_HEADER]: SECRET }))
+    expect([301, 302, 307, 308, 403]).not.toContain(res.status)
+  })
+
+  it("report mode still refuses and redirects nothing", async () => {
+    process.env.CF_ORIGIN_LOCK_MODE = "report"
+    const res = await middleware(direct("/brackets/leagues/new"))
+    expect([308, 403]).not.toContain(res.status)
+  })
+})
+
 describe("OFF by default — the worker and every unconfigured environment", () => {
   it("lets a direct hit through when no secret is set, even with mode=enforce", async () => {
     process.env.CF_ORIGIN_LOCK_MODE = "enforce"
