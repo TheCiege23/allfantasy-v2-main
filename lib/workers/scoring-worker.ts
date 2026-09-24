@@ -52,6 +52,8 @@ export async function runScoringWorker(options?: {
     ok: true,
     extra: {
       processedLeagues: results.length,
+      // Leagues where nothing was written because a team could not be scored (see scoreLeagueWeek).
+      unavailableLeagues: results.filter((r) => r.status === 'unavailable').length,
       season: period.season,
       weekOrRound: period.weekOrRound,
     },
@@ -73,7 +75,8 @@ export async function runWeeklyLeagueAutomation(options?: {
     weekOrRound: options?.weekOrRound,
   })
   await Promise.all(
-    scoring.results.map(async (result) => {
+    // A week that was not scored has nothing new to recap.
+    scoring.results.filter((result) => result.status === 'scored').map(async (result) => {
       await generateWeeklyLeagueArtifacts({
         leagueId: result.leagueId,
         season: result.season,
