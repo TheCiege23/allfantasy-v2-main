@@ -1,5 +1,5 @@
 ﻿import { prisma } from '@/lib/prisma'
-import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
+import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
@@ -441,6 +441,7 @@ export async function syncCompletedDraftToRedraftSeason(
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
+      isDraftPickSkipped(pick) ||
       isDraftPickRowEmpty({
         playerName: pick.playerName,
         position: pick.position,

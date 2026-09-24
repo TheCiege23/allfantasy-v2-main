@@ -165,6 +165,15 @@ describe('undoLastPick', () => {
     expect(ctx.getCapture().deletedPickId).toBe('pick-1')
   })
 
+  // A completed draft has written its rosters and season; taking its last pick off the board
+  // would leave that player on a roster with no pick behind him.
+  it('refuses to undo a completed draft', async () => {
+    ctx.store.session.status = 'completed'
+    expect(await undoLastPick('league-1')).toBe(false)
+    expect(ctx.getCapture().deletedPickId).toBeNull()
+    expect(ctx.prisma.$transaction).not.toHaveBeenCalled()
+  })
+
   describe('in_progress + timerSeconds set (standard case)', () => {
     it('resets timerEndAt to a full fresh window', async () => {
       const before = Date.now()

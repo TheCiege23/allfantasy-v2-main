@@ -318,7 +318,12 @@ export async function POST(
         )
       }
       const ok = await undoLastPick(leagueId, { reason: reasonRaw, actorUserId: userId })
-      if (!ok) return NextResponse.json({ error: 'No pick to undo' }, { status: 400 })
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'No pick to undo', hint: 'A completed draft cannot be undone — edit the pick instead.' },
+          { status: 400 },
+        )
+      }
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({ ok: true, action: 'undo_pick', session: await withViewerSession(leagueId, userId, snapshot) })
     }
@@ -847,7 +852,12 @@ export async function POST(
     }
     if (action === 'reset_draft') {
       const ok = await resetDraftSession(leagueId)
-      if (!ok) return NextResponse.json({ error: 'Cannot reset draft' }, { status: 400 })
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'Cannot reset draft. A completed draft built the rosters and season and cannot be reset here.' },
+          { status: 400 },
+        )
+      }
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({
         ok: true,

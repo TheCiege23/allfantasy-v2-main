@@ -72,7 +72,15 @@ const DRAFT_UI_DEFAULTS: DraftUISettings = {
   orphanTeamAiManagerEnabled: false,
   orphanDrafterMode: 'cpu',
   liveDraftChatSyncEnabled: false,
-  autoPickEnabled: false,
+  /**
+   * 🛑 ON by default: when the pick clock runs out, the pick is made (queue → AI → best
+   * available). It was OFF, and it gates every expired-timer path, so any draft with an absent
+   * manager or an unfilled seat stopped at that pick until the commissioner picked by hand —
+   * while the session's own "CPU autopick for absent managers" (`DraftSession.cpuAutoPick`)
+   * defaulted ON and said it would. That flag still switches it off per draft, and a
+   * commissioner who sets this key to false keeps a clock that waits.
+   */
+  autoPickEnabled: true,
   timerMode: 'per_pick',
   commissionerForceAutoPickEnabled: false,
   commissionerPauseControlsEnabled: true,
