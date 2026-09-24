@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
+import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
@@ -88,6 +89,16 @@ export const WEEK_KEYED_SPORTS: readonly string[] = ['NFL', 'NCAAF']
  * edit — the same standard `SEASON_CAPABLE_SPORTS` sets.
  */
 export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL']
+
+/**
+ * Date-windowed sports whose slate comes from the Rolling Insights season schedule
+ * (lib/sports-data/riSeasonSchedule.ts), because every schedule in `SportsGame` is INCOMPLETE for
+ * them. NCAAB, measured 2026-09-24: thesportsdb 2025-26 stops at a 3,000-game cap on 02-04, and
+ * week 1 lists 243 games against 310 in our game logs; RI's schedule matches the logs exactly.
+ * A slate short a game can seal a week whose stats miss that game — so for these sports an
+ * unsynced schedule is an EMPTY slate, which refuses, never a fallback to the partial feeds.
+ */
+export const RI_SCHEDULE_SLATE_SPORTS: readonly string[] = ['NCAAB']
 
 export type WeekFinalizeRefusal =
   | 'finalizer_disabled'
@@ -267,6 +278,29 @@ export async function readWeekSlate(
   },
 ): Promise<WeekSlateSummary> {
   const windowed = args.dateWindow ?? null
+
+  if (windowed && RI_SCHEDULE_SLATE_SPORTS.includes(args.sport.toUpperCase())) {
+    const games = await readRiScheduleWindow(prisma as never, { sport: args.sport, season: args.season, window: windowed })
+    if (games == null) {
+      return { games: 0, final: 0, unfinished: 0, cancelled: 0, lastStartTime: null, source: 'rolling_insights_schedule (not synced)' }
+    }
+    // Same discriminator as below: the regular slate takes unlabelled games too, never postseason.
+    const slateGames = games.filter((g) =>
+      args.seasonType === 'regular' ? g.seasonType === 'regular' || g.seasonType == null : g.seasonType === 'post',
+    )
+    let final = 0
+    let cancelled = 0
+    let unfinished = 0
+    let lastStart: string | null = null
+    for (const g of slateGames) {
+      const status = normalizeGameStatus(g.status)
+      if (status === 'final') final += 1
+      else if (status === 'cancelled') cancelled += 1
+      else unfinished += 1
+      if (g.startTime && (lastStart == null || g.startTime > lastStart)) lastStart = g.startTime
+    }
+    return { games: slateGames.length, final, unfinished, cancelled, lastStartTime: lastStart, source: 'rolling_insights_schedule' }
+  }
   /*
    * 🛑 THE WINDOW IS EASTERN DAYS, AND `startTime` IS A UTC INSTANT — SELECTING ON THE INSTANT
    * PUTS A THIRD OF THE SEASON IN THE WRONG WEEK.

@@ -61,7 +61,14 @@ const SCHEDULED = new Set([
 
 const POSTPONED = new Set(['post', 'pst', 'postponed', 'susp', 'suspended', 'delayed', 'int'])
 
-const CANCELLED = new Set(['canc', 'cancelled', 'canceled', 'abd', 'abandoned', 'awd', 'wo'])
+/*
+ * `replaced` is Rolling Insights: the fixture moved to another game id (`replaced_by`), often just
+ * the home/away order flipped. THIS id will never be played — its replacement is its own row — so
+ * it cannot hold a week open. 283 of 6,027 NCAAB 2025-26 games, measured 2026-09-24
+ * (fixtures/schedule-season.NCAABB.json); as `unknown` it read as unfinished and no week holding
+ * one could ever seal.
+ */
+const CANCELLED = new Set(['canc', 'cancelled', 'canceled', 'abd', 'abandoned', 'awd', 'wo', 'replaced'])
 
 /**
  * Live. api-sports encodes the period in the code itself (`1H`, `IN2`, `Q3`,
