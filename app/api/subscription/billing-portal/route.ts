@@ -17,7 +17,8 @@ function appOrigin(): string {
 
 export async function GET(req: Request) {
   try {
-    const geoBlock = await enforcePaidSubscriptionGeo(req)
+    // The portal is where subscriptions are cancelled; a VPN must never block that.
+    const geoBlock = await enforcePaidSubscriptionGeo(req, { blockVpnOrProxy: false })
     if (geoBlock) return geoBlock
 
     const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
