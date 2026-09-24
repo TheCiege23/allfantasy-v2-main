@@ -48,30 +48,47 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
 /**
  * Sports whose season can actually RUN, end to end, today.
  *
- * 🛑 THIS IS A CAPABILITY, NOT A PREFERENCE, AND THE GAP IS SILENT. A league in
- * any other sport can be created, drafted and scheduled — and then nothing ever
- * happens to it. `syncPlayerWeeklyScoresForRedraftSeason` THROWS for a non-NFL
- * sport ("Weekly stat sync is currently wired for NFL only"), so its matchups
- * never finalize, so `advance_week` refuses forever, so it never reaches
- * playoffs, a champion or an offseason. Nothing goes red; the league simply sits
- * at week 1, which is exactly the dead end the whole season-lifecycle effort
- * exists to remove.
+ * 🛑 THIS IS A CAPABILITY, NOT A PREFERENCE, AND THE GAP IS SILENT. A league in a
+ * sport that is not listed can be created, drafted and scheduled — and then
+ * nothing ever happens to it. Its matchups never finalize, so `advance_week`
+ * refuses forever, so it never reaches playoffs, a champion or an offseason.
+ * Nothing goes red; the league simply sits at week 1, which is exactly the dead
+ * end the whole season-lifecycle effort exists to remove.
  *
- * ⚠ THE PER-SPORT `lib/{nba,mlb,nhl,ncaab,ncaaf}-scoring` MODULES DO NOT CHANGE
- * THIS, AND THEY LOOK LIKE THEY DO. They are CONFIG services — their own headers
- * say "Read/write NBA scoring configuration from League.settings JSON". They
- * define what a stat is worth; they do not fetch stat lines or compute a weekly
- * score. Everything that writes `PlayerWeeklyScore` is NFL-specific.
+ * ⚠ THE RATIONALE HERE WENT STALE AND ASSERTED THE OPPOSITE OF THE CODE. It read
+ * "`syncPlayerWeeklyScoresForRedraftSeason` THROWS for a non-NFL sport (wired for
+ * NFL only)". That service now says "wired for NFL, NBA and NHL" and carries a
+ * full daily-sport branch reading `player_game_stats` across a date window — the
+ * throw had been narrowed and this comment was not. **A comment asserting a
+ * capability is not evidence of one**, in either direction, and re-reading the
+ * code it describes is what adding the next sport owes.
+ *
+ * ⚠ THE PER-SPORT `lib/{nba,mlb,nhl,ncaab,ncaaf}-scoring` MODULES STILL DO NOT
+ * CHANGE THIS, AND THEY STILL LOOK LIKE THEY DO. They are CONFIG services — their
+ * own headers say "Read/write NBA scoring configuration from League.settings
+ * JSON". They define what a stat is worth; they do not fetch stat lines.
  *
  * ⚠ AND THE WEEK RESOLVER IS BROADER THAN THIS LIST, WHICH IS NOT A CONTRADICTION.
  * `lib/season-week` can place a week for NFL, NCAAF and SOCCER from the schedule
  * feed. Knowing WHICH week it is does not help when nothing can score that week,
  * so the narrower capability is the one that governs here.
  *
- * Widening this list means wiring a stat provider for that sport — not editing
- * this line.
+ * WHAT NHL NEEDED, AND WHAT THE NEXT SPORT WILL (measured 2026-09-24, not assumed):
+ *   1. a stat path — `player_game_stats` held 733 NHL rows across 693 players;
+ *   2. a schedule in a RANKED feed — `thesportsdb` held 1,373 NHL 2026 rows, and
+ *      it is in `LIVE_SCORE_SOURCES`;
+ *   3. its statuses understood by `normalizeGameStatus` — `FT`/`AOT`/`AP` all map
+ *      to `final`, `NS` to `scheduled`, so finished games are not read as open;
+ *   4. a recorded season opener, because a daily sport's week is a DATE WINDOW —
+ *      NHL 2026 is `2026-09-29` in `dailySportSeasonStarts.ts`;
+ *   5. the finalizer able to close it — `DATE_WINDOWED_SPORTS` in `weekFinalizer.ts`,
+ *      since `SportsGame.week` for NHL is noise (29 distinct values, 1..500).
+ *
+ * ⚠ NBA CLEARS (1) AND (4) AND IS STILL ABSENT. Its season starts 2026-10-20, so
+ * nothing above has been checked against a real NBA slate. Adding it is a
+ * measurement, not an edit.
  */
-export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL']
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL']
 
 /** Whether a league in this sport can run a season to completion today. */
 export function canRunSeasonForSport(sport: string | null | undefined): boolean {
