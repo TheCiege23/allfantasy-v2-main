@@ -87,18 +87,26 @@ export type PricingV4Props = {
 type Interval = 'month' | 'year'
 
 /**
- * ⚠ ASCENDING BY PRICE, WHICH IS NOT THE ORDER THE HANDOFF DRAWS. The design put
- * Legacy last, after Supreme, because Legacy was then the $29.99 top tier. It is
- * now $9.99 — a peer of Pro — so leaving it in the last column would present the
- * cheapest paid plan as the most premium one. Price order also makes Supreme the
- * natural endpoint, which is what it now is.
+ * ⚠ ASCENDING BY PRICE, so Supreme is the natural endpoint — which is what it is.
+ *
+ * ⚠ AF LEGACY (af_war_room) IS OFF THE LAUNCH PRICING — owner's decision 2026-09-24. At
+ * $9.99 it sat beside Pro at the same price and was hard to tell apart from it, and
+ * Supreme already includes its tools. The SKU is not retired: it still sells from
+ * /upgrade?plan=war_room, and an existing subscriber keeps it. Leaving it out of this
+ * list is the whole change — `ordered` below renders only what this names.
  */
-const LANE_ORDER = ['af_pro', 'af_war_room', 'af_commissioner', 'af_supreme'] as const
+const LANE_ORDER = ['af_pro', 'af_commissioner', 'af_supreme'] as const
 
+/*
+ * 🛑 THE FREE TIER LEADS WITH RUNNING LEAGUES, BECAUSE THAT IS THE RULE: creating,
+ * importing and running leagues is free and unlimited (Oct 15 paywall). It used to list
+ * only "see your leagues" items, which read as if running one were the paid part.
+ */
 const FREE_INCLUDES = [
+  'Create and import unlimited leagues',
+  'Drafts, trades, waivers and live scoring',
+  'Commissioner basics: settings, invites and playoffs',
   'Every league you play, in one place',
-  'Live scores and standings',
-  'Import from Sleeper, ESPN and Yahoo',
 ]
 
 function money(n: number): string {
@@ -145,7 +153,7 @@ function Shield() {
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'What stays free?',
-    a: "Every league, live score and standing. Imports are unlimited and there's no trial clock on them.",
+    a: "Creating, importing and running your leagues — drafts, trades, waivers, live scoring, standings and the commissioner basics. League creation and imports are unlimited, with no trial clock.",
   },
   {
     q: 'Do you take league dues?',
@@ -268,8 +276,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         <span className="af-pr-eyebrow">Pricing</span>
         <h1 className="af-pr-title">Win more with tools built for fantasy managers</h1>
         <p className="af-pr-sub">
-          Every league, live score and standing is free forever. Subscribe for Chimmy intelligence
-          and commissioner tools — or buy tokens when you need them.
+          Creating, importing and running your leagues is free forever. Subscribe for Chimmy and
+          player tools or commissioner automation — or buy tokens when you need them.
         </p>
 
         <div className="af-pr-toggle-row">
@@ -311,7 +319,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         {/* ── Free ─────────────────────────────────────────────── */}
         <section className="af-pr-card">
           <h2 className="af-pr-name">Free</h2>
-          <p className="af-pr-desc">Every league you play, in one place. No card, no trial clock.</p>
+          <p className="af-pr-desc">Create, import and run every league. No card, no trial clock.</p>
           <div className="af-pr-price">
             <span className="af-pr-amount">$0</span>
           </div>

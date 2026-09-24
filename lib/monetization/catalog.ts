@@ -92,7 +92,8 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     // lib/subscription/feature-access.ts = [pro, commissioner, war_room]).
     // Commissioner does NOT grant Pro's player tools, so a subscriber who bought on
     // that sentence would find the trade and waiver tools still locked.
-    description: "The tools to run your leagues — health, integrity, recaps and the Commissioner OS.",
+    // Not "the tools to run your leagues" — running a league is free (Oct 15 paywall rule).
+    description: "Commissioner intelligence on top of your free league — health, integrity, recaps and the Commissioner OS.",
     amountUsd: 14.99,
     currency: "usd",
     // Must match subscription-policy.ts's commissioner.monthlyIncludedPremiumCredits (100).
@@ -120,7 +121,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     // lib/subscription/feature-access.ts = [pro, commissioner, war_room]).
     // Commissioner does NOT grant Pro's player tools, so a subscriber who bought on
     // that sentence would find the trade and waiver tools still locked.
-    description: "The tools to run your leagues — health, integrity, recaps and the Commissioner OS.",
+    description: "Commissioner intelligence on top of your free league — health, integrity, recaps and the Commissioner OS.",
     amountUsd: 129.99,
     currency: "usd",
     // Must match subscription-policy.ts's commissioner.yearlyIncludedPremiumCredits (1500).
@@ -147,7 +148,8 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     // grants 300 tokens/mo against Supreme's 1,000 while costing $10 MORE, so
     // "everything in Supreme plus" was false in the one dimension a pricing grid
     // shows side by side.
-    description: "The live draft room, dynasty tools, and priority access.",
+    // Not "the live draft room" — the draft room is free for every league.
+    description: "Draft-room intelligence, dynasty tools, and priority access.",
     amountUsd: 9.99,
     currency: "usd",
     // Must match subscription-policy.ts's war_room.monthlyIncludedPremiumCredits (300). Previously
@@ -175,7 +177,8 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     // grants 300 tokens/mo against Supreme's 1,000 while costing $10 MORE, so
     // "everything in Supreme plus" was false in the one dimension a pricing grid
     // shows side by side.
-    description: "The live draft room, dynasty tools, and priority access.",
+    // Not "the live draft room" — the draft room is free for every league.
+    description: "Draft-room intelligence, dynasty tools, and priority access.",
     amountUsd: 79.99,
     currency: "usd",
     // Must match subscription-policy.ts's war_room.yearlyIncludedPremiumCredits (3500). Previously
