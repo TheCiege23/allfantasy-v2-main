@@ -97,14 +97,71 @@ export function checkOriginLock(
 const reported = new Set<string>()
 const MAX_REPORTED = 500
 
-export function reportOriginLock(reason: string, host: string | null, pathname: string, mode: "report" | "enforce"): void {
+export type OriginLockOutcome = "would-refuse" | "refused" | "redirected"
+
+const OUTCOME_WORDS: Record<OriginLockOutcome, string> = {
+  "would-refuse": "would refuse",
+  refused: "refused",
+  redirected: "redirected to the canonical host",
+}
+
+export function reportOriginLock(reason: string, host: string | null, pathname: string, outcome: OriginLockOutcome): void {
   const key = `${reason}|${host ?? ""}|${pathname}`
   if (reported.has(key) || reported.size >= MAX_REPORTED) return
   reported.add(key)
   console.warn(
-    `[origin-lock] ${mode === "enforce" ? "refused" : "would refuse"} a request that did not come through Cloudflare ` +
+    `[origin-lock] ${OUTCOME_WORDS[outcome]} a request that did not come through Cloudflare ` +
       `(edge secret ${reason}) host=${host ?? "-"} path=${pathname}. Logged once per path per process.`,
   )
+}
+
+export type OriginLockRefusal = { kind: "redirect"; location: string } | { kind: "forbidden" }
+
+/**
+ * How to refuse a request the lock has rejected in enforce mode.
+ *
+ * A PAGE request (GET/HEAD, outside /api/) that reached the origin under a
+ * non-canonical host is 308'd to the canonical host with the same path and
+ * query. Measured 2026-09-24: AdsBot-Google fetches an ad landing page on the
+ * origin's own `.up.railway.app` host, and a 403 there is how an ad gets
+ * disapproved. The redirected request comes back through Cloudflare, which sets
+ * its own location headers over any forged ones, so this is no less secure.
+ *
+ * Everything else is a 403:
+ *   - API calls and non-GET methods: a machine gets a clear refusal, and a
+ *     redirect would change what a POST means.
+ *   - A request that already claims the canonical host (Host: www sent straight
+ *     to Railway's IP). Redirecting it to itself would loop — and if the
+ *     Cloudflare rule were ever removed, every visitor would get
+ *     ERR_TOO_MANY_REDIRECTS instead of a clear 403.
+ *   - A canonical host that is itself a Railway origin host (a misconfigured
+ *     deployment falls back to RAILWAY_PUBLIC_DOMAIN): it bypasses Cloudflare
+ *     too, so redirecting there loops.
+ *   - No Host header: nothing to reason about.
+ *
+ * The Location is built by assigning pathname/search onto a URL for the
+ * canonical host — never by resolving the path against it — so a path like
+ * `//evil.example/x` cannot become a protocol-relative open redirect, and
+ * X-Forwarded-Host is never read.
+ */
+export function originLockRefusal(
+  req: { method: string; pathname: string; search: string; host: string | null },
+  canonicalHost: string,
+): OriginLockRefusal {
+  const method = req.method.toUpperCase()
+  const isApi = req.pathname === "/api" || req.pathname.startsWith("/api/")
+  if ((method !== "GET" && method !== "HEAD") || isApi) return { kind: "forbidden" }
+
+  const host = (req.host ?? "").split(":")[0].trim().toLowerCase()
+  const canonical = canonicalHost.trim().toLowerCase()
+  if (!host || !canonical || host === canonical) return { kind: "forbidden" }
+  if (canonical.endsWith(".up.railway.app") || canonical.endsWith(".railway.internal")) return { kind: "forbidden" }
+
+  const url = new URL(`https://${canonical}`)
+  url.pathname = req.pathname
+  url.search = req.search
+  if (url.hostname !== canonical) return { kind: "forbidden" }
+  return { kind: "redirect", location: url.toString() }
 }
 
 /** Test seam. */
