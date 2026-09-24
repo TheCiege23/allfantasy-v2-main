@@ -1,5 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from "next/server";
+import { clientIpFromHeaders } from "@/lib/http/clientIp";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { signAdminSessionCookie } from "@/lib/adminSession";
@@ -11,10 +12,10 @@ const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_ATTEMPTS = 8;
 const LOCK_MS = 15 * 60 * 1000;
 
+// Keyed on the client, never the first forwarded-for entry: that one is caller-supplied,
+// and rotating it bought unlimited guesses against this lockout.
 function ipFrom(req: Request) {
-  const xf = req.headers.get("x-forwarded-for");
-  if (xf) return xf.split(",")[0].trim();
-  return "local";
+  return clientIpFromHeaders(req.headers) ?? "local";
 }
 
 function bucketFor(key: string): Bucket {

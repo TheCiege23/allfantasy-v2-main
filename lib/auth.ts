@@ -893,7 +893,7 @@ export const authOptions: NextAuthOptions = {
         const { recordIdentitySignal } = await import("@/lib/identity/IdentitySignalRecorder");
         await recordIdentitySignal({
           userId: user.id,
-          ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+          ip: (await import("@/lib/http/clientIp")).clientIpFromHeaders(h),
           userAgent: h.get("user-agent"),
           context: "login",
         });

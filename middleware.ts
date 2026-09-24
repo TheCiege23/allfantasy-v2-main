@@ -10,6 +10,7 @@ import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
+import { clientIpFromHeaders } from "@/lib/http/clientIp"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
@@ -622,7 +623,7 @@ async function routeMiddleware(request: NextRequest) {
   // they were two separate copies of this until 2026-09-02, and both went blind
   // together when production left Vercel.
   const edgeGeo = resolveEdgeGeo(request.headers)
-  const ip = request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const ip = clientIpFromHeaders(request.headers)
 
   // ⚠ THE FALLBACK RUNS ONLY WHEN NO EDGE PLACED THE REQUEST, and it is cached
   // for exactly that reason: this matcher covers all but static assets, so an

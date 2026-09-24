@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { logUserEventByUsername } from '@/lib/user-events';
 import { TRADE_EVALUATOR_SYSTEM_PROMPT, TradeEvaluationResponseSchema } from '@/lib/trade-evaluator-prompt';
-import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { getComprehensiveLearningContext } from '@/lib/comprehensive-trade-learning';
 import { recordTrendSignalsByPlayerNames } from '@/lib/player-trend';
 import { buildOpenAIMetaContext, resolveAIMetaContextWithWindow } from '@/lib/meta-insights';
@@ -129,7 +129,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/trade-eval", tool: "AiTrad
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+    const ip = getClientIp(request);
     const rateLimitResult = rateLimit(ip, 10, 60000);
 
     if (!rateLimitResult.success) {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getClientIp } from '@/lib/rate-limit'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 let cachedPlayers: any[] | null = null
 let cacheTime = 0
@@ -18,7 +19,7 @@ function checkRate(ip: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const ip = getClientIp(req)
   if (!checkRate(ip)) {
     return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
   }
