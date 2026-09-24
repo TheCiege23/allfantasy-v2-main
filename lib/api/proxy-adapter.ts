@@ -20,16 +20,23 @@ function copyHeaders(req: NextRequest): Headers {
   // all proxied traffic into a single shared bucket.
   const forwardedFor = req.headers.get('x-forwarded-for')
   const realIp = req.headers.get('x-real-ip')
-  // Only survives if the self-call reaches the origin directly; through the public
-  // hostname Cloudflare overwrites it with the caller's (our) egress address.
-  const cfConnectingIp = req.headers.get('cf-connecting-ip')
 
   if (cookie) headers.set('cookie', cookie)
   if (authorization) headers.set('authorization', authorization)
   if (contentType) headers.set('content-type', contentType)
   if (forwardedFor) headers.set('x-forwarded-for', forwardedFor)
   if (realIp) headers.set('x-real-ip', realIp)
-  if (cfConnectingIp) headers.set('cf-connecting-ip', cfConnectingIp)
+  // 🛑 NEVER forward `cf-connecting-ip`. This self-call goes back out through the
+  // public hostname, and Cloudflare REFUSES any request that arrives already
+  // carrying that header: 403, error 1000 "DNS points to prohibited IP". It does
+  // not overwrite it, as this file used to say. Forwarding it (#1199) broke every
+  // proxied route in production — league list, standings, league sections, AI
+  // waiver/trade advice — from the moment it deployed. Measured 2026-09-24:
+  // `curl -H 'cf-connecting-ip: …' https://www.allfantasy.ai/api/health` → 403;
+  // the same request with x-forwarded-for, x-real-ip, cookie or authorization
+  // → 200. The cost of dropping it is that an IP-keyed limit on the TARGET sees
+  // Railway's address, which is the state before #1199. The outer request has
+  // already been geo- and VPN-checked on the real client by middleware.ts.
 
   return headers
 }
