@@ -21,6 +21,7 @@ import {
   notifyQueuePlayerUnavailable,
 } from '@/lib/draft-notifications'
 import { publishDraftIntelForUpcomingManagers, sendDraftIntelDm } from '@/lib/draft-intelligence'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 type TradedPickRecord = {
@@ -99,8 +100,9 @@ export async function tryQueueAutoPick(
   leagueId: string,
   rosterId: string
 ): Promise<{ success: boolean; playerName?: string; queuePlayerUnavailable?: boolean }> {
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } }, queues: true },
   })
   if (!draftSession || draftSession.status !== 'in_progress') return { success: false }
@@ -186,8 +188,9 @@ export async function runSlowDraftAutomationTick(
   const runtimeMeta = readRuntimeMeta(leagueSettings)
   let nextRuntimeMeta: SlowRuntimeMeta = { ...runtimeMeta }
 
-  let session = await prisma.draftSession.findUnique({
+  let session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.draftType === 'auction') {
@@ -208,8 +211,9 @@ export async function runSlowDraftAutomationTick(
         changed = true
         actions.push({ type: 'pause_window_started' })
         nextRuntimeMeta.autoPausedByWindow = true
-        session = await prisma.draftSession.findUnique({
+        session = await prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           include: { picks: { orderBy: { overall: 'asc' } } },
         })
       }
@@ -230,8 +234,9 @@ export async function runSlowDraftAutomationTick(
         changed = true
         actions.push({ type: 'pause_window_ended' })
         nextRuntimeMeta.autoPausedByWindow = false
-        session = await prisma.draftSession.findUnique({
+        session = await prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           include: { picks: { orderBy: { overall: 'asc' } } },
         })
       }

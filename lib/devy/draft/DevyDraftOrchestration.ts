@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { getDevyConfig } from '../DevyLeagueConfig'
 import type { DevyLeagueConfigShape } from '../types'
 import type { DevyDraftPhase, DevyPickOrderMethod } from '../types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type DraftPhaseStatus = 'not_started' | 'in_progress' | 'completed'
 
@@ -37,8 +38,9 @@ export async function getCurrentDraftPhase(leagueId: string): Promise<{
   const config = await getDevyConfig(leagueId)
   if (!config) return { phase: null, phaseInfo: null, sessionId: null }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, draftType: true, rounds: true, devyConfig: true },
   })
 
@@ -100,8 +102,9 @@ export async function getCurrentDraftPhase(leagueId: string): Promise<{
  * Reads completedPhases from session devyConfig JSON.
  */
 export async function getCompletedPhases(leagueId: string): Promise<DevyDraftPhase[]> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { devyConfig: true, status: true },
   })
   if (!session) return []

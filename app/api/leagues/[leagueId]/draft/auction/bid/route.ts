@@ -11,6 +11,7 @@ import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionServic
 import { prisma } from '@/lib/prisma'
 import { notifyAuctionOutbid } from '@/lib/draft-notifications'
 import { rosterConfigurationIncompleteBody } from '@/lib/league/roster-configuration-gate-error'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,8 +38,9 @@ export async function POST(
     return NextResponse.json({ error: 'Valid amount (integer) required' }, { status: 400 })
   }
 
-  const before = await prisma.draftSession.findUnique({
+  const before = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { auctionState: true },
   })
   const beforeState = (before?.auctionState ?? {}) as Record<string, unknown>

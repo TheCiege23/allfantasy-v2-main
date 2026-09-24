@@ -14,6 +14,7 @@ import type {
   BudgetSummaryEntry,
   KeeperOutcomeEntry,
 } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * Build full deterministic post-draft summary for a completed draft.
@@ -157,8 +158,9 @@ export async function ensurePostDraftFinalized(leagueId: string): Promise<boolea
     console.error('[ensurePostDraftFinalized] repairDraftCompletionIfBoardFull', leagueId, e)
   })
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { status: true },
   })
   if (!session || session.status !== 'completed') return false

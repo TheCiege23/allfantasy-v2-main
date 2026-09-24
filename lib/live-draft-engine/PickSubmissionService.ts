@@ -34,6 +34,7 @@ import { logStructured } from '@/lib/logging/structured'
 import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEvent'
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { withPickLock } from '@/lib/draft/draftLock'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface SubmitPickInput {
   leagueId: string
@@ -66,8 +67,9 @@ export interface SubmitPickResult {
 }
 
 async function resolveCurrentOverallForStalePreflight(leagueId: string): Promise<number | null> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session) return null
@@ -93,8 +95,9 @@ async function resolveCurrentOverallForStalePreflight(leagueId: string): Promise
  * Not exported; external callers use the `submitPick` wrapper below.
  */
 async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId: input.leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session) return { success: false, error: 'Draft session not found' }

@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,8 +132,9 @@ export async function POST(req: NextRequest) {
         where: { leagueId: result.leagueId },
         select: { platformUserId: true },
       }),
-      tx.draftSession.findUnique({
+      tx.draftSession.findFirst({
         where: { leagueId: result.leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { status: true },
       }),
       tx.userProfile.findFirst({

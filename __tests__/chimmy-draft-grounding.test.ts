@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    draftSession: { findUnique: mocks.sessionFindUnique },
+    draftSession: { findUnique: mocks.sessionFindUnique, findFirst: mocks.sessionFindUnique },
     draftPick: { findMany: mocks.pickFindMany, count: mocks.pickCount },
   },
 }))

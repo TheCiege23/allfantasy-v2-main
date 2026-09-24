@@ -12,6 +12,7 @@ import { resolveAuctionWin } from '@/lib/live-draft-engine/auction/AuctionEngine
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,8 +32,9 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}))
   const forceByCommissioner = Boolean(body.forceByCommissioner ?? body.force_by_commissioner ?? false)
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { status: true, timerEndAt: true, draftType: true },
   })
   if (!draftSession || draftSession.draftType !== 'auction') {

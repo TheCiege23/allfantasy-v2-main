@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { DraftImportPreview } from './DraftImportPreview'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface ImportCommitResult {
   success: boolean
@@ -58,8 +59,9 @@ function buildImportFingerprint(input: {
  * Create backup of current draft session state (for rollback). Returns backup id.
  */
 export async function createImportBackup(leagueId: string): Promise<string | null> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session) return null
@@ -108,8 +110,9 @@ export async function commitImport(
   preview: DraftImportPreview,
   options: { backupBeforeCommit?: boolean } = {}
 ): Promise<ImportCommitResult> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: true },
   })
   if (!session) return { success: false, error: 'Draft session not found' }
@@ -150,7 +153,7 @@ export async function commitImport(
 
   try {
     await prisma.$transaction(async (tx) => {
-      const sess = await (tx as any).draftSession.findUnique({ where: { leagueId } })
+      const sess = await (tx as any).draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
       if (!sess) throw new Error('Draft session not found')
       await (tx as any).draftPick.deleteMany({ where: { sessionId: sess.id } })
       const sessionId = sess.id
@@ -245,8 +248,9 @@ export async function rollbackImport(leagueId: string): Promise<ImportCommitResu
       amount?: number | null
     }>
   }
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
   })
   if (!session) return { success: false, error: 'Draft session not found' }
 

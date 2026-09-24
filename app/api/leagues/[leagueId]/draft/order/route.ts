@@ -10,6 +10,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,8 +28,9 @@ export async function GET(
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { slotOrder: true, status: true, teamCount: true },
   })
   if (!draftSession) return NextResponse.json({ slotOrder: null, status: null }, { status: 200 })
@@ -61,8 +63,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'slotOrder must be a non-empty array of { slot, rosterId, displayName }' }, { status: 400 })
   }
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, teamCount: true },
   })
   if (!draftSession) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
@@ -77,7 +80,7 @@ export async function PATCH(
   }))
 
   await prisma.draftSession.update({
-    where: { leagueId },
+    where: { id: draftSession.id },
     data: {
       slotOrder: normalized as any,
       version: { increment: 1 },

@@ -38,6 +38,7 @@ import { prisma } from '@/lib/prisma'
 import { buildContextHash } from '@/lib/adp/computeAllFantasyAdp'
 import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import { loadAdpBoard } from '@/lib/adp/loadAdpBoard'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 function argValue(name: string): string | null {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
@@ -73,7 +74,7 @@ async function main() {
   }
 
   const leagues = await prisma.league.findMany({
-    where: leagueId ? { id: leagueId } : { draftSessions: { isNot: null } },
+    where: leagueId ? { id: leagueId } : { draftSessions: { some: {} } },
     select: {
       id: true,
       name: true,
@@ -84,7 +85,13 @@ async function main() {
       leagueVariant: true,
       leagueSize: true,
       settings: true,
-      draftSessions: { select: { draftType: true, teamCount: true, status: true } },
+      // Must pick the current draft exactly as lib/adp/readSnapshotForLeague.ts does, or this
+      // audit's hash silently disagrees with the one production serves.
+      draftSessions: {
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        take: 1,
+        select: { draftType: true, teamCount: true, status: true },
+      },
     },
     take: leagueId ? 1 : limit,
   })
@@ -110,7 +117,7 @@ async function main() {
         leagueSize: league.leagueSize,
         settings: league.settings,
       },
-      session: league.draftSessions ?? null,
+      session: league.draftSessions[0] ?? null,
     })
     const hash = buildContextHash(context)
     /*
@@ -131,7 +138,7 @@ async function main() {
       `    context: ${context.sport} ${context.leagueType} ${context.draftType} ` +
         `${context.scoringFormat} ${context.rosterFormat} ${context.teamCount}-team ${context.season}`,
     )
-    console.log(`    session: ${league.draftSessions ? league.draftSessions.status : 'none'}`)
+    console.log(`    session: ${league.draftSessions[0]?.status ?? 'none'}`)
     console.log(`    hash:    ${hash}  ->  ${label}`)
   }
 
@@ -159,7 +166,7 @@ async function main() {
             leagueSize: league.leagueSize,
             settings: league.settings,
           },
-          session: league.draftSessions ?? null,
+          session: league.draftSessions[0] ?? null,
         }),
       ),
     ),

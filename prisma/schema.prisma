@@ -6422,7 +6422,9 @@ model League {
   draftPickAuditLogs                    DraftPickAuditLog[]
   draftIntroViews                       DraftIntroView[]
   draftRecaps                           DraftRecap[]
-  draftSessions                         DraftSession?
+  /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
+  /// 2026-09-24; read the current one with `orderBy: CURRENT_DRAFT_SESSION_ORDER, take: 1`.
+  draftSessions                         DraftSession[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
   guillotineAiInsights                  GuillotineAIInsight[]
@@ -12404,10 +12406,21 @@ model MockDraftChat {
   @@map("mock_draft_chats")
 }
 
-/// Live draft session for a league. One active session per league at a time.
+/// Live draft session for a league. One OPEN session per league at a time — but a league runs
+/// many drafts over its life: a startup, then a rookie draft each year, plus dispersal and
+/// supplemental pools.
+///
+/// `leagueId` carried `@unique` until 2026-09-24, which enforced one draft per league EVER and
+/// is what blocked dynasty year two. "One open at a time" is now enforced where it belongs, by
+/// a partial unique index that Prisma's schema language cannot express:
+///   CREATE UNIQUE INDEX "draft_sessions_leagueId_open_key"
+///     ON "draft_sessions"("leagueId") WHERE "status" <> 'completed';
+/// It lives in the migration only, so do NOT "restore" the `@unique` to make the schema look
+/// symmetrical — that reinstates the bug. Read a league's current draft with
+/// `CURRENT_DRAFT_SESSION_ORDER` from `lib/draft-room/currentDraftSession.ts`.
 model DraftSession {
   id                         String                        @id @default(uuid())
-  leagueId                   String                        @unique
+  leagueId                   String
   status                     String                        @default("pre_draft")
   draftType                  String                        @default("snake")
   rounds                     Int                           @default(15)

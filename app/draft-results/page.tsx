@@ -27,8 +27,10 @@ export default async function DraftResultsPage({
   const leaguesWithCompletedDraft = await prisma.league.findMany({
     where: {
       userId,
+      // Any completed draft counts: a league with a finished startup and a live rookie draft
+      // still has results to show.
       draftSessions: {
-        is: { status: 'completed' },
+        some: { status: 'completed' },
       },
     },
     select: {

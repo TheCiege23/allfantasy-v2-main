@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { WarehouseIngestionService } from './WarehouseIngestionService'
 import { normalizeStatPayload } from './StatNormalizationService'
 import { normalizeSportForWarehouse } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const ingestion = new WarehouseIngestionService()
 
@@ -267,8 +268,9 @@ export async function generateDraftFactsFromLeague(
   if (!league) return 0
 
   const sport = normalizeSportForWarehouse(league.sport)
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true },
   })
   if (!session) return 0

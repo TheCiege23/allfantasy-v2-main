@@ -42,6 +42,7 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: hm.prismaTransaction,
     draftSession: {
       findUnique: hm.draftSessionFindUnique,
+      findFirst: hm.draftSessionFindUnique,
       update: hm.draftSessionUpdate,
     },
     draftPick: {
@@ -203,6 +204,7 @@ beforeEach(() => {
     const tx = {
       draftSession: {
         findUnique: hm.draftSessionFindUnique,
+        findFirst: hm.draftSessionFindUnique,
         update: hm.draftSessionUpdate,
       },
       draftPick: {

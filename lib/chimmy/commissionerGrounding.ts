@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * THE COMMISSIONER'S VIEW — everyone's league, not just yours.
@@ -125,8 +126,9 @@ export async function buildCommissionerContext(
 
   // ── Activity, read from the draft rather than from claims ──────────────────
   try {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, status: true, draftType: true, rounds: true, teamCount: true, timerSeconds: true },
     })
     if (session) {

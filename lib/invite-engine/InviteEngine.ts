@@ -26,6 +26,7 @@ import type {
   InviteStatus,
   InviteType,
 } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const MAX_ACTIVE_PER_USER_PER_DAY = 100
 const TOKEN_MAX_ATTEMPTS = 5
@@ -248,8 +249,9 @@ export async function createFantasyLeagueRoster(
       tx.roster.count({
         where: { leagueId, NOT: { platformUserId: { startsWith: 'orphan-' } } },
       }),
-      tx.draftSession.findUnique({
+      tx.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { status: true },
       }),
       tx.userProfile.findFirst({

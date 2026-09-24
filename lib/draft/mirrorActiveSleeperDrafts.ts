@@ -20,6 +20,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { syncDraftFromSleeper } from '@/lib/draft/sleeperSync'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type MirrorSummary = {
   scanned: number
@@ -118,8 +119,9 @@ export async function mirrorSleeperDraftForLeagueThrottled(leagueId: string): Pr
   if (current && now - current.lastRunAt < MIRROR_TICK_THROTTLE_MS) return
 
   const tick = (async () => {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, sleeperDraftId: true, status: true },
     })
     if (!session?.sleeperDraftId) return

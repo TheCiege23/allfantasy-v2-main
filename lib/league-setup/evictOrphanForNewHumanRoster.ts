@@ -24,6 +24,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type EvictOrphanReason =
   | 'ALREADY_SEATED'
@@ -68,8 +69,9 @@ export async function evictOrphanForNewHumanRoster(
   if (!input.leagueId) return { ok: false, error: 'Missing leagueId' }
   if (!input.humanRosterId) return { ok: false, error: 'Missing humanRosterId' }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId: input.leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, slotOrder: true },
   })
   if (!session) {

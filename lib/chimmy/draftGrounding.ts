@@ -7,6 +7,7 @@ import {
   getUpcomingPickOwners,
 } from '@/lib/live-draft-engine/DraftOrderService'
 import type { DraftType, SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * THE DRAFT — live, scheduled, or finished.
@@ -66,8 +67,9 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
 
   let session: SessionRow | null
   try {
-    session = (await prisma.draftSession.findUnique({
+    session = (await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         id: true,
         status: true,

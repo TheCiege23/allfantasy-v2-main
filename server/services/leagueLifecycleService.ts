@@ -6,6 +6,7 @@
 import type { League, LeagueLifecycleState, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type LeagueLifecycleAction =
   | 'draft_pick'
@@ -319,8 +320,9 @@ export async function ensureDraftingLifecycleForActiveSession(
         where: { id: leagueId },
         select: { lifecycleState: true, userId: true },
       }),
-      prisma.draftSession.findUnique({
+      prisma.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { status: true },
       }),
     ])

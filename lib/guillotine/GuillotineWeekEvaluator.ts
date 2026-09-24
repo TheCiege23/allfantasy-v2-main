@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import type { GuillotineWeekEvalResult, PeriodScoreRow } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface WeekEvaluatorInput {
   leagueId: string
@@ -52,8 +53,9 @@ export function isPastCorrectionCutoff(args: {
  * Load draft slot order for a league (slot -> rosterId or rosterId -> slot).
  */
 export async function getDraftSlotByRoster(leagueId: string): Promise<Map<string, number>> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { slotOrder: true },
   })
   const order = session?.slotOrder as Array<{ slot: number; rosterId: string }> | null

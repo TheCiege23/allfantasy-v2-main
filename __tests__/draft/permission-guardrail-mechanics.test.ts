@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   getAllowedPositionsAndRosterSize: vi.fn(),
   prisma: {
     draftSession: {
+      // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
+      findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
       findUnique: vi.fn(),
     },
     draftQueue: {

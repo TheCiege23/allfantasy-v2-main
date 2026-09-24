@@ -30,6 +30,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const MAX_ROWS = 500
 
@@ -299,8 +300,9 @@ export async function loadRosterMoveRows(
 export async function loadDraftRows(
   leagueId: string,
 ): Promise<{ session: RawDraftSessionRow | null; picks: RawDraftPickRow[] }> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       leagueId: true,

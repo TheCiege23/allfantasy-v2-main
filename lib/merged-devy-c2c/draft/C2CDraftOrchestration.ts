@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getC2CConfig } from '../C2CLeagueConfig'
 import type { C2CDraftPhase, C2CPoolType } from '../types'
 import type { C2CLeagueConfigShape } from '../types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type C2CDraftPhaseStatus = 'not_started' | 'in_progress' | 'completed'
 
@@ -35,8 +36,9 @@ export async function getCurrentC2CDraftPhase(leagueId: string): Promise<{
   const config = await getC2CConfig(leagueId)
   if (!config) return { phase: null, phaseInfo: null, sessionId: null }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, draftType: true, rounds: true },
   })
 

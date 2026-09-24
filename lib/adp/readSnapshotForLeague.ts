@@ -22,6 +22,7 @@ import {
 } from './computeAllFantasyAdp'
 import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import { loadAdpBoard } from '@/lib/adp/loadAdpBoard'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface AllFantasyAdpEntry {
   playerName: string
@@ -141,7 +142,11 @@ export async function readAllFantasyAdpForLeague(
       leagueVariant: true,
       leagueSize: true,
       settings: true,
-      draftSessions: { select: { draftType: true, teamCount: true } },
+      draftSessions: {
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        take: 1,
+        select: { draftType: true, teamCount: true },
+      },
     },
   })
   if (!league) {
@@ -164,7 +169,7 @@ export async function readAllFantasyAdpForLeague(
       leagueSize: league.leagueSize,
       settings: league.settings,
     },
-    session: league.draftSessions ?? null,
+    session: league.draftSessions[0] ?? null,
     season: options.season ?? null,
   })
   return readAllFantasyAdpForContext(context, options)

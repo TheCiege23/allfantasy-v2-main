@@ -21,6 +21,7 @@ import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { executeCanonicalLeagueCreation } from '@/lib/league-creation/canonical/executeCanonicalLeagueCreation'
 import { syncCompletedDraftToRedraftSeason } from '@/lib/redraft/finalizeDraftToRedraftSeason'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type SeededG8League = {
   mark: string
@@ -109,7 +110,7 @@ export async function seedG8CommissionerLeague(
   //    populates exactly like a customer league: seed DraftPicks on the
   //    commissioner + an opponent generic roster, mark the session completed, then
   //    sync into RedraftRoster via the production finalizer (no hand-built rosters).
-  const draftSession = await prisma.draftSession.findUnique({ where: { leagueId: league.id }, select: { id: true } })
+  const draftSession = await prisma.draftSession.findFirst({ where: { leagueId: league.id }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true } })
   if (!draftSession) throw new Error('G8 seed: canonical league has no draft session')
   const commishRoster = await prisma.roster.findFirst({ where: { leagueId: league.id, platformUserId: userId }, select: { id: true } })
   const oppRoster = await prisma.roster.findFirst({ where: { leagueId: league.id, NOT: { id: commishRoster?.id ?? '' } }, select: { id: true } })

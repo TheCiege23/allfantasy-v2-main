@@ -15,7 +15,7 @@ const ctx = vi.hoisted(() => {
   return {
     prisma: {
       liveDraftAutopickPreference: { findUnique },
-      draftSession: { findUnique: vi.fn(async () => ({ id: 'session-1' })) },
+      draftSession: { findFirst(...a: unknown[]) { return (this as any).findUnique(...a) }, findUnique: vi.fn(async () => ({ id: 'session-1' })) },
     },
     findUnique,
   }

@@ -16,6 +16,7 @@ import type {
 import { computeTimerEndAt } from '@/lib/live-draft-engine/DraftTimerService'
 import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { processWinningContractBid } from '@/lib/salary-cap/ContractBidService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -119,8 +120,9 @@ async function _nominatePlayerCore(
     }
   }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.draftType !== 'auction') {
@@ -203,8 +205,9 @@ async function _placeBidCore(
     }
   }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.draftType !== 'auction') {
@@ -291,8 +294,9 @@ async function _resolveAuctionWinCore(
   winnerRosterId?: string
   amount?: number
 }> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.draftType !== 'auction') {
@@ -533,7 +537,7 @@ async function tryAssignAuctionContract(
  * Initialize auction state and budgets when starting an auction draft.
  */
 export async function initializeAuctionForSession(leagueId: string): Promise<boolean> {
-  const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.draftType !== 'auction') return false
 
   const slotOrder = (session.slotOrder as unknown as SlotOrderEntry[]) ?? []

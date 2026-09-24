@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   league: { findUnique: vi.fn() },
-  draftSession: { findUnique: vi.fn() },
+  draftSession: { findFirst(...a: unknown[]) { return (this as any).findUnique(...a) }, findUnique: vi.fn() },
   redraftSeason: { findFirst: vi.fn(), create: vi.fn() },
   redraftRoster: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
   redraftRosterPlayer: { findFirst: vi.fn(), create: vi.fn() },

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   prisma: {
     draftSession: {
+      // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
+      findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
       findUnique: vi.fn(),
       findMany: vi.fn(),
     },

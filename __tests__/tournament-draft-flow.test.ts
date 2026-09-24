@@ -279,7 +279,20 @@ describe('scheduleRoundDraft — simultaneous vs staggered', () => {
     prismaMock.draftSession.update.mockResolvedValue({})
     prismaMock.tournamentAnnouncement.create.mockResolvedValue({})
     prismaMock.tournamentAuditLog.create.mockResolvedValue({})
-    getOrCreateDraftSessionMock.mockResolvedValue({ sessionId: 'ds-1' })
+    // The real contract is `{ session, created }` — there has never been a `sessionId` field. It
+    // only mattered once scheduleRoundDraft started writing to `session.id`, because
+    // DraftSession.leagueId is no longer unique (2026-09-24).
+    getOrCreateDraftSessionMock.mockImplementation(async (leagueId: string) => ({
+      session: { id: `ds-${leagueId}` },
+      created: false,
+    }))
+  })
+
+  it('updates each league\'s own draft session by id, never by leagueId', async () => {
+    const { scheduleRoundDraft } = await import('@/lib/tournament/scheduleRoundDraft')
+    await scheduleRoundDraft('t-1', 1, new Date())
+    const wheres = prismaMock.draftSession.update.mock.calls.map((c) => c[0].where)
+    expect(wheres).toEqual([{ id: 'ds-l-1' }, { id: 'ds-l-2' }])
   })
 
   it('simultaneous mode: all leagues get the same draftScheduledAt', async () => {

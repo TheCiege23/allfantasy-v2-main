@@ -40,6 +40,7 @@ import {
   suggestionOnlyExplanation,
 } from '@/lib/live-draft-engine/draftQueueAiReorder'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,8 +64,9 @@ export async function POST(
   let queue: QueueEntry[] = Array.isArray(body.queue) ? body.queue : []
 
   if (queue.length === 0) {
-    const draftSessionProbe = await prisma.draftSession.findUnique({
+    const draftSessionProbe = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true },
     })
     if (draftSessionProbe) {
@@ -77,8 +79,9 @@ export async function POST(
   }
 
   const currentUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!draftSession) {
