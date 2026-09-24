@@ -14,8 +14,11 @@
  *     grep -rnE "from '(@/lib/geo|\.)/geoIpFetch'|import\(.*geoIpFetch|require\(.*geoIpFetch" \
  *       --include=*.ts --include=*.tsx .
  *
- * must show `lib/geo/detectUserState.ts` and test files, and nothing else. A
- * request path importing this directly is the thing the guard exists to catch.
+ * must show `lib/geo/detectUserState.ts`, `lib/geo/geoIpCache.ts`,
+ * `lib/geo/anonymizerCache.ts` and test files, and nothing else. The two caches
+ * are the middleware's path to these vendors; each bounds the call count to one
+ * per IP per TTL. A request path importing this directly is the thing the guard
+ * exists to catch.
  *
  * ⚠ THE ALIASED FORM ALONE IS NOT THE CENSUS, and the first version of this
  * comment made exactly that mistake. `detectUserState` imports this RELATIVELY
@@ -43,11 +46,19 @@
 export async function fetchProxycheck(
   ip: string,
   key: string,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
   try {
     const url = `https://proxycheck.io/v2/${encodeURIComponent(ip)}?key=${encodeURIComponent(key)}&vpn=1&asn=1`
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } })
-    if (!res.ok) return null
+    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 }, signal })
+    if (!res.ok) {
+      // ⚠ A quota denial arrives as a 429/401/403 whose body says
+      // `status: "denied"`. Dropping every non-2xx as `null` made an exhausted
+      // quota indistinguishable from an outage, so the gate went open silently.
+      // Only the status is passed on — never the message, which could echo the key.
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
+      return body && typeof body.status === "string" ? { status: body.status } : null
+    }
     return (await res.json()) as Record<string, unknown>
   } catch (e) {
     // ⚠ The key is in the query string, so the URL must never be logged.

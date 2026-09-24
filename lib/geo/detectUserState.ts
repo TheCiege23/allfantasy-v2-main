@@ -1,10 +1,15 @@
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
 
 import type { GeoDetectionResult } from "./geoTypes"
-import { resolveEdgeGeo } from "./geoHeaders"
+import { isTorExit, resolveEdgeGeo } from "./geoHeaders"
 import { fetchIpApi, fetchProxycheck } from "./geoIpFetch"
-import { parseIpApiPayload, UNREADABLE_IP_GEO } from "./geoIpParse"
-import type { ParsedIpGeo } from "./geoIpParse"
+import {
+  combineAnonymizerSignals,
+  parseIpApiPayload,
+  parseProxycheckPayload,
+  UNREADABLE_IP_GEO,
+} from "./geoIpParse"
+import type { ParsedIpGeo, ProxycheckVerdict } from "./geoIpParse"
 
 export { __resetIpApiShapeWarning } from "./geoIpParse"
 
@@ -24,21 +29,14 @@ const extractClientIp = clientIpFromHeaders
 
 /**
  * Optional VPN/proxy check via proxycheck.io when PROXYCHECK_API_KEY is set.
- * On any failure, returns false (do not block solely due to check failure).
+ * `null` when there is no key; an unanswered verdict on any failure (do not
+ * block solely due to check failure). The reading itself is `./geoIpParse`'s,
+ * shared with the middleware gate.
  */
-async function detectVpnOrProxy(ip: string | null): Promise<boolean> {
-  if (!ip) return false
+async function proxycheckVerdict(ip: string): Promise<ProxycheckVerdict | null> {
   const key = process.env.PROXYCHECK_API_KEY?.trim()
-  if (!key) return false
-  const data = await fetchProxycheck(ip, key)
-  if (!data) return false
-  const node = data[ip] as Record<string, unknown> | undefined
-  if (!node || typeof node !== "object") return false
-  const proxy = String(node.proxy ?? "").toLowerCase()
-  const typ = String(node.type ?? "").toUpperCase()
-  if (proxy === "yes") return true
-  if (typ.includes("VPN")) return true
-  return false
+  if (!key) return null
+  return parseProxycheckPayload(await fetchProxycheck(ip, key), ip)
 }
 
 /**
@@ -117,14 +115,16 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
 
   const stateCode = placed.country === "US" ? placed.regionCode : null
 
-  let isVpnOrProxy = false
-  if (rawIp) {
-    isVpnOrProxy = await detectVpnOrProxy(rawIp)
-    if (!isVpnOrProxy) {
-      // Reuse the response already in hand rather than calling twice; only ask
-      // again when the geo branch above never ran.
-      isVpnOrProxy = lookup ? lookup.vpnHint : (await ipapiLookup(rawIp)).vpnHint
-    }
+  // Tor is read from the edge header and costs nothing; everything else is the
+  // same combined rule the middleware gate applies (./geoIpParse).
+  let isVpnOrProxy = isTorExit(headers)
+  if (!isVpnOrProxy && rawIp) {
+    const proxycheck = await proxycheckVerdict(rawIp)
+    // Reuse the response already in hand rather than calling twice; only ask
+    // again when the geo branch above never ran, and not at all once proxycheck
+    // has already said yes.
+    const ipapi = proxycheck?.anonymized ? null : (lookup ?? (await ipapiLookup(rawIp)))
+    isVpnOrProxy = combineAnonymizerSignals({ tor: false, proxycheck, ipapi }) === true
   }
 
   return {

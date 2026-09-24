@@ -135,6 +135,21 @@ export function resolveEdgeGeo(input: Request | Headers): EdgeGeo {
 }
 
 /**
+ * Did Cloudflare identify this client as a Tor exit?
+ *
+ * ⚠ `normaliseCountry` turns `T1` into "no country", which is right for the
+ * question "which state is this" and wrong for the question "can we trust the
+ * location at all". Read through `resolveEdgeGeo` alone, a Tor user looks like
+ * an unplaced one, and an unplaced client passes every state gate. This reads
+ * the raw header so the anonymizer gate can see what the normaliser discards.
+ * Header-only and free: Tor never costs a vendor call.
+ */
+export function isTorExit(input: Request | Headers): boolean {
+  const headers = input instanceof Headers ? input : input.headers;
+  return (read(headers, "cf-ipcountry") ?? "").toUpperCase() === "T1";
+}
+
+/**
  * The one question every geo gate actually asks: which US state is this, if any?
  *
  * Returns `null` when the client is outside the US, or when no edge placed them.

@@ -96,7 +96,11 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
   if (data.error) return UNREADABLE_IP_GEO
 
   const org = String(data.org ?? "").toLowerCase()
-  const vpnHint = org.includes("vpn") || org.includes("proxy") || org.includes("hosting")
+  const vpnHint =
+    org.includes("vpn") ||
+    org.includes("proxy") ||
+    org.includes("hosting") ||
+    isPrivacyRelayNetwork(data.asn, data.org)
 
   const country = asCountryCode(data.country_code) ?? asCountryCode(data.country)
   // `region` is the full name ("Washington") in most vendors' payloads and is
@@ -110,4 +114,120 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
   }
 
   return { country, regionCode, vpnHint, shapeUnrecognised: false }
+}
+
+/**
+ * Networks that carry privacy-relay traffic and never a subscriber's own line.
+ *
+ * iCloud Private Relay leaves Apple's network through Akamai (AS36183),
+ * Cloudflare (AS13335) and Fastly (AS54113); Cloudflare WARP leaves through
+ * AS13335 too. An end user's connection is never ADDRESSED from a CDN's
+ * network, so a client IP there is a relay, whatever a VPN list says about it.
+ *
+ * ⚠ The client IP must be `cf-connecting-ip`. Cloudflare's own hop sits in
+ * AS13335 as well, so reading the wrong header would flag every visitor —
+ * the exact failure `lib/http/clientIp` exists to prevent.
+ *
+ * Owner's decision, 2026-09-24: Private Relay is treated like a VPN. It keeps
+ * the user's region by default, but a user who picks "country and time zone"
+ * can surface in a neighbouring state, and the gate cannot tell which setting
+ * produced an address.
+ */
+const PRIVACY_RELAY_ASNS = new Set(["13335", "36183", "54113"])
+const PRIVACY_RELAY_ORGS = ["cloudflare", "akamai", "fastly"]
+
+export function isPrivacyRelayNetwork(asn: unknown, org: unknown): boolean {
+  const asnDigits = String(asn ?? "").trim().toUpperCase().replace(/^AS/, "")
+  if (PRIVACY_RELAY_ASNS.has(asnDigits)) return true
+  const name = String(org ?? "").toLowerCase()
+  return PRIVACY_RELAY_ORGS.some((o) => name.includes(o))
+}
+
+export interface ProxycheckVerdict {
+  /** The vendor answered about this IP. False on a denial, an error or an unreadable payload. */
+  answered: boolean
+  anonymized: boolean
+  /** Top-level `status: "denied"` — quota exhausted or key refused. Every answer is "unknown" while it holds. */
+  denied: boolean
+}
+
+const PROXYCHECK_UNANSWERED: ProxycheckVerdict = { answered: false, anonymized: false, denied: false }
+
+/**
+ * proxycheck.io `type` values that mean the address cannot place a person.
+ * `HOSTING` is a data centre: a VPN the vendor has not catalogued yet usually
+ * lands here, and a residence never does. The ipapi hint already counted
+ * "hosting" before this existed, so this keeps the two vendors on one rule.
+ */
+const ANONYMIZING_TYPES = ["VPN", "TOR", "HOSTING"]
+
+let warnedDenied = false
+
+function warnDeniedOnce(): void {
+  if (warnedDenied) return
+  warnedDenied = true
+  // ⚠ Status only. The vendor's message is not logged: the key rides in the
+  // request's query string, and a message that echoes it would leak it.
+  console.warn(
+    "[geo] proxycheck.io refused the lookup (status: denied — quota exhausted or key rejected). " +
+      "VPN detection fails OPEN while this holds, so the VPN gate is not enforcing. " +
+      "This is logged once per process.",
+  )
+}
+
+/** Test seam. Nothing in production should need to reset this. */
+export function __resetProxycheckDeniedWarning(): void {
+  warnedDenied = false
+}
+
+/**
+ * Read a proxycheck.io v2 payload (`&vpn=1&asn=1`) for one IP.
+ *
+ * ONE reading for both callers — `detectUserState` (signup, /api/geo/check,
+ * checkout) and `anonymizerCache` (the middleware gate) — for the reason this
+ * module exists at all: two copies of a vendor rule drift, and a gate and the
+ * API that explains it must not disagree about the same address.
+ */
+export function parseProxycheckPayload(data: Record<string, unknown> | null, ip: string): ProxycheckVerdict {
+  if (!data) return PROXYCHECK_UNANSWERED
+  const status = String(data.status ?? "").toLowerCase()
+  if (status === "denied") {
+    warnDeniedOnce()
+    return { answered: false, anonymized: false, denied: true }
+  }
+  if (status === "error") return PROXYCHECK_UNANSWERED
+
+  const node = data[ip]
+  if (!node || typeof node !== "object") return PROXYCHECK_UNANSWERED
+  const entry = node as Record<string, unknown>
+
+  const proxy = String(entry.proxy ?? "").toLowerCase()
+  const type = String(entry.type ?? "").toUpperCase()
+  const anonymized =
+    proxy === "yes" ||
+    ANONYMIZING_TYPES.some((t) => type.includes(t)) ||
+    isPrivacyRelayNetwork(entry.asn, entry.provider ?? entry.organisation)
+  return { answered: true, anonymized, denied: false }
+}
+
+/**
+ * The one rule for "is this client hiding where it is": Tor, a proxy or VPN, a
+ * data centre, or a privacy relay. `true` when any signal says so, `false` when
+ * a vendor answered and none did, `null` when nothing could answer.
+ *
+ * ⚠ `null` is NOT "clean", and callers must not cache or report it as such.
+ * The gate fails open on it — deliberately, because a vendor outage must not
+ * take the product down — but it is an absence of evidence, not evidence.
+ */
+export function combineAnonymizerSignals(s: {
+  tor: boolean
+  proxycheck: ProxycheckVerdict | null
+  ipapi: ParsedIpGeo | null
+}): boolean | null {
+  if (s.tor) return true
+  if (s.proxycheck?.anonymized) return true
+  if (s.ipapi?.vpnHint) return true
+  if (s.proxycheck?.answered) return false
+  if (s.ipapi && (s.ipapi.country !== null || s.ipapi.shapeUnrecognised)) return false
+  return null
 }

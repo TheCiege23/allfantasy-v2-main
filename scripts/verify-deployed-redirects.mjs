@@ -44,6 +44,23 @@ const CANONICAL_HOSTS = new Set(['allfantasy.ai', 'www.allfantasy.ai'])
 const BOGUS = 'deploy-verify-not-a-real-token'
 
 /**
+ * ⚠ GITHUB'S RUNNERS ARE A DATA CENTRE, AND THE VPN GATE REFUSES DATA CENTRES.
+ * Since 2026-09-24 middleware.ts sends an anonymized client to /vpn-blocked for
+ * every non-public page and answers 403 on the API. Without a credential, the
+ * redirect probes would go red — and worse, the page probes would follow the
+ * redirect and pass by rendering /vpn-blocked instead of /login.
+ *
+ * A machine credential is the documented pass (lib/http/machineCredential): the
+ * request is not a person, so neither the geo nor the VPN gate applies. It grants
+ * nothing else — every probed route still runs its own checks. Sent only to a
+ * canonical host, never to an arbitrary VERIFY_BASE_URL.
+ */
+const MACHINE_HEADERS =
+  process.env.CRON_SECRET && CANONICAL_HOSTS.has(new URL(BASE).hostname.toLowerCase())
+    ? { 'x-cron-secret': process.env.CRON_SECRET }
+    : {}
+
+/**
  * Hosts that mean "every interface" to a server and nothing at all to a client.
  *
  * ⚠ Takes a HOSTNAME, never a host. `url.host` on an IPv6 literal is `[::]:8080`, and stripping
@@ -171,6 +188,7 @@ async function probe({ path, method = 'GET' }, attempt = 1) {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method,
+      headers: MACHINE_HEADERS,
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
     })
@@ -183,7 +201,7 @@ async function probe({ path, method = 'GET' }, attempt = 1) {
       } catch { /* unparseable is a finding, not something to follow */ }
       const samePath = target && target.pathname === new URL(`${BASE}${path}`).pathname
       if (target && samePath && CANONICAL_HOSTS.has(target.hostname.toLowerCase())) {
-        const hop = await fetch(target, { method, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
+        const hop = await fetch(target, { method, headers: MACHINE_HEADERS, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
         return { status: hop.status, location: hop.headers.get('location'), viaCanonicalHop: true }
       }
     }
@@ -401,7 +419,7 @@ async function main() {
   for (const p of PAGE_PROBES) {
     let res
     try {
-      res = await fetch(`${BASE}${p.path}`, { signal: AbortSignal.timeout(30_000) })
+      res = await fetch(`${BASE}${p.path}`, { headers: MACHINE_HEADERS, signal: AbortSignal.timeout(30_000) })
     } catch (err) {
       console.error(`\nUNREACHABLE -- ${p.path}: ${err instanceof Error ? err.message : String(err)}`)
       console.error('   Not a render regression; a reachability or capacity problem.')
