@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServedOrigin } from '@/lib/http/served-origin'
+import { internalHopHeaders } from '@/lib/http/internalHop'
 
 type ProxyOptions = {
   targetPath: string
@@ -61,9 +62,14 @@ export async function proxyToExisting(req: NextRequest, options: ProxyOptions): 
     }
   }
 
+  const headers = copyHeaders(req)
+  // Cloudflare stamps this hop with Railway's data-centre address, which the VPN
+  // gate would refuse; the signed marker says "already checked" — lib/http/internalHop.
+  for (const [k, v] of Object.entries(await internalHopHeaders(method, target))) headers.set(k, v)
+
   const upstream = await fetch(target.toString(), {
     method,
-    headers: copyHeaders(req),
+    headers,
     body,
     cache: 'no-store',
   })

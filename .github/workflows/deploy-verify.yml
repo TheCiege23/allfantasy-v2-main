@@ -67,6 +67,9 @@ jobs:
         env:
           PUSH_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
           INPUT_SHA: ${{ inputs.expect_sha }}
+          # Runners are data-centre IPs, which the VPN gate refuses; the script sends this as
+          # a machine credential so it probes the real pages, not /vpn-blocked. See the script.
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
           TARGET="${INPUT_SHA:-${PUSH_SHA:-}}"

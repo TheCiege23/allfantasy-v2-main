@@ -9,9 +9,11 @@ import { getToken } from "next-auth/jwt"
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
-import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
+import { isTorExit, resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
+import { resolveAnonymizerByIp } from "@/lib/geo/anonymizerCache"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
+import { INTERNAL_HOP_HEADER, verifyInternalHop } from "@/lib/http/internalHop"
 import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http/originLock"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
@@ -129,6 +131,7 @@ const GEO_EXEMPT_PREFIXES = [
   "/geo-blocked",
   "/paid-restricted",
   "/restricted",
+  "/vpn-blocked",
   "/terms",
   "/privacy",
   "/data-deletion",
@@ -272,6 +275,159 @@ function isFullBlockApiExempt(pathname: string): boolean {
   return FULL_BLOCK_API_EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+// ─── The VPN gate ────────────────────────────────────────────────────────────
+/*
+ * 🛑 EVERY STATE GATE ABOVE READS THE LOCATION OF THE IP A VPN REPLACES. Until
+ * 2026-09-24 the only VPN check was paid checkout, so a Washington user on any
+ * VPN exit had the whole product — an exit in Canada reads as "not US" and
+ * skips every state rule at once — and a paid-block user could use paid tools
+ * they already held. Tor was worse: Cloudflare's `T1` normalises to "no
+ * country", and no country passes everything.
+ *
+ * Owner's rule, 2026-09-24: over a VPN, proxy, Tor, data-centre address or
+ * iCloud Private Relay, only PUBLIC pages load — the homepage, the legal pages
+ * and /vpn-blocked. Sign-in, sign-up, the app and every API are refused,
+ * WHATEVER COUNTRY the exit is in. Real visitors outside the US, not on a VPN,
+ * are untouched: the state rules are about US states.
+ *
+ * The verdict comes from lib/geo/anonymizerCache — one vendor lookup per IP per
+ * TTL, and it FAILS OPEN on an outage, like every geo check here.
+ */
+
+/**
+ * API paths a VPN may still reach. Built FROM the geo list's machine entries so
+ * a webhook added there is exempt here too — Stripe and GitHub call from data
+ * centres, and a VPN check would refuse them. `/api/auth` is deliberately NOT
+ * carried over whole: sign-in is refused over a VPN, so only NextAuth's
+ * read-only and sign-out endpoints stay open (every page polls the session).
+ *
+ *   /api/subscription/billing-portal  cancelling must never depend on turning a
+ *       VPN off (the earlier checkout decision, kept). /vpn-blocked links to it.
+ */
+const VPN_EXEMPT_API_PREFIXES = [
+  ...GEO_EXEMPT_PREFIXES.filter((p) => p.startsWith("/api/") && p !== "/api/auth"),
+  ...FULL_BLOCK_API_EXEMPT_PREFIXES,
+  "/api/subscription/billing-portal",
+  "/api/auth/session",
+  "/api/auth/csrf",
+  "/api/auth/providers",
+  "/api/auth/signout",
+  "/api/auth/_log",
+  "/api/auth/error",
+]
+
+function isVpnExemptApi(pathname: string): boolean {
+  return VPN_EXEMPT_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+/**
+ * Files a VPN visitor to a public page still needs: robots, sitemaps, the
+ * manifest, the service worker, fonts. The matcher already skips images.
+ * ⚠ An explicit extension list, not "has a dot": player slugs such as
+ * `a.j.-brown` contain dots, and "has a dot" would wave those pages through.
+ */
+const STATIC_FILE = /\.(?:txt|xml|json|webmanifest|ico|js|css|map|woff2?|ttf|otf|mp4|webm|mp3|pdf|avif)$/i
+
+/** Pages that load over a VPN. Everything else redirects to /vpn-blocked. */
+function isVpnPublicPage(pathname: string): boolean {
+  if (pathname === "/" || pathname === "") return true
+  if (isExemptPath(pathname)) return true // legal pages and the block pages themselves
+  // Android app-link verification is fetched by Google from a data centre.
+  if (pathname === "/.well-known" || pathname.startsWith("/.well-known/")) return true
+  return STATIC_FILE.test(pathname)
+}
+
+/**
+ * Search, ad-review and link-preview crawlers run from data centres, so a VPN
+ * check can flag them; refusing Googlebot de-indexes the site and refusing
+ * AdsBot disapproves the ads. They are waved through on PAGES only, and only
+ * when they carry no session or guest cookie.
+ *
+ * ⚠ A User-Agent can be forged, and this is bounded on purpose rather than
+ * trusted: a forger gets exactly what an anonymous visitor sees — page HTML.
+ * Sign-in is an API, and APIs have no crawler exemption, so the forger can
+ * never hold a session; and anyone presenting a session cookie is checked
+ * regardless of what their User-Agent says.
+ */
+const CRAWLER_UA =
+  /\b(?:Googlebot|AdsBot-Google|Mediapartners-Google|Google-InspectionTool|GoogleOther|Storebot-Google|APIs-Google|FeedFetcher-Google|bingbot|BingPreview|Applebot|DuckDuckBot|YandexBot|facebookexternalhit|Facebot|meta-externalagent|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|TelegramBot|Pinterestbot|redditbot)\b/i
+
+function hasSessionOrGuestCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some((c) => c.name.includes("next-auth.session-token") || c.name.includes("authjs.session-token") || c.name === GUEST_SESSION_COOKIE_NAME)
+}
+
+function isAnonymousCrawler(request: NextRequest): boolean {
+  const method = request.method.toUpperCase()
+  if (method !== "GET" && method !== "HEAD") return false
+  if (!CRAWLER_UA.test(request.headers.get("user-agent") ?? "")) return false
+  return !hasSessionOrGuestCookie(request)
+}
+
+/** Tor from the edge header (free); everything else from the cached vendor verdict. */
+async function isAnonymizedClient(request: NextRequest): Promise<boolean> {
+  if (isTorExit(request.headers)) return true
+  const ip = clientIpFromHeaders(request.headers)
+  if (!ip) return false
+  return (await resolveAnonymizerByIp(ip)) === true
+}
+
+/** The owner bypass the geo gates honour. Decodes the session only when asked. */
+async function isOwnerRequest(request: NextRequest): Promise<boolean> {
+  const authSecret = resolveAuthSecret()
+  if (!authSecret) return false
+  const token = await getToken({ req: request, secret: authSecret })
+  return isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null)
+}
+
+const VPN_BLOCKED_MESSAGE =
+  "AllFantasy.ai can't be used over a VPN, proxy, Tor or iCloud Private Relay, because we have to confirm which state you're in. Turn it off and try again."
+
+/**
+ * 403 VPN_BLOCKED for an API request from an anonymized client, else null.
+ *
+ * Skipped for: machine credentials (checked by the caller, first), exempt
+ * paths, and a verified internal hop — our own server calling itself back
+ * through Cloudflare, which stamps the hop with Railway's data-centre address.
+ * The person's own request has already been through this gate by then.
+ */
+async function apiVpnRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (isVpnExemptApi(pathname)) return null
+  if (
+    request.headers.has(INTERNAL_HOP_HEADER) &&
+    (await verifyInternalHop(request.headers, request.method, pathname))
+  ) {
+    return null
+  }
+  if (!(await isAnonymizedClient(request))) return null
+  if (await isOwnerRequest(request)) return null
+  return new NextResponse(
+    JSON.stringify({ error: "VPN_BLOCKED", message: VPN_BLOCKED_MESSAGE, redirectTo: "/vpn-blocked" }),
+    { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
+  )
+}
+
+/** Redirect to /vpn-blocked for a non-public page from an anonymized client, else null. */
+async function pageVpnRedirect(
+  request: NextRequest,
+  pathname: string,
+  tokenUserId: string | null,
+): Promise<NextResponse | null> {
+  if (isVpnPublicPage(pathname)) return null
+  if (isAnonymousCrawler(request)) return null
+  if (hasMachineCredential(request.headers)) return null
+  if (!(await isAnonymizedClient(request))) return null
+  // tokenUserId is only decoded on session-gated paths; decode it here otherwise.
+  if (tokenUserId ? isMiddlewareAdmin(tokenUserId) : await isOwnerRequest(request)) return null
+  const url = request.nextUrl.clone()
+  url.pathname = "/vpn-blocked"
+  url.search = ""
+  url.searchParams.set("from", `${pathname}${request.nextUrl.search}`)
+  return NextResponse.redirect(url)
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * 🛑 THE GEO GATE FOR /api/*, WHICH NEVER RAN BEFORE #1204. routeMiddleware
  * returns early for every API path long before the page geo block, so every API
@@ -292,8 +448,12 @@ function isFullBlockApiExempt(pathname: string): boolean {
  * the same owner bypass the page gate has.
  */
 async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
-  if (isExemptPath(pathname)) return null
   if (hasMachineCredential(request.headers)) return null
+  // Before the geo exemptions and the `country !== "US"` early return below: a
+  // VPN is refused wherever its exit is, and /api/auth sign-in is refused too.
+  const vpnRefusal = await apiVpnRefusal(request, pathname)
+  if (vpnRefusal) return vpnRefusal
+  if (isExemptPath(pathname)) return null
 
   const { country, region } = await resolveRequestGeo(request)
   if (country !== "US" || !region) return null
@@ -743,15 +903,20 @@ async function routeMiddleware(request: NextRequest) {
   // API routes are gated there by apiGeoRefusal, from the same helpers.
   const { ip, country, region } = await resolveRequestGeo(request)
 
+  if (country === "US" && region && !isMiddlewareAdmin(tokenUserId) && isFullyBlocked(region)) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/geo-blocked"
+    url.searchParams.set("state", region)
+    return NextResponse.redirect(url)
+  }
+
+  // Outside the `country === "US"` guard on purpose: a VPN exit abroad is the
+  // cheapest way around every state rule. Public pages load; nothing else does.
+  const vpnRedirect = await pageVpnRedirect(request, pathname, tokenUserId)
+  if (vpnRedirect) return vpnRedirect
+
   if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
     const stateCode = region
-
-    if (isFullyBlocked(stateCode)) {
-      const url = request.nextUrl.clone()
-      url.pathname = "/geo-blocked"
-      url.searchParams.set("state", stateCode)
-      return NextResponse.redirect(url)
-    }
 
     if (isPaidBlocked(stateCode) && isPaidRoute(pathname)) {
       const url = request.nextUrl.clone()
