@@ -284,6 +284,19 @@ describe('the specialist agent is chosen from the orchestration intent', () => {
 
 describe('tool loop system prompt', () => {
   /*
+   * Owner's call 2026-09-24: smart, fun and informational. One voice for both paths — the tool loop
+   * and the orchestration fallback read the same block — and the user's saved preferences, which
+   * only the fallback used to see, now reach the path that answers first.
+   */
+  it('speaks in the shared Chimmy voice and hands the loop the user\'s saved style', () => {
+    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    expect(ROUTE.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
+    expect(ROUTE).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
+    expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
+    expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,\s*\n\s*clockLine: userTemporalContext\.promptLine,[\s\S]{0,500}?styleLine: personalizationDirectives \?\? null,/)
+  })
+
+  /*
    * When the model fetches its own context, nothing upstream can guarantee the
    * context is there — so the do-not-invent rule has to travel with the tools.
    */

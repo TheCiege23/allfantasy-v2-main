@@ -144,6 +144,22 @@ describe('runChimmyToolLoop on Claude', () => {
     expect(opts.headers).toEqual({ 'anthropic-beta': 'server-side-fallback-2026-07-01' })
   })
 
+  /*
+   * The user's saved Chimmy preferences ride AFTER the cached instructions, like the clock: per-user
+   * text inside the cached block would bust the cache for everyone and could be served to someone else.
+   */
+  it("sends the user's saved style after the cached instructions, never inside them", async () => {
+    h.anthropicCreate.mockResolvedValue(answer('ok'))
+
+    await runChimmyToolLoop({ ...base, styleLine: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
+
+    const [params] = h.anthropicCreate.mock.calls[0]
+    expect(params.system).toHaveLength(3)
+    expect(params.system[0]).toMatchObject({ text: 'You are Chimmy.', cache_control: { type: 'ephemeral' } })
+    expect(params.system[2]).toEqual({ type: 'text', text: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
+    expect(params.system[0].text).not.toContain('PERSONALIZATION')
+  })
+
   it('lets CHIMMY_CLAUDE_MODEL choose the model', async () => {
     vi.stubEnv('CHIMMY_CLAUDE_MODEL', 'claude-sonnet-5')
     h.anthropicCreate.mockResolvedValue({ ...answer('ok'), model: 'claude-sonnet-5' })
