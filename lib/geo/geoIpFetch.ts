@@ -38,6 +38,16 @@
  */
 
 /**
+ * 🛑 `cache: "no-store"` ALONE — NEVER WITH `next: { revalidate: 0 }`. Both together make Next.js
+ * warn `fetch for <url> … specified "cache: no-store" and "revalidate: 0", only one should be
+ * specified`, and that warning prints the WHOLE URL — the key in the query string and the visitor's
+ * IP in the path — into the server log on every /api/geo/check. Observed in production deploy logs
+ * 2026-09-24; the catch blocks below were careful never to log the URL, and Next did it for them.
+ * The two options mean the same thing here (never cache), so one is enough.
+ */
+const NO_CACHE: RequestInit = { cache: "no-store" }
+
+/**
  * Raw proxycheck.io response for one IP, or `null` on any failure.
  *
  * Returns `null` rather than throwing: a VPN check that cannot run must not
@@ -50,7 +60,7 @@ export async function fetchProxycheck(
 ): Promise<Record<string, unknown> | null> {
   try {
     const url = `https://proxycheck.io/v2/${encodeURIComponent(ip)}?key=${encodeURIComponent(key)}&vpn=1&asn=1`
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 }, signal })
+    const res = await fetch(url, { ...NO_CACHE, signal })
     if (!res.ok) {
       // ⚠ A quota denial arrives as a 429/401/403 whose body says
       // `status: "denied"`. Dropping every non-2xx as `null` made an exhausted
@@ -81,7 +91,7 @@ export async function fetchIpApi(
 ): Promise<Record<string, unknown> | null> {
   try {
     const url = `https://ipapi.co/${encodeURIComponent(ip)}/json/?key=${encodeURIComponent(key)}`
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 }, signal })
+    const res = await fetch(url, { ...NO_CACHE, signal })
     if (!res.ok) return null
     return (await res.json()) as Record<string, unknown>
   } catch {
