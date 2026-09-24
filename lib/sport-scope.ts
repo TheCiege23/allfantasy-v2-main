@@ -87,8 +87,22 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  * ⚠ NBA CLEARS (1) AND (4) AND IS STILL ABSENT. Its season starts 2026-10-20, so
  * nothing above has been checked against a real NBA slate. Adding it is a
  * measurement, not an edit.
+ *
+ * NCAAB (2026-09-24), against the same list — and one item the list did not have:
+ *   1. stats: 110,640 `player_game_stats` rows for 2025-26 (backfilled), daily sweep since;
+ *   2. schedule: NOT a ranked feed. Every SportsGame schedule for NCAAB is incomplete
+ *      (thesportsdb stops at a 3,000-game cap), so the finalizer reads Rolling Insights' season
+ *      schedule instead — `RI_SCHEDULE_SLATE_SPORTS`, lib/sports-data/riSeasonSchedule.ts (#1201).
+ *      Until the 2026-27 schedule is published (it 304s — GAPS N-16) NO week can seal: an unsynced
+ *      schedule is an empty slate, which refuses;
+ *   3. statuses: final/completed -> final, `replaced` -> cancelled (#1201), postponed holds;
+ *   4. opener: 2026-11-02 in dailySportSeasonStarts.ts;
+ *   5. finalizer: `DATE_WINDOWED_SPORTS`;
+ *   6. NEW — roster ids: a drafted player holds the pool's Rolling Insights id while game logs are
+ *      keyed on PlayerIdentityMap.id; queried directly every starter scored 0 (#1200 bridges it).
+ *      Any next sport must check this too.
  */
-export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL']
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NCAAB']
 
 /** Whether a league in this sport can run a season to completion today. */
 export function canRunSeasonForSport(sport: string | null | undefined): boolean {

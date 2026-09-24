@@ -10,6 +10,8 @@
  * GAPS.md `G-01`. The final describe block pins the real vendor keys; six of
  * them were wrong in the first version of the alias tables.
  */
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getSportConfig } from '@/lib/sportConfig'
 import {
@@ -19,6 +21,7 @@ import {
   isDailyStatSport,
   normalizeDailySportWeeklyStats,
   normalizeNbaGameStats,
+  normalizeNcaabGameStats,
   normalizeNhlGameStats,
   weekWindowFromSeasonStart,
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
@@ -34,6 +37,7 @@ describe('normalized keys are keys the scoring engine can score', () => {
   it.each([
     ['NBA', normalizeNbaGameStats, { points: 30, rebounds: 12, assists: 11, steals: 2, blocks: 1, turnovers: 3, tpm: 4, fgm: 10, ftm: 6 }],
     ['NHL', normalizeNhlGameStats, { goals: 2, assists: 1, plus_minus: 3, shots: 7, power_play_points: 1, short_handed_points: 0, blocked: 2, hits: 4, penalty_minutes: 2, saves: 30, wins: 1, shutouts: 0, goals_against: 2 }],
+    ['NCAAB', normalizeNcaabGameStats, { points: 27, total_rebounds: 8, assists: 4, steals: 0, blocks: 4, turnovers: 4, three_points_made: 1, field_goals_made: 10, free_throws_made: 6 }],
   ])('%s output keys all exist in the sport config', (sport, normalize, payload) => {
     const configKeys = new Set(getSportConfig(sport).scoringCategories.map((c) => c.key))
     const { stats } = normalize(payload)
@@ -47,6 +51,33 @@ describe('normalized keys are keys the scoring engine can score', () => {
   it('every derived NBA bonus key is also a real config category', () => {
     const configKeys = new Set(getSportConfig('NBA').scoringCategories.map((c) => c.key))
     for (const key of DERIVED_NBA_KEYS) expect(configKeys.has(key)).toBe(true)
+  })
+})
+
+describe('NCAAB — against the committed /live fixture (the 2026 national final)', () => {
+  const box = (JSON.parse(readFileSync(path.join(process.cwd(), 'contracts', 'rolling-insights', 'fixtures', 'live.NCAABB.json'), 'utf8')) as {
+    data: { NCAABB: Array<{ player_box: Record<string, Record<string, Record<string, unknown>>> }> }
+  }).data.NCAABB[0].player_box
+  const players = [...Object.values(box.home_team), ...Object.values(box.away_team)]
+
+  it('is a daily stat sport now', () => {
+    expect(isDailyStatSport('NCAAB')).toBe(true)
+  })
+
+  it('scores every real box line, and reports NO key the vendor always sends', () => {
+    for (const p of players) {
+      const { stats, unmappedKeys } = normalizeNcaabGameStats({ stats: p })
+      expect(stats.pts).toBe(p.points)
+      expect(stats.reb).toBe(p.total_rebounds)
+      // fouls, minutes, attempts…: known and deliberately unscored, so the "alias table may be
+      // wrong" warning stays reserved for a key the vendor has never sent.
+      expect(unmappedKeys).toEqual([])
+    }
+  })
+
+  it('still reports a key it has never seen', () => {
+    const { unmappedKeys } = normalizeNcaabGameStats({ stats: { points: 10, brand_new_vendor_stat: 3 } })
+    expect(unmappedKeys).toEqual(['brand_new_vendor_stat'])
   })
 })
 

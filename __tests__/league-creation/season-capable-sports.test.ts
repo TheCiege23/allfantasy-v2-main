@@ -39,7 +39,7 @@ import {
 
 describe('canRunSeasonForSport', () => {
   it('is the set whose stat path AND finalizer were both measured', () => {
-    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL'])
+    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NCAAB'])
     expect(canRunSeasonForSport('NFL')).toBe(true)
     expect(canRunSeasonForSport('NHL')).toBe(true)
   })
@@ -47,7 +47,7 @@ describe('canRunSeasonForSport', () => {
   it('refuses every sport that cannot yet run one', () => {
     // NBA is here deliberately: its opener is recorded and the mechanism is
     // sport-agnostic, but nothing has been checked against a real NBA slate.
-    for (const sport of ['NBA', 'MLB', 'NCAAB', 'NCAAF', 'SOCCER']) {
+    for (const sport of ['NBA', 'MLB', 'NCAAF', 'SOCCER']) {
       expect(canRunSeasonForSport(sport), `${sport} must not claim season capability`).toBe(false)
     }
   })
