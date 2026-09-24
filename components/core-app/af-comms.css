@@ -2226,3 +2226,85 @@
  * for the empty state, which inside an answer would float the chips away from the text they follow.
  */
 .af-cm-turn .af-cm-followups { justify-content: flex-start; margin-top: 10px; }
+
+/*
+ * ══ Fit pass — 2026-09-24 (owner: "the chat bubble, including chimmy intelligence, looks bad
+ *    on mobile and PC") ══
+ *
+ * 🛑 THE COMPACT LAYOUT WAS KEYED ON THE SCREEN, AND IT IS THE PANEL THAT IS NARROW. Every
+ * compact rule above sits in `@media (max-width: 520px)`. Docked on a desktop the panel is 392px
+ * (352px under 1200px) on a screen far wider than 520, so it got the WIDE layout squeezed into a
+ * phone-sized column: five icon+label tabs overflowing their track with the open pill landing on
+ * its neighbours ("Leagu", "Chimm"), a league filter reading "Find a lea", a footer wrapping onto
+ * two lines. `.af-cm` is now a size container, and the compact rules below ask how wide the PANEL
+ * is — one answer for docked, phone and a narrow window alike.
+ *
+ * At every width: the tabs are an equal five-column grid (a flex row let long labels shove short
+ * ones out of the track); the composer is one line that grows as you type — no resize grip, and
+ * the send button no longer stretched to the textarea's height; the fine print is one quiet line.
+ *
+ * ⚠ CONTRACTS UNTOUCHED, AS IN EVERY LAYER ABOVE. The audience line, the scope (chip on wide,
+ * dropdown always), the cost note and the privacy notices all still render.
+ */
+.af-cm { container: af-cm / inline-size; }
+
+.af-cm-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.af-cm-tab { min-width: 0; padding-inline: 6px; white-space: nowrap; }
+.af-cm-tab > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.af-cm-audience { display: flex; align-items: center; gap: 6px; padding: 10px 4px 8px; font-size: 11px; color: var(--muted); }
+.af-cm-audience > svg { flex: none; color: var(--accent); }
+
+/* With no filter box the dropdown takes the whole row. The box, when shown, matches it. */
+.af-cm-league-picker[data-search='false'] { grid-template-columns: minmax(0, 1fr); }
+.af-cm-league-search { padding: 0 10px; border: 0; background: var(--surface); }
+.af-cm-league-search input { padding-inline: 4px; }
+
+/* Fast / Deep and what they mean, on one row instead of two. */
+.af-cm-answer-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; padding-top: 10px; }
+.af-cm-answer-mode .af-cm-scope-chips { flex: none; }
+.af-cm-answer-mode .af-cm-scope-note { flex: 1 1 180px; margin: 0; }
+
+.af-cm-trades { margin-bottom: 14px; }
+.af-cm-trades-toggle { min-height: 40px; font-size: 13px; font-weight: 700; }
+
+.af-cm-composer { align-items: flex-end; }
+.af-cm .af-cm-input { resize: none; field-sizing: content; min-height: 44px; max-height: 140px; overflow-y: auto; }
+.af-cm-composer .af-cm-icon,
+.af-cm-composer .af-cm-send { flex: none; width: 44px; height: 44px; min-height: 44px; }
+.af-cm-costnote { margin: 0; padding: 2px 20px 10px; background: transparent; font-size: 10.5px; line-height: 1.4; text-align: center; }
+
+.af-cm-foot { margin-top: 0; padding: 10px 20px; gap: 12px; }
+.af-cm-footlink { flex: none; white-space: nowrap; }
+.af-cm-footnote { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+@container af-cm (max-width: 520px) {
+  .af-cm-head { padding: 10px 14px 0; }
+  .af-cm-title { font-size: 16px; }
+  .af-cm-tabs { margin-top: 10px; padding: 3px; border-radius: 16px; }
+  /* Icon over label: five labels fit a 330px track this way, and the icons come back. */
+  .af-cm-tab { flex-direction: column; gap: 3px; min-height: 48px; padding: 5px 2px; border-radius: 13px; font-size: 10.5px; }
+  .af-cm-tab > svg { display: block; }
+  .af-cm-audience { padding: 8px 2px 6px; font-size: 10.5px; }
+
+  .af-cm-scope { padding: 0 14px 10px; }
+  .af-cm-league-picker { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; }
+  .af-cm-league-picker[data-search='false'] { grid-template-columns: minmax(0, 1fr); }
+  .af-cm-league-picker input,
+  .af-cm-league-picker select { min-height: 40px; }
+  /* The phones already dropped these two lines; the docked panel is the same width. */
+  .af-cm-scope-note { display: none; }
+  .af-cm-answer-mode { margin-top: 8px; padding-top: 8px; }
+
+  .af-cm-thread { padding: 12px 16px; }
+  .af-cm-empty { padding: 6px 0; }
+  .af-cm-welcome-icon { margin-bottom: 10px; }
+  .af-cm-empty .af-cm-empty-t { font-size: 20px; }
+  .af-cm-empty-b { font-size: 12px; }
+  .af-cm-quick { margin-top: 14px; gap: 6px; }
+
+  .af-cm-composer { padding: 8px 12px; gap: 6px; }
+  .af-cm-costnote { padding: 0 14px 8px; font-size: 10px; }
+  .af-cm-foot { padding: 8px 14px; }
+  .af-cm-footnote { display: none; }
+}
