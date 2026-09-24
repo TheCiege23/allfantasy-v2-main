@@ -5,7 +5,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
+import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { buildLineupSectionsFromPicks } from '@/lib/post-draft/buildStartersFromPicks'
 import { buildPlayerDataFromSections } from '@/lib/roster/LineupTemplateValidation'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
@@ -86,8 +87,10 @@ export async function finalizeRosterAssignments(
   leagueId: string,
   draftId?: string,
 ): Promise<FinalizeRosterAssignmentsSummary> {
+  // A league can hold several drafts; without an order this took whichever row Postgres returned.
   const session = await prisma.draftSession.findFirst({
     where: { leagueId, ...(draftId ? { id: draftId } : {}) },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.status !== 'completed') return EMPTY_FINALIZE_SUMMARY
@@ -99,6 +102,7 @@ export async function finalizeRosterAssignments(
   const byRoster = new Map<string, AssignedPlayer[]>()
   for (const p of session.picks) {
     if (
+      isDraftPickSkipped(p) ||
       isDraftPickRowEmpty({
         playerName: p.playerName,
         position: p.position,

@@ -15,6 +15,7 @@ import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
 import { logAction } from '@/server/services/auditService'
@@ -237,6 +238,8 @@ export async function executeLeagueSettingsPatch(
   if (body.rounds != null) {
     const r = Number(body.rounds)
     if (!Number.isFinite(r) || r < 1 || r > 50) return jsonError('rounds must be 1–50', 400)
+    const roundsError = await validateDraftRoundsFitRoster(leagueId, r)
+    if (roundsError) return jsonError(roundsError, 400)
   }
 
   const preset = body.pickTimerPreset != null ? String(body.pickTimerPreset) : undefined
@@ -466,7 +469,13 @@ export async function executeLeagueSettingsPatch(
 
   if (shouldPatchLs && updated) {
     try {
-      await syncDraftSessionFromLeagueSettings(leagueId, updated, teamCount)
+      // Only the keys this request patched: a timezone or keeper-count save must not re-push
+      // rounds, type and order over what the draft room set. The sync itself refuses a draft
+      // that has started.
+      const patchedKeys = new Set(
+        [...LEAGUE_SETTINGS_ROW_PATCH_KEYS].filter((k) => body[k] !== undefined),
+      )
+      await syncDraftSessionFromLeagueSettings(leagueId, updated, teamCount, patchedKeys)
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncDraftSessionFromLeagueSettings', e)
     }

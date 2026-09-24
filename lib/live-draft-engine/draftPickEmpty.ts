@@ -25,6 +25,16 @@ export function isDraftPickRowEmpty(p: {
   return false
 }
 
+/**
+ * A pick the clock SKIPPED (`autopick_behavior: 'skip'` writes `(Skipped)` / `SKIP`). It occupies
+ * its overall — it is not an open pick, so `isDraftPickRowEmpty` stays false and the board moves
+ * on — but it names no player, so no roster may receive it. Both post-draft roster syncs used to
+ * put a "(Skipped)" player on the team.
+ */
+export function isDraftPickSkipped(p: { position?: string | null }): boolean {
+  return String(p.position ?? '').trim().toUpperCase() === 'SKIP'
+}
+
 /** Client snapshot rows may set commissioner clear on `pickEditorEmpty` instead of JSON metadata only. */
 export function isDraftPickRowEmptyFromSnapshot(p: {
   playerName?: string | null

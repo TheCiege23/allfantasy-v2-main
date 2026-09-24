@@ -10,6 +10,7 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
+import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
 import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
@@ -187,7 +188,11 @@ export async function PATCH(
       configPatch.draft_type = normalizedDraftType
     }
   }
-  if (typeof body.rounds === 'number') configPatch.rounds = body.rounds
+  if (typeof body.rounds === 'number') {
+    const roundsError = await validateDraftRoundsFitRoster(leagueId, Math.round(body.rounds))
+    if (roundsError) return NextResponse.json({ error: roundsError }, { status: 400 })
+    configPatch.rounds = body.rounds
+  }
   if (body.timer_seconds !== undefined) configPatch.timer_seconds = body.timer_seconds
   if (body.slow_timer_seconds !== undefined) configPatch.slow_timer_seconds = body.slow_timer_seconds
   if (typeof body.pick_order_rules === 'string') configPatch.pick_order_rules = body.pick_order_rules

@@ -301,6 +301,8 @@ export async function runSlowDraftAutomationTick(
     // processExpiredDraftPickForLeague. Pause/skip/notification side-effects below remain untouched.
     if (
       uiSettings.autoPickEnabled &&
+      // The session's per-draft switch, honoured here as the cron path honours it.
+      (session as { cpuAutoPick?: boolean }).cpuAutoPick !== false &&
       !isSoftTimerEnabled(uiSettings) &&
       timer.status === 'expired' &&
       onClockRosterId

@@ -89,7 +89,7 @@ export async function POST(
     }
   })
 
-  const draftSessionReset = await resetDraftSession(params.leagueId).catch(() => false)
+  const draftSessionReset = await resetDraftSession(params.leagueId, { allowCompleted: true }).catch(() => false)
 
   return NextResponse.json({
     ok: true,
