@@ -284,3 +284,59 @@ describe('a stored score survives a provider that stops sending one', () => {
     expect(clearedIt).toBe(true)
   })
 })
+
+/*
+ * CFBD throttle telemetry (2026-09-23). `cfbdAsked` is what lets the key's burn be counted from
+ * sync_job_runs — 13,330 of 15,157 runs this month asked CFBD before the throttle existed.
+ */
+describe('import-scores CFBD throttle + cfbdAsked telemetry', () => {
+  beforeEach(async () => {
+    const { __resetCfbdThrottleForTests } = await import('@/lib/scores/cfbdThrottle')
+    __resetCfbdThrottleForTests()
+    // Gate open (newest row an hour old) and a college game in the window — the throttle allows CFBD.
+    prismaMock.sportsGame.findFirst.mockResolvedValue({ fetchedAt: new Date(Date.now() - 3_600_000), id: 'g' })
+    prismaMock.sportsGame.findMany.mockResolvedValue([])
+    syncAPISportsGamesToDbMock.mockResolvedValue(0)
+  })
+
+  const outcomeMeta = () => (syncRuns[0]!.outcome as { metadata?: { cfbdAsked?: boolean } }).metadata
+
+  it('records cfbdAsked=true when the cfbd provider actually ran', async () => {
+    fetchGamesForSportMock.mockImplementation(async (sport: string) =>
+      sport === 'NCAAF' ? [{ source: 'cfbd', games: [], error: null }] : [{ source: 'espn', games: [], error: null }],
+    )
+    await importScoresGET(req('/api/cron/import-scores'))
+    expect(outcomeMeta()?.cfbdAsked).toBe(true)
+    const ncaafCall = fetchGamesForSportMock.mock.calls.find((c) => c[0] === 'NCAAF')!
+    expect(ncaafCall[3]?.skip).toBeUndefined() // the throttle allowed it
+  })
+
+  it('passes the throttle skip through and records cfbdAsked=false on the very next tick', async () => {
+    fetchGamesForSportMock.mockImplementation(async (sport: string, _s: number, _w: unknown, opts?: { skip?: Record<string, string> }) =>
+      sport === 'NCAAF'
+        ? [{ source: 'cfbd', games: [], error: opts?.skip?.cfbd ?? null }]
+        : [{ source: 'espn', games: [], error: null }],
+    )
+    await importScoresGET(req('/api/cron/import-scores')) // asks CFBD, records the attempt
+    syncRuns.length = 0
+    await importScoresGET(req('/api/cron/import-scores')) // two minutes later in spirit: throttled
+
+    const second = fetchGamesForSportMock.mock.calls.filter((c) => c[0] === 'NCAAF')[1]!
+    expect(second[3]?.skip?.cfbd).toMatch(/^skipped: CFBD throttled/)
+    expect(outcomeMeta()?.cfbdAsked).toBe(false)
+  })
+
+  it('force=true bypasses the throttle', async () => {
+    fetchGamesForSportMock.mockResolvedValue([{ source: 'cfbd', games: [], error: null }])
+    await importScoresGET(req('/api/cron/import-scores'))
+    await importScoresGET(req('/api/cron/import-scores?force=true'))
+    const calls = fetchGamesForSportMock.mock.calls.filter((c) => c[0] === 'NCAAF')
+    expect(calls[calls.length - 1]![3]?.skip).toBeUndefined()
+  })
+
+  it('a gated run records cfbdAsked=false', async () => {
+    prismaMock.sportsGame.findFirst.mockResolvedValue({ fetchedAt: new Date() })
+    await importScoresGET(req('/api/cron/import-scores'))
+    expect(outcomeMeta()?.cfbdAsked).toBe(false)
+  })
+})

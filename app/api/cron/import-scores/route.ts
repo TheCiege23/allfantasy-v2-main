@@ -502,6 +502,15 @@ async function handle(req: NextRequest) {
       // and a job that looks degraded every time it behaves correctly is a muted alarm.
       metadata: {
         gatedSports: acc.filter((r) => "gated" in r && r.gated === true).map((r) => r.sport),
+        /*
+         * Whether THIS run spent a CFBD call — so the key's burn can be counted from our own table
+         * rather than inferred. True only when the cfbd provider actually ran: a gated sport, the
+         * throttle, or a budget skip (`error` starting "skipped:") all mean no call was made.
+         */
+        cfbdAsked: acc.some((r) => {
+          const cfbd = "bySource" in r ? (r.bySource as Record<string, { error: string | null }> | undefined)?.cfbd : undefined
+          return cfbd != null && !(cfbd.error ?? "").startsWith("skipped:")
+        }),
       },
     }),
   )
