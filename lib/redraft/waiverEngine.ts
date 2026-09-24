@@ -183,6 +183,11 @@ export async function processWaiverWindow(
       results.push(await denyClaim(claim.id, 'Roster not found for this season.'))
       continue
     }
+    // A chopped guillotine team is out of the league: it cannot pick up the players it just lost.
+    if (roster.isEliminated) {
+      results.push(await denyClaim(claim.id, 'This team has been eliminated.'))
+      continue
+    }
 
     const bid = claim.bidAmount ?? 0
     if (bid < 0) {

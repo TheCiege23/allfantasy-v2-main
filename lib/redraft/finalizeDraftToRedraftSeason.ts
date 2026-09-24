@@ -7,6 +7,7 @@ import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -303,7 +304,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
   return { redraftRoster, created: true, genericRoster }
 }
 
-async function ensureScheduleForNewSeason(params: {
+export async function ensureScheduleForNewSeason(params: {
   seasonId: string
   leagueId: string
   sport: string
@@ -315,6 +316,13 @@ async function ensureScheduleForNewSeason(params: {
     where: { seasonId: params.seasonId },
   })
   if (existingScheduleCount > 0) return
+
+  /*
+   * A guillotine league has no opponents: every surviving team plays the chop line, scored by
+   * `runNativeGuillotineWeek`. A head-to-head schedule would pair survivors with teams that have
+   * been chopped and emptied, and those matchups could never go final.
+   */
+  if (await isGuillotineLeague(params.leagueId).catch(() => false)) return
 
   // RedraftRoster has no createdAt column; order by id (cuid, roughly
   // creation-ordered) for a deterministic, schema-valid roster sequence so the
