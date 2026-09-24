@@ -41,6 +41,7 @@ import {
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -211,6 +212,8 @@ type AnalyzeResult = {
     alternateTargetsNote?: string
     why?: string
   }
+  /** The partner's own trade record, bound to this deal — present only for a viewer whose plan has it. */
+  competitiveEdge?: TradeEdgeState
 }
 
 /**
@@ -444,6 +447,11 @@ export function TradeCenter(props: {
    * trailing every step.
    */
   history?: ReactNode
+  /**
+   * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
+   * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
+   */
+  edgeAccess?: CoreDepthAccess | null
 }) {
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
@@ -2060,6 +2068,17 @@ export function TradeCenter(props: {
             <p className="af-tc-row-sub">{intel.alternateTargetsNote}</p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* Competitive Edge: the partner's own trade record, once there is a deal with them to read it against. */}
+      {result && partnerRoster ? (
+        <div className="af-tc-mstep-wrap" data-mstep="review">
+          <TradeCompetitiveEdge
+            access={props.edgeAccess ?? null}
+            edge={result.competitiveEdge}
+            partnerName={theirLabel}
+          />
+        </div>
       ) : null}
 
       {/*

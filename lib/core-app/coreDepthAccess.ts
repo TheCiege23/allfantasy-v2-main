@@ -11,10 +11,14 @@
  *   - Commissioner hub: everything needed to run the league stays free; charts, member
  *     activity, the audit log, waiver oversight, the calendar and automations are AF Commissioner.
  *
- * ⚠ THE WAR ROOM IS DELIBERATELY NOT HERE. Its paid value is Competitive Edge guidance inside a
- * decision, which /core does not surface yet; Scout withholds raw profiles from every caller by
+ *   - Competitive Edge (AF Pro, and the War Room plan): what the manager on the other side of a
+ *     decision has actually done — lib/competitive-edge/. The War Room's paid value, surfaced INSIDE
+ *     the decision (the Trade Center today), not on the War Room screen itself.
+ *
+ * ⚠ THE WAR ROOM SCREEN IS STILL NOT GATED. Scout withholds raw profiles from every caller by
  * design (Milestone 32 — an entitlement decides who pays, not what a raw dossier is), and Game
- * Plan is a safety feature. Gating either would charge for the wrong thing.
+ * Plan is a safety feature. Gating either would charge for the wrong thing; the paid part is the
+ * Competitive Edge the screen points to.
  *
  * ⚠ BEFORE PAYWALL LAUNCH EVERYTHING IS UNLOCKED, and `preLaunchFree` says so, so a screen can
  * say "Free until Oct 15" to the people who will lose it — not to plan holders, who won't.
@@ -22,7 +26,7 @@
  */
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
-export type CoreDepth = 'player_depth' | 'trade_depth' | 'commissioner_depth'
+export type CoreDepth = 'player_depth' | 'trade_depth' | 'commissioner_depth' | 'competitive_edge'
 
 export type CoreDepthSpec = {
   /** The plan feature that unlocks it — resolved through the entitlement matrix, not by plan name. */
@@ -52,6 +56,18 @@ export const CORE_DEPTH: Record<CoreDepth, CoreDepthSpec> = {
     planName: 'AF Commissioner',
     label: 'Commissioner insights',
     upgradePath: '/upgrade?plan=commissioner',
+  },
+  /*
+   * `manager_psychology`, NOT `war_room`: the matrix grants manager_psychology to AF Pro, the War
+   * Room plan and Supreme, while the `war_room` feature id opens nothing at all (measured
+   * 2026-09-24). Its own depth rather than trade_depth, so a War Room plan holder — who does not
+   * have the Trade Center breakdown — still gets Competitive Edge.
+   */
+  competitive_edge: {
+    featureId: 'manager_psychology',
+    planName: 'AF Pro',
+    label: 'Competitive Edge',
+    upgradePath: '/upgrade?plan=pro',
   },
 }
 
