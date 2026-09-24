@@ -11,6 +11,7 @@ import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
+import { checkOriginLock, reportOriginLock } from "@/lib/http/originLock"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
@@ -494,6 +495,17 @@ function isSpeculativeRequest(request: NextRequest): boolean {
  * choke point means a new redirect added later cannot silently drop attribution.
  */
 export async function middleware(request: NextRequest) {
+  // ⚠ FIRST, AHEAD OF THE /api EARLY EXIT: a request that bypassed Cloudflare
+  // carries forgeable cf-* headers, and every geo gate and rate limit below
+  // trusts them. Off unless CF_ORIGIN_AUTH_SECRET is set — see lib/http/originLock.
+  const lock = checkOriginLock(request.headers, request.nextUrl.pathname)
+  if (lock.action !== "allow") {
+    reportOriginLock(lock.reason, request.headers.get("host"), request.nextUrl.pathname, lock.action === "refuse" ? "enforce" : "report")
+    if (lock.action === "refuse") {
+      return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/plain", "cache-control": "no-store" } })
+    }
+  }
+
   const response = await routeMiddleware(request)
   return applyAttributionCapture(request, response)
 }
