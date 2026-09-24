@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { isSpeculativeRequestHeaders } from "@/lib/http/speculativeRequest"
+import { hasMachineCredential } from "@/lib/http/machineCredential"
 import { LEAGUE_FIRST_COOKIE, LEAGUE_FIRST_PARAM, parseLeagueFirstToggle } from "@/lib/core-app/leagueFirst"
 import { SELECTABLE_LANGUAGES } from "@/lib/i18n/constants"
 import type { NextRequest } from "next/server"
@@ -252,28 +253,52 @@ async function resolveRequestGeo(request: NextRequest) {
 }
 
 /**
- * 🛑 THE PAID GATE FOR /api/*, WHICH NEVER RAN BEFORE THIS. The page geo block
- * carried `/api/` branches answering 451 PAID_GEO_BLOCKED, but routeMiddleware
- * returns early for every API path long before reaching it, so /api/user/autocoach,
- * /api/leagues/import, dispersal-draft, integrity and autocoach-settings were open
- * to every restricted state. Checkout and the billing portal were covered only
- * because their handlers call enforcePaidSubscriptionGeo themselves.
+ * API surfaces exempt from the Washington block by prefix, because they are
+ * machine-only and their handlers enforce their own keys — which the middleware
+ * cannot check cheaply (/api/v1 keys live in the database).
  *
- * Paid routes only, on purpose. Blocking Washington from EVERY API is a separate
- * decision that needs a census of machine callers first (see GEO_EXEMPT_PREFIXES);
- * a full block does include the paid tier, so WA is refused here.
+ *   /api/internal  x-internal-key / x-ingestion-key, server-to-server only
+ *   /api/v1        the partner Intelligence API, API-key gated. ⚠ A product call:
+ *                  a partner's SERVER may sit in Washington (Azure West US 2)
+ *                  while its users do not. Remove this line to block it too.
  *
- * Cheap for everything else: a non-paid path returns before any geo or session
- * work, and the session is decoded only for a request that would be refused, to
- * honour the same owner bypass the page gate has.
+ * NOT in GEO_EXEMPT_PREFIXES on purpose: that list also exempts from the PAID
+ * gate and applies to pages; these only relax the full block on the API.
  */
-async function paidApiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
-  if (!isPaidRoute(pathname) || isExemptPath(pathname)) return null
+const FULL_BLOCK_API_EXEMPT_PREFIXES = ["/api/internal", "/api/v1"]
+
+function isFullBlockApiExempt(pathname: string): boolean {
+  return FULL_BLOCK_API_EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+/**
+ * 🛑 THE GEO GATE FOR /api/*, WHICH NEVER RAN BEFORE #1204. routeMiddleware
+ * returns early for every API path long before the page geo block, so every API
+ * answered every restricted state normally.
+ *
+ *   - Washington (full block): 403 GEO_BLOCKED on every API that is not exempt.
+ *   - Paid-block states: 451 PAID_GEO_BLOCKED on paid routes only.
+ *
+ * ⚠ MACHINE CALLERS ARE EXEMPTED BY CREDENTIAL, NOT BY PATH. A census on
+ * 2026-09-24 found 65 API routes outside GEO_EXEMPT_PREFIXES that accept a
+ * machine secret — 10 of them scheduled from GitHub Actions, which runs in
+ * Azure West US 2, in Washington. A request that proves it holds a machine
+ * secret (lib/http/machineCredential) is not a person, wherever its IP is, and
+ * the check runs BEFORE any location lookup so a cron never costs a vendor call.
+ * A person in Washington holds no such secret and is refused everywhere.
+ *
+ * The session is decoded only for a request that would be refused, to honour
+ * the same owner bypass the page gate has.
+ */
+async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (isExemptPath(pathname)) return null
+  if (hasMachineCredential(request.headers)) return null
 
   const { country, region } = await resolveRequestGeo(request)
   if (country !== "US" || !region) return null
-  const fullBlock = isFullyBlocked(region)
-  if (!fullBlock && !isPaidBlocked(region)) return null
+  const fullBlock = isFullyBlocked(region) && !isFullBlockApiExempt(pathname)
+  const paidBlock = !fullBlock && isPaidRoute(pathname) && (isPaidBlocked(region) || isFullyBlocked(region))
+  if (!fullBlock && !paidBlock) return null
 
   const authSecret = resolveAuthSecret()
   if (authSecret) {
@@ -585,8 +610,8 @@ async function routeMiddleware(request: NextRequest) {
   // username checks live in the route handlers themselves; the middleware
   // only stamps standard security headers on API responses.
   if (isApiPath(pathname)) {
-    const paidRefusal = await paidApiGeoRefusal(request, pathname)
-    if (paidRefusal) return paidRefusal
+    const geoRefusal = await apiGeoRefusal(request, pathname)
+    if (geoRefusal) return geoRefusal
     return applyApiSecurityHeaders(pathname, nextWithRouteHeaders(request, pathname))
   }
 
@@ -695,7 +720,7 @@ async function routeMiddleware(request: NextRequest) {
   }
 
   // Pages only: every /api/* path returned near the top of this function, and
-  // paid API routes are gated there by paidApiGeoRefusal, from the same helpers.
+  // API routes are gated there by apiGeoRefusal, from the same helpers.
   const { ip, country, region } = await resolveRequestGeo(request)
 
   if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
