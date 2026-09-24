@@ -185,12 +185,11 @@ export async function executeLeagueSettingsPatch(
     return jsonError('AF Commissioner or AF Supreme is required for Commissioner Intelligence and League Helper settings.', 403)
   }
 
-  if (body.playoffTeams != null) {
-    const pt = Number(body.playoffTeams)
-    if ((pt === 7 || pt === 9) && !hasSub) {
-      return jsonError('7- and 9-team playoff brackets require an AF Commissioner subscription.', 403)
-    }
-  }
+  // ⚠ 7- and 9-team playoff brackets are NOT a paid feature. They were refused here without
+  // AF Commissioner, but the bracket engine seeds any field the same way — pad to the next power
+  // of two and hand the top seeds first-round byes (canonicalNflRedraftPlayoffRuntime) — so a
+  // 7-team bracket is built exactly like the free 6-team one. Running a league is free; only the
+  // league-size bound below applies.
 
   if (body.timezone != null) {
     const tz = String(body.timezone)
