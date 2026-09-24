@@ -11,6 +11,7 @@ import {
   SMS_PROGRAM_OPERATOR,
   SMS_PROGRAM_SUPPORT_EMAIL,
 } from "@/lib/legal/smsProgram"
+import { SmsOptInExample } from "@/components/legal/SmsOptInExample"
 
 interface TermsPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
@@ -376,6 +377,15 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
             <Link href="/privacy#sms-communications" className="text-cyan-400 hover:text-cyan-300 mx-1">Privacy Policy</Link>.
           </li>
         </ul>
+        <h3 id="sms-opt-in" className="text-lg font-semibold text-white mt-6 mb-2">How you opt in</h3>
+        <p>
+          Adding a mobile number is optional, and you can use {SMS_PROGRAM_BRAND} without one. You verify a number in one of
+          two places: <strong>Settings → Security → Phone</strong>, or the <strong>Phone</strong> tab on the verification page.
+          Both show the box below. It is unchecked by default, and no code is sent until you check it and ask for one. A number
+          you add during onboarding gets no alerts until you verify it there. Verification and password-reset codes are sent only
+          when you request one; every other text goes only to a verified number.
+        </p>
+        <SmsOptInExample />
       </section>
 
       <section id="clause-24">

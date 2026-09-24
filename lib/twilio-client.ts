@@ -1,5 +1,6 @@
 import "server-only"
 import twilio from "twilio"
+import { formatProgramSms } from "@/lib/legal/smsProgram"
 
 let twilioClient: ReturnType<typeof twilio> | undefined
 
@@ -238,7 +239,9 @@ export async function sendSms(toPhone: string, body: string): Promise<boolean> {
     await client.messages.create({
       from: fromNumber,
       to: toPhone,
-      body: body.slice(0, 1600),
+      // Brand name + opt-out line (formatProgramSms). Sliced first so the added
+      // "Reply STOP" line can never be the part that gets cut off.
+      body: formatProgramSms(body.slice(0, 1500)),
     })
     return true
   } catch (error) {

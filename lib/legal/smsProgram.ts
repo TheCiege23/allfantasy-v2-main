@@ -25,3 +25,20 @@ export const SMS_CONSENT_TEXT =
   "including verification codes, account alerts, and optional league notifications. " +
   "Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out, HELP for help. " +
   "Consent is not a condition of purchase. See our Terms and Privacy Policy."
+
+export const SMS_OPT_OUT_LINE = "Reply STOP to opt out."
+
+/**
+ * Names the sender and adds the opt-out line to a raw SMS body. Applied once, in
+ * sendSms (lib/twilio-client), the single exit every notification text goes through.
+ *
+ * ⚠ CARRIERS REQUIRE EVERY TEXT TO IDENTIFY ITS SENDER, AND THE A2P CAMPAIGN'S SAMPLE
+ * MESSAGES MUST MATCH REAL TRAFFIC. Callers build bodies such as "You were mentioned
+ * in World Cup Pool: X." that carry neither, so this is not left to each caller.
+ * Idempotent: a body that already names the brand or says "Reply STOP" is not doubled.
+ */
+export function formatProgramSms(body: string): string {
+  const text = body.trim()
+  const named = /allfantasy/i.test(text) ? text : `${SMS_PROGRAM_BRAND}: ${text}`
+  return /reply\s+stop/i.test(named) ? named : `${named}\n${SMS_OPT_OUT_LINE}`
+}
