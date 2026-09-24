@@ -11,6 +11,7 @@ import {
   isDailyStatsSport,
   renderDailySeasonBlock,
 } from '@/lib/chimmy/tools/dailySportStats'
+import { buildNcaabLeadersContext, buildNcaabSeasonStatsContext } from '@/lib/chimmy/tools/collegeBasketballStats'
 import { fmt, isoMinute, latest, nameToken, num } from '@/lib/chimmy/tools/statsFormat'
 
 export { nameToken }
@@ -42,10 +43,13 @@ export { nameToken }
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type StatsSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL'
+export type StatsSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+
+/** Sports whose season totals are read from `fantasy_stat_lines`. NCAAB's are summed from game logs. */
+type StoredTotalsSport = Exclude<StatsSport, 'NCAAB'>
 
 /** Which season-total source each sport reads, and the JSON key its rows carry the name under. */
-const SEASON_SOURCE: Record<StatsSport, { source: string; nameKey: string; label: string }> = {
+const SEASON_SOURCE: Record<StoredTotalsSport, { source: string; nameKey: string; label: string }> = {
   NFL: { source: 'rolling_insights', nameKey: 'riPlayerName', label: 'Rolling Insights' },
   NCAAF: { source: 'cfbd', nameKey: 'name', label: 'CollegeFootballData' },
   MLB: { source: 'rolling_insights', nameKey: 'riPlayerName', label: 'Rolling Insights' },
@@ -60,11 +64,12 @@ export function normalizeStatsSport(raw: unknown): StatsSport | null {
   if (v === 'MLB' || v === 'BASEBALL') return 'MLB'
   if (v === 'NBA' || v === 'BASKETBALL') return 'NBA'
   if (v === 'NHL' || v === 'HOCKEY') return 'NHL'
+  if (v === 'NCAAB' || v === 'NCAABB' || v === 'CBB' || v === 'COLLEGEBASKETBALL' || v === 'NCAABASKETBALL' || v === 'NCAAMB') return 'NCAAB'
   return null
 }
 
 function unsupportedSport(raw: unknown): string {
-  return `Stats for "${String(raw)}" are not available from AllFantasy's data yet — only NFL, college football, MLB, NBA and NHL are. Say so plainly; do not give numbers from memory.`
+  return `Stats for "${String(raw)}" are not available from AllFantasy's data yet — only NFL, college football, MLB, NBA, NHL and college basketball are. Say so plainly; do not give numbers from memory.`
 }
 
 // ── Season totals ────────────────────────────────────────────────────────────────────────────
@@ -149,7 +154,7 @@ function renderStatBlock(block: Record<string, unknown>, labels: Array<[string, 
 
 type SeasonRow = { playerId: string; season: string; team: string | null; stats: unknown; fetchedAt: Date | null }
 
-async function newestSeason(db: Db, sport: StatsSport): Promise<string | null> {
+async function newestSeason(db: Db, sport: StoredTotalsSport): Promise<string | null> {
   const { source } = SEASON_SOURCE[sport]
   const rows = await db.$queryRaw<Array<{ season: string | null }>>(Prisma.sql`
     SELECT max(season) AS season FROM fantasy_stat_lines
@@ -163,8 +168,11 @@ export async function buildPlayerSeasonStatsContext(
 ): Promise<string> {
   const asked = String(args.playerName ?? '').trim()
   if (!asked) return 'No player name was given, so nothing was looked up. Ask which player they mean.'
-  const sport = normalizeStatsSport(args.sport)
-  if (!sport) return unsupportedSport(args.sport)
+  const resolved = normalizeStatsSport(args.sport)
+  if (!resolved) return unsupportedSport(args.sport)
+  // 🛑 BEFORE any fantasy_stat_lines read: NCAAB vendor totals are truncated (GAPS N-14).
+  if (resolved === 'NCAAB') return buildNcaabSeasonStatsContext({ playerName: asked, season: args.season, now: args.now }, db)
+  const sport: StoredTotalsSport = resolved
   const { source, nameKey, label } = SEASON_SOURCE[sport]
   const daily = isDailyStatsSport(sport) ? sport : null
 
@@ -534,8 +542,11 @@ export async function buildSeasonLeadersContext(
   args: { stat: unknown; sport?: unknown; season?: unknown; limit?: unknown; now?: Date },
   db: Db = defaultPrisma,
 ): Promise<string> {
-  const sport = normalizeStatsSport(args.sport)
-  if (!sport) return unsupportedSport(args.sport)
+  const resolved = normalizeStatsSport(args.sport)
+  if (!resolved) return unsupportedSport(args.sport)
+  // 🛑 BEFORE any fantasy_stat_lines read: NCAAB vendor totals are truncated (GAPS N-14).
+  if (resolved === 'NCAAB') return buildNcaabLeadersContext({ stat: args.stat, season: args.season, limit: args.limit, now: args.now }, db)
+  const sport: StoredTotalsSport = resolved
   if (isDailyStatsSport(sport)) {
     const season =
       typeof args.season === 'number' && Number.isFinite(args.season)

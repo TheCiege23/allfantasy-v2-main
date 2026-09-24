@@ -375,7 +375,7 @@ function detectUnsupportedStatEventQuestion(message: string): boolean {
 const LIVE_WINDOW_CUE = /\b(today|tonight|right now|currently|live|in the game|this game)\b/i
 
 const SEASON_OR_WEEK_CUE =
-  /\b(this season|season|this year|so far|last week|last night|week\s*\d+|last \d+ games?|last game|last start|career|leads? the (nfl|nba|nhl|mlb|majors|league|nation|country)|in the (nfl|nba|nhl|mlb|majors)|college football|ncaa|cfb)\b/i
+  /\b(this season|season|this year|so far|last week|last night|week\s*\d+|last \d+ games?|last game|last start|career|leads? the (nfl|nba|nhl|mlb|majors|league|nation|country)|in the (nfl|nba|nhl|mlb|majors)|college football|college basketball|ncaa|cfb|cbb)\b/i
 
 /*
  * Phase 3 (2026-09-24) stores MLB / NBA / NHL too, so those questions now belong to the same
