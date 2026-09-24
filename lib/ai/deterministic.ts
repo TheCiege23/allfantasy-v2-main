@@ -368,25 +368,34 @@ function detectUnsupportedStatEventQuestion(message: string): boolean {
  *   - the blanket stat refusal turned every season question into a paid web search while the
  *     answer sat in fantasy_stat_lines.
  *
- * So the live window answers only questions about NOW, and the refusal yields for football
- * questions about a SEASON or a WEEK. Other sports keep the refusal (and its web-search
- * escalation): we do not store their stats yet, and a football-only tool must not claim them.
+ * So the live window answers only questions about NOW, and the refusal yields for stored-sport
+ * questions about a SEASON or a WEEK (or, for the daily sports, "last night"). Sports we do not
+ * store — soccer, the WNBA — keep the refusal and its web-search escalation.
  */
 const LIVE_WINDOW_CUE = /\b(today|tonight|right now|currently|live|in the game|this game)\b/i
 
 const SEASON_OR_WEEK_CUE =
-  /\b(this season|season|this year|so far|last week|week\s*\d+|last \d+ games?|last game|career|leads? the (nfl|league|nation|country)|in the nfl|college football|ncaa|cfb)\b/i
+  /\b(this season|season|this year|so far|last week|last night|week\s*\d+|last \d+ games?|last game|last start|career|leads? the (nfl|nba|nhl|mlb|majors|league|nation|country)|in the (nfl|nba|nhl|mlb|majors)|college football|ncaa|cfb)\b/i
 
-const NON_FOOTBALL_STAT_CUE =
-  /\b(mlb|nba|nhl|wnba|mls|soccer|baseball|basketball|hockey|home runs?|homers?|hrs?|rbis?|batting|strikeouts?|rebounds?|three[- ]pointers?|goals?|goalscorers?|saves?)\b/i
+/*
+ * Phase 3 (2026-09-24) stores MLB / NBA / NHL too, so those questions now belong to the same
+ * tools. What still keeps the refusal (and its web-search escalation) is the sports we do NOT
+ * store: soccer and the WNBA. "goals" alone is NOT here — it is the NHL's headline stat — so a
+ * soccer question has to name soccer (EPL, MLS, …) to be refused.
+ */
+const UNSTORED_SPORT_STAT_CUE =
+  /\b(wnba|mls|soccer|futbol|fútbol|premier league|epl|la ?liga|serie a|bundesliga|champions league|world cup|goalscorers?)\b/i
 
 export function isLiveWindowStatQuestion(message: string): boolean {
   return LIVE_WINDOW_CUE.test(message)
 }
 
-export function isStoredFootballStatsQuestion(message: string): boolean {
-  return SEASON_OR_WEEK_CUE.test(message) && !NON_FOOTBALL_STAT_CUE.test(message) && !LIVE_WINDOW_CUE.test(message)
+export function isStoredStatsQuestion(message: string): boolean {
+  return SEASON_OR_WEEK_CUE.test(message) && !UNSTORED_SPORT_STAT_CUE.test(message) && !LIVE_WINDOW_CUE.test(message)
 }
+
+/** @deprecated The stored stats now cover MLB / NBA / NHL too; use `isStoredStatsQuestion`. */
+export const isStoredFootballStatsQuestion = isStoredStatsQuestion
 
 function resolveNflTeamForWeather(message: string): { abbrev: string; label: string } | null {
   const lower = message.toLowerCase()
@@ -1326,8 +1335,8 @@ export async function tryDeterministicAnswerDetailed(
     const playerStat = await buildPlayerStatAnswer(message, safeLocale)
     if (playerStat) return classify(playerStat)
   }
-  /* A football season/week stat question belongs to the stored-stats tools downstream. */
-  const unsupportedStatEvent = isStoredFootballStatsQuestion(message)
+  /* A season/week stat question belongs to the stored-stats tools downstream. */
+  const unsupportedStatEvent = isStoredStatsQuestion(message)
     ? null
     : buildUnsupportedStatEventAnswer(message, safeLocale)
   if (unsupportedStatEvent) return refusal(unsupportedStatEvent)
