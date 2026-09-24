@@ -18,7 +18,7 @@ import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
 import { runLiveScoringTick, type LiveBroadcastEvent, type LiveTickResult } from '@/lib/live-scoring/orchestrator'
-import { gamesToSnapshots, liveProviderServesSport, type LiveSeasonType, type LiveStatsProvider } from '@/lib/live-scoring/provider'
+import { gamesToSnapshots, liveProviderServesSport, liveProviderSports, type LiveSeasonType, type LiveStatsProvider } from '@/lib/live-scoring/provider'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
 import { NflLiveStatsProvider } from '@/lib/live-scoring/nflLiveStatsProvider'
 import type { RescoreRosterInput, RescoreMatchupInput } from '@/lib/live-scoring/rescorePlan'
@@ -398,7 +398,7 @@ export async function runLiveScoringForActiveSeasons(
         affectedMatchups: 0,
         broadcastEvents: 0,
         nextPollDelayMs: 0,
-        reason: `sport_not_live_scored: ${season.sport} (the live provider serves ${(provider.sports ?? ['NFL']).join(', ')}; daily sports score through the weekly sync)`,
+        reason: `sport_not_live_scored: ${season.sport} (the live provider serves ${liveProviderSports(provider).join(', ')}; daily sports score through the weekly sync)`,
         seasonType: 'regular',
         slateSource: 'not-live-scored',
       })

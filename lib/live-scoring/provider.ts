@@ -123,9 +123,19 @@ export interface LiveStatsProvider {
  *
  * Daily sports score through the weekly sync (playerWeeklyScoreService), not this tick.
  */
-export function liveProviderServesSport(provider: Pick<LiveStatsProvider, 'sports'>, sport: string | null | undefined): boolean {
-  const served = provider.sports ?? ['NFL']
-  return served.includes(String(sport ?? '').trim().toUpperCase())
+export function liveProviderServesSport(provider: object, sport: string | null | undefined): boolean {
+  return liveProviderSports(provider).includes(String(sport ?? '').trim().toUpperCase())
+}
+
+/**
+ * The sports `provider` declares, NFL when it declares none. Takes `object` rather than
+ * `Pick<LiveStatsProvider, 'sports'>` on purpose: that Pick has only an optional member, so
+ * TypeScript's weak-type check rejects any provider class that does not declare `sports` — which
+ * is exactly the undeclared case this default exists for.
+ */
+export function liveProviderSports(provider: object): readonly string[] {
+  const declared = (provider as { sports?: readonly string[] }).sports
+  return declared ?? ['NFL']
 }
 
 /** Pure: map provider games → orchestrator snapshots. `fractionElapsed` is null
