@@ -47,6 +47,7 @@ import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
 import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { NflScoringSettingsPanel } from '@/components/league-settings/NflScoringSettingsPanel'
 import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoringSettingsPanel'
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
@@ -723,8 +724,19 @@ export function SettingsSubPanelBody({
     ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
     : null
   const mockDraftHref = ctx.sleeperLeagueId ? `https://sleeper.com/mock-draft/${ctx.sleeperLeagueId}` : null
-  const inviteUrl =
-    ctx.platformLeagueId.length > 0
+  // A league hosted here is joined here. Its `platformLeagueId` is `manual-<uuid>`, so the Sleeper
+  // link this used to build for every league — shown, copied and QR-coded right after creation —
+  // led nowhere. `/join?code=` resolves `settings.inviteCode`, which create writes from the
+  // league's first invite token (and the invite panel's own endpoint re-mints if missing).
+  const nativeInviteCode =
+    (typeof settings.inviteCode === 'string' && settings.inviteCode.trim()) ||
+    ctx.league.invites?.find((invite) => invite.isActive)?.token ||
+    ''
+  const inviteUrl = isNativePlatform(ctx.league.platform)
+    ? nativeInviteCode
+      ? `${typeof window !== 'undefined' ? window.location.origin : 'https://allfantasy.ai'}/join?code=${encodeURIComponent(nativeInviteCode)}`
+      : ''
+    : ctx.platformLeagueId.length > 0
       ? `https://sleeper.com/leagues/${ctx.platformLeagueId}`
       : 'https://sleeper.com/'
 
@@ -1080,6 +1092,16 @@ function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: 
     setCopied(true)
     window.setTimeout(() => setCopied(false), 2000)
   }
+  if (!inviteUrl) {
+    return (
+      <div className="space-y-4">
+        <Row label="Members" value={`${filled} / ${total} teams`} />
+        <p className="text-[12px] text-white/60">
+          This league has no invite link yet. Open the commissioner invite settings to create one.
+        </p>
+      </div>
+    )
+  }
   return (
     <div className="space-y-4">
       <Row label="Members" value={`${filled} / ${total} teams`} />
@@ -1103,7 +1125,9 @@ function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: 
           WhatsApp
         </a>
       </div>
-      <p className="text-[11px] text-white/35">Invite metadata from Sleeper may include invite_code when synced.</p>
+      {inviteUrl.includes('sleeper.com') ? (
+        <p className="text-[11px] text-white/35">Invite metadata from Sleeper may include invite_code when synced.</p>
+      ) : null}
     </div>
   )
 }

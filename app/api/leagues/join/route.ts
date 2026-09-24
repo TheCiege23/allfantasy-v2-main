@@ -241,6 +241,13 @@ export async function POST(req: NextRequest) {
     // Skip roster-linked setup when we deferred creation for manual claim;
     // those steps run after the user picks their team via /claim-roster.
     if (!roster) {
+      // Record the membership now: the manager has passed every gate above, and the team
+      // picker (`/api/leagues/{id}/claim-roster`) admits only members of the league.
+      await tx.redraftLeagueMember.upsert({
+        where: { leagueId_userId: { leagueId: result.leagueId, userId } },
+        create: { leagueId: result.leagueId, userId, role: 'MEMBER', teamNumber: null },
+        update: {},
+      })
       return {
         success: true as const,
         leagueId: result.leagueId,
@@ -284,16 +291,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await tx.redraftLeagueMember
-      .create({
-        data: {
-          leagueId: result.leagueId,
-          userId,
-          role: 'MEMBER',
-          teamNumber,
-        },
-      })
-      .catch(() => null)
+    // An upsert, not `.create().catch()`: a native seat claim has already written this row, and
+    // inside a Postgres transaction the duplicate insert's error aborts the transaction — the
+    // `.catch` hides the error but every later statement then fails and the join rolls back.
+    await tx.redraftLeagueMember.upsert({
+      where: { leagueId_userId: { leagueId: result.leagueId, userId } },
+      create: { leagueId: result.leagueId, userId, role: 'MEMBER', teamNumber },
+      update: teamNumber != null ? { teamNumber } : {},
+    })
 
     if (league.platform === 'manual') {
       const manualTeamCount = await tx.leagueTeam.count({

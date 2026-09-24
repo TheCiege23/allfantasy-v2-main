@@ -16,6 +16,7 @@
  */
 
 import type { Prisma } from '@prisma/client'
+import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 
 type Tx = Prisma.TransactionClient
 
@@ -180,53 +181,17 @@ export async function claimPlaceholderRoster(args: {
     .sort((a, b) => (foundationSlotNumber(a) ?? 9999) - (foundationSlotNumber(b) ?? 9999))[0]
 
   if (nativeOpenRoster) {
-    const slotNumber = foundationSlotNumber(nativeOpenRoster)
-    const displayName = claimDisplayName(candidate)
-    const data = nativeOpenRoster.playerData as Record<string, unknown>
-    const foundation = rosterFoundationMeta(nativeOpenRoster) ?? {}
-    await tx.roster.update({
-      where: { id: nativeOpenRoster.id },
-      data: {
-        platformUserId: candidate.appUserId,
-        playerData: {
-          ...data,
-          foundation: {
-            ...foundation,
-            openTeam: false,
-            claimedBy: candidate.appUserId,
-            claimedAt: new Date().toISOString(),
-          },
-        } as Prisma.InputJsonValue,
-        settings: {
-          openSlot: false,
-          aiManaged: false,
-        },
-      },
+    // The one seat writer: roster, team, entry slot, membership and any season roster together.
+    // The membership insert used to be a `.create().catch()` here AND again in the join route —
+    // and inside a Postgres transaction the second insert's unique violation aborts the whole
+    // transaction, which a `.catch` cannot undo, so every code join into a native league failed.
+    const seat = await assignLeagueSeat(tx, {
+      leagueId,
+      rosterId: nativeOpenRoster.id,
+      userId: candidate.appUserId,
+      displayName: claimDisplayName(candidate),
     })
-    await tx.leagueTeam.updateMany({
-      where: { leagueId, externalId: nativeOpenRoster.id },
-      data: {
-        ownerName: displayName,
-        teamName: `${displayName}'s Team`,
-        platformUserId: candidate.appUserId,
-        claimedByUserId: candidate.appUserId,
-        isOrphan: false,
-      },
-    })
-    await tx.leagueEntrySlot.updateMany({
-      where: { leagueId, rosterId: nativeOpenRoster.id },
-      data: { status: 'FILLED' },
-    })
-    await tx.redraftLeagueMember
-      .create({
-        data: {
-          leagueId,
-          userId: candidate.appUserId,
-          role: 'MEMBER',
-          teamNumber: slotNumber,
-        },
-      })
-      .catch(() => {})
+    if (!seat.ok) return { claimed: false }
     return { claimed: true, rosterId: nativeOpenRoster.id, matchedBy: 'native_open_slot' }
   }
 

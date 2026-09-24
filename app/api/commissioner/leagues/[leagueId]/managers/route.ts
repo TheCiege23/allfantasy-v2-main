@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { trackDiscoveryOrphanAdoption } from '@/lib/discovery-analytics/server'
+import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
 
 type SessionWithUser = { user?: { id?: string } } | null
 
@@ -95,33 +96,17 @@ export async function DELETE(
   const rosterId = req.nextUrl.searchParams?.get('rosterId') ?? (await req.json().catch(() => ({}))).rosterId
   if (!rosterId) return NextResponse.json({ error: 'rosterId required' }, { status: 400 })
 
-  const roster = await (prisma as any).roster.findFirst({
-    where: { id: rosterId, leagueId },
-    select: { id: true, platformUserId: true },
-  })
-  if (!roster) {
+  // Releases every record of the seat — roster, team, entry slot, membership, season roster.
+  // Renaming the roster's owner alone left the removed manager's team claim, membership and
+  // season ownership in place, so they kept access to and control of the team.
+  const released = await prisma.$transaction((tx) => releaseLeagueSeat(tx, { leagueId, rosterId }))
+  if (!released.ok) {
     return NextResponse.json({ error: 'Roster not found or does not belong to this league' }, { status: 404 })
   }
 
-  // Mark as orphan: set platformUserId to a unique placeholder so the slot is preserved but no user is linked.
-  const orphanId = `orphan-${roster.id}`
-  await (prisma as any).roster.update({
-    where: { id: rosterId },
-    data: { platformUserId: orphanId },
-  })
-  await prisma.leagueTeam.updateMany({
-    where: {
-      leagueId,
-      OR: [{ externalId: roster.id }, { externalId: roster.platformUserId }],
-    },
-    data: {
-      externalId: roster.id,
-    },
-  })
-
   return NextResponse.json({
     status: 'ok',
-    message: 'Manager removed; roster slot marked as orphan. Re-add a manager via platform or future invite flow.',
+    message: 'Manager removed; the team is open for the next person who joins.',
     rosterId,
   })
 }
@@ -148,7 +133,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'rosterId and userId required' }, { status: 400 })
   }
 
-  const roster = await (prisma as any).roster.findFirst({
+  const roster = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId },
     select: { id: true, platformUserId: true },
   })
@@ -158,26 +143,16 @@ export async function PATCH(
 
   const wasOrphan = isOrphanPlatformUserId(roster.platformUserId)
 
-  await (prisma as any).roster.update({
-    where: { id: rosterId },
-    data: { platformUserId: userId },
-  })
-
-  const profile = await prisma.userProfile.findFirst({
-    where: { userId },
-    select: { displayName: true, sleeperUsername: true },
-  })
-  const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || userId
-  await prisma.leagueTeam.updateMany({
-    where: {
-      leagueId,
-      OR: [{ externalId: roster.id }, { externalId: roster.platformUserId }, { externalId: userId }],
-    },
-    data: {
-      externalId: roster.id,
-      ownerName: displayName,
-    },
-  })
+  // The seat writer, with `replaceExisting` so a commissioner can hand a held team to someone
+  // else. Setting only the roster owner left the new manager unable to reach their own roster
+  // through the redraft routes (which check the team claim) after the draft.
+  const seat = await prisma.$transaction((tx) =>
+    assignLeagueSeat(tx, { leagueId, rosterId, userId, replaceExisting: true }),
+  )
+  if (!seat.ok) {
+    const status = seat.code === 'ROSTER_NOT_FOUND' || seat.code === 'USER_NOT_FOUND' ? 404 : 409
+    return NextResponse.json({ error: seat.message, code: seat.code }, { status })
+  }
 
   if (wasOrphan) {
     await trackDiscoveryOrphanAdoption(
