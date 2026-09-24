@@ -13,6 +13,7 @@ import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
+import type { CoreDepthAccess } from './coreDepthAccess'
 
 /**
  * The player card pop-up — STATE 6 / STATE 7 of the 2026-09-07 design handoff
@@ -306,6 +307,12 @@ export type PlayerCardData = {
    * cannot save.
    */
   follow?: { following: boolean } | null
+  /**
+   * The viewer's player-depth access, set by the route (./playerCardDepth.ts). When it is locked
+   * the market move, trades, comps and insight were withheld, and the sheet says so rather than
+   * reading the emptied sections as "none".
+   */
+  depth?: CoreDepthAccess | null
 }
 
 /* ── tuning ──────────────────────────────────────────────────────────────── */

@@ -13,6 +13,7 @@ import { getBaseUrl } from '@/lib/get-base-url'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { getCommissionerWaiverOversight, type WaiverOversight } from './commissionerWaivers'
 import type { CoreIssue } from './outstandingIssues'
+import type { CoreDepthAccess } from './coreDepthAccess'
 import { isScored } from './currentWeek'
 import { platformLabel, verifiedHandoff } from './platformLinks'
 import { leagueWeekFromSettings, playoffStartWeek, regularSeasonWeeks, tradeDeadlineWeek } from './seasonTimeline'
@@ -216,6 +217,12 @@ export type CommissionerHubData = {
   unclaimedTeams: number
   /** Managers with no move in the window, by name — people, never empty seats. */
   quietManagers: string[]
+  /**
+   * Commissioner depth (AF Commissioner, ./coreDepthAccess.ts). Locked, the waiver oversight read
+   * and the calendar export were skipped here and the screen draws locks over member activity,
+   * the charts, automations, waivers and the audit log. Absent renders everything, as before.
+   */
+  depth?: CoreDepthAccess | null
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
@@ -352,9 +359,12 @@ export async function getCommissionerHub(input: {
   /** Already derived for the shell; filtered to this league by the caller. */
   issues: CoreIssue[]
   now?: Date
+  /** The viewer's commissioner depth; null or absent loads everything. */
+  depth?: CoreDepthAccess | null
 }): Promise<CommissionerHubResult> {
   const { leagueId, userId, issues } = input
   const now = input.now ?? new Date()
+  const depthOpen = input.depth?.unlocked !== false
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -464,12 +474,15 @@ export async function getCommissionerHub(input: {
     prisma.roster
       .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
       .catch(() => []),
-    getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
-      (): WaiverOversight => ({
-        available: false,
-        reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
-      }),
-    ),
+    // Seven queries (commissionerWaivers.ts), for a panel a locked viewer is not shown.
+    depthOpen
+      ? getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
+          (): WaiverOversight => ({
+            available: false,
+            reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
+          }),
+        )
+      : Promise.resolve<WaiverOversight>({ available: false, reason: 'Waiver oversight is part of AF Commissioner.' }),
     getCommissionerHubHealthForUser(userId, [
       {
         id: leagueId,
@@ -695,13 +708,16 @@ export async function getCommissionerHub(input: {
       : null,
     polls: open.map((p) => ({ id: p.id, question: p.question, closesAt: p.closesAt })),
   })
-  const ics = buildIcs({
-    leagueId,
-    leagueName,
-    events: calendar.events,
-    now,
-    appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
-  })
+  // The calendar is free to read; exporting it to a calendar app is AF Commissioner. Null hides both export buttons.
+  const ics = depthOpen
+    ? buildIcs({
+        leagueId,
+        leagueName,
+        events: calendar.events,
+        now,
+        appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
+      })
+    : null
   const upcoming = nextDeadline(calendar)
 
   // ── Canonical health score ─────────────────────────────────────────────
@@ -983,6 +999,7 @@ export async function getCommissionerHub(input: {
     // Ingested teams only: a league with no team rows has nothing to invite anyone to yet.
     unclaimedTeams: teams.length > 0 ? teams.length - claimed : 0,
     quietManagers,
+    depth: input.depth ?? null,
   }
 }
 

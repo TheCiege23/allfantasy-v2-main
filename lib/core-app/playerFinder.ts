@@ -767,8 +767,17 @@ export async function getPlayerDetail(
    * which of them is YOURS to act on, because roster ownership resolves through
    * the claimed-team predicate, not through the league list.
    */
-  userId?: string | null
+  userId?: string | null,
+  opts: {
+    /**
+     * False when the viewer's plan does not include player depth (lib/core-app/coreDepthAccess.ts):
+     * the free-agent pickups are then neither computed nor sent. The bench swaps in `impact` are
+     * unaffected — they are the free "in your leagues" answer.
+     */
+    includeMoves?: boolean
+  } = {},
 ): Promise<PlayerDetail | null> {
+  const includeMoves = opts.includeMoves !== false
   const { sport: refSport, externalId } = parsePlayerRef(playerReference)
 
   /*
@@ -839,7 +848,7 @@ export async function getPlayerDetail(
    */
   const MOVE_LEAGUE_CAP = 4
   const moveLeagues =
-    userId && row.sleeperId && leagues.available
+    includeMoves && userId && row.sleeperId && leagues.available
       ? leagues.data
           // Only leagues where he is on YOUR roster have a hole for a pickup to fill.
           .filter((l) => l.isYours)
@@ -874,7 +883,9 @@ export async function getPlayerDetail(
       ? { available: true, data: moveRows }
       : {
           available: false,
-          reason: !userId
+          reason: !includeMoves
+            ? 'pickup options are part of AF Pro'
+            : !userId
             ? 'sign in to see pickup options for your own leagues'
             : !row.sleeperId
               ? 'we hold no Sleeper id for this player, so we cannot weigh him against your rosters'

@@ -38,6 +38,8 @@ import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
 import { createPhaseTimer, unattributedMs } from '@/lib/logging/phaseTimer'
 import { logUsageEvent } from '@/lib/telemetry/usage'
 import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
+import { applyTradeAnalysisDepth } from '@/lib/trade-value-console/tradeAnalysisDepth'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 const assetSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -84,7 +86,9 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         return NextResponse.json({ error: 'Too many requests. Try again shortly.' }, { status: 429 })
       }
 
-      const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+      const session = (await getServerSession(authOptions as never)) as {
+        user?: { id?: string; email?: string | null }
+      } | null
       const userId = session?.user?.id ?? null
 
       const json = await req.json().catch(() => null)
@@ -430,7 +434,16 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
       }).catch(() => {})
 
       const withAiLimit = aiLimit ? { ...responseBody, aiLimit } : responseBody
-      return NextResponse.json(decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit)
+      /*
+       * Trade depth (AF Pro): the verdict above is free, the breakdown is not —
+       * lib/trade-value-console/tradeAnalysisDepth.ts. Withheld HERE, because every client that
+       * posts to this route (the Trade Center, the league trades tab, the value modal) is a
+       * browser component and would otherwise receive it.
+       */
+      const tradeDepth = await resolveCoreDepth(userId, 'trade_depth', { email: session?.user?.email ?? null })
+      return NextResponse.json(
+        applyTradeAnalysisDepth(decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit, tradeDepth),
+      )
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

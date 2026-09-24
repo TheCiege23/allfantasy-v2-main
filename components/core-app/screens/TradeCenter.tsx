@@ -39,6 +39,8 @@ import {
   suggestionToPickedAssets,
 } from '@/components/core-app/screens/TradePartnerSuggestions'
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
+import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -419,7 +421,15 @@ export function TradeCenter(props: {
    * Null for a native league, or when the resolver could not verify a host.
    */
   sourceLink?: SourceScreenLink | null
+  /**
+   * Trade depth (AF Pro): the breakdown under the verdict, who to trade with, and the finder.
+   * The routes withhold that data from a locked viewer; this decides what is drawn. Null renders
+   * everything, as before.
+   */
+  depthAccess?: CoreDepthAccess | null
 }) {
+  const depthAccess = props.depthAccess ?? null
+  const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1330,15 +1340,19 @@ export function TradeCenter(props: {
       {otherRosters.length > 0 ? (
         <div className="af-tc-partner" data-mstep="get">
           {/* Item #8: who is worth trading with, and a deal to start from. */}
-          <TradePartnerSuggestions
-            ranking={partnerRanking}
-            selectedRosterId={partnerRosterId}
-            onChoose={(rosterId) => {
-              setPartnerRosterId(rosterId)
-              setResult(null)
-            }}
-            onStartWith={startSuggestedDeal}
-          />
+          {depthAccess && depthLocked ? (
+            <CoreDepthLock access={depthAccess} what="Who to trade with" />
+          ) : (
+            <TradePartnerSuggestions
+              ranking={partnerRanking}
+              selectedRosterId={partnerRosterId}
+              onChoose={(rosterId) => {
+                setPartnerRosterId(rosterId)
+                setResult(null)
+              }}
+              onStartWith={startSuggestedDeal}
+            />
+          )}
           <span className="af-label">Trading with</span>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (
@@ -1825,9 +1839,14 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {intel ? (
+      {result && depthAccess && depthLocked ? (
+        <div className="af-tc-mstep-wrap" data-mstep="review">
+          <CoreDepthLock access={depthAccess} what="The full trade breakdown" />
+        </div>
+      ) : intel ? (
         <section className="af-tc-dos" data-mstep="review">
           <div className="af-label">Decision OS · this deal</div>
+          {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
           {intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
 
           <div className="af-tc-pairs">
@@ -1969,7 +1988,9 @@ export function TradeCenter(props: {
         exactly why steps are keyed on `data-mstep` and never on a class name.
       */}
       <div className="af-tc-mstep-wrap" data-mstep="get">
-        <TradeFinderPanel leagueId={props.league?.id ?? null} />
+        <CoreDepthGate access={depthAccess} what="The trade finder" showFreeUntil={false}>
+          <TradeFinderPanel leagueId={props.league?.id ?? null} />
+        </CoreDepthGate>
       </div>
 
       <div className="af-tc-actions" data-mstep="review">

@@ -4,6 +4,7 @@ import { findTemplate } from '@/lib/commissioner-reports/reportCatalog'
 import { generateReport } from '@/lib/commissioner-reports/reportStore'
 import { isLiveReady } from '@/lib/commissioner-ui/liveReadiness'
 import { resolveActiveLeagueId } from '@/lib/commissioner-ui/resolveActiveLeagueId'
+import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,6 +42,20 @@ export async function POST(request: Request) {
     // Not "no league" but "not a commissioner of one" — the same gate every module's live client
     // short-circuits on. 403 rather than 404: the resource exists, this session may not act on it.
     return NextResponse.json({ error: 'No commissioned league for this session.' }, { status: 403 })
+  }
+
+  // Reports are AF Commissioner (lib/commissioner-ui/commissionerOsDepth.ts) — after the commissioner check.
+  const depth = await resolveCommissionerOsDepth()
+  if (!depth.unlocked) {
+    return NextResponse.json(
+      {
+        error: 'Premium feature',
+        code: 'feature_not_entitled',
+        message: `Reports are part of ${depth.planName}.`,
+        upgradePath: depth.upgradePath,
+      },
+      { status: 403 },
+    )
   }
 
   if (!(await isLiveReady('reports'))) {

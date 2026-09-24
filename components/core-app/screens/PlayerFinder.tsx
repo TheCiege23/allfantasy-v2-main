@@ -25,6 +25,8 @@ import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { pregameInactive } from '@/lib/core-app/pregameInactive'
 import { byeChip, byeStatus } from '@/lib/core-app/byeStatus'
+import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 /** The loader hands a Date across the server boundary; tests and fixtures may hand an ISO string. */
 function asIso(v: Date | string | null | undefined): string | null {
@@ -141,6 +143,14 @@ export type PlayerFinderProps = {
    * decision column stays about the first.
    */
   compare?: PlayerDetail | null
+  /** A `?vs=` was asked for — so a locked viewer is told why no comparison appeared. */
+  compareRequested?: boolean
+  /**
+   * Player depth (AF Pro): compare, the trade visual, trade windows, pickups, the verdict and the
+   * bench swaps. The page's loaders already skipped the data behind a lock; this decides what is
+   * drawn. Null (the public page, tests) renders everything as before.
+   */
+  depthAccess?: CoreDepthAccess | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -318,9 +328,12 @@ export function PlayerFinder({
   windowsUnread = 0,
   triage = null,
   compare = null,
+  compareRequested = false,
+  depthAccess = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
+  const depthLocked = depthAccess?.unlocked === false
   /*
    * Swap the ingest-level reason for the sign-in one on exactly the sections
    * that are gated. Everything else on this screen — bio, injury, projection,
@@ -631,21 +644,31 @@ export function PlayerFinder({
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
         {/* The trade visual, under the ownership card, when someone else has him here. */}
-        {detail && leagueView?.ownership.kind === 'other' && tradeVisual ? (
-          <TradeVisual state={tradeVisual} playerName={detail.player.name} />
+        {detail && leagueView?.ownership.kind === 'other' && depthAccess && depthLocked ? (
+          <CoreDepthLock access={depthAccess} what={`Trading for ${detail.player.name}`} />
+        ) : detail && leagueView?.ownership.kind === 'other' && tradeVisual ? (
+          <CoreDepthGate access={depthAccess}>
+            <TradeVisual state={tradeVisual} playerName={detail.player.name} />
+          </CoreDepthGate>
+        ) : null}
+
+        {detail && compareRequested && depthAccess && depthLocked ? (
+          <CoreDepthLock access={depthAccess} what="Side-by-side compare" />
         ) : null}
 
         {/* ── Detail ────────────────────────────────────────────────── */}
         {detail && compare ? (
-          <PlayerCompare
-            a={detail}
-            b={compare}
-            query={query}
-            selectedLeagueId={selectedLeagueId ?? null}
-            signedIn={signedIn}
-            swapHref={swapHref}
-            clearHref={clearHref}
-          />
+          <CoreDepthGate access={depthAccess}>
+            <PlayerCompare
+              a={detail}
+              b={compare}
+              query={query}
+              selectedLeagueId={selectedLeagueId ?? null}
+              signedIn={signedIn}
+              swapHref={swapHref}
+              clearHref={clearHref}
+            />
+          </CoreDepthGate>
         ) : detail ? (
           <section className="af-card af-pf-detail">
             <header className="af-pf-detail-head">
@@ -1047,16 +1070,18 @@ export function PlayerFinder({
             {/* ── Recommended moves ─────────────────────────────────── */}
             {signedIn ? (
               <div className="af-pf-d-only">
-                <RecommendedMoves
-                  moves={moves}
-                  emptyReason={
-                    !detail.impact.available
-                      ? detail.impact.reason
-                      : impactRows.length === 0
-                        ? 'He is not on any of your rosters, so there is no lineup to fix.'
-                        : null
-                  }
-                />
+                <CoreDepthGate access={depthAccess} what="Recommended moves">
+                  <RecommendedMoves
+                    moves={moves}
+                    emptyReason={
+                      !detail.impact.available
+                        ? detail.impact.reason
+                        : impactRows.length === 0
+                          ? 'He is not on any of your rosters, so there is no lineup to fix.'
+                          : null
+                    }
+                  />
+                </CoreDepthGate>
               </div>
             ) : null}
 
@@ -1094,8 +1119,18 @@ export function PlayerFinder({
         real per-league impact behind it — an empty rail of headed cards would
         imply we looked and found nothing, which is different from not looking.
       */}
-      {detail && (impactRows.length > 0 || presence || (windows && windows.length > 0)) ? (
+      {/*
+        Locked (player depth is AF Pro): the column holds the lock instead. Its data — presence and
+        windows — was never loaded; the verdict and the swaps are drawn from the impact rows the
+        free table already shows, so for them the lock is the whole of the gate.
+      */}
+      {detail && depthAccess && depthLocked && signedIn ? (
         <aside className="af-pf-side" aria-label="What to do">
+          <CoreDepthLock access={depthAccess} what="The verdict, bench swaps and trade windows" />
+        </aside>
+      ) : detail && (impactRows.length > 0 || presence || (windows && windows.length > 0)) ? (
+        <aside className="af-pf-side" aria-label="What to do">
+          {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
           {impactRows.length > 0 ? (
             <PlayerVerdict
               playerName={detail.player.name}

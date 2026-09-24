@@ -177,6 +177,7 @@ import { getLivePageData } from '@/lib/live/liveScoresPage'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
+import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
 import CommissionerOverview from '@/components/core-app/screens/CommissionerOverview'
 import { getCommissionerOverview } from '@/lib/core-app/commissionerOverview'
 import Standings from '@/components/core-app/screens/Standings'
@@ -615,7 +616,7 @@ export default async function AfCorePage({
 
   // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
   const shellStartedAt = Date.now()
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
   const userId = session?.user?.id
   if (!userId) {
     /*
@@ -1362,6 +1363,7 @@ export default async function AfCorePage({
         segment,
         activeKey,
         userId,
+        viewerEmail: session?.user?.email ?? null,
         selectedLeagueId,
         playerQuery,
         selectedPlayerId,
@@ -1651,6 +1653,8 @@ type CoreScreenContext = {
   segment: string
   activeKey: CoreNavKey
   userId: string
+  /** For the plan lookup only — admin and QA accounts bypass the paywall by email. */
+  viewerEmail: string | null
   selectedLeagueId: string | null
   playerQuery: string
   selectedPlayerId: string | null
@@ -1710,6 +1714,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     segment,
     activeKey,
     userId,
+    viewerEmail,
     selectedLeagueId,
     playerQuery,
     selectedPlayerId,
@@ -1736,6 +1741,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     homeScope,
     favoriteIds,
   } = ctx
+
+  /*
+   * The /core depth paywall (lib/core-app/coreDepthAccess.ts) — one plan read per render, and only
+   * on the three screens that carry paid depth. Started here and awaited at the first loader that
+   * needs it, so it runs beside the reads in between rather than in front of them.
+   *
+   * ⚠ THE LOADERS BELOW SKIP WHAT A LOCKED VIEWER MAY NOT SEE. A lock card over data the page
+   * already sent is a client-only gate; the screens' own locks only decide what is drawn.
+   */
+  const corePaywallRead =
+    activeKey === 'players' || activeKey === 'trades' || activeKey === 'commissioner'
+      ? resolveCorePaywall(userId, { email: viewerEmail, now })
+      : Promise.resolve(null)
 
   // Rendered above the matchup and the league home (league-first only; null everywhere else).
   const chimmyMoves = await chimmyMovesRead
@@ -1956,6 +1974,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const shareCard =
     activeKey === 'career' && careerView === 'share' && careerScreen ? toShareCard(careerScreen.data) : null
 
+  const corePaywall = await corePaywallRead
+  // Player depth: compare, the trade visual, trade windows and free-agent pickups (AF Pro).
+  const playerDepthOpen = corePaywall?.player_depth.unlocked !== false
+
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
@@ -1973,7 +1995,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getPlayerDetail(
           selectedPlayerId,
           selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id),
-          userId
+          userId,
+          { includeMoves: playerDepthOpen },
         ).catch(() => null)
       : null
 
@@ -1985,7 +2008,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const vsRef = typeof sp.vs === 'string' && sp.vs.trim() ? sp.vs.trim() : null
   const playerCompare =
-    activeKey === 'players' && playerDetail && vsRef
+    activeKey === 'players' && playerDepthOpen && playerDetail && vsRef
       ? await getPlayerDetail(vsRef, selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id), userId).catch(() => null)
       : null
 
@@ -2049,7 +2072,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * line) that would have thrown on every signed-in Player Finder view.
    */
   const playerTradeVisual =
-    playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
+    playerDepthOpen && playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
       ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId, leagueCtx).catch(
           () => null,
         )
@@ -2071,7 +2094,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const MAX_WINDOW_LEAGUES = 6
   const otherLeagueIds =
-    activeKey === 'players' && playerDetail?.player.sleeperId && !selectedLeagueId && playerDetail.leagues.available
+    activeKey === 'players' && playerDepthOpen && playerDetail?.player.sleeperId && !selectedLeagueId && playerDetail.leagues.available
       ? playerDetail.leagues.data
           .filter((r) => !r.isYours && r.owner)
           .map((r) => r.leagueId)
@@ -2089,7 +2112,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const playerWindowsUnread = otherLeagueIds.length - playerWindows.length
 
   const presenceLeagueId = (() => {
-    if (activeKey !== 'players' || !playerDetail?.player.sleeperId) return null
+    if (activeKey !== 'players' || !playerDepthOpen || !playerDetail?.player.sleeperId) return null
     if (selectedLeagueId) return selectedLeagueId
     // The cross-league card covers the other owners; the single card is only for a player who is yours everywhere.
     if (playerWindows.length > 0) return null
@@ -2740,6 +2763,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           userId,
           issues: issues.filter((i) => i.leagueId === selectedLeagueId),
           now,
+          depth: corePaywall?.commissioner_depth ?? null,
         }).catch(() => null)
       : null
 
@@ -3748,6 +3772,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
               leagues={tradeStripLeagues.filter((league) => league.id === selectedLeagueId)}
               valueActions={tradeValueActions}
+              depthAccess={corePaywall?.trade_depth ?? null}
             />
             <Trades data={trades} />
           </>
@@ -4015,6 +4040,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           windows={playerWindows.length > 0 ? playerWindows : null}
           windowsUnread={playerWindowsUnread}
           compare={playerCompare}
+          compareRequested={Boolean(vsRef)}
+          depthAccess={corePaywall?.player_depth ?? null}
           triage={gameDayTriage}
           nowIso={new Date().toISOString()}
         />

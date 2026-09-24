@@ -14,6 +14,7 @@ import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playe
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import {
   pickUnpricedReason,
   playerUnpricedReason,
@@ -194,7 +195,9 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> },
 ) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null }
+  } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -831,13 +834,23 @@ export async function GET(
     savedStrategy && hasPairedOutcomeSimulation && hasLeagueRosterContext && hasPricedSuggestion && hasProjectedSuggestion,
   )
 
+  /*
+   * Trade depth (AF Pro, lib/core-app/coreDepthAccess.ts): who to trade with and the suggested
+   * packages. The rosters are the builder and stay free. Withheld at the response, not skipped
+   * upstream, because `tradeContext` below is derived from the suggestions and the propose
+   * panel reads it — skipping them would change what that context says, not just what is sent.
+   */
+  const tradeDepth = await resolveCoreDepth(userId, 'trade_depth', { email: session?.user?.email ?? null })
+  const depthOpen = tradeDepth.unlocked
+
   return NextResponse.json({
     rosters: result,
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,
-    partnerRanking,
-    suggestions,
-    multiTeamSuggestions,
+    partnerRanking: depthOpen ? partnerRanking : null,
+    suggestions: depthOpen ? suggestions : [],
+    multiTeamSuggestions: depthOpen ? multiTeamSuggestions : [],
+    depth: tradeDepth,
     tradeContext: {
       valueBook: describeValueBook(valueBook),
       proposalModel: proposalMode.replace(/_/g, ' '),
