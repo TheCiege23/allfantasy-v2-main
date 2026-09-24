@@ -6,6 +6,15 @@ import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerC
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import type { TradesData, TradeRecord, PendingOffer } from '@/lib/core-app/trades'
+import { useFocusTradeFromUrl } from '@/components/core-app/useFocusTradeFromUrl'
+
+/**
+ * The Sleeper transaction id a row stands for — the id a trade email or push links to.
+ * History rows carry the graded ledger's `<leagueId>:<transactionId>`; offers carry it bare.
+ */
+function linkIdOf(id: string): string {
+  return id.split(':').pop() ?? id
+}
 
 /**
  * Screen 6 — Trades.
@@ -54,7 +63,7 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
   )
 
   return (
-    <li className="af-tr-offer">
+    <li className="af-tr-offer" data-trade-id={linkIdOf(offer.id)}>
       <header className="af-tr-offer-head">
         <span className="af-tr-offer-partner">{offer.partnerName}</span>
         {offer.proposedAt ? (
@@ -126,7 +135,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
   const assets = trade.playersIn + trade.playersOut + trade.picks
 
   return (
-    <li className="af-card af-tr-card">
+    <li className="af-card af-tr-card" data-trade-id={linkIdOf(trade.transactionId)}>
       <header className="af-tr-card-head">
         <span className="af-tr-when af-num">
           {trade.season ?? '—'}
@@ -229,6 +238,8 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
 }
 
 export function Trades({ data }: TradesProps) {
+  // A trade email or push lands here with `?trade=`; bring that trade into view.
+  useFocusTradeFromUrl()
   return (
     /*
       Names on this screen belong to THIS league, so the card opens in its

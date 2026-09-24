@@ -117,7 +117,11 @@ export async function GET(req: NextRequest) {
         rowsRead: rs.length,
         rowsWritten: rs.reduce((a, r) => a + r.emailsSent, 0),
         errors: rs.filter((r) => r.error).map((r) => `${r.sleeperLeagueId}: ${r.error}`),
-        metadata: { newTrades: rs.reduce((a, r) => a + r.newTrades, 0), bootstrapped: rs.filter((r) => r.bootstrap).length },
+        metadata: {
+          newTrades: rs.reduce((a, r) => a + r.newTrades, 0),
+          newOffers: rs.reduce((a, r) => a + r.newOffers, 0),
+          bootstrapped: rs.filter((r) => r.bootstrap).length,
+        },
       }),
     )
 
@@ -183,6 +187,7 @@ export async function GET(req: NextRequest) {
       offerLedger,
       leagues: results.length,
       newTrades: results.reduce((a, r) => a + r.newTrades, 0),
+      newOffers: results.reduce((a, r) => a + r.newOffers, 0),
       emailsSent: results.reduce((a, r) => a + r.emailsSent, 0),
       bootstrapped: results.filter((r) => r.bootstrap).length,
       errors: results.filter((r) => r.error).map((r) => ({ league: r.sleeperLeagueId, error: r.error })),

@@ -485,3 +485,12 @@
 
 .af-tr-offer-eval-copy strong { color: var(--text); }
 .af-tr-offer-eval-copy small { color: var(--faint); }
+
+/* The trade an email or push linked to (see useFocusTradeFromUrl). Outline, not border, so the
+   card's own geometry does not move while the page is re-centring on it. */
+.af-tr-card[data-trade-focused='true'],
+.af-tr-offer[data-trade-focused='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--accent-soft);
+}

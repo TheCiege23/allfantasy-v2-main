@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { SleeperTransaction } from '@/lib/sleeper-client'
+
 /**
  * sleeperTradeSync — every direct read of the Sleeper league API used by the
  * trade-notify path, in one place.
@@ -39,7 +41,12 @@ export async function sleeperGet<T>(path: string): Promise<T | null> {
 
 const j = sleeperGet
 
-export type SleeperRoster = { roster_id: number; players?: string[] | null }
+/**
+ * `owner_id` is the Sleeper USER id holding the roster. It is how a pending offer is addressed to
+ * the managers actually in it — the same roster→owner join the league Trades panel makes — so an
+ * offer alert and the "Needs you" list agree about who is involved.
+ */
+export type SleeperRoster = { roster_id: number; owner_id?: string | null; players?: string[] | null }
 
 /**
  * Completed trade ids in the CURRENT season's feed (cheap: 18 week fetches).
@@ -57,14 +64,35 @@ export type SleeperRoster = { roster_id: number; players?: string[] | null }
  * about, and treating an unknown status as notifiable would turn any future Sleeper vocabulary
  * change into a spam incident. The allow-list is explicit for that reason.
  */
-export type FeedTrade = { id: string; status: 'complete' | 'pending' }
+export type FeedTrade = {
+  id: string
+  status: 'complete' | 'pending'
+  /**
+   * Who is in the trade, what moves, and who proposed it. Carried because a PENDING offer is never
+   * in the graded ledger — the ledger reads completed trades only — so the offer alert has to be
+   * built from the feed row itself or it cannot be built at all.
+   */
+  rosterIds: number[]
+  creator: string | null
+  createdMs: number | null
+  tx: Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks' | 'waiver_budget'>>
+}
 
 const NOTIFIABLE_STATUSES = new Set(['complete', 'pending'])
+
+type WireTrade = Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks' | 'waiver_budget'>> & {
+  transaction_id: string
+  type: string
+  status: string
+  roster_ids?: number[] | null
+  creator?: string | null
+  created?: number | null
+}
 
 export async function currentTradeIds(sleeperLeagueId: string, options?: { requireComplete?: boolean }): Promise<FeedTrade[] | null> {
   const weeks = await Promise.all(
     Array.from({ length: MAX_WEEKS }, (_, i) =>
-      j<{ transaction_id: string; type: string; status: string }[]>(
+      j<WireTrade[]>(
         `/league/${sleeperLeagueId}/transactions/${i + 1}`,
       ),
     ),
@@ -76,7 +104,12 @@ export async function currentTradeIds(sleeperLeagueId: string, options?: { requi
     for (const t of w ?? []) {
       if (t.type !== 'trade') continue
       if (!NOTIFIABLE_STATUSES.has(t.status)) continue
-      out.push({ id: t.transaction_id, status: t.status as FeedTrade['status'] })
+      out.push({ id: t.transaction_id, status: t.status as FeedTrade['status'],
+        rosterIds: Array.isArray(t.roster_ids) ? t.roster_ids.map(Number).filter(Number.isFinite) : [],
+        creator: typeof t.creator === 'string' && t.creator ? t.creator : null,
+        createdMs: typeof t.created === 'number' ? t.created : null,
+        tx: { adds: t.adds, drops: t.drops, draft_picks: t.draft_picks, waiver_budget: t.waiver_budget },
+      })
     }
   }
   return out
