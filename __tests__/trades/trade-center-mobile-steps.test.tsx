@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 /**
@@ -80,21 +80,38 @@ const chooseMatt = () =>
 const step = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('.af-tc-step')].find((b) => b.textContent?.includes(label))!
 
+/*
+ * 2026-09-24: the step labels became Offers / Send / Get / Review (four tabs share 390px), and the
+ * inbox, value alerts and league history moved onto their own Offers step instead of rendering on
+ * every step. Assertions below that changed say so where they changed.
+ */
 describe('steps', () => {
-  it('starts on "You send", with the step marked current', () => {
+  it('starts on "Send", with the step marked current', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     expect(root(container).getAttribute('data-mobile-step')).toBe('give')
-    expect(step('You send').getAttribute('aria-current')).toBe('step')
-    expect(step('You get').getAttribute('aria-current')).toBeNull()
+    expect(step('Send').getAttribute('aria-current')).toBe('step')
+    expect(step('Get').getAttribute('aria-current')).toBeNull()
   })
 
   it('moves between steps from the step bar', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(step('You get'))
+    fireEvent.click(step('Get'))
     expect(root(container).getAttribute('data-mobile-step')).toBe('get')
-    expect(step('You get').getAttribute('aria-current')).toBe('step')
+    expect(step('Get').getAttribute('aria-current')).toBe('step')
     fireEvent.click(step('Review'))
     expect(root(container).getAttribute('data-mobile-step')).toBe('review')
+    fireEvent.click(step('Offers'))
+    expect(root(container).getAttribute('data-mobile-step')).toBe('offers')
+  })
+
+  it('🛑 a trade link (?trade=) lands on Offers, where that trade is', () => {
+    window.history.replaceState(null, '', '/core/trades?league=l1&trade=tx-9')
+    try {
+      const { container } = render(<TradeCenter league={LEAGUE} />)
+      expect(root(container).getAttribute('data-mobile-step')).toBe('offers')
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
   })
 
   it('tags every step-owned section, so the stylesheet can hide the rest', () => {
@@ -111,8 +128,14 @@ describe('steps', () => {
     expect(tag('.af-tc-balance')).toBe('review')
     // The finder's root reuses `.af-tc-dos`, so it is found through its wrapper, not its class.
     expect(container.querySelector(".af-tc-mstep-wrap[data-mstep='get'] .af-tc-dos")).not.toBeNull()
-    // The inbox is on every step: nothing above it is tagged.
-    expect(container.querySelector('.af-tc-inbox')?.closest('[data-mstep]')).toBeNull()
+    // The inbox belongs to Offers. It used to be untagged and so rendered on every building step.
+    expect(tag('.af-tc-inbox')).toBe('offers')
+    expect(tag('.af-tc-draft')).toBe('offers review')
+  })
+
+  it('the league history, passed in, belongs to Offers too — not trailing every step', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} history={<section className="history-probe">History</section>} />)
+    expect(container.querySelector('.history-probe')?.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('offers')
   })
 })
 
@@ -156,47 +179,85 @@ describe('offers from the inbox', () => {
 })
 
 describe('the persistent control', () => {
-  it('is disabled on an empty deal, and enabled once anything is added', () => {
+  /*
+   * 2026-09-24: on a building step it points at the side still missing, and analyses once neither
+   * is. It used to say "Review trade" on both building steps, which sent a manager to Review only
+   * to be told "Add what you get" and sent back — two wasted taps per deal.
+   */
+  it('on an empty deal it points at the other side, and is not a dead button', () => {
     render(<TradeCenter league={LEAGUE} />)
-    expect(primary().textContent).toBe('Review trade')
-    expect(primary().disabled).toBe(true)
-    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    expect(primary().textContent).toBe('Next: what you get')
     expect(primary().disabled).toBe(false)
   })
 
-  it('goes to Review from a building step', () => {
+  it('🛑 after adding what you send, it goes to what you GET — not to a Review that sends you back', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    expect(primary().textContent).toBe('Next: what you get')
     fireEvent.click(primary())
+    expect(root(container).getAttribute('data-mobile-step')).toBe('get')
+  })
+
+  it('on the step whose side is empty while the other is filled, it says what to add and waits', () => {
+    render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(step('Get'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    fireEvent.click(step('Send'))
+    expect(primary().textContent).toBe('Add what you send')
+    expect(primary().disabled).toBe(true)
+  })
+
+  it('🛑 with both sides filled, one tap from a building step goes to Review AND starts the analysis', async () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    fireEvent.click(step('Get'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    expect(primary().textContent).toBe('Analyze trade')
+    await act(async () => {
+      fireEvent.click(primary())
+    })
     expect(root(container).getAttribute('data-mobile-step')).toBe('review')
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/trade-value/analyze'))).toBe(true)
   })
 
   it('🛑 on Review with an empty side, sends you to that side instead of to an analysis that will refuse', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(primary())
+    fireEvent.click(step('Review'))
     expect(primary().textContent).toBe('Add what you get')
     fireEvent.click(primary())
     expect(root(container).getAttribute('data-mobile-step')).toBe('get')
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/trade-value/analyze'))).toBe(false)
   })
 
-  it('🛑 …and the other way round: only what you GET added sends you to "You send"', () => {
+  it('🛑 …and the other way round: only what you GET added sends you to "Send"', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
-    fireEvent.click(step('You get'))
+    fireEvent.click(step('Get'))
     chooseMatt()
     fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
-    fireEvent.click(primary())
-    expect(root(container).getAttribute('data-mobile-step')).toBe('review')
+    fireEvent.click(step('Review'))
     expect(primary().textContent).toBe('Add what you send')
     fireEvent.click(primary())
     expect(root(container).getAttribute('data-mobile-step')).toBe('give')
   })
 
+  it('on Offers it starts a deal, or returns to the one in progress', () => {
+    const { container } = render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(step('Offers'))
+    expect(primary().textContent).toBe('Build a trade')
+    fireEvent.click(primary())
+    expect(root(container).getAttribute('data-mobile-step')).toBe('give')
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    fireEvent.click(step('Offers'))
+    expect(primary().textContent).toBe('Back to your trade')
+  })
+
   it('analyses from Review once both sides hold something', async () => {
     render(<TradeCenter league={LEAGUE} />)
     fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
-    fireEvent.click(step('You get'))
+    fireEvent.click(step('Get'))
     chooseMatt()
     fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
     fireEvent.click(step('Review'))
@@ -209,6 +270,83 @@ describe('the persistent control', () => {
     const body = JSON.parse(String((call![1] as RequestInit).body))
     expect(body.sideGive.map((a: { name: string }) => a.name)).toEqual(['DK Metcalf'])
     expect(body.sideGet.map((a: { name: string }) => a.name)).toEqual(['Christian McCaffrey'])
+  })
+})
+
+/** Both sides filled, partner chosen, analysis answered with `answer`. */
+async function analyzedDeal(answer: () => Promise<unknown>) {
+  fetchMock.mockImplementation(async (url: string) =>
+    String(url).includes('/api/trade-value/analyze')
+      ? answer()
+      : { ok: false, status: 500, json: async () => ({}) },
+  )
+  const utils = render(<TradeCenter league={{ ...LEAGUE, id: `l-${Math.random()}` }} />)
+  fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+  fireEvent.click(step('Get'))
+  chooseMatt()
+  fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+  await act(async () => {
+    fireEvent.click(primary())
+  })
+  return utils
+}
+
+const VERDICT = {
+  ok: true,
+  status: 200,
+  json: async () => ({ percentDiff: 12, fairnessScore: 60, labels: { fairnessLabel: 'Slight win', confidenceLabel: 'Medium' } }),
+}
+
+describe('🛑 the verdict always belongs to the deal on screen', () => {
+  it('adding an asset after analysing clears the verdict — it described the old deal', async () => {
+    // A second player on your roster, so there is something left to add after the analysis.
+    const data = rosterData.current as { rosters: Array<{ players: unknown[] }> }
+    data.rosters[0]!.players.push(player('p2', 'George Pickens', 4000))
+    const { container } = await analyzedDeal(async () => VERDICT)
+    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).not.toBeNull()
+    fireEvent.click(step('Send'))
+    fireEvent.click(screen.getByLabelText('Add George Pickens'))
+    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).toBeNull()
+  })
+
+  it('removing an asset clears it too', async () => {
+    const { container } = await analyzedDeal(async () => VERDICT)
+    fireEvent.click(step('Send'))
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".af-tc-team[data-mstep='give'] .af-tc-remove")!)
+    expect(container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')).toBeNull()
+  })
+
+  it('while the analysis runs, the verdict slot says so instead of sitting empty', async () => {
+    const { container } = await analyzedDeal(() => new Promise(() => {}))
+    const pending = container.querySelector('.af-tc-verdict--pending')
+    expect(pending).not.toBeNull()
+    expect(pending!.getAttribute('aria-busy')).toBe('true')
+    expect(pending!.getAttribute('data-mstep')).toBe('review')
+  })
+})
+
+describe('the Offers tab', () => {
+  it('badges the number of offers waiting on this manager', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/api/league/trades-panel')
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              activeTrades: [],
+              historyTrades: [],
+              pending: { scanned: true, reason: null, platform: 'sleeper', leagueUrl: null, weeksUnanswered: 0 },
+              pendingOffers: [
+                { transactionId: 'in-1', direction: 'incoming', partnerName: 'Matt Jones', proposedAt: null, give: [], get: [] },
+                { transactionId: 'out-1', direction: 'outgoing', partnerName: 'Matt Jones', proposedAt: null, give: [], get: [] },
+              ],
+            }),
+          }
+        : { ok: false, status: 500, json: async () => ({}) },
+    )
+    render(<TradeCenter league={{ ...LEAGUE, id: 'l3-badge' }} />)
+    // One incoming offer; the outgoing one is not waiting on you.
+    await waitFor(() => expect(step('Offers').querySelector('.af-tc-step-count')?.textContent).toBe('1'))
   })
 })
 
@@ -369,13 +507,17 @@ describe('stylesheet', () => {
 
   it('🛑 the step bar sticks to the TOP inside the phone block — the bottom belongs to the shell', () => {
     const block = lastPhoneBlock(CSS)
-    expect(block).toMatch(/\.af-tc-stepbar \{\n    position: sticky;\n    top: 6px;/)
+    /*
+     * Below the safe-area inset, not at a bare 6px: in the home-screen app the shell paints a fixed
+     * strip over the status bar (z 70), and a bar stuck at 6px slid under it (2026-09-24).
+     */
+    expect(block).toMatch(/\.af-tc-stepbar \{\n    position: sticky;\n    top: calc\(6px \+ env\(safe-area-inset-top, 0px\)\);/)
     expect(block).not.toMatch(/\.af-tc-stepbar \{[^}]*bottom:/)
   })
 
   it('hides every section not tagged for the current step, inside the phone block only', () => {
     const block = lastPhoneBlock(CSS)
-    for (const s of ['give', 'get', 'review']) {
+    for (const s of ['offers', 'give', 'get', 'review']) {
       expect(block).toContain(`.af-tc[data-mobile-step='${s}'] [data-mstep]:not([data-mstep~='${s}'])`)
     }
     // Outside the block, no step hiding exists — so desktop can never lose a section.

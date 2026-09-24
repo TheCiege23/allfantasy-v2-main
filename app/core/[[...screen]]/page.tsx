@@ -3773,8 +3773,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagues={tradeStripLeagues.filter((league) => league.id === selectedLeagueId)}
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
+              history={<Trades data={trades} />}
             />
-            <Trades data={trades} />
           </>
         ) : tradesLoadFailed ? (
           <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
