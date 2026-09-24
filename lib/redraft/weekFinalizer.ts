@@ -3,6 +3,9 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
+import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 
 /**
@@ -64,14 +67,27 @@ export const WEEK_FINALIZE_LOOKBACK_WEEKS = 3
 /**
  * Sports whose `SportsGame.week` identifies a slate.
  *
- * ⚠ NBA AND NHL ARE ABSENT BECAUSE THEIR ROWS DO NOT CARRY A USABLE WEEK — measured on
- * the schedule feed, NBA writes 0 and NHL writes 500 (`lib/season-week/sportWeekSignal.ts`),
- * and every daily-sport `player_game_stats` row is `weekOrRound = 0`. A daily sport's week
- * is a DATE WINDOW, so its slate check is a different query, not a different constant —
- * until that is written, those sports are refused by name rather than finalized on a
- * column that means nothing.
+ * ⚠ NBA AND NHL ARE ABSENT BECAUSE THEIR ROWS DO NOT CARRY A USABLE WEEK — measured again on
+ * production 2026-09-24: NHL season 2026 holds 1,373 `thesportsdb` rows carrying 29 distinct
+ * "weeks" ranging 1..500. That is not a week, it is a column the feed fills arbitrarily.
+ * They are finalized through {@link DATE_WINDOWED_SPORTS} instead.
  */
 export const WEEK_KEYED_SPORTS: readonly string[] = ['NFL', 'NCAAF']
+
+/**
+ * Sports whose week is a DATE WINDOW, closed by the same seven days the stat sync aggregates.
+ *
+ * 🛑 THE WINDOW COMES FROM A RECORDED SEASON OPENER, NEVER A GUESS. `resolveDailySportSeasonStart`
+ * returns null for a season nobody has written down, and this refuses with
+ * `season_start_unknown` rather than anchoring on January 1 — a guessed anchor does not fail
+ * loudly, it assigns every game to the wrong week and seals confidently wrong scores.
+ *
+ * ⚠ NBA IS ABSENT ON PURPOSE AND IS ONE LINE AWAY. The mechanism below is sport-agnostic and
+ * NBA's opener is already recorded (2026-10-20), but its season has not started, so no NBA
+ * slate or stat row has been checked against this path. Adding it is a measurement, not an
+ * edit — the same standard `SEASON_CAPABLE_SPORTS` sets.
+ */
+export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL']
 
 export type WeekFinalizeRefusal =
   | 'finalizer_disabled'
@@ -82,6 +98,15 @@ export type WeekFinalizeRefusal =
   | 'within_grace_period'
   | 'no_starters'
   | 'stat_coverage_below_floor'
+  /**
+   * A daily sport whose season opener is not recorded, so its week has no date window.
+   *
+   * ⚠ DISTINCT FROM `sport_not_week_keyed` BECAUSE THEY MEAN OPPOSITE THINGS. That one says
+   * the finalizer does not handle this sport at all; this one says it does, and is missing
+   * one dated fact — `REGULAR_SEASON_START_UTC` in `dailySportSeasonStarts.ts`, one line.
+   * Collapsing them would send the reader to rewrite a subsystem when the fix is a date.
+   */
+  | 'season_start_unknown'
   /**
    * The backfill could not run because the provider's quota was spent.
    *
@@ -224,13 +249,47 @@ export async function readWeekSlate(
     week: number
     seasonType: 'regular' | 'postseason'
     now?: Date
+    /**
+     * A daily sport's slate, selected by DATE instead of by `week`.
+     *
+     * 🛑 `SportsGame.week` IS NOISE FOR NHL AND NBA, NOT A WEEK. Measured on production
+     * 2026-09-24: NHL season 2026 holds 1,373 `thesportsdb` rows carrying 29 distinct
+     * "weeks" ranging 1..500. The sport has no week, so the feed writes whatever it likes,
+     * and querying `week: N` against that picks an arbitrary handful of games and calls it
+     * a slate.
+     *
+     * A daily sport's week IS a date window — the same one
+     * `syncPlayerWeeklyScoresForRedraftSeason` already aggregates its stats over, from the
+     * same `weekWindowFromSeasonStart` anchor. Passing it keeps both halves reading the
+     * same seven days.
+     */
+    dateWindow?: { start: Date; end: Date } | null
   },
 ): Promise<WeekSlateSummary> {
+  const windowed = args.dateWindow ?? null
+  /*
+   * 🛑 THE WINDOW IS EASTERN DAYS, AND `startTime` IS A UTC INSTANT — SELECTING ON THE INSTANT
+   * PUTS A THIRD OF THE SEASON IN THE WRONG WEEK.
+   *
+   * `player_game_stats.game_date` stores the EASTERN calendar day a game was played (#1194),
+   * and the stat sync buckets by it. A slate that filtered `startTime` against the same bounds
+   * would bucket by UTC instead, and the two halves would disagree about which games belong to
+   * the week. Measured on production 2026-09-24: 954 of 1,409 NHL 2026 games — 67.7% — start
+   * after UTC midnight, because a 7-10pm Eastern puck drop is the NEXT UTC day. Week 1 alone
+   * holds 42 games by UTC instant against 39 by Eastern day.
+   *
+   * So the query over-selects by six hours and the exact membership test happens below, on
+   * `easternCalendarDay` — the same helper, and therefore the same DST handling, that wrote
+   * those `game_date` values.
+   */
+  const EASTERN_OVERSELECT_MS = 6 * 60 * 60 * 1000
   const rawRows = await prisma.sportsGame.findMany({
     where: {
       sport: args.sport,
       season: args.season,
-      week: args.week,
+      ...(windowed
+        ? { startTime: { gte: windowed.start, lt: new Date(windowed.end.getTime() + EASTERN_OVERSELECT_MS) } }
+        : { week: args.week }),
       // Only ranked feeds may answer: an unranked one (cfbd donates kickoff times and has no
       // live status at all) would contribute permanent "unfinished" rows.
       source: { in: [...LIVE_SCORE_SOURCES] },
@@ -246,7 +305,22 @@ export async function readWeekSlate(
     select: { status: true, startTime: true, source: true, fetchedAt: true, season: true, week: true },
   })
 
-  const rows = pickFreshestSourceRows(rawRows, (args.now ?? new Date()).getTime())
+  /*
+   * ⚠ A WINDOWED READ MUST DROP `week` BEFORE SELECTION, OR THE NOISE BECOMES THE GROUPING.
+   * `pickFreshestSourceRows` slices on `season:week` and picks one source PER SLICE. NHL rows
+   * inside one seven-day window carry several of those junk week values, so the selection
+   * would split the window into arbitrary groups. Rows with a null week share a single slice —
+   * which that module documents as the original whole-call behaviour, and is exactly right for
+   * a caller that did not group by week in the first place.
+   */
+  const inWindow = windowed
+    ? rawRows.filter((row) => {
+        const day = easternCalendarDay(row.startTime)
+        return day != null && day >= windowed.start && day < windowed.end
+      })
+    : rawRows
+  const selectable = windowed ? inWindow.map((row) => ({ ...row, week: null })) : inWindow
+  const rows = pickFreshestSourceRows(selectable, (args.now ?? new Date()).getTime())
 
   let final = 0
   let cancelled = 0
@@ -307,7 +381,25 @@ export async function finalizeRedraftWeek(
   }
 
   if (isWeekFinalizerDisabled()) return emptyResult(base, 'finalizer_disabled')
-  if (!WEEK_KEYED_SPORTS.includes(sport)) return emptyResult(base, 'sport_not_week_keyed')
+
+  const isDateWindowed = DATE_WINDOWED_SPORTS.includes(sport)
+  if (!WEEK_KEYED_SPORTS.includes(sport) && !isDateWindowed) {
+    return emptyResult(base, 'sport_not_week_keyed')
+  }
+
+  /*
+   * A daily sport's week is seven days from its recorded opener — the SAME anchor and helper
+   * the stat sync uses, so the slate and the stats cover the same dates. Resolved before the
+   * already-final short circuit so a season with no recorded opener says which fact is
+   * missing instead of silently reading an empty slate.
+   */
+  let dateWindow: { start: Date; end: Date } | null = null
+  if (isDateWindowed) {
+    const seasonStart = resolveDailySportSeasonStart(sport, season.season)
+    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, params.week) : null
+    if (!window) return emptyResult(base, 'season_start_unknown')
+    dateWindow = { start: new Date(window.start), end: new Date(window.end) }
+  }
 
   const matchups = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week: params.week },
@@ -328,6 +420,7 @@ export async function finalizeRedraftWeek(
     week: params.week,
     seasonType,
     now,
+    dateWindow,
   })
   if (slate.games === 0) return emptyResult(base, 'no_games_on_slate', { slate, matchupsConsidered })
   if (slate.unfinished > 0) return emptyResult(base, 'games_not_final', { slate, matchupsConsidered })
