@@ -35,15 +35,35 @@ function txMock() {
 }
 
 describe('2026-09-19 league audit reproductions', () => {
-  it('reproduces dynasty hidden-date blocker after visible fields are complete', () => {
-    const issues = analyzeCreateLeagueCompletion({
-      ...DEFAULT_V2_STATE, leagueType: 'dynasty', name: body.leagueName,
-      sport: 'NFL', draftType: 'snake', scoringPresetId: 'fb_half_ppr',
+  // ✅ FIXED 2026-09-24. The reproduction is INVERTED rather than deleted, so the audit's
+  // finding stays legible and the fix stays guarded.
+  //
+  // The gap: `dynasty.draftMode` defaulted to `'scheduled'` while `draftDateUtc` defaulted to
+  // empty, and NOTHING IN THE UI SET EITHER. `draftDateUtc` appeared in exactly two places in
+  // the codebase — that default and the validator that rejected it — so the message ("set a
+  // startup draft date/time, or switch draft mode to Offline") named two controls that do not
+  // exist and the form could never be completed. Production agreed: 165 dynasty leagues, every
+  // one an import, zero created natively.
+  //
+  // The default is now `'offline'`. The RULE is unchanged, and the second half pins that.
+  it('no longer blocks dynasty on a date no screen can set', () => {
+    const base = {
+      ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, name: body.leagueName,
+      sport: 'NFL' as const, draftType: 'snake' as const, scoringPresetId: 'fb_half_ppr',
       draftDate: body.conceptSetup.draftDate, draftTime: body.conceptSetup.draftTime,
       timezone: body.timezone, dynasty: getDefaultDynastySetup('NFL', 'snake'),
-    })
-    expect(issues.map(x => x.code)).toContain('dynasty_draft_date')
+    }
+
+    const issues = analyzeCreateLeagueCompletion(base)
+    expect(issues.map(x => x.code)).not.toContain('dynasty_draft_date')
     expect(issues.map(x => x.code)).not.toContain('draft_date_required')
+
+    // Still fires for anyone who does choose a scheduled startup.
+    const scheduled = analyzeCreateLeagueCompletion({
+      ...base,
+      dynasty: { ...base.dynasty, draftMode: 'scheduled', draftDateUtc: '' },
+    })
+    expect(scheduled.map(x => x.code)).toContain('dynasty_draft_date')
   })
 
   // PARTIALLY FIXED 2026-09-19. The missing scheduled timestamp is resolved:

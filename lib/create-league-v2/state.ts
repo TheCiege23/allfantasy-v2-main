@@ -200,7 +200,27 @@ export function getDefaultDynastySetup(sport: SupportedSport, draftType: WizardD
   const sportDefaults = defaultDynastyBySport(sport)
   return {
     startupDraftType: draftType,
-    draftMode: 'scheduled',
+    /*
+     * 🛑 `'scheduled'` MADE THE DYNASTY FORM PERMANENTLY UNSUBMITTABLE, AND THE WIZARD HAD NO
+     * WAY OUT OF IT.
+     *
+     * `form-completion.ts` raises a blocking `dynasty_draft_date` whenever the mode is
+     * `scheduled` and `draftDateUtc` is empty, and it defaulted to `scheduled` with an empty
+     * date. Nothing in the UI sets either field — `draftDateUtc` appears in exactly two places
+     * in the codebase, this default and that validator — so the message ("set a date, or
+     * switch draft mode to Offline") named two controls that do not exist. Production reflects
+     * it: 165 dynasty leagues, every one an import, and ZERO created natively.
+     *
+     * ⚠ THE VALIDATION RULE IS KEPT, NOT DELETED. It is correct for anyone who does choose a
+     * scheduled startup, and it will guard that choice the day the control exists. Only the
+     * default moves.
+     *
+     * ⚠ AND NOTHING IS LOST BY DEFAULTING TO OFFLINE: the draft date is a real, editable
+     * column (`LeagueSettings.draftDateUtc`) with a working post-create UI in
+     * `DraftSettingsPanel`. This routes the commissioner to the screen that exists instead of
+     * blocking creation on one that does not.
+     */
+    draftMode: 'offline',
     draftDateUtc: '',
     divisionCount: 0,
     scoringTemplateId: 'default',
