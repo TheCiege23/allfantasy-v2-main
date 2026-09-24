@@ -89,6 +89,12 @@ export function teamDefenseTargets(query: TeamDefenseStatsQuery): string[] {
 }
 
 export interface LiveStatsProvider {
+  /**
+   * The sports this provider can live-score. ABSENT MEANS NFL ONLY — every implementation so far
+   * is, and a provider that forgets to declare must fail closed, never open (see
+   * `liveProviderServesSport`).
+   */
+  readonly sports?: readonly string[]
   /** All games for the sport/season/week (the cadence engine decides which are active). */
   fetchActiveGames(query: LiveStatsQuery): Promise<LiveGameLite[]>
   /** Raw offensive stat lines for the given rostered players whose game is in `games`. */
@@ -101,6 +107,25 @@ export interface LiveStatsProvider {
   ): Promise<Map<string, Record<string, number>>>
   /** Normalize the provider's raw game status to the canonical {@link LiveGameStatus}. */
   normalizeGameStatus(raw: string | null | undefined): LiveGameStatus
+}
+
+/**
+ * Whether `provider` may live-score a season of `sport`.
+ *
+ * 🛑 THE LIVE TICK RAN EVERY ACTIVE SEASON THROUGH THE NFL PROVIDER, WHATEVER ITS SPORT. For an NHL
+ * season that meant NFL games as the slate and Sleeper's NFL week stats looked up by the NHL
+ * roster's ids — which are numeric Rolling Insights ids, and 2,812 of 4,367 NHL pool ids (64%)
+ * equal some NFL player's Sleeper id (NCAAB 8,813 of 18,209; NBA 1,146 of 1,841), measured on
+ * production 2026-09-24. A hit credits an NHL player with an NFL player's line, overwrites
+ * player_weekly_scores.stats, resets isFinalized and rebroadcasts. The first native NHL league
+ * (created 2026-09-24) was being ticked every two minutes as "NFL week 1"; it wrote nothing only
+ * because every NFL week-1 game was already final — luck, not a check.
+ *
+ * Daily sports score through the weekly sync (playerWeeklyScoreService), not this tick.
+ */
+export function liveProviderServesSport(provider: Pick<LiveStatsProvider, 'sports'>, sport: string | null | undefined): boolean {
+  const served = provider.sports ?? ['NFL']
+  return served.includes(String(sport ?? '').trim().toUpperCase())
 }
 
 /** Pure: map provider games → orchestrator snapshots. `fractionElapsed` is null
