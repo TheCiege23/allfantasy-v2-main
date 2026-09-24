@@ -15,9 +15,11 @@ export function getPlayerImage(player: PlayerImageSource, sportOverride?: string
   const u = player.imageUrl?.trim()
   if (u && classifyAvatarSource(u) === 'headshot') return u
   const id = player.id?.trim()
-  if (id && looksLikeSleeperExternalId(id)) {
-    const sport = normalizeToSupportedSport(sportOverride ?? DEFAULT_SPORT)
-    return sleeperHeadshotUrl(id, sport.toLowerCase())
+  const sport = normalizeToSupportedSport(sportOverride ?? DEFAULT_SPORT)
+  // Only an NFL draft-room id is a Sleeper id. A native NBA/NHL/MLB pool carries Rolling Insights
+  // ids, which are numeric too, and a Sleeper URL built from one shows a different person.
+  if (id && sport === 'NFL' && looksLikeSleeperExternalId(id)) {
+    return sleeperHeadshotUrl(id, 'nfl')
   }
   return null
 }

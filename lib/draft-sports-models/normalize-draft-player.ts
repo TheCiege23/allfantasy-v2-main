@@ -115,8 +115,12 @@ export function normalizeDraftPlayer(
     )
   )
 
+  // Only an NFL row's id can be a Sleeper id. Outside NFL the pool fills `sleeperId` with the
+  // Rolling Insights id, and a Sleeper URL built from it shows another person.
   const sleeperForCdn =
-    raw.sleeperId != null && String(raw.sleeperId).trim() !== ''
+    sportNorm !== 'NFL'
+      ? null
+      : raw.sleeperId != null && String(raw.sleeperId).trim() !== ''
       ? String(raw.sleeperId).trim()
       : looksLikeSleeperExternalId(raw.playerId ?? null)
         ? String(raw.playerId).trim()
