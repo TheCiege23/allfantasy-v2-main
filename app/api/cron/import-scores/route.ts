@@ -37,6 +37,7 @@ import {
 } from "@/lib/api-sports"
 import { prisma } from "@/lib/prisma"
 import { fetchGamesForSport, normalizeGameStatus, type ProviderGame } from "@/lib/scores/gameScoreProviders"
+import { recordCfbdAttempt, shouldFetchCfbdNow } from "@/lib/scores/cfbdThrottle"
 import { createRunBudget } from "@/lib/cron/runBudget"
 
 /**
@@ -359,11 +360,24 @@ async function runOneSport(url: URL, sport: Sport, budget: ReturnType<typeof cre
      * response can still serialise; `fetchGamesForSport` reports anything it skips rather than
      * dropping it silently.
      */
+    /*
+     * CFBD is throttled (lib/scores/cfbdThrottle.ts): every 15 minutes during college games, every
+     * 6 hours otherwise, instead of every tick — it was ~77% of this key's monthly calls. ESPN and
+     * TheSportsDB still run every tick. `force=true` bypasses it, like the gate above. The attempt is
+     * recorded BEFORE the call, so a failing CFBD is throttled too rather than retried each tick.
+     */
+    let skip: Record<string, string> | undefined
+    if (sport === "NCAAF") {
+      const decision = force ? ({ run: true } as const) : await shouldFetchCfbdNow()
+      if (decision.run) recordCfbdAttempt()
+      else skip = { cfbd: decision.reason }
+    }
+
     const attempts = await fetchGamesForSport(
       sport,
       Number.isFinite(seasonYear) ? seasonYear : new Date().getFullYear(),
       toWeek(url.searchParams.get("week")),
-      { deadlineAt: Date.now() + Math.max(0, budget.remainingMs() - 20_000) },
+      { deadlineAt: Date.now() + Math.max(0, budget.remainingMs() - 20_000), skip },
     )
 
     const bySource: Record<
@@ -488,6 +502,15 @@ async function handle(req: NextRequest) {
       // and a job that looks degraded every time it behaves correctly is a muted alarm.
       metadata: {
         gatedSports: acc.filter((r) => "gated" in r && r.gated === true).map((r) => r.sport),
+        /*
+         * Whether THIS run spent a CFBD call — so the key's burn can be counted from our own table
+         * rather than inferred. True only when the cfbd provider actually ran: a gated sport, the
+         * throttle, or a budget skip (`error` starting "skipped:") all mean no call was made.
+         */
+        cfbdAsked: acc.some((r) => {
+          const cfbd = "bySource" in r ? (r.bySource as Record<string, { error: string | null }> | undefined)?.cfbd : undefined
+          return cfbd != null && !(cfbd.error ?? "").startsWith("skipped:")
+        }),
       },
     }),
   )
