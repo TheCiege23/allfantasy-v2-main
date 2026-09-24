@@ -40,6 +40,7 @@ describe('recorded regular-season openers', () => {
 
   it('can report what it does know', () => {
     expect(knownDailySportSeasons('NHL')).toEqual([2026])
+    expect(knownDailySportSeasons('NCAAB')).toEqual([2026])
     expect(knownDailySportSeasons('NFL')).toEqual([])
   })
 })

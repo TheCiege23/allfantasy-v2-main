@@ -88,7 +88,7 @@ export const WEEK_KEYED_SPORTS: readonly string[] = ['NFL', 'NCAAF']
  * slate or stat row has been checked against this path. Adding it is a measurement, not an
  * edit — the same standard `SEASON_CAPABLE_SPORTS` sets.
  */
-export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL']
+export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NCAAB']
 
 /**
  * Date-windowed sports whose slate comes from the Rolling Insights season schedule

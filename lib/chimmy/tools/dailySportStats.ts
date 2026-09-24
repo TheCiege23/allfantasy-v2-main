@@ -47,15 +47,10 @@ export function isDailyStatsSport(sport: string): sport is DailySport {
 }
 
 /*
- * Openers the STATS tools need that are deliberately NOT in lib/season-week/dailySportSeasonStarts.ts.
- * Recording NCAAB there would switch on fantasy-scoring week resolution for college basketball
- * (seasonWeekService treats any recorded opener as a scoring anchor) — a separate decision. This
- * only drives the "these are last season's numbers" note. Source: the first 2026-27 NCAAB game in
- * SportsGame (2026-11-02), measured 2026-09-24.
+ * (The NCAAB opener used to live here as a stats-only copy, because recording it in
+ * dailySportSeasonStarts.ts would have switched on fantasy scoring. Scoring is on now, so the one
+ * authority is dailySportSeasonStarts.ts again — two copies of a date is how they drift.)
  */
-const STATS_ONLY_SEASON_STARTS: Readonly<Record<string, Readonly<Record<number, string>>>> = {
-  NCAAB: { 2026: '2026-11-02T00:00:00.000Z' },
-}
 
 /** "2025" -> "2025-26" for the sports whose season spans two calendar years. */
 export function dailySeasonLabel(sport: DailySport, season: string | number): string {
@@ -73,7 +68,7 @@ export function dailyOffSeasonNote(sport: DailySport, season: string | number, n
   if (sport === 'MLB') return null
   const y = Number(season)
   if (!Number.isFinite(y)) return null
-  const start = resolveDailySportSeasonStart(sport, y + 1) ?? STATS_ONLY_SEASON_STARTS[sport]?.[y + 1] ?? null
+  const start = resolveDailySportSeasonStart(sport, y + 1)
   if (!start) return null
   const thisLabel = dailySeasonLabel(sport, y)
   const nextLabel = dailySeasonLabel(sport, y + 1)

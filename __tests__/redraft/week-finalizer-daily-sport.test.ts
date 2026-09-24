@@ -68,6 +68,92 @@ function makePrisma(games: ReturnType<typeof game>[], scored: string[] = ['p1', 
 
 beforeEach(() => vi.clearAllMocks())
 
+/*
+ * NCAAB (switched on 2026-09-24): its slate comes from the Rolling Insights season schedule in
+ * SportsDataCache (lib/sports-data/riSeasonSchedule.ts), NEVER from SportsGame, whose NCAAB
+ * schedules are incomplete (thesportsdb stops at a 3,000-game cap).
+ */
+const NCAAB_SEASON = { id: 'season-cbb', leagueId: 'league-cbb', sport: 'NCAAB', season: 2026 }
+/** Week 1 runs Monday 2026-11-02 -> 2026-11-09 (Eastern days). */
+const CBB_AFTER_GRACE = new Date('2026-11-09T14:00:00.000Z')
+
+function makeNcaabPrisma(schedule: Record<string, unknown> | null, scored: string[] = ['p1', 'p2']) {
+  const base = makePrisma([], scored)
+  const store = new Map<string, unknown>(schedule ? Object.entries(schedule) : [])
+  return {
+    ...base,
+    prisma: {
+      ...base.prisma,
+      redraftSeason: { findFirst: vi.fn(async () => NCAAB_SEASON) },
+      redraftRosterPlayer: {
+        findMany: vi.fn(async () => [
+          { playerId: 'p1', sport: 'NCAAB', slotType: 'PG' },
+          { playerId: 'p2', sport: 'NCAAB', slotType: 'C' },
+        ]),
+      },
+      sportsDataCache: {
+        findUnique: vi.fn(async (args: AnyArgs) => (store.has(args.where.cacheKey) ? { data: store.get(args.where.cacheKey) } : null)),
+        findMany: vi.fn(async (args: AnyArgs) =>
+          (args.where.cacheKey.in as string[]).filter((k) => store.has(k)).map((k) => ({ cacheKey: k, data: store.get(k) })),
+        ),
+      },
+    },
+  }
+}
+
+const cbbGame = (gameId: string, day: string, status: string, startTime: string) => ({
+  gameId, day, startTime, status, seasonType: 'regular', eventName: null, replacedBy: null,
+})
+
+describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', () => {
+  it('lists NCAAB as date-windowed', () => {
+    expect(DATE_WINDOWED_SPORTS).toContain('NCAAB')
+  })
+
+  it('REFUSES while the season schedule is unsynced (2026-27 still 304s) — and never falls back to SportsGame', async () => {
+    const { prisma } = makeNcaabPrisma(null)
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-cbb', week: 1, dryRun: true },
+      { prisma, now: () => CBB_AFTER_GRACE, recalculateMatchups: vi.fn() as any },
+    )
+    expect(result.finalized).toBe(false)
+    expect(result.refusal).toBe('no_games_on_slate')
+    expect(result.slate?.source).toMatch(/not synced/)
+    expect(prisma.sportsGame.findMany).not.toHaveBeenCalled()
+  })
+
+  it('gets past the slate when the synced week is all final — a replaced game does not hold it open', async () => {
+    const { prisma } = makeNcaabPrisma({
+      'NCAAB:rischedule:2026:meta': { games: 3 },
+      'NCAAB:rischedule:2026:2026-11-02': { games: [cbbGame('20261102-1-2', '2026-11-02', 'final', '2026-11-02T23:00:00.000Z')] },
+      'NCAAB:rischedule:2026:2026-11-08': {
+        games: [
+          cbbGame('20261108-3-4', '2026-11-08', 'completed', '2026-11-08T23:00:00.000Z'),
+          cbbGame('20261108-5-6', '2026-11-08', 'replaced', '2026-11-08T20:00:00.000Z'),
+        ],
+      },
+    })
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-cbb', week: 1, dryRun: true },
+      { prisma, now: () => CBB_AFTER_GRACE, recalculateMatchups: vi.fn() as any },
+    )
+    expect(result.slate).toMatchObject({ games: 3, final: 2, cancelled: 1, unfinished: 0, source: 'rolling_insights_schedule' })
+    expect(['games_not_final', 'no_games_on_slate', 'season_start_unknown']).not.toContain(result.refusal)
+  })
+
+  it('holds the week open for a game still scheduled', async () => {
+    const { prisma } = makeNcaabPrisma({
+      'NCAAB:rischedule:2026:meta': { games: 1 },
+      'NCAAB:rischedule:2026:2026-11-08': { games: [cbbGame('20261108-3-4', '2026-11-08', 'scheduled', '2026-11-08T23:00:00.000Z')] },
+    })
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-cbb', week: 1, dryRun: true },
+      { prisma, now: () => CBB_AFTER_GRACE, recalculateMatchups: vi.fn() as any },
+    )
+    expect(result.refusal).toBe('games_not_final')
+  })
+})
+
 describe('finalizeRedraftWeek — a daily sport', () => {
   it('lists NHL as date-windowed, not week-keyed', () => {
     expect(WEEK_KEYED_SPORTS).not.toContain('NHL')

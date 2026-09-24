@@ -46,6 +46,11 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
   NBA: {
     2026: '2026-10-20T00:00:00.000Z',
   },
+  // The first 2026-27 NCAAB game in SportsGame (espn_live; measured 2026-09-24). Opening day is
+  // the first Monday of November. Weeks run Monday-to-Sunday from here.
+  NCAAB: {
+    2026: '2026-11-02T00:00:00.000Z',
+  },
 }
 
 /**
