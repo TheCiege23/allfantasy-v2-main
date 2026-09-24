@@ -587,7 +587,20 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
                   )}
                 </>
               )}
-              {session && draftStatus !== 'pre_draft' && (
+              {session && draftStatus === 'completed' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runDraftControl('create_next_draft')}
+                  disabled={!!saving}
+                  title="After the season is finalized: a rookie draft for dynasty leagues, or a full draft with locked keepers on the board."
+                  data-testid="commissioner-tab-create-next-draft"
+                >
+                  Create next season&apos;s draft
+                </Button>
+              )}
+              {/* A completed draft built the rosters and season; the server refuses to reset it. */}
+              {session && draftStatus !== 'pre_draft' && draftStatus !== 'completed' && (
                 <>
                   {!resetDraftConfirm ? (
                     <Button size="sm" variant="outline" onClick={() => setResetDraftConfirm(true)} disabled={!!saving} className="border-red-500/40 text-red-200">

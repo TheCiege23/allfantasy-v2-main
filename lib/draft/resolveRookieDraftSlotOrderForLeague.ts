@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getRookieDraftOrderConfig, computeRookieDraftOrder } from '@/lib/league/rookieDraftOrder'
+import { buildRosterIdResolver } from '@/lib/league/league-settings-draft-sync'
 
 export type RookieDraftSlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 
@@ -15,9 +16,10 @@ export type RookieDraftSlotOrderEntry = { slot: number; rosterId: string; displa
  * "worst record picks first" and it would silently have zero effect on the draft.
  *
  * `computeRookieDraftOrder` orders `LeagueTeam` rows (the standings model);
- * the live draft needs `Roster` ids. There is no FK between the two, so teams
- * and rosters are paired by canonical id order — the same convention
- * `getStandingsForLottery` already uses for this exact problem.
+ * the live draft needs `Roster` ids. There is no FK between the two, so each
+ * team is resolved to its own roster by `buildRosterIdResolver` — the team's
+ * `externalId`, else its owner. (It used to pair the two lists by id order,
+ * which for random UUIDs is an arbitrary pairing.)
  */
 export async function resolveRookieDraftSlotOrderForLeague(
   leagueId: string,
@@ -31,22 +33,22 @@ export async function resolveRookieDraftSlotOrderForLeague(
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
-      rosters: { select: { id: true }, orderBy: { id: 'asc' } },
-      teams: { select: { id: true }, orderBy: { id: 'asc' } },
+      rosters: { select: { id: true, platformUserId: true } },
+      teams: { select: { id: true, externalId: true, claimedByUserId: true, platformUserId: true } },
     },
   })
   if (!league) return null
 
-  const rosters = league.rosters ?? []
-  const teams = league.teams ?? []
-  const rosterIdByTeamId = new Map<string, string>()
-  for (let i = 0; i < teams.length; i++) {
-    rosterIdByTeamId.set(teams[i].id, rosters[i]?.id ?? teams[i].id)
-  }
-
-  return result.slots.map((s) => ({
+  // 🛑 Each team's OWN roster. This used to sort both lists by random UUID and pair them by
+  // index, so the worst team's first pick went to whichever manager's roster id sorted there —
+  // and a team without a pair got its team id seated, which the pick authority never accepts.
+  const resolveRosterId = buildRosterIdResolver(league.rosters ?? [], league.teams ?? [])
+  const slots = result.slots.map((s) => ({
     slot: s.slot,
-    rosterId: rosterIdByTeamId.get(s.teamId) ?? s.teamId,
+    rosterId: resolveRosterId(s.teamId),
     displayName: s.teamName || s.ownerName,
   }))
+  // An order that cannot place every team is not applied (the caller keeps the default order).
+  if (slots.some((s) => !s.rosterId)) return null
+  return slots as RookieDraftSlotOrderEntry[]
 }
