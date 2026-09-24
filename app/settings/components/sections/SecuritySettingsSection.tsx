@@ -163,11 +163,10 @@ export function SecuritySettingsSection({
 
   const handleSendPhoneCode = async () => {
     const trimmed = phoneInput.replace(/[\s()-]/g, "").trim()
-    if (!trimmed) return
+    if (!trimmed || !smsConsent) return
     setPhoneSending(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
-    if (!smsConsent) return
     const result = await startPhoneVerification(trimmed.startsWith("+") ? trimmed : `+1${trimmed}`, {
       smsConsent: true,
       consentSource: "settings-security",
@@ -572,7 +571,7 @@ export function SecuritySettingsSection({
                   </button>
                   <button
                     type="button"
-                    disabled={phoneSending}
+                    disabled={phoneSending || !smsConsent}
                     onClick={handleSendPhoneCode}
                     className="rounded-lg border px-3 py-2 text-sm font-medium"
                     style={{ borderColor: "var(--border)", color: "var(--text)" }}
