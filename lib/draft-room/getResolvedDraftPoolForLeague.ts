@@ -795,6 +795,45 @@ function resolveConflictingExternalIds(
   return rows
 }
 
+const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal'])
+
+export function isFollowUpDraftMode(draftModeLabel: string | null | undefined): boolean {
+  return FOLLOW_UP_DRAFT_MODES.has(String(draftModeLabel ?? '').toLowerCase())
+}
+
+/**
+ * What a draft's own mode takes out of the pool.
+ *
+ * - A league's SECOND draft (rookie, supplemental, dispersal) picks from players nobody holds.
+ *   Rosters carry over into it — a rookie draft ADDS to standing rosters — so without this the
+ *   pool offered every starter already on a team.
+ * - "Rookies only" / "Veterans only" were enforced at pick time but never applied to the board,
+ *   so a rookie draft listed every veteran and refused them one by one. When no entry carries a
+ *   rookie flag at all, "rookies only" keeps the full pool rather than an empty board.
+ */
+export function applyDraftModePoolFilters(
+  entries: NormalizedDraftEntry[],
+  session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
+  rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
+): NormalizedDraftEntry[] {
+  let out = entries
+  if (isFollowUpDraftMode(session?.draftModeLabel) && rostered.length > 0) {
+    out = filterExcludedDraftEntries(
+      out,
+      new Set(rostered.map((r) => normalizeDraftPoolNameForDedupe(r.playerName ?? '')).filter(Boolean)),
+      new Set(rostered.map((r) => String(r.playerId ?? '').trim()).filter(Boolean)),
+    )
+  }
+  // The board matches what pick validation (`validateSpecialtyDraftPools`) already enforces.
+  const pool = String(session?.playerPool ?? '').toLowerCase()
+  if (pool === 'rookies_only' && out.some((e) => e.isRookie === true)) {
+    out = out.filter((e) => e.isRookie === true)
+  } else if (pool === 'veterans_only') {
+    out = out.filter((e) => e.isRookie !== true)
+  }
+  return out
+}
+
 function filterExcludedDraftEntries(
   entries: NormalizedDraftEntry[],
   excludeDraftedNames?: ReadonlySet<string>,
@@ -887,7 +926,15 @@ export async function getResolvedDraftPoolForLeague(
       where: { leagueId },
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
       /* `teamCount` is here for the AI ADP context hash below - see the block comment there. */
-      select: { devyConfig: true, c2cConfig: true, keeperSelections: true, draftType: true, teamCount: true },
+      select: {
+        devyConfig: true,
+        c2cConfig: true,
+        keeperSelections: true,
+        draftType: true,
+        teamCount: true,
+        draftModeLabel: true,
+        playerPool: true,
+      },
     }),
   ])
   perfLeagueDraft()
@@ -2306,6 +2353,25 @@ export async function getResolvedDraftPoolForLeague(
     options.excludeDraftedNames,
     options.excludeDraftedPlayerIds,
   )
+
+  if (isFollowUpDraftMode(draftSession?.draftModeLabel)) {
+    // The league's CURRENT rosters only: last season's rows are never marked dropped, so reading
+    // every season would hide a player a team has since released.
+    const latestSeason = await prisma.redraftSeason
+      .findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+      .catch(() => null)
+    const rostered = latestSeason
+      ? await prisma.redraftRosterPlayer
+          .findMany({
+            where: { droppedAt: null, roster: { leagueId, seasonId: latestSeason.id } },
+            select: { playerId: true, playerName: true },
+          })
+          .catch(() => [] as Array<{ playerId: string; playerName: string }>)
+      : []
+    entries = applyDraftModePoolFilters(entries, draftSession, rostered)
+  } else {
+    entries = applyDraftModePoolFilters(entries, draftSession, [])
+  }
 
   // Phase 2: filter out teamless (free-agent/released) players from the live pool.
   // DEF/DST units are exempt â they legitimately may not carry a team abbreviation.

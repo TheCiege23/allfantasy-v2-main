@@ -487,6 +487,22 @@ export default function CommissionerControlsPanel({ leagueId }: { leagueId?: str
                 )}
               </div>
             )}
+            {draftStatus === 'completed' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runDraftControl('create_next_draft')}
+                  disabled={busyAction !== null}
+                  data-testid="commissioner-controls-create-next-draft"
+                >
+                  Create next season&apos;s draft
+                </Button>
+                <span className="text-xs text-white/50">
+                  After the season is finalized: a rookie draft for dynasty leagues, or a full draft with locked keepers on the board.
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-xs text-white/50">No draft session found. Start a draft first, then controls will appear.</p>

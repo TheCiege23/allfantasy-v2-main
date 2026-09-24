@@ -32,7 +32,9 @@ const {
   mockLeagueUpdate,
   mockExecuteSeasonCarryover,
   mockGenerateSchedule,
+  mockRedraftRosterFindMany,
 } = vi.hoisted(() => ({
+  mockRedraftRosterFindMany: vi.fn(),
   mockRedraftSeasonFindFirst: vi.fn(),
   mockRedraftSeasonFindUnique: vi.fn(),
   mockLeagueFindFirst: vi.fn(),
@@ -53,6 +55,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftSeason: { findFirst: mockRedraftSeasonFindFirst, findUnique: mockRedraftSeasonFindUnique },
     league: { findFirst: mockLeagueFindFirst, update: mockLeagueUpdate },
+    redraftRoster: { findMany: mockRedraftRosterFindMany },
     $transaction: mockTransaction,
     keeperSelectionSession: { findFirst: mockKeeperSelectionSessionFindFirst, update: mockKeeperSelectionSessionUpdate },
     keeperRecord: { updateMany: mockKeeperRecordUpdateMany },
@@ -77,6 +80,65 @@ import { lockKeeperSelections } from '@/lib/keeper/selectionEngine'
 beforeEach(() => {
   vi.clearAllMocks()
   mockExecuteSeasonCarryover.mockResolvedValue({ totalKept: 0, byTeam: [] })
+  // No rosters in the completed season: the shell falls back to building from LeagueTeam.
+  mockRedraftRosterFindMany.mockResolvedValue([])
+})
+
+function arrangeShellCreation() {
+  mockRedraftSeasonFindFirst.mockResolvedValueOnce(null)
+  mockRedraftSeasonFindUnique.mockResolvedValueOnce({
+    sport: 'nfl',
+    season: 2024,
+    totalWeeks: 17,
+    playoffStartWeek: 15,
+    medianGame: false,
+  })
+  mockTxRedraftSeasonCreate.mockResolvedValueOnce({ id: 'season-2' })
+  mockTxRedraftRosterCreate.mockImplementation(async ({ data }: { data: { ownerId: string } }) => ({ id: `r-${data.ownerId}` }))
+  mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => unknown) =>
+    cb({
+      redraftSeason: { create: mockTxRedraftSeasonCreate },
+      redraftRoster: { create: mockTxRedraftRosterCreate },
+      redraftMatchup: { create: mockTxRedraftMatchupCreate },
+      league: { update: mockTxLeagueUpdate },
+    }),
+  )
+}
+
+describe('ensureNextRedraftSeasonShell — team identity carries across seasons', () => {
+  it("clones last season's rosters, orphan owner ids included", async () => {
+    arrangeShellCreation()
+    mockLeagueFindFirst.mockResolvedValueOnce({ id: 'league-1', userId: 'commish-1', teams: [] })
+    mockRedraftRosterFindMany.mockResolvedValueOnce([
+      { ownerId: 'commish-1', ownerName: 'C', teamName: 'Team C', avatarUrl: null },
+      { ownerId: 'roster:R-2', ownerName: 'Open', teamName: 'Team 2', avatarUrl: null },
+    ])
+
+    await ensureNextRedraftSeasonShell('league-1', 'season-1')
+
+    const owners = mockTxRedraftRosterCreate.mock.calls.map((c) => c[0].data.ownerId)
+    expect(owners).toEqual(['commish-1', 'roster:R-2'])
+  })
+
+  it('never gives the commissioner two rosters when rebuilding from teams', async () => {
+    // The commissioner owns a team AND the league has an unclaimed one. Both used to map to the
+    // commissioner, and @@unique([seasonId, ownerId]) rolled the whole shell back.
+    arrangeShellCreation()
+    mockLeagueFindFirst.mockResolvedValueOnce({
+      id: 'league-1',
+      userId: 'commish-1',
+      teams: [
+        { id: 't1', externalId: 'R-1', claimedByUserId: 'commish-1', ownerName: 'C', teamName: 'Team C', avatarUrl: null },
+        { id: 't2', externalId: 'R-2', claimedByUserId: null, ownerName: 'Open', teamName: 'Team 2', avatarUrl: null },
+      ],
+    })
+
+    await ensureNextRedraftSeasonShell('league-1', 'season-1')
+
+    const owners = mockTxRedraftRosterCreate.mock.calls.map((c) => c[0].data.ownerId)
+    expect(owners).toEqual(['commish-1', 'roster:R-2'])
+    expect(new Set(owners).size).toBe(owners.length)
+  })
 })
 
 describe('ensureNextRedraftSeasonShell', () => {
