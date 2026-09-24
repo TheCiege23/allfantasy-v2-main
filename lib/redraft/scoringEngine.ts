@@ -15,6 +15,10 @@ import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
+import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -114,6 +118,55 @@ export function isScoringStarterSlot(slotType: string | null | undefined): boole
   return isNflRedraftScoringStarterSlot(slotType)
 }
 
+/*
+ * 🛑 BEST BALL WAS SCORED LIKE A LINEUP LEAGUE. A best-ball team never sets a lineup — the
+ * system starts its highest scorers each week — but matchups summed only the players sitting in
+ * starter slots, which nothing ever changed after the draft auto-filled them. Bench points never
+ * counted, so every best-ball matchup and standing was the score of a stale lineup.
+ *
+ * The optimal lineup is chosen HERE, inside matchup scoring, so the matchup, the standings and
+ * the finalizer all agree without a separate job. It is never written back to `slotType`.
+ */
+const BEST_BALL_EXCLUDED_SLOTS = new Set(['IR', 'RESERVE', 'TAXI', 'DEVY'])
+
+/** In a best-ball league every active player can score except IR / reserve / taxi / devy. */
+export function isBestBallCandidateSlot(slotType: string | null | undefined): boolean {
+  return !BEST_BALL_EXCLUDED_SLOTS.has(normalizeToken(slotType))
+}
+
+/** The players whose weekly stats decide a matchup: starters, or the whole active roster in best ball. */
+export function countsTowardScore(slotType: string | null | undefined, bestBall: boolean): boolean {
+  return bestBall ? isBestBallCandidateSlot(slotType) : isScoringStarterSlot(slotType)
+}
+
+export function leagueIsBestBall(
+  league: { bestBallMode?: boolean | null; leagueVariant?: string | null; leagueType?: string | null } | null | undefined,
+): boolean {
+  if (!league) return false
+  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType)
+}
+
+/**
+ * The league's starter slots as optimizer input: the commissioner's roster (a superflex league
+ * gets its SF seat), with the same slot eligibility lineup validation enforces.
+ */
+export function buildBestBallSlots(sport: string, leagueSettings: unknown): LineupSlotSpec[] {
+  const config = resolveRedraftRosterConfig(sport, leagueSettings)
+  const slots: LineupSlotSpec[] = []
+  let order = 0
+  for (const [token, count] of config.starterCapacities) {
+    slots.push({ slot: token, eligible: allowedPositionsForSlot(sport, token), count, slotOrder: order++ })
+  }
+  return slots
+}
+
+function playerPositions(position: string | null | undefined): string[] {
+  return String(position ?? '')
+    .split(/[/,]/)
+    .map((p) => normalizeToken(p))
+    .filter(Boolean)
+}
+
 type SportConfigBlob = Record<string, unknown>
 
 function readSportConfig(league: { settings: unknown }): SportConfigBlob {
@@ -211,7 +264,11 @@ export type RosterScoreSummary = {
   points: number
   missingPlayerIds: string[]
   allFinal: boolean
+  /** Best ball only: the lineup the system started this week, and any seat nobody could fill. */
+  bestBall?: { assignments: OptimalSlotAssignment[]; unfilledSlots: { slot: string; seat: number }[] }
 }
+
+type BestBallScoringContext = { sport: string; slots: LineupSlotSpec[] }
 
 export type MatchupScoreUpdateSummary = {
   matchupId: string
@@ -228,7 +285,9 @@ async function scoreRosterStarters(args: {
   week: number
   seasonYear: number
   useDevyEngine: boolean
+  bestBall?: BestBallScoringContext | null
 }): Promise<RosterScoreSummary> {
+  if (args.bestBall && !args.useDevyEngine) return scoreRosterBestBall({ ...args, bestBall: args.bestBall })
   if (args.useDevyEngine) {
     const r = await calculateOfficialTeamScore(args.leagueId, args.rosterId, args.week, args.seasonYear)
     return {
@@ -291,6 +350,73 @@ async function scoreRosterStarters(args: {
   }
 }
 
+/**
+ * Best ball: score every eligible player, then start the highest-scoring legal lineup
+ * (`computeOptimalLineup`, exact — a superflex seat takes a second QB when that scores more).
+ * Complete only when every candidate has a stat row, which the week finalizer guarantees by
+ * sealing the whole best-ball roster, not just its starters.
+ */
+async function scoreRosterBestBall(args: {
+  leagueId: string
+  rosterId: string
+  week: number
+  seasonYear: number
+  bestBall: BestBallScoringContext
+}): Promise<RosterScoreSummary> {
+  const players = await prisma.redraftRosterPlayer.findMany({
+    where: { rosterId: args.rosterId, droppedAt: null },
+  })
+  const candidates = players.filter((p: (typeof players)[number]) => isBestBallCandidateSlot(p.slotType))
+
+  let scored = 0
+  let allFinal = true
+  const missingPlayerIds: string[] = []
+  const inputs: { playerId: string; positions: string[]; points: number; playerName: string | null }[] = []
+  for (const p of candidates) {
+    const row = await prisma.playerWeeklyScore.findUnique({
+      where: {
+        playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport },
+      },
+    })
+    if (!row) {
+      missingPlayerIds.push(p.playerId)
+      allFinal = false
+      continue
+    }
+    const points = await calculateScoreFromSportConfig(
+      args.leagueId,
+      p.playerId,
+      args.week,
+      row.stats as Record<string, number>,
+      p.position,
+    )
+    inputs.push({ playerId: p.playerId, positions: playerPositions(p.position), points, playerName: p.playerName ?? null })
+    scored += 1
+    if (!row.isFinalized) allFinal = false
+  }
+
+  const lineup = computeOptimalLineup({ players: inputs, slots: args.bestBall.slots })
+  return {
+    rosterId: args.rosterId,
+    starterCount: candidates.length,
+    scoredStarterCount: scored,
+    points: Math.round(lineup.total * 100) / 100,
+    missingPlayerIds,
+    allFinal,
+    bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
+  }
+}
+
+async function loadBestBallContext(leagueId: string): Promise<BestBallScoringContext | null> {
+  const league = await prisma.league.findFirst({
+    where: { id: leagueId },
+    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true },
+  })
+  if (!league || !leagueIsBestBall(league)) return null
+  const sport = String(league.sport ?? 'NFL')
+  return { sport, slots: buildBestBallSlots(sport, league.settings) }
+}
+
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
   const m = await prisma.redraftMatchup.findFirst({
     where: { id: matchupId },
@@ -317,6 +443,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const seasonYear = season.season
 
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
+  const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
 
   const home = await scoreRosterStarters({
     leagueId,
@@ -324,6 +451,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     week,
     seasonYear,
     useDevyEngine,
+    bestBall,
   })
   const away = await scoreRosterStarters({
     leagueId,
@@ -331,6 +459,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     week,
     seasonYear,
     useDevyEngine,
+    bestBall,
   })
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =

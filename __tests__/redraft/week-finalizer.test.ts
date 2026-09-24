@@ -60,6 +60,7 @@ function makePrisma(overrides: {
   rosterPlayers?: Array<{ playerId: string; sport: string; slotType: string }>
   existingScores?: Array<{ playerId: string; sport: string }>
   season?: typeof SEASON | null
+  league?: { bestBallMode?: boolean; leagueType?: string | null; leagueVariant?: string | null } | null
 } = {}) {
   const calls: Array<{ key: string; args: AnyArgs }> = []
   const record = (key: string) => (args: AnyArgs) => {
@@ -76,6 +77,12 @@ function makePrisma(overrides: {
   })
 
   const prisma = {
+    league: {
+      findFirst: vi.fn(async (args: AnyArgs) => {
+        record('league.findFirst')(args)
+        return overrides.league ?? { bestBallMode: false, leagueType: 'redraft', leagueVariant: null }
+      }),
+    },
     redraftSeason: {
       findFirst: vi.fn(async (args: AnyArgs) => {
         record('redraftSeason.findFirst')(args)
@@ -169,6 +176,51 @@ describe('finalizeRedraftWeek', () => {
     expect(updated?.where).toMatchObject({ week: 2, season: 2026, sport: 'NFL', isFinalized: false })
     expect(updated?.where.playerId.in.sort()).toEqual(['p1', 'p2', 'p3', 'p4', 'p5'])
     expect(updated?.data).toEqual({ isFinalized: true })
+  })
+
+  it('best ball: the bench scores too, so it is sealed with the starters (IR and taxi are not)', async () => {
+    const { prisma, calls } = makePrisma({
+      league: { bestBallMode: true, leagueType: 'best_ball', leagueVariant: null },
+      rosterPlayers: [
+        starter('p1'),
+        starter('p2'),
+        { playerId: 'b1', sport: 'NFL', slotType: 'BENCH' },
+        { playerId: 'b2', sport: 'NFL', slotType: 'BN' },
+        { playerId: 'ir1', sport: 'NFL', slotType: 'IR' },
+        { playerId: 't1', sport: 'NFL', slotType: 'TAXI' },
+      ],
+      existingScores: [
+        { playerId: 'p1', sport: 'NFL' },
+        { playerId: 'p2', sport: 'NFL' },
+        { playerId: 'b1', sport: 'NFL' },
+        { playerId: 'b2', sport: 'NFL' },
+      ],
+    })
+
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-1', week: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any },
+    )
+
+    expect(result.finalized).toBe(true)
+    expect(result.starters).toBe(4)
+    const updated = argsFor(calls, 'playerWeeklyScore.updateMany')
+    expect(updated?.where.playerId.in.sort()).toEqual(['b1', 'b2', 'p1', 'p2'])
+    expect(argsFor(calls, 'league.findFirst')?.where).toEqual({ id: 'league-1' })
+  })
+
+  it('a lineup league still seals only its starters', async () => {
+    const { prisma, calls } = makePrisma({
+      rosterPlayers: [starter('p1'), starter('p2'), { playerId: 'b1', sport: 'NFL', slotType: 'BENCH' }],
+    })
+
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-1', week: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any },
+    )
+
+    expect(result.starters).toBe(2)
+    expect(argsFor(calls, 'playerWeeklyScore.updateMany')?.where.playerId.in.sort()).toEqual(['p1', 'p2'])
   })
 
   it('refuses while any game is unfinished, and writes nothing', async () => {
@@ -458,6 +510,7 @@ describe('finalizeCompletedWeeksForSeason — backfilling a past week', () => {
   /** Coverage that starts below the floor and rises only if `syncWeekStats` is called. */
   function makeSweepPrisma(scored: Array<{ playerId: string; sport: string }>) {
     return {
+      league: { findFirst: vi.fn(async () => null) },
       redraftSeason: { findFirst: vi.fn(async () => SEASON) },
       redraftMatchup: {
         findMany: vi.fn(async (args: AnyArgs) =>

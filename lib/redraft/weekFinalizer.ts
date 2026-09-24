@@ -7,7 +7,7 @@ import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
-import { isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from './scoringEngine'
+import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 
 /**
@@ -487,12 +487,24 @@ export async function finalizeRedraftWeek(
     : []
 
   /*
+   * ⚠ IN BEST BALL THE BENCH SCORES TOO. The matchup starts each team's best lineup from every
+   * active player, so every one of them needs a sealed row — sealing starters only left bench
+   * players without a row and the matchup could never go final.
+   */
+  const bestBall = leagueIsBestBall(
+    await prisma.league.findFirst({
+      where: { id: season.leagueId },
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true },
+    }),
+  )
+
+  /*
    * One row per (playerId, sport): the score table is keyed that way, and two managers
    * starting the same player must not be counted as two starters to cover.
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
   for (const p of rosterPlayers) {
-    if (!isScoringStarterSlot(p.slotType)) continue
+    if (!countsTowardScore(p.slotType, bestBall)) continue
     starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
   }
   if (starters.size === 0) {
