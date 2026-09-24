@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { ingestSportStats } from '@/lib/schedule-stats'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 
 /**
  * COLLEGE FOOTBALL GAME LOGS, FROM A RESPONSE WE WERE ALREADY FETCHING AND THROWING AWAY.
@@ -186,7 +187,10 @@ export async function planCfbdGameLogs(
   for (const g of schedule) {
     if (g.startTime == null || g.week == null) continue
     const id = cfbdGameId(g.externalId)
-    if (id) dateByGame.set(id, g.startTime)
+    // The Eastern calendar DAY, not the kickoff instant: `game_date` is a DATE, and a 7:30pm ET
+    // Saturday kickoff is Sunday in UTC (4,011 rows / 54 games measured a day late, 2026-09-24).
+    const day = easternCalendarDay(g.startTime)
+    if (id && day) dateByGame.set(id, day)
     const t = g.startTime.getTime()
     if (t > (lastKickoff.get(g.week) ?? -Infinity)) lastKickoff.set(g.week, t)
   }

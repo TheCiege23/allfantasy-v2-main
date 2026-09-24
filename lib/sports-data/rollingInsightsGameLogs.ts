@@ -7,6 +7,7 @@ import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsights
 import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFieldMaps'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
+import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
 
 /**
  * Per-game player box lines for every sport, from Rolling Insights `/live/{date}/{SPORT}`.
@@ -102,7 +103,13 @@ export interface RiGameBox {
   providerGameId: string
   season: number | null
   weekOrRound: number
+  /** The kickoff INSTANT (GMT on the wire). Right for "when", wrong for "which day". */
   gameDate: Date | null
+  /**
+   * The game's US Eastern calendar DAY, for the `game_date` DATE column — see easternGameDay.ts.
+   * Storing `gameDate` there dated every evening game a day late.
+   */
+  gameDay: Date | null
   status: string | null
   /** `null` = the label was absent or not one we recognise — never assumed to be regular. */
   seasonType: RiSeasonType | null
@@ -264,6 +271,10 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
     // "no week" value rather than a made-up round number.
     weekOrRound: num(g.week) ?? 0,
     gameDate: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null,
+    // The vendor prints the Eastern day into game_ID; the kickoff's Eastern date is the fallback.
+    gameDay:
+      gameDayFromRiGameId(providerGameId) ??
+      easternCalendarDay(parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null),
     status: str(g.status ?? g.game_status),
     // Preseason, regular season and playoffs all arrive through the same `/live` call. Dropping
     // this is how 619 NHL preseason rows landed in season 2026 unmarked — see riSeasonType.ts.
@@ -454,7 +465,9 @@ export async function ingestRollingInsightsGameLogs(opts: {
             confidence,
             team: line.team,
             opponent: line.opponent,
-            gameDate: box.gameDate,
+            // The DAY, not the instant: `game_date` is a DATE, and the instant's UTC date is
+            // tomorrow for every US night game (easternGameDay.ts has the measured damage).
+            gameDate: box.gameDay,
             fetchedAt: now,
           }
 

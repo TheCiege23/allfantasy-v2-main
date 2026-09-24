@@ -41,6 +41,8 @@ describe('normalizeRiGameBox — against the committed NCAABB fixture', () => {
     expect(box.providerGameId).toBe('20260406-12-103')
     expect(box.season).toBe(2025) // "2025-2026" -> the year the season started
     expect(box.gameDate?.toISOString()).toBe('2026-04-07T00:50:00.000Z') // GMT; the id carries the ET day
+    // The DAY stored in game_date is the Eastern one — the instant's UTC date is a day late.
+    expect(box.gameDay?.toISOString()).toBe('2026-04-06T00:00:00.000Z')
     const teams = new Set(box.lines.map((l) => `${l.team}@${l.opponent}`))
     expect(teams).toEqual(new Set(['MICH@CONN', 'CONN@MICH']))
   })

@@ -91,10 +91,23 @@ describe('planCfbdGameLogs + collector', () => {
     const input = ingest.mock.calls[0][0]
     expect(input).toMatchObject({ sportType: 'NCAAF', season: 2026, weekOrRound: 3, source: 'cfbd-weekly' })
     const curtis = input.playerStats.find((p: { playerId: string }) => p.playerId === '5158948')
-    expect(curtis.gameDate).toEqual(W3_LAST)
+    // The Eastern DAY of the kickoff (06:30Z is 2:30am EDT on 09-20), never the raw instant.
+    expect(curtis.gameDate).toEqual(new Date('2026-09-20T00:00:00.000Z'))
     // Never the VarChar(8) columns — school names would overflow them.
     expect(curtis.team).toBeUndefined()
     expect(curtis.opponent).toBeUndefined()
+  })
+
+  it('REGRESSION: dates a Saturday-night kickoff Saturday, not the Sunday it is in UTC', async () => {
+    // 7:30pm EDT Saturday 09-19 is 23:30Z; 8:30pm EDT is 00:30Z SUNDAY. The column is a DATE, and
+    // storing the instant dated 4,011 rows / 54 games a day late (measured 2026-09-24).
+    const plan = await planCfbdGameLogs(
+      { season: 2026, now: new Date('2026-09-20T12:00:00Z') },
+      db([], [{ externalId: '401856695', week: 3, startTime: new Date('2026-09-20T00:30:00Z') }]),
+    )
+    expect(plan.dateByGame.get('cfbd:401856695')).toEqual(
+      new Date('2026-09-19T00:00:00.000Z'),
+    )
   })
 
   it('skips a week completed AFTER it settled, but rewrites one stamped before', async () => {
