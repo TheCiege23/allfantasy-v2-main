@@ -358,18 +358,41 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, leagueType: true, isDynasty: true },
+    select: { id: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
 
-  const isRedraft =
-    String(league.leagueType ?? '').toLowerCase() === 'redraft' ||
-    league.isDynasty === false
-
-  if (!isRedraft) {
-    return { ...EMPTY_SUMMARY, reason: 'not_redraft_league' }
-  }
+  /*
+   * 🛑 THIS GATE READ `leagueType === 'redraft' || isDynasty === false`, WHICH IS NOT A
+   * STATEMENT ABOUT REDRAFT — IT IS "EVERYTHING EXCEPT DYNASTY", AND DYNASTY WAS EXCLUDED BY
+   * ITS NAME RATHER THAN FOR A REASON.
+   *
+   * `RedraftSeason` is the generic season shell every format hangs off, not a redraft-only
+   * table: guillotine reaches this exact sync and `ensureGuillotineSeason` builds on the
+   * `RedraftSeason` it produces, saying so in its own header. Tournament, survivor, zombie,
+   * salary-cap and keeper all pass through the second arm the same way. Dynasty was the only
+   * format the gate turned away, so a dynasty league finished its draft and got no season, no
+   * rosters and no schedule — nothing to score, and nothing said why.
+   *
+   * ⚠ AND THE BODY BELOW HAS NOTHING REDRAFT-SPECIFIC IN IT. It walks the completed picks,
+   * ensures a roster per generic roster, and adds players that are not already active.
+   *
+   * ⚠ A ROOKIE DRAFT IN YEAR TWO IS SAFE FOR THE SAME REASON, AND THIS WAS CHECKED RATHER
+   * THAN ASSUMED: `ensureRedraftSeason` reuses the league's most recent season instead of
+   * creating a second, and each player is skipped when an undropped row already exists. So a
+   * rookie draft ADDS to the standing rosters; it cannot replace the veterans with a
+   * rookies-only roster, which is the failure that would justify excluding dynasty.
+   *
+   * ⚠ WHAT IS STILL NOT SOLVED, STATED SO IT IS NOT MISTAKEN FOR SOLVED: carrying rosters
+   * ACROSS seasons. That is the keeper/carryover engine's job and no native dynasty league
+   * has reached a second year — production holds 165 dynasty leagues and every one is an
+   * import whose season came from materialization, never from this path.
+   *
+   * ⚠ NO REPLACEMENT GATE IS ADDED, DELIBERATELY. Every other format already passed, so any
+   * new exclusion written here would be removing something that works today on no evidence —
+   * `not_redraft_league` therefore stays in the result type and is no longer produced.
+   */
 
   const session = await prisma.draftSession.findUnique({
     where: { leagueId },
