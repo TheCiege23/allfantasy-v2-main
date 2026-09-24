@@ -7,23 +7,32 @@ import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { sendTemplatedEmail } from '@/lib/resend-client'
 import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
-import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
+import { buildPendingTradeOfferEmail, buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
 import { canAccessForUser } from '@/lib/access/canAccessForUser'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
-import { currentTradeIds, type FeedTrade } from '@/lib/trade-intel/sleeperTradeSync'
+import {
+  currentTradeIds,
+  fetchLeagueRosters,
+  type FeedTrade,
+  type SleeperRoster,
+} from '@/lib/trade-intel/sleeperTradeSync'
+import { buildTradeAssetsForRoster } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { getAllPlayers, getLeagueUsers } from '@/lib/api-cache/SleeperCacheLayer'
+import { resolveSourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 
 /**
- * tradeNotifyService — "your league just traded" with INSTANT grades.
+ * tradeNotifyService — "your league just traded" with INSTANT grades, and "a trade is waiting on
+ * you" for an offer still open.
  *
  * Flow per league (invoked by the cron route):
  *  1. Cheap detection: read the CURRENT season's transaction feed and collect
- *     completed trade ids.
+ *     pending and completed trades.
  *  2. Diff against the seen-set stored in SportsDataCache (no migrations).
- *  3. On a new trade: force-refresh the graded ledger (so the fresh trade is
- *     graded), then email every AF member of that league the initial grades
- *     with a link to the Legacy ledger.
+ *  3. A new OFFER is sent to the managers in it who still have to answer it. A new COMPLETION —
+ *     including an offer we saw while it was pending — force-refreshes the graded ledger and emails
+ *     every AF member of the league the initial grades.
  *
  * Honesty + noise rules:
  *  - BOOTSTRAP: the first run for a league records every existing trade as
@@ -31,6 +40,7 @@ import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
  *    for what happens after you turned this on.
  *  - Emails go only to AF users attached to the league (owner + claimed
  *    teams). We cannot email league members who aren't on AllFantasy.
+ *  - Every link goes to the RECIPIENT'S OWN copy of the league. See `rowFor`.
  *  - Every failure is contained per-league; one broken league never blocks
  *    the rest of the sweep.
  */
@@ -49,8 +59,12 @@ const SEEN_TTL_MS = 2 * 365 * 24 * 60 * 60 * 1000
  * `readSeen` accepts only version 2, so a v1 record reads as ABSENT, the existing bootstrap records
  * everything currently in the feed and notifies nothing, and the league is live from its second
  * run. One quiet run per league, no migration script, no burst.
+ *
+ * `pending` was added inside version 2 and is OPTIONAL on purpose: a record written before it reads
+ * as "no offers outstanding", which is the correct reading of a record that never tracked any, and
+ * does not cost every league a second quiet run.
  */
-type SeenRecord = { version: 2; seen: string[]; lastRunIso: string }
+type SeenRecord = { version: 2; seen: string[]; pending?: string[]; lastRunIso: string }
 
 async function readSeen(sleeperLeagueId: string): Promise<SeenRecord | null> {
   const row = await prisma.sportsDataCache
@@ -60,23 +74,147 @@ async function readSeen(sleeperLeagueId: string): Promise<SeenRecord | null> {
   return data?.version === 2 && Array.isArray(data.seen) ? data : null
 }
 
-async function writeSeen(sleeperLeagueId: string, seen: string[]): Promise<void> {
+async function writeSeen(sleeperLeagueId: string, seen: string[], pending: string[] = []): Promise<void> {
   const cacheKey = `${SEEN_PREFIX}${sleeperLeagueId}`
-  const data = { version: 2, seen: seen.slice(-500), lastRunIso: new Date().toISOString() } as unknown as object
+  const data = { version: 2, seen: seen.slice(-500), pending: pending.slice(-200), lastRunIso: new Date().toISOString() } as unknown as object
   const expiresAt = new Date(Date.now() + SEEN_TTL_MS)
   await prisma.sportsDataCache
     .upsert({ where: { cacheKey }, update: { data, expiresAt }, create: { cacheKey, data, expiresAt } })
     .catch(() => null)
 }
 
+export type TradeNotificationPlan = {
+  /** Offers nobody has been told about yet. */
+  offers: FeedTrade[]
+  /** Trade ids to announce as completed. */
+  completions: string[]
+  seen: string[]
+  pending: string[]
+}
+
+/**
+ * What this run must announce, and what to remember afterwards. PURE.
+ *
+ * 🛑 THE BUG THIS EXISTS FOR. The notifier used to hold one set, `seen`. A trade caught while
+ * PENDING went into it, the email was then built from the graded ledger — which reads completed
+ * trades only — so the offer was not found and nothing was sent. When the offer was accepted it
+ * kept its transaction id, was already `seen`, and the completion was never announced either. The
+ * better the sweep got at catching offers early, the more trades it silently swallowed.
+ *
+ * So an offer is remembered in `pending` until it completes, and a completed trade is announced
+ * when it is new OR was last seen pending. An offer that is withdrawn simply never completes; it
+ * ages out of the capped list.
+ */
+export function planTradeNotifications(
+  feed: FeedTrade[],
+  record: { seen: string[]; pending?: string[] },
+): TradeNotificationPlan {
+  const seen = new Set(record.seen)
+  const pending = new Set(record.pending ?? [])
+  const offers: FeedTrade[] = []
+  const completions: string[] = []
+  const newIds: string[] = []
+  const handled = new Set<string>()
+
+  for (const trade of feed) {
+    if (handled.has(trade.id)) continue
+    handled.add(trade.id)
+    const isNew = !seen.has(trade.id)
+    if (isNew) newIds.push(trade.id)
+    if (trade.status === 'pending') {
+      if (isNew) {
+        offers.push(trade)
+        pending.add(trade.id)
+      }
+    } else if (isNew || pending.has(trade.id)) {
+      completions.push(trade.id)
+      pending.delete(trade.id)
+    }
+  }
+
+  return { offers, completions, seen: [...record.seen, ...newIds], pending: [...pending] }
+}
+
 export type LeagueNotifyResult = {
   sleeperLeagueId: string
   checked: boolean
   bootstrap: boolean
+  /** Completed trades announced this run. */
   newTrades: number
+  /** Open offers announced this run. */
+  newOffers: number
   emailsSent: number
   error?: string
 }
+
+type AfLeagueRow = {
+  id: string
+  name: string | null
+  userId: string
+  sport: string
+  teams: Array<{ claimedByUserId: string | null; platformUserId: string | null }>
+}
+
+type Recipient = { id: string; email: string }
+
+/**
+ * The AF users attached to any AF copy of this Sleeper league, minus opt-outs and undeliverable
+ * addresses.
+ */
+async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]> {
+  const userIds = [
+    ...new Set(
+      afLeagues.flatMap((l) => [l.userId, ...l.teams.map((t) => t.claimedByUserId)]).filter(
+        (v): v is string => typeof v === 'string' && v.length > 0,
+      ),
+    ),
+  ]
+  const users = await prisma.appUser
+    .findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } })
+    .catch(() => [] as { id: string; email: string | null }[])
+  // Keep the id alongside the address: manager psychology is premium, and the
+  // entitlement is per recipient, so the email can no longer be built once and
+  // blasted to a list.
+  /*
+   * ⚠ PREFERENCES AND DELIVERABILITY ARE CHECKED HERE, BEFORE ANY SEND.
+   * This loop used to email every attached user unconditionally: the
+   * unsubscribe link in the footer demonstrably did not stop the next
+   * sweep (nothing read EmailPreference), and RFC-reserved fixture
+   * addresses kept getting hit, burning the sending domain's reputation.
+   */
+  const candidateEmails = [...new Set(users.map((u) => u.email).filter((e): e is string => !!e))]
+  const prefRows = await prisma.emailPreference
+    .findMany({
+      where: { email: { in: candidateEmails } },
+      select: { email: true, tradeAlerts: true, unsubscribedAt: true },
+    })
+    .catch(() => [] as { email: string; tradeAlerts: boolean; unsubscribedAt: Date | null }[])
+  const blocked = new Set(
+    prefRows.filter((p) => p.unsubscribedAt != null || p.tradeAlerts === false).map((p) => p.email),
+  )
+
+  const recipients: Recipient[] = []
+  const seenEmails = new Set<string>()
+  for (const u of users) {
+    const email = u.email
+    if (!email || seenEmails.has(email)) continue
+    seenEmails.add(email)
+    if (blocked.has(email)) continue
+    if (isUndeliverableEmailDomain(email)) continue
+    recipients.push({ id: u.id, email })
+  }
+  return recipients
+}
+
+const uniqueIds = (rows: FeedTrade[]): string[] => [...new Set(rows.map((r) => r.id))]
+
+/** Sleeper's transaction id, from a graded-ledger id shaped `<leagueId>:<transactionId>`. */
+function transactionIdOf(tradeId: string): string {
+  return tradeId.split(':').pop() ?? tradeId
+}
+
+type SleeperUserRow = { user_id?: string; display_name?: string; metadata?: { team_name?: string } }
+type SleeperPlayerRow = { full_name?: string; first_name?: string; last_name?: string; position?: string; team?: string }
 
 /** Detect + notify for one Sleeper league id (may map to several AF league rows). */
 export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<LeagueNotifyResult> {
@@ -85,104 +223,81 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     checked: false,
     bootstrap: false,
     newTrades: 0,
+    newOffers: 0,
     emailsSent: 0,
   }
   try {
     const feed = await currentTradeIds(sleeperLeagueId)
     if (feed == null) return { ...base, error: 'transaction feed unavailable' }
     base.checked = true
-    const currentIds = feed.map((f) => f.id)
-    /*
-     * The status a trade carried WHEN WE FIRST SAW IT, which is what the copy has to describe.
-     * A pending offer that is accepted later keeps its transaction id, so it is already `seen` and
-     * never notifies twice — the manager was told when the decision was theirs to make, which is
-     * the moment that mattered.
-     */
-    const statusById = new Map<string, FeedTrade['status']>(feed.map((f) => [f.id, f.status]))
 
     const seenRecord = await readSeen(sleeperLeagueId)
     if (!seenRecord) {
-      // First run: record history, notify nothing (no retro spam).
-      await writeSeen(sleeperLeagueId, currentIds)
+      // First run: record history, notify nothing (no retro spam). An offer open right now is
+      // remembered as pending, so its completion — which happens after this — is still announced.
+      await writeSeen(sleeperLeagueId, uniqueIds(feed), uniqueIds(feed.filter((f) => f.status === 'pending')))
       return { ...base, bootstrap: true }
     }
 
-    const seen = new Set(seenRecord.seen)
-    const newIds = currentIds.filter((id) => !seen.has(id))
-    if (newIds.length === 0) return base
-    base.newTrades = newIds.length
+    const plan = planTradeNotifications(feed, seenRecord)
+    if (plan.offers.length === 0 && plan.completions.length === 0) return base
+    base.newTrades = plan.completions.length
+    base.newOffers = plan.offers.length
 
-    // Fresh grades so the new trade is included and graded.
-    const grades = await getTradeGrades(sleeperLeagueId, { force: true })
-    // Mark seen regardless — a grading hiccup must not cause duplicate emails later.
-    await writeSeen(sleeperLeagueId, [...seenRecord.seen, ...newIds])
-    if (!grades) return { ...base, error: 'grading unavailable — trade recorded, email skipped' }
-
-    const newTrades = grades.trades.filter((t) => newIds.some((id) => t.id.endsWith(`:${id}`)))
-    if (newTrades.length === 0) return { ...base, error: 'new trade not present in graded ledger yet' }
+    // Mark seen regardless — a grading or send hiccup must not cause duplicate emails later.
+    await writeSeen(sleeperLeagueId, plan.seen, plan.pending)
 
     // Recipients: AF users attached to any AF league row for this Sleeper league.
-    const afLeagues = await prisma.league.findMany({
+    const afLeagues: AfLeagueRow[] = await prisma.league.findMany({
       where: { platform: 'sleeper', platformLeagueId: sleeperLeagueId },
       select: {
         id: true,
         name: true,
         userId: true,
-        teams: { select: { claimedByUserId: true } },
+        sport: true,
+        teams: { select: { claimedByUserId: true, platformUserId: true } },
       },
+      // Deterministic, so the fallback row below is the same one on every run.
+      orderBy: { createdAt: 'asc' },
     })
     if (afLeagues.length === 0) return base
-    const userIds = [
-      ...new Set(
-        afLeagues.flatMap((l) => [l.userId, ...l.teams.map((t) => t.claimedByUserId)]).filter(
-          (v): v is string => typeof v === 'string' && v.length > 0,
-        ),
-      ),
-    ]
-    const users = await prisma.appUser
-      .findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } })
-      .catch(() => [] as { id: string; email: string | null }[])
-    // Keep the id alongside the address: manager psychology is premium, and the
-    // entitlement is per recipient, so the email can no longer be built once and
-    // blasted to a list.
-    /*
-     * ⚠ PREFERENCES AND DELIVERABILITY ARE CHECKED HERE, BEFORE ANY SEND.
-     * This loop used to email every attached user unconditionally: the
-     * unsubscribe link in the footer demonstrably did not stop the next
-     * sweep (nothing read EmailPreference), and RFC-reserved fixture
-     * addresses kept getting hit, burning the sending domain's reputation.
-     */
-    const candidateEmails = [...new Set(users.map((u) => u.email).filter((e): e is string => !!e))]
-    const prefRows = await prisma.emailPreference
-      .findMany({
-        where: { email: { in: candidateEmails } },
-        select: { email: true, tradeAlerts: true, unsubscribedAt: true },
-      })
-      .catch(() => [] as { email: string; tradeAlerts: boolean; unsubscribedAt: Date | null }[])
-    const blocked = new Set(
-      prefRows.filter((p) => p.unsubscribedAt != null || p.tradeAlerts === false).map((p) => p.email),
-    )
-
-    const recipients: Array<{ id: string; email: string }> = []
-    const seenEmails = new Set<string>()
-    for (const u of users) {
-      const email = u.email
-      if (!email || seenEmails.has(email)) continue
-      seenEmails.add(email)
-      if (blocked.has(email)) continue
-      if (isUndeliverableEmailDomain(email)) continue
-      recipients.push({ id: u.id, email })
-    }
+    const recipients = await resolveRecipients(afLeagues)
     if (recipients.length === 0) return base
 
-    const leagueName = afLeagues[0].name ?? 'your league'
-    const ledgerUrl = `${getBaseUrl()}/core/trades?league=${encodeURIComponent(afLeagues[0].id)}`
+    /*
+     * 🛑 THE RECIPIENT'S OWN COPY OF THE LEAGUE, NEVER `afLeagues[0]`.
+     *
+     * A Sleeper league imported by several AllFantasy users is one AF row PER importer. Every link
+     * used to point at `afLeagues[0]` — whichever row the query returned first — and /core treats a
+     * `?league=` the viewer does not play as unauthorised and redirects to the cross-league board,
+     * which cannot show a Sleeper trade. So everyone but one importer clicked "See the full
+     * breakdown" and landed somewhere the trade was not. Measured 2026-09-24: 28 Sleeper leagues,
+     * 65 AF rows. A mute is saved per row too, so the footer and the push gate take the same row.
+     */
+    const rowFor = (userId: string): AfLeagueRow =>
+      afLeagues.find((l) => l.userId === userId || l.teams.some((t) => t.claimedByUserId === userId)) ??
+      afLeagues[0]
+    const tradeUrl = (rowId: string, transactionId: string) =>
+      `/core/trades?league=${encodeURIComponent(rowId)}&trade=${encodeURIComponent(transactionId)}`
+    const unsubscribeUrlFor = (email: string) =>
+      `${getBaseUrl()}/api/email/unsubscribe?token=${encodeURIComponent(createEmailUnsubscribeToken(email))}`
+
+    if (plan.offers.length > 0) {
+      const sent = await notifyOffers({ sleeperLeagueId, offers: plan.offers, afLeagues, recipients, rowFor, tradeUrl, unsubscribeUrlFor })
+      base.emailsSent += sent.emailsSent
+      if (sent.error) base.error = sent.error
+    }
+
+    if (plan.completions.length === 0) return base
+
+    // Fresh grades so the new trade is included and graded.
+    const grades = await getTradeGrades(sleeperLeagueId, { force: true })
+    if (!grades) return { ...base, error: 'grading unavailable — trade recorded, email skipped' }
+
+    const newTrades = grades.trades.filter((t) => plan.completions.includes(transactionIdOf(t.id)))
+    if (newTrades.length === 0) return { ...base, error: 'new trade not present in graded ledger yet' }
+
     for (const trade of newTrades) {
-      /*
-       * The graded ledger keys a trade as `<something>:<transactionId>`, which is how `newTrades`
-       * was matched above. The same suffix recovers the status the feed reported for it.
-       */
-      const isOffer = statusById.get(trade.id.split(':').pop() ?? '') === 'pending'
       // League shape, scoring settings, last season's real production and roster
       // needs. Optional by design: if any of it is unavailable the email falls
       // back to what realized points alone can prove.
@@ -196,6 +311,9 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
       }).catch(() => null)
 
       for (const recipient of recipients) {
+        const row = rowFor(recipient.id)
+        const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
+        const href = tradeUrl(row.id, transactionIdOf(trade.id))
         const entitled = psychology
           ? await canAccessForUser('manager_psychology', {
               userId: recipient.id,
@@ -207,8 +325,8 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
         const { subject, html } = buildTradeGradeEmail({
           leagueName,
           trade,
-          ledgerUrl,
-          status: isOffer ? 'pending' : 'complete',
+          ledgerUrl: `${getBaseUrl()}${href}`,
+          status: 'complete',
           expectation,
           psychology: entitled ? psychology : null,
           /*
@@ -222,10 +340,8 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
            * of them unsubscribe the rest.
            */
           baseUrl: getBaseUrl(),
-          leagueId: afLeagues[0].id,
-          unsubscribeUrl: `${getBaseUrl()}/api/email/unsubscribe?token=${encodeURIComponent(
-            createEmailUnsubscribeToken(recipient.email),
-          )}`,
+          leagueId: row.id,
+          unsubscribeUrl: unsubscribeUrlFor(recipient.email),
         })
         const sent = await sendTemplatedEmail({ to: recipient.email, subject, html }).catch(
           () => ({ ok: false as const }),
@@ -239,39 +355,23 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
          * the subscription table, the send service, and a service worker that
          * already carries trade action buttons and a league-scoped deep link.
          *
-         * Sent per recipient, after the email. No subscription is the normal case
-         * and costs one indexed read.
-         *
-         * 🛑 GATED ON THE USER'S NOTIFICATION SETTINGS since 2026-09-14. Having a
-         * subscription was treated as consent to every trade buzz, so a manager who
-         * switched trade alerts off, muted this league or set quiet hours was buzzed
-         * anyway — the push service looks at nothing but the subscription. pushGate is
-         * the dispatcher's own rule. It is checked against the recipient's OWN league
-         * row: imported leagues are per-user copies, so a mute is saved on theirs, not
-         * necessarily on afLeagues[0]. A settings read that fails sends nothing.
+         * 🛑 GATED ON THE USER'S NOTIFICATION SETTINGS since 2026-09-14, against the recipient's
+         * OWN league row: imported leagues are per-user copies, so a mute is saved on theirs.
+         * A settings read that fails sends nothing.
          */
-        const recipientLeagueId =
-          afLeagues.find(
-            (l) => l.userId === recipient.id || l.teams.some((t) => t.claimedByUserId === recipient.id),
-          )?.id ?? afLeagues[0].id
         const pushGate = await decidePushForUser(recipient.id, {
-          category: isOffer ? 'trade_proposals' : 'trade_accept_reject',
-          leagueId: recipientLeagueId,
+          category: 'trade_accept_reject',
+          leagueId: row.id,
           severity: 'medium',
         }).catch(() => null)
-        /*
-         * ⚠ THE COPY FOLLOWS THE STATUS, same as the subject line above. "Trade accepted" on an
-         * offer still awaiting your answer is worse than no notification: it tells a manager a
-         * decision was made that was in fact left to them, and they will not open it.
-         */
         if (pushGate?.allowed) {
           await sendPushToUser(recipient.id, {
-            title: isOffer ? `Trade offer in ${leagueName}` : `Trade accepted in ${leagueName}`,
+            title: `Trade accepted in ${leagueName}`,
             body: subject,
-            href: `/core/trades?league=${encodeURIComponent(afLeagues[0].id)}`,
-            tag: `trade:${afLeagues[0].id}:${trade.id}`,
+            href,
+            tag: `trade:${row.id}:${trade.id}`,
             type: 'trade',
-            leagueId: afLeagues[0].id,
+            leagueId: row.id,
           }).catch(() => [])
         }
       }
@@ -281,6 +381,110 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     console.error('[trade-notify] league sweep failed', { sleeperLeagueId, err })
     return { ...base, error: 'unexpected failure' }
   }
+}
+
+/**
+ * Tell the managers IN an open offer that it is waiting on them.
+ *
+ * ⚠ ONLY THE MANAGERS IN IT, AND NOT THE ONE WHO SENT IT. Guap's call (2026-09-24): an offer is a
+ * request to a specific person; the rest of the league hears about it when it completes, with the
+ * grades. The proposer already knows what they proposed.
+ *
+ * ⚠ "IN IT" IS DECIDED EXACTLY AS THE LEAGUE'S TRADES PANEL DECIDES IT — the claimed team's
+ * platform id on the recipient's own row, else the Sleeper id on their profile, then the Sleeper
+ * roster that id owns. A looser rule would alert someone the league page then shows nothing to,
+ * which is the email-says-yes, page-says-no failure this change exists to remove.
+ */
+async function notifyOffers(args: {
+  sleeperLeagueId: string
+  offers: FeedTrade[]
+  afLeagues: AfLeagueRow[]
+  recipients: Recipient[]
+  rowFor: (userId: string) => AfLeagueRow
+  tradeUrl: (rowId: string, transactionId: string) => string
+  unsubscribeUrlFor: (email: string) => string
+}): Promise<{ emailsSent: number; error?: string }> {
+  const { sleeperLeagueId, offers, afLeagues, recipients, rowFor, tradeUrl, unsubscribeUrlFor } = args
+  const rosters: SleeperRoster[] | null = await fetchLeagueRosters(sleeperLeagueId)
+  if (!rosters || rosters.length === 0) {
+    // The offer stays in `pending`, so its completion is still announced; only the alert is lost.
+    return { emailsSent: 0, error: 'rosters unavailable — offer recorded, alert skipped' }
+  }
+
+  const profiles = await prisma.userProfile
+    .findMany({
+      where: { userId: { in: recipients.map((r) => r.id) } },
+      select: { userId: true, sleeperUserId: true },
+    })
+    .catch(() => [] as Array<{ userId: string; sleeperUserId: string | null }>)
+  const profileSleeperId = new Map(profiles.map((p) => [p.userId, p.sleeperUserId?.trim() || null]))
+  const sleeperIdOf = (userId: string): string | null => {
+    const claimed = rowFor(userId).teams.find((t) => t.claimedByUserId === userId)?.platformUserId?.trim()
+    return claimed || profileSleeperId.get(userId) || null
+  }
+  const rosterIdOf = (sleeperId: string): number | null => {
+    const roster = rosters.find((r) => String(r.owner_id ?? '') === sleeperId)
+    return roster && Number.isFinite(Number(roster.roster_id)) ? Number(roster.roster_id) : null
+  }
+
+  // Names are decoration: an unavailable directory costs a label, never the alert.
+  const isNfl = String(afLeagues[0].sport ?? 'NFL').toUpperCase() === 'NFL'
+  const players = (isNfl ? await getAllPlayers().catch(() => ({})) : {}) as Record<string, SleeperPlayerRow>
+  const users = (await getLeagueUsers(sleeperLeagueId).catch(() => [])) as SleeperUserRow[]
+  const proposerNameOf = (creator: string | null): string | null => {
+    if (!creator) return null
+    const u = users.find((row) => row.user_id === creator)
+    return u?.metadata?.team_name?.trim() || u?.display_name?.trim() || null
+  }
+  const sleeperLink = resolveSourceScreenLink({ platform: 'sleeper', sourceLeagueId: sleeperLeagueId, screen: 'trade' })
+  const sleeperUrl = sleeperLink?.verified ? sleeperLink.href : null
+
+  let emailsSent = 0
+  for (const offer of offers) {
+    for (const recipient of recipients) {
+      const sleeperId = sleeperIdOf(recipient.id)
+      if (!sleeperId || sleeperId === offer.creator) continue
+      const rosterId = rosterIdOf(sleeperId)
+      if (rosterId == null || !offer.rosterIds.includes(rosterId)) continue
+
+      const row = rowFor(recipient.id)
+      const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
+      const href = tradeUrl(row.id, offer.id)
+      const { assetsGiven, assetsReceived } = buildTradeAssetsForRoster({ tx: offer.tx, userRosterId: rosterId, players })
+      const { subject, html } = buildPendingTradeOfferEmail({
+        leagueName,
+        proposerName: proposerNameOf(offer.creator),
+        youGet: assetsReceived,
+        youGive: assetsGiven,
+        reviewUrl: `${getBaseUrl()}${href}`,
+        sleeperUrl,
+        baseUrl: getBaseUrl(),
+        leagueId: row.id,
+        unsubscribeUrl: unsubscribeUrlFor(recipient.email),
+      })
+      const sent = await sendTemplatedEmail({ to: recipient.email, subject, html }).catch(
+        () => ({ ok: false as const }),
+      )
+      if (sent.ok) emailsSent += 1
+
+      const pushGate = await decidePushForUser(recipient.id, {
+        category: 'trade_proposals',
+        leagueId: row.id,
+        severity: 'medium',
+      }).catch(() => null)
+      if (pushGate?.allowed) {
+        await sendPushToUser(recipient.id, {
+          title: `Trade offer in ${leagueName}`,
+          body: subject,
+          href,
+          tag: `trade:${row.id}:${offer.id}`,
+          type: 'trade',
+          leagueId: row.id,
+        }).catch(() => [])
+      }
+    }
+  }
+  return { emailsSent }
 }
 
 /** Sweep every imported Sleeper league (bounded), one contained result each. */

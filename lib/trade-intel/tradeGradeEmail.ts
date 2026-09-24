@@ -14,6 +14,8 @@ import type {
 // would drag prisma into this renderer. Vitest stubs `server-only`, so a test
 // suite would stay green while the module became unusable in a pure context.
 import type { TradePsychologyContext } from '@/lib/trade-intel/tradePsychologyLoader'
+// Type-only for the same reason: the scanner is `server-only`.
+import type { PendingTradeAsset } from '@/lib/provider-trades/scanPendingSleeperTrades'
 
 /**
  * tradeGradeEmail — the "your league just traded" email, as a real visual.
@@ -818,6 +820,119 @@ export function buildTradeGradeEmail(params: {
     </tr>
     ${emailFooter({
       baseUrl,
+      leagueName,
+      leagueId: params.leagueId ?? null,
+      unsubscribeUrl: params.unsubscribeUrl ?? null,
+    })}
+  </table>
+</div>
+</body>
+</html>`
+
+  return { subject, html }
+}
+
+/**
+ * A Sleeper trade OFFER still waiting on the recipient — the email that never existed.
+ *
+ * 🛑 WHY IT IS NOT `buildTradeGradeEmail` WITH `status: 'pending'`. That builder takes a trade from
+ * the graded ledger, and the ledger reads COMPLETED trades only, so an offer is never in it. The
+ * notifier used to mark a pending trade seen, look for it in the ledger, fail to find it, and stop —
+ * and because a trade keeps its id when accepted, the completion was then never announced either.
+ * An offer is built from the feed row instead, and says only what the feed can prove: who proposed
+ * it and what moves.
+ *
+ * ⚠ NO GRADE HERE, DELIBERATELY. The offer's value read lives on the league page, and a second copy
+ * computed for the inbox would be one more surface disagreeing with the others. The email carries
+ * the swap and sends the manager to the read.
+ *
+ * ⚠ AND NO "ACCEPT" BUTTON. Sleeper's API has no write endpoint; the only honest action is a link
+ * to Sleeper's own trade screen, labelled as such.
+ */
+export function buildPendingTradeOfferEmail(params: {
+  leagueName: string
+  /** Display name of whoever proposed it, or null when Sleeper did not say. */
+  proposerName: string | null
+  youGet: PendingTradeAsset[]
+  youGive: PendingTradeAsset[]
+  /** The recipient's OWN league page for this offer. */
+  reviewUrl: string
+  /** Sleeper's trade screen, only when the link is verified. */
+  sleeperUrl?: string | null
+  baseUrl: string
+  leagueId?: string | null
+  unsubscribeUrl?: string | null
+}): TradeGradeEmail {
+  const { leagueName } = params
+  const names = (assets: PendingTradeAsset[]) => {
+    const shown = assets.slice(0, 3).map((a) => a.playerName)
+    const extra = assets.length - shown.length
+    return shown.length > 0 ? `${shown.join(', ')}${extra > 0 ? ` +${extra}` : ''}` : 'nothing'
+  }
+  const who = params.proposerName?.trim() || 'Another manager'
+  const subject = `Trade offer in ${leagueName} — you get ${names(params.youGet)} for ${names(params.youGive)}`
+
+  const assetRows = (assets: PendingTradeAsset[]) =>
+    assets.length === 0
+      ? `<div style="font-size:13px;color:${FAINT}">Nothing</div>`
+      : assets
+          .map((a) => {
+            const detail = a.isPick || a.faabAmount != null ? '' : [a.position, a.team].filter((v) => v && v !== '—').join(' · ')
+            return `<div style="font-size:14px;font-weight:700;color:${TEXT};margin-top:6px">${escapeHtml(a.playerName)}${
+              detail ? `<span style="font-size:11px;font-weight:600;color:${FAINT}">\u00A0\u00A0${escapeHtml(detail)}</span>` : ''
+            }</div>`
+          })
+          .join('')
+  const sideCell = (label: string, accent: string, assets: PendingTradeAsset[]) => `
+      <td valign="top" width="50%" style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};border-radius:14px">
+        <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${accent};font-weight:800">${label}</div>
+        ${assetRows(assets)}
+      </td>`
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:${BG}">
+<div style="background:${BG};padding:24px 12px;font-family:${FONT};color:${TEXT}">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto">
+    <tr>
+      <td style="padding-bottom:14px">
+        <div style="font-size:11px;letter-spacing:0.10em;text-transform:uppercase;color:${FAINT};font-weight:700">
+          Trade offer · waiting on you
+        </div>
+        <div style="font-size:21px;font-weight:800;color:${TEXT};margin-top:5px;line-height:1.25">
+          ${escapeHtml(leagueName)}
+        </div>
+        <div style="font-size:13px;color:${MUTED};margin-top:3px">${escapeHtml(who)} sent you an offer on Sleeper.</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <table role="presentation" width="100%" cellspacing="8" cellpadding="0" style="margin:0 -8px">
+          <tr>
+            ${sideCell('You get', GOT_ACCENT, params.youGet)}
+            ${sideCell('You give', MUTED, params.youGive)}
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding:20px 0 6px 0">
+        <a href="${escapeHtml(params.reviewUrl)}" style="display:inline-block;background:#ffffff;color:#0b0b0f;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:12px">
+          See our read on this offer
+        </a>
+        ${
+          params.sleeperUrl
+            ? `<div style="font-size:12px;margin-top:12px"><a href="${escapeHtml(params.sleeperUrl)}" style="color:${MUTED};text-decoration:underline">Answer it in Sleeper</a></div>`
+            : ''
+        }
+        <div style="font-size:11px;color:${FAINT};margin-top:9px;line-height:1.5">
+          AllFantasy can't accept or decline a Sleeper trade. You answer it in Sleeper.
+        </div>
+      </td>
+    </tr>
+    ${emailFooter({
+      baseUrl: params.baseUrl,
       leagueName,
       leagueId: params.leagueId ?? null,
       unsubscribeUrl: params.unsubscribeUrl ?? null,
