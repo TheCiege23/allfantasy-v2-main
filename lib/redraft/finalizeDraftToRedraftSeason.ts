@@ -158,6 +158,7 @@ async function ensureRedraftSeason(leagueId: string) {
       sport: true,
       season: true,
       medianGame: true,
+      playoffStartWeek: true,
     },
   })
   if (!league) throw new Error('League not found')
@@ -166,7 +167,14 @@ async function ensureRedraftSeason(leagueId: string) {
   const cfg = tryGetSportConfig(sportKey)
   const seasonYear = Number(league.season ?? currentSeasonYear()) || currentSeasonYear()
   const totalWeeks = cfg?.defaultSeasonWeeks ?? 17
-  const playoffStartWeek = cfg?.defaultPlayoffStartWeek ?? 15
+  // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
+  // It used to be the sport default always, while the bracket read the league setting — so the
+  // regular season and the playoffs could overlap or leave a gap.
+  const leaguePlayoffStart = Number(league.playoffStartWeek)
+  const playoffStartWeek =
+    Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
+      ? leaguePlayoffStart
+      : cfg?.defaultPlayoffStartWeek ?? 15
 
   const season = await prisma.redraftSeason.create({
     data: {

@@ -14,6 +14,7 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
+import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -142,11 +143,12 @@ async function runLegacyAutomationBridge() {
  * cached stat rows, which is what repairs a league that missed a tick.
  */
 async function runRedraftReconciliation() {
-  const seasons = await prisma.redraftSeason.findMany({
+  const eligible = await prisma.redraftSeason.findMany({
     where: engineSeasonScope(),
     select: { id: true, leagueId: true, sport: true },
-    take: 50,
+    orderBy: { id: 'asc' },
   })
+  const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
 
   let reconciled = 0
   let skippedUnresolvedWeek = 0

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { computeWeeklyMedianResults, isMatchupComplete } from '@/lib/redraft/medianGame'
 
 /**
  * Recompute standings from matchup scores already written from PlayerWeeklyScore.
@@ -23,7 +24,8 @@ export async function updateStandings(
       ties: number
       pointsFor: number
       pointsAgainst: number
-      streakEvents: Array<'W' | 'L' | 'T'>
+      /** In week order; within a week the head-to-head game comes before the median game. */
+      streakEvents: Array<{ week: number; result: 'W' | 'L' | 'T' }>
     }
   >()
 
@@ -47,17 +49,7 @@ export async function updateStandings(
   for (const matchup of matchups) {
     if (!matchup.awayRosterId) continue
 
-    const snapshot = matchup.lineupSnapshots
-    const scoring =
-      snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
-        ? (snapshot as Record<string, unknown>).redraftScoring
-        : null
-    const isComplete =
-      matchup.status === 'final' ||
-      matchup.status === 'completed' ||
-      (scoring && typeof scoring === 'object' && (scoring as Record<string, unknown>).isComplete === true)
-
-    if (!isComplete) continue
+    if (!isMatchupComplete(matchup)) continue
 
     const home = rows.get(matchup.homeRosterId)
     const away = rows.get(matchup.awayRosterId)
@@ -73,21 +65,53 @@ export async function updateStandings(
     if (homeScore > awayScore) {
       home.wins += 1
       away.losses += 1
-      home.streakEvents.push('W')
-      away.streakEvents.push('L')
+      home.streakEvents.push({ week: matchup.week, result: 'W' })
+      away.streakEvents.push({ week: matchup.week, result: 'L' })
     } else if (awayScore > homeScore) {
       away.wins += 1
       home.losses += 1
-      away.streakEvents.push('W')
-      home.streakEvents.push('L')
+      away.streakEvents.push({ week: matchup.week, result: 'W' })
+      home.streakEvents.push({ week: matchup.week, result: 'L' })
     } else {
       home.ties += 1
       away.ties += 1
-      home.streakEvents.push('T')
-      away.streakEvents.push('T')
+      home.streakEvents.push({ week: matchup.week, result: 'T' })
+      away.streakEvents.push({ week: matchup.week, result: 'T' })
     }
 
     matchupsCounted += 1
+  }
+
+  // League median: a second game each week against the week's median score. The commissioner's
+  // current `League.medianGame` wins over the season's copy, which is taken once at the draft.
+  // A failed read of the flag means "no median this pass", never "no standings".
+  let medianGameOn = false
+  try {
+    const seasonRow = await prisma.redraftSeason.findUnique({
+      where: { id: seasonId },
+      select: { medianGame: true, league: { select: { medianGame: true } } },
+    })
+    medianGameOn = seasonRow?.league?.medianGame ?? seasonRow?.medianGame ?? false
+  } catch {
+    medianGameOn = false
+  }
+  if (medianGameOn) {
+    for (const weekResult of computeWeeklyMedianResults(matchups)) {
+      for (const [rosterId, outcome] of weekResult.outcomes) {
+        const row = rows.get(rosterId)
+        if (!row) continue
+        if (outcome === 'W') row.wins += 1
+        else if (outcome === 'L') row.losses += 1
+        else row.ties += 1
+        row.streakEvents.push({ week: weekResult.week, result: outcome })
+      }
+      await prisma.redraftMatchup.updateMany({
+        where: { seasonId, week: weekResult.week },
+        data: { medianScore: weekResult.median },
+      })
+    }
+    // Keep each roster's events in week order (stable: H2H stays ahead of that week's median).
+    for (const row of rows.values()) row.streakEvents.sort((a, b) => a.week - b.week)
   }
 
   const ordered = [...rows.entries()].sort(([, a], [, b]) => {
@@ -99,12 +123,13 @@ export async function updateStandings(
   const seedByRoster = new Map(ordered.map(([rosterId], index) => [rosterId, index + 1]))
 
   for (const [rosterId, row] of rows.entries()) {
-    const last = row.streakEvents[row.streakEvents.length - 1]
+    const results = row.streakEvents.map((e) => e.result)
+    const last = results[results.length - 1]
     let streak: string | null = null
     if (last) {
       let count = 0
-      for (let i = row.streakEvents.length - 1; i >= 0; i--) {
-        if (row.streakEvents[i] !== last) break
+      for (let i = results.length - 1; i >= 0; i--) {
+        if (results[i] !== last) break
         count += 1
       }
       streak = `${last}${count}`

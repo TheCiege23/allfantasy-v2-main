@@ -45,9 +45,12 @@ export type WeekRollHoldReason =
    * The schedule runtime does not cover this league's format at all.
    *
    * ⚠ THIS IS A SEPARATE REASON FROM `RUNTIME_REFUSED` BECAUSE IT IS PERMANENT.
-   * `resolveNflRedraftScheduleRuntime` accepts only `sport === 'NFL' && format
-   * === 'redraft'`, so a guillotine, survivor, zombie, dynasty or keeper league
-   * — all of which DO carry a `RedraftSeason` — is refused every single time.
+   * `resolveNflRedraftScheduleRuntime` covers `runsStandardWeeklySeason` — a
+   * season-capable sport in a standard weekly format (redraft, keeper, dynasty,
+   * best ball, …). A guillotine, survivor, zombie or tournament league, which runs
+   * its own engine but DOES carry a `RedraftSeason`, is refused every single time.
+   * (Until 2026-09-24 it also refused every keeper, dynasty and best-ball league
+   * and every non-NFL sport, which left them on week 1 forever.)
    * Counting that as a failure would mark this job `partial` on every hourly run
    * forever, which is how a real signal gets trained out of a dashboard. It is a
    * coverage gap to be reported once, not an incident to be raised hourly.

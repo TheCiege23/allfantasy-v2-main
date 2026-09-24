@@ -8,6 +8,7 @@ import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatN
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from './scoringEngine'
+import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -412,7 +413,9 @@ export async function finalizeRedraftWeek(
     )
   }
 
-  const sport = String(season.sport ?? 'NFL').toUpperCase()
+  // `RedraftSeason.sport` holds config keys ("NCAAFB"), while the slate lists and `SportsGame.sport`
+  // speak LeagueSport ("NCAAF") — a college football season was refused as not week-keyed.
+  const sport = seasonSportToLeagueSport(season.sport ?? 'NFL') || 'NFL'
   const base = {
     seasonId: season.id,
     leagueId: season.leagueId,
