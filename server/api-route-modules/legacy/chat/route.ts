@@ -3,6 +3,9 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import {
   buildUserChatContext,
   buildEnhancedUserContext,
@@ -350,6 +353,21 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/chat", tool: "LegacyCh
     if (!auth.authenticated) {
       return forbiddenResponse(auth.error || 'Unauthorized')
     }
+
+    /*
+     * ⚠ requireAuthOrOrigin only checks the request ORIGIN — `authenticated` is true for any
+     * same-origin caller, signed in or not — so this reached OpenAI with no account at all.
+     * The plan lives on the app account, not the legacy cookie, so the gate keys on the
+     * NextAuth session; without one the caller is anonymous (a small daily allowance by IP
+     * until paywall launch, sign-in required after).
+     */
+    const appSession = (await getServerSession(authOptions as never).catch(() => null)) as
+      | { user?: { id?: string; email?: string | null } }
+      | null
+    const gated = await aiCostGate(request, 'legacy_chat', appSession?.user?.id ?? null, {
+      email: appSession?.user?.email ?? null,
+    })
+    if (gated) return gated
 
     const body = await request.json()
 

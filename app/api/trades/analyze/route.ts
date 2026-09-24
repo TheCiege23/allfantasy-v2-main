@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { assertLeagueMember } from "@/lib/league/league-access";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { aiCostGate } from "@/lib/ai-protection/costGate";
 import { runTradeAnalysis } from "@/lib/engine/trade";
 import type {
   TradeEngineRequest,
@@ -225,6 +226,9 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const gated = await aiCostGate(req, "trade_ai", userId);
+    if (gated) return gated;
 
     const ip = getClientIp(req) || "unknown";
     const rl = rateLimit(`trades-analyze:${ip}`, 20, 60_000);

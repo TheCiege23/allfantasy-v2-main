@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getLiveADP, formatADPForPrompt } from '@/lib/adp-data'
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const gated = await aiCostGate(req, 'mock_trade_ai', session.user.id)
+    if (gated) return gated
 
     const body = await req.json()
     const { leagueId, currentPick, direction, rounds = 18, tradePartnerPick } = body

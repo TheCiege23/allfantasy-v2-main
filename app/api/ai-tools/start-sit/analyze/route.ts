@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { withApiUsage } from '@/lib/telemetry/usage'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { runStartSitAnalysis } from '@/lib/ai-tools-start-sit/runStartSitAnalysis'
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
@@ -41,6 +42,9 @@ export const POST = withApiUsage({ endpoint: '/api/ai-tools/start-sit/analyze', 
       if (!userId) {
         return NextResponse.json({ error: 'Sign in required' }, { status: 401 })
       }
+
+      const gated = await aiCostGate(req, 'start_sit_ai', userId)
+      if (gated) return gated
 
       const json = await req.json().catch(() => null)
       const parsed = bodySchema.safeParse(json)

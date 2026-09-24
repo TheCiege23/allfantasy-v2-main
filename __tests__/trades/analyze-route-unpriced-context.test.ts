@@ -20,6 +20,11 @@ vi.mock('@/lib/telemetry/usage', () => ({
   logUsageEvent: vi.fn(async () => {}),
 }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: () => ({ success: true }), getClientIp: () => '127.0.0.1' }))
+// The route now asks the AI cost gate before the write-up; this suite is about context notes,
+// so the gate simply allows the call.
+vi.mock('@/lib/ai-protection/costGate', () => ({
+  evaluateAiCostGate: vi.fn(async () => ({ ok: true, hasPlan: false, anonymous: false })),
+}))
 vi.mock('@/lib/trade-value-console/runTradeConsoleAnalysis', () => ({
   runTradeConsoleAnalysis: vi.fn(async () => analysis.current),
 }))

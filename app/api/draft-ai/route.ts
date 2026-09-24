@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { runDraftAIAssist } from '@/lib/draft-ai-engine'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { resolveSportForAI } from '@/lib/ai/AISportContextResolver'
 import { buildDraftRecommendationContext } from '@/lib/ai/SportAwareRecommendationService'
 import { resolveSportVariantContext } from '@/lib/league-defaults-orchestrator/SportVariantContextResolver'
@@ -18,6 +19,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const gated = await aiCostGate(req, 'draft_ai', session.user.id)
+  if (gated) return gated
 
   const body = await req.json().catch(() => ({}))
   const available = Array.isArray(body.available) ? body.available : []

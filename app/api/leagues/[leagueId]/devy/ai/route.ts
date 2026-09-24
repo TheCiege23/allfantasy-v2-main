@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isDevyLeague } from '@/lib/devy'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import {
   buildDevyScoutContext,
   buildDevyPromotionAdvisorContext,
@@ -38,6 +39,10 @@ export async function POST(
 
   const isDevy = await isDevyLeague(leagueId)
   if (!isDevy) return NextResponse.json({ error: 'Not a devy league' }, { status: 404 })
+
+  // OpenAI per call. The sibling /api/devy/ai requires commissioner_ai_tools; this matched nothing.
+  const gated = await aiCostGate(req, 'league_format_ai', userId)
+  if (gated) return gated
 
   const body = await req.json().catch(() => ({}))
   const type = (body.type as DevyAIType) ?? 'scout'
