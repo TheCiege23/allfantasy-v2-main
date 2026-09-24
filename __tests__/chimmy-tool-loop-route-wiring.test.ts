@@ -293,7 +293,24 @@ describe('tool loop system prompt', () => {
     expect(ROUTE.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
     expect(ROUTE).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
     expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
-    expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,\s*\n\s*clockLine: userTemporalContext\.promptLine,[\s\S]{0,500}?styleLine: personalizationDirectives \?\? null,/)
+    expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,\s*\n\s*clockLine: userTemporalContext\.promptLine,[\s\S]{0,900}?styleLine: \[\s*\n\s*personalizationDirectives,/)
+  })
+
+  /*
+   * Chimmy's track record (2026-09-24): its record reaches the loop per user, so "how good are your
+   * picks?" is answered from graded calls — and the start/sit calls the loop makes are collected and
+   * recorded, so the record grows from chat and not only from the comparison screen.
+   */
+  it('hands the loop its graded track record, and records the start/sit calls the answer made', () => {
+    expect(ROUTE).toMatch(
+      /styleLine: \[\s*\n\s*personalizationDirectives,\s*\n\s*renderTrackRecordPromptLine\(chimmyTrackRecordFor\(await readAdviceLearningSnapshot\(\), userId \?\? null\)\),/,
+    )
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\] \}/)
+    const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
+    expect(record).toBeGreaterThan(-1)
+    /* Recorded before the answer is returned, against the text the user is about to see. */
+    const answered = ROUTE.indexOf("source: 'chimmy_tool_loop'")
+    expect(answered).toBeGreaterThan(record)
   })
 
   /*

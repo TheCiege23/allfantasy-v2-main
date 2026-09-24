@@ -58,6 +58,25 @@ describe('league-gated analyst tools', () => {
     expect(h.trade).toHaveBeenCalledWith({ give: ["Ja'Marr Chase"], get: ['Justin Jefferson'], leagueId: 'L1', userId: 'u1' })
   })
 
+  /* Chimmy's track record: the engines' start/sit calls reach the route only when it asks. */
+  it.each([
+    ['compare_start_options', h.startSit],
+    ['optimize_my_lineup', h.optimizer],
+  ] as const)('%s hands its call to the context collector, and only when there is one', async (name, fn) => {
+    const call = { leagueId: 'L1', season: 2026, week: 4, rec: { key: 'a', name: 'A B' }, alt: { key: 'c', name: 'C D' }, slot: null }
+    fn.mockImplementation(async (a: { onStartCall?: (c: typeof call) => void }) => {
+      a.onStartCall?.(call)
+      return 'BLOCK'
+    })
+    const startCalls: Array<typeof call> = []
+    await executeChimmyTool(name, { players: ['A B', 'C D'] }, { ...CTX, startCalls })
+    expect(startCalls).toEqual([call])
+
+    fn.mockClear()
+    await executeChimmyTool(name, { players: ['A B', 'C D'] }, CTX)
+    expect(fn.mock.calls[0][0]).not.toHaveProperty('onStartCall')
+  })
+
   it('passes a trade-idea search its position and player, and nothing it cannot use', async () => {
     await executeChimmyTool('find_trade_ideas', { position: 'running backs', trade_away: '  Tony Pollard ' }, CTX)
     expect(h.tradeIdeas).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1', position: 'RB', tradeAway: 'Tony Pollard' })

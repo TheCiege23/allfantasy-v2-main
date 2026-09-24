@@ -74,7 +74,19 @@ export type AdviceLearningSnapshot = {
   calibration: { start_sit: Partial<Record<ChimmyConfidenceLevel, BandCounts>> }
   /** userId → [adviceKey, followed (1 | 0), decay weight], newest first. */
   followThrough: Record<string, Array<[string, 0 | 1, number]>>
+  /**
+   * CHIMMY'S TRACK RECORD — every graded start/sit call in the window, raw and undecayed, at any
+   * confidence (calibration above only counts calls that carried one). Optional because a snapshot
+   * written before 2026-09-24 has neither field; readers treat absent as "no record yet".
+   * See `trackRecord.ts` for how it is shown.
+   */
+  record?: { start_sit: RecordCounts }
+  /** userId → [right, wrong, same] start/sit calls. */
+  userRecords?: Record<string, [number, number, number]>
 }
+
+/** Graded calls: right, wrong, and `same` (within a point — neither, and never in a rate). */
+export type RecordCounts = { right: number; wrong: number; same: number }
 
 const DAY_MS = 86_400_000
 const round4 = (n: number) => Math.round(n * 10_000) / 10_000
@@ -86,12 +98,20 @@ export function buildAdviceLearningSnapshot(
   const nowMs = opts.now.getTime()
   const calibration: AdviceLearningSnapshot['calibration'] = { start_sit: {} }
   const verdicts = new Map<string, Array<{ key: string; followed: 0 | 1; w: number; at: number }>>()
+  const record: RecordCounts = { right: 0, wrong: 0, same: 0 }
+  const userRecords: Record<string, [number, number, number]> = {}
   let calls = 0
   let verdictCount = 0
 
   for (const o of outcomes) {
     const at = o.givenAt instanceof Date ? o.givenAt.getTime() : Number.NaN
     const w = decayWeight((nowMs - at) / DAY_MS, LEARNING_HALF_LIFE_DAYS)
+
+    if (o.adviceType === 'start_sit' && (o.call === 'right' || o.call === 'wrong' || o.call === 'same')) {
+      const i = o.call === 'right' ? 0 : o.call === 'wrong' ? 1 : 2
+      record[o.call] += 1
+      if (o.userId) (userRecords[o.userId] ??= [0, 0, 0])[i] += 1
+    }
 
     const pct = o.confidencePct
     if (
@@ -145,6 +165,8 @@ export function buildAdviceLearningSnapshot(
     totals: { users: opts.users, outcomes: outcomes.length, calls, verdicts: verdictCount },
     calibration,
     followThrough,
+    record: { start_sit: record },
+    userRecords,
   }
 }
 

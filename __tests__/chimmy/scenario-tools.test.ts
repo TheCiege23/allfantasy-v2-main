@@ -101,3 +101,42 @@ describe('runWaiverScenarioTool', () => {
     expect(h.waiver).not.toHaveBeenCalled()
   })
 })
+
+/* Chimmy's track record: a contested "A or B?" is a call; "start both" or "neither" is not. */
+describe('runStartSitScenarioTool — the call it made', () => {
+  const option = (playerId: string, name: string, inBestLineup: boolean) => ({
+    playerId, name, position: 'WR', points: 10, inBestLineup, lineupIfStarted: 100,
+  })
+  const ready = (contested: boolean) => ({
+    tag: 'ready',
+    kind: 'start_sit',
+    status: 'ready',
+    options: [option('4046', 'Jayden Reed', true), option('8150', 'Rashid Shaheed', !contested)],
+    week: { season: '2026', week: 4 },
+    contested,
+    startPlayerId: contested ? '4046' : null,
+  })
+
+  it('reports the pick and the player it was picked over', async () => {
+    h.startSit.mockResolvedValue(ready(true))
+    const onStartCall = vi.fn()
+    await runStartSitScenarioTool({ players: ['Jayden Reed', 'Rashid Shaheed'], ...LEAGUE, onStartCall })
+    expect(onStartCall).toHaveBeenCalledWith({
+      leagueId: 'L1',
+      season: 2026,
+      week: 4,
+      rec: { key: '4046', name: 'Jayden Reed' },
+      alt: { key: '8150', name: 'Rashid Shaheed' },
+      slot: null,
+    })
+  })
+
+  it('reports nothing when the scenario picks nobody, or was not computed', async () => {
+    const onStartCall = vi.fn()
+    h.startSit.mockResolvedValue(ready(false))
+    await runStartSitScenarioTool({ players: ['Jayden Reed', 'Rashid Shaheed'], ...LEAGUE, onStartCall })
+    h.startSit.mockResolvedValue({ tag: 'x', kind: 'start_sit', status: 'unresolved', reason: 'unpriced_player', detail: 'no projection' })
+    await runStartSitScenarioTool({ players: ['Jayden Reed', 'Rashid Shaheed'], ...LEAGUE, onStartCall })
+    expect(onStartCall).not.toHaveBeenCalled()
+  })
+})

@@ -7,6 +7,7 @@ import {
   buildLineupOptimizerContext,
   isOutDesignation,
   renderLineupOptimizationBlock,
+  singleSwapCall,
   type LineupOptimizerDeps,
 } from '@/lib/chimmy/lineupOptimizerGrounding'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
@@ -207,4 +208,68 @@ describe('buildLineupOptimization', () => {
 describe('isOutDesignation', () => {
   it.each(['Out', 'O', 'IR', 'PUP', 'Suspended'])('treats %s as not playing', (s) => expect(isOutDesignation(s)).toBe(true))
   it.each(['Questionable', 'Doubtful', '', null])('does not treat %s as ruled out', (s) => expect(isOutDesignation(s)).toBe(false))
+})
+
+/*
+ * Chimmy's track record: a lineup answer is a gradeable "start X over Y" only when the optimizer made
+ * exactly one change — with two in and two out, which starter replaces which was never decided.
+ */
+describe('singleSwapCall', () => {
+  it('turns one priced swap past the noise band into a call, in the slot he takes', async () => {
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te1', 'rb3'] // Bigsby 7 at FLEX, Reed 12 benched
+    const r = await run()
+    expect(singleSwapCall(r, 'L1')).toEqual({
+      leagueId: 'L1',
+      season: 2026,
+      week: 3,
+      rec: { key: 'wr3', name: 'Jayden Reed' },
+      alt: { key: 'rb3', name: 'Tank Bigsby' },
+      slot: r.status === 'ready' ? r.best.slots.find((s) => s.player.playerId === 'wr3')?.slot : undefined,
+    })
+  })
+
+  it('is no call with two changes each way, an unpriced starter, or no change at all', async () => {
+    expect(singleSwapCall(await run(), 'L1')).toBeNull() // Nacua on bye: two in, two out, gain unknown
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr3', 'te1', 'wr2']
+    expect(singleSwapCall(await run(), 'L1')).toBeNull() // already the best lineup
+  })
+
+  /* Two in, two out, every player priced: which starter replaces which was never decided. */
+  it('is no call when two players come in and two go out, even with the gain known', async () => {
+    LINES['wr-bye'] = yards(5) // Nacua priced this time
+    try {
+      starterIds = ['qb1', 'rb1', 'rb3', 'wr1', 'wr-bye', 'te1', 'wr2'] // Bigsby and Nacua start
+      const r = await run()
+      if (r.status !== 'ready') throw new Error('not ready')
+      expect(r.startInstead.map((p) => p.name).sort()).toEqual(['Jahmyr Gibbs', 'Jayden Reed'])
+      expect(r.benchInstead).toHaveLength(2)
+      expect(r.gain).toBeGreaterThan(0.5)
+      expect(singleSwapCall(r, 'L1')).toBeNull()
+    } finally {
+      delete LINES['wr-bye']
+    }
+  })
+
+  it('is no call inside the noise band', async () => {
+    LINES.wr3 = yards(7.3) // Reed barely ahead of Bigsby
+    try {
+      starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te1', 'rb3']
+      const r = await run()
+      if (r.status !== 'ready') throw new Error('not ready')
+      expect(r.gain).toBeLessThan(0.5)
+      expect(singleSwapCall(r, 'L1')).toBeNull()
+    } finally {
+      LINES.wr3 = yards(12)
+    }
+  })
+
+  it('hands the tool loop the call, and only when asked', async () => {
+    starterIds = ['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te1', 'rb3']
+    const onStartCall = vi.fn()
+    const block = await buildLineupOptimizerContext({ leagueId: 'L1', userId: 'viewer-1', onStartCall }, deps)
+    expect(block).toMatch(/LINEUP OPTIMIZER/)
+    expect(onStartCall).toHaveBeenCalledTimes(1)
+    expect(onStartCall.mock.calls[0][0]).toMatchObject({ rec: { name: 'Jayden Reed' }, alt: { name: 'Tank Bigsby' } })
+    await expect(buildLineupOptimizerContext({ leagueId: 'L1', userId: 'viewer-1' }, deps)).resolves.toMatch(/LINEUP OPTIMIZER/)
+  })
 })

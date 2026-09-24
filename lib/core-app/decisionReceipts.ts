@@ -11,6 +11,8 @@ import {
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { computeWeeklyMaxPf, type WeeklyRosterPlayer } from '@/lib/commissioner-os/efl/maxPfEngine'
 import { listAdviceForUser, type ChimmyAdvice } from '@/lib/chimmy-advice/adviceStore'
+import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
+import { chimmyTrackRecordFor, type TrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 import { addAdviceKey, startSitAdviceKey } from '@/lib/chimmy-advice/adviceKeys'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { composePlayerIdentities } from './playerIdentityCompose'
@@ -184,6 +186,11 @@ export type DecisionReceiptsData = {
   autocoachUnscored?: number
   /** Calls that could not be tied to a week or to your roster that week. */
   autocoachUnreadable?: number
+  /**
+   * Chimmy's record on YOUR start/sit calls, all of them in the outcome window — not just the few
+   * rows below. From the outcome snapshot (rebuilt every few hours). Absent = none graded yet.
+   */
+  chimmyRecord?: TrackRecordLine
   /** Chimmy's recent start/sit advice. Absent = none, or advice is unavailable (table not applied). */
   chimmy?: ChimmyReceipt[]
   /** Advice for a week still being played. */
@@ -1210,14 +1217,16 @@ export async function getDecisionReceipts(args: {
   ownerSleeperId: string | null
   currentWeek: number | null
 }): Promise<DecisionReceiptsData | null> {
-  const [trades, waivers, lineups, autocoach, chimmy] = await Promise.all([
+  const [trades, waivers, lineups, autocoach, chimmy, snapshot] = await Promise.all([
     getTradeReceipts(args).catch(() => null),
     getWaiverReceipts(args).catch(() => null),
     getLineupReceipts(args).catch(() => null),
     getAutoCoachReceipts(args).catch(() => null),
     getChimmyAdviceReceipts(args).catch(() => null),
+    readAdviceLearningSnapshot(),
   ])
-  if (!trades && !waivers && !lineups && !autocoach && !chimmy) return null
+  const chimmyRecord = chimmyTrackRecordFor(snapshot, args.userId)?.you ?? null
+  if (!trades && !waivers && !lineups && !autocoach && !chimmy && !chimmyRecord) return null
   return {
     trades: trades?.trades ?? [],
     tooEarly: trades?.tooEarly ?? 0,
@@ -1236,6 +1245,7 @@ export async function getDecisionReceipts(args: {
           autocoachUnreadable: autocoach.unreadable,
         }
       : {}),
+    ...(chimmyRecord ? { chimmyRecord } : {}),
     ...(chimmy
       ? {
           chimmy: chimmy.chimmy,

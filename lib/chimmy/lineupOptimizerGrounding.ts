@@ -15,6 +15,7 @@ import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
 import type { ScenarioWeek } from './tradeScenarioTypes'
+import type { ChatStartCall } from './tools/chimmyTools'
 
 /**
  * "Set my lineup" — the whole roster, not a two-player choice.
@@ -316,12 +317,50 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
 }
 
 /** The tool entry point: prose for the model, never a throw. */
+/**
+ * The one "start X over Y" an optimization amounts to — or null.
+ *
+ * ⚠ ONLY AN UNAMBIGUOUS SWAP IS A CALL. The optimizer returns who to start and who to bench as two
+ * lists; with two changes on each side, which starter replaces which is not something it decided,
+ * and pairing them by position in the list would grade a call nobody made. So: exactly one in,
+ * exactly one out, both priced, and a gain past MIN_SWAP_GAIN — below that the block itself tells
+ * the model to call it a coin flip, which is not advice to grade.
+ */
+export function singleSwapCall(result: LineupOptimization, leagueId: string): ChatStartCall | null {
+  if (result.status !== 'ready' || !result.current.known) return null
+  if (result.startInstead.length !== 1 || result.benchInstead.length !== 1) return null
+  if (result.gain == null || result.gain < MIN_SWAP_GAIN) return null
+  const rec = result.startInstead[0]!
+  const alt = result.benchInstead[0]!
+  if (rec.points == null || alt.points == null || rec.playerId === alt.playerId) return null
+  const season = Number(result.week.season)
+  if (!Number.isInteger(season)) return null
+  return {
+    leagueId,
+    season,
+    week: result.week.week,
+    rec: { key: rec.playerId, name: rec.name },
+    alt: { key: alt.playerId, name: alt.name },
+    slot: result.best.slots.find((s) => s.player.playerId === rec.playerId)?.slot ?? null,
+  }
+}
+
 export async function buildLineupOptimizerContext(
-  args: { leagueId: string; userId: string },
+  args: {
+    leagueId: string
+    userId: string
+    /** Told the call when the optimization amounts to one swap — see ChimmyToolContext.startCalls. */
+    onStartCall?: (call: ChatStartCall) => void
+  },
   deps?: LineupOptimizerDeps,
 ): Promise<string> {
   try {
-    return renderLineupOptimizationBlock(await buildLineupOptimization(args, deps))
+    const result = await buildLineupOptimization({ leagueId: args.leagueId, userId: args.userId }, deps)
+    if (args.onStartCall) {
+      const call = singleSwapCall(result, args.leagueId)
+      if (call) args.onStartCall(call)
+    }
+    return renderLineupOptimizationBlock(result)
   } catch {
     return 'The lineup optimizer failed to run. Say that you could not compute a lineup rather than answering as though you had.'
   }

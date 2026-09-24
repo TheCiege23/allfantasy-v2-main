@@ -47,6 +47,22 @@ export type ChimmyToolContext = {
    */
   leagueId: string | null
   userId: string | null
+  /**
+   * "Start X over Y" calls the engines made during this answer, collected so the route can record
+   * the ones the answer actually said (`lib/chimmy-advice/chatStartSitAdvice.ts`) and grade them later
+   * against real weekly scores — Chimmy's track record. Absent = do not collect. Never read by a tool.
+   */
+  startCalls?: ChatStartCall[]
+}
+
+/** One engine-made start/sit call: the pick, the player it was picked over, and the week. */
+export type ChatStartCall = {
+  leagueId: string
+  season: number
+  week: number
+  rec: { key: string; name: string }
+  alt: { key: string; name: string }
+  slot: string | null
 }
 
 /** OpenAI-shaped function tools; Grok accepts these through the OpenAI SDK. */
@@ -807,13 +823,22 @@ export async function executeChimmyTool(
       case 'optimize_my_lineup': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { buildLineupOptimizerContext } = await import('@/lib/chimmy/lineupOptimizerGrounding')
-        return await buildLineupOptimizerContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+        return await buildLineupOptimizerContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
+        })
       }
 
       case 'compare_start_options': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runStartSitScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runStartSitScenarioTool({ players: args.players, leagueId: ctx.leagueId, userId: ctx.userId })
+        return await runStartSitScenarioTool({
+          players: args.players,
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
+        })
       }
 
       case 'evaluate_trade': {
