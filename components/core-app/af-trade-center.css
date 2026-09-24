@@ -2039,9 +2039,16 @@
    * corners were clipped (seen in the 390px screenshot); the gap shows the page
    * scrolling under it, which is the point of the blur.
    */
+  /*
+   * 🛑 PLUS THE SAFE AREA. Saved to the home screen, the app draws under the status bar
+   * (`viewportFit: 'cover'`, `black-translucent`) and the shell paints a fixed strip over that
+   * inset at z-index 70 (`.af-shell::before`). At a bare `top: 6px` this bar (z 30) stuck UNDER
+   * that strip, so the step tabs were hidden behind the clock and battery. In Safari proper the
+   * inset is 0 and nothing moves.
+   */
   .af-tc-stepbar {
     position: sticky;
-    top: 6px;
+    top: calc(6px + env(safe-area-inset-top, 0px));
     z-index: 30;
     display: grid;
     gap: 8px;
@@ -2055,7 +2062,7 @@
   }
   .af-tc-steps {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
     padding: 3px;
     border-radius: 11px;
@@ -2088,15 +2095,12 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
+  /*
+   * Hidden since the fourth tab: at 390px a tab is ~83px wide, and the number circle plus a count
+   * badge truncated "Offers" to "Off…". The labels say what each step is; the order is visible.
+   */
   .af-tc-step-num {
-    display: inline-grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--line2);
-    font-size: 10px;
+    display: none;
   }
   .af-tc-step[data-on='true'] .af-tc-step-num {
     background: var(--accent);
@@ -2151,10 +2155,39 @@
    * in `data-mstep`; anything untagged (header, inbox, league context) shows on
    * all three.
    */
+  .af-tc[data-mobile-step='offers'] [data-mstep]:not([data-mstep~='offers']),
   .af-tc[data-mobile-step='give'] [data-mstep]:not([data-mstep~='give']),
   .af-tc[data-mobile-step='get'] [data-mstep]:not([data-mstep~='get']),
   .af-tc[data-mobile-step='review'] [data-mstep]:not([data-mstep~='review']) {
     display: none;
+  }
+
+  /* The page's intro paragraph is for someone arriving, not someone mid-deal. */
+  .af-tc:not([data-mobile-step='offers']) .af-tc-lede {
+    display: none;
+  }
+
+  /* The verdict scrolls into view on arrival; keep it clear of the sticky step bar above it. */
+  .af-tc-verdict {
+    scroll-margin-top: calc(150px + env(safe-area-inset-top, 0px));
+  }
+
+  /*
+   * 8–10px text, measured in the 2026-09-24 audit, is unreadable at arm's length on a phone.
+   * Floors: 11px for labels, 12px for the text a manager actually reads.
+   */
+  .af-tc-timeline-titleline time,
+  .af-tc-timeline-status,
+  .af-tc-timeline-assets span,
+  .af-tc-timeline-grades span,
+  .af-tc-timeline-grades small {
+    font-size: 11px;
+  }
+  .af-tc-timeline-assets b,
+  .af-tc-timeline-advice,
+  .af-tc-timeline-gap,
+  .af-tc-timeline-filters button {
+    font-size: 12px;
   }
 
   .af-tc[data-mobile-step='review'] .af-tc-review {
@@ -2197,11 +2230,20 @@
   }
   .af-tc-review-list li {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     min-height: 32px;
     color: var(--text);
     font-size: 13px;
+  }
+  /* Why a line has no value — on its own line under the row, since a phone cannot hover. */
+  .af-tc-review-why {
+    flex: 1 0 100%;
+    margin-top: -4px;
+    color: var(--faint);
+    font-size: 11px;
+    line-height: 1.35;
   }
   .af-tc-review-name {
     min-width: 0;
@@ -2349,4 +2391,48 @@
   font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+/*
+ * ── The verdict while it is being worked out ─────────────────────────────
+ *
+ * Appended at the end of the file, outside every `@media` block, like the sections above it.
+ * The analysis takes seconds; this is the slot the verdict will fill, saying so.
+ */
+.af-tc-verdict--pending {
+  gap: 10px;
+}
+.af-tc-verdict-pending-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.af-tc-verdict-pending-bar {
+  position: relative;
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface2);
+}
+.af-tc-verdict-pending-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: af-tc-verdict-pending 1.4s ease-in-out infinite;
+}
+@keyframes af-tc-verdict-pending {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-tc-verdict-pending-bar::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.45;
+  }
 }

@@ -328,6 +328,12 @@ export function TradeInbox(props: {
    * cached response predates.
    */
   reloadToken?: number
+  /**
+   * How many offers are waiting on this manager — Sleeper offers they received plus AllFantasy
+   * proposals addressed to them. Null until the panel has loaded. The phone step bar badges the
+   * Offers tab with it, so an offer is visible from the builder without leaving it.
+   */
+  onNeedsYouCount?: (count: number | null) => void
 }) {
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
@@ -365,6 +371,21 @@ export function TradeInbox(props: {
   useEffect(() => {
     void load()
   }, [load])
+
+  const { onNeedsYouCount } = props
+  useEffect(() => {
+    if (!onNeedsYouCount) return
+    if (!data) {
+      onNeedsYouCount(null)
+      return
+    }
+    // The same two streams the inbox renders as incoming: Sleeper offers, and native proposals.
+    const sleeper = (data.pendingOffers ?? []).filter((o) => o.direction === 'incoming').length
+    const native = (data.activeTrades ?? []).filter(
+      (t) => t.status !== 'pending_on_sleeper' && t.direction === 'incoming',
+    ).length
+    onNeedsYouCount(sleeper + native)
+  }, [data, onNeedsYouCount])
 
   const loadOffer = useCallback(
     (o: Offer) => {

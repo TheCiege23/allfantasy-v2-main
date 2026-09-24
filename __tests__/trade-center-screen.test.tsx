@@ -286,7 +286,8 @@ describe('phase 2 — mobile and drafts', () => {
      * pill and Comms launcher covered all three of its buttons. The persistent control moved into
      * a top-sticky step bar — pinned in detail by __tests__/trades/trade-center-mobile-steps.
      */
-    expect(CSS).toContain('position: sticky;\n    top: 6px;')
+    // Offset by the safe-area inset since 2026-09-24, or it slides under the home-screen status strip.
+    expect(CSS).toContain('position: sticky;\n    top: calc(6px + env(safe-area-inset-top, 0px));')
     // The caption is context, not a control.
     expect(CSS).toContain('.af-tc-caption {\n    display: none;')
   })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
@@ -360,11 +360,22 @@ function AllLeaguesTradeHub(props: {
  * desktop render is byte-for-byte the page it was, a rotate or resize never loses picker or
  * analyser state, and nothing depends on knowing the viewport before hydration.
  */
-export type MobileStep = 'give' | 'get' | 'review'
+export type MobileStep = 'offers' | 'give' | 'get' | 'review'
 
+/*
+ * ⚠ OFFERS IS A STEP OF ITS OWN (2026-09-24). The inbox, its timeline, the value alerts and the
+ * league's trade history used to be untagged, so they rendered on EVERY step: a manager building a
+ * deal on a phone scrolled past the whole inbox to reach the roster on each of the three steps, and
+ * the history block below the builder repeated the inbox a second time. Guap: "the trade system
+ * feels clunky on PC and mobile". Reading offers and building a deal are two jobs; on a phone each
+ * now gets the screen to itself. Desktop is untouched — the tags only act below 720px.
+ *
+ * The labels are short because four tabs share 390px.
+ */
 const MOBILE_STEPS: Array<{ key: MobileStep; label: string }> = [
-  { key: 'give', label: 'You send' },
-  { key: 'get', label: 'You get' },
+  { key: 'offers', label: 'Offers' },
+  { key: 'give', label: 'Send' },
+  { key: 'get', label: 'Get' },
   { key: 'review', label: 'Review' },
 ]
 
@@ -427,6 +438,12 @@ export function TradeCenter(props: {
    * everything, as before.
    */
   depthAccess?: CoreDepthAccess | null
+  /**
+   * The league's trade history (the `Trades` screen), rendered after the builder. Passed in rather
+   * than rendered beside this component so it can belong to the phone's Offers step instead of
+   * trailing every step.
+   */
+  history?: ReactNode
 }) {
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
@@ -457,6 +474,18 @@ export function TradeCenter(props: {
   const [mobileStep, setMobileStep] = useState<MobileStep>('give')
   const isPhone = usePhoneViewport()
   const stepAnchorRef = useRef<HTMLDivElement | null>(null)
+  const verdictRef = useRef<HTMLElement | null>(null)
+  /** Offers waiting on this manager, reported by the inbox; badges the Offers tab. */
+  const [needsYou, setNeedsYou] = useState<number | null>(null)
+
+  /*
+   * A trade email or push links to `?trade=<id>`, and that trade is on the Offers step (its inbox
+   * or its history). Read after mount rather than during render so the server and client agree on
+   * the first paint; `useFocusTradeFromUrl` then brings the trade itself into view.
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('trade')) setMobileStep('offers')
+  }, [])
   /* The "+ Add asset" button that opened the phone sheet — where focus returns on close. */
   const sheetOpenerRef = useRef<HTMLElement | null>(null)
 
@@ -657,12 +686,21 @@ export function TradeCenter(props: {
   const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
   const valueActions = props.valueActions ?? []
 
+  /*
+   * 🛑 EVERY CHANGE TO THE DEAL CLEARS THE VERDICT. `loadOffer` below says why — a score left up
+   * while the assets change underneath "is the one way this page can state something false" — and
+   * yet adding or removing an asset left it up: add a player after analysing and the grade still
+   * described the old deal while the totals described the new one. Found by the trade audit
+   * (2026-09-24). The verdict now always belongs to the deal on screen, or is absent.
+   */
   const addAsset = useCallback(
     (side: 'give' | 'get', asset: PickedAsset) => {
       const setter = side === 'give' ? setGiveAssets : setGetAssets
       /* Immutable update — never write into the existing array. */
       setter((prev) => [...prev, asset])
       setPicking(null)
+      setResult(null)
+      setError(null)
     },
     [],
   )
@@ -670,6 +708,8 @@ export function TradeCenter(props: {
   const removeAsset = useCallback((side: 'give' | 'get', index: number) => {
     const setter = side === 'give' ? setGiveAssets : setGetAssets
     setter((prev) => prev.filter((_, i) => i !== index))
+    setResult(null)
+    setError(null)
   }, [])
 
   /**
@@ -842,6 +882,19 @@ export function TradeCenter(props: {
       setBusy(false)
     }
   }, [props.league?.id, giveAssets, getAssets, partnerRoster?.teamExternalId])
+
+  /*
+   * On a phone the verdict lands below both sides and the value bar — off screen, under a sticky
+   * bar, after a wait of several seconds. Bring it up when it arrives, unless it is already visible.
+   * `scroll-margin-top` in the stylesheet keeps it clear of the sticky step bar.
+   */
+  useEffect(() => {
+    if (!result || !isPhone) return
+    const el = verdictRef.current
+    if (!el) return
+    const top = el.getBoundingClientRect().top
+    if (top < 0 || top > window.innerHeight * 0.6) el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [result, isPhone])
 
   /*
    * ⚠ A LETTER PER SIDE, OR NO LETTER AT ALL. `projectedLetterFor` returns null
@@ -1108,18 +1161,47 @@ export function TradeCenter(props: {
    * a manager who added only what they want got an error box after a network round trip. Naming
    * the missing step is the same information a turn earlier, as a control instead of a complaint.
    */
+  /*
+   * ⚠ ON A BUILDING STEP IT POINTS AT WHAT IS STILL MISSING, AND ANALYSES ONCE NOTHING IS. It used
+   * to say "Review trade" on both building steps, so a manager who added what they send was sent to
+   * Review, told "Add what you get", and sent back — two wasted taps on every deal, measured as the
+   * clunkiest part of the phone flow in the 2026-09-24 audit. Now: the empty side is the next
+   * step, and a deal with both sides goes straight to Review WITH the analysis running, because
+   * that is the only thing anyone does on arrival there.
+   */
+  const bothSides = giveAssets.length > 0 && getAssets.length > 0
+  const analyzeLabel = busy ? 'Analyzing…' : result ? 'Analyze again' : 'Analyze trade'
   const primary: { label: string; disabled: boolean; run: () => void } =
-    mobileStep !== 'review'
-      ? { label: 'Review trade', disabled: !hasAssets, run: () => goToStep('review') }
-      : giveAssets.length === 0 && getAssets.length > 0
-        ? { label: 'Add what you send', disabled: false, run: () => goToStep('give') }
-        : getAssets.length === 0 && giveAssets.length > 0
-          ? { label: 'Add what you get', disabled: false, run: () => goToStep('get') }
-          : {
-              label: busy ? 'Analyzing…' : result ? 'Analyze again' : 'Analyze trade',
-              disabled: !hasAssets || busy,
-              run: () => void analyze(),
+    mobileStep === 'offers'
+      ? hasAssets
+        ? { label: 'Back to your trade', disabled: false, run: () => goToStep('review') }
+        : { label: 'Build a trade', disabled: false, run: () => goToStep('give') }
+      : mobileStep !== 'review'
+        ? bothSides
+          ? {
+              label: result ? 'See the verdict' : analyzeLabel,
+              disabled: busy,
+              run: () => {
+                goToStep('review')
+                if (!result) void analyze()
+              },
             }
+          : mobileStep === 'give'
+            ? giveAssets.length === 0 && getAssets.length > 0
+              ? { label: 'Add what you send', disabled: true, run: () => undefined }
+              : { label: 'Next: what you get', disabled: false, run: () => goToStep('get') }
+            : getAssets.length === 0 && giveAssets.length > 0
+              ? { label: 'Add what you get', disabled: true, run: () => undefined }
+              : { label: 'Next: what you send', disabled: false, run: () => goToStep('give') }
+        : giveAssets.length === 0 && getAssets.length > 0
+          ? { label: 'Add what you send', disabled: false, run: () => goToStep('give') }
+          : getAssets.length === 0 && giveAssets.length > 0
+            ? { label: 'Add what you get', disabled: false, run: () => goToStep('get') }
+            : {
+                label: analyzeLabel,
+                disabled: !hasAssets || busy,
+                run: () => void analyze(),
+              }
 
   return (
     <div className="af-tc" data-mobile-step={mobileStep}>
@@ -1156,7 +1238,7 @@ export function TradeCenter(props: {
 
       {/* Every league at a glance, before this one's context — see the strip's own header. */}
       {props.leagues && props.leagues.length > 0 ? (
-        <details className="af-tc-switcher">
+        <details className="af-tc-switcher" data-mstep="offers">
           <summary>Switch league <span>{props.leagues.length} connected</span></summary>
           <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
         </details>
@@ -1192,7 +1274,7 @@ export function TradeCenter(props: {
         deal contains. Scoped by the league's type when the caller knows it; the
         full six otherwise, because an unknown type must not read as a rule.
       */}
-      <details className="af-tc-disclosure">
+      <details className="af-tc-disclosure" data-mstep="offers">
         <summary>{legend.types.length} tradeable asset types <span>View league rules</span></summary>
         <div className="af-tc-legend">
           <span className="af-tc-legend-label">
@@ -1225,7 +1307,7 @@ export function TradeCenter(props: {
       ) : null}
 
       {draftKey ? (
-        <div className="af-tc-draft">
+        <div className="af-tc-draft" data-mstep="offers review">
           <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
           <span className="af-tc-spacer" />
           <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
@@ -1240,15 +1322,18 @@ export function TradeCenter(props: {
         job: read what was offered, then price it. Below the builder they would
         be a footnote to a deal the manager had already hand-built.
       */}
-      <TradeInbox
-        leagueId={props.league?.id ?? null}
-        onLoad={loadOffer}
-        onCounter={startCounter}
-        reloadToken={inboxReloadToken}
-      />
+      <div className="af-tc-mstep-wrap" data-mstep="offers">
+        <TradeInbox
+          leagueId={props.league?.id ?? null}
+          onLoad={loadOffer}
+          onCounter={startCounter}
+          reloadToken={inboxReloadToken}
+          onNeedsYouCount={setNeedsYou}
+        />
+      </div>
 
       {valueActions.length > 0 ? (
-        <details className="af-tc-value-actions">
+        <details className="af-tc-value-actions" data-mstep="offers">
           <summary><span>Value change alerts</span><b>{valueActions.length} players across your leagues</b></summary>
           <div className="af-tc-value-action-list">
             {valueActions.map((player) => (
@@ -1285,7 +1370,14 @@ export function TradeCenter(props: {
       <div className="af-tc-stepbar">
         <nav className="af-tc-steps" aria-label="Trade builder steps">
           {MOBILE_STEPS.map((s, i) => {
-            const count = s.key === 'give' ? giveAssets.length : s.key === 'get' ? getAssets.length : null
+            const count =
+              s.key === 'give'
+                ? giveAssets.length
+                : s.key === 'get'
+                  ? getAssets.length
+                  : s.key === 'offers'
+                    ? needsYou || null // no badge for zero or unknown; a "0" reads as a read we may not have
+                    : null
             return (
               <button
                 key={s.key}
@@ -1673,6 +1765,13 @@ export function TradeCenter(props: {
                     >
                       {money(l.marketValue)}
                     </span>
+                    {/*
+                      Said in text, not only in `title`: a tooltip needs a hover, and a phone has none.
+                      Without this the review shows an em dash with no way to learn why.
+                    */}
+                    {l.marketValue == null && l.unpricedWhy ? (
+                      <span className="af-tc-review-why">{l.unpricedWhy}</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -1728,8 +1827,23 @@ export function TradeCenter(props: {
         ⚠ THE VERDICT IS SUPPRESSED WHEN THE FORMAT BLOCKS THE DEAL. A score
         beneath a "this cannot happen" banner still gets read as a score.
       */}
+      {/*
+        The analysis takes several seconds — league values plus a written read. The only sign of it
+        used to be the button label, on a control the manager had just scrolled away from, so the
+        page looked idle. The slot the verdict will fill says what is happening instead.
+      */}
+      {busy && !result ? (
+        <section className="af-tc-verdict af-tc-verdict--pending" data-mstep="review" aria-busy="true" aria-live="polite">
+          <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
+          <p className="af-tc-verdict-pending-copy">
+            Pricing this deal against your league&rsquo;s values and rosters &mdash; usually 5 to 15 seconds.
+          </p>
+          <span className="af-tc-verdict-pending-bar" aria-hidden />
+        </section>
+      ) : null}
+
       {result && !blocked ? (
-        <section className="af-tc-verdict" data-mstep="review">
+        <section ref={verdictRef} className="af-tc-verdict" data-mstep="review">
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
@@ -2018,6 +2132,16 @@ export function TradeCenter(props: {
           Ask Chimmy to explain
         </button>
       </div>
+
+      {/*
+        The league's history, last on the page as it always was on desktop. On a phone it belongs
+        to Offers — the place a trade email lands — instead of trailing every building step.
+      */}
+      {props.history ? (
+        <div className="af-tc-mstep-wrap" data-mstep="offers">
+          {props.history}
+        </div>
+      ) : null}
     </div>
   )
 }
