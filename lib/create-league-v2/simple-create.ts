@@ -34,14 +34,20 @@ export const IMPORT_LEAGUE_PROVIDERS: readonly ImportProviderOption[] = [
   { id: 'manual', label: 'Other/manual', state: 'coming_soon' },
 ]
 
+/*
+ * 🛑 ONLY AF COMMISSIONER'S AUTOMATION BELONGS HERE — NEVER A LEAGUE FORMAT.
+ *
+ * This list also held customScoring, superflex, tePremium, idp, customWaiverRules,
+ * customPlayoffRules and advancedDraftRules, disabled for everyone without AF Commissioner
+ * and refused by POST /api/leagues. None of them did anything: league creation never reads
+ * `conceptSetup.advancedSetup` (league-create-audit-20260919 reproduces a superflex/IDP/TE
+ * premium flag leaving roster and scoring unchanged). The real controls — the scoring preset,
+ * the IDP concept, the draft and playoff settings — are free. So the checklist only ever told
+ * a free commissioner that superflex and IDP cost money, and the rule is that creating and
+ * running a league is free. Custom scoring TABLES stay paid where they are real: the scoring
+ * settings panel (`advanced_scoring`).
+ */
 export const PREMIUM_ADVANCED_CREATE_KEYS = [
-  'customScoring',
-  'superflex',
-  'tePremium',
-  'idp',
-  'customWaiverRules',
-  'customPlayoffRules',
-  'advancedDraftRules',
   'aiCommissionerTools',
   'tradeApprovalAutomation',
   'leagueHealthMonitoring',
@@ -52,13 +58,6 @@ export type PremiumAdvancedCreateKey = (typeof PREMIUM_ADVANCED_CREATE_KEYS)[num
 export type PremiumAdvancedCreateState = Partial<Record<PremiumAdvancedCreateKey, boolean>>
 
 export const PREMIUM_ADVANCED_CREATE_LABELS: Record<PremiumAdvancedCreateKey, string> = {
-  customScoring: 'Custom scoring',
-  superflex: 'Superflex',
-  tePremium: 'TE Premium',
-  idp: 'IDP',
-  customWaiverRules: 'Custom waiver rules',
-  customPlayoffRules: 'Custom playoff rules',
-  advancedDraftRules: 'Advanced draft rules',
   aiCommissionerTools: 'AI Commissioner tools',
   tradeApprovalAutomation: 'Trade approval automation',
   leagueHealthMonitoring: 'League health monitoring',

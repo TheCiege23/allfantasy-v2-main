@@ -119,7 +119,7 @@ describe('Canonical native league creation pipeline', () => {
         leagueName: 'Pipeline Test',
         conceptSetup: {
           advancedSetup: {
-            superflex: true,
+            aiCommissionerTools: true,
           },
         },
       }),
@@ -128,6 +128,42 @@ describe('Canonical native league creation pipeline', () => {
     const res = await postCreateLeague(req)
     expect(res.status).toBe(403)
     expect(executeCanonicalLeagueCreationMock).not.toHaveBeenCalled()
+  })
+
+  // Creating a league is free. Superflex, IDP, TE premium and custom scoring used to be
+  // "premium advanced setup" here and a free commissioner got 403 — for flags league creation
+  // never even reads. A stale one (sessionStorage, an old client) must not block a create.
+  it.each([
+    ['superflex'],
+    ['idp'],
+    ['tePremium'],
+    ['customScoring'],
+    ['customPlayoffRules'],
+    ['advancedDraftRules'],
+    ['customWaiverRules'],
+  ])('does NOT refuse a free commissioner a league-format flag (%s)', async (flag) => {
+    const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
+    const req = new Request('http://localhost/api/leagues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        concept: 'redraft',
+        sport: 'NFL',
+        scoringPreset: 'fb_half_ppr',
+        teamCount: 12,
+        draftType: 'snake',
+        leagueName: 'Pipeline Test',
+        conceptSetup: {
+          advancedSetup: {
+            [flag]: true,
+          },
+        },
+      }),
+    })
+
+    const res = await postCreateLeague(req)
+    expect(res.status).toBe(200)
+    expect(executeCanonicalLeagueCreationMock).toHaveBeenCalledTimes(1)
   })
 
   it('allows premium advanced settings with AF Commissioner', async () => {
@@ -151,7 +187,7 @@ describe('Canonical native league creation pipeline', () => {
         leagueName: 'Pipeline Test',
         conceptSetup: {
           advancedSetup: {
-            superflex: true,
+            aiCommissionerTools: true,
           },
         },
       }),
@@ -163,7 +199,7 @@ describe('Canonical native league creation pipeline', () => {
       expect.objectContaining({
         body: expect.objectContaining({
           conceptSetup: expect.objectContaining({
-            advancedSetup: { superflex: true },
+            advancedSetup: { aiCommissionerTools: true },
           }),
         }),
       }),
