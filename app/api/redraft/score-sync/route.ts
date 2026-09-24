@@ -15,6 +15,7 @@ import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
+import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -157,6 +158,9 @@ async function runRedraftReconciliation() {
   let weeksFinalized = 0
   let finalizeFailed = 0
   const finalizeRefusals: Record<string, number> = {}
+  let guillotineChops = 0
+  let guillotineFailed = 0
+  const guillotineOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
@@ -236,6 +240,28 @@ async function runRedraftReconciliation() {
     } catch {
       finalizeFailed += 1
     }
+
+    /*
+     * A native guillotine league chops its lowest team once each finished week. It runs after the
+     * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
+     * even when this tick's sync failed. One chop per week, guarded inside.
+     */
+    try {
+      const guillotine = await runNativeGuillotineWeek(
+        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
+        {
+          syncWeekStats: async ({ seasonId, week }) => {
+            await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
+          },
+        },
+      )
+      if (guillotine.outcome !== 'not_guillotine') {
+        guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
+      }
+      if (guillotine.outcome === 'chopped') guillotineChops += 1
+    } catch {
+      guillotineFailed += 1
+    }
   }
 
   return {
@@ -247,6 +273,9 @@ async function runRedraftReconciliation() {
     weeksFinalized,
     finalizeFailed,
     finalizeRefusals,
+    guillotineChops,
+    guillotineFailed,
+    guillotineOutcomes,
   }
 }
 
@@ -345,7 +374,8 @@ export async function GET(request: Request) {
         r.survivorBridge.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
         r.redraft.failed > 0 ||
-        r.redraft.finalizeFailed > 0
+        r.redraft.finalizeFailed > 0 ||
+        r.redraft.guillotineFailed > 0
           ? 'partial'
           : 'success',
       metadata: {

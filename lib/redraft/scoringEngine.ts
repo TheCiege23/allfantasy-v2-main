@@ -417,6 +417,22 @@ async function loadBestBallContext(leagueId: string): Promise<BestBallScoringCon
   return { sport, slots: buildBestBallSlots(sport, league.settings) }
 }
 
+/**
+ * One roster's score for one week, by the same rules a matchup uses (devy engine, best ball, or
+ * starter slots). For formats scored outside a head-to-head matchup — a guillotine week is every
+ * surviving team against the chop line, not against an opponent.
+ */
+export async function scoreRosterForWeek(args: {
+  leagueId: string
+  rosterId: string
+  week: number
+  seasonYear: number
+}): Promise<RosterScoreSummary> {
+  const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
+  const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
+  return scoreRosterStarters({ ...args, useDevyEngine, bestBall })
+}
+
 export async function updateMatchupScores(matchupId: string): Promise<MatchupScoreUpdateSummary | null> {
   const m = await prisma.redraftMatchup.findFirst({
     where: { id: matchupId },
