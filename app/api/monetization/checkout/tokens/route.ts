@@ -11,6 +11,7 @@ import {
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
+import { findStripeCustomerIdForUser } from "@/lib/monetization/stripeCustomerForUser"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
 import {
   normalizeCouponCode,
@@ -103,8 +104,10 @@ export async function POST(req: Request) {
       sku: item.sku,
       userId: session.user.id,
       userEmail: session.user.email ?? null,
+      stripeCustomerId: await findStripeCustomerIdForUser(session.user.id),
       returnPath,
       couponCode: resolvedCouponCode,
+      couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
     })
     if (!checkout || checkout.purchaseType !== "tokens") {
       return NextResponse.json(
