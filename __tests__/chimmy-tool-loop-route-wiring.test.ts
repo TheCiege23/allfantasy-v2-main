@@ -9,6 +9,7 @@ import {
   requiresLeagueGrounding,
   ROSTER_INTENT,
 } from '@/lib/chimmy-chat/question-routing'
+import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
 
 /**
  * The wiring contract, asserted against the route source.
@@ -287,21 +288,26 @@ describe('tool loop system prompt', () => {
    * When the model fetches its own context, nothing upstream can guarantee the
    * context is there — so the do-not-invent rule has to travel with the tools.
    */
-  it('carries the same refusal discipline as the push path', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
-    expect(start).toBeGreaterThan(-1)
-    const prompt = ROUTE.slice(start, start + 1200)
+  /*
+   * The prompt lives in lib/chimmy/tools/toolLoopSystemPrompt.ts so the answer-bank eval runs the
+   * one production sends. So check the STRING, and that the route hands the loop that constant —
+   * a local copy in the route would pass a text search and be the prompt nobody evaluates.
+   */
+  it('is the shared constant, imported and passed to the loop', () => {
+    expect(ROUTE).toMatch(/import \{[^}]*CHIMMY_TOOL_LOOP_SYSTEM_PROMPT[^}]*\} from '@\/lib\/chimmy\/tools\/toolLoopSystemPrompt'/)
+    expect(ROUTE).not.toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT\b/)
+    expect(BLOCK).toContain('systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+  })
 
-    expect(prompt).toMatch(/NEVER invent/i)
-    expect(prompt).toMatch(/no data/i)
-    expect(prompt).toMatch(/do not fall back on general knowledge/i)
+  it('carries the same refusal discipline as the push path', () => {
+    expect(CHIMMY_TOOL_LOOP_SYSTEM_PROMPT).toMatch(/NEVER invent/i)
+    expect(CHIMMY_TOOL_LOOP_SYSTEM_PROMPT).toMatch(/no data/i)
+    expect(CHIMMY_TOOL_LOOP_SYSTEM_PROMPT).toMatch(/do not fall back on general knowledge/i)
   })
 
   /* An empty live feed is "no games polled", not a scoreline of zero. */
   it('spells out the empty-feed trap', () => {
-    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
-    const prompt = ROUTE.slice(start, start + 1200)
-    expect(prompt).toMatch(/NOT that nobody scored/i)
+    expect(CHIMMY_TOOL_LOOP_SYSTEM_PROMPT).toMatch(/NOT that nobody scored/i)
   })
 })
 

@@ -235,3 +235,48 @@ describe('runChimmyToolLoop on Claude', () => {
     expect(msgs[2]).toEqual({ role: 'user', content: 'who leads in touchdowns?' })
   })
 })
+
+/*
+ * The observer exists for the answer-bank eval (scripts/chimmy-eval). It must see everything the
+ * grader needs and be unable to change anything the user gets.
+ */
+describe('the eval observer', () => {
+  it('reports every tool result and every response, and the answer is unchanged', async () => {
+    h.anthropicCreate
+      .mockResolvedValueOnce({ ...wantsTools({ id: 't1', name: 'get_stat_leaders', input: { stat: 'touchdowns' } }), usage: { input_tokens: 10, output_tokens: 2 } })
+      .mockResolvedValueOnce({ ...answer('Josh Allen leads with 2.'), usage: { input_tokens: 20, output_tokens: 5 } })
+    const tools: unknown[] = []
+    const responses: Array<Record<string, unknown>> = []
+
+    const out = await runChimmyToolLoop({
+      ...base,
+      observer: { onToolResult: (e) => tools.push(e), onResponse: (e) => responses.push(e) },
+    })
+
+    expect(out?.text).toBe('Josh Allen leads with 2.')
+    expect(tools).toEqual([{ turn: 1, name: 'get_stat_leaders', input: { stat: 'touchdowns' }, result: 'Leaders: 1. Josh Allen — 2' }])
+    expect(responses.map((r) => r.stopReason)).toEqual(['tool_use', 'end_turn'])
+    expect(responses[1]).toMatchObject({ turn: 2, usage: { input_tokens: 20, output_tokens: 5 } })
+  })
+
+  it('cannot turn an answer into a fallback by throwing', async () => {
+    h.anthropicCreate
+      .mockResolvedValueOnce(wantsTools({ id: 't1', name: 'get_stat_leaders' }))
+      .mockResolvedValueOnce(answer('fine'))
+    const boom = () => {
+      throw new Error('observer broke')
+    }
+
+    const out = await runChimmyToolLoop({ ...base, observer: { onToolResult: boom, onResponse: boom, onGiveUp: boom } })
+
+    expect(out?.text).toBe('fine')
+  })
+
+  it('says why the loop gave up', async () => {
+    h.anthropicCreate.mockResolvedValueOnce({ ...answer('no'), stop_reason: 'refusal' })
+    const reasons: string[] = []
+
+    expect(await runChimmyToolLoop({ ...base, observer: { onGiveUp: (e) => reasons.push(e.reason) } })).toBeNull()
+    expect(reasons).toEqual(['refusal'])
+  })
+})

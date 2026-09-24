@@ -23,7 +23,10 @@
  * ⚠ `knownGap` IS WRITTEN ONLY WHERE IT WAS VERIFIED FROM CODE, not predicted. It was checked against
  * the 18 tool definitions in `lib/chimmy/tools/chimmyTools.ts` on origin/main 62ab73768 (2026-09-24):
  * no tool exposes a Decision OS decision, and none reads ADP, soccer stats or standings, odds or
- * probabilities, news, or the web. Everything else is left for the run to measure — a pre-filled
+ * probabilities, news, or the web. ⚠ The web IS reachable OUTSIDE the tool loop: when the route's
+ * deterministic step refuses a question, `lib/ai/liveSportsAnswer.ts` may answer it with Anthropic
+ * (or Grok) web search — the `liveSearchFallback` flag, on by default. It is a fallback, not a tool
+ * the model can choose, so the gaps below still stand. Everything else is left for the run to measure — a pre-filled
  * guess would make the first scorecard agree with me instead of with Chimmy.
  *
  * ⚠ League names are PLACEHOLDERS resolved by the runner from its fixture account: `{nativeLeague}` is
@@ -128,7 +131,7 @@ export const NO_DECISION_TOOL = 'No Chimmy tool exposes a Decision OS decision; 
 export const NO_ADP = 'No ADP tool.'
 export const NO_SOCCER = 'No soccer stats or standings tool (the stats tools cover NFL, NCAAF, MLB, NBA, NHL, NCAAB).'
 export const NO_PROBABILITY = 'No odds or probability tool.'
-export const NO_NEWS = 'No news or web tool.'
+export const NO_NEWS = 'No news or web tool in the tool loop (a web-search fallback runs only after a deterministic refusal).'
 
 export const CHIMMY_ANSWER_BANK: readonly AnswerCase[] = [
   // ── the owner's own example, and its neighbours ─────────────────────────────────────────────
@@ -337,7 +340,7 @@ export const CHIMMY_ANSWER_BANK: readonly AnswerCase[] = [
     league: 'none',
     decision: null,
     groundOn: [MISSING('ADP read (format-aware, dated)')],
-    rubric: ['Gives an ADP only with its source, format and date.'],
+    rubric: ['Either gives an ADP with its source, format and date, or says plainly it has no ADP data. An ADP missing any of the three fails.'],
     knownGap: NO_ADP,
   },
   {
