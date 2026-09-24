@@ -6,6 +6,7 @@ import { getDeliveryMethodAvailability } from "@/lib/notification-settings/Deliv
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
+import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
 import { sendPushToUser } from "@/lib/push-notifications"
 import { decidePush } from "@/lib/notifications/pushGate"
 import { retryWithBackoff } from "@/lib/error-handling"
@@ -183,14 +184,20 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       }
 
       if (catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
-        const smsBody = body ? `${title}\n${body}` : title
-        const smsSent = await sendSms(profile.phone, smsBody.slice(0, 320))
-        if (!smsSent) {
-          console.error("[NotificationDispatcher] SMS send returned false", {
-            userId,
-            category,
-            type,
-          })
+        // A Twilio charge per text, previously uncapped. Over the daily cap the text is
+        // skipped; the in-app row, email and push above/below still go out.
+        if (!(await reserveSmsToday(userId))) {
+          console.warn("[NotificationDispatcher] SMS daily cap reached; text skipped", { userId, category, type })
+        } else {
+          const smsBody = body ? `${title}\n${body}` : title
+          const smsSent = await sendSms(profile.phone, smsBody.slice(0, 320))
+          if (!smsSent) {
+            console.error("[NotificationDispatcher] SMS send returned false", {
+              userId,
+              category,
+              type,
+            })
+          }
         }
       }
 

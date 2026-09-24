@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { withApiUsage } from '@/lib/telemetry/usage'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { runTradeConsoleAnalysis } from '@/lib/trade-value-console/runTradeConsoleAnalysis'
+import { evaluateAiCostGate } from '@/lib/ai-protection/costGate'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
@@ -102,8 +103,33 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         )
       }
 
+      /*
+       * 🛑 THE WRITTEN "WHY" COSTS AN OPENAI CALL ON EVERY EVALUATION; THE GRADE COSTS NOTHING.
+       * Owner's decision (2026-09-24): free users keep the verdict, AF Pro gets the AI write-up.
+       * So this never refuses — it turns the model off (`skipAi`, the deterministic path the
+       * console already has) and says why in `aiLimit`. Before paywall launch everyone gets the
+       * write-up up to a daily cap; after it, only a plan holder does.
+       */
+      let aiLimit: { reason: string; message: string; upgradePath: string | null } | null = null
+      let skipAi = Boolean(parsed.data.skipAi)
+      if (!skipAi) {
+        const aiGate = await evaluateAiCostGate(req, 'trade_center_ai', userId)
+        if (!aiGate.ok) {
+          skipAi = true
+          aiLimit = {
+            reason: aiGate.reason,
+            message:
+              aiGate.reason === 'plan' || aiGate.reason === 'sign_in'
+                ? 'The full written analysis is part of AF Pro. Your trade grade is below.'
+                : "You've reached today's limit for trade write-ups. Your trade grade is below.",
+            upgradePath: aiGate.reason === 'rate' ? null : '/pricing',
+          }
+        }
+      }
+
       const payload: TradeConsoleAnalyzeInput = {
         ...parsed.data,
+        skipAi,
         userId,
         sportFilter: parsed.data.sportFilter as TradeConsoleAnalyzeInput['sportFilter'],
       }
@@ -397,11 +423,14 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
           unattributedMs: unattributedMs(phase),
           assetsGive: parsed.data.sideGive.length,
           assetsGet: parsed.data.sideGet.length,
-          skipAi: Boolean(parsed.data.skipAi),
+          // The EFFECTIVE skip — a capped or plan-withheld call reads as skipped, with the reason.
+          skipAi,
+          aiLimit: aiLimit?.reason ?? null,
         },
       }).catch(() => {})
 
-      return NextResponse.json(decisionOs ? { ...responseBody, decisionOs } : responseBody)
+      const withAiLimit = aiLimit ? { ...responseBody, aiLimit } : responseBody
+      return NextResponse.json(decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit)
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

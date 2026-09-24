@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { aiCostGate } from '@/lib/ai-protection/costGate';
 import {
   assembleTradeDecisionContext,
   contextToPromptV1,
@@ -70,6 +71,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const gated = await aiCostGate(req, 'trade_ai', session.user.id);
+  if (gated) return gated;
 
   const includeTrace = wantsDebugTrace(req);
   const { sideA, sideB, leagueContext, leagueId, sport } = await req.json();
