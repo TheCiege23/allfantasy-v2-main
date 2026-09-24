@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { providerIdIsUsableForPlayer } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
+import { providerIdIsUsableForPlayer } from '@/lib/draft-room/player-canonical-identity'
 
 /** The pool's own answer to "who holds this Sleeper id", by suffixless base name. */
 const OWNERS = new Map<string, string>([
