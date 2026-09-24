@@ -6,6 +6,7 @@ import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
 import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFieldMaps'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
+import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
 
 /**
  * Per-game player box lines for every sport, from Rolling Insights `/live/{date}/{SPORT}`.
@@ -103,6 +104,10 @@ export interface RiGameBox {
   weekOrRound: number
   gameDate: Date | null
   status: string | null
+  /** `null` = the label was absent or not one we recognise — never assumed to be regular. */
+  seasonType: RiSeasonType | null
+  /** The vendor's own `season_type`, verbatim, so an unrecognised label is still inspectable. */
+  seasonTypeLabel: string | null
   lines: RiBoxLine[]
 }
 
@@ -260,12 +265,16 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
     weekOrRound: num(g.week) ?? 0,
     gameDate: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null,
     status: str(g.status ?? g.game_status),
+    // Preseason, regular season and playoffs all arrive through the same `/live` call. Dropping
+    // this is how 619 NHL preseason rows landed in season 2026 unmarked — see riSeasonType.ts.
+    seasonType: classifyRiSeasonType(g.season_type ?? g.seasonType),
+    seasonTypeLabel: str(g.season_type ?? g.seasonType),
     lines,
   }
 }
 
 /** Flatten the recognised numeric fields; everything else stays in `statPayload` verbatim. */
-function normalizedMapFor(line: RiBoxLine): Record<string, unknown> {
+function normalizedMapFor(line: RiBoxLine, box: Pick<RiGameBox, 'seasonType' | 'seasonTypeLabel'>): Record<string, unknown> {
   const stats: Record<string, number> = {}
   for (const [key, value] of Object.entries(line.raw)) {
     const n = num(value)
@@ -276,6 +285,9 @@ function normalizedMapFor(line: RiBoxLine): Record<string, unknown> {
     position: str(line.raw.position ?? line.raw.POS) ?? null,
     positionCategory: str(line.raw.position_category) ?? null,
     status: str(line.raw.status) ?? null,
+    /** `regular` | `pre` | `post` | null. Readers resolve it via `resolveStoredSeasonType`. */
+    seasonType: box.seasonType,
+    seasonTypeLabel: box.seasonTypeLabel,
     stats,
     /**
      * ⚠ READ THIS BEFORE READING `fantasyPoints`. False means the row was never scored, and the
@@ -294,6 +306,8 @@ export interface GameLogIngestResult {
   written: number
   /** Box lines whose provider player id has no PlayerIdentityMap row — NOT written. */
   unresolved: number
+  /** Game `season_type` labels that classified as unknown. Non-empty means riSeasonType.ts needs a pattern. */
+  unrecognizedSeasonTypes: string[]
   notModifiedDates: string[]
   unsupported: boolean
   errors: string[]
@@ -343,6 +357,7 @@ export async function ingestRollingInsightsGameLogs(opts: {
     lines: 0,
     written: 0,
     unresolved: 0,
+    unrecognizedSeasonTypes: [],
     notModifiedDates: [],
     unsupported: false,
     errors: [],
@@ -408,6 +423,13 @@ export async function ingestRollingInsightsGameLogs(opts: {
         if (!box || box.lines.length === 0) continue
         result.games += 1
         result.lines += box.lines.length
+        if (
+          box.seasonType === null &&
+          result.unrecognizedSeasonTypes.length < 10 &&
+          !result.unrecognizedSeasonTypes.includes(box.seasonTypeLabel ?? '(missing)')
+        ) {
+          result.unrecognizedSeasonTypes.push(box.seasonTypeLabel ?? '(missing)')
+        }
 
         for (const line of box.lines) {
           const playerId = identityByRiId.get(line.providerPlayerId)
@@ -427,7 +449,7 @@ export async function ingestRollingInsightsGameLogs(opts: {
             season: box.season ?? fallbackSeason,
             weekOrRound: box.weekOrRound,
             statPayload: toPrismaJsonInput(line.raw),
-            normalizedStatMap: toPrismaJsonInput(normalizedMapFor(line)),
+            normalizedStatMap: toPrismaJsonInput(normalizedMapFor(line, box)),
             source: SOURCE,
             confidence,
             team: line.team,

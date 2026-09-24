@@ -44,6 +44,7 @@
 | `N-10` | `date_injured` format varies by sport | OPEN (our work) | injury parsing | Not ISO and inconsistent: `"2026-1-29"` (NFL, unpadded), `"2026-04-15"` (MLB), `"Jul 20, 2026"` (SOCCER). |
 | `N-11` | `player_id` type varies by sport | OPEN (our work) | joins | **STRING** for NFL/MLB/NBA/NHL, **INTEGER** for SOCCER. PBP `players[].id` is an **INTEGER** for NFL. Cast explicitly on every join. |
 | `N-12` | GraphQL API | NOT MODELLED | nothing | New docs mention a separate GraphQL API — OAuth2 client-credentials, `Authorization: Bearer`, Apollo Sandbox at `datafeeds.rolling-insights.com/graphql`. Deliberately excluded from the OpenAPI spec. Only NFL and MLB per the older skill repo. Ignore unless REST becomes limiting. |
+| `N-13` | `season_type` labels for non-regular games in MLB / NBA / NHL `/live` | UNVERIFIED — do not probe | preseason/playoff separation in `player_game_stats` | Only `"Regular Season"` is measured (every game in the three fixtures); the contract lists `Preseason`/playoff labels for NFL only. `lib/sports-data/riSeasonType.ts` classifies known spellings and returns `null` for anything else, and the ingest reports unrecognised labels (`unrecognizedSeasonTypes`) — read the first NHL preseason / MLB postseason run summary rather than probing. Opened 2026-09-24 when 619 NHL preseason rows were found unmarked in season 2026. |
 
 ---
 
