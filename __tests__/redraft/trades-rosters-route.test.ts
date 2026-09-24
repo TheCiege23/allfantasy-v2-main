@@ -91,6 +91,26 @@ vi.mock('@/lib/trade-intel/partnerHistory', () => ({
   loadLeagueTradeHistory: (...args: unknown[]) => loadLeagueTradeHistory(...args),
 }))
 
+/*
+ * Trade depth (AF Pro, lib/core-app/coreDepthAccess.ts). Open unless a test locks it, so every other
+ * case here asserts what a plan holder — or anyone before launch — receives, whatever today's date.
+ */
+const tradeDepthLocked = vi.hoisted(() => ({ current: false }))
+vi.mock('@/lib/core-app/corePaywall', async () => {
+  const { decideCoreDepth } = await vi.importActual<typeof import('@/lib/core-app/coreDepthAccess')>(
+    '@/lib/core-app/coreDepthAccess',
+  )
+  return {
+    resolveCoreDepth: vi.fn(async (_u: unknown, depth: 'trade_depth') =>
+      decideCoreDepth(depth, {
+        live: true,
+        startsAt: new Date('2026-10-15T04:00:00.000Z'),
+        hasPlan: !tradeDepthLocked.current,
+      }),
+    ),
+  }
+})
+
 import { GET } from '@/app/api/leagues/[leagueId]/trades/rosters/route'
 
 function ctx(leagueId: string) {
@@ -720,6 +740,28 @@ describe('partnerRanking (item #8)', () => {
     expect(body.rosters).toHaveLength(2)
     expect(body.partnerRanking?.partners).toHaveLength(1)
     expect(body.partnerRanking?.gaps).toContain('Trade history is not on file for this league, so past dealing did not count.')
+  })
+
+  it('🛑 locked (AF Pro): no ranking and no suggested packages — the rosters, the builder, stay', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', starters: ['QB', 'RB', 'BN'] })
+    tradeDepthLocked.current = true
+    try {
+      const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+      const body = (await res.json()) as Record<string, unknown> & { rosters: unknown[] }
+      expect(body.rosters).toHaveLength(2)
+      expect(body.partnerRanking).toBeNull()
+      expect(body.suggestions).toEqual([])
+      expect(body.multiTeamSuggestions).toEqual([])
+      expect(body.depth).toMatchObject({ unlocked: false, planName: 'AF Pro' })
+    } finally {
+      tradeDepthLocked.current = false
+    }
+  })
+
+  it('[control] open: the same league DOES get a ranking — so the lock above is withholding something', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', starters: ['QB', 'RB', 'BN'] })
+    const body = await get()
+    expect(body.partnerRanking?.partners.map((p) => p.rosterId)).toEqual(['roster-b'])
   })
 
   it('is null when the viewer has no team here — there is nobody to rank partners FOR', async () => {

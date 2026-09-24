@@ -20,6 +20,8 @@ import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimm
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { buildLeagueFormatLabel } from '@/lib/leagues/leagueFormatLabel'
 import { describeTradeCanonicalOpinion } from '@/lib/decision-os/trade/canonicalVisibility'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 type SportFilter = 'ALL' | (typeof SUPPORTED_SPORTS)[number]
 
@@ -472,6 +474,8 @@ export function TradeValueModal({
    */
   const decisionOsState = describeTradeCanonicalOpinion(decisionOs ?? null)
   const secondary = result?.secondary as Record<string, unknown> | undefined
+  // Trade depth (AF Pro): the route withheld the breakdown below the verdict for a locked viewer.
+  const tradeDepth = (result?.depth ?? null) as CoreDepthAccess | null
   const evaluation = result?.evaluation as { bullets?: string[]; sensitivity?: string } | undefined
   const chimmyPayload = result?.chimmyPayload as Record<string, unknown> | undefined
   const rosterSummary = result?.rosterSummary as
@@ -945,6 +949,12 @@ export function TradeValueModal({
           <p className="mt-2 text-[10px] text-[#5c6480]">No synced roster — value-only (no lineup simulation).</p>
         ) : null}
       </div>
+
+      {tradeDepth && tradeDepth.unlocked === false ? (
+        <div className="mt-4">
+          <CoreDepthLock access={tradeDepth} what="The full trade breakdown" />
+        </div>
+      ) : null}
 
       {tradeIntelligence ? (
         <div

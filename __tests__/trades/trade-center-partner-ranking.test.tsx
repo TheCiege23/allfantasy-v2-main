@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import React from 'react'
 
 /**
@@ -13,6 +13,7 @@ vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal)
 })
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
+import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
 
 const LEAGUE = { id: 'l1', name: 'Draft Junkies', format: 'Dynasty · PPR', teamCount: 12 }
 
@@ -102,5 +103,77 @@ describe('Trade Center partner ranking', () => {
     const on = [...document.querySelectorAll('.af-tc-partner-chip')].find((c) => c.getAttribute('data-on') === 'true')
     expect(on?.textContent).toBe('Charlie')
     expect(document.body.textContent).toContain('Started from a suggested deal with Charlie')
+  })
+})
+
+/*
+ * Trade depth (AF Pro, from Oct 15). The routes withhold the data from a locked viewer — the
+ * rosters route sends no ranking, the analyze route no breakdown, the finder refuses — so these pin
+ * what the SCREEN draws. The breakdown case deliberately hands the screen an analysis that still
+ * carries `tradeIntelligence`: the lock must not depend on the data happening to be absent.
+ */
+describe('Trade Center — trade depth paywall', () => {
+  const START = new Date('2026-10-15T04:00:00.000Z')
+  const LOCKED = decideCoreDepth('trade_depth', { live: true, startsAt: START, hasPlan: false })
+  const PRELAUNCH = decideCoreDepth('trade_depth', { live: false, startsAt: START, hasPlan: false })
+
+  const ANALYSIS = {
+    fairnessScore: 55,
+    confidenceScore: 60,
+    percentDiff: 4,
+    labels: { fairnessLabel: 'Fair', confidenceLabel: 'Medium confidence' },
+    players: { give: [{ name: 'Receiver', position: 'WR', team: 'KC', marketValue: 4000, pricedSource: 'fantasycalc' }], get: [] },
+    tradeIntelligence: {
+      why: 'You sell a starter for depth you do not need.',
+      whoWinsNow: 'opponent',
+      whoWinsLongTerm: 'you',
+      contenderRecommendation: 'A contender should pass.',
+      rebuilderRecommendation: 'A rebuilder should take it.',
+      tradeWarnings: [],
+      rebalanceSuggestions: [],
+      alternateTargets: [],
+    },
+  }
+
+  const analyze = async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url === '/api/trade-value/analyze'
+          ? { ok: true, status: 200, json: async () => ANALYSIS }
+          : { ok: false, status: 500, json: async () => ({}) },
+      ),
+    )
+    fireEvent.click(screen.getByLabelText('Add Receiver'))
+    fireEvent.click(screen.getByText('Analyze this trade'))
+    await waitFor(() => expect(document.body.textContent).toContain('Fair'))
+  }
+
+  it('locked: who to trade with and the finder are locks; the "Trading with" chips stay', () => {
+    render(<TradeCenter league={LEAGUE} depthAccess={LOCKED} />)
+    expect(document.querySelector('.af-tc-fits')).toBeNull()
+    const who = screen.getByRole('region', { name: 'Who to trade with — AF Pro' })
+    expect(within(who).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro')
+    expect(screen.getByRole('region', { name: 'The trade finder — AF Pro' })).toBeInTheDocument()
+    expect(screen.queryByText('Find trade partners')).toBeNull()
+    expect(chips()).toEqual(['Charlie', 'Bravo', 'Delta'])
+  })
+
+  it('locked: the verdict renders and the breakdown under it is a lock, even if the data arrived', async () => {
+    render(<TradeCenter league={LEAGUE} depthAccess={LOCKED} />)
+    await analyze()
+    expect(screen.getByRole('region', { name: 'The full trade breakdown — AF Pro' })).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('Decision OS · this deal')
+    expect(document.body.textContent).not.toContain('You sell a starter for depth you do not need.')
+  })
+
+  it('before launch the breakdown renders, marked "Free until Oct 15 — then AF Pro"', async () => {
+    render(<TradeCenter league={LEAGUE} depthAccess={PRELAUNCH} />)
+    expect(document.querySelector('.af-tc-fits')).not.toBeNull()
+    await analyze()
+    expect(document.body.textContent).toContain('Decision OS · this deal')
+    expect(document.body.textContent).toContain('You sell a starter for depth you do not need.')
+    expect(screen.getByTestId('core-free-until-trade_depth')).toHaveTextContent('Free until Oct 15 — then AF Pro')
+    expect(screen.queryByTestId('core-lock-trade_depth')).toBeNull()
   })
 })

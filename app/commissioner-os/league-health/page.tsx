@@ -1,8 +1,14 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
+import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
+import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { LeagueHealthView } from '@/components/commissioner-os/league-health/LeagueHealthView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
 export default async function LeagueHealthPage() {
+  const depth = await resolveCommissionerOsDepth()
+  if (!depth.unlocked) return <CommissionerDepthLocked access={depth} what="League health trends" />
+
   const adapter = await getDecisionOSAdapter()
 
   const [detailResponse, risksResponse, evidenceResponse, recommendationsResponse] = await Promise.all([
@@ -14,6 +20,7 @@ export default async function LeagueHealthPage() {
 
   return (
     <CommissionerPageContainer>
+      <FreeUntilNote access={depth} />
       <LeagueHealthView
         dataMode={adapter.mode}
         detail={

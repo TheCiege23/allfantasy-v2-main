@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Suspense } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
@@ -30,6 +30,8 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
+import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -108,9 +110,13 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
 
   const { league, role, tiles, settings, access, unread, disputes, publicStandings, art } = data
   const now = new Date()
+  // Commissioner depth (AF Commissioner). Locked, the loader skipped the waiver read and the export.
+  const depth = data.depth ?? null
+  const depthOpen = depth?.unlocked !== false
   // Started here, awaited by the sections that show them — each inside its own boundary.
+  // The timeline also feeds the free "Recent changes" panel, so it loads either way; the charts do not.
   const timeline = loadAuditTimeline(data.grant)
-  const activity = loadActivityCharts(data.grant, now)
+  const activity = depthOpen ? loadActivityCharts(data.grant, now) : null
   const platformName = platformLabel(league.platform)
   const quiet = data.quietManagers
 
@@ -209,7 +215,9 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
         <Suspense fallback={<RecentChangesFallback />}>
           <RecentChanges timeline={timeline} />
         </Suspense>
-        <MemberActivity data={data} />
+        <HubDepthGate depth={depth} id="ch-members" what="Member activity">
+          <MemberActivity data={data} />
+        </HubDepthGate>
       </div>
 
       {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}
@@ -227,7 +235,9 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
       <LeagueAreas data={data} />
 
       {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
-      {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
+      <HubDepthGate depth={depth} id="ch-waivers" what="Waiver oversight">
+        {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
+      </HubDepthGate>
 
       <div className="af-ch-split">
         {/* ── How the league runs ────────────────────────────────────── */}
@@ -311,14 +321,20 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
       </div>
 
       {/* ── 7 · Charts (item 5) — large, so below the working sections ─── */}
-      <Suspense fallback={<ChartsFallback />}>
-        <OperationalCharts data={data} activity={activity} />
-      </Suspense>
+      <HubDepthGate depth={depth} id="ch-reports" what="League charts">
+        {activity ? (
+          <Suspense fallback={<ChartsFallback />}>
+            <OperationalCharts data={data} activity={activity} />
+          </Suspense>
+        ) : null}
+      </HubDepthGate>
 
       {/* ── 8 · Automations (item 8) ──────────────────────────────────── */}
-      <HubSection id="ch-recipes" title="Automations">
-        <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
-      </HubSection>
+      <HubDepthGate depth={depth} id="ch-recipes" what="Automations">
+        <HubSection id="ch-recipes" title="Automations">
+          <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
+        </HubSection>
+      </HubDepthGate>
 
       {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
       <CommunityLinks
@@ -365,9 +381,11 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
       </section>
 
       {/* ── 10 · Audit log (item 6) — the longest table, so last ────────── */}
-      <Suspense fallback={<AuditTimelineFallback />}>
-        <AuditTimeline timeline={timeline} />
-      </Suspense>
+      <HubDepthGate depth={depth} id="ch-timeline" what="The full audit log">
+        <Suspense fallback={<AuditTimelineFallback />}>
+          <AuditTimeline timeline={timeline} />
+        </Suspense>
+      </HubDepthGate>
 
       <footer className="afh-foot">
         <p>
@@ -417,3 +435,40 @@ function Tile({ tile }: { tile: CommissionerTile }) {
 }
 
 export default CommissionerHub
+
+/**
+ * One commissioner-depth section: drawn as-is when open, marked "Free until" before launch for a
+ * viewer without the plan, and replaced by the lock after it. The lock keeps the section's `id` so
+ * the jump links in the nav and the hero still land somewhere that explains itself.
+ *
+ * ⚠ A SERVER COMPONENT, SO NOT RENDERING A SECTION IS WHAT KEEPS ITS DATA OFF THE WIRE — nothing
+ * here is serialised to the browser unless a client island below it is drawn.
+ */
+function HubDepthGate({
+  depth,
+  id,
+  what,
+  children,
+}: {
+  depth: CoreDepthAccess | null
+  id: string
+  what: string
+  children: ReactNode
+}) {
+  if (!depth) return <>{children}</>
+  if (!depth.unlocked) {
+    return (
+      <div id={id} className="af-ch-depth-lock">
+        <CoreDepthLock access={depth} what={what} />
+      </div>
+    )
+  }
+  if (!depth.preLaunchFree) return <>{children}</>
+  // One wrapper, so the note and its section stay ONE item in the hub's grids and splits.
+  return (
+    <div className="af-ch-depth-open">
+      <FreeUntilNote access={depth} />
+      {children}
+    </div>
+  )
+}

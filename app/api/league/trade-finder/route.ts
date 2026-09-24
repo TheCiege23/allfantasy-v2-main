@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getTradeFinder } from '@/lib/trade-intel/tradeFinderService'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,9 +13,25 @@ export const dynamic = 'force-dynamic'
  * Sleeper-only for now. No linked Sleeper account → linked:false honestly.
  */
 export async function GET(req: NextRequest) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null }
+  } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Trade depth (AF Pro, lib/core-app/coreDepthAccess.ts). Refused before any league read.
+  const tradeDepth = await resolveCoreDepth(userId, 'trade_depth', { email: session?.user?.email ?? null })
+  if (!tradeDepth.unlocked) {
+    return NextResponse.json(
+      {
+        error: 'Premium feature',
+        code: 'feature_not_entitled',
+        message: `The trade finder is part of ${tradeDepth.planName}.`,
+        upgradePath: tradeDepth.upgradePath,
+      },
+      { status: 403 },
+    )
+  }
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
