@@ -214,10 +214,10 @@ test.describe("@db @notifications notification preferences click audit", () => {
     const globalToggle = page.getByTestId("notifications-global-toggle")
     await globalToggle.uncheck()
 
-    // Category expand/collapse and toggle wiring. `lineup_reminders` no longer
-    // renders a toggle (no automatic lineup reminder fires yet), so the audit
-    // drives Matchup results instead — and asserts the dead toggle is gone.
-    await expect(page.getByRole("button", { name: /Lineup reminders/i })).toHaveCount(0)
+    // Category expand/collapse and toggle wiring. `lineup_reminders` was hidden
+    // while nothing sent it; Chimmy's lineup check does now, so its toggle is
+    // back under the name that says what it governs.
+    await expect(page.getByRole("button", { name: /Chimmy's lineup check before kickoff/i }).first()).toBeVisible()
     const matchupHeader = page.getByRole("button", { name: /Matchup results/i }).first()
     if ((await matchupHeader.getAttribute("aria-expanded")) !== "true") {
       await matchupHeader.click()

@@ -103,7 +103,8 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
-  lineup_reminders: "Lineup reminders",
+  // Chimmy's once-a-week check before the main slate (lib/chimmy-alerts/lineupCheck.ts).
+  lineup_reminders: "Chimmy's lineup check before kickoff",
   matchup_results: "Matchup results",
   waiver_processing: "Waiver processing",
   trade_proposals: "Trade proposals",
