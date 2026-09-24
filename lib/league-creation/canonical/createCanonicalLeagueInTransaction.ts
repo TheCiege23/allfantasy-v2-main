@@ -409,6 +409,8 @@ export async function createCanonicalLeagueInTransaction(
       // three-keeper league to every consumer that trusts the column. A league created here
       // without keepers has decided: none.
       ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
+      // League-median game — the standings engine plays it when this is on.
+      medianGame: conceptSetupForPrivacy.medianGame === true,
       ...(isGuillotine
         ? {
             playoffStartWeek: null,

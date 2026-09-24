@@ -69,6 +69,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   const conceptSetup: Record<string, unknown> = {
     visibility: state.privacy,
     isPublic: state.privacy === 'public',
+    medianGame: state.medianGame === true,
     draftDate: state.draftDate,
     draftTime: state.draftTime,
     draftTimezone: state.timezone,

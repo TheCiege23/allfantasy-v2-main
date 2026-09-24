@@ -158,6 +158,8 @@ export interface CreateLeagueV2State {
   nameTouched: boolean
   description: string
   privacy: LeaguePrivacy
+  /** Every team also plays the week's median score (`League.medianGame`). */
+  medianGame: boolean
   draftDate: string
   draftTime: string
   timezone: string
@@ -333,6 +335,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   nameTouched: false,
   description: '',
   privacy: 'private',
+  medianGame: false,
   draftDate: '',
   draftTime: '',
   timezone: 'America/New_York',

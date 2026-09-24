@@ -13,6 +13,7 @@ import {
   type NflRedraftPlayoffRuntimeState,
   type NflRedraftPlayoffTeamInput,
 } from './canonicalNflRedraftPlayoffRuntime'
+import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 
 export type NflRedraftPlayoffRuntimeResolved =
   | {
@@ -270,7 +271,9 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   const general = rules.general ?? {}
   const sport = String(general.sport ?? season.sport ?? 'NFL').toUpperCase()
   const format = 'format' in general ? String((general as { format?: unknown }).format ?? 'redraft') : 'redraft'
-  if (sport !== 'NFL' || format !== 'redraft') {
+  // Same coverage as the schedule runtime: a season the roller can advance must be able to
+  // reach its bracket and champion.
+  if (!runsStandardWeeklySeason(sport, format)) {
     return { ok: false, reason: 'not_nfl_redraft' }
   }
 

@@ -418,6 +418,24 @@ export function LeagueBasicsStep({
           </button>
         ))}
       </div>
+
+      <label
+        className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] px-4 py-3 text-sm"
+        data-testid="g30-median-game"
+      >
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={state.medianGame === true}
+          onChange={(event) => onChange({ medianGame: event.target.checked })}
+        />
+        <span>
+          <span className="block font-bold">{t('createLeague.g30.medianGame.label')}</span>
+          <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.medianGame.body')}
+          </span>
+        </span>
+      </label>
     </section>
   )
 }
