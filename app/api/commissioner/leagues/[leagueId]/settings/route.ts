@@ -6,6 +6,8 @@ import { isAdminEmailAllowed, isAdminRole } from "@/lib/adminAuth"
 import { getLeagueConfiguration } from "@/lib/commissioner-settings"
 import { validateCommissionerPatch } from "@/lib/commissioner-settings"
 import type { LeagueSettingsPatch } from "@/lib/commissioner-settings/types"
+import { prisma } from "@/lib/prisma"
+import { STRUCTURAL_LEAGUE_KEYS, structuralPatchRefusal } from "@/lib/league/structuralSettingsLock"
 
 type SessionUser = {
   id?: string
@@ -56,6 +58,16 @@ export async function PATCH(
   const validation = validateCommissionerPatch(body)
   if (!validation.valid) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
+  }
+  // Sport, season, team count, format and dynasty are fixed once the draft has started.
+  if (STRUCTURAL_LEAGUE_KEYS.some((key) => (body as Record<string, unknown>)[key] !== undefined)) {
+    const current = await prisma.league.findUnique({
+      where: { id: params.leagueId },
+      select: { sport: true, season: true, leagueSize: true, leagueType: true, isDynasty: true },
+    })
+    if (!current) return NextResponse.json({ error: "League not found" }, { status: 404 })
+    const structuralRefusal = await structuralPatchRefusal(params.leagueId, body as Record<string, unknown>, current)
+    if (structuralRefusal) return NextResponse.json({ error: structuralRefusal }, { status: 409 })
   }
   const { updateLeagueSettings } = await import("@/lib/commissioner-settings/CommissionerSettingsService")
   const updated = await updateLeagueSettings(params.leagueId, body)

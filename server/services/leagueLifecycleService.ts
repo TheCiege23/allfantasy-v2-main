@@ -95,11 +95,27 @@ const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
     'settings_edit_commissioner',
     'league_lock_toggle',
   ]),
+  /*
+   * 🛑 A LEAGUE LEAVES ITS DRAFT INTO THIS STATE, AND NOTHING MOVES IT ON TO `in_season`.
+   * `completeDraftSession` sets `post_draft`; no writer ever makes the `post_draft → in_season`
+   * transition, so a native league lives here for its whole first season. Without the player
+   * actions below every waiver claim (`/api/waiver-wire/.../claims`, `.../add-drop`) was refused
+   * the moment the draft ended, and the Trades / Playoffs / AI settings tabs returned 400.
+   * Free agency opening right after the draft is what every host does.
+   */
   post_draft: new Set([
+    'waiver_claim_submit',
+    'waiver_process_run',
+    'roster_edit',
+    'trade_act',
+    'standings_view',
     'settings_edit_general',
     'settings_edit_draft',
     'settings_edit_commissioner',
     'settings_edit_waivers',
+    'settings_edit_trades',
+    'settings_edit_playoffs',
+    'settings_edit_ai',
     'import_sync',
     'automation_run',
     'league_archive',
