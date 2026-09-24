@@ -196,7 +196,12 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     mockRosterFindFirst
       .mockResolvedValueOnce(makeRoster(PROPOSER_ROSTER, USER_ID))
       .mockResolvedValueOnce(makeRoster(RECEIVER_ROSTER, 'user-2'))
-    mockAfLeagueTradeFindFirst.mockResolvedValue({ id: 'trade-parent', rootTradeId: null, status: 'pending', metadata: {} })
+    // The parent was offered TO the roster now countering it — the only roster allowed to counter.
+    mockAfLeagueTradeFindFirst.mockResolvedValue({
+      id: 'trade-parent', rootTradeId: null, status: 'pending', metadata: {},
+      proposerRosterId: RECEIVER_ROSTER, receiverRosterId: PROPOSER_ROSTER, items: [],
+    })
+    mockAfLeagueTradeUpdateMany.mockResolvedValue({ count: 1 })
     mockAfLeagueTradeCreate.mockResolvedValue({ id: 'trade-counter' })
 
     await createAfLeagueTrade({
