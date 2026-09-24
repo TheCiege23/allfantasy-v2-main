@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { CHIMMY_TITLE, CHIMMY_DESCRIPTION } from '@/lib/seo-landing/config'
 import ChimmyLandingClient from './ChimmyLandingClient'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
+import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
+import { chimmyTrackRecordFor } from '@/lib/chimmy-outcomes/trackRecord'
 
 const BASE = 'https://allfantasy.ai'
 
@@ -24,7 +26,14 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 }
 
-export default function ChimmyPage() {
+/*
+ * Chimmy's graded record is on this page, from the outcome snapshot the maintenance cron rebuilds at
+ * most every six hours — so the page is rebuilt on that cadence too, never per request.
+ */
+export const revalidate = 21600
+
+export default async function ChimmyPage() {
+  const record = chimmyTrackRecordFor(await readAdviceLearningSnapshot(), null)?.everyone ?? null
   return (
     <>
       <EngagementEventTracker
@@ -32,7 +41,7 @@ export default function ChimmyPage() {
         oncePerDayKey="tool_chimmy_chat"
         meta={{ product: "legacy" }}
       />
-      <ChimmyLandingClient />
+      <ChimmyLandingClient trackRecord={record} />
     </>
   )
 }

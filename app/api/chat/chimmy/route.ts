@@ -159,9 +159,12 @@ import { buildPortfolioPlayerGrounding } from '@/lib/chimmy/chimmyPortfolioPlaye
 import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjuriesTool'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
+import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
+import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
+import { chimmyTrackRecordFor, renderTrackRecordPromptLine } from '@/lib/chimmy-outcomes/trackRecord'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import {
@@ -2897,7 +2900,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
      * league the user is a member of (it is the only writer — `lib/chimmy/tools/chimmyTools.ts`).
      * Read back below so the drawer learns which league the answer was about.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null }
+    /*
+     * `startCalls` collects the "start X over Y" calls the engines make during this answer, so the
+     * ones the answer actually says are recorded below and graded later — Chimmy's track record.
+     */
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[] }
     const loop = await runChimmyToolLoop({
       question: message,
       /*
@@ -2912,8 +2919,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
        * The user's saved Chimmy preferences (explanation style, risk, humor…). The fallback path has
        * always read them; the tool loop — the path that answers first — never did, so "keep it
        * short" in Settings changed nothing for most answers. The voice block defers to them.
+       *
+       * And Chimmy's own track record with this user and with everyone, so "how good are your
+       * picks?" is answered from graded calls instead of invented. Per-user, so it rides here,
+       * after the cached instructions — never inside them.
        */
-      styleLine: personalizationDirectives ?? null,
+      styleLine: [
+        personalizationDirectives,
+        renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       conversation: conversation.slice(-6).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
@@ -2975,6 +2991,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         boundLeague && leagueSnapshot && boundLeague.id === leagueSnapshot.id
           ? buildChimmyPlayerCards({ answer: loopText, rosters: leagueSportsGrounding?.packet.rosters ?? null, sport })
           : []
+      /*
+       * Chimmy's track record: the start/sit calls this answer made, recorded so they are graded
+       * against real weekly scores. The writer keeps only calls the answer — as the user saw it —
+       * names both players of. Awaited like the push path's advice writes; a failure never costs the
+       * user the answer.
+       */
+      if (userId && toolContext.startCalls.length > 0) {
+        await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText }).catch(() => null)
+      }
       return NextResponse.json({
         response: loopText,
         result: loopText,

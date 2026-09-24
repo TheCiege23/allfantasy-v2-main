@@ -7,6 +7,7 @@ import {
   renderWaiverScenarioBlock,
 } from '@/lib/chimmy/lineupScenarioGrounding'
 import { buildTradeScenario, renderTradeScenarioBlock } from '@/lib/chimmy/tradeScenarioGrounding'
+import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
 
 /**
  * The push path's scenario engines, reachable from the tool loop.
@@ -66,7 +67,13 @@ export async function runTradeScenarioTool(args: { give: unknown; get: unknown; 
   return renderTradeScenarioBlock(scenario)
 }
 
-export async function runStartSitScenarioTool(args: { players: unknown; leagueId: string; userId: string }): Promise<string> {
+export async function runStartSitScenarioTool(args: {
+  players: unknown
+  leagueId: string
+  userId: string
+  /** Told the call when the scenario picks one player over the other — see ChimmyToolContext.startCalls. */
+  onStartCall?: (call: ChatStartCall) => void
+}): Promise<string> {
   const players = names(args.players)
   if (players.length !== 2) {
     return players.length > 2
@@ -80,6 +87,26 @@ export async function runStartSitScenarioTool(args: { players: unknown; leagueId
   })
   if (!scenario) {
     return `Neither ${players.join(' nor ')} could be matched to their roster as a start/sit choice. Ask them to check the names; do not rank the two.`
+  }
+  /*
+   * Only a pick is a call. `startPlayerId` is set only when the scenario is contested — "both are in
+   * your best lineup" or "neither is" picks nobody, and a receipt for it would grade advice that was
+   * never given.
+   */
+  if (args.onStartCall && scenario.status === 'ready') {
+    const pick = scenario.options.find((o) => o.playerId === scenario.startPlayerId)
+    const other = scenario.options.find((o) => o.playerId !== scenario.startPlayerId)
+    const season = Number(scenario.week.season)
+    if (pick && other && Number.isInteger(season)) {
+      args.onStartCall({
+        leagueId: args.leagueId,
+        season,
+        week: scenario.week.week,
+        rec: { key: pick.playerId, name: pick.name },
+        alt: { key: other.playerId, name: other.name },
+        slot: null,
+      })
+    }
   }
   return renderStartSitScenarioBlock(scenario)
 }

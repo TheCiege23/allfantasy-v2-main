@@ -622,6 +622,13 @@
   text-transform: uppercase;
 }
 .af3a-receipt-group:first-of-type { margin-top: 2px; }
+/* Chimmy's whole record on your start/sit calls, above its recent rows. */
+.af3a-receipt-record {
+  margin: 4px 0 8px;
+  color: var(--text2);
+  font: 400 12px/1.5 'Archivo', system-ui, sans-serif;
+}
+.af3a-receipt-record b { color: var(--text); font-weight: 700; }
 
 /* ── Inline help badge ────────────────────────────────────────────────────────
  * ⚠ THIS WAS SHIPPED WITH NO RULE AT ALL, AND THE ABSENCE WAS INVISIBLE IN CODE.

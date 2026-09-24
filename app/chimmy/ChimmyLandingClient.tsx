@@ -7,6 +7,7 @@ import { LandingCTAStrip } from '@/components/landing/LandingCTAStrip'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { Bot, Sparkles, BarChart3, DraftingCompass, Layers3, Target, Zap, ArrowRight, AppWindow } from 'lucide-react'
 import { getChimmyChatHref } from '@/lib/ai-product-layer'
+import type { TrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 
 /*
  * Each card names something Chimmy COMPUTES from the user's own league — the lineup fill, the season
@@ -16,14 +17,16 @@ import { getChimmyChatHref } from '@/lib/ai-product-layer'
 const FEATURES = [
   { icon: Layers3, title: 'Your best lineup, every week', body: "Every player priced under your league's own scoring, the swaps that gain points, and any starter on a bye or hurt called out." },
   { icon: Target, title: 'Playoff odds, simulated', body: 'Thousands of simulated seasons on your real schedule: playoff, bye and title odds, the wins you need, and who to root against this week.' },
-  { icon: BarChart3, title: 'Trade grades with lineup impact', body: 'Value on both sides and what the deal does to your starting lineup — plus a counter-offer, graded before Chimmy suggests it.' },
+  { icon: BarChart3, title: 'Trades — graded and found', body: 'Value on both sides and what the deal does to your starting lineup. Or ask Chimmy to search your whole league for trades that work for both teams.' },
   { icon: Sparkles, title: "This week's matchup", body: 'Win probability, projected margin and all-time rivalry for every game you play, with the coin flips highlighted.' },
   { icon: DraftingCompass, title: 'Waivers and drafts', body: 'The best available players and what adding one does to your lineup, plus live draft help.' },
   { icon: Bot, title: 'Every sport you play', body: 'NFL, NBA, MLB, NHL, college football and basketball, and soccer — across every league you have connected.' },
 ]
 
-export default function ChimmyLandingClient() {
+export default function ChimmyLandingClient({ trackRecord = null }: { trackRecord?: TrackRecordLine | null }) {
   const { t } = useLanguage()
+  /* The platform-wide rate appears only once enough calls are graded for it to mean something. */
+  const graded = trackRecord && trackRecord.ratePct != null ? trackRecord : null
 
   return (
     <main
@@ -85,6 +88,23 @@ export default function ChimmyLandingClient() {
                 )
               })}
             </ul>
+          </section>
+
+          <section className="mt-10" data-testid="chimmy-track-record">
+            <h2 className="text-xl font-semibold mb-3">Graded, not guessed</h2>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Every start/sit call Chimmy makes in a Sleeper league is checked against the real weekly scores,
+              and your own record shows on your home screen.
+            </p>
+            {graded ? (
+              <p className="mt-3 text-base">
+                <span className="font-semibold">So far: {graded.ratePct}% right</span>{' '}
+                <span style={{ color: 'var(--muted)' }}>
+                  over {graded.right + graded.wrong} decided calls
+                  {graded.same > 0 ? `, plus ${graded.same} too close to call` : ''}.
+                </span>
+              </p>
+            ) : null}
           </section>
 
           <section className="mt-10">

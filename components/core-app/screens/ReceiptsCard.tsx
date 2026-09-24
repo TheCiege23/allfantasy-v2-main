@@ -11,6 +11,7 @@ import type {
   TradeReceipt,
   WaiverReceipt,
 } from '@/lib/core-app/decisionReceipts'
+import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
@@ -182,6 +183,7 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const autocoachPending = data.autocoachPending ?? 0
   const autocoachUnscored = data.autocoachUnscored ?? 0
   const autocoachUnreadable = data.autocoachUnreadable ?? 0
+  const chimmyRecord = readTrackRecordLine(data.chimmyRecord)
   const chimmy: ChimmyReceipt[] = data.chimmy ?? []
   const chimmyPending = data.chimmyPending ?? 0
   const chimmyUnscored = data.chimmyUnscored ?? 0
@@ -195,7 +197,8 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const hasLineups = lineups.length > 0 || lineupsUnscored > 0 || lineupsUnreadable > 0
   const hasAutoCoach = autocoach.length > 0 || autocoachPending > 0 || autocoachUnscored > 0 || autocoachUnreadable > 0
   const hasChimmyAdds = chimmyAdds.length > 0 || chimmyAddsTooEarly > 0 || chimmyAddsUnscored > 0 || chimmyAddsUnknown > 0
-  const hasChimmy = chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
+  const hasChimmy =
+    chimmyRecord != null || chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
   const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
@@ -308,6 +311,16 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
       {hasChimmy ? (
         <>
           {headed ? <h3 className="af3a-receipt-group">Chimmy</h3> : null}
+          {chimmyRecord ? (
+            /*
+             * The whole record, not just the rows below: every start/sit call Chimmy made you that has
+             * been graded against the real scores. The percentage appears only once it means something.
+             */
+            <p className="af3a-receipt-record" data-kind="chimmy-record">
+              <b>Chimmy’s record on your start/sit calls:</b>{' '}
+              <span className="af3a-mono">{describeTrackRecord(chimmyRecord)}</span>
+            </p>
+          ) : null}
           {chimmy.length > 0 ? (
             <ul className="af3a-receipt-list">
               {chimmy.map((c) => (
