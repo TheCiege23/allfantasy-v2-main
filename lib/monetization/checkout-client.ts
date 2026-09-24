@@ -97,12 +97,15 @@ export async function resolveCheckoutUrl(
       const data = (await response.json().catch(() => ({}))) as {
         url?: string
         error?: string
+        message?: string
         metaEvent?: MetaEventPayload
       }
       if (!response.ok || !data.url) {
         return {
           ok: false,
-          error: data.error ?? "Unable to start checkout. Please try again.",
+          // A geo refusal puts a code in `error` (PAID_GEO_BLOCKED, VPN_BLOCKED)
+          // and the sentence meant for a person in `message`.
+          error: data.message ?? data.error ?? "Unable to start checkout. Please try again.",
         }
       }
       return { ok: true, url: data.url, metaEvent: data.metaEvent }
