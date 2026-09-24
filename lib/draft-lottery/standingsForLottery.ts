@@ -1,9 +1,10 @@
 /**
  * Fetch league standings for weighted draft lottery.
- * Maps LeagueTeam (standings) to Roster (slotOrder rosterId) by index.
+ * Maps each LeagueTeam (standings) to the Roster it owns (slotOrder rosterId).
  */
 
 import { prisma } from '@/lib/prisma'
+import { buildRosterIdResolver } from '@/lib/league/league-settings-draft-sync'
 import type { LotteryEligibleTeam, LotteryEligibilityMode, LotteryWeightingMode, LotteryTiebreakMode } from './types'
 
 export interface StandingsRow {
@@ -20,18 +21,33 @@ export interface StandingsRow {
 }
 
 /**
- * Get standings for a league: one row per team with rosterId and displayName.
- * Teams and rosters are paired by canonical (id) order; then rows are sorted by currentRank for lottery use.
+ * Get standings for a league: one row per team, carrying the id of the roster that team owns.
+ *
+ * 🛑 THIS USED TO SORT TEAMS AND ROSTERS BY ID AND ZIP THEM BY INDEX. Ids are random, so the
+ * pairing was arbitrary: a team's record set its lottery odds, and the pick it won was seated on
+ * whichever roster id happened to sort alongside it — another manager's.
+ *
+ * Now each team resolves to its own roster (`externalId`, then its claimant, then its platform
+ * user — `buildRosterIdResolver`, the same mapping the draft order uses). A team that cannot be
+ * resolved keeps the old positional pairing, but only over rosters no other team owns, so it can
+ * never duplicate one; when nothing resolves the output is exactly what it was.
+ *
+ * Rows follow team order (teams by id), and `teamIndex` / the `currentRank` fallback keep their
+ * meaning. A roster no team points at still gets a row after the teams. Padding to `leagueSize`
+ * with `placeholder-N` ids happens only for a league with no team rows at all, as before.
  */
 export async function getStandingsForLottery(leagueId: string): Promise<StandingsRow[]> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
       leagueSize: true,
-      rosters: { select: { id: true }, orderBy: { id: 'asc' } },
+      rosters: { select: { id: true, platformUserId: true }, orderBy: { id: 'asc' } },
       teams: {
         select: {
           id: true,
+          externalId: true,
+          claimedByUserId: true,
+          platformUserId: true,
           ownerName: true,
           teamName: true,
           wins: true,
@@ -48,28 +64,54 @@ export async function getStandingsForLottery(leagueId: string): Promise<Standing
 
   const rosters = league.rosters ?? []
   const teams = league.teams ?? []
-  const teamCount = league.leagueSize ?? Math.max(rosters.length, teams.length)
 
-  const rows: StandingsRow[] = []
-  for (let i = 0; i < teamCount; i++) {
-    const t = teams[i]
-    const rosterId = rosters[i]?.id ?? t?.id ?? `placeholder-${i + 1}`
-    const displayName = t ? (t.teamName || t.ownerName || `Team ${i + 1}`) : `Team ${i + 1}`
-    const rank = t?.currentRank ?? i + 1
-    rows.push({
-      rosterId,
-      displayName,
-      teamIndex: i,
-      rank,
-      wins: t?.wins ?? 0,
-      losses: t?.losses ?? 0,
-      ties: t?.ties ?? 0,
-      pointsFor: t?.pointsFor ?? 0,
-      maxPf: t?.pointsFor ?? 0,
-    })
+  if (teams.length === 0) {
+    const teamCount = league.leagueSize ?? rosters.length
+    const rows: StandingsRow[] = []
+    for (let i = 0; i < teamCount; i++) {
+      rows.push(emptyRow(rosters[i]?.id ?? `placeholder-${i + 1}`, i))
+    }
+    return rows
   }
 
+  const resolveRosterId = buildRosterIdResolver(rosters, teams)
+  const owned = teams.map((t) => resolveRosterId(t.id))
+  const taken = new Set(owned.filter((id): id is string => Boolean(id)))
+  // Rosters nobody owns, in id order: the positional fallback draws from these in turn.
+  const unowned = rosters.map((r) => r.id).filter((id) => !taken.has(id))
+
+  const rows: StandingsRow[] = teams.map((t, i) => {
+    const rosterId = owned[i] ?? unowned.shift() ?? t.id
+    return {
+      rosterId,
+      displayName: t.teamName || t.ownerName || `Team ${i + 1}`,
+      teamIndex: i,
+      rank: t.currentRank ?? i + 1,
+      wins: t.wins ?? 0,
+      losses: t.losses ?? 0,
+      ties: t.ties ?? 0,
+      pointsFor: t.pointsFor ?? 0,
+      maxPf: t.pointsFor ?? 0,
+    }
+  })
+  for (const rosterId of unowned) rows.push(emptyRow(rosterId, rows.length))
+
   return rows
+}
+
+/** A roster with no team row: no standings to weigh, but it still holds a pick. */
+function emptyRow(rosterId: string, index: number): StandingsRow {
+  return {
+    rosterId,
+    displayName: `Team ${index + 1}`,
+    teamIndex: index,
+    rank: index + 1,
+    wins: 0,
+    losses: 0,
+    ties: 0,
+    pointsFor: 0,
+    maxPf: 0,
+  }
 }
 
 /**
