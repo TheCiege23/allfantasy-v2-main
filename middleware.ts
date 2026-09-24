@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { isSpeculativeRequestHeaders } from "@/lib/http/speculativeRequest"
+import { hasMachineCredential } from "@/lib/http/machineCredential"
 import { LEAGUE_FIRST_COOKIE, LEAGUE_FIRST_PARAM, parseLeagueFirstToggle } from "@/lib/core-app/leagueFirst"
 import { SELECTABLE_LANGUAGES } from "@/lib/i18n/constants"
 import type { NextRequest } from "next/server"
@@ -221,6 +222,104 @@ function isExemptPath(pathname: string): boolean {
     if (pathname === p || pathname.startsWith(`${p}/`)) return true
   }
   return false
+}
+
+/** One definition of "paid surface" for the page gate and the API gate alike. */
+function isPaidRoute(pathname: string): boolean {
+  return PAID_GEO_PREFIXES.some((p) => isPaidPrefix(p, pathname)) || PAID_GEO_PATTERNS.some((r) => r.test(pathname))
+}
+
+/**
+ * Which country and state this request is from. Edge-agnostic (Cloudflare in
+ * production, Vercel on previews) and shared with lib/geo/detectUserState, so
+ * the gate and the API report the same answer — they were two copies until
+ * 2026-09-02, and both went blind together when production left Vercel.
+ *
+ * ⚠ THE IP FALLBACK RUNS ONLY WHEN NO EDGE PLACED THE REQUEST, and it is cached
+ * for exactly that reason: this matcher covers all but static assets, so an
+ * uncached lookup would be one vendor call per chunk and per API hit.
+ * resolveGeoByIp collapses that to one call per IP per TTL. It fails open (null
+ * on timeout, outage or an unplaceable IP): best-effort, not a substitute for
+ * proxying through Cloudflare.
+ */
+async function resolveRequestGeo(request: NextRequest) {
+  const edgeGeo = resolveEdgeGeo(request.headers)
+  const ip = clientIpFromHeaders(request.headers)
+  const viaIp = edgeGeo.source === "unknown" && ip ? await resolveGeoByIp(ip) : null
+  return {
+    ip,
+    country: viaIp ? viaIp.country : edgeGeo.country,
+    region: viaIp ? viaIp.regionCode : edgeGeo.regionCode,
+  }
+}
+
+/**
+ * API surfaces exempt from the Washington block by prefix, because they are
+ * machine-only and their handlers enforce their own keys — which the middleware
+ * cannot check cheaply (/api/v1 keys live in the database).
+ *
+ *   /api/internal  x-internal-key / x-ingestion-key, server-to-server only
+ *   /api/v1        the partner Intelligence API, API-key gated. ⚠ A product call:
+ *                  a partner's SERVER may sit in Washington (Azure West US 2)
+ *                  while its users do not. Remove this line to block it too.
+ *
+ * NOT in GEO_EXEMPT_PREFIXES on purpose: that list also exempts from the PAID
+ * gate and applies to pages; these only relax the full block on the API.
+ */
+const FULL_BLOCK_API_EXEMPT_PREFIXES = ["/api/internal", "/api/v1"]
+
+function isFullBlockApiExempt(pathname: string): boolean {
+  return FULL_BLOCK_API_EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+/**
+ * 🛑 THE GEO GATE FOR /api/*, WHICH NEVER RAN BEFORE #1204. routeMiddleware
+ * returns early for every API path long before the page geo block, so every API
+ * answered every restricted state normally.
+ *
+ *   - Washington (full block): 403 GEO_BLOCKED on every API that is not exempt.
+ *   - Paid-block states: 451 PAID_GEO_BLOCKED on paid routes only.
+ *
+ * ⚠ MACHINE CALLERS ARE EXEMPTED BY CREDENTIAL, NOT BY PATH. A census on
+ * 2026-09-24 found 65 API routes outside GEO_EXEMPT_PREFIXES that accept a
+ * machine secret — 10 of them scheduled from GitHub Actions, which runs in
+ * Azure West US 2, in Washington. A request that proves it holds a machine
+ * secret (lib/http/machineCredential) is not a person, wherever its IP is, and
+ * the check runs BEFORE any location lookup so a cron never costs a vendor call.
+ * A person in Washington holds no such secret and is refused everywhere.
+ *
+ * The session is decoded only for a request that would be refused, to honour
+ * the same owner bypass the page gate has.
+ */
+async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (isExemptPath(pathname)) return null
+  if (hasMachineCredential(request.headers)) return null
+
+  const { country, region } = await resolveRequestGeo(request)
+  if (country !== "US" || !region) return null
+  const fullBlock = isFullyBlocked(region) && !isFullBlockApiExempt(pathname)
+  const paidBlock = !fullBlock && isPaidRoute(pathname) && (isPaidBlocked(region) || isFullyBlocked(region))
+  if (!fullBlock && !paidBlock) return null
+
+  const authSecret = resolveAuthSecret()
+  if (authSecret) {
+    const token = await getToken({ req: request, secret: authSecret })
+    if (isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null)) return null
+  }
+
+  const body = fullBlock
+    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region }
+    : {
+        error: "PAID_GEO_BLOCKED",
+        message: "Paid features are not available in your state.",
+        stateCode: region,
+        allowFree: true,
+        redirectTo: "/paid-restricted",
+      }
+  return new NextResponse(JSON.stringify(body), {
+    status: fullBlock ? 403 : 451,
+    headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS },
+  })
 }
 
 /**
@@ -523,6 +622,8 @@ async function routeMiddleware(request: NextRequest) {
   // username checks live in the route handlers themselves; the middleware
   // only stamps standard security headers on API responses.
   if (isApiPath(pathname)) {
+    const geoRefusal = await apiGeoRefusal(request, pathname)
+    if (geoRefusal) return geoRefusal
     return applyApiSecurityHeaders(pathname, nextWithRouteHeaders(request, pathname))
   }
 
@@ -630,71 +731,25 @@ async function routeMiddleware(request: NextRequest) {
     tokenUserId = typeof token.sub === 'string' ? token.sub : null
   }
 
-  // Edge-agnostic: Cloudflare in production, Vercel on previews. Shared with
-  // lib/geo/detectUserState so the gate and the API report the same answer —
-  // they were two separate copies of this until 2026-09-02, and both went blind
-  // together when production left Vercel.
-  const edgeGeo = resolveEdgeGeo(request.headers)
-  const ip = clientIpFromHeaders(request.headers)
-
-  // ⚠ THE FALLBACK RUNS ONLY WHEN NO EDGE PLACED THE REQUEST, and it is cached
-  // for exactly that reason: this matcher covers all but static assets, so an
-  // uncached lookup here would be one vendor call per chunk and per API hit.
-  // resolveGeoByIp collapses that to one call per IP per TTL and dedups the
-  // parallel requests of a single page load. With the hostname proxied through
-  // Cloudflare, edgeGeo answers and this line never makes a call at all.
-  //
-  // It fails open (null on timeout, outage or an unplaceable IP), which raises
-  // this gate from NOT ENFORCED AT ALL — measured 2026-09-07, no edge header on
-  // any request — to best-effort. It is not a substitute for proxying.
-  const viaIp = edgeGeo.source === "unknown" && ip ? await resolveGeoByIp(ip) : null
-  const country = viaIp ? viaIp.country : edgeGeo.country
-  const region = viaIp ? viaIp.regionCode : edgeGeo.regionCode
+  // Pages only: every /api/* path returned near the top of this function, and
+  // API routes are gated there by apiGeoRefusal, from the same helpers.
+  const { ip, country, region } = await resolveRequestGeo(request)
 
   if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
     const stateCode = region
 
     if (isFullyBlocked(stateCode)) {
-      if (pathname.startsWith("/api/")) {
-        return new NextResponse(
-          JSON.stringify({
-            error: "GEO_BLOCKED",
-            message: "AllFantasy.ai is not available in your state.",
-            stateCode,
-          }),
-          { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
-        )
-      }
       const url = request.nextUrl.clone()
       url.pathname = "/geo-blocked"
       url.searchParams.set("state", stateCode)
       return NextResponse.redirect(url)
     }
 
-    if (isPaidBlocked(stateCode)) {
-      const isPaidRoute =
-        PAID_GEO_PREFIXES.some((p) => isPaidPrefix(p, pathname)) ||
-        PAID_GEO_PATTERNS.some((r) => r.test(pathname))
-
-      if (isPaidRoute && pathname.startsWith("/api/")) {
-        return new NextResponse(
-          JSON.stringify({
-            error: "PAID_GEO_BLOCKED",
-            message: "Paid features are not available in your state.",
-            stateCode,
-            allowFree: true,
-            redirectTo: "/paid-restricted",
-          }),
-          { status: 451, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
-        )
-      }
-
-      if (isPaidRoute && !pathname.startsWith("/api/")) {
-        const url = request.nextUrl.clone()
-        url.pathname = "/paid-restricted"
-        url.searchParams.set("state", stateCode)
-        return NextResponse.redirect(url)
-      }
+    if (isPaidBlocked(stateCode) && isPaidRoute(pathname)) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/paid-restricted"
+      url.searchParams.set("state", stateCode)
+      return NextResponse.redirect(url)
     }
   }
 

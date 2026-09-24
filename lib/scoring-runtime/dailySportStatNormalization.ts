@@ -83,6 +83,37 @@ const NBA_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
 }
 
 /**
+ * Canonical keys from `lib/sportConfig/configs/ncaab.ts`: pts, reb, ast, stl, blk, to, threes.
+ *
+ * NCAAB's `/live` box has NBA's shape and field names (fixtures/live.NCAABB.json, GAPS G-03), so
+ * the spellings are NBA's — but ONLY the categories the NCAAB config can score. NBA's table also
+ * emits fgm/ftm and derived doubles, which ncaab.ts does not define; emitting them would be keys
+ * the engine silently ignores, and the config-key test forbids it.
+ */
+const NCAAB_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  pts: NBA_STAT_ALIASES.pts,
+  reb: NBA_STAT_ALIASES.reb,
+  ast: NBA_STAT_ALIASES.ast,
+  stl: NBA_STAT_ALIASES.stl,
+  blk: NBA_STAT_ALIASES.blk,
+  to: NBA_STAT_ALIASES.to,
+  threes: NBA_STAT_ALIASES.threes,
+}
+
+/**
+ * Vendor keys the NCAAB box ALWAYS carries and the config deliberately does not score — every
+ * numeric field in fixtures/live.NCAABB.json outside the aliases above. Without this list each of
+ * them is reported as "Unrecognized NCAAB provider stat keys (alias table may be wrong)" on every
+ * sync, and the warning stops meaning anything; with it, only a key the vendor has never sent
+ * before is reported, which is what that warning is for.
+ */
+const NCAAB_KNOWN_UNSCORED = new Set([
+  'player_id', 'fouls', 'minutes', 'offensive_rebounds', 'defensive_rebounds',
+  'field_goals_made', 'field_goals_attempted', 'two_points_made', 'two_points_attempted',
+  'two_point_percentage', 'three_points_attempted', 'free_throws_made', 'free_throws_attempted',
+])
+
+/**
  * Canonical keys from `lib/sportConfig/configs/nhl.ts`.
  *
  * ⚠ NHL splits its box into `skaters` and `goalies`, so one player entry
@@ -211,6 +242,11 @@ export function normalizeNbaGameStats(raw: unknown): NormalizedGameStats {
   return result
 }
 
+export function normalizeNcaabGameStats(raw: unknown): NormalizedGameStats {
+  const result = normalizeWithAliases(raw, NCAAB_STAT_ALIASES)
+  return { ...result, unmappedKeys: result.unmappedKeys.filter((k) => !NCAAB_KNOWN_UNSCORED.has(k)) }
+}
+
 export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
   return normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
 }
@@ -281,6 +317,7 @@ export function aggregateWeeklyStats(
 const DAILY_SPORT_NORMALIZERS: Readonly<Record<string, (raw: unknown) => NormalizedGameStats>> = {
   NBA: normalizeNbaGameStats,
   NHL: normalizeNhlGameStats,
+  NCAAB: normalizeNcaabGameStats,
 }
 
 export function isDailyStatSport(sport: string | null | undefined): boolean {
