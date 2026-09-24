@@ -749,7 +749,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
                     type="button"
                     className="af-rc-btn af-rc-btn--ghost"
                     onClick={handleSendPhoneCode}
-                    disabled={phoneSending}
+                    disabled={phoneSending || !smsConsent}
                   >
                     {phoneSending ? 'Sending…' : 'Send a new code'}
                   </button>
