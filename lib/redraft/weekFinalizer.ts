@@ -274,9 +274,16 @@ export async function readWeekSlate(
    * `player_game_stats.game_date` stores the EASTERN calendar day a game was played (#1194),
    * and the stat sync buckets by it. A slate that filtered `startTime` against the same bounds
    * would bucket by UTC instead, and the two halves would disagree about which games belong to
-   * the week. Measured on production 2026-09-24: 954 of 1,409 NHL 2026 games — 67.7% — start
-   * after UTC midnight, because a 7-10pm Eastern puck drop is the NEXT UTC day. Week 1 alone
-   * holds 42 games by UTC instant against 39 by Eastern day.
+   * the week. Measured on production 2026-09-24: 957 of 1,415 NHL 2026 games — 67.6% — start
+   * after UTC midnight, because a 7-10pm Eastern puck drop is the NEXT UTC day. Week 1 holds
+   * 42 games by UTC instant against 43 by Eastern day.
+   *
+   * ⚠ THE UTC WINDOW MISSES GAMES RATHER THAN OVER-COUNTING THEM, WHICH IS THE WORSE
+   * DIRECTION: a slate short one game can report itself complete and SEAL a week whose stats
+   * include a game it never checked. (An earlier note here said 39, from a SQL check that
+   * converted the wrong way — `startTime` is `timestamp without time zone`, so
+   * `AT TIME ZONE 'America/New_York'` INTERPRETS it as Eastern and shifts it TO UTC. Declare
+   * the column UTC first: `(x AT TIME ZONE 'UTC') AT TIME ZONE 'America/New_York'`.)
    *
    * So the query over-selects by six hours and the exact membership test happens below, on
    * `easternCalendarDay` — the same helper, and therefore the same DST handling, that wrote
