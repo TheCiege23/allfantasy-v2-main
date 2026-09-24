@@ -87,6 +87,32 @@ export type ChimmyToolLoopResult = {
   model?: string
 }
 
+/**
+ * Read-only taps on a run, for the answer-bank eval (scripts/chimmy-eval). Optional and inert:
+ * production passes none, and no observer can change what the loop sends, runs or returns — an
+ * observer that throws is swallowed rather than allowed to turn an answer into a fallback.
+ */
+export type ChimmyToolLoopObserver = {
+  /** Every tool the model ran, with the exact text the model was given back. */
+  onToolResult?: (event: { turn: number; name: string; input: unknown; result: string }) => void
+  /** Every provider round trip, with its token usage when the provider reports it. */
+  onResponse?: (event: { turn: number; model: string; stopReason: string | null; usage: unknown }) => void
+  /** Why the loop returned null, when it did — each of these sends production to the PECR path. */
+  onGiveUp?: (event: { reason: string; detail?: string }) => void
+}
+
+function observe<K extends keyof ChimmyToolLoopObserver>(
+  observer: ChimmyToolLoopObserver | undefined,
+  key: K,
+  event: Parameters<NonNullable<ChimmyToolLoopObserver[K]>>[0],
+): void {
+  try {
+    ;(observer?.[key] as ((e: typeof event) => void) | undefined)?.(event)
+  } catch {
+    /* An observer must never change the outcome of a run. */
+  }
+}
+
 function hasXaiKey(): boolean {
   return Boolean((process.env.XAI_API_KEY || process.env.GROK_API_KEY)?.trim())
 }
@@ -164,6 +190,8 @@ type ChimmyToolLoopArgs = {
   context: ChimmyToolContext
   enabled: boolean
   model?: string
+  /** Eval-only taps; see ChimmyToolLoopObserver. */
+  observer?: ChimmyToolLoopObserver
 }
 
 export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
@@ -230,7 +258,10 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
 
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
-      if (Date.now() >= deadline) return null
+      if (Date.now() >= deadline) {
+        observe(args.observer, 'onGiveUp', { reason: 'deadline' })
+        return null
+      }
 
       let response: Anthropic.Message
       try {
@@ -249,8 +280,18 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
         }
       }
 
+      observe(args.observer, 'onResponse', {
+        turn,
+        model: response.model || model,
+        stopReason: response.stop_reason ?? null,
+        usage: response.usage,
+      })
+
       // A refusal or a truncated answer is not an answer: fall back to the push path.
-      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') return null
+      if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') {
+        observe(args.observer, 'onGiveUp', { reason: String(response.stop_reason) })
+        return null
+      }
 
       // Keep the FULL content, thinking blocks included — they must go back unchanged.
       messages.push({ role: 'assistant', content: response.content })
@@ -262,11 +303,15 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
           .map((b) => b.text)
           .join('')
           .trim()
+        if (!text) observe(args.observer, 'onGiveUp', { reason: 'empty_text' })
         return text ? { text, toolsUsed, turns: turn, provider: 'claude', model: response.model || model } : null
       }
 
       // See the Grok loop: the last turn must not end on a tool call.
-      if (turn === MAX_TOOL_TURNS) return null
+      if (turn === MAX_TOOL_TURNS) {
+        observe(args.observer, 'onGiveUp', { reason: 'turn_limit' })
+        return null
+      }
 
       /*
        * Sequential on purpose: `find_league_by_name` rebinds `context.leagueId`, and the league
@@ -277,6 +322,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
       for (const use of toolUses) {
         const result = await executeChimmyTool(use.name, use.input ?? {}, args.context)
         toolsUsed.push(use.name)
+        observe(args.observer, 'onToolResult', { turn, name: use.name, input: use.input ?? {}, result })
         results.push({ type: 'tool_result', tool_use_id: use.id, content: result })
       }
       messages.push({ role: 'user', content: results })
@@ -285,6 +331,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   } catch (err) {
     // As for Grok: the user falls back quietly; the owner hears about billing/credential failures.
     const e = err as { status?: number; message?: string } | null
+    observe(args.observer, 'onGiveUp', { reason: 'provider_error', detail: `${e?.status ?? ''} ${e?.message ?? ''}`.trim() })
     reportProviderFailure({ provider: 'anthropic', status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
     return null
   }
@@ -353,6 +400,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
 
         const result = await executeChimmyTool(name, parsed, args.context)
         toolsUsed.push(name)
+        observe(args.observer, 'onToolResult', { turn, name, input: parsed, result })
 
         messages.push({
           role: 'tool',
