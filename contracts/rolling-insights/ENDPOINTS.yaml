@@ -336,7 +336,7 @@ identifiers:
     DARTS:  { param: event_id, format: opaque, examples: ["202304PL10"] }
     NHL:    { format: unknown }   # see GAPS.md
     NCAAFB: { format: unknown }   # see GAPS.md
-    NCAABB: { format: unknown }   # see GAPS.md
+    NCAABB: { format: "YYYYMMDD-{away_team_id}-{home_team_id}", examples: ["20260406-12-103"] }  # fixtures/live.NCAABB.json: 12 = CONN (away), 103 = MICH (home). Date is the US-EASTERN day; game_time is GMT (07 Apr 00:50).
     SOCCER: { format: unknown }   # see GAPS.md
     # ⚠️ The two numeric segments are team IDs, but which is home vs away is
     # NOT documented. One weak sample suggests {home}-{away}. VERIFY before relying.
@@ -503,7 +503,39 @@ fields:
                  faceoffs_won, faceoffs_lost, power_plays, power_plays_converted,
                  short_handed_goals_scored, short_handed_goals_allowed]
   NCAAFB: { confidence: none, live: unknown }   # see GAPS.md
-  NCAABB: { confidence: none, live: unknown }   # see GAPS.md
+  NCAABB:
+    source: probe.sh live NCAAB "" 2026-04-06 (RSC_TOKEN2), captured 2026-09-24
+    confidence: medium      # was `none / live: unknown`. ONE game (the 2026 national final), so
+                            # the shape is measured but the sample is small. G-03 RESOLVED.
+    fixture: fixtures/live.NCAABB.json   # 1 game: UConn at Michigan, NCAA Tournament round 6
+    live_envelope: [game_ID, sport, season, season_type, round, status, game_status,
+                    game_time, game_location, event_name, region, region_display_order,
+                    home_team_name, away_team_name, home_team_seed, away_team_seed,
+                    home_team_display_order]
+    # season is the SPAN "2025-2026" (start year 2025), like NBA/NHL.
+    # season_type measured: "Postseason" (event_name "NCAA Tournament"). See GAPS N-13.
+    # Player box has NBA's shape — NO group level:
+    #      player_box.<side>.<player_id>.<stat>
+    live_player:
+      identity: [player, position, status, starter]     # starter is a BOOLEAN
+      stats:    [points, total_rebounds, offensive_rebounds, defensive_rebounds, assists,
+                 steals, blocks, turnovers, fouls, minutes,
+                 field_goals_made, field_goals_attempted,
+                 two_points_made, two_points_attempted, two_point_percentage,
+                 three_points_made, three_points_attempted,
+                 free_throws_made, free_throws_attempted]
+      # ⚠ `minutes` is a STRING of whole minutes ("20") — NBA sends "MM:SS". Season totals'
+      #   `minutes` (player-stats) is unrelated and unreliable; see GAPS N-14.
+    live_team:
+      identity: [abbrv, mascot, record, division_name, conf_ID, team_id, rank]
+      scoring:  [score, "quarter_scores.1", "quarter_scores.2", "quarter_scores.T"]  # halves
+      stats:    [assists, blocks, steals, turnovers, fouls, total_rebounds,
+                 offensive_rebounds, defensive_rebounds, field_goals_made,
+                 field_goals_attempted, two_points_made, two_points_attempted,
+                 two_point_percentage, three_points_made, three_points_attempted,
+                 free_throws_made, free_throws_attempted]
+    # ⚠ THE PLAYER BOX CAN BE INCOMPLETE: in the fixture Michigan's 8 lines sum to its 69,
+    #   UConn's 6 lines sum to 50 of its 63. See GAPS N-15.
 
 # ============================================================================
 commercial:
