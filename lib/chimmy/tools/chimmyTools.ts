@@ -362,6 +362,104 @@ export const CHIMMY_TOOL_SPECS = [
       },
     },
   },
+
+  /*
+   * ── ANALYST TOOLS (2026-09-24) ────────────────────────────────────────────────────────────────
+   * Everything above READS a fact. These run the engines that turn facts into a decision — the
+   * season simulator, the lineup fill, the trade evaluator — each one already shipping on a /core
+   * screen or the push path, and none of them reachable from the loop that answers first.
+   *
+   * ⚠ ONE NARROW EXCEPTION TO "NOTHING HERE WRITES": `get_playoff_outlook` lets the season simulator
+   * store the run it computed in its own `sportsDataCache` key, as the Season Outlook screen already
+   * does. A derived, expiring cache of inputs the model cannot influence — not league or user data.
+   * Nothing else below writes, and "optimize" computes a lineup; it never sets one.
+   */
+  {
+    type: 'function' as const,
+    function: {
+      name: 'optimize_my_lineup',
+      description:
+        "Sets the user's best starting lineup for THIS WEEK in the league in scope: every active player priced with this week's projection under the league's OWN scoring, the optimal lineup by slot, the swaps versus the lineup currently set on their platform with the points gained, and red flags — a starter with no projection (bye / ruled out), an injured starter, an empty slot. Use for 'who should I start', 'set my lineup', 'is my lineup right', 'any lineup mistakes'. NFL only; says so for other sports.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'compare_start_options',
+      description:
+        "Start A or B? Compares exactly two players on the user's roster: this week's projection for each under the league's scoring, and the best lineup total if each is the one started. Use when they name two players ('Chase or Nacua?'). For the whole lineup use optimize_my_lineup.",
+      parameters: {
+        type: 'object',
+        properties: {
+          players: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Exactly two FULL player names as the user wrote them, e.g. ["Ja\'Marr Chase", "Puka Nacua"].',
+          },
+        },
+        required: ['players'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'evaluate_trade',
+      description:
+        "Grades a trade the user describes, in the league in scope, with the same evaluator as the Trade Center: AllFantasy market value given vs received with a letter grade, and the user's starting lineup before and after this week under the league's scoring. The players they GET must all be on ONE other team. Use for 'should I do X for Y', 'grade this trade', 'is this fair'. Call once per offer; call it for each counter-offer you suggest too.",
+      parameters: {
+        type: 'object',
+        properties: {
+          give: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'What the USER gives up: full player names, and dynasty picks written like "2027 1st".',
+          },
+          get: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'What the USER receives: full player names from one other team, and picks like "2027 2nd".',
+          },
+        },
+        required: ['give', 'get'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'evaluate_waiver_move',
+      description:
+        "Prices a waiver pickup for the user in the league in scope: the player to add (and optionally drop), this week's projection for each under the league's scoring, and the starting lineup total before and after. Use after get_available_players, for 'should I pick up X', 'add X and drop Y'. The added player must be unrostered in this league.",
+      parameters: {
+        type: 'object',
+        properties: {
+          add: { type: 'string', description: 'Full name of the player to add.' },
+          drop: { type: 'string', description: 'Full name of the player to drop, if they named one.' },
+        },
+        required: ['add'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_playoff_outlook',
+      description:
+        "Playoff, first-round-bye and championship odds from AllFantasy's season simulator (thousands of runs of each league's REAL remaining schedule). With a league in scope: their odds with ranges, current seed, the wins they need ('magic number'), remaining schedule difficulty, luck, THIS WEEK's swing game (odds if they win vs lose) and which rivals to root against, moves that raise their odds, and the league table. With NO league selected: every current league of theirs in one summary plus the game that matters most. Use for 'will I make the playoffs', 'playoff odds', 'what do I need', 'who should I root for', 'how are my leagues looking'.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_matchup',
+      description:
+        "This week's head-to-head: opponent, win probability and projected margin from each team's fitted weekly scoring, records, all-time rivalry, and the league's other games (or the cut line in a guillotine league). With NO league selected: every one of their matchups this week, sorted into coin flips, favoured and underdog. Use for 'how does my matchup look', 'am I favoured', 'who am I playing', 'which of my games are close'.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
 ] as const
 
 /*
@@ -679,6 +777,53 @@ export async function executeChimmyTool(
       case 'get_real_standings': {
         const { buildRealStandingsContext } = await import('@/lib/chimmy/tools/realStatsTools')
         return await buildRealStandingsContext({ sport: args.sport, season: args.season, group: args.group })
+      }
+
+      /* ── Analyst tools. Each reads the WHOLE league, so each needs the membership-proven id. ── */
+
+      case 'optimize_my_lineup': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLineupOptimizerContext } = await import('@/lib/chimmy/lineupOptimizerGrounding')
+        return await buildLineupOptimizerContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'compare_start_options': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { runStartSitScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
+        return await runStartSitScenarioTool({ players: args.players, leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'evaluate_trade': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
+        return await runTradeScenarioTool({ give: args.give, get: args.get, leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'evaluate_waiver_move': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { runWaiverScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
+        return await runWaiverScenarioTool({ add: args.add, drop: args.drop, leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      /*
+       * ⚠ THESE TWO WORK WITHOUT A LEAGUE, like get_my_starters_playing: with none in scope they
+       * answer across every current league of the user's, read through `listMemberLeagues`. They
+       * still need a USER — that is what scopes them.
+       */
+      case 'get_playoff_outlook': {
+        if (!ctx.userId) {
+          return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not estimate odds.'
+        }
+        const { buildPlayoffOutlookContext } = await import('@/lib/chimmy/playoffOutlookGrounding')
+        return await buildPlayoffOutlookContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+      }
+
+      case 'get_my_matchup': {
+        if (!ctx.userId) {
+          return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name an opponent.'
+        }
+        const { buildMatchupPreviewContext } = await import('@/lib/chimmy/matchupPreviewGrounding')
+        return await buildMatchupPreviewContext({ leagueId: ctx.leagueId, userId: ctx.userId })
       }
 
       default:

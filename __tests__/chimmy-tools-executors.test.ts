@@ -122,6 +122,20 @@ describe('tool specs', () => {
       'get_player_game_log',
       'get_season_stat_leaders',
       'get_real_standings',
+      /*
+       * The analyst tools (2026-09-24). Each RUNS an engine that already ships — the lineup fill,
+       * the start/sit and waiver scenarios, the Trade Center evaluator, the Season Outlook
+       * simulator, the Week board — over rows the session already reaches, and returns prose.
+       * None writes: "optimize" computes a lineup, it never sets one (we hold no platform write
+       * access). The first four need the membership-proven league; the last two fall back to
+       * every league through `listMemberLeagues`, like get_my_starters_playing.
+       */
+      'optimize_my_lineup',
+      'compare_start_options',
+      'evaluate_trade',
+      'evaluate_waiver_move',
+      'get_playoff_outlook',
+      'get_my_matchup',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

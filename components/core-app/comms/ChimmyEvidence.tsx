@@ -103,6 +103,18 @@ const SOURCE_LABELS: Record<string, string> = {
   get_trade_block: 'Trade block (marked in AllFantasy)',
   get_upcoming_games: 'Upcoming games',
   get_stat_leaders: 'Stat leaders',
+  get_my_starters_playing: 'Which of your starters play today',
+  get_my_injuries: 'Injuries across your leagues',
+  get_player_season_stats: 'Season stats',
+  get_player_game_log: 'Game logs',
+  get_season_stat_leaders: 'Season stat leaders',
+  get_real_standings: 'Real-world standings',
+  optimize_my_lineup: "Your best lineup, scored under your league's rules",
+  compare_start_options: 'Start/sit comparison under your league\'s scoring',
+  evaluate_trade: "Trade grade and lineup impact, run against your league's rosters",
+  evaluate_waiver_move: 'Waiver add/drop, run against your roster',
+  get_playoff_outlook: 'Season simulation (playoff, bye and title odds)',
+  get_my_matchup: "This week's matchup and win probability",
 }
 
 /** Rubric signal slugs. These are a fixed, small set — see confidence-rubric.ts. */

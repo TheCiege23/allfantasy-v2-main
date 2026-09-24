@@ -34,6 +34,7 @@ import {
 } from './ChimmyAnswerMode'
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import { readReadyScenario, type ReadyChimmyScenario } from '@/lib/chimmy/tradeScenarioTypes'
+import { readFollowUps } from '@/lib/chimmy/followUps'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -272,6 +273,8 @@ type ChatTurn = {
   retryQuestion?: string | null
   /** Brought in from another scope's conversation when the scope changed. */
   carried?: boolean
+  /** What to ask next, from the server. Tapping fills the composer; it never sends. */
+  followUps?: string[] | null
 }
 
 /** How many earlier turns follow the user into another scope. */
@@ -450,6 +453,8 @@ type ChimmyEnvelope = {
     sourceLinks?: { label: string; href: string }[]
     staleness?: { staleMinutes?: number | null; warning?: unknown }
     syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
+    /** Validated by `readFollowUps` before anything renders it. */
+    followUps?: unknown
   }
 }
 
@@ -810,6 +815,7 @@ function ChimmyPanel({
             scenario: readReadyScenario(payload.meta?.scenario),
             advice: readAdvice(payload),
             mode: answeredMode(payload.meta),
+            followUps: readFollowUps(payload.meta?.followUps),
           },
         ])
         // Asked from "All leagues", answered about one of yours: the conversation moves there.
@@ -851,9 +857,16 @@ function ChimmyPanel({
     [turns, scopeId, send, moveToScope],
   )
 
+  /*
+   * Lead with what Chimmy now COMPUTES from the league — the best lineup, the season simulation,
+   * this week's win probability — rather than questions any chatbot would take.
+   */
   const quickPrompts = scope
-    ? ['Who should I flex?', 'Any injuries I should know about?', 'Is this trade fair?']
-    : ['Which league needs me most?', 'What locks first today?', 'Where am I weakest?']
+    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'Is this trade fair?']
+    : ['Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
+
+  /* Follow-up chips render under the newest answer only; older ones would be stale suggestions. */
+  const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
 
   return (
     <div className="af-cm-panel">
@@ -1046,6 +1059,21 @@ function ChimmyPanel({
               {/* 0 is only ever reported for a charge refunded because no answer was delivered. */}
               {t.role === 'chimmy' && t.cost != null ? (
                 <span className="af-cm-cost af-num">{t.cost === 0 ? 'Not charged' : `${t.cost} tokens`}</span>
+              ) : null}
+
+              {/*
+                What to ask next. Same contract as the quick prompts: a tap fills the box and
+                spends nothing — sending is still the user's decision.
+              */}
+              {t.role === 'chimmy' && t.id === lastChimmyId && t.followUps?.length && !busy ? (
+                <div className="af-cm-quick af-cm-followups" role="group" aria-label="Ask next">
+                  {t.followUps.map((q) => (
+                    <button key={q} type="button" className="af-cm-quickbtn" onClick={() => setDraft(q)}>
+                      <span>{q}</span>
+                      <ArrowUpRight size={13} aria-hidden />
+                    </button>
+                  ))}
+                </div>
               ) : null}
             </div>
           ))

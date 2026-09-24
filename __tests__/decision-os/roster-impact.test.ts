@@ -95,6 +95,23 @@ describe('fillLineup', () => {
     expect(fill.unknownSlots).toEqual(['WEIRD_SLOT'])
   })
 
+  /*
+   * Assignments are reported in the DECLARED slot order even though the fill runs restrictive-first,
+   * so a reader can print the lineup the way the league lays it out.
+   */
+  it('reports who took which slot, in declared order', () => {
+    const fill = fillLineup(
+      [p('rb1', 'RB', 30), p('rb2', 'RB', 5), p('wr1', 'WR', 20), p('wr2', 'WR', 19)],
+      ['FLEX', 'RB', 'WR', 'BN'],
+    )
+    expect(fill.assignments).toEqual([
+      { slot: 'FLEX', playerId: 'wr2' },
+      { slot: 'RB', playerId: 'rb1' },
+      { slot: 'WR', playerId: 'wr1' },
+    ])
+    expect(fill.assignments.map((a) => a.playerId).sort()).toEqual([...fill.starterIds].sort())
+  })
+
   it('never seats a bench or IR slot', () => {
     const fill = fillLineup([p('rb1', 'RB', 10), p('rb2', 'RB', 9)], ['RB', 'BN', 'IR'])
     expect(fill.starterIds).toEqual(['rb1'])

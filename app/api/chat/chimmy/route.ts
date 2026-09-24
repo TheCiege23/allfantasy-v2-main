@@ -118,6 +118,7 @@ import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import { judgeChimmyDelivery } from '@/lib/chimmy/chargeOnDelivery'
+import { suggestChimmyFollowUps } from '@/lib/chimmy/followUps'
 import {
   buildChimmyResponseForAssistantMode,
   normalizeChimmyAssistantMode,
@@ -416,10 +417,24 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   'If the question names a league — "KBFL", "my dynasty league" — call find_league_by_name FIRST, then the league tools. Without it nothing is selected and they read nothing.',
   'For "who is out / hurt / injured on my teams" questions, call get_my_injuries — it checks every league at once. Report only the designations it returns, with their dates, and never add an injury from memory.',
   'For a real player\'s stats (NFL, college football, MLB, NBA, NHL or college basketball — pass the sport: NCAAF, MLB, NBA, NHL or NCAAB), call get_player_season_stats for season totals, get_player_game_log for "last week" / "last night" / recent games, get_season_stat_leaders for "who leads the league in X", and get_real_standings for real team records. Quote the refresh time they give; if a tool says the numbers are from an earlier season, or that the player has not played recently, say exactly that — never present them as this season or last night.',
-  'For start/sit, drop, or "where am I weak" questions, call get_my_roster. It returns roster FACTS only — positions, teams, injury status — and NO projections or points, so reason about roles and health and never state projected scores or a ranking you did not receive.',
+  /*
+   * ── THE ANALYST TOOLS (2026-09-24) ──────────────────────────────────────────────────────────
+   * The loop could fetch facts but not run a single engine, so "who should I start" was answered
+   * from injury tags and "will I make the playoffs" from nothing. These route each decision question
+   * to the engine that already answers it on a /core screen.
+   */
+  'For "who should I start", "set my lineup" or "is my lineup right", call optimize_my_lineup: it prices the whole roster for this week under the league\'s own scoring and flags starters on a bye, injured or missing. For "A or B?" between two named players call compare_start_options. get_my_roster is roster FACTS only — it carries NO projections — so never quote projected points from it.',
+  'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
+  'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
+  'For playoff chances, what record they need, or who to root for, call get_playoff_outlook. For this week\'s opponent, win probability or which games are close, call get_my_matchup. Both also work with no league selected — they then cover every league the user is in.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
   'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
-  'Answer in a few sentences. Name the data you used.',
+  /*
+   * ⚠ "A FEW SENTENCES" MADE THE PAID ANSWER READ LIKE THE FREE ONE. The engines return a best
+   * lineup, a swing game, magic numbers — a two-sentence cap threw most of that away. Decisive
+   * first, then the evidence, then one move: the shape an analyst writes, still short.
+   */
+  'Answer like a sharp analyst: lead with the recommendation and its key number, then two to four short bullet reasons drawn from the tool data, then one concrete next step. Quote numbers exactly as the tools give them and name the data you used. No filler.',
 ].join(' ')
 
 const SPORTS_KEYWORDS = [
@@ -2844,6 +2859,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                   select: { id: true, name: true, platform: true, season: true, lastSyncedAt: true },
                 })
                 .catch(() => null)
+      /*
+       * Headshot cards for the players the answer names — the push path always had them, the loop
+       * never did, so the answers that now run the lineup optimizer came back as bare text. Only for
+       * the session's own league: that is the roster packet already loaded above, and a league the
+       * model bound by name has no packet here (loading one would be a second full read per answer).
+       */
+      const loopPlayers =
+        boundLeague && leagueSnapshot && boundLeague.id === leagueSnapshot.id
+          ? buildChimmyPlayerCards({ answer: loopText, rosters: leagueSportsGrounding?.packet.rosters ?? null, sport })
+          : []
       return NextResponse.json({
         response: loopText,
         result: loopText,
@@ -2882,11 +2907,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
           dataSources: loop.toolsUsed,
+          /*
+           * The next questions worth asking — each one answerable by a tool, none of them sent until
+           * the user taps and then sends. Deterministic: see lib/chimmy/followUps.ts.
+           */
+          followUps: suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
+          ...(loopPlayers.length > 0 ? { players: loopPlayers } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
-            caveats: [
-              'Answered by the experimental tool loop; the model chose which data to read.',
-            ],
+            /*
+             * ⚠ WAS "Answered by the experimental tool loop". The loop is the DEFAULT path and has
+             * been since the Claude switch; calling it experimental on every answer undercut exactly
+             * the answers that now run the real engines. What stays true is worth saying.
+             */
+            caveats: ['Chimmy chose which of your league data to read for this answer; the sources are listed.'],
           },
         },
       })

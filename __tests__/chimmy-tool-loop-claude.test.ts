@@ -183,8 +183,27 @@ describe('runChimmyToolLoop on Claude', () => {
     h.anthropicCreate.mockResolvedValue(wantsTools({ id: 't', name: 'get_league_standings' }))
 
     expect(await runChimmyToolLoop(base)).toBeNull()
-    expect(h.anthropicCreate).toHaveBeenCalledTimes(3)
-    expect(h.execute).toHaveBeenCalledTimes(2)
+    expect(h.anthropicCreate).toHaveBeenCalledTimes(4)
+    expect(h.execute).toHaveBeenCalledTimes(3)
+  })
+
+  /*
+   * ⚠ THE LAST TURN MUST ANSWER. `none` is the one forcing mode compatible with adaptive thinking,
+   * and the tools still travel with it because the history now carries tool_use blocks.
+   */
+  it('sends the final turn with tool_choice none and the tools still attached, and returns its answer', async () => {
+    h.anthropicCreate
+      .mockResolvedValueOnce(wantsTools({ id: 't1', name: 'find_league_by_name', input: { name: 'KBFL' } }))
+      .mockResolvedValueOnce(wantsTools({ id: 't2', name: 'get_playoff_outlook' }))
+      .mockResolvedValueOnce(wantsTools({ id: 't3', name: 'optimize_my_lineup' }))
+      .mockResolvedValueOnce(answer('You are 62% to make it; start Reed.'))
+
+    const out = await runChimmyToolLoop(base)
+
+    expect(out).toMatchObject({ text: 'You are 62% to make it; start Reed.', turns: 4 })
+    const calls = h.anthropicCreate.mock.calls.map((c) => c[0])
+    expect(calls.map((p) => p.tool_choice)).toEqual([{ type: 'auto' }, { type: 'auto' }, { type: 'auto' }, { type: 'none' }])
+    expect(calls[3].tools.length).toBeGreaterThan(0)
   })
 
   it('treats a refusal or a truncated answer as no answer', async () => {

@@ -8,13 +8,18 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { Bot, Sparkles, BarChart3, DraftingCompass, Layers3, Target, Zap, ArrowRight, AppWindow } from 'lucide-react'
 import { getChimmyChatHref } from '@/lib/ai-product-layer'
 
+/*
+ * Each card names something Chimmy COMPUTES from the user's own league — the lineup fill, the season
+ * simulator, the trade evaluator, the week model — not a topic it will chat about. A promise here is
+ * one the tool loop has a tool for (lib/chimmy/tools/chimmyTools.ts).
+ */
 const FEATURES = [
-  { icon: DraftingCompass, title: 'Draft help', body: 'Real-time rankings, strategy tips, and answers to your draft questions.' },
-  { icon: BarChart3, title: 'Trade analysis', body: 'Get grades and explanations for trades in your league context.' },
-  { icon: Layers3, title: 'Waiver advice', body: 'Pickup and lineup recommendations tuned to your settings.' },
-  { icon: Target, title: 'Matchup predictions', body: 'Project outcomes and explore scenarios for your matchups.' },
-  { icon: Sparkles, title: 'League storytelling', body: 'Narratives, rivalries, and hall of fame moments for your league.' },
-  { icon: Bot, title: 'AI commissioner support', body: 'Sport-specific guidance across NFL, NBA, MLB, NHL, NCAA, and soccer.' },
+  { icon: Layers3, title: 'Your best lineup, every week', body: "Every player priced under your league's own scoring, the swaps that gain points, and any starter on a bye or hurt called out." },
+  { icon: Target, title: 'Playoff odds, simulated', body: 'Thousands of simulated seasons on your real schedule: playoff, bye and title odds, the wins you need, and who to root against this week.' },
+  { icon: BarChart3, title: 'Trade grades with lineup impact', body: 'Value on both sides and what the deal does to your starting lineup — plus a counter-offer, graded before Chimmy suggests it.' },
+  { icon: Sparkles, title: "This week's matchup", body: 'Win probability, projected margin and all-time rivalry for every game you play, with the coin flips highlighted.' },
+  { icon: DraftingCompass, title: 'Waivers and drafts', body: 'The best available players and what adding one does to your lineup, plus live draft help.' },
+  { icon: Bot, title: 'Every sport you play', body: 'NFL, NBA, MLB, NHL, college football and basketball, and soccer — across every league you have connected.' },
 ]
 
 export default function ChimmyLandingClient() {
@@ -38,7 +43,7 @@ export default function ChimmyLandingClient() {
                 {t('home.chimmy.title')}
               </h1>
               <p className="mt-1 text-base" style={{ color: 'var(--muted)' }}>
-                Your AI fantasy sports assistant
+                Your fantasy analyst — every answer from your own league
               </p>
             </div>
           </div>
