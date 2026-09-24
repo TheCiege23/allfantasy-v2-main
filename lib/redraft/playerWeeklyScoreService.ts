@@ -28,6 +28,7 @@ import {
   resolveDailySportSeasonStart,
 } from '@/lib/season-week/dailySportSeasonStarts'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
+import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -39,6 +40,8 @@ export type WeeklyScoreSyncSummary = {
   cacheRowsRead: number
   /** Daily-sport game rows in the window that were PRESEASON games, and so not scored. */
   preseasonRowsSkipped?: number
+  /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
+  gameLogIdsBridged?: number
   scoresUpserted: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
@@ -285,9 +288,22 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       return summary
     }
 
+    /*
+     * 🛑 ROSTER IDS ARE NOT GAME-LOG IDS FOR THE DAILY SPORTS. A drafted player carries the pool's
+     * Rolling Insights id; player_game_stats is keyed on PlayerIdentityMap.id. Queried directly,
+     * every NHL/NCAAB starter found ZERO rows (measured 2026-09-24) — see rosterGameLogIdBridge.ts.
+     */
+    const bridge = await bridgeRosterIdsToGameLogIds(prisma, candidateSportKeys(sport), playerIds)
+    summary.gameLogIdsBridged = bridge.bridged
+    if (bridge.ambiguous.length) {
+      summary.warnings.push(
+        `${bridge.ambiguous.length} roster id(s) are both a Rolling Insights id and another player's Sleeper id in ${sport}; ` +
+          `they were NOT matched to game logs rather than risk scoring the wrong player: ${bridge.ambiguous.slice(0, 5).join(', ')}.`,
+      )
+    }
     const gameRows = await prisma.playerGameStat.findMany({
       where: {
-        playerId: { in: playerIds },
+        playerId: { in: bridge.gameLogIds },
         sportType: { in: candidateSportKeys(sport) },
         gameDate: { gte: window.start, lt: window.end },
       },
@@ -307,9 +323,12 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         summary.preseasonRowsSkipped = (summary.preseasonRowsSkipped ?? 0) + 1
         continue
       }
-      const rows = dailyRowsByPlayer.get(row.playerId) ?? []
+      // Credit the row to the ROSTER player it belongs to, not the id it is stored under.
+      const rosterId = bridge.rosterIdFor(row.playerId)
+      if (!rosterId) continue
+      const rows = dailyRowsByPlayer.get(rosterId) ?? []
       rows.push(row.normalizedStatMap)
-      dailyRowsByPlayer.set(row.playerId, rows)
+      dailyRowsByPlayer.set(rosterId, rows)
     }
     summary.cacheRowsRead = gameRows.length
   }

@@ -19,7 +19,7 @@ const prismaMock = vi.hoisted(() => ({
   league: { findFirst: vi.fn() },
   playerGameLogCache: { findMany: vi.fn() },
   playerGameStat: { findMany: vi.fn() },
-  playerIdentityMap: { findFirst: vi.fn() },
+  playerIdentityMap: { findFirst: vi.fn(), findMany: vi.fn() },
   playerWeeklyScore: { upsert: vi.fn(), findUnique: vi.fn() },
   redraftRoster: { findMany: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
@@ -56,6 +56,7 @@ describe('daily-sport weekly score sync', () => {
     vi.clearAllMocks()
     prismaMock.adminAuditLog.create.mockResolvedValue({ id: 'audit-1' })
     prismaMock.playerIdentityMap.findFirst.mockResolvedValue(null)
+    prismaMock.playerIdentityMap.findMany.mockResolvedValue([])
     prismaMock.playerWeeklyScore.upsert.mockResolvedValue({})
     prismaMock.sportsPlayer.findFirst.mockResolvedValue(null)
     prismaMock.sportsGame.findMany.mockResolvedValue([])
@@ -167,6 +168,52 @@ describe('daily-sport weekly score sync', () => {
     expect(summary.preseasonRowsSkipped).toBe(1)
     const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0][0]
     expect(written.create.stats).toMatchObject({ pts: 45, reb: 9, ast: 13 })
+  })
+
+  it('REGRESSION (measured 2026-09-24): scores a roster that holds the RI id, whose game logs are keyed on the identity id', async () => {
+    // A native NHL roster stores the draft pool's id (the Rolling Insights id "3932"); the ingest
+    // keys player_game_stats on PlayerIdentityMap.id. Queried directly, every starter found 0 rows.
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NHL', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NHL'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: '3932', sport: 'NHL', position: 'D', team: 'NSH' }])
+    prismaMock.playerIdentityMap.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      'rollingInsightsId' in args.where ? [{ id: 'pim-ufko', rollingInsightsId: '3932', sleeperId: null }] : [],
+    )
+    prismaMock.playerGameStat.findMany.mockImplementation(async (args: { where: { playerId: { in: string[] } } }) =>
+      args.where.playerId.in.includes('pim-ufko')
+        ? [
+            { playerId: 'pim-ufko', normalizedStatMap: { seasonType: 'regular', stats: { goals: 1, assists: 1, shots_on_goal: 3 } } },
+            { playerId: 'pim-ufko', normalizedStatMap: { seasonType: 'regular', stats: { goals: 0, assists: 2, shots_on_goal: 2 } } },
+          ]
+        : [],
+    )
+
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(summary.gameLogIdsBridged).toBe(1)
+    expect(summary.scoresUpserted).toBe(1)
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0][0]
+    // Credited to the ROSTER player's id, summed across both games.
+    expect(JSON.stringify(written.where)).toContain('3932')
+    expect(written.create.stats).toMatchObject({ g: 1, a: 3, sog: 5 })
+  })
+
+  it('refuses to bridge an id that is also another player\'s Sleeper id, and says so', async () => {
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NHL', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NHL'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: '5850', sport: 'NHL', position: 'C', team: 'BOS' }])
+    prismaMock.playerIdentityMap.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      'rollingInsightsId' in args.where
+        ? [{ id: 'pim-ri', rollingInsightsId: '5850', sleeperId: null }]
+        : [{ id: 'pim-other', rollingInsightsId: null, sleeperId: '5850' }],
+    )
+
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(summary.gameLogIdsBridged).toBe(0)
+    expect(summary.warnings.join(' ')).toMatch(/NOT matched to game logs rather than risk scoring the wrong player: 5850/)
+    const queried = prismaMock.playerGameStat.findMany.mock.calls[0][0].where.playerId.in
+    expect(queried).not.toContain('pim-ri')
   })
 
   it('reports unrecognized provider keys instead of scoring a silent zero', async () => {
