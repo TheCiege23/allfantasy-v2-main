@@ -190,10 +190,28 @@ async function runRedraftReconciliation() {
      * so a season that never closes says why.
      */
     try {
-      const sweep = await finalizeCompletedWeeksForSeason({
-        seasonId: season.id,
-        throughWeek: resolved.fantasyWeek,
-      })
+      const sweep = await finalizeCompletedWeeksForSeason(
+        {
+          seasonId: season.id,
+          throughWeek: resolved.fantasyWeek,
+        },
+        {
+          /*
+           * The sweep looks BACK, and the reconciliation above only ever ran for the CURRENT
+           * week — so an older week was judged on stats nobody had refreshed since it was
+           * current. This is the same sync, aimed at the week actually being closed, and the
+           * sweep calls it only when a week refuses for coverage.
+           */
+          syncWeekStats: async ({ seasonId, week }) => {
+            await syncPlayerWeeklyScoresForRedraftSeason({
+              seasonId,
+              week,
+              actorId: 'system:score-sync-backfill',
+            })
+            await recalculateMatchupsForSeasonWeek(seasonId, week)
+          },
+        },
+      )
       weeksFinalized += sweep.finalized
       for (const [reason, count] of Object.entries(sweep.refusals)) {
         finalizeRefusals[reason] = (finalizeRefusals[reason] ?? 0) + count
