@@ -3,9 +3,21 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import {
+  buildDailyGameLogContext,
+  buildDailySeasonLeadersContext,
+  dailyOffSeasonNote,
+  dailySeasonLabel,
+  isDailyStatsSport,
+  renderDailySeasonBlock,
+} from '@/lib/chimmy/tools/dailySportStats'
+import { fmt, isoMinute, latest, nameToken, num } from '@/lib/chimmy/tools/statsFormat'
+
+export { nameToken }
 
 /**
- * REAL-WORLD STATS FOR CHIMMY, READ FROM OUR OWN TABLES (Phase 1: NFL + college football).
+ * REAL-WORLD STATS FOR CHIMMY, READ FROM OUR OWN TABLES (Phase 1: NFL + college football;
+ * Phase 3 adds MLB / NBA / NHL — their game logs and leaders live in dailySportStats.ts).
  *
  * Until this module Chimmy had no stats tool at all: "how many yards did Chase have last week",
  * "who leads the NFL in rushing" and "SEC standings" fell through to a paid web search, while the
@@ -30,55 +42,29 @@ import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolut
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type StatsSport = 'NFL' | 'NCAAF'
+export type StatsSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL'
 
 /** Which season-total source each sport reads, and the JSON key its rows carry the name under. */
 const SEASON_SOURCE: Record<StatsSport, { source: string; nameKey: string; label: string }> = {
   NFL: { source: 'rolling_insights', nameKey: 'riPlayerName', label: 'Rolling Insights' },
   NCAAF: { source: 'cfbd', nameKey: 'name', label: 'CollegeFootballData' },
+  MLB: { source: 'rolling_insights', nameKey: 'riPlayerName', label: 'Rolling Insights' },
+  NBA: { source: 'rolling_insights', nameKey: 'riPlayerName', label: 'Rolling Insights' },
+  NHL: { source: 'rolling_insights', nameKey: 'riPlayerName', label: 'Rolling Insights' },
 }
 
 export function normalizeStatsSport(raw: unknown): StatsSport | null {
   const v = String(raw ?? 'NFL').trim().toUpperCase().replace(/[\s_-]+/g, '')
   if (!v || v === 'NFL') return 'NFL'
   if (v === 'NCAAF' || v === 'NCAAFB' || v === 'CFB' || v === 'COLLEGEFOOTBALL' || v === 'CFBD') return 'NCAAF'
+  if (v === 'MLB' || v === 'BASEBALL') return 'MLB'
+  if (v === 'NBA' || v === 'BASKETBALL') return 'NBA'
+  if (v === 'NHL' || v === 'HOCKEY') return 'NHL'
   return null
 }
 
 function unsupportedSport(raw: unknown): string {
-  return `Stats for "${String(raw)}" are not available from AllFantasy's data yet — only NFL and college football are. Say so plainly; do not give numbers from memory.`
-}
-
-/** The longest run of letters in a name — the ILIKE prefilter, same rule the projection reader uses. */
-export function nameToken(raw: string): string {
-  const parts = String(raw).split(/[^A-Za-z]+/).filter(Boolean)
-  return parts.reduce((best, p) => (p.length > best.length ? p : best), '')
-}
-
-function isoMinute(d: Date | string | null | undefined): string | null {
-  if (!d) return null
-  const t = new Date(d)
-  return Number.isNaN(t.getTime()) ? null : `${t.toISOString().slice(0, 16).replace('T', ' ')} UTC`
-}
-
-/** The newest of some timestamps. By time — `Array.sort()` on Dates compares their strings. */
-function latest(values: Array<Date | string | null | undefined>): Date | null {
-  let best: number | null = null
-  for (const v of values) {
-    if (!v) continue
-    const t = new Date(v).getTime()
-    if (Number.isFinite(t) && (best == null || t > best)) best = t
-  }
-  return best == null ? null : new Date(best)
-}
-
-function num(v: unknown): number | null {
-  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN
-  return Number.isFinite(n) ? n : null
-}
-
-function fmt(n: number): string {
-  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
+  return `Stats for "${String(raw)}" are not available from AllFantasy's data yet — only NFL, college football, MLB, NBA and NHL are. Say so plainly; do not give numbers from memory.`
 }
 
 // ── Season totals ────────────────────────────────────────────────────────────────────────────
@@ -172,7 +158,7 @@ async function newestSeason(db: Db, sport: StatsSport): Promise<string | null> {
 }
 
 export async function buildPlayerSeasonStatsContext(
-  args: { playerName: string; sport?: unknown; season?: unknown },
+  args: { playerName: string; sport?: unknown; season?: unknown; now?: Date },
   db: Db = defaultPrisma,
 ): Promise<string> {
   const asked = String(args.playerName ?? '').trim()
@@ -180,6 +166,7 @@ export async function buildPlayerSeasonStatsContext(
   const sport = normalizeStatsSport(args.sport)
   if (!sport) return unsupportedSport(args.sport)
   const { source, nameKey, label } = SEASON_SOURCE[sport]
+  const daily = isDailyStatsSport(sport) ? sport : null
 
   const season =
     typeof args.season === 'number' && Number.isFinite(args.season)
@@ -218,7 +205,10 @@ export async function buildPlayerSeasonStatsContext(
   }
 
   const labels = sport === 'NFL' ? NFL_SEASON_LABELS : NCAAF_SEASON_LABELS
+  const seasonText = daily ? dailySeasonLabel(daily, season) : season
   const lines: string[] = []
+  const offSeason = daily && args.season == null ? dailyOffSeasonNote(daily, season, args.now) : null
+  if (offSeason) lines.push(offSeason)
   if (exact.length > 1) {
     lines.push(`⚠ ${exact.length} different players are named "${asked}". Ask which one they mean rather than picking.`)
   }
@@ -229,8 +219,15 @@ export async function buildPlayerSeasonStatsContext(
     const team = String(stats.riTeam ?? row.team ?? '').trim()
     const position = String(stats.position ?? '').trim()
     lines.push(
-      `${name}${position ? `, ${position}` : ''}${team ? `, ${team}` : ''} — ${sport} ${season} regular season, from ${label}, refreshed ${isoMinute(row.fetchedAt) ?? 'at an unknown time'}:`,
+      `${name}${position ? `, ${position}` : ''}${team ? `, ${team}` : ''} — ${sport} ${seasonText} regular season, from ${label}, refreshed ${isoMinute(row.fetchedAt) ?? 'at an unknown time'}:`,
     )
+    if (daily) {
+      const body = renderDailySeasonBlock(daily, regular)
+      lines.push(...(body.length ? body : ['- No regular-season stats recorded yet.']))
+      const postLines = renderDailySeasonBlock(daily, stats.postseason)
+      if (postLines.length) lines.push('Postseason:', ...postLines)
+      continue
+    }
     lines.push(regular ? `- ${renderStatBlock(regular, labels) || 'no counting stats recorded yet'}` : '- No regular-season stats recorded yet.')
     const post = stats.postseason && typeof stats.postseason === 'object'
       ? renderStatBlock(stats.postseason as Record<string, unknown>, labels)
@@ -287,6 +284,7 @@ export async function buildPlayerGameLogContext(
   const sport = normalizeStatsSport(args.sport)
   if (!sport) return unsupportedSport(args.sport)
   if (sport === 'NCAAF') return buildNcaafGameLogContext(args, db)
+  if (isDailyStatsSport(sport)) return buildDailyGameLogContext(sport, args, db)
 
   const token = nameToken(asked)
   if (token.length < 2) return `"${asked}" is not a name I can search for. Ask for the player's full name.`
@@ -533,16 +531,25 @@ export const LEADER_STATS: Record<string, { label: string; NFL?: string; NCAAF?:
 }
 
 export async function buildSeasonLeadersContext(
-  args: { stat: unknown; sport?: unknown; season?: unknown; limit?: unknown },
+  args: { stat: unknown; sport?: unknown; season?: unknown; limit?: unknown; now?: Date },
   db: Db = defaultPrisma,
 ): Promise<string> {
   const sport = normalizeStatsSport(args.sport)
   if (!sport) return unsupportedSport(args.sport)
+  if (isDailyStatsSport(sport)) {
+    const season =
+      typeof args.season === 'number' && Number.isFinite(args.season)
+        ? String(Math.floor(args.season))
+        : await newestSeason(db, sport)
+    if (!season) return `NO ${sport} SEASON STATS ARE STORED AT ALL, so no leaderboard can be built. Say so.`
+    const limit = Math.min(10, Math.max(1, typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : 5))
+    return buildDailySeasonLeadersContext(sport, { stat: args.stat, season, limit, now: args.season == null ? args.now : undefined }, db)
+  }
   const statKey = String(args.stat ?? '').trim().toLowerCase()
   const stat = LEADER_STATS[statKey]
-  const jsonKey = stat?.[sport]
+  const jsonKey = stat?.[sport as 'NFL' | 'NCAAF']
   if (!stat || !jsonKey) {
-    const offered = Object.keys(LEADER_STATS).filter((k) => LEADER_STATS[k][sport]).join(', ')
+    const offered = Object.keys(LEADER_STATS).filter((k) => LEADER_STATS[k][sport as 'NFL' | 'NCAAF']).join(', ')
     return `"${statKey}" is not a ${sport} stat I can rank. Available: ${offered}. Do not produce a leaderboard from memory.`
   }
   const { source, nameKey, label } = SEASON_SOURCE[sport]
@@ -594,6 +601,7 @@ type StandingEntry = {
   won?: number
   lost?: number
   tied?: number
+  otLost?: number
   pointsFor?: number
   pointsAgainst?: number
   conference?: string
@@ -627,6 +635,9 @@ const GROUP_ALIASES: Record<string, string> = {
   independents: 'independents',
   afc: 'american football conference',
   nfc: 'national football conference',
+  // MLB standings are stored by LEAGUE (conference and division both read "American League").
+  al: 'american league',
+  nl: 'national league',
 }
 
 function expandGroup(raw: string): string {
@@ -636,7 +647,7 @@ function expandGroup(raw: string): string {
 }
 
 export async function buildRealStandingsContext(
-  args: { sport?: unknown; season?: unknown; group?: unknown },
+  args: { sport?: unknown; season?: unknown; group?: unknown; now?: Date },
   db: Db = defaultPrisma,
 ): Promise<string> {
   const sport = normalizeStatsSport(args.sport)
@@ -693,20 +704,50 @@ export async function buildRealStandingsContext(
 
   const buckets = new Map<string, typeof teams>()
   for (const t of teams) buckets.set(t.bucket, [...(buckets.get(t.bucket) ?? []), t])
+  const daily = isDailyStatsSport(sport) ? sport : null
+  /* NHL ranks by POINTS (2 per win, 1 per overtime loss). ESPN's `otLost` is populated for MLB
+   * too (measured: ARI 83-74 with otLost 8) and means nothing there, so it is read for NHL only. */
+  const nhlPoints = (t: StandingEntry) => 2 * (num(t.won) ?? 0) + (num(t.otLost) ?? 0)
+  const offSeason = daily && args.season == null ? dailyOffSeasonNote(daily, season, args.now) : null
   /* No "refreshed at": the cache keeps only `createdAt`, and rows are updated in place, so the
    * creation time understates freshness by days (measured: 09-18 on rows showing week-2 results). */
-  const out = [`${sport} ${season} standings (ESPN, updated every few hours):`]
+  const out = [
+    ...(offSeason ? [offSeason] : []),
+    `${sport} ${daily ? dailySeasonLabel(daily, season) : season} standings (ESPN, updated every few hours):`,
+  ]
   for (const [bucket, list] of [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     out.push(`${bucket}:`)
-    list
-      .sort((a, b) => b.pct - a.pct || b.diff - a.diff || a.name.localeCompare(b.name))
-      .forEach((t) => {
-        const rec = `${fmt(num(t.won) ?? 0)}-${fmt(num(t.lost) ?? 0)}${num(t.tied) ? `-${fmt(num(t.tied) ?? 0)}` : ''}`
-        const pf = num(t.pointsFor)
-        const pa = num(t.pointsAgainst)
-        out.push(`- ${t.name} ${rec}${pf != null && pa != null ? ` (PF ${fmt(pf)}, PA ${fmt(pa)})` : ''}`)
-      })
+    list.sort((a, b) =>
+      sport === 'NHL'
+        ? nhlPoints(b) - nhlPoints(a) || b.pct - a.pct || a.name.localeCompare(b.name)
+        : b.pct - a.pct || b.diff - a.diff || a.name.localeCompare(b.name),
+    )
+    const leader = list[0]
+    list.forEach((t) => {
+      const w = num(t.won) ?? 0
+      const l = num(t.lost) ?? 0
+      const pf = num(t.pointsFor)
+      const pa = num(t.pointsAgainst)
+      if (sport === 'NHL') {
+        out.push(`- ${t.name} ${fmt(w)}-${fmt(l)}-${fmt(num(t.otLost) ?? 0)}, ${fmt(nhlPoints(t))} pts${pf != null && pa != null ? ` (GF ${fmt(pf)}, GA ${fmt(pa)})` : ''}`)
+        return
+      }
+      if (daily) {
+        const gb = ((num(leader.won) ?? 0) - w + (l - (num(leader.lost) ?? 0))) / 2
+        const extra = sport === 'MLB' && pf != null && pa != null ? `, RS ${fmt(pf)}, RA ${fmt(pa)}` : ''
+        out.push(`- ${t.name} ${fmt(w)}-${fmt(l)} (${gb <= 0 ? '—' : `${fmt(gb)} GB`}${extra})`)
+        return
+      }
+      const rec = `${fmt(w)}-${fmt(l)}${num(t.tied) ? `-${fmt(num(t.tied) ?? 0)}` : ''}`
+      out.push(`- ${t.name} ${rec}${pf != null && pa != null ? ` (PF ${fmt(pf)}, PA ${fmt(pa)})` : ''}`)
+    })
   }
-  out.push('Ordered by win percentage, then point differential — not an official tiebreaker order.')
+  out.push(
+    sport === 'NHL'
+      ? 'Ordered by points (W-L-OTL), then win percentage — not the official tiebreaker order.'
+      : daily
+        ? `Grouped by ${sport === 'MLB' ? 'league' : 'conference'} as stored — NOT by division, so "GB" is games behind the ${sport === 'MLB' ? 'league' : 'conference'} leader, not a division race. Not an official tiebreaker order.`
+        : 'Ordered by win percentage, then point differential — not an official tiebreaker order.',
+  )
   return out.join('\n')
 }

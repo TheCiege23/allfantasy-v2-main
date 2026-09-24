@@ -20,7 +20,7 @@ vi.mock('@/lib/live/playerStatLeaders', async () => {
 
 import {
   isLiveWindowStatQuestion,
-  isStoredFootballStatsQuestion,
+  isStoredStatsQuestion,
   tryDeterministicAnswerDetailed,
 } from '@/lib/ai/deterministic'
 
@@ -37,27 +37,32 @@ beforeEach(() => {
 })
 
 describe('classifiers', () => {
-  it('season / week football questions belong to the stored-stats tools', () => {
+  it('season / week questions for the stored sports belong to the stored-stats tools', () => {
     for (const q of [
       'How many TDs does Josh Allen have this season?',
       'Who leads the NFL in rushing yards?',
       "How many receiving yards did Ja'Marr Chase have last week?",
       'passing yards leaders in college football',
       'how many touchdowns has Bijan scored so far',
+      // Phase 3: MLB / NBA / NHL are stored too.
+      'How many home runs does Ohtani have this season?',
+      'Who leads the NBA in scoring?',
+      'how many goals does McDavid have this season',
+      'what did Aaron Judge do last night',
     ]) {
-      expect(isStoredFootballStatsQuestion(q), q).toBe(true)
+      expect(isStoredStatsQuestion(q), q).toBe(true)
     }
   })
 
-  it('other sports and live questions do not', () => {
+  it('unstored sports and live questions do not', () => {
     for (const q of [
-      'How many home runs does Ohtani have this season?',
       'who has the most goals this season in the EPL',
+      'WNBA scoring leaders this season',
       'who has the most TDs today?',
       'how many rushing yards does Henry have right now',
       'who leads in TDs?',
     ]) {
-      expect(isStoredFootballStatsQuestion(q), q).toBe(false)
+      expect(isStoredStatsQuestion(q), q).toBe(false)
     }
   })
 
@@ -85,8 +90,13 @@ describe('tryDeterministicAnswerDetailed', () => {
     expect(out?.text).toContain('Josh Allen')
   })
 
-  it('still refuses a non-football season stat, so it can escalate to web search', async () => {
+  it('REGRESSION (Phase 3): an MLB season stat is no longer refused into a paid web search', async () => {
     const out = await tryDeterministicAnswerDetailed('How many home runs does Ohtani have this season?')
+    expect(out).toBeNull()
+  })
+
+  it('still refuses a season stat for a sport we do not store, so it can escalate to web search', async () => {
+    const out = await tryDeterministicAnswerDetailed('who are the top goalscorers in the EPL this season?')
     expect(out?.kind).toBe('refusal')
   })
 })

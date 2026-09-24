@@ -51,11 +51,16 @@ const CHASE_2026 = {
 }
 
 describe('normalizeStatsSport / nameToken', () => {
-  it('maps the ways people name college football, and refuses other sports', () => {
+  it('maps the ways people name each stored sport, and refuses the rest', () => {
     expect(normalizeStatsSport(undefined)).toBe('NFL')
     expect(normalizeStatsSport('college football')).toBe('NCAAF')
     expect(normalizeStatsSport('NCAAFB')).toBe('NCAAF')
-    expect(normalizeStatsSport('MLB')).toBeNull()
+    expect(normalizeStatsSport('MLB')).toBe('MLB')
+    expect(normalizeStatsSport('baseball')).toBe('MLB')
+    expect(normalizeStatsSport('basketball')).toBe('NBA')
+    expect(normalizeStatsSport('hockey')).toBe('NHL')
+    expect(normalizeStatsSport('soccer')).toBeNull()
+    expect(normalizeStatsSport('WNBA')).toBeNull()
   })
 
   it('takes the longest letter run, so apostrophes and suffixes do not break the prefilter', () => {
@@ -109,8 +114,8 @@ describe('get_player_season_stats', () => {
 
   it('refuses an unsupported sport without querying', async () => {
     const { db, calls } = fakeDb(() => [])
-    const out = await buildPlayerSeasonStatsContext({ playerName: 'Shohei Ohtani', sport: 'MLB' }, db)
-    expect(out).toMatch(/only NFL and college football/)
+    const out = await buildPlayerSeasonStatsContext({ playerName: 'Erling Haaland', sport: 'soccer' }, db)
+    expect(out).toMatch(/only NFL, college football, MLB, NBA and NHL/)
     expect(calls).toHaveLength(0)
   })
 })
