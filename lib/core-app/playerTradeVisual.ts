@@ -207,6 +207,150 @@ function contains(pd: Record<string, unknown>, id: string): boolean {
   return allIds(pd).includes(id)
 }
 
+/*
+ * ── THE LEAGUE READS EVERY TRADE SURFACE HERE STARTS FROM ─────────────────────────────────────────
+ *
+ * Exported so the league-wide trade finder (`lib/chimmy/tradeFinderGrounding.ts`) builds its rosters
+ * exactly as the player card and "should I trade for X?" do. Three copies of "which roster is yours"
+ * and "what is this player worth here" would disagree the first time one of them was fixed.
+ */
+
+/** Every team and roster row in the league. The caller must have proved membership. */
+export async function readLeagueTradeRows(leagueId: string) {
+  const [teams, rosters] = await Promise.all([
+    prisma.leagueTeam
+      .findMany({
+        where: { leagueId },
+        select: {
+          externalId: true,
+          platformUserId: true,
+          claimedByUserId: true,
+          ownerName: true,
+          teamName: true,
+          wins: true,
+          losses: true,
+          ties: true,
+          pointsFor: true,
+        },
+      })
+      .catch(() => []),
+    prisma.roster
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
+      .catch(() => []),
+  ])
+  return { teams, rosters }
+}
+
+export type LeagueTradeRows = Awaited<ReturnType<typeof readLeagueTradeRows>>
+export type LeagueTradeTeam = LeagueTradeRows['teams'][number]
+export type LeagueTradeRoster = LeagueTradeRows['rosters'][number]
+
+/** The caller's claimed team, and the roster it owns. */
+export function callerTradeSeat(
+  rows: LeagueTradeRows,
+  userId: string,
+): { yours: LeagueTradeTeam | null; myRoster: LeagueTradeRoster | null } {
+  const yours = rows.teams.find((t) => t.claimedByUserId === userId) ?? null
+  const yourIds = new Set([yours?.platformUserId, yours?.externalId, userId].filter((x): x is string => Boolean(x)))
+  const myRoster = rows.rosters.find((r) => yourIds.has(r.platformUserId)) ?? null
+  return { yours, myRoster }
+}
+
+/** The team row that owns a roster. */
+export function teamForTradeRoster(teams: LeagueTradeTeam[], roster: LeagueTradeRoster): LeagueTradeTeam | null {
+  return (
+    teams.find((t) => t.platformUserId === roster.platformUserId) ??
+    teams.find((t) => t.externalId === roster.platformUserId) ??
+    null
+  )
+}
+
+/** Every player id on a roster: players, starters, reserve and taxi. */
+export function tradeRosterPlayerIds(roster: LeagueTradeRoster): string[] {
+  return allIds((roster.playerData ?? {}) as Record<string, unknown>)
+}
+
+export type TradePlayerRow = { sleeperId: string | null; name: string; position: string | null; age: number | null }
+
+/** Name, position and age for a set of player ids, keyed by id. */
+export async function readTradePlayerRows(ids: string[]): Promise<Map<string, TradePlayerRow>> {
+  if (!ids.length) return new Map()
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: { sleeperId: { in: ids } },
+      select: { sleeperId: true, name: true, position: true, age: true },
+      distinct: ['sleeperId'],
+    })
+    .catch(() => [] as TradePlayerRow[])
+  return new Map(rows.filter((r) => r.sleeperId).map((r) => [r.sleeperId as string, r]))
+}
+
+/*
+ * ⚠ THE CHART IS FETCHED WITH ONE `ppr` AND APPLIES IT TO EVERY POSITION, so a league with a
+ * per-position reception rule — TE premium being the common one — is priced by a chart that
+ * models neither its tight ends nor its receivers. `playerValueForLeague` corrects for that and
+ * returns BOTH numbers; `adjusted` equals `base` for an ordinary league, so nothing moves for
+ * the leagues that already matched.
+ */
+export function toDiscoveryPlayers(
+  roster: LeagueTradeRoster,
+  byId: Map<string, TradePlayerRow>,
+  values: MarketValuesPayload,
+  leagueScoring: Record<string, number>,
+): DiscoveryPlayer[] {
+  return tradeRosterPlayerIds(roster).flatMap((id) => {
+    const row = byId.get(id)
+    if (!row) return []
+    const priced = playerValueForLeague(values, id, leagueScoring)
+    return [
+      {
+        playerId: id,
+        playerName: row.name,
+        position: row.position ? normalizePosition(row.position) : 'UNK',
+        value: priced?.adjusted ?? playerValue(values, id),
+        isLocked: false,
+      },
+    ]
+  })
+}
+
+/** One side of a trade: the team's stance, needs and surpluses over its priced players. */
+export function toDiscoveryRoster(
+  team: LeagueTradeTeam | null,
+  rosterId: string,
+  players: DiscoveryPlayer[],
+  fallbackName: string,
+  shape: { leagueSize: number; rosterSlots: string[] | null },
+): DiscoveryRoster {
+  const profile = buildTeamProfile({
+    rosterId,
+    wins: team?.wins ?? 0,
+    losses: team?.losses ?? 0,
+    ties: team?.ties ?? 0,
+    pointsFor: team?.pointsFor ?? 0,
+    playoffSeed: null,
+    leagueSize: shape.leagueSize,
+    positions: players.map((p) => p.position),
+    rosterSlots: shape.rosterSlots,
+  })
+  return {
+    rosterId,
+    teamName: team?.teamName ?? fallbackName,
+    managerDisplayName: team?.ownerName ?? null,
+    stance: profile.stance,
+    stanceSettled: profile.stanceSettled,
+    weakPositions: profile.weakPositions,
+    strongPositions: profile.strongPositions,
+    players,
+  }
+}
+
+/** The league's roster slots, as Sleeper labels them, when the settings carry them. */
+export function rosterSlotsOf(settings: unknown): string[] | null {
+  const s = (settings ?? {}) as Record<string, unknown>
+  return Array.isArray(s.roster_positions) ? s.roster_positions.map(String) : null
+}
+
 /** The market-value context the value service keys its cache on, from the league's own settings. */
 export function marketContextFor(
   settings: unknown,
@@ -382,31 +526,9 @@ export async function getPlayerTradeVisual(
     .catch(() => null)
   if (!league) return { available: false, reason: 'league not found' }
 
-  const [teams, rosters] = await Promise.all([
-    prisma.leagueTeam
-      .findMany({
-        where: { leagueId },
-        select: {
-          externalId: true,
-          platformUserId: true,
-          claimedByUserId: true,
-          ownerName: true,
-          teamName: true,
-          wins: true,
-          losses: true,
-          ties: true,
-          pointsFor: true,
-        },
-      })
-      .catch(() => []),
-    prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
-      .catch(() => []),
-  ])
-
-  const yours = teams.find((t) => t.claimedByUserId === userId) ?? null
-  const yourIds = new Set([yours?.platformUserId, yours?.externalId, userId].filter((x): x is string => Boolean(x)))
-  const myRoster = rosters.find((r) => yourIds.has(r.platformUserId)) ?? null
+  const tradeRows = await readLeagueTradeRows(leagueId)
+  const { teams, rosters } = tradeRows
+  const { yours, myRoster } = callerTradeSeat(tradeRows, userId)
   if (!myRoster) return { available: false, reason: 'you need a claimed team in this league to build a trade' }
 
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null
@@ -414,10 +536,7 @@ export async function getPlayerTradeVisual(
   if (holder.platformUserId === myRoster.platformUserId) {
     return { available: false, reason: 'he is already on your roster in this league' }
   }
-  const partnerTeam =
-    teams.find((t) => t.platformUserId === holder.platformUserId) ??
-    teams.find((t) => t.externalId === holder.platformUserId) ??
-    null
+  const partnerTeam = teamForTradeRoster(teams, holder)
 
   const leagueSize = rosters.length || 12
   /*
@@ -431,77 +550,23 @@ export async function getPlayerTradeVisual(
     return { available: false, reason: 'no market values are loaded for this league’s format yet, so a package cannot be priced' }
   }
 
-  const myPd = (myRoster.playerData ?? {}) as Record<string, unknown>
   const theirPd = (holder.playerData ?? {}) as Record<string, unknown>
-  const ids = [...new Set([...allIds(myPd), ...allIds(theirPd)])]
-  const rows = await prisma.sportsPlayer
-    .findMany({
-      where: { sleeperId: { in: ids } },
-      select: { sleeperId: true, name: true, position: true, age: true },
-      distinct: ['sleeperId'],
-    })
-    .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null; age: number | null }>)
-  const byId = new Map(rows.filter((r) => r.sleeperId).map((r) => [r.sleeperId as string, r]))
+  const byId = await readTradePlayerRows([
+    ...new Set([...tradeRosterPlayerIds(myRoster), ...tradeRosterPlayerIds(holder)]),
+  ])
 
-  /*
-   * ⚠ THE CHART IS FETCHED WITH ONE `ppr` AND APPLIES IT TO EVERY POSITION, so a league with a
-   * per-position reception rule — TE premium being the common one — is priced by a chart that
-   * models neither its tight ends nor its receivers. `playerValueForLeague` corrects for that and
-   * returns BOTH numbers; `adjusted` equals `base` for an ordinary league, so nothing moves for
-   * the leagues that already matched.
-   */
   const leagueScoring = marketContext.scoring.settings
-
-  const toPlayers = (pd: Record<string, unknown>): DiscoveryPlayer[] =>
-    allIds(pd).flatMap((id) => {
-      const row = byId.get(id)
-      if (!row) return []
-      const priced = playerValueForLeague(values, id, leagueScoring)
-      return [
-        {
-          playerId: id,
-          playerName: row.name,
-          position: row.position ? normalizePosition(row.position) : 'UNK',
-          value: priced?.adjusted ?? playerValue(values, id),
-          isLocked: false,
-        },
-      ]
-    })
-
   const settings = (league.settings ?? {}) as Record<string, unknown>
-  const rosterSlots = Array.isArray(settings.roster_positions) ? settings.roster_positions.map(String) : null
+  const shape = { leagueSize, rosterSlots: rosterSlotsOf(league.settings) }
 
-  const side = (
-    team: (typeof teams)[number] | null,
-    rosterId: string,
-    players: DiscoveryPlayer[],
-    fallbackName: string
-  ): DiscoveryRoster => {
-    const profile = buildTeamProfile({
-      rosterId,
-      wins: team?.wins ?? 0,
-      losses: team?.losses ?? 0,
-      ties: team?.ties ?? 0,
-      pointsFor: team?.pointsFor ?? 0,
-      playoffSeed: null,
-      leagueSize,
-      positions: players.map((p) => p.position),
-      rosterSlots,
-    })
-    return {
-      rosterId,
-      teamName: team?.teamName ?? fallbackName,
-      managerDisplayName: team?.ownerName ?? null,
-      stance: profile.stance,
-      stanceSettled: profile.stanceSettled,
-      weakPositions: profile.weakPositions,
-      strongPositions: profile.strongPositions,
-      players,
-    }
-  }
-
-  const me = side(yours, myRoster.platformUserId, toPlayers(myPd), 'Your team')
-  const partner = side(partnerTeam, holder.platformUserId, toPlayers(theirPd), 'Another manager')
+  const me = toDiscoveryRoster(yours, myRoster.platformUserId, toDiscoveryPlayers(myRoster, byId, values, leagueScoring), 'Your team', shape)
+  const partner = toDiscoveryRoster(
+    partnerTeam,
+    holder.platformUserId,
+    toDiscoveryPlayers(holder, byId, values, leagueScoring),
+    'Another manager',
+    shape,
+  )
 
   const targetRow = byId.get(targetSleeperId)
   const packages = findPackages({

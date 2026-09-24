@@ -22,7 +22,7 @@ const at = (re: RegExp) => {
 
 describe('the AF Pro allowance in /api/chat/chimmy', () => {
   it('skips the token preflight when the plan covers the turn', () => {
-    expect(ROUTE).toMatch(/const planCovers = Boolean\(planState && planState\.remaining > 0\)\s*\n\s*if \(!planCovers\) \{\s*\n\s*const blocked = await runTokenGate\(\)/)
+    expect(ROUTE).toMatch(/const planCovers = Boolean\(planState && planState\.remaining > 0\)[\s\S]{0,400}?\n\s*if \(!planCovers\) \{\s*\n\s*const blocked = await runTokenGate\(exhaustedPlanMeta\)/)
   })
 
   it('takes the allowance only AFTER the free undecided-trade return', () => {
@@ -37,7 +37,7 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('falls back to the token preflight when the last included answer went elsewhere', () => {
-    expect(ROUTE).toMatch(/planIncluded = await takeChimmyPlanAllowance\(\{ userId, state: planState \}\)\s*\n\s*if \(!planIncluded\) \{\s*\n\s*const blocked = await runTokenGate\(\)/)
+    expect(ROUTE).toMatch(/planIncluded = await takeChimmyPlanAllowance\(\{ userId, state: planState \}\)\s*\n\s*if \(!planIncluded\) \{\s*\n\s*const blocked = await runTokenGate\(exhaustedPlanMeta\)/)
   })
 
   it('gives the included answer back when nothing was delivered, and when the request throws', () => {
@@ -51,6 +51,16 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
     expect(searched).toBeGreaterThan(-1)
     expect(take).toBeGreaterThan(searched)
     expect(ROUTE).toMatch(/const ledger = searchIncluded \|\| !mayCharge\s*\n\s*\? null/)
+  })
+
+  /*
+   * The out-of-tokens card offers AF Pro only to an account without it. The refusals are where it
+   * learns which: without the plan on them, a subscriber whose day is used is sold the plan they have.
+   */
+  it('tells the consent and out-of-tokens refusals whether the caller holds the plan', () => {
+    expect(ROUTE).toMatch(/code: 'token_confirmation_required',\s*\n\s*preview: tokenPreview,\s*\n\s*planAllowance: plan,/)
+    expect(ROUTE).toMatch(/code: 'insufficient_token_balance',[\s\S]{0,200}?planAllowance: planMeta,\s*\n\s*\},\s*\n\s*\{ status: 402 \}/)
+    expect(ROUTE).toMatch(/const exhaustedPlanMeta: ChimmyPlanAllowanceMeta \| null = planState\s*\n\s*\? planAllowanceMeta\(\{ \.\.\.planState, used: planState\.limit, remaining: 0 \}, false\)/)
   })
 
   it('reports the allowance on every paid answer shape', () => {

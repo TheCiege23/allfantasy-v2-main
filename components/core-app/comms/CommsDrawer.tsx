@@ -41,6 +41,7 @@ import {
   readPlanAllowanceView,
   type ChimmyPlanAllowanceView,
 } from '@/lib/chimmy/planAllowanceView'
+import { describeOutOfAnswers, type OutOfAnswers } from '@/lib/chimmy/outOfAnswers'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -432,6 +433,12 @@ type ChimmyEnvelope = {
   /** Machine-readable reason. `error` is a sentence; this is the map key. */
   code?: string
   preview?: { ruleCode?: string }
+  /**
+   * On a 409 consent request or a 402 out-of-tokens refusal: the caller's Chimmy allowance when
+   * their plan includes Chimmy (used up, or they would not be paying). Validated by
+   * `readPlanAllowanceView`; it decides whether the out-of-answers card offers AF Pro.
+   */
+  planAllowance?: unknown
   /** `choices` rides a 412 "which league?" — the caller's own leagues, from the route's lookup. */
   details?: { message?: string; choices?: Array<{ leagueId?: unknown; leagueName?: unknown }> }
   contract?: {
@@ -603,6 +610,8 @@ function ChimmyPanel({
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /* Out of tokens: a card with ways to keep going, not an error line. See lib/chimmy/outOfAnswers.ts. */
+  const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
   const [answerMode, setAnswerMode] = useChimmyAnswerMode(userId)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -615,6 +624,7 @@ function ChimmyPanel({
   useEffect(() => {
     setScreenshot(null)
     setError(null)
+    setOutOfAnswers(null)
     if (screenshotRef.current) screenshotRef.current.value = ''
   }, [scopeId])
 
@@ -650,6 +660,7 @@ function ChimmyPanel({
       if ((!question && !attached) || busy) return
       setDraft('')
       setError(null)
+      setOutOfAnswers(null)
       setBusy(true)
       setScreenshot(null)
       if (screenshotRef.current) screenshotRef.current.value = ''
@@ -707,6 +718,21 @@ function ChimmyPanel({
         let payload = (await res.json().catch(() => ({}))) as ChimmyEnvelope
 
         /*
+         * Out of tokens is not a failure to report, it is a choice to offer: the question goes back
+         * into the composer (so buying and re-asking is one click and one send), and the card says
+         * how to keep going. The plan comes from the refusal itself when the route sent it, else
+         * from what this drawer last knew.
+         */
+        const outOfTokens = (from: ChimmyEnvelope) => {
+          setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
+          setDraft(question)
+          if (activeScope.current === scopeId) {
+            setScreenshot(attached)
+            setOutOfAnswers(describeOutOfAnswers(readPlanAllowanceView(from.planAllowance) ?? planStatus))
+          }
+        }
+
+        /*
          * 🛑 EVERY PAID ANSWER FROM THIS DRAWER WAS REFUSED. `/api/chat/chimmy`
          * returns 409 `token_confirmation_required` unless the request carries
          * `confirmTokenSpend`, and every token rule is seeded with
@@ -721,7 +747,10 @@ function ChimmyPanel({
          */
         if (res.status === 409 && payload.code === 'token_confirmation_required') {
           const consent = await confirmTokenSpend(payload.preview?.ruleCode ?? 'ai_chimmy_chat_message')
-          if (!consent.preview.canSpend) throw new Error(describeChimmyError('insufficient_token_balance'))
+          if (!consent.preview.canSpend) {
+            outOfTokens(payload)
+            return
+          }
           if (!consent.confirmed) {
             setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
             setDraft(question)
@@ -730,6 +759,11 @@ function ChimmyPanel({
           }
           res = await fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(true) })
           payload = (await res.json().catch(() => ({}))) as typeof payload
+        }
+
+        if (res.status === 402 && payload.code === 'insufficient_token_balance') {
+          outOfTokens(payload)
+          return
         }
 
         if (!res.ok) {
@@ -856,7 +890,7 @@ function ChimmyPanel({
         setBusy(false)
       }
     },
-    [answerMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
+    [answerMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, planStatus, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
   )
 
   useEffect(() => {
@@ -888,7 +922,7 @@ function ChimmyPanel({
    * this week's win probability — rather than questions any chatbot would take.
    */
   const quickPrompts = scope
-    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'Is this trade fair?']
+    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'Find me a trade that fills my weakest spot']
     : ['Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
 
   /* Follow-up chips render under the newest answer only; older ones would be stale suggestions. */
@@ -1124,6 +1158,24 @@ function ChimmyPanel({
           * genuinely do not know.
           */}
         {error ? <p className="af-cm-error">{error}</p> : null}
+        {outOfAnswers ? (
+          <div className="af-cm-outofanswers" role="status">
+            <p className="af-cm-outofanswers-title">{outOfAnswers.title}</p>
+            <p className="af-cm-outofanswers-body">{outOfAnswers.body}</p>
+            <div className="af-cm-outofanswers-actions">
+              {outOfAnswers.actions.map((a) => (
+                <Link
+                  key={a.href}
+                  href={a.href}
+                  className="af-cm-outofanswers-btn"
+                  data-primary={a.primary ? 'true' : undefined}
+                >
+                  {a.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div ref={endRef} />
       </div>
 

@@ -433,6 +433,7 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
    */
   'For "who should I start", "set my lineup" or "is my lineup right", call optimize_my_lineup: it prices the whole roster for this week under the league\'s own scoring and flags starters on a bye, injured or missing. For "A or B?" between two named players call compare_start_options. get_my_roster is roster FACTS only — it carries NO projections — so never quote projected points from it.',
   'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
+  'For "find me a trade", "who should I trade with", "who has a running back I can get" or "what can I get for X", call find_trade_ideas — with position or trade_away when they named one. It searches every roster in the league; present its ideas with its names and numbers, lead with the first, and offer to grade one with evaluate_trade.',
   'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
   'For playoff chances, what record they need, or who to root for, call get_playoff_outlook. For this week\'s opponent, win probability or which games are close, call get_my_matchup. Both also work with no league selected — they then cover every league the user is in.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
@@ -2622,7 +2623,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let tokenPreview = null as TokenSpendPreview | null
   let tokenPreviewFailed = false as boolean
   /** The token preflight: preview the price, and ask for consent when the rule needs it. */
-  const runTokenGate = async (): Promise<NextResponse | null> => {
+  /*
+   * `plan` rides the 409 so the drawer can tell a subscriber whose day's answers are used from an
+   * account with no plan — it decides whether an out-of-tokens card offers AF Pro or only tokens.
+   */
+  const runTokenGate = async (plan: ChimmyPlanAllowanceMeta | null): Promise<NextResponse | null> => {
     try {
       tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
     } catch (error) {
@@ -2647,6 +2652,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           error: 'Token spend confirmation required before sending to Chimmy.',
           code: 'token_confirmation_required',
           preview: tokenPreview,
+          planAllowance: plan,
         },
         { status: 409 }
       )
@@ -2663,8 +2669,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    */
   const planState = await readPlanAllowance()
   const planCovers = Boolean(planState && planState.remaining > 0)
+  /* The allowance as it stands when this turn has to be paid for in tokens: used up, not included. */
+  const exhaustedPlanMeta: ChimmyPlanAllowanceMeta | null = planState
+    ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
+    : null
   if (!planCovers) {
-    const blocked = await runTokenGate()
+    const blocked = await runTokenGate(exhaustedPlanMeta)
     if (blocked) return blocked
   }
 
@@ -2750,7 +2760,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (planCovers && planState && userId) {
     planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
     if (!planIncluded) {
-      const blocked = await runTokenGate()
+      const blocked = await runTokenGate(exhaustedPlanMeta)
       if (blocked) return blocked
     }
   }
@@ -2758,11 +2768,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * What this turn did with the allowance, for `meta.planAllowance`: included, or (for a plan holder
    * past the allowance) charged in tokens because the day's answers were used.
    */
-  let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded
-    ? planAllowanceMeta(planIncluded, true)
-    : planState
-      ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
-      : null
+  let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded ? planAllowanceMeta(planIncluded, true) : exhaustedPlanMeta
 
   let spendLedger: { id: string; balanceAfter: number } | null = null
   if (!planIncluded && !tokenPreviewFailed) {
@@ -2794,6 +2800,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             code: 'insufficient_token_balance',
             requiredTokens: error.requiredTokens,
             currentBalance: error.currentBalance,
+            planAllowance: planMeta,
           },
           { status: 402 }
         )
