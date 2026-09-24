@@ -212,6 +212,78 @@ async function notifyOnTradeCreated(input: {
   }
 }
 
+/**
+ * Why a counter to `parent` must be refused, or null when it may go ahead. PURE.
+ *
+ * 🛑 THE LOOPHOLE (audit 2026-09-24). A counter looked the parent up by id and league and nothing
+ * else, then set it to 'countered' unconditionally. So ANY league member — anyone who owns a roster,
+ * which the proposer check below proves and nothing more — could "counter" a trade between two other
+ * managers and kill it, and could do it to a trade that was already accepted, awaiting review, or
+ * processed. The counter route takes both roster ids from the request body, so no UI was needed.
+ *
+ * A counter is an answer to an offer, so it takes the rules an answer takes (accept and reject):
+ *   - the offer is still PENDING and has not expired;
+ *   - it comes from a roster the offer was made TO — not the roster that proposed it, which
+ *     withdraws its offer rather than countering it, and not a roster outside the trade.
+ * Ownership of that roster is proven by the caller's own proposer check on `proposerRosterId`.
+ *
+ * ⚠ WHERE THE COUNTER GOES IS DELIBERATELY NOT RESTRICTED. A counter aimed at a third roster is
+ * reachable and has tested notification semantics (`counter-notification-dispatch.test.ts`); it is
+ * no loophole, because the counterer was offered the parent and could reject it anyway.
+ */
+export function counterRefusal(
+  parent: {
+    status: string
+    expiresAt?: Date | null
+    proposerRosterId: string
+    receiverRosterId: string
+    items?: Array<{ fromRosterId: string; toRosterId: string }> | null
+  },
+  counterProposerRosterId: string,
+  now: Date = new Date(),
+): string | null {
+  if (parent.status !== 'pending') return 'Only a pending trade can be countered'
+  if (parent.expiresAt && parent.expiresAt < now) return 'Trade expired'
+  const offeredTo = new Set([
+    parent.receiverRosterId,
+    ...(parent.items ?? []).flatMap((i) => [i.fromRosterId, i.toRosterId]),
+  ])
+  offeredTo.delete(parent.proposerRosterId)
+  if (!offeredTo.has(counterProposerRosterId)) {
+    return 'Only a manager this trade was offered to can counter it'
+  }
+  return null
+}
+
+type TradeWriter = Pick<typeof prisma, 'afLeagueTrade'>
+
+/**
+ * Close the parent as 'countered' — but only if it is STILL pending when the counter is written.
+ *
+ * ⚠ A CONDITIONAL CLAIM, NOT A READ-THEN-WRITE. The status was checked when the parent was read, and
+ * accept runs concurrently: an unconditional update here would overwrite a trade accepted between
+ * that read and this write. Cancel and settlement claim the same way. On the production path this
+ * runs in the counter's own transaction, so losing the race rolls the counter back with it.
+ */
+async function claimParentForCounter(db: TradeWriter, parentId: string): Promise<void> {
+  const claimed = await db.afLeagueTrade.updateMany({
+    where: { id: parentId, status: 'pending' },
+    data: { status: 'countered' },
+  })
+  if (claimed.count === 0) throw new Error('This trade changed before your counter was sent — reload it and try again')
+}
+
+async function linkCounterToParent(
+  db: TradeWriter,
+  parent: { id: string; metadata: Prisma.JsonValue | null },
+  counterTradeId: string,
+): Promise<void> {
+  await db.afLeagueTrade.update({
+    where: { id: parent.id },
+    data: { metadata: { ...((parent.metadata as object | null) ?? {}), counterTradeId } as Prisma.InputJsonValue },
+  })
+}
+
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   currentWeek?: number | null
   verifiedProposalEvidence?: VerifiedProposalEvidence | null
@@ -273,9 +345,14 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   const parent = input.parentTradeId
     ? await prisma.afLeagueTrade.findFirst({
         where: { id: input.parentTradeId, leagueId: input.leagueId },
+        include: { items: true },
       })
     : null
   if (input.parentTradeId && !parent) throw new Error('Parent trade not found')
+  if (parent) {
+    const refusal = counterRefusal(parent, input.proposerRosterId)
+    if (refusal) throw new Error(refusal)
+  }
 
   const rootId = parent?.rootTradeId ?? parent?.id ?? null
 
@@ -334,7 +411,10 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   // exercising the legacy creation path until their generated client updates.
   const trade = decisionStore
     ? await prisma.$transaction(async (tx) => {
+        // The claim comes first, so a lost race rolls the counter back rather than orphaning it.
+        if (parent) await claimParentForCounter(tx, parent.id)
         const created = await tx.afLeagueTrade.create({ data: createData })
+        if (parent) await linkCounterToParent(tx, parent, created.id)
         const managerStrategy = managerStore
           ? await getTradeManagerStrategy(input.leagueId, input.proposedByUserId, {
               tradeManagerStrategy: tx.tradeManagerStrategy,
@@ -366,7 +446,12 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         })
         return created
       })
-    : await prisma.afLeagueTrade.create({ data: createData })
+    : await (async () => {
+        if (parent) await claimParentForCounter(prisma, parent.id)
+        const created = await prisma.afLeagueTrade.create({ data: createData })
+        if (parent) await linkCounterToParent(prisma, parent, created.id)
+        return created
+      })()
 
   await appendAfTradeStatusHistory({
     tradeId: trade.id,
@@ -397,10 +482,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   })
 
   if (input.parentTradeId && parent) {
-    await prisma.afLeagueTrade.update({
-      where: { id: parent.id },
-      data: { status: 'countered', metadata: { ...(parent.metadata as object), counterTradeId: trade.id } as Prisma.InputJsonValue },
-    })
+    // The status and the counter link were written with the counter itself — see claimParentForCounter.
     await appendAfTradeStatusHistory({
       tradeId: parent.id,
       fromStatus: parent.status,
