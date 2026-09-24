@@ -7,13 +7,13 @@ import {
   TRADE_PARTNER_SYSTEM_PROMPT,
   buildTradePartnerUserPrompt,
 } from '@/lib/trade-partner-prompt';
-import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp, rateLimit } from '@/lib/rate-limit';
 
 const openai = getOpenAIRouteClient();
 
 export const POST = withApiUsage({ endpoint: "/api/trade-partner", tool: "TradePartner" })(async (request: NextRequest) => {
   try {
-    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+    const ip = getClientIp(request);
     const rateLimitResult = rateLimit(ip, 10, 60000);
 
     if (!rateLimitResult.success) {

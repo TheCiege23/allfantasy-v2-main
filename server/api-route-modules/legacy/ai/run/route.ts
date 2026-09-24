@@ -2,7 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from "next/server"
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { prisma } from "@/lib/prisma"
-import { rateLimit } from "@/lib/rate-limit"
+import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { trackLegacyToolUsage } from "@/lib/analytics-server"
 import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity"
 import { createDerivedFieldTracker, buildRunEvidence } from "@/lib/legacy/intelligenceEvidence"
@@ -808,7 +808,7 @@ export const POST = withApiUsage({
   tool: "LegacyAiRun",
 })(async (request: NextRequest) => {
   try {
-    const ip = request.headers.get("x-forwarded-for") || "unknown"
+    const ip = getClientIp(request)
     const rateLimitResult = rateLimit(ip, 5, 60000)
 
     if (!rateLimitResult.success) {

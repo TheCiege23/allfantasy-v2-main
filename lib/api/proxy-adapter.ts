@@ -19,12 +19,16 @@ function copyHeaders(req: NextRequest): Headers {
   // all proxied traffic into a single shared bucket.
   const forwardedFor = req.headers.get('x-forwarded-for')
   const realIp = req.headers.get('x-real-ip')
+  // Only survives if the self-call reaches the origin directly; through the public
+  // hostname Cloudflare overwrites it with the caller's (our) egress address.
+  const cfConnectingIp = req.headers.get('cf-connecting-ip')
 
   if (cookie) headers.set('cookie', cookie)
   if (authorization) headers.set('authorization', authorization)
   if (contentType) headers.set('content-type', contentType)
   if (forwardedFor) headers.set('x-forwarded-for', forwardedFor)
   if (realIp) headers.set('x-real-ip', realIp)
+  if (cfConnectingIp) headers.set('cf-connecting-ip', cfConnectingIp)
 
   return headers
 }

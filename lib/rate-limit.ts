@@ -1,3 +1,5 @@
+import { clientIpFromHeaders } from '@/lib/http/clientIp'
+
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
 
 const WINDOW_MS = 60 * 1000
@@ -161,10 +163,9 @@ export function consumeRateLimit(args: {
   }
 }
 
+/** The client's address for keying a limit; the rule itself lives in lib/http/clientIp. */
 export function getClientIp(req: Request) {
-  const xff = req.headers.get('x-forwarded-for')
-  if (xff) return xff.split(',')[0].trim() || 'unknown'
-  return req.headers.get('x-real-ip') || 'unknown'
+  return clientIpFromHeaders(req.headers) ?? 'unknown'
 }
 
 /** Convenience: convert rl into milliseconds remaining (for UI countdowns). */

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains";
 import { emailSchema, sanitizeString } from "@/lib/validation";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { getResendClient } from "@/lib/resend-client";
 import { getEarlyAccessWelcomeEmailV2 } from "@/lib/email-templates/early-access-welcome";
 import { getBaseUrl } from "@/lib/get-base-url";
@@ -12,11 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function getIp(request: NextRequest) {
-  return (
-    request.headers.get("x-forwarded-for") ||
-    request.headers.get("x-real-ip") ||
-    "unknown"
-  );
+  return getClientIp(request);
 }
 
 function getErrorMessage(error: unknown): string {

@@ -1,3 +1,5 @@
+import { clientIpFromHeaders } from "@/lib/http/clientIp"
+
 import type { GeoDetectionResult } from "./geoTypes"
 import { resolveEdgeGeo } from "./geoHeaders"
 import { fetchIpApi, fetchProxycheck } from "./geoIpFetch"
@@ -13,24 +15,12 @@ function getHeadersSource(input: Request | Headers): Headers {
 }
 
 /**
- * ⚠ `cf-connecting-ip` FIRST, because behind Cloudflare the other two are the
- * proxy chain, not the user. Measured 2026-09-24 in production: a request
- * arrived with an `x-forwarded-for` of a Cloudflare `172.69.x` address — a Cloudflare
- * hop and a relay, NEITHER of them the client's public address (checked
- * against the client's own view of it). Every IP-keyed check here was asking about
- * Cloudflare, and a proxy check on a datacenter hop is how a VPN gate ends up
- * refusing every buyer. Cloudflare overwrites this header on every proxied
- * request, so a client cannot set it through the public hostname.
+ * ⚠ The VPN check asks about THIS address, so it must be the client's: a proxy
+ * check on a Cloudflare hop is how a VPN gate ends up refusing every buyer. The
+ * rule (cf-connecting-ip first) lives in lib/http/clientIp, shared with every
+ * other IP-keyed decision.
  */
-function extractClientIp(headers: Headers): string | null {
-  const cf = headers.get("cf-connecting-ip")?.trim()
-  if (cf) return cf
-  const real = headers.get("x-real-ip")?.trim()
-  if (real) return real
-  const fwd = headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  if (fwd) return fwd
-  return null
-}
+const extractClientIp = clientIpFromHeaders
 
 /**
  * Optional VPN/proxy check via proxycheck.io when PROXYCHECK_API_KEY is set.

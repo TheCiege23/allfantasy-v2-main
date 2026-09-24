@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { trackLegacyToolUsage } from '@/lib/analytics-server';
 import { resolveOrCreateLegacyUser } from '@/lib/legacy-user-resolver';
 import { logUserEvent } from '@/lib/user-events';
@@ -16,7 +16,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/import", tool: "Legacy
       return auth.response;
     }
 
-    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+    const ip = getClientIp(request);
     const rateLimitResult = rateLimit(ip, 5, 60000);
 
     if (!rateLimitResult.success) {
