@@ -40,6 +40,7 @@ function makePrisma(games: ReturnType<typeof game>[], scored: string[] = ['p1', 
   return {
     calls,
     prisma: {
+      league: { findFirst: vi.fn(async () => null) },
       redraftSeason: { findFirst: vi.fn(async () => NHL_SEASON) },
       redraftMatchup: {
         findMany: vi.fn(async () => [{ id: 'm1', status: 'active' }]),
@@ -84,6 +85,7 @@ function makeNcaabPrisma(schedule: Record<string, unknown> | null, scored: strin
     ...base,
     prisma: {
       ...base.prisma,
+      league: { findFirst: vi.fn(async () => null) },
       redraftSeason: { findFirst: vi.fn(async () => NCAAB_SEASON) },
       redraftRosterPlayer: {
         findMany: vi.fn(async () => [

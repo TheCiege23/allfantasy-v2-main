@@ -13,7 +13,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client'
-import { recalculateMatchupsForSeasonWeek, isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
+import { recalculateMatchupsForSeasonWeek, countsTowardScore, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
 import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
@@ -227,6 +227,22 @@ export async function runLiveScoringTickForSeason(
   const broadcast = deps.broadcast ?? publishToSse
   const now = deps.now ?? new Date()
 
+  /*
+   * In best ball the bench scores too (the matchup starts each team's best lineup), so the live
+   * fetch and the rescore topology must cover every eligible player, not the starter slots.
+   * Read once, only when a tick actually has live games. A failed read narrows this tick to the
+   * starters; matchup scoring reads the league itself, so the scores stay right.
+   */
+  let bestBallRead: Promise<boolean> | null = null
+  const isBestBall = () =>
+    (bestBallRead ??= prisma.league
+      .findFirst({
+        where: { id: season.leagueId },
+        select: { bestBallMode: true, leagueVariant: true, leagueType: true },
+      })
+      .then((league) => leagueIsBestBall(league))
+      .catch(() => false))
+
   const slate = await resolveSlate(prisma, season.sport, season.season, now)
   const seasonType = deps.seasonType ?? slate.seasonType
 
@@ -263,9 +279,10 @@ export async function runLiveScoringTickForSeason(
        * 3,840/hour against a 1,000/hour cap. The cap is per provider, so the damage landed
        * on `stats/nfl/week`, and the week finalizer then refused on coverage it could not fix.
        */
+      const bestBall = await isBestBall()
       const defenseTeams = new Set<string>()
       for (const s of starters) {
-        if (!isScoringStarterSlot(s.slotType)) continue
+        if (!countsTowardScore(s.slotType, bestBall)) continue
         const abbr = /^nfl:def:(.+)$/i.exec(String(s.playerId))?.[1]
         if (abbr) defenseTeams.add(abbr.trim().toUpperCase())
         else offensiveIds.push(s.playerId)
@@ -306,11 +323,12 @@ export async function runLiveScoringTickForSeason(
         matchupByRoster.set(m.homeRosterId, m.id)
         if (m.awayRosterId) matchupByRoster.set(m.awayRosterId, m.id)
       }
+      const bestBall = await isBestBall()
       const rosterInputs: RescoreRosterInput[] = rosters.map(
         (r: { id: string; players: Array<{ playerId: string; slotType: string }> }) => ({
           rosterId: r.id,
           matchupId: matchupByRoster.get(r.id) ?? null,
-          scoringPlayerIds: r.players.filter((p) => isScoringStarterSlot(p.slotType)).map((p) => p.playerId),
+          scoringPlayerIds: r.players.filter((p) => countsTowardScore(p.slotType, bestBall)).map((p) => p.playerId),
         }),
       )
       return { rosters: rosterInputs, matchups: matchupInputs }

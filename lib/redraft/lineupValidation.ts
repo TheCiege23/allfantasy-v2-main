@@ -89,7 +89,8 @@ function starterCapacityBySlot(sport: string): Map<string, number> {
   return counts
 }
 
-function allowedPositionsForSlot(sport: string, slotType: string): string[] {
+/** Positions (normalized tokens) that may fill a starter slot. Shared with best-ball scoring. */
+export function allowedPositionsForSlot(sport: string, slotType: string): string[] {
   const config = getRedraftSportConfig(sport)
   const slot = normalizeToken(slotType)
   const flexPositions = config.flexPositions[slot]
