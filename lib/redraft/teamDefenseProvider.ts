@@ -16,6 +16,7 @@
  * a warning; only stats Sleeper actually returns are ingested.
  */
 import type { PrismaClient } from '@prisma/client'
+import { createTtlMemo } from '@/lib/ttl-memo'
 import { normalizeNflTeam } from './lineupLock'
 import { ingestNflTeamDefenseBoxScores, type IngestTeamDefenseResult } from './teamDefenseStatsIngest'
 
@@ -28,10 +29,71 @@ export type SleeperTeamDefenseFetcher = (
 
 const SLEEPER_STATS_BASE = 'https://api.sleeper.com/stats/nfl/player'
 
+/**
+ * One in-process entry per (team, season, seasonType).
+ *
+ * 🛑 THIS CALL BURNED 95% OF THE SLEEPER BUDGET AND STARVED EVERY OTHER CONSUMER.
+ *
+ * The URL asks for a team's WHOLE SEASON (`grouping=week`) and the caller extracts one week
+ * from it — so the identical payload was refetched once per team PER SEASON BEING SCORED, on
+ * every tick. Measured on production 2026-09-24, from the minute the first native league
+ * advanced to week 2 and gave the live tick a week to score:
+ *
+ *     01:21Z  128 calls   (32 teams x 4 seasons)
+ *     01:23Z  128
+ *     ...     every 2 minutes  =  3,840/hour against a 1,000/hour cap
+ *     01:35Z   76          budget exhausted
+ *
+ * ⚠ AND THE DAMAGE LANDED SOMEWHERE ELSE ENTIRELY. The cap is per PROVIDER, so once it was
+ * gone `canCall('sleeper', 'stats/nfl/week')` returned false too;
+ * `NflLiveStatsProvider.fetchPlayerStatsForGames` returns an EMPTY map when refused, the score
+ * sync read that as "these players have no stats", and the week finalizer refused with
+ * `stat_coverage_below_floor` — naming the roster when the cause was this function's quota.
+ *
+ * ⚠ THE TTL IS DELIBERATELY SHORT. The current week's numbers move while games are in play, so
+ * this must not outlive a tick by much; it exists to collapse the per-season fanout within and
+ * across adjacent ticks, not to serve stale scores. At 4 minutes the same 4-season tick costs
+ * 32 calls instead of 128, and the next tick reuses them.
+ */
+const teamDefenseSeasonMemo = createTtlMemo<unknown>({
+  ttlMs: () => Number(process.env.AF_TEAM_DEFENSE_MEMO_MS ?? 4 * 60 * 1000),
+  maxEntries: 256,
+})
+
+/**
+ * Calls that have not answered yet, so concurrent askers share one request.
+ *
+ * ⚠ THE VALUE MEMO ALONE DOES NOT STOP A STAMPEDE — it only fills once a call RETURNS, so
+ * every caller that arrives before the first response still issues its own. The production
+ * pattern is sequential, but nothing enforces that, and coalescing costs one Map.
+ */
+const teamDefenseInFlight = new Map<string, Promise<unknown | null>>()
+
 /** Live Sleeper fetch for one team defense's weekly stats (rate-limited, timed out). */
 export const fetchSleeperTeamDefenseSeason: SleeperTeamDefenseFetcher = async (teamAbbr, season, seasonType) => {
   const team = normalizeNflTeam(teamAbbr)
   if (!team) return null
+  const memoKey = `${team}|${season}|${seasonType}`
+  const memoised = teamDefenseSeasonMemo.get(memoKey)
+  if (memoised !== undefined) return memoised
+  const pending = teamDefenseInFlight.get(memoKey)
+  if (pending) return pending
+
+  const request = fetchTeamDefenseSeasonUncached(team, season, seasonType, memoKey)
+  teamDefenseInFlight.set(memoKey, request)
+  try {
+    return await request
+  } finally {
+    teamDefenseInFlight.delete(memoKey)
+  }
+}
+
+async function fetchTeamDefenseSeasonUncached(
+  team: string,
+  season: number,
+  seasonType: string,
+  memoKey: string,
+): Promise<unknown | null> {
   const endpoint = 'team-defense:nfl:sleeper'
   // Lazy import: rate-limit-manager pulls in `server-only`, which throws under
   // tsx. Tests/E2E inject a fixture fetcher and never reach this live path.
@@ -47,7 +109,11 @@ export const fetchSleeperTeamDefenseSeason: SleeperTeamDefenseFetcher = async (t
       .recordCall('sleeper', endpoint, res.status, Math.max(0, Date.now() - startedAt), { cached: false, error: res.ok ? null : `HTTP ${res.status}` })
       .catch(() => undefined)
     if (!res.ok) return null
-    return await res.json()
+    const payload = await res.json()
+    // ⚠ ONLY A SUCCESS IS CACHED. Storing a miss would turn one transient outage into four
+    // minutes of "this team has no defence" for every league — the weather-geocode precedent.
+    teamDefenseSeasonMemo.set(memoKey, payload)
+    return payload
   } catch {
     await rateLimitManager.recordCall('sleeper', endpoint, 0, Math.max(0, Date.now() - startedAt), { cached: false, error: 'fetch_failed' }).catch(() => undefined)
     return null

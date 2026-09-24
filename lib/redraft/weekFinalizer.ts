@@ -82,6 +82,18 @@ export type WeekFinalizeRefusal =
   | 'within_grace_period'
   | 'no_starters'
   | 'stat_coverage_below_floor'
+  /**
+   * The backfill could not run because the provider's quota was spent.
+   *
+   * 🛑 WITHOUT THIS, THE SAME STATE REPORTS AS `stat_coverage_below_floor` — TRUE ABOUT THE
+   * NUMBER AND WRONG ABOUT THE CAUSE. A rate-limited Sleeper call returns an EMPTY map
+   * (`nflLiveStatsProvider.ts`, `if (!canCall) return out`), the sync reads that as "these
+   * players have no stats", and the coverage figure that results points the next reader at the
+   * roster. Measured 2026-09-24: week 1 refused at 0.721 while 19 of its 24 unscored starters
+   * had real lines sitting in Sleeper's payload, unreachable only because the team-defense
+   * fetch had already spent the hour's budget.
+   */
+  | 'provider_rate_limited'
 
 export type WeekSlateSummary = {
   games: number
@@ -131,7 +143,10 @@ export type WeekFinalizerDeps = {
    * Injected rather than imported because `playerWeeklyScoreService` is what would fill them
    * and it already reaches this module's normalizers; a direct import would close the cycle.
    */
-  syncWeekStats?: (args: { seasonId: string; week: number }) => Promise<void>
+  syncWeekStats?: (args: {
+    seasonId: string
+    week: number
+  }) => Promise<{ rateLimited?: boolean } | void>
 }
 
 export type FinalizeRedraftWeekParams = {
@@ -539,8 +554,18 @@ export async function finalizeCompletedWeeksForSeason(
      */
     if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
       try {
-        await deps.syncWeekStats({ seasonId: params.seasonId, week })
+        const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week })
         result = await attempt()
+        /*
+         * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
+         * payload, so the retry's coverage is the same number for a completely different
+         * reason — and `stat_coverage_below_floor` sends the next reader to the roster. Only
+         * relabel when the week is still refusing for coverage: a week that sealed anyway, or
+         * one blocked on its slate, is not a quota story.
+         */
+        if (backfill?.rateLimited && result.refusal === 'stat_coverage_below_floor') {
+          result = { ...result, refusal: 'provider_rate_limited' }
+        }
       } catch {
         // A provider gap leaves the original refusal standing rather than inventing coverage.
       }
