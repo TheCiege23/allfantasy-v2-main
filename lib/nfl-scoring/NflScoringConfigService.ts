@@ -52,6 +52,14 @@ export async function saveLeagueNflScoringConfig(leagueId: string, config: { pre
   await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...currentSettings, [`${PREFIX}config`]: { presetKey: config.presetKey, source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'), rules: config.rules, matchesPreset: detectNflPresetMatch(config.rules) === config.presetKey, premiumFeaturesUsed: config.premiumFeaturesUsed ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null, warningFlags } } } })
 }
 
-export async function applyDefaultNflScoringOnCreate(leagueId: string): Promise<void> {
-  await saveLeagueNflScoringConfig(leagueId, { presetKey: 'af_default', rules: buildFullNflScoringConfig('af_default'), source: 'AF_DEFAULT' })
+/**
+ * Seed the league's scoring store at create. `presetKey` must follow the preset the manager
+ * picked — this store is what the live scorer reads, so seeding `af_default` regardless turned
+ * every Full PPR and Standard league into a half-PPR one.
+ */
+export async function applyDefaultNflScoringOnCreate(
+  leagueId: string,
+  presetKey: NflScoringPresetKey = 'af_default',
+): Promise<void> {
+  await saveLeagueNflScoringConfig(leagueId, { presetKey, rules: buildFullNflScoringConfig(presetKey), source: 'AF_DEFAULT' })
 }

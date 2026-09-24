@@ -71,19 +71,25 @@ describe('2026-09-19 league audit reproductions', () => {
   // `toUtc` and persists `LeagueSettings.draftDateUtc` (DST-correct coverage in
   // `league-create-audit-fixes-20260919.test.ts`).
   //
-  // 🛑 The public-visibility disagreement is STILL OPEN and is deliberately
-  // left reproducing here: the listing is activated while
-  // `RedraftLeagueExtendedSettings.isPublic` stays false, because that flag
-  // only consults best-ball visibility.
-  it('schedules the draft, but public visibility records still disagree', async () => {
+  // ✅ FIXED 2026-09-24 — the public-visibility disagreement is closed and this
+  // is INVERTED rather than deleted. The listing was activated while
+  // `RedraftLeagueExtendedSettings.isPublic` stayed false (that flag only
+  // consulted best-ball visibility), and `league_privacy_visibility` — what
+  // discovery and the privacy resolver read — was never written at all.
+  it('schedules the draft, and public visibility records agree', async () => {
     const tx = txMock()
     const engine = runPresetEngine({ ...body, commissionerId: 'audit-user' })
     await createCanonicalLeagueInTransaction(tx as any, 'audit-user', body as any, engine)
     // 2026-10-01 20:00 in America/New_York is EDT (UTC-4).
     expect(tx.leagueSettings.create.mock.calls[0][0].data.draftDateUtc?.toISOString())
       .toBe('2026-10-02T00:00:00.000Z')
-    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0][0].data.isPublic).toBe(false)
+    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0][0].data.isPublic).toBe(true)
     expect(tx.findLeagueListing.upsert.mock.calls[0][0].create.isActive).toBe(true)
+    const leagueData = tx.league.create.mock.calls[0][0].data
+    expect(leagueData.settings.league_privacy_visibility).toBe('public')
+    // The `/join?code=` link the league page shows after create must resolve: the code the
+    // validator matches (`settings.inviteCode`) is the invite row's token.
+    expect(leagueData.settings.inviteCode).toBe(tx.leagueInvite.create.mock.calls[0][0].data.token)
     expect(tx.draftSession.create.mock.calls[0][0].data.teamCount).toBe(12)
     expect(tx.roster.create).toHaveBeenCalledTimes(12)
   })
@@ -120,6 +126,10 @@ describe('2026-09-19 league audit reproductions', () => {
     expect(matrix).toHaveLength(12)
   })
 
+  // ✅ FIXED 2026-09-24: the bootstrap now seeds the chosen preset (see
+  // `create-league-v2/bootstrap-seeds-chosen-scoring.test.ts`, which drives it). This case still
+  // feeds the OLD seed by hand, so it keeps documenting what an `af_default` store does to a
+  // Full-PPR league — the state every NFL league created before the fix is in.
   it('reproduces full-PPR creation being scored with the bootstrap half-PPR default', async () => {
     const engine = runPresetEngine({ ...body, scoringPreset: 'fb_ppr', commissionerId: 'audit-user' })
     db.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: {

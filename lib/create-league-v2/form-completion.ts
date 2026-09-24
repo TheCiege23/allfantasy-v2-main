@@ -5,7 +5,12 @@
 
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import type { CreateLeagueV2State } from './state'
-import { getDefaultKeeperSetup, getEffectiveLeagueType, isDynastyConcept } from './state'
+import {
+  getDefaultKeeperSetup,
+  getEffectiveLeagueType,
+  isDynastyConcept,
+  resolveBestBallSetupForWizard,
+} from './state'
 import {
   getDraftTypeOptions,
   getIdpDraftTypeOptions,
@@ -176,7 +181,7 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
   }
 
   if (lt === 'best_ball') {
-    const bb = state.bestBall
+    const bb = resolveBestBallSetupForWizard(state)
     if (!bb.lineupTemplateId.trim() || !bb.rosterTemplateId.trim()) {
       issues.push({
         code: 'best_ball_templates',

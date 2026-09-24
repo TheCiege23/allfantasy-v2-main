@@ -8,8 +8,10 @@
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import {
+  BEST_BALL_DRAFT_MODES,
   getDefaultBestBallSettings,
   type BestBallCreateSettings,
+  type BestBallDraftMode,
   type BestBallModeId,
 } from '@/lib/bestball/rules'
 import type { PremiumAdvancedCreateState } from '@/lib/create-league-v2/simple-create'
@@ -276,6 +278,43 @@ export function getDefaultBestBallSetup(
   draftType: WizardDraftType = 'snake',
 ): BestBallSetupState {
   return getDefaultBestBallSettings(sport, mode, draftType === 'auction' || draftType === 'linear' || draftType === 'offline' || draftType === 'auto' || draftType === 'snake' ? draftType : 'snake')
+}
+
+/**
+ * The Best Ball block as it will be validated and saved.
+ *
+ * `state.bestBall` is captured once, when Best Ball is picked, and the wizard has no Best Ball
+ * controls of its own — so its draft mode, 3RR, timezone and visibility went stale the moment
+ * the manager changed the ordinary draft type, timezone or privacy. On NFL that made every
+ * non-snake Best Ball league unsubmittable (`best_ball_3rr` with no 3RR control to clear it), and
+ * `normalizeBestBallSettings` lets these nested values win, so the saved block disagreed with
+ * the league's own draft type and timezone. The wizard's top-level choices are the source.
+ */
+export function resolveBestBallSetupForWizard(state: CreateLeagueV2State): BestBallSetupState {
+  const bb = state.bestBall
+  const draftMode = (BEST_BALL_DRAFT_MODES as readonly string[]).includes(state.draftType)
+    ? (state.draftType as BestBallDraftMode)
+    : bb.draftMode
+  const draftDerived =
+    draftMode === bb.draftMode
+      ? null
+      : getDefaultBestBallSettings(state.sport, bb.mode, draftMode)
+  return {
+    ...bb,
+    ...(draftDerived
+      ? {
+          draftMode: draftDerived.draftMode,
+          draftOrderType: draftDerived.draftOrderType,
+          draftExecutionMode: draftDerived.draftExecutionMode,
+          thirdRoundReversal: draftDerived.thirdRoundReversal,
+          slowDraftClockMinutes: draftDerived.slowDraftClockMinutes,
+          offlineEntryTracking: draftDerived.offlineEntryTracking,
+        }
+      : {}),
+    timezone: state.timezone?.trim() || bb.timezone,
+    language: state.language || bb.language,
+    visibility: state.privacy === 'public' ? 'public' : 'private',
+  }
 }
 
 export const DEFAULT_V2_STATE: CreateLeagueV2State = {

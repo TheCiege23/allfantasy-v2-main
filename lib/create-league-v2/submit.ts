@@ -8,7 +8,7 @@
 
 import type { CreateLeagueV2State } from './state'
 import { getDefaultKeeperSetup } from './state'
-import { getEffectiveLeagueType, isFootballLike, isDynastyConcept } from './state'
+import { getEffectiveLeagueType, isFootballLike, isDynastyConcept, resolveBestBallSetupForWizard } from './state'
 import { finalizeCanonicalCreatePayload } from '@/lib/league-creation/normalizeCreateLeaguePayload'
 import { resolveEffectiveDraftType, isThirdRoundReversalAvailable } from '@/lib/create-league-v2/rules-engine'
 import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
@@ -130,7 +130,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       draftType: state.draftType,
       timezone: state.timezone,
       language: state.language,
-      conceptSetup: { bestBall: state.bestBall },
+      conceptSetup: { bestBall: resolveBestBallSetupForWizard(state) },
     })
     conceptSetup.bestBall = bestBall
   }
@@ -154,7 +154,8 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     timezone: state.timezone,
     language: state.language === 'es' ? 'es' : 'en',
     tradeReviewMode,
-    ...(state.sport === 'SOCCER' && state.soccerPipeline ? { soccerPipeline: state.soccerPipeline } : {}),
+    // A state restored from sessionStorage from before the wizard defaulted this still has null.
+    ...(state.sport === 'SOCCER' ? { soccerPipeline: state.soccerPipeline ?? 'euro' } : {}),
   }
 
   if (Object.keys(conceptSetup).length > 0) {
