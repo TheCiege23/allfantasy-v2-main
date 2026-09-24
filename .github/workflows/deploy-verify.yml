@@ -40,16 +40,28 @@ permissions:
   contents: read
 
 concurrency:
-  # A newer push supersedes an older wait -- verifying a build that is already replaced tells
-  # nobody anything.
+  # One run at a time, and a running one is NEVER cancelled.
+  #
+  # ⚠ THIS USED TO BE cancel-in-progress: true, AND THAT STARVED THE CHECK. Builds take ~20 min
+  # and on 2026-09-24 main took a push every 15-20 min, so each run was cancelled by the next
+  # push before its build landed -- and a cancelled run shows grey, not red. The script now
+  # accepts a DESCENDANT of its commit as deployed (production routinely skips straight past a
+  # commit when a newer build finishes first), so a running wait ends as soon as ANY build
+  # containing its commit is live, and cancelling it can only lose a verification.
+  #
+  # GitHub still keeps at most one PENDING run per group and replaces an older pending run
+  # with a newer one. That is fine: the newer commit contains the older, so the run that does
+  # start verifies both.
   group: deploy-verify
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   verify:
     name: Verify deployed redirects
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Must exceed VERIFY_WAIT_MINUTES below plus the probes (~2 min, up to ~6 with retries).
+    # 20 was set when builds took under 15 minutes; they now take 16-21.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
@@ -70,6 +82,13 @@ jobs:
           # Runners are data-centre IPs, which the VPN gate refuses; the script sends this as
           # a machine credential so it probes the real pages, not /vpn-blocked. See the script.
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # How long to wait for the pushed commit (or a descendant) to be served. Measured
+          # 2026-09-24: 16-21 min from push to live. Raise it if builds get slower; keep
+          # timeout-minutes above it.
+          VERIFY_WAIT_MINUTES: "40"
+          # Read-only: the GitHub compare API answers "does the served commit contain the
+          # pushed one?", which a fetch-depth-1 checkout cannot answer with local git.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TARGET="${INPUT_SHA:-${PUSH_SHA:-}}"
