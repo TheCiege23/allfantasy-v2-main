@@ -72,6 +72,14 @@ export const TRADE_VERDICT_FIELDS = [
   'aiLimit',
 ] as const
 
+/**
+ * Fields the route adds that carry their OWN paywall, and so pass through this filter untouched:
+ * `competitiveEdge` is the `competitive_edge` depth (AF Pro and the War Room plan), computed only
+ * for a viewer who has it. A War Room plan holder does not have trade depth, and stripping it here
+ * would take away what they paid for.
+ */
+export const SEPARATELY_GATED_FIELDS = ['competitiveEdge'] as const
+
 export function applyTradeAnalysisDepth<T extends object>(
   body: T,
   access: CoreDepthAccess,

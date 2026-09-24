@@ -3,7 +3,7 @@
  * The /core depth paywall at the ROUTES — where it actually has to hold, because every screen that
  * reads these is a browser component and would receive whatever the route sends.
  *
- * `resolveCoreDepth` is mocked here: its own rule and the plan matrix are pinned in
+ * `resolveCoreDepth`/`resolveCorePaywall` are mocked here: their rule and the plan matrix are pinned in
  * core-depth-paywall.test.ts. What these pin is that each route asks, and what it withholds.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,9 +15,14 @@ const START = new Date('2026-10-15T04:00:00.000Z')
 const lockedAccess = (d: CoreDepth) => decideCoreDepth(d, { live: true, startsAt: START, hasPlan: false })
 const openAccess = (d: CoreDepth) => decideCoreDepth(d, { live: true, startsAt: START, hasPlan: true })
 
-const depthState = vi.hoisted(() => ({ locked: false }))
+/** `locked` locks every depth; `lockedOnly` locks just the named ones (e.g. a War Room plan: trade depth locked, edge open). */
+const depthState = vi.hoisted(() => ({ locked: false, lockedOnly: null as string[] | null }))
+const isLocked = (d: CoreDepth) => depthState.locked || Boolean(depthState.lockedOnly?.includes(d))
 const resolveCoreDepth = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/core-app/corePaywall', () => ({ resolveCoreDepth }))
+const resolveCorePaywall = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/core-app/corePaywall', () => ({ resolveCoreDepth, resolveCorePaywall }))
+const loadTradeEdge = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/competitive-edge/tradeEdgeLoader', () => ({ loadTradeEdge }))
 
 const getServerSession = vi.hoisted(() => vi.fn())
 vi.mock('next-auth', () => ({ getServerSession: (...a: unknown[]) => getServerSession(...a) }))
@@ -81,9 +86,18 @@ import { GET as reportGET } from '@/app/api/commissioner-os/reports/[id]/downloa
 
 beforeEach(() => {
   depthState.locked = false
-  resolveCoreDepth.mockImplementation(async (_u: unknown, d: CoreDepth) =>
-    depthState.locked ? lockedAccess(d) : openAccess(d),
+  depthState.lockedOnly = null
+  resolveCoreDepth.mockImplementation(async (_u: unknown, d: CoreDepth) => (isLocked(d) ? lockedAccess(d) : openAccess(d)))
+  resolveCorePaywall.mockImplementation(async () =>
+    Object.fromEntries(
+      (['player_depth', 'trade_depth', 'commissioner_depth', 'competitive_edge'] as CoreDepth[]).map((d) => [
+        d,
+        isLocked(d) ? lockedAccess(d) : openAccess(d),
+      ]),
+    ),
   )
+  loadTradeEdge.mockReset()
+  loadTradeEdge.mockResolvedValue({ available: true, data: { manager: { name: 'tashaR', teamExternalId: '3' }, facts: [] } })
   resolveCommissionerOsDepth.mockImplementation(async () =>
     depthState.locked ? lockedAccess('commissioner_depth') : openAccess('commissioner_depth'),
   )
@@ -112,7 +126,15 @@ describe('/api/trade-value/analyze — the verdict is free, the breakdown is AF 
       confidenceScore: 40,
       percentDiff: 10,
       labels: { fairnessLabel: 'Slightly favours you', sideAdvantage: 'me' },
-      players: { give: [], get: [] },
+      // What the viewer gives is what the partner would receive: a WR and a pick; FAAB is not tracked.
+      players: {
+        give: [
+          { name: 'A', position: 'WR' },
+          { name: '2027 1st', position: 'PICK' },
+          { name: 'FAAB $5', position: 'FAAB' },
+        ],
+        get: [{ name: 'B', position: 'RB' }],
+      },
       tradeIntelligence: { why: 'the breakdown', whoWinsNow: 'you' },
       chimmyPayload: { tradeIntelligence: { why: 'the breakdown, again' } },
       opponentRosterTargets: [{ name: 'Counter target' }],
@@ -124,7 +146,7 @@ describe('/api/trade-value/analyze — the verdict is free, the breakdown is AF 
     }
   })
 
-  const post = async () => {
+  const post = async (extra: Record<string, unknown> = {}) => {
     const req = new Request('http://localhost/api/trade-value/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,6 +157,7 @@ describe('/api/trade-value/analyze — the verdict is free, the breakdown is AF 
         teamContext: 'my_team',
         sideGive: [{ kind: 'player', name: 'A' }],
         sideGet: [{ kind: 'player', name: 'B' }],
+        ...extra,
       }),
     })
     const res = await (analyzePOST as unknown as (r: Request) => Promise<Response>)(req)
@@ -152,7 +175,8 @@ describe('/api/trade-value/analyze — the verdict is free, the breakdown is AF 
       expect(body, k).not.toHaveProperty(k)
     }
     expect(JSON.stringify(body)).not.toContain('the breakdown')
-    expect(resolveCoreDepth).toHaveBeenCalledWith('u1', 'trade_depth', { email: 'u1@example.com' })
+    // One plan read for the whole response, with the email (admin and QA bypass).
+    expect(resolveCorePaywall).toHaveBeenCalledWith('u1', { email: 'u1@example.com' })
   })
 
   it('locked: the verdict, the league rules and the bye facts are all still there', async () => {
@@ -170,6 +194,53 @@ describe('/api/trade-value/analyze — the verdict is free, the breakdown is AF 
     expect(body.tradeIntelligence).toEqual({ why: 'the breakdown', whoWinsNow: 'you' })
     expect(body.needNotes).toEqual(['You are thin at RB.'])
     expect(body.summaryLine).toBe('You win now; they win later.')
+  })
+
+  describe('Competitive Edge — its own depth (AF Pro and the War Room plan)', () => {
+    const withPartner = { opponentTeamExternalId: '3' }
+
+    it('open, with a partner: read for THIS deal — what the viewer gives is what the partner gets', async () => {
+      const { body } = await post(withPartner)
+      expect(loadTradeEdge).toHaveBeenCalledWith({
+        leagueId: 'l1',
+        userId: 'u1',
+        opponentTeamExternalId: '3',
+        deal: {
+          theyGet: [{ kind: 'player', position: 'WR' }, { kind: 'pick' }],
+          theySend: [{ kind: 'player', position: 'RB' }],
+        },
+      })
+      expect(body.competitiveEdge).toMatchObject({ available: true, data: { manager: { name: 'tashaR' } } })
+    })
+
+    it('🛑 locked: the history is never read, and nothing is sent', async () => {
+      depthState.lockedOnly = ['competitive_edge']
+      const { body } = await post(withPartner)
+      expect(loadTradeEdge).not.toHaveBeenCalled()
+      expect(body).not.toHaveProperty('competitiveEdge')
+    })
+
+    it('🛑 a War Room plan (edge open, trade depth locked) keeps Competitive Edge while the breakdown goes', async () => {
+      depthState.lockedOnly = ['trade_depth']
+      const { body } = await post(withPartner)
+      expect(body).not.toHaveProperty('tradeIntelligence')
+      expect(body.competitiveEdge).toMatchObject({ available: true })
+    })
+
+    it('no partner chosen → nothing to read', async () => {
+      const { body } = await post()
+      expect(loadTradeEdge).not.toHaveBeenCalled()
+      expect(body).not.toHaveProperty('competitiveEdge')
+    })
+
+    it('a failed read is stated, not a 500', async () => {
+      loadTradeEdge.mockImplementation(async () => {
+        throw new Error('db down')
+      })
+      const { status, body } = await post(withPartner)
+      expect(status).toBe(200)
+      expect(body.competitiveEdge).toEqual({ available: false, reason: 'Competitive Edge could not be read just now.' })
+    })
   })
 })
 

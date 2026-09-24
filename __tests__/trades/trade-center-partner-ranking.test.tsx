@@ -177,3 +177,114 @@ describe('Trade Center — trade depth paywall', () => {
     expect(screen.queryByTestId('core-lock-trade_depth')).toBeNull()
   })
 })
+
+/*
+ * Competitive Edge in the Trade Center: the chosen partner's own trade record, bound to the deal.
+ * Its own depth (AF Pro and the War Room plan). The route computes it only for a viewer who has it;
+ * the lock here must hold even if an analysis somehow carried it.
+ */
+describe('Trade Center — Competitive Edge', () => {
+  const START = new Date('2026-10-15T04:00:00.000Z')
+  const EDGE_LOCKED = decideCoreDepth('competitive_edge', { live: true, startsAt: START, hasPlan: false })
+  const EDGE_OPEN = decideCoreDepth('competitive_edge', { live: true, startsAt: START, hasPlan: true })
+  const EDGE_PRELAUNCH = decideCoreDepth('competitive_edge', { live: false, startsAt: START, hasPlan: false })
+
+  const EDGE = {
+    available: true,
+    data: {
+      manager: { name: 'Charlie', teamExternalId: 't-r3' },
+      coverage: {
+        source: 'sleeper_trade_history',
+        trades: 5,
+        seasons: ['2024', '2025', '2026'],
+        gaps: [],
+        firstSeason: '2024',
+        lastTradeAt: '2026-09-10T15:00:00.000Z',
+        asOf: '2026-09-24T22:00:00.000Z',
+        stale: false,
+        sufficient: true,
+        shortfall: null,
+      },
+      facts: [
+        { key: 'trade.acquired.WR', text: 'Charlie took on a WR in 3 of their 5 trades (4 WRs in all).', bearsOnDeal: true },
+        { key: 'trade.volume', text: 'Charlie has made 5 trades in this league since 2024; the last was Sep 10, 2026.', bearsOnDeal: false },
+      ],
+    },
+  }
+
+  const analyzeWith = async (edge: unknown) => {
+    const analyzeCalls: Array<Record<string, unknown>> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url !== '/api/trade-value/analyze') return { ok: false, status: 500, json: async () => ({}) }
+        analyzeCalls.push(JSON.parse(String(init?.body ?? '{}')))
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            fairnessScore: 55,
+            confidenceScore: 60,
+            percentDiff: 4,
+            labels: { fairnessLabel: 'Fair', confidenceLabel: 'Medium confidence' },
+            players: { give: [], get: [] },
+            ...(edge ? { competitiveEdge: edge } : {}),
+          }),
+        }
+      }),
+    )
+    const charlie = [...document.querySelectorAll('.af-tc-partner-chip')].find((c) => c.textContent === 'Charlie')!
+    fireEvent.click(charlie)
+    fireEvent.click(screen.getByLabelText('Add Receiver'))
+    fireEvent.click(screen.getByText('Analyze this trade'))
+    await waitFor(() => expect(document.body.textContent).toContain('Fair'))
+    return analyzeCalls
+  }
+
+  it('open: the partner’s record for this deal, the deal lines first, with its basis', async () => {
+    render(<TradeCenter league={LEAGUE} edgeAccess={EDGE_OPEN} />)
+    const calls = await analyzeWith(EDGE)
+    // The partner goes to the route — that is what binds the edge to this manager.
+    expect(calls[0]!.opponentTeamExternalId).toBe('t-r3')
+    const section = screen.getByTestId('trade-competitive-edge')
+    expect(within(section).getByText('Competitive Edge · Charlie')).toBeInTheDocument()
+    const lists = section.querySelectorAll('ul')
+    expect(lists[0]!.textContent).toContain('took on a WR in 3 of their 5 trades')
+    expect(lists[1]!.textContent).toContain('has made 5 trades in this league since 2024')
+    expect(screen.getByTestId('trade-competitive-edge-basis').textContent).toMatch(
+      /Counted from completed trades in this league's Sleeper history \(2024–2026\), as of .+ ET\. It shows what they did, not whether they will accept\./,
+    )
+    expect(screen.queryByTestId('core-free-until-competitive_edge')).toBeNull()
+  })
+
+  it('🛑 locked: a lock to AF Pro, and none of the record — even if the analysis carried it', async () => {
+    render(<TradeCenter league={LEAGUE} edgeAccess={EDGE_LOCKED} />)
+    await analyzeWith(EDGE)
+    const lock = screen.getByRole('region', { name: 'Competitive Edge — AF Pro' })
+    expect(within(lock).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro')
+    expect(screen.queryByTestId('trade-competitive-edge')).toBeNull()
+    expect(document.body.textContent).not.toContain('took on a WR')
+  })
+
+  it('a history that could not be read says why, instead of reading as a quiet trader', async () => {
+    render(<TradeCenter league={LEAGUE} edgeAccess={EDGE_OPEN} />)
+    await analyzeWith({ available: false, reason: "Competitive Edge reads Sleeper trade history today. ESPN leagues aren't connected yet." })
+    expect(screen.getByTestId('trade-competitive-edge').textContent).toContain("ESPN leagues aren't connected yet.")
+  })
+
+  it('before launch it renders, marked "Free until Oct 15 — then AF Pro"', async () => {
+    render(<TradeCenter league={LEAGUE} edgeAccess={EDGE_PRELAUNCH} />)
+    await analyzeWith(EDGE)
+    expect(screen.getByTestId('core-free-until-competitive_edge')).toHaveTextContent('Free until Oct 15 — then AF Pro')
+  })
+
+  it('no partner chosen → no section at all', async () => {
+    render(<TradeCenter league={LEAGUE} edgeAccess={EDGE_OPEN} />)
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ fairnessScore: 50, labels: { fairnessLabel: 'Fair' }, players: { give: [], get: [] } }) })))
+    fireEvent.click(screen.getByLabelText('Add Receiver'))
+    fireEvent.click(screen.getByText('Analyze this trade'))
+    await waitFor(() => expect(document.body.textContent).toContain('Fair'))
+    expect(screen.queryByTestId('trade-competitive-edge')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Competitive Edge — AF Pro' })).toBeNull()
+  })
+})

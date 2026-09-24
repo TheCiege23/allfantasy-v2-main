@@ -3774,6 +3774,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
               history={<Trades data={trades} />}
+              edgeAccess={corePaywall?.competitive_edge ?? null}
             />
           </>
         ) : tradesLoadFailed ? (

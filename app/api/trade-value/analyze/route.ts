@@ -39,7 +39,19 @@ import { createPhaseTimer, unattributedMs } from '@/lib/logging/phaseTimer'
 import { logUsageEvent } from '@/lib/telemetry/usage'
 import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
 import { applyTradeAnalysisDepth } from '@/lib/trade-value-console/tradeAnalysisDepth'
-import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
+import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
+import { loadTradeEdge } from '@/lib/competitive-edge/tradeEdgeLoader'
+import type { EdgeDealAsset } from '@/lib/competitive-edge/tradeEdge'
+
+/** A priced line, as Competitive Edge reads the deal: picks count as picks, FAAB is not an asset it tracks. */
+function edgeAssets(lines: Array<{ position?: string | null }>): EdgeDealAsset[] {
+  return lines.flatMap((line): EdgeDealAsset[] => {
+    const position = String(line.position ?? '').toUpperCase()
+    if (position === 'FAAB') return []
+    if (position === 'PICK') return [{ kind: 'pick' }]
+    return [{ kind: 'player', position: line.position ?? null }]
+  })
+}
 
 const assetSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -90,6 +102,8 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         user?: { id?: string; email?: string | null }
       } | null
       const userId = session?.user?.id ?? null
+      // ONE plan read for the trade breakdown and Competitive Edge, started now and awaited later.
+      const paywallRead = resolveCorePaywall(userId, { email: session?.user?.email ?? null })
 
       const json = await req.json().catch(() => null)
       const parsed = bodySchema.safeParse(json)
@@ -298,6 +312,26 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
               ? 'me'
               : null
 
+      /*
+       * Competitive Edge (lib/competitive-edge/): the other manager's own trade record, bound to THIS
+       * deal — what they would receive is what the viewer gives. Started beside the context notes, and
+       * only for a viewer whose plan has it: a locked viewer's analysis never reads the history.
+       */
+      const paywall = await paywallRead
+      const edgePartner = parsed.data.opponentTeamExternalId?.trim() || null
+      const competitiveEdgeRead =
+        parsed.data.leagueId && userId && edgePartner && paywall.competitive_edge.unlocked
+          ? loadTradeEdge({
+              leagueId: parsed.data.leagueId,
+              userId,
+              opponentTeamExternalId: edgePartner,
+              deal: { theyGet: edgeAssets(out.players.give), theySend: edgeAssets(out.players.get) },
+            }).catch((error: unknown) => {
+              console.error('[trade-value/analyze] competitive edge read failed', error)
+              return { available: false as const, reason: 'Competitive Edge could not be read just now.' }
+            })
+          : null
+
       const context =
         parsed.data.leagueId && userId
           ? await buildTradeContextNotes({
@@ -440,10 +474,11 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * posts to this route (the Trade Center, the league trades tab, the value modal) is a
        * browser component and would otherwise receive it.
        */
-      const tradeDepth = await resolveCoreDepth(userId, 'trade_depth', { email: session?.user?.email ?? null })
-      return NextResponse.json(
-        applyTradeAnalysisDepth(decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit, tradeDepth),
-      )
+      const competitiveEdge = competitiveEdgeRead ? await competitiveEdgeRead : null
+      const withOpinion = decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit
+      // Its own depth, so the trade-depth filter below keeps it (tradeAnalysisDepth.ts, SEPARATELY_GATED).
+      const withEdge = competitiveEdge ? { ...withOpinion, competitiveEdge } : withOpinion
+      return NextResponse.json(applyTradeAnalysisDepth(withEdge, paywall.trade_depth))
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

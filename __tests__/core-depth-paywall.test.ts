@@ -24,6 +24,7 @@ import { hasFeatureAccessForPlans } from '@/lib/subscription/feature-access'
 import { DEFAULT_PAYWALL_STARTS_AT } from '@/lib/monetization/paywallLaunch'
 import {
   applyTradeAnalysisDepth,
+  SEPARATELY_GATED_FIELDS,
   TRADE_DEPTH_FIELDS,
   TRADE_VERDICT_FIELDS,
 } from '@/lib/trade-value-console/tradeAnalysisDepth'
@@ -32,7 +33,7 @@ import type { PlayerCardData } from '@/lib/core-app/playerCard'
 
 const BEFORE = new Date('2026-10-01T12:00:00.000Z')
 const AFTER = new Date('2026-10-20T12:00:00.000Z')
-const DEPTHS: CoreDepth[] = ['player_depth', 'trade_depth', 'commissioner_depth']
+const DEPTHS: CoreDepth[] = ['player_depth', 'trade_depth', 'commissioner_depth', 'competitive_edge']
 
 const locked = (depth: CoreDepth) => decideCoreDepth(depth, { live: true, startsAt: DEFAULT_PAYWALL_STARTS_AT, hasPlan: false })
 const open = (depth: CoreDepth) => decideCoreDepth(depth, { live: true, startsAt: DEFAULT_PAYWALL_STARTS_AT, hasPlan: true })
@@ -62,6 +63,7 @@ describe('the rule', () => {
       planName: 'AF Commissioner',
       upgradePath: '/upgrade?plan=commissioner',
     })
+    expect(CORE_DEPTH.competitive_edge).toMatchObject({ planName: 'AF Pro', upgradePath: '/upgrade?plan=pro' })
   })
 })
 
@@ -84,6 +86,13 @@ describe('the plan mapping, read through the real entitlement matrix', () => {
     expect(opens(['commissioner'], 'commissioner_depth')).toBe(true)
     expect(opens(['commissioner'], 'player_depth')).toBe(false)
     expect(opens(['commissioner'], 'trade_depth')).toBe(false)
+    expect(opens(['commissioner'], 'competitive_edge')).toBe(false)
+  })
+
+  it('Competitive Edge opens for AF Pro AND the War Room plan — which does not get the trade breakdown', () => {
+    expect(opens(['pro'], 'competitive_edge')).toBe(true)
+    expect(opens(['war_room'], 'competitive_edge')).toBe(true)
+    expect(opens(['war_room'], 'trade_depth')).toBe(false)
   })
 
   it('Supreme opens everything; no plan opens nothing', () => {
@@ -169,9 +178,16 @@ describe('the trade analysis filter — the verdict stays, the breakdown goes', 
     for (const k of [...TRADE_VERDICT_FIELDS, ...TRADE_DEPTH_FIELDS]) expect(out[k], k).toBe(`value-of-${k}`)
   })
 
-  it('the two lists do not overlap', () => {
+  it('the three lists do not overlap', () => {
     const depth = new Set<string>(TRADE_DEPTH_FIELDS)
-    expect(TRADE_VERDICT_FIELDS.filter((k) => depth.has(k))).toEqual([])
+    const own = new Set<string>(SEPARATELY_GATED_FIELDS)
+    expect(TRADE_VERDICT_FIELDS.filter((k) => depth.has(k) || own.has(k))).toEqual([])
+    expect(TRADE_DEPTH_FIELDS.filter((k) => own.has(k))).toEqual([])
+  })
+
+  it('a separately gated field passes the trade filter untouched, even when trade depth is locked', () => {
+    const out = applyTradeAnalysisDepth({ ...FULL, competitiveEdge: 'edge' }, locked('trade_depth')) as Record<string, unknown>
+    expect(out.competitiveEdge).toBe('edge')
   })
 
   /*
@@ -196,8 +212,11 @@ describe('the trade analysis filter — the verdict stays, the breakdown goes', 
     const noteKeys = [...empty.matchAll(/^ {2}([A-Za-z]+):/gm)].map((m) => m[1]!)
     expect(noteKeys).toContain('formatNotes')
 
-    const known = new Set<string>([...TRADE_VERDICT_FIELDS, ...TRADE_DEPTH_FIELDS])
-    const unclassified = [...returned, ...noteKeys, 'decisionOs', 'aiLimit'].filter((k) => !known.has(k))
+    const known = new Set<string>([...TRADE_VERDICT_FIELDS, ...TRADE_DEPTH_FIELDS, ...SEPARATELY_GATED_FIELDS])
+    // Every key the ROUTE adds on top of the analysis — read from its own spreads, not restated.
+    const routeAdded = [...notes.matchAll(/\{ \.\.\.\w+, (\w+) \}/g)].map((m) => m[1]!)
+    expect(routeAdded).toEqual(expect.arrayContaining(['aiLimit', 'decisionOs', 'competitiveEdge']))
+    const unclassified = [...returned, ...noteKeys, ...routeAdded].filter((k) => !known.has(k))
     expect(unclassified).toEqual([])
   })
 })
@@ -294,6 +313,8 @@ describe('the loaders skip what a locked viewer may not see', () => {
   it('/core: the hub and the Trade Center are handed their depth', () => {
     expect(guardOf(PAGE, 'const commissionerHub =', '.catch(')).toContain('depth: corePaywall?.commissioner_depth')
     expect(PAGE).toContain('depthAccess={corePaywall?.trade_depth ?? null}')
+    // Competitive Edge's own depth — without it the Trade Center could never draw its lock.
+    expect(PAGE).toContain('edgeAccess={corePaywall?.competitive_edge ?? null}')
     expect(PAGE).toContain('depthAccess={corePaywall?.player_depth ?? null}')
   })
 

@@ -44,6 +44,7 @@ export async function resolveCorePaywall(
     player_depth: decide('player_depth'),
     trade_depth: decide('trade_depth'),
     commissioner_depth: decide('commissioner_depth'),
+    competitive_edge: decide('competitive_edge'),
   }
 }
 

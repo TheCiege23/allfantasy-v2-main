@@ -338,7 +338,8 @@ export async function getScoutData(
           available: false,
           locked: true,
           evidenceCount: fact.evidenceCount,
-          reason: 'Open a trade, draft or waiver decision for Competitive Edge guidance.',
+          // Competitive Edge lives in the decision, from their real trades (lib/competitive-edge/) — not here.
+          reason: 'Analyze a trade with them in the Trade Center for Competitive Edge: their own trade record, counted.',
         }
 
     return {
