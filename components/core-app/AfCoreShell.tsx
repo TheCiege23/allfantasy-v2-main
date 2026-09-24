@@ -8,6 +8,7 @@ import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
+import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
@@ -370,6 +371,8 @@ export type AfCoreShellProps = {
   comms?: {
     leagues: CommsLeague[]
     chimmyTokenCost: number | null
+    /** Included Chimmy answers left today when the plan includes Chimmy (lib/chimmy/planAllowance.ts). */
+    chimmyPlanAllowance?: ChimmyPlanAllowanceView | null
     /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
     homeSignals?: string | null
     /** League-scoped screens dock the panel beside the content instead of over it. */
@@ -2307,6 +2310,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           leagues={comms.leagues}
           pageLeagueId={props.selectedLeagueId ?? null}
           chimmyTokenCost={comms.chimmyTokenCost}
+          chimmyPlanAllowance={comms.chimmyPlanAllowance ?? null}
           homeSignals={comms.homeSignals ?? null}
           pageSurface={isCoreSurfaceKey(active) ? active : null}
           dockable={comms.dockable}

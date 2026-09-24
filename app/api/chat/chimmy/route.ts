@@ -120,6 +120,14 @@ import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import { judgeChimmyDelivery } from '@/lib/chimmy/chargeOnDelivery'
 import { suggestChimmyFollowUps } from '@/lib/chimmy/followUps'
 import {
+  planAllowanceMeta,
+  readChimmyPlanAllowance,
+  releaseChimmyPlanAllowance,
+  takeChimmyPlanAllowance,
+  type ChimmyPlanAllowanceMeta,
+  type ChimmyPlanAllowanceState,
+} from '@/lib/chimmy/planAllowance'
+import {
   buildChimmyResponseForAssistantMode,
   normalizeChimmyAssistantMode,
 } from '@/lib/chimmy-chat/assistant-mode'
@@ -1186,6 +1194,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const userId = session?.user?.id ?? null
   const userEmail = session?.user?.email ?? null
 
+  /*
+   * Whether the caller's plan includes Chimmy, and how much of today's allowance is left
+   * (lib/chimmy/planAllowance.ts — AF Pro, 100 a day, owner's decision 2026-09-24). Read LAZILY and
+   * once: only the paths that would otherwise charge ask, so a free lookup never pays for an
+   * entitlement query.
+   */
+  let planAllowanceRead: Promise<ChimmyPlanAllowanceState | null> | null = null
+  const readPlanAllowance = (): Promise<ChimmyPlanAllowanceState | null> =>
+    (planAllowanceRead ??= userId
+      ? readChimmyPlanAllowance({ userId, email: userEmail }).catch(() => null)
+      : Promise.resolve(null))
+
   const limitRes = await runAiProtection(req, {
     action: 'chimmy',
     getUserId: async () => userId,
@@ -1691,8 +1711,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         : null
 
       const mayCharge = Boolean(userId && confirmTokenSpend && preview?.canSpend)
+      /*
+       * A plan that includes Chimmy covers this search too, consent or not — there is nothing to
+       * consent to when no tokens move. The allowance is TAKEN only once a sourced answer exists,
+       * on the same "pay for an answer, never for a refusal" rule as the charge below.
+       */
+      const searchPlan = await readPlanAllowance()
+      const planCoversSearch = Boolean(searchPlan && searchPlan.remaining > 0)
 
-      if (mayCharge) {
+      if (mayCharge || planCoversSearch) {
         const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
         const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
 
@@ -1704,18 +1731,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
          * cost AND withhold the answer. Losing the fee is bad; losing the fee
          * and the answer is worse.
          */
-        const ledger = await spendService
-          .spendTokensForRule({
-            userId: userId as string,
-            ruleCode: 'ai_chimmy_chat_message',
-            confirmed: confirmTokenSpend,
-            sourceType: 'chimmy_chat',
-            sourceId: conversationId,
-            description: 'Chimmy live web search answer',
-            metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
-            userEmail,
-          })
-          .catch(() => null)
+        const searchIncluded =
+          planCoversSearch && searchPlan && userId
+            ? await takeChimmyPlanAllowance({ userId, state: searchPlan })
+            : null
+        const ledger = searchIncluded || !mayCharge
+          ? null
+          : await spendService
+              .spendTokensForRule({
+                userId: userId as string,
+                ruleCode: 'ai_chimmy_chat_message',
+                confirmed: confirmTokenSpend,
+                sourceType: 'chimmy_chat',
+                sourceId: conversationId,
+                description: 'Chimmy live web search answer',
+                metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
+                userEmail,
+              })
+              .catch(() => null)
+        const searchPlanMeta: ChimmyPlanAllowanceMeta | null = searchIncluded
+          ? planAllowanceMeta(searchIncluded, true)
+          : searchPlan
+            ? planAllowanceMeta({ ...searchPlan, used: searchPlan.limit, remaining: 0 }, false)
+            : null
 
         const sourceLines = searched.citations.map((c) => `- ${c.label}: ${c.url}`).join('\n')
         const body = `${searched.text}\n\nSources consulted:\n${sourceLines}`
@@ -1741,6 +1779,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
              * not write, and saying otherwise would make the two look alike.
              */
             confidencePct: 70,
+            ...(searchPlanMeta ? { planAllowance: searchPlanMeta } : {}),
             providerStatus:
               searched.provider === 'claude'
                 ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
@@ -2575,35 +2614,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const customRules = await customRulesTask
 
   const spendService = new TokenSpendService()
-  let tokenPreview: TokenSpendPreview | null = null
-  let tokenPreviewFailed = false
-  try {
-    tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
-  } catch (error) {
-    if (error instanceof TokenSpendRuleNotFoundError) {
-      return NextResponse.json(
-        {
-          error: error.message,
-          code: 'token_spend_rule_missing',
-        },
-        { status: 500 }
+  /*
+   * ⚠ `null as …`, NOT `: … = null`. Both are now assigned only inside `runTokenGate`, and TypeScript
+   * does not follow assignments made in a closure — with an annotated `= null` initialiser it narrows
+   * the outer reads to `null` for good, and every `tokenPreview.ruleCode` below becomes `never`.
+   */
+  let tokenPreview = null as TokenSpendPreview | null
+  let tokenPreviewFailed = false as boolean
+  /** The token preflight: preview the price, and ask for consent when the rule needs it. */
+  const runTokenGate = async (): Promise<NextResponse | null> => {
+    try {
+      tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+    } catch (error) {
+      if (error instanceof TokenSpendRuleNotFoundError) {
+        return NextResponse.json(
+          {
+            error: error.message,
+            code: 'token_spend_rule_missing',
+          },
+          { status: 500 }
+        )
+      }
+      tokenPreviewFailed = true
+      console.error(
+        '[api/chat/chimmy] Token preview failed, continuing without preflight:',
+        error instanceof Error ? error.message : error
       )
     }
-    tokenPreviewFailed = true
-    console.error(
-      '[api/chat/chimmy] Token preview failed, continuing without preflight:',
-      error instanceof Error ? error.message : error
-    )
+    if (!tokenPreviewFailed && tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
+      return NextResponse.json(
+        {
+          error: 'Token spend confirmation required before sending to Chimmy.',
+          code: 'token_confirmation_required',
+          preview: tokenPreview,
+        },
+        { status: 409 }
+      )
+    }
+    return null
   }
-  if (!tokenPreviewFailed && tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
-    return NextResponse.json(
-      {
-        error: 'Token spend confirmation required before sending to Chimmy.',
-        code: 'token_confirmation_required',
-        preview: tokenPreview,
-      },
-      { status: 409 }
-    )
+
+  /*
+   * ── CHIMMY IS INCLUDED IN AF PRO, 100 ANSWERS A DAY (owner's decision, 2026-09-24) ─────────────
+   * A plan that carries `ai_chat` with allowance left skips the token preflight entirely: no price,
+   * no consent prompt, no charge. The allowance is TAKEN at the spend point below — after the free
+   * trade-target return, so an undecided verdict costs nothing here either — and given back if no
+   * answer is delivered. Past the allowance, and for everyone without the plan, nothing changes.
+   */
+  const planState = await readPlanAllowance()
+  const planCovers = Boolean(planState && planState.remaining > 0)
+  if (!planCovers) {
+    const blocked = await runTokenGate()
+    if (blocked) return blocked
   }
 
   /*
@@ -2679,8 +2741,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
   }
 
+  /*
+   * The included answer, when the plan covers this turn. Taken atomically: if another request took
+   * the last one since the read above, this turn falls back to the token preflight it skipped —
+   * which asks for consent exactly as it would have for a free account.
+   */
+  let planIncluded: ChimmyPlanAllowanceState | null = null
+  if (planCovers && planState && userId) {
+    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    if (!planIncluded) {
+      const blocked = await runTokenGate()
+      if (blocked) return blocked
+    }
+  }
+  /*
+   * What this turn did with the allowance, for `meta.planAllowance`: included, or (for a plan holder
+   * past the allowance) charged in tokens because the day's answers were used.
+   */
+  let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded
+    ? planAllowanceMeta(planIncluded, true)
+    : planState
+      ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
+      : null
+
   let spendLedger: { id: string; balanceAfter: number } | null = null
-  if (!tokenPreviewFailed) {
+  if (!planIncluded && !tokenPreviewFailed) {
     try {
       const ledger = await spendService.spendTokensForRule({
         userId,
@@ -2759,6 +2844,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 ledgerId: spendLedger.id,
               }
             : undefined,
+        ...(planMeta ? { planAllowance: planMeta } : {}),
         providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
         leagueGrounding: tradeTargetGrounding,
         tradeTarget: { status: 'decided', verdict: v.verdict, player: tradeTargetResult.targetName },
@@ -2912,6 +2998,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
            * the user taps and then sends. Deterministic: see lib/chimmy/followUps.ts.
            */
           followUps: suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
+          ...(planMeta ? { planAllowance: planMeta } : {}),
           ...(loopPlayers.length > 0 ? { players: loopPlayers } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
@@ -3930,6 +4017,13 @@ ${describedTradeCtx}`
         })
       if (refund) chargeRefund = { balanceAfter: refund.balanceAfter, reason: delivery.reason }
     }
+    /* The same deal for an included answer: a turn nobody answered does not use one up. */
+    if (!delivery.delivered && planIncluded && userId) {
+      await releaseChimmyPlanAllowance({ userId })
+      planMeta = planMeta
+        ? { ...planMeta, used: Math.max(0, planMeta.used - 1), released: true as const }
+        : planMeta
+    }
 
     const meta = {
       assistant: 'Chimmy',
@@ -4017,6 +4111,7 @@ ${describedTradeCtx}`
             ...(chargeRefund ? { refunded: true as const, refundReason: chargeRefund.reason } : {}),
           }
         : undefined,
+      ...(planMeta ? { planAllowance: planMeta } : {}),
       quantData: pecrOutput.quantData,
       trendData: pecrOutput.trendData,
       responseStructure: pecrOutput.responseStructure,
@@ -4130,6 +4225,7 @@ ${describedTradeCtx}`
       }
     )
   } catch (error) {
+    if (planIncluded && userId) await releaseChimmyPlanAllowance({ userId })
     if (spendLedger?.id) {
       await spendService
         .refundSpendByLedger({

@@ -1,3 +1,5 @@
+import { CHIMMY_PLAN_DAILY_INCLUDED } from "@/lib/chimmy/planAllowanceView"
+
 export type MonetizationSubscriptionSku =
   | "af_pro_monthly"
   | "af_pro_yearly"
@@ -42,7 +44,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_pro_monthly",
     type: "subscription",
     title: "AF Pro Monthly",
-    description: "Player tools for active fantasy managers — trades, waivers, lineups, and drafts.",
+    description: `Player tools for active fantasy managers — trades, waivers, lineups, drafts, and ${CHIMMY_PLAN_DAILY_INCLUDED} Chimmy answers a day.`,
     amountUsd: 9.99,
     currency: "usd",
     interval: "month",
@@ -62,7 +64,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_pro_yearly",
     type: "subscription",
     title: "AF Pro Yearly",
-    description: "Player tools for active fantasy managers — trades, waivers, lineups, and drafts.",
+    description: `Player tools for active fantasy managers — trades, waivers, lineups, drafts, and ${CHIMMY_PLAN_DAILY_INCLUDED} Chimmy answers a day.`,
     amountUsd: 79.99,
     currency: "usd",
     // Must match subscription-policy.ts's pro.yearlyIncludedPremiumCredits (3500). Previously 3000,
