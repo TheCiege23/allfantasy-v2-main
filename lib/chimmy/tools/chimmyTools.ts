@@ -292,12 +292,12 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_season_stats',
       description:
-        "A real player's season-to-date stats for NFL, college football, MLB, NBA or NHL (yards and TDs; home runs, AVG and ERA; points, rebounds and assists; goals, assists and saves…). Use for 'what are X's stats this season', 'how many home runs does X have', 'how is X doing this year'. Takes a NAME. Returns provider totals with the time they were refreshed — real stats, not fantasy points and not projections. For NBA/NHL it may say the numbers are LAST season's; repeat that.",
+        "A real player's season-to-date stats for NFL, college football, MLB, NBA, NHL or college basketball (yards and TDs; home runs, AVG and ERA; points, rebounds and assists; goals, assists and saves…). Use for 'what are X's stats this season', 'how many home runs does X have', 'how is X doing this year'. Takes a NAME. Returns provider totals with the time they were refreshed — real stats, not fantasy points and not projections. For NBA/NHL it may say the numbers are LAST season's; repeat that.",
       parameters: {
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA or NHL. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           season: { type: 'number', description: 'A year, only if the user named one (e.g. 2025). Omit for the current season.' },
         },
         required: ['player'],
@@ -309,12 +309,12 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_game_log',
       description:
-        "A real player's game-by-game stat lines — NFL, college football, MLB, NBA or NHL. Use for 'how many yards did X have last week', 'X's last 3 games', 'what did X do last night', 'how did X pitch in his last start'. Takes a NAME plus the sport. Daily sports (MLB/NBA/NHL) list games by DATE, newest first — there are no weeks. If it warns the lines are from an earlier season or that he has not played recently, do NOT present them as this season or as last night.",
+        "A real player's game-by-game stat lines — NFL, college football, MLB, NBA, NHL or college basketball. Use for 'how many yards did X have last week', 'X's last 3 games', 'what did X do last night', 'how did X pitch in his last start'. Takes a NAME plus the sport. Daily sports (MLB/NBA/NHL/college basketball) list games by DATE, newest first — there are no weeks. If it warns the lines are from an earlier season or that he has not played recently, do NOT present them as this season or as last night.",
       parameters: {
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA or NHL. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           week: { type: 'number', description: 'NFL / college only: a specific week, only if the user named one. Do not guess the current week. Ignored for MLB/NBA/NHL.' },
           last_n: { type: 'number', description: 'How many recent games (1-10). Defaults to 5.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },
@@ -328,16 +328,16 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_season_stat_leaders',
       description:
-        "Who leads NFL, college football, MLB, NBA or NHL in a stat this season. Use for 'who leads the NFL in rushing', 'home run leaders', 'who leads the NBA in scoring', 'most goals in the NHL'. Season-to-date totals; rate stats (AVG, ERA, per-game, SV%) use a minimum-games cutoff it states.",
+        "Who leads NFL, college football, MLB, NBA, NHL or college basketball in a stat this season. Use for 'who leads the NFL in rushing', 'home run leaders', 'who leads the NBA in scoring', 'most goals in the NHL'. Season-to-date totals; rate stats (AVG, ERA, per-game, SV%) use a minimum-games cutoff it states.",
       parameters: {
         type: 'object',
         properties: {
           stat: {
             type: 'string',
             description:
-              'Football: passing_yards, passing_touchdowns, passing_interceptions, completions, rushing_yards, rushing_touchdowns, rushing_attempts, receiving_yards, receptions, receiving_touchdowns, targets, sacks, tackles, interceptions, forced_fumbles, field_goals_made. MLB: home_runs, rbi, runs, hits, stolen_bases, batting_average, strikeouts, wins, saves, era. NBA: points, rebounds, assists, steals, blocks, three_pointers_made, points_per_game, rebounds_per_game, assists_per_game. NHL: goals, assists, points, plus_minus, shots, power_play_points, penalty_minutes, hits, wins, shutouts, save_percentage, goals_against_average.',
+              'Football: passing_yards, passing_touchdowns, passing_interceptions, completions, rushing_yards, rushing_touchdowns, rushing_attempts, receiving_yards, receptions, receiving_touchdowns, targets, sacks, tackles, interceptions, forced_fumbles, field_goals_made. MLB: home_runs, rbi, runs, hits, stolen_bases, batting_average, strikeouts, wins, saves, era. NBA: points, rebounds, assists, steals, blocks, three_pointers_made, points_per_game, rebounds_per_game, assists_per_game. NHL: goals, assists, points, plus_minus, shots, power_play_points, penalty_minutes, hits, wins, shutouts, save_percentage, goals_against_average. NCAAB: points, rebounds, assists, steals, blocks, three_pointers_made, points_per_game, rebounds_per_game, assists_per_game.',
           },
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA or NHL. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           limit: { type: 'number', description: 'How many leaders (1-10). Defaults to 5.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },
         },
@@ -350,11 +350,11 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_real_standings',
       description:
-        "The real standings for NFL, college football, MLB, NBA or NHL — records by conference (MLB by league). Use for 'NFL standings', 'SEC standings', 'AL standings', 'NBA East standings', 'what's the Bruins' record'. NOT fantasy league standings (that is get_league_standings).",
+        "The real standings for NFL, college football, MLB, NBA, NHL or college basketball — records by conference (MLB by league). Use for 'NFL standings', 'SEC standings', 'AL standings', 'NBA East standings', 'what's the Bruins' record'. NOT fantasy league standings (that is get_league_standings).",
       parameters: {
         type: 'object',
         properties: {
-          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA or NHL. Defaults to NFL — always pass the sport for anything that is not the NFL.' },
+          sport: { type: 'string', description: 'NFL, NCAAF (college football), MLB, NBA, NHL or NCAAB (college basketball). Defaults to NFL — always pass the sport for anything that is not the NFL.' },
           group: { type: 'string', description: 'Optional conference or league to narrow to, e.g. AFC, SEC, Big Ten, AL, NL, Eastern, Western.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },
         },

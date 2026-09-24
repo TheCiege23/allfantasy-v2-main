@@ -32,10 +32,29 @@ import { fmt, isoMinute, latest, nameToken, num } from '@/lib/chimmy/tools/stats
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type DailySport = 'MLB' | 'NBA' | 'NHL'
+export type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
 
+/** The daily sports whose season totals come from Rolling Insights `fantasy_stat_lines`. */
+export type RiSeasonSport = Exclude<DailySport, 'NCAAB'>
+
+/**
+ * ⚠ NCAAB IS A DAILY SPORT FOR GAME LOGS AND STANDINGS, BUT NOT FOR SEASON TOTALS. Its vendor
+ * totals are truncated (GAPS N-14), so season stats and leaders are summed from game logs in
+ * collegeBasketballStats.ts. Callers must route NCAAB there BEFORE any `fantasy_stat_lines` path.
+ */
 export function isDailyStatsSport(sport: string): sport is DailySport {
-  return sport === 'MLB' || sport === 'NBA' || sport === 'NHL'
+  return sport === 'MLB' || sport === 'NBA' || sport === 'NHL' || sport === 'NCAAB'
+}
+
+/*
+ * Openers the STATS tools need that are deliberately NOT in lib/season-week/dailySportSeasonStarts.ts.
+ * Recording NCAAB there would switch on fantasy-scoring week resolution for college basketball
+ * (seasonWeekService treats any recorded opener as a scoring anchor) — a separate decision. This
+ * only drives the "these are last season's numbers" note. Source: the first 2026-27 NCAAB game in
+ * SportsGame (2026-11-02), measured 2026-09-24.
+ */
+const STATS_ONLY_SEASON_STARTS: Readonly<Record<string, Readonly<Record<number, string>>>> = {
+  NCAAB: { 2026: '2026-11-02T00:00:00.000Z' },
 }
 
 /** "2025" -> "2025-26" for the sports whose season spans two calendar years. */
@@ -54,7 +73,7 @@ export function dailyOffSeasonNote(sport: DailySport, season: string | number, n
   if (sport === 'MLB') return null
   const y = Number(season)
   if (!Number.isFinite(y)) return null
-  const start = resolveDailySportSeasonStart(sport, y + 1)
+  const start = resolveDailySportSeasonStart(sport, y + 1) ?? STATS_ONLY_SEASON_STARTS[sport]?.[y + 1] ?? null
   if (!start) return null
   const thisLabel = dailySeasonLabel(sport, y)
   const nextLabel = dailySeasonLabel(sport, y + 1)
@@ -210,6 +229,8 @@ export function renderDailySeasonBlock(sport: DailySport, block: unknown): strin
   if (!Object.keys(b).length) return []
   if (sport === 'MLB') return mlbSeason(b)
   if (sport === 'NBA') return nbaSeason(b)
+  // NCAAB totals are summed from game logs (collegeBasketballStats.ts); a vendor block is never rendered.
+  if (sport === 'NCAAB') return []
   return nhlSeason(b)
 }
 
@@ -304,7 +325,8 @@ function renderGameGroup(sport: DailySport, row: DailyGameRow): string | null {
   const payload = rec(row.payload)
   const group = String(map.group ?? row.gameId.split(':')[1] ?? 'all')
   if (sport === 'MLB') return group === 'pitching' ? mlbPitchingGame(stats, payload) : mlbBattingGame(stats)
-  if (sport === 'NBA') return nbaGame(stats, payload)
+  // NCAAB's box has NBA's shape (fixtures/live.NCAABB.json); its minutes arrive as "20", not "MM:SS".
+  if (sport === 'NBA' || sport === 'NCAAB') return nbaGame(stats, payload)
   return nhlGame(group, stats, payload)
 }
 
@@ -449,7 +471,7 @@ const total = (path: readonly string[]): Pick<DailyLeaderSpec, 'parts' | 'value'
 
 const G = ['games_played'] as const
 
-export const DAILY_LEADER_STATS: Record<DailySport, Record<string, DailyLeaderSpec>> = {
+export const DAILY_LEADER_STATS: Record<RiSeasonSport, Record<string, DailyLeaderSpec>> = {
   MLB: {
     home_runs: { label: 'home runs', ...total(['batting', 'HR']) },
     rbi: { label: 'RBI', ...total(['batting', 'RBI']) },
@@ -573,7 +595,7 @@ function formatValue(n: number, format: DailyLeaderSpec['format']): string {
 }
 
 export async function buildDailySeasonLeadersContext(
-  sport: DailySport,
+  sport: RiSeasonSport,
   args: { stat: unknown; season: string; limit: number; now?: Date },
   db: Db,
 ): Promise<string> {

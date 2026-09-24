@@ -115,7 +115,7 @@ describe('get_player_season_stats', () => {
   it('refuses an unsupported sport without querying', async () => {
     const { db, calls } = fakeDb(() => [])
     const out = await buildPlayerSeasonStatsContext({ playerName: 'Erling Haaland', sport: 'soccer' }, db)
-    expect(out).toMatch(/only NFL, college football, MLB, NBA and NHL/)
+    expect(out).toMatch(/only NFL, college football, MLB, NBA, NHL and college basketball/)
     expect(calls).toHaveLength(0)
   })
 })
