@@ -35,7 +35,14 @@ import {
 import { buildTeamDefensePlayerId } from '@/lib/redraft/teamDefenseStatsIngest'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
-import { resolveSeasonType, teamsInGames, type LiveGameLite, type LiveStatsProvider, type LiveStatsQuery } from '@/lib/live-scoring/provider'
+import {
+  resolveSeasonType,
+  teamDefenseTargets,
+  type LiveGameLite,
+  type LiveStatsProvider,
+  type LiveStatsQuery,
+  type TeamDefenseStatsQuery,
+} from '@/lib/live-scoring/provider'
 import type { LiveGameStatus } from '@/lib/live-scoring/types'
 
 export class NflLiveStatsProvider implements LiveStatsProvider {
@@ -82,11 +89,12 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
   }
 
   async fetchTeamDefenseStatsForGames(
-    query: LiveStatsQuery & { games: readonly LiveGameLite[] },
+    query: TeamDefenseStatsQuery,
   ): Promise<Map<string, Record<string, number>>> {
     const out = new Map<string, Record<string, number>>()
     const seasonType = resolveSeasonType(query)
-    const teams = teamsInGames(query.games)
+    // One Sleeper call PER TEAM below, so this narrowing IS the cost of the method.
+    const teams = teamDefenseTargets(query)
     for (const team of teams) {
       const payload = await fetchSleeperTeamDefenseSeason(team, query.season, seasonType).catch(() => null)
       if (payload == null) continue

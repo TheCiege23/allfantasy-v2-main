@@ -19,10 +19,12 @@
  * poller that never emits.
  */
 
+import { teamDefenseTargets } from '@/lib/live-scoring/provider'
 import type {
   LiveGameLite,
   LiveStatsProvider,
   LiveStatsQuery,
+  TeamDefenseStatsQuery,
 } from '@/lib/live-scoring/provider'
 import type { LiveGameStatus } from '@/lib/live-scoring/types'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
@@ -202,16 +204,25 @@ export class RollingInsightsLiveProvider implements LiveStatsProvider {
    * behind a comment explaining why that was intentional.
    */
   async fetchTeamDefenseStatsForGames(
-    query: LiveStatsQuery & { games: readonly LiveGameLite[] }
+    query: TeamDefenseStatsQuery
   ): Promise<Map<string, Record<string, number>>> {
     const date = new Date().toISOString().slice(0, 10)
     const snaps = await this.poll(date)
     const gameIds = new Set(query.games.map((g) => g.gameId))
+    /*
+     * One poll serves every team here, so narrowing saves no request — it is applied for
+     * one reason: `teamAbbrs` must mean the same thing in every implementation. A filter
+     * that one provider honours and another ignores is worse than no filter, because the
+     * caller cannot tell which it got.
+     */
+    const wanted = new Set(teamDefenseTargets(query))
 
     const out = new Map<string, Record<string, number>>()
     for (const snap of snaps) {
       if (gameIds.size > 0 && !gameIds.has(snap.gameId)) continue
       for (const t of snap.teams ?? []) {
+        const abbr = String(t.team ?? '').trim().toUpperCase()
+        if (query.teamAbbrs !== undefined && !wanted.has(abbr)) continue
         out.set(defKey(t.team), t.stats)
       }
     }

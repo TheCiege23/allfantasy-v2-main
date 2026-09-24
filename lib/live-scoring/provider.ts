@@ -51,6 +51,43 @@ export function resolveSeasonType(query: { seasonType?: LiveSeasonType }): LiveS
  * the `playerIds` the caller cares about (rostered players) so we never fetch the
  * whole league — only what could affect a matchup.
  */
+/**
+ * A team-defense stat request, optionally narrowed to the defenses somebody owns.
+ *
+ * 🛑 `teamAbbrs` PRESENT MEANS "EXACTLY THESE", AND AN EMPTY ARRAY MEANS NONE — it does NOT
+ * mean "no filter". A season with no rostered defence should cost zero provider calls, and
+ * treating empty as unfiltered is the classic version of this bug: it would restore the
+ * every-team fetch precisely for the leagues that need none of it.
+ *
+ * ⚠ WHY THIS EXISTS. The NFL implementation calls Sleeper once PER TEAM, so an unnarrowed
+ * request is 32 calls — per season being scored, per tick. Measured on production
+ * 2026-09-24, when the first native league advanced a week and gave the tick something to
+ * score: 128 calls every two minutes (32 teams x 4 seasons), 3,840/hour against a
+ * 1,000/hour cap, and the budget gone by :16. The cap is per PROVIDER, so the visible
+ * damage was elsewhere — `stats/nfl/week` went dark and the week finalizer refused on
+ * coverage it could not fix.
+ *
+ * The offensive path next to this one has always narrowed to rostered starters. This is the
+ * same idea, applied to the half that was still asking for the whole league.
+ */
+export type TeamDefenseStatsQuery = LiveStatsQuery & {
+  games: readonly LiveGameLite[]
+  teamAbbrs?: readonly string[]
+}
+
+/**
+ * Which team defenses to actually ask for: the teams playing, narrowed to the ones owned.
+ *
+ * Pure, shared by every provider, so "present but empty means none" cannot drift between
+ * implementations.
+ */
+export function teamDefenseTargets(query: TeamDefenseStatsQuery): string[] {
+  const playing = teamsInGames(query.games)
+  if (query.teamAbbrs === undefined) return playing
+  const wanted = new Set(query.teamAbbrs.map((t) => String(t ?? '').trim().toUpperCase()).filter(Boolean))
+  return playing.filter((t) => wanted.has(t))
+}
+
 export interface LiveStatsProvider {
   /** All games for the sport/season/week (the cadence engine decides which are active). */
   fetchActiveGames(query: LiveStatsQuery): Promise<LiveGameLite[]>
@@ -60,7 +97,7 @@ export interface LiveStatsProvider {
   ): Promise<Map<string, Record<string, number>>>
   /** Raw team-defense stat lines keyed by `nfl:def:<TEAM>` for teams playing in `games`. */
   fetchTeamDefenseStatsForGames(
-    query: LiveStatsQuery & { games: readonly LiveGameLite[] },
+    query: TeamDefenseStatsQuery,
   ): Promise<Map<string, Record<string, number>>>
   /** Normalize the provider's raw game status to the canonical {@link LiveGameStatus}. */
   normalizeGameStatus(raw: string | null | undefined): LiveGameStatus
