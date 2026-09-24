@@ -779,7 +779,14 @@ export async function fetchGamesForSport(
   sport: 'NFL' | 'NCAAF',
   season: number,
   week?: number,
-  opts?: { deadlineAt?: number },
+  opts?: {
+    deadlineAt?: number
+    /**
+     * Sources NOT to call this time, each with the reason reported in its result — e.g. CFBD under
+     * `lib/scores/cfbdThrottle.ts`. Reported like a deadline skip, never omitted.
+     */
+    skip?: Partial<Record<string, string>>
+  },
 ): Promise<ProviderResult[]> {
   const deadlineAt = opts?.deadlineAt ?? Number.POSITIVE_INFINITY
 
@@ -816,6 +823,11 @@ export async function fetchGamesForSport(
 
   const attempts: ProviderResult[] = []
   for (const provider of planned) {
+    const skipReason = opts?.skip?.[provider.source]
+    if (skipReason) {
+      attempts.push({ source: provider.source, games: [], error: skipReason })
+      continue
+    }
     /*
      * ⚠ SKIPPED, AND IT SAYS SO. Omitting the entry would make a dropped provider look like a
      * provider that answered with nothing — the same "silent truncation reads as covered
