@@ -16,6 +16,7 @@ import {
   refreshSubscriptionPeriod,
   resolveUserIdFromStripeCustomerId,
   updateSubscriptionFromStripeEvent,
+  upsertSubscriptionPlanForCatalogItem,
 } from "@/lib/subscription/webhookHandlers"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
@@ -132,42 +133,16 @@ async function persistSubscriptionEntitlementFromCheckout(
   const item = getMonetizationCatalogItemBySku(context.sku)
   if (!item || item.type !== "subscription" || !item.planFamily || !item.interval) return
 
-  const plans = (prisma as any).subscriptionPlan
   const subscriptions = (prisma as any).userSubscription
-  if (!plans || !subscriptions) return
+  if (!subscriptions) return
 
   const now = new Date()
   const currentPeriodEnd = addBillingInterval(now, item.interval)
   const stripeSubscriptionId =
     typeof session.subscription === "string" ? session.subscription : null
 
-  const plan = await plans.upsert({
-    where: { code: item.planFamily },
-    update: {
-      name: item.title.replace(" Monthly", "").replace(" Yearly", ""),
-      description: item.description,
-      isBundle: item.planFamily === "af_supreme",
-      isActive: true,
-      metadata: {
-        sku: item.sku,
-        interval: item.interval,
-        amountUsd: item.amountUsd,
-      },
-    },
-    create: {
-      code: item.planFamily,
-      name: item.title.replace(" Monthly", "").replace(" Yearly", ""),
-      description: item.description,
-      isBundle: item.planFamily === "af_supreme",
-      isActive: true,
-      metadata: {
-        sku: item.sku,
-        interval: item.interval,
-        amountUsd: item.amountUsd,
-      },
-    },
-    select: { id: true },
-  })
+  const plan = await upsertSubscriptionPlanForCatalogItem(item)
+  if (!plan) return
 
   const baseData = {
     userId: context.userId,
@@ -307,6 +282,23 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
   }
 
   if (SUPPORTED_PURCHASE_TYPES.has(purchaseType)) {
+    /*
+     * ⚠ A COMPLETED SESSION IS NOT A PAID ONE. With a delayed payment method (bank
+     * debit and the like) Checkout completes with payment_status "unpaid" and the
+     * money arrives days later — or never. Granting here handed out the plan or the
+     * tokens before the funds cleared. Wait for
+     * checkout.session.async_payment_succeeded, which routes back through this same
+     * function once payment_status is "paid"; every grant below is idempotent, so the
+     * second pass is safe. "no_payment_required" (a 100%-off code, a trial) is paid enough.
+     */
+    if (session.payment_status === "unpaid") {
+      console.info("[stripe webhook] checkout completed unpaid — awaiting async payment", {
+        sessionId: session.id,
+        purchaseType,
+      })
+      return purchaseType
+    }
+
     if (purchaseType === "subscription") {
       await persistSubscriptionEntitlementFromCheckout(session, checkoutContext)
       if (checkoutContext?.userId) {
@@ -454,7 +446,8 @@ export async function POST(req: NextRequest) {
 
     try {
       switch (event.type) {
-        case "checkout.session.completed": {
+        case "checkout.session.completed":
+        case "checkout.session.async_payment_succeeded": {
           const session = event.data.object as Stripe.Checkout.Session
           purchaseType = await routeCheckoutSessionCompleted(session)
           break

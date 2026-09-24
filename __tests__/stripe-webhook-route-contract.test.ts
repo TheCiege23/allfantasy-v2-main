@@ -326,6 +326,64 @@ describe("Stripe webhook route contracts", () => {
   })
 
   // -------------------------------------------------------------------------
+  // Delayed payment methods: completed ≠ paid
+  // -------------------------------------------------------------------------
+
+  it("does NOT grant the plan while a completed session is still unpaid", async () => {
+    constructEventMock.mockReturnValueOnce({
+      id: "evt_unpaid",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_unpaid",
+          mode: "subscription",
+          payment_status: "unpaid",
+          subscription: "sub_unpaid",
+          customer: "cus_unpaid",
+          metadata: { purchaseType: "subscription", userId: "u1", sku: "af_pro_monthly" },
+        },
+      },
+    })
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    const req = createMockNextRequest("http://localhost/api/stripe/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "sig_test" },
+      body: "{}",
+    })
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    expect(userSubscriptionUpsertMock).not.toHaveBeenCalled()
+    expect(grantTokensFromPackagePurchaseMock).not.toHaveBeenCalled()
+  })
+
+  it("grants the plan when the delayed payment succeeds (async_payment_succeeded)", async () => {
+    constructEventMock.mockReturnValueOnce({
+      id: "evt_async_paid",
+      type: "checkout.session.async_payment_succeeded",
+      data: {
+        object: {
+          id: "cs_unpaid",
+          mode: "subscription",
+          payment_status: "paid",
+          subscription: "sub_unpaid",
+          customer: "cus_unpaid",
+          metadata: { purchaseType: "subscription", userId: "u1", sku: "af_pro_monthly" },
+        },
+      },
+    })
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    const req = createMockNextRequest("http://localhost/api/stripe/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "sig_test" },
+      body: "{}",
+    })
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ purchaseType: "subscription" })
+    expect(userSubscriptionUpsertMock).toHaveBeenCalledTimes(1)
+  })
+
+  // -------------------------------------------------------------------------
   // Token purchase path
   // -------------------------------------------------------------------------
 
