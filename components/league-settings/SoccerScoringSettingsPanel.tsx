@@ -190,10 +190,13 @@ export function SoccerScoringSettingsPanel({
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            presetKey: selectedPreset,
-            rules: editedRules,
-          }),
+          // Rules only for a custom table. The route treats any `rules` in the body as a premium
+          // edit, so sending them with a plain preset switch refused every free commissioner.
+          body: JSON.stringify(
+            selectedPreset === 'custom'
+              ? { presetKey: selectedPreset, rules: editedRules }
+              : { presetKey: selectedPreset },
+          ),
         },
       )
       const data = await res.json()
