@@ -162,10 +162,11 @@ describe('finalizeRedraftWeek — a daily sport', () => {
    * 🛑 THE WINDOW IS EASTERN DAYS, NOT UTC INSTANTS, AND FOR NHL THAT IS MOST OF THE SEASON.
    *
    * `player_game_stats.game_date` stores the EASTERN calendar day (#1194) and the stat sync
-   * buckets by it. Measured on production 2026-09-24: 954 of 1,409 NHL 2026 games — 67.7% —
+   * buckets by it. Measured on production 2026-09-24: 957 of 1,415 NHL 2026 games — 67.6% —
    * start after UTC midnight, because a 7-10pm Eastern puck drop is the next UTC day. Week 1
-   * alone holds 42 games by UTC instant against 39 by Eastern day, so a slate selected on the
-   * instant would wait on games whose stats landed in a different week.
+   * holds 42 games by UTC instant against 43 by Eastern day — so a slate selected on the
+   * instant is SHORT one game, and a short slate can report itself complete and seal a week
+   * whose stats include a game it never checked.
    */
   it('includes a game played on the window\'s last Eastern evening, after UTC midnight', async () => {
     // 2026-10-06T01:30Z is 9:30pm on Oct 5 in New York — inside week 1 (Sep 29 – Oct 5).
