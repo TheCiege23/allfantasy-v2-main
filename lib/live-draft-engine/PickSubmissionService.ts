@@ -331,6 +331,12 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           team: input.team ?? null,
           byeWeek: input.byeWeek ?? null,
           playerId: input.playerId ?? null,
+          // The pool resolved this face for the card that was picked; the insert used to drop it,
+          // so the board rebuilt one from the id — an NFL Sleeper URL for every sport. Only a real
+          // URL is kept: the pool's "AF" placeholder is a data: URI, not a photo.
+          playerImageUrl: /^https?:\/\//i.test(String(input.playerImageUrl ?? '').trim())
+            ? String(input.playerImageUrl).trim()
+            : null,
           tradedPickMeta: tradedPickMeta ? (tradedPickMeta as any) : undefined,
           source: input.source ?? 'user',
           assetType,

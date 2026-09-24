@@ -29,8 +29,17 @@ export function getTeamLogoUrl(teamAbbr: string | null, sport: string = 'nfl'): 
   return getPrimaryLogoUrlForTeam(toSportType(sport), teamAbbr.trim())
 }
 
-export function buildHeadshotUrl(playerId: string | null): string | null {
+/**
+ * Sleeper headshot URL for an NFL player id. Every other sport returns `null`.
+ *
+ * 🛑 It used to build the NFL URL whatever the sport. Outside NFL the ids reaching this function
+ * are Rolling Insights ids, and the repo's own measurement found 42,031 of 42,032 of them that
+ * collide with a Sleeper id belong to a DIFFERENT person — so an NBA or NHL card showed a stranger's
+ * face, or a 404. A player without a stored image is shown with initials instead.
+ */
+export function buildHeadshotUrl(playerId: string | null, sport: string = 'nfl'): string | null {
   if (!playerId) return null
+  if (String(sport).trim().toLowerCase() !== 'nfl') return null
   // Team defenses use team codes (e.g. "PHI") — the players CDN 404s those, but
   // Sleeper serves them as team logos (mirrors lib/sports-data/headshots.ts).
   if (/^[A-Z]{2,3}$/.test(playerId)) {

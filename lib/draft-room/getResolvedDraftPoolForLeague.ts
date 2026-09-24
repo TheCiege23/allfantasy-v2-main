@@ -8,6 +8,8 @@ import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
+import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { isDevyLeague } from '@/lib/devy'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
 import { isC2CLeague, getC2CPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/merged-devy-c2c'
@@ -274,6 +276,49 @@ const POSITION_FULL_TO_ABBREV: Record<string, string> = {
   'right tackle': 'rt',
 }
 
+/** True when the league's lineup starts two quarterbacks — a superflex slot or two QB slots. */
+export async function leagueStartsTwoQuarterbacks(leagueId: string): Promise<boolean> {
+  const payload = await getLeagueDraftTemplatePayload(leagueId).catch(() => null)
+  const slots = payload?.template?.slots ?? []
+  let qbStarters = 0
+  for (const slot of slots) {
+    const name = String(slot.slotName ?? '').trim().toUpperCase()
+    const starters = Math.max(0, Number(slot.starterCount ?? 0))
+    if (starters === 0) continue
+    // Our templates spell it three ways (`SUPERFLEX`, `SUPER_FLEX`, `SF`).
+    if (name === 'SUPERFLEX' || name === 'SUPER_FLEX' || name === 'SF') return true
+    if (name === 'QB') qbStarters += starters
+  }
+  return qbStarters >= 2
+}
+
+/** TheSportsDB lists staff beside players ("Assistant Coach", "Owner", "General Manager"). */
+export function isNonPlayerRosterRole(position: string | null | undefined): boolean {
+  return /coach|owner|president|manager|chairman|ceo|director|scout|trainer|\bhc\b/i.test(String(position ?? ''))
+}
+
+/** Photo sources, best first — the same order the SportsPlayer query ranks them in. */
+const NON_NFL_PHOTO_SOURCE_ORDER = ['thesportsdb', 'api_football', 'cfbd', 'sleeper', 'rolling_insights', 'backfill']
+
+/**
+ * The photo for a name only when exactly ONE person carries it in the best source that has the
+ * name at all. Two people with the name in that source is ambiguous and yields nothing — a lower
+ * source is not consulted, because it cannot say which of the two the pool row is.
+ */
+export function uniqueNamePhoto(bySource: Map<string, string[]> | undefined): string | null {
+  if (!bySource) return null
+  const ordered = [
+    ...NON_NFL_PHOTO_SOURCE_ORDER.filter((src) => bySource.has(src)),
+    ...[...bySource.keys()].filter((src) => !NON_NFL_PHOTO_SOURCE_ORDER.includes(src)),
+  ]
+  for (const src of ordered) {
+    const urls = [...new Set(bySource.get(src) ?? [])]
+    if (urls.length === 0) continue
+    return urls.length === 1 ? urls[0]! : null
+  }
+  return null
+}
+
 function normalizePositionForMapKey(pos: string | null | undefined): string {
   const lower = String(pos ?? '').trim().toLowerCase()
   return POSITION_FULL_TO_ABBREV[lower] ?? lower
@@ -324,15 +369,37 @@ type AveragedAdpRow = {
   adp: number
 }
 
-async function loadLatestAveragedAdpRowsFromDb(
+/**
+ * ADP boards for two-quarterback lineups. A superflex/2QB board and a 1QB board are different
+ * markets: Josh Allen is ~18.7 on Sleeper's 1QB board and ~1.2 on its 2QB board, and averaging the
+ * two put every QB ~10 picks early in a 1QB league (and late in a superflex one).
+ */
+const QB_HEAVY_ADP_SCORINGS = ['2qb', 'superflex']
+
+export async function loadLatestAveragedAdpRowsFromDb(
   sport: LeagueSport,
   format: 'redraft' | 'dynasty',
+  twoQuarterbacks = false,
+): Promise<AveragedAdpRow[]> {
+  if (twoQuarterbacks) {
+    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS })
+    // No 2QB board for this format is better answered by the 1QB board than by nothing.
+    if (qbHeavy.length > 0) return qbHeavy
+  }
+  return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS })
+}
+
+async function loadLatestAveragedAdpRowsForScorings(
+  sport: LeagueSport,
+  format: 'redraft' | 'dynasty',
+  scoring: { in: string[] } | { notIn: string[] },
 ): Promise<AveragedAdpRow[]> {
   const findLatest = () =>
     prisma.adpDataRecord.findFirst({
       where: {
         sport,
         format,
+        scoring,
         source: { notIn: ADP_IMPORT_SOURCES_EXCLUDED },
       },
       orderBy: [{ season: 'desc' }, { week: 'desc' }, { createdAt: 'desc' }],
@@ -361,6 +428,7 @@ async function loadLatestAveragedAdpRowsFromDb(
     where: {
       sport,
       format,
+      scoring,
       season: latest.season,
       week: latest.week,
       source: { notIn: ADP_IMPORT_SOURCES_EXCLUDED },
@@ -849,7 +917,8 @@ export async function getResolvedDraftPoolForLeague(
       ? 'dynasty'
       : 'redraft'
   const perfAdpRows = perfStart('4. loadLatestAveragedAdpRowsFromDb')
-  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat).catch(
+  const twoQuarterbacks = sport === 'NFL' ? await leagueStartsTwoQuarterbacks(leagueId) : false
+  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks).catch(
     () => [] as AveragedAdpRow[],
   )
   perfAdpRows()
@@ -1419,6 +1488,24 @@ export async function getResolvedDraftPoolForLeague(
   const sportsPlayerSleeperIdByLooseTeamKey = new Map<string, string>()
   const sportsPlayerImageByStrictTeamKey = new Map<string, string>()
   const sportsPlayerSleeperIdByStrictTeamKey = new Map<string, string>()
+  /**
+   * Non-NFL photos by NAME, per source — used only when the name is unambiguous on both sides.
+   *
+   * Outside NFL the pool rows come from Rolling Insights ("PG", "D", "Memphis Grizzlies") and the
+   * photos from TheSportsDB / API-Football / CFBD ("Point Guard", "Defenceman", and a team that
+   * is often a different one — measured on the test DB 2026-09-24, both sources disagree on team
+   * and position for the same person). Every key above carries a position, so those photos never
+   * attached: 601 NBA, 1,127 NHL, 1,106 MLB, ~1,400 soccer and ~5,100 college football photos sat
+   * unused and the board showed initials (or, before the headshot fix, a stranger's face).
+   */
+  const nonNflImagesByName = new Map<string, Map<string, string[]>>()
+  const poolNameCounts = new Map<string, number>()
+  if (sport !== 'NFL') {
+    for (const r of rawListFiltered as RawRow[]) {
+      const nk = normalizeDraftPoolNameForDedupe(String(r.name ?? r.playerName ?? r.full_name ?? ''))
+      if (nk) poolNameCounts.set(nk, (poolNameCounts.get(nk) ?? 0) + 1)
+    }
+  }
   if (rawListFiltered.length > 0) {
     try {
       /**
@@ -1483,6 +1570,13 @@ export async function getResolvedDraftPoolForLeague(
         // Filter: must classify as a real headshot URL (https://, not data: URI,
         // not /teamLogos/ path, not a naked filename).
         if (classifyAvatarSource(row.imageUrl) !== 'headshot') continue
+        if (sport !== 'NFL' && !isNonPlayerRosterRole(row.position)) {
+          const bySource = nonNflImagesByName.get(nk) ?? new Map<string, string[]>()
+          const urls = bySource.get(row.source) ?? []
+          urls.push(row.imageUrl)
+          bySource.set(row.source, urls)
+          nonNflImagesByName.set(nk, bySource)
+        }
         if (tk && strictTeamKey && !sportsPlayerImageByStrictTeamKey.has(strictTeamKey)) {
           sportsPlayerImageByStrictTeamKey.set(strictTeamKey, row.imageUrl)
         }
@@ -1878,7 +1972,14 @@ export async function getResolvedDraftPoolForLeague(
       const teamMatch = lookupTeam ? sportsPlayerImageByLooseTeamKey.get(looseTeamKey) : null
       const namePosMatch = sportsPlayerImageByNameKey.get(`${lookupName}|${normalizeKeyPart(position)}`) ?? null
       const nameOnlyMatch = !lookupTeam ? sportsPlayerImageByNameKey.get(`${lookupName}|`) : null
-      backfilledHeadshot = teamMatch ?? namePosMatch ?? nameOnlyMatch ?? null
+      backfilledHeadshot =
+        teamMatch ??
+        namePosMatch ??
+        nameOnlyMatch ??
+        (sport !== 'NFL' && poolNameCounts.get(lookupName) === 1
+          ? uniqueNamePhoto(nonNflImagesByName.get(lookupName))
+          : null) ??
+        null
     }
 
     /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
@@ -2198,6 +2299,8 @@ export async function getResolvedDraftPoolForLeague(
 
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[])
   let entries = normalizePlayerList(dedupedEnrichedList, sport)
+  // Stored crests over the static registry's guesses (see draftPoolTeamLogos.ts).
+  entries = applyStoredTeamLogos(entries, await loadDraftPoolTeamLogoResolver(sport))
   entries = filterExcludedDraftEntries(
     entries,
     options.excludeDraftedNames,

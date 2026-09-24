@@ -250,6 +250,42 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     expect(completeDraftSessionMock).not.toHaveBeenCalled()
   })
 
+  /**
+   * The pool resolves each card's face; the insert used to drop it and the board rebuilt one from
+   * the id — an NFL Sleeper URL for every sport. A real URL is kept; the pool's "AF" data: URI
+   * placeholder is not a photo and is not stored.
+   */
+  it('stores the photo the picked card showed, but never a data: placeholder', async () => {
+    await submitPick({
+      leagueId: 'league-1',
+      playerName: 'Josh Allen',
+      position: 'QB',
+      team: 'BUF',
+      playerId: 'player-1',
+      rosterId: 'roster-a',
+      source: 'user',
+      expectedOverall: 1,
+      playerImageUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/josh.png',
+    } as Parameters<typeof submitPick>[0])
+    expect((ctx.store.picks[0] as Record<string, unknown>).playerImageUrl).toBe(
+      'https://r2.thesportsdb.com/images/media/player/cutout/josh.png',
+    )
+
+    ctx.resetStore()
+    await submitPick({
+      leagueId: 'league-1',
+      playerName: 'Josh Allen',
+      position: 'QB',
+      team: 'BUF',
+      playerId: 'player-1',
+      rosterId: 'roster-a',
+      source: 'user',
+      expectedOverall: 1,
+      playerImageUrl: 'data:image/svg+xml;utf8,<svg/>',
+    } as Parameters<typeof submitPick>[0])
+    expect((ctx.store.picks[0] as Record<string, unknown>).playerImageUrl).toBeNull()
+  })
+
   it('consecutive picks: roster A then roster B; timer resets each time; different players', async () => {
     const t0 = new Date('2026-03-01T18:00:00.000Z')
     vi.useFakeTimers()

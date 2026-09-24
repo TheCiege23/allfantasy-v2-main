@@ -137,6 +137,22 @@ function sportsPlayerQuality(row: {
 }
 
 /**
+ * Relevance for players with no ADP — every player outside NFL, whose sports have no ADP feed.
+ *
+ * Without it the no-ADP tier kept the table's alphabetical order and the caller's cut
+ * (2,400–4,500 rows) fell on names from A to roughly D: NCAAF carries ~74,000 rows, NCAAB
+ * ~18,000, MLB ~8,500. A player on a current team outranks a free agent, and one with a real
+ * photo outranks one without — the photo sources (TheSportsDB, CFBD, API-Football) carry the
+ * players people actually draft (CFBD's ~5,100 college football photos are its FBS rosters).
+ * Ties keep alphabetical order (the sort is stable).
+ */
+export function rosteredPlayerSignal(row: { team?: string | null; imageUrl?: string | null }): number {
+  const team = String(row.team ?? '').trim().toUpperCase()
+  const onTeam = team !== '' && team !== 'FA' && team !== 'FREE AGENT' ? 2 : 0
+  return onTeam + (isHttpImage(row.imageUrl) ? 1 : 0)
+}
+
+/**
  * Real, provider-agnostic fantasy-relevance signal for pool selection priority
  * (Phase 27, refined Phase 28). Returns a Map of `playerKey` (already
  * `name|position`, lowercased, matching this file's own key format) to that
@@ -350,7 +366,7 @@ async function buildPlayerPoolForSport(
     .sort((a, b) => {
       const aRank = adpRankByKey.get(`${String(a.name ?? '').trim().toLowerCase()}|${String(a.position ?? '').trim().toLowerCase()}`)
       const bRank = adpRankByKey.get(`${String(b.name ?? '').trim().toLowerCase()}|${String(b.position ?? '').trim().toLowerCase()}`)
-      if (aRank === undefined && bRank === undefined) return 0
+      if (aRank === undefined && bRank === undefined) return rosteredPlayerSignal(b) - rosteredPlayerSignal(a)
       if (aRank === undefined) return 1
       if (bRank === undefined) return -1
       return aRank - bRank

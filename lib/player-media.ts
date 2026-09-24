@@ -44,7 +44,7 @@ function teamCacheKey(teamAbbr: string, sport: string): string {
 
 function buildMediaFromTemplate(playerId: string | null, teamAbbr: string | null, sport: string = 'nfl'): PlayerMedia {
   return {
-    headshotUrl: buildHeadshotUrl(playerId),
+    headshotUrl: buildHeadshotUrl(playerId, sport),
     teamLogoUrl: getTeamLogoUrl(teamAbbr, sport),
   }
 }
@@ -168,7 +168,7 @@ export async function attachPlayerMedia(player: {
   const effectiveTeam = dbTeamAbbr || player.teamAbbr || null
 
   const media: PlayerMedia = {
-    headshotUrl: dbImageUrl || buildHeadshotUrl(player.playerId),
+    headshotUrl: dbImageUrl || buildHeadshotUrl(player.playerId, sport),
     teamLogoUrl: dbTeamLogoUrl || getTeamLogoUrl(effectiveTeam, sport),
   }
 
@@ -294,7 +294,7 @@ export async function attachPlayerMediaBatch(
     const source: 'db' | 'template' = (dbTeamAbbr || dbImageUrl || dbTeamLogoUrl) ? 'db' : 'template'
 
     const media: PlayerMedia = {
-      headshotUrl: dbImageUrl || buildHeadshotUrl(p.playerId),
+      headshotUrl: dbImageUrl || buildHeadshotUrl(p.playerId, p.sport),
       teamLogoUrl: dbTeamLogoUrl || getTeamLogoUrl(effectiveTeam, p.sport),
     }
 
@@ -357,7 +357,7 @@ export async function attachPlayerMediaHistorical(
   const effectiveTeam = historicalTeam || player.teamAbbr || null
 
   const media: PlayerMedia = {
-    headshotUrl: buildHeadshotUrl(player.playerId),
+    headshotUrl: buildHeadshotUrl(player.playerId, sport),
     teamLogoUrl: getTeamLogoUrl(effectiveTeam, sport),
   }
 
