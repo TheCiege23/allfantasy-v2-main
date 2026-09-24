@@ -656,7 +656,7 @@ function toPosixPath(filePath) {
 function getChangedFiles(base, head) {
   const range = `${base}..${head}`;
   const command = `git diff --name-only --diff-filter=ACMRTUXB ${range}`;
-  const output = execSync(command, { encoding: "utf8" }).trim();
+  const output = execSync(command, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 }).trim();
   if (!output) {
     return [];
   }
@@ -844,7 +844,10 @@ function isHostDefinitionFile(filePath) {
  */
 function getChangedLineNumbers(base, head) {
   return parseChangedLineNumbers(
-    execSync(`git diff -U0 --diff-filter=ACMRTUXB ${base}..${head}`, { encoding: "utf8" }),
+    // maxBuffer: execSync's ~1 MB default made the guard CRASH (ENOBUFS) — reporting neither pass
+    // nor fail — on the first change to commit a large contract fixture (a 5.7 MB season schedule,
+    // 2026-09-24). A diff's size is not a property of the code being checked.
+    execSync(`git diff -U0 --diff-filter=ACMRTUXB ${base}..${head}`, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 }),
   );
 }
 

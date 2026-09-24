@@ -41,6 +41,7 @@ import {
 } from "@/lib/sports-data/rollingInsightsGameLogs"
 import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImportService"
 import { RI_LIVE_GAME_LOG_SPORTS } from "@/lib/sports-reporting/riLiveGameLogAdapter"
+import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/riSeasonSchedule"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import {
   SleeperWeeklyStatsFetcher,
@@ -202,6 +203,25 @@ async function handle(req: NextRequest) {
       }
     }
 
+    /*
+     * THE NCAAB SEASON SCHEDULE, for the week finalizer (lib/sports-data/riSeasonSchedule.ts):
+     * every SportsGame schedule for college basketball is incomplete, so a week there cannot be
+     * judged "all games final". One RI call per scheduled run; skipped for an explicit date-range
+     * backfill, and after the budget. Folded into this daily RI pass rather than a new route or
+     * cron slot (cron-budget-check.mjs caps the list). A 304 — the 2026-27 schedule before RI
+     * publishes it — writes nothing and is simply reported.
+     */
+    let schedule: Record<string, unknown> | null = null
+    if (!fromDate && !toDate && !budget.exhausted() && candidates.includes("NCAAB")) {
+      try {
+        const season = currentScheduleSeason()
+        const r = await syncRiSeasonSchedule({ sport: "NCAAB", season, db: prisma as never })
+        schedule = { NCAAB: r }
+      } catch (err) {
+        schedule = { NCAAB: { error: String(err).slice(0, 200) } }
+      }
+    }
+
     const written = Object.values(perSport).reduce<number>(
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),
       0,
@@ -229,6 +249,7 @@ async function handle(req: NextRequest) {
           days,
           deferredSports: deferred,
           explicitSport: explicit ?? null,
+          schedule,
           // `season_type` labels riSeasonType.ts could not classify (GAPS N-13). Persisted here
           // because the route's response is read by nobody; an NHL preseason / MLB postseason
           // label we have not seen yet is how that gap gets closed without a probe.
@@ -248,6 +269,7 @@ async function handle(req: NextRequest) {
       provider: "rolling_insights",
       written,
       sports: perSport,
+      schedule,
       deferredForBudget: deferred.length ? deferred : undefined,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
