@@ -9,8 +9,14 @@
 # the 21st — and the Launch plan includes 10 branches per project, not Scale's 25.
 #
 # Before bringing creation back, give the branch a consumer (migrations, an e2e lane) in the SAME
-# change. The delete job and the sweep stay, to clean up what earlier PRs left, and they are
-# harmless when there is nothing to find.
+# change. The delete job and the sweep stay, to clean up what earlier PRs left.
+#
+# ⚠ THIS HEADER USED TO CALL THE DELETE JOB "HARMLESS WHEN THERE IS NOTHING TO FIND", AND IT WAS
+# NOT. It used `neondatabase/delete-branch-action`, which exits 1 when the branch is missing — so
+# once creation stopped, every PR opened after 2026-09-22 went red on close with
+# `ERROR: Branch preview/pr-<n>-… not found.` (first seen on #1224's close, 2026-09-24). The job
+# now treats exactly that message, for exactly this PR's branch, as "nothing to delete", and still
+# fails on anything else — a wrong project, bad credentials, an API outage.
 #
 # Requires repository secrets/variables from Neon GitHub integration:
 #   - secrets.NEON_API_KEY
@@ -76,12 +82,34 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     steps:
-      - name: Delete Neon branch
-        uses: neondatabase/delete-branch-action@v3
+      - uses: actions/setup-node@v4
         with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          api_key: ${{ secrets.NEON_API_KEY }}
-          branch: preview/pr-${{ github.event.number }}-${{ needs.setup.outputs.head_branch }}
+          node-version: '24'
+
+      # 🛑 THE BRANCH NAME REACHES THE SCRIPT THROUGH `env:`, NEVER `${{ }}` INSIDE `run:`. A git
+      # branch name may legally contain `$(…)`, backticks and `;`, and an expression interpolated
+      # into a script is pasted in before bash parses it — a named branch would become a command.
+      # From an environment variable it is only ever data.
+      #
+      # ⚠ ONLY "Branch <this exact name> not found" COUNTS AS NOTHING TO DO. A looser `not found`
+      # would also pass "project not found" (a wrong NEON_PROJECT_ID) and turn a broken cleanup into
+      # a green one. neonctl reads NEON_API_KEY from the environment; the key is never echoed.
+      - name: Delete Neon branch (if one was ever made)
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          BRANCH: preview/pr-${{ github.event.pull_request.number }}-${{ needs.setup.outputs.head_branch }}
+        run: |
+          if out=$(npx -y neonctl@2 branches delete "$BRANCH" --project-id "$NEON_PROJECT_ID" 2>&1); then
+            echo "Deleted $BRANCH."
+            exit 0
+          fi
+          if printf '%s\n' "$out" | grep -qF "Branch $BRANCH not found"; then
+            echo "No preview branch $BRANCH for this PR — nothing to delete."
+            exit 0
+          fi
+          printf '%s\n' "$out"
+          exit 1
 
   # The reconciler. Reads every branch, asks GitHub for each PR's state, and deletes only the
   # `preview/pr-*` ones whose PR is closed or merged. Every other case — open, unknown, a named
