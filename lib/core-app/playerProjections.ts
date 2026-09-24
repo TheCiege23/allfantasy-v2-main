@@ -105,11 +105,23 @@ export async function latestProjectionWeek(): Promise<{ season: string; week: nu
    * switched college projections off entirely. `lookupProjections` resolves the
    * college season itself and ignores the week — see lib/core-app/ncaafProjections.ts.
    */
+  /*
+   * 🛑 THE WEEK THE FEED IS BEING REFRESHED FOR, NOT THE HIGHEST WEEK ON FILE. Those differ the
+   * moment a week is written early, and it was — every week of 2026 until the importer was fixed:
+   * its date guess ran a week ahead (see `approximateCurrentWeek` in cron/import-projections), so
+   * "highest week" answered NEXT week from each Tuesday through Monday night's game, and every
+   * lineup, matchup and waiver number shown as "this week" was next week's. The importer now pulls
+   * Sleeper's own current week each day, so the most recently fetched week IS the current one —
+   * and the early rows already on file stop deciding anything the next time it runs.
+   *
+   * ⚠ A HAND-RUN `?week=N` import becomes "the week" until the next scheduled run. That is the
+   * price of reading this from the data rather than a clock, and the reason not to prefill.
+   */
   const row = await prisma.fantasyProjection.findFirst({
     // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
     // provider feed — they must not decide, or serve as, "the week the feed holds".
     where: { source: { not: 'allfantasy' } },
-    orderBy: [{ season: 'desc' }, { week: 'desc' }],
+    orderBy: [{ fetchedAt: 'desc' }, { season: 'desc' }, { week: 'desc' }],
     select: { season: true, week: true },
   })
   return row ? { season: row.season, week: row.week } : null

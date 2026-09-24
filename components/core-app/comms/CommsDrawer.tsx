@@ -6,6 +6,7 @@ import { LeagueScopePicker } from './LeagueScopePicker'
 import { useScopedConversation } from './useScopedConversation'
 import {
   ArrowUpRight,
+  Eye,
   ImagePlus,
   MessageCircle,
   MessagesSquare,
@@ -951,7 +952,7 @@ function ChimmyPanel({
           */}
         <p className="af-cm-scope-note">
           {scope
-            ? `Answers default to ${scope.name} — its scoring, its roster rules, its schedule. Name another of your leagues in the question to ask about that one instead.`
+            ? `Answers default to ${scope.name}. Name another of your leagues in the question to ask about that one instead.`
             : 'Answers cover every league you play. Ask about one by name, or pick it above.'}
         </p>
         {!publicMode && connectedMembers.length > 1 ? (
@@ -1229,8 +1230,12 @@ function ChimmyPanel({
         >
           <ImagePlus size={18} aria-hidden />
         </button>
+        {/*
+          One line that grows as you type (CSS `field-sizing: content`, capped), not a two-line box
+          with a resize grip — the grip was the only thing in the composer that looked broken.
+        */}
         <textarea
-          rows={2}
+          rows={1}
           className="af-cm-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -2296,8 +2301,14 @@ export function CommsDrawer({
             })}
           </nav>
 
-          {/* Who can see what you type here. The tabs' whole distinction. */}
-          <p className="af-cm-audience">{TABS.find((t) => t.id === tab)!.audience}</p>
+          {/*
+            Who can see what you type here. The tabs' whole distinction — so it says so, rather than
+            leaving "Just you" floating under the tabs with nothing to say what it answers.
+          */}
+          <p className="af-cm-audience">
+            <Eye size={12} aria-hidden />
+            <span>Who sees this: {TABS.find((t) => t.id === tab)!.audience}</span>
+          </p>
         </header>
 
         {tab === 'league' ? (

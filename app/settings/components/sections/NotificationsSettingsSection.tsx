@@ -25,12 +25,12 @@ const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
 /**
  * Every rendered control must govern an event some code actually fires.
- * `lineup_reminders` stays a valid stored/dispatch category (the QA
- * league-reminder route still dispatches under it), but no automatic lineup
- * reminder exists yet — a real one needs lineup-lock times the platform does
- * not durably populate — so its toggle is hidden until a sender exists.
+ * `lineup_reminders` was hidden here until a sender existed; since 2026-09-24
+ * Chimmy's lineup check (lib/chimmy-alerts/lineupCheck.ts, run from the alert
+ * sweep before each week's main slate) sends under it, so its toggle is back.
+ * Keep the set: the next category added before its sender goes here.
  */
-const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set(["lineup_reminders"])
+const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set<NotificationCategoryId>([])
 const VISIBLE_CATEGORY_IDS = NOTIFICATION_CATEGORY_IDS.filter((id) => !HIDDEN_CATEGORY_IDS.has(id))
 
 export function NotificationsSettingsSection({
