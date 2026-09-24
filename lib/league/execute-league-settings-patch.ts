@@ -22,6 +22,7 @@ import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -168,6 +169,15 @@ export async function executeLeagueSettingsPatch(
     include: { leagueSettings: true, teams: true },
   })
   if (!league) return jsonError('League not found', 404)
+
+  // Sport, season, team count, format and dynasty are fixed once the draft has started —
+  // regardless of which door (sectioned or not) the request came through.
+  const structuralRefusal = await structuralPatchRefusal(leagueId, body, league)
+  if (structuralRefusal) return jsonError(structuralRefusal, 409)
+  if (body.leagueSize != null) {
+    const size = Number(body.leagueSize)
+    if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
+  }
 
   const [profile, commissionerEntitlement] = await Promise.all([
     prisma.userProfile.findFirst({
