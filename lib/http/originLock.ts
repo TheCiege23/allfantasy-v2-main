@@ -71,7 +71,13 @@ export function secretsMatch(expected: string, actual: string): boolean {
 export function checkOriginLock(
   headers: { get(name: string): string | null },
   pathname: string,
-  env: OriginLockEnv = process.env,
+  // Read by name, not by passing `process.env`: OriginLockEnv is all-optional (a
+  // "weak type"), and with this repo's ambient ProcessEnv declarations the whole
+  // object fails TS2559 — which CI's ratchet caught and an isolated tsc did not.
+  env: OriginLockEnv = {
+    CF_ORIGIN_AUTH_SECRET: process.env.CF_ORIGIN_AUTH_SECRET,
+    CF_ORIGIN_LOCK_MODE: process.env.CF_ORIGIN_LOCK_MODE,
+  },
 ): OriginLockDecision {
   const mode = modeOf(env)
   if (mode === "off" || EXEMPT_PATHS.has(pathname)) return { action: "allow" }
