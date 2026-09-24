@@ -3,12 +3,13 @@ import type { ReactNode } from "react"
 import "./legal-page.css"
 
 /**
- * Per-route last-updated stamps. Privacy carries August 2026 for the Discord
- * integration disclosure; the other routes are unchanged since March 2026.
+ * Per-route last-updated stamps. Privacy and Terms carry September 2026 for the
+ * SMS program disclosures (A2P 10DLC resubmission; Privacy was August 2026 for the
+ * Discord integration before that); the other routes are unchanged since March 2026.
  */
 const LEGAL_LAST_UPDATED_BY_PAGE = {
-  privacy: "August 2026",
-  terms: "March 2026",
+  privacy: "September 2026",
+  terms: "September 2026",
   disclaimer: "March 2026",
   dataDeletion: "March 2026",
   aiTransparency: "March 2026",

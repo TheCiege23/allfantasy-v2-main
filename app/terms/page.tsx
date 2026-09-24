@@ -6,6 +6,11 @@ import LegalPageRenderer, {
 } from "@/components/legal/LegalPageRenderer"
 import { TERMS_PAGE_TITLE, TERMS_POLICY_CHECKLIST } from "@/lib/legal/TermsPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import {
+  SMS_PROGRAM_BRAND,
+  SMS_PROGRAM_OPERATOR,
+  SMS_PROGRAM_SUPPORT_EMAIL,
+} from "@/lib/legal/smsProgram"
 
 interface TermsPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
@@ -88,7 +93,8 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
       <section id="clause-1">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">1. Acceptance of Terms</h2>
         <p>
-          By accessing or using AllFantasy (&quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;).
+          AllFantasy is operated by {SMS_PROGRAM_OPERATOR} (&quot;we,&quot; &quot;us&quot;). By accessing or using AllFantasy
+          (&quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;).
           If you do not agree, do not use the Service. We may modify these Terms; continued use after changes constitutes acceptance.
         </p>
       </section>
@@ -351,13 +357,34 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
+      <section id="sms-terms">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">SMS Terms</h2>
+        <p>
+          <strong>Program.</strong> {SMS_PROGRAM_BRAND} text messages are sent by {SMS_PROGRAM_OPERATOR}. When you add a
+          mobile number and check the SMS consent box, you agree to receive verification codes, password reset codes, account
+          security alerts and, only if you enable them in notification settings, league and event notifications.
+        </p>
+        <ul className="list-disc pl-6 mt-3 space-y-1">
+          <li>Message frequency varies.</li>
+          <li>Message and data rates may apply.</li>
+          <li>Reply <strong>STOP</strong> to cancel at any time; you will receive one confirmation and no further messages. Reply START to resubscribe.</li>
+          <li>Reply <strong>HELP</strong> for help, or email {SMS_PROGRAM_SUPPORT_EMAIL}.</li>
+          <li>Consent to receive SMS is not a condition of any purchase.</li>
+          <li>Carriers are not liable for delayed or undelivered messages.</li>
+          <li>
+            Mobile numbers and SMS opt-in data are never shared with third parties for marketing. See our
+            <Link href="/privacy#sms-communications" className="text-cyan-400 hover:text-cyan-300 mx-1">Privacy Policy</Link>.
+          </li>
+        </ul>
+      </section>
+
       <section id="clause-24">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">24. Contact</h2>
         <p>
           Questions about these Terms? Contact us at:
         </p>
         <div className="mt-3 p-4 bg-white/5 rounded-xl border border-white/10">
-          <p className="font-semibold text-white">AllFantasy</p>
+          <p className="font-semibold text-white">{SMS_PROGRAM_OPERATOR} (AllFantasy)</p>
           <p className="text-white/60">Email: support@allfantasy.ai</p>
         </div>
       </section>
