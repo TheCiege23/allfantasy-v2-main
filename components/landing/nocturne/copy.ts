@@ -10,6 +10,27 @@
  * edge", "full output", "insights", never "AI".
  */
 
+import { getMonetizationCatalogItemBySku, type MonetizationSku } from '@/lib/monetization/catalog'
+import { CHIMMY_PLAN_DAILY_INCLUDED } from '@/lib/chimmy/planAllowanceView'
+
+/**
+ * 🛑 A PRICE IS NEVER TYPED INTO THIS FILE OR copy.i18n.ts — IT IS READ FROM THE CATALOG.
+ *
+ * Every tier here used to carry its price as a string literal, five times over (en, es,
+ * zh, tl, vi), and by 2026-09-24 they had drifted from what checkout charges: yearly
+ * Pro $99.99 against a charged $79.99, Commissioner $149.99 against $129.99, Supreme
+ * $199.99 against $159.99, and AF Legacy at $29.99 / $299.99 against $9.99 / $79.99.
+ * `catalog.ts` is the figure `verify-stripe-price-parity` holds Stripe to, so reading it
+ * here makes the landing page agree with the charge by construction.
+ */
+export function planPrice(sku: MonetizationSku): string {
+  const amount = getMonetizationCatalogItemBySku(sku)?.amountUsd
+  return amount == null ? '' : `$${amount.toFixed(2)}`
+}
+
+/** Chimmy answers a day included with AF Pro — the same constant the chat route enforces. */
+export const PRO_CHIMMY_DAILY = CHIMMY_PLAN_DAILY_INCLUDED
+
 /** One feature bullet in a pricing tier. `locked` renders a lock icon instead of a check. */
 export interface NocturnePlanFeature {
   text: string
@@ -156,14 +177,14 @@ export const NOCTURNE_COPY: NocturneCopy = {
   },
 
   hero: {
-    badge: 'Fantasy sports only · No gambling · Free for players',
+    badge: 'Fantasy sports only · No gambling · Every league free',
     titleTop: 'Every league you play.',
     titleAccent: 'One screen.',
     body:
       'Bring Sleeper, ESPN, Yahoo and more into one command center that shows what needs your attention, who to start, and where to go — across every league at once.',
     primary: 'Get started free',
     secondary: 'See how it works',
-    finePrint: 'Free to explore every league · Paid plans from $9.99/mo · Cancel anytime',
+    finePrint: `Create, import and run leagues free · Paid plans from ${planPrice('af_pro_monthly')}/mo · Cancel anytime`,
     mockup: {
       title: 'Your leagues',
       clock: 'Week 12 · Sun 11:41a',
@@ -176,7 +197,7 @@ export const NOCTURNE_COPY: NocturneCopy = {
       lockedTitle: 'Projected edge this week',
       lockedSub: 'Across all 4 leagues',
       lockedValue: '+14.6',
-      lockedTag: 'AF Legacy',
+      lockedTag: 'AF Pro',
     },
   },
 
@@ -256,98 +277,91 @@ export const NOCTURNE_COPY: NocturneCopy = {
 
   pricing: {
     kicker: 'Simple pricing',
-    title: 'Free to see it all. Upgrade to act on it.',
+    title: 'Every league is free. Upgrade for the edge.',
     body:
-      'Explore every league, live scores and standings for free. Go Pro for player tools, Commissioner to run your leagues, Supreme for projections and cross-league analytics, or AF Legacy for the full output — live draft room, dynasty tools and priority access.',
-    footnote:
-      'Every paid plan includes a monthly token allowance and can be billed monthly or yearly. Cancel anytime.',
-    // Ordered low→high. Prices, names, and the "Everything in …" ladder mirror the
-    // canonical catalog (lib/monetization/catalog.ts); `plan` maps to the /upgrade
-    // ?plan= param normalized in app/upgrade/page.tsx. `plan: null` → straight to signup.
+      'Create, import and run as many leagues as you want — drafts, trades, waivers, live scoring and standings included, free forever. Go Pro for Chimmy and player tools, Commissioner for league automation and integrity tools, or Supreme for both.',
+    footnote: 'Paid plans bill monthly or yearly. Cancel anytime from Settings → Billing.',
+    /*
+     * Ordered low→high; `plan` maps to the /upgrade ?plan= param normalized in
+     * app/upgrade/page.tsx, `plan: null` → straight to signup.
+     *
+     * ⚠ THREE CLAIMS THAT WERE ON THIS PAGE AND ARE NOT TRUE — DO NOT RESTORE THEM:
+     *  - "Everything in Pro" on Commissioner. Only Supreme bundles tiers
+     *    (SUPREME_INCLUDED_PLAN_IDS); a Commissioner subscriber does not get Pro's tools.
+     *  - A "monthly token allowance" on every paid plan. Subscriptions grant no tokens
+     *    (lib/tokens/subscription-policy.ts is all zeroes, deliberately).
+     *  - Mock drafts, the live draft room and the weighted lottery sold as paid. All three
+     *    are free — creating and running a league is free.
+     * AF Legacy is off the launch pricing (owner's decision 2026-09-24); its SKU still sells
+     * from /upgrade?plan=war_room, and Supreme includes its tools.
+     */
     tiers: [
       {
         key: 'free',
         name: 'Free',
         price: '$0',
-        priceSuffix: 'forever, for players',
+        priceSuffix: 'forever',
         priceYear: null,
         plan: null,
         featured: false,
         badge: null,
         cta: 'Get started free',
         features: [
-          { text: 'All your leagues on one board' },
-          { text: 'Live scores, matchups & standings' },
-          { text: 'Player search across every league' },
-          { text: 'Projected edges & full insights', locked: true },
+          { text: 'Create & import unlimited leagues' },
+          { text: 'Drafts, trades, waivers & live scoring' },
+          { text: 'Every league on one board' },
+          { text: 'Commissioner basics: settings, invites & playoffs' },
         ],
       },
       {
         key: 'pro',
         name: 'AF Pro',
-        price: '$9.99',
+        price: planPrice('af_pro_monthly'),
         priceSuffix: '/ mo',
-        priceYear: 'or $99.99/yr',
+        priceYear: `or ${planPrice('af_pro_yearly')}/yr`,
         plan: 'pro',
         featured: false,
         badge: null,
         cta: 'Get AF Pro',
         features: [
           { text: 'Everything in Free' },
+          { text: `Chimmy: ${PRO_CHIMMY_DAILY} answers a day` },
           { text: 'Trade & waiver tools' },
           { text: 'Start/sit & lineup guidance' },
-          { text: 'Draft prep & mock drafts' },
         ],
       },
       {
         key: 'commissioner',
         name: 'Commissioner',
-        price: '$14.99',
+        price: planPrice('af_commissioner_monthly'),
         priceSuffix: '/ mo',
-        priceYear: 'or $149.99/yr',
+        priceYear: `or ${planPrice('af_commissioner_yearly')}/yr`,
         plan: 'commissioner',
         featured: false,
         badge: null,
         cta: 'Get Commissioner',
         features: [
-          { text: 'Everything in Pro' },
-          { text: 'Full commissioner tool suite' },
-          { text: 'Dispersal draft & weighted lottery' },
-          { text: 'Integrity monitoring & broadcast' },
+          { text: 'Everything in Free' },
+          { text: 'League automation & custom scoring tables' },
+          { text: 'Integrity monitoring & league health' },
+          { text: 'Recaps, power rankings & storylines' },
         ],
       },
       {
         key: 'supreme',
         name: 'AF Supreme',
-        price: '$19.99',
+        price: planPrice('af_supreme_monthly'),
         priceSuffix: '/ mo',
-        priceYear: 'or $199.99/yr',
+        priceYear: `or ${planPrice('af_supreme_yearly')}/yr`,
         plan: 'supreme',
-        featured: false,
-        badge: null,
+        featured: true,
+        badge: 'Best value',
         cta: 'Get AF Supreme',
         features: [
-          { text: 'Everything in Commissioner' },
-          { text: 'Projections & projected edges' },
-          { text: 'Cross-league analytics & portfolio' },
-          { text: 'Higher monthly token allowance' },
-        ],
-      },
-      {
-        key: 'legacy',
-        name: 'AF Legacy',
-        price: '$29.99',
-        priceSuffix: '/ mo',
-        priceYear: 'or $299.99/yr',
-        plan: 'war_room',
-        featured: true,
-        badge: 'Full output',
-        cta: 'Get AF Legacy',
-        features: [
-          { text: 'Everything in Supreme' },
-          { text: 'Live draft room' },
-          { text: 'Dynasty & devy deep tools' },
-          { text: 'Priority & early access' },
+          { text: 'Everything in AF Pro & Commissioner' },
+          { text: 'Dynasty & devy planning tools' },
+          { text: 'Less than buying both' },
+          { text: 'Built for commissioners who also play' },
         ],
       },
     ],

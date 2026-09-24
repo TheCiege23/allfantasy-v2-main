@@ -24,10 +24,12 @@ export type PlanFamilyKey =
 export const PLAN_FAMILY_SHORT_TAGLINE: Record<PlanFamilyKey, string> = {
   af_pro:
     "Player-focused tools: Chimmy, trades, waivers, and matchup edges across every supported sport.",
+  // ⚠ Not "league operations" and not "Draft room": running a league and its draft room are
+  // FREE (the Oct 15 paywall rule). These plans sell what sits on top of that.
   af_commissioner:
-    "Commissioner toolkit: governance, automations, and league operations — dues & payouts stay on FanCred.",
+    "Commissioner automation, integrity and insight — running your league stays free, and dues & payouts stay on FanCred.",
   af_war_room:
-    "Draft room plus dynasty & long-term planning for deep, year-round fantasy managers.",
+    "Draft-room intelligence plus dynasty & long-term planning for deep, year-round fantasy managers.",
   /*
    * ⚠ NO LONGER "Pro + Commissioner + AF Legacy". SUPREME_INCLUDED_PLAN_IDS is
    * now [pro, commissioner]; Legacy stands on its own at $9.99 beside them. And
@@ -46,7 +48,10 @@ export const PLAN_FAMILY_INCLUDES: Record<PlanFamilyKey, readonly string[]> = {
     "Game-day lineup calls scored by your league's own settings",
   ],
   af_commissioner: [
-    "Custom scoring, lock settings, invites, exports, and analytics",
+    // ⚠ Lock settings and invites were listed here and are FREE — every commissioner
+    // runs their league without a plan. Custom scoring TABLES are the paid part
+    // (`advanced_scoring`); switching presets is free.
+    "Custom scoring tables and league automation",
     "Commissioner summaries, recaps, and leaderboard explanations",
     "League health, integrity checks, and the Commissioner OS",
   ],
