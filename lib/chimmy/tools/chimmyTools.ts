@@ -308,11 +308,12 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_game_log',
       description:
-        "A real NFL player's game-by-game stat lines. Use for 'how many yards did X have last week', 'X's last 3 games', 'what did X do in week 4'. Takes a NAME. NFL only — for college football offer season totals instead. If it warns that the lines are from an earlier season, do NOT present them as this season.",
+        "A real player's game-by-game stat lines, NFL or college football. Use for 'how many yards did X have last week', 'X's last 3 games', 'what did X do in week 4'. Takes a NAME, plus sport NCAAF for a college player. If it warns that the lines are from an earlier season, do NOT present them as this season.",
       parameters: {
         type: 'object',
         properties: {
           player: { type: 'string', description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.' },
+          sport: { type: 'string', description: 'NFL or NCAAF (college football). Defaults to NFL.' },
           week: { type: 'number', description: 'A specific week, only if the user named one. Do not guess the current week.' },
           last_n: { type: 'number', description: 'How many recent games (1-10). Defaults to 5.' },
           season: { type: 'number', description: 'A year, only if the user named one.' },

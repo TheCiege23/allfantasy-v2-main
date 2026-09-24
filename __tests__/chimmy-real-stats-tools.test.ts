@@ -181,11 +181,40 @@ describe('get_player_game_log', () => {
     expect(out).toMatch(/2 NFL players are named "Josh Allen"/)
   })
 
-  it('offers season totals for college football instead of inventing a game line', async () => {
-    const { db, calls } = fakeDb(() => [])
+  it('college: finds the player by his CFBD season row and reads his CFBD-id game lines', async () => {
+    const { db, calls } = fakeDb((s) => {
+      if (s.text.includes('fantasy_stat_lines')) {
+        return [{ playerId: '5158948', name: 'Jared Curtis', team: 'Vanderbilt', position: 'QB', season: '2026' }]
+      }
+      if (s.text.includes('max(season)')) return [{ season: 2026 }]
+      return [
+        {
+          playerId: '5158948',
+          season: 2026,
+          week: 3,
+          team: null,
+          opponent: null,
+          gameDate: new Date('2026-09-19T23:30:00Z'),
+          statPayload: { 'passing.COMPLETIONS': 20, 'passing.ATT': 34, 'passing.YDS': 277, 'rushing.YDS': 64, _opponent: 'NC State', _homeAway: 'home' },
+        },
+      ]
+    })
+
+    const out = await buildPlayerGameLogContext({ playerName: 'Jared Curtis', sport: 'NCAAF' }, db)
+
+    expect(out).toContain('Week 3 vs NC State (2026-09-19): 20 cmp, 34 att, 277 pass yds, 64 rush yds')
+    const q = calls.find((c) => c.text.includes('stat_payload'))!
+    expect(q.text).toContain(`"sportType" = 'NCAAF'`)
+    expect(q.values).toContain('5158948') // the CFBD athlete id, straight from the season row
+  })
+
+  it('college: says plainly when no game lines are stored yet, instead of inventing one', async () => {
+    const { db } = fakeDb((s) => {
+      if (s.text.includes('fantasy_stat_lines')) return [{ playerId: '1', name: 'Arch Manning', team: 'Texas', position: 'QB', season: '2026' }]
+      return [{ season: null }]
+    })
     const out = await buildPlayerGameLogContext({ playerName: 'Arch Manning', sport: 'NCAAF' }, db)
-    expect(out).toMatch(/Per-game college football lines are not stored/)
-    expect(calls).toHaveLength(0)
+    expect(out).toMatch(/NO college football game lines are stored yet/)
   })
 })
 

@@ -219,6 +219,8 @@ async function runOneSport(
           written: cfbd.written,
           skippedNonFantasy: cfbd.skippedNonFantasy,
           errors: cfbd.errors,
+          // Per-game lines written into player_game_stats (lib/stats/cfbdGameLogs.ts).
+          gameLogs: cfbd.gameLogs ?? null,
           cfbdIdBridge: bridgeError ? { error: bridgeError } : bridge,
           durationMs: Date.now() - startedAt,
         },

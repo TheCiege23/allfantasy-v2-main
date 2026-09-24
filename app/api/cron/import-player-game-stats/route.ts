@@ -72,9 +72,13 @@ const DEFAULT_MAX_WEEKS = 6
  * Sports whose per-game player lines come from Rolling Insights `/live/{date}/{SPORT}`.
  *
  * NFL is absent because it already has a better source here: Sleeper's weekly stats, with a
- * completion ledger and fantasy points already computed. NCAAF is absent because Rolling Insights
- * carries no college football data at all — measured `fetched: 0` — which is the same reason
- * `import-stat-lines` routes NCAAF to CollegeFootballData.
+ * completion ledger and fantasy points already computed. NCAAF is absent because its per-game
+ * lines come from CollegeFootballData instead, written by `import-stat-lines` from the
+ * `/games/players` responses it already fetches (lib/stats/cfbdGameLogs.ts, 2026-09-23).
+ *
+ * ⚠ CORRECTED 2026-09-23: this used to say Rolling Insights "carries no college football data at
+ * all — measured `fetched: 0`". It does: NCAAFB is on the SECOND RI account (`RSC_TOKEN2`), and a
+ * probe with only the first token reads as "no college". See the two-account warning in CLAUDE.md.
  */
 const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "SOCCER"] as const
 

@@ -286,9 +286,7 @@ export async function buildPlayerGameLogContext(
   if (!asked) return 'No player name was given, so nothing was looked up. Ask which player they mean.'
   const sport = normalizeStatsSport(args.sport)
   if (!sport) return unsupportedSport(args.sport)
-  if (sport === 'NCAAF') {
-    return 'Per-game college football lines are not stored yet — only season totals are. Offer the season totals (get_player_season_stats) instead; do not give a game line from memory.'
-  }
+  if (sport === 'NCAAF') return buildNcaafGameLogContext(args, db)
 
   const token = nameToken(asked)
   if (token.length < 2) return `"${asked}" is not a name I can search for. Ask for the player's full name.`
@@ -387,6 +385,128 @@ export async function buildPlayerGameLogContext(
   lines.push(
     'Fantasy points shown are Sleeper\'s standard presets, NOT the user\'s league scoring. A week missing from this list was not played or not imported yet — never a zero.',
   )
+  return lines.join('\n')
+}
+
+// ── College football game log ────────────────────────────────────────────────────────────────
+
+/** CFBD per-game keys (lib/stats/cfbdGameLogs.ts), in box-score order. */
+const NCAAF_GAME_KEYS: Array<[string, string]> = [
+  ['passing.COMPLETIONS', 'cmp'],
+  ['passing.ATT', 'att'],
+  ['passing.YDS', 'pass yds'],
+  ['passing.TD', 'pass TD'],
+  ['passing.INT', 'INT'],
+  ['rushing.CAR', 'car'],
+  ['rushing.YDS', 'rush yds'],
+  ['rushing.TD', 'rush TD'],
+  ['receiving.REC', 'rec'],
+  ['receiving.YDS', 'rec yds'],
+  ['receiving.TD', 'rec TD'],
+  ['fumbles.LOST', 'fumbles lost'],
+  ['defensive.TOT', 'tackles'],
+  ['defensive.TFL', 'TFL'],
+  ['defensive.SACKS', 'sacks'],
+  ['interceptions.INT', 'INT (def)'],
+  ['kicking.FGM', 'FG made'],
+  ['kicking.FGA', 'FG att'],
+  ['kicking.XPM', 'XP made'],
+]
+
+/*
+ * College lines live in player_game_stats under the CFBD athlete id — the SAME id the CFBD season
+ * rows in fantasy_stat_lines carry (their `player_id`), so a player found by name there is the key
+ * here. No identity-map hop, and so none of its coverage gaps.
+ */
+async function buildNcaafGameLogContext(
+  args: { playerName: string; season?: unknown; week?: unknown; lastN?: unknown },
+  db: Db,
+): Promise<string> {
+  const asked = String(args.playerName ?? '').trim()
+  const token = nameToken(asked)
+  if (token.length < 2) return `"${asked}" is not a name I can search for. Ask for the player's full name.`
+
+  const candidates = await db.$queryRaw<Array<{ playerId: string; name: string | null; team: string | null; position: string | null; season: string }>>(Prisma.sql`
+    SELECT DISTINCT ON (player_id) player_id AS "playerId", stats ->> 'name' AS name,
+           coalesce(stats ->> 'riTeam', team) AS team, stats ->> 'position' AS position, season
+    FROM fantasy_stat_lines
+    WHERE sport = 'NCAAF' AND source = 'cfbd' AND week = 0 AND (stats ->> 'name') ILIKE ${`%${token}%`}
+    ORDER BY player_id, season DESC
+    LIMIT 60`)
+  const target = normalizePlayerName(asked)
+  const players = candidates.filter((c) => normalizePlayerName(c.name ?? '') === target)
+  if (players.length === 0) {
+    const near = [...new Set(candidates.map((c) => c.name).filter(Boolean))].slice(0, 5)
+    return [
+      `No college football player named "${asked}" has stats on file.`,
+      near.length ? `Similar names: ${near.join(', ')}. Ask which one they mean.` : '',
+      'Do not give a game line from memory.',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  }
+  if (players.length > 1) {
+    return `${players.length} college players are named "${asked}" (${players.map((p) => `${p.position ?? '?'}, ${p.team ?? '?'}`).join('; ')}). Ask which one they mean rather than picking.`
+  }
+  const player = players[0]
+
+  const week = typeof args.week === 'number' && Number.isFinite(args.week) ? Math.floor(args.week) : null
+  const requestedSeason = typeof args.season === 'number' && Number.isFinite(args.season) ? Math.floor(args.season) : null
+  const lastN = Math.min(10, Math.max(1, typeof args.lastN === 'number' && Number.isFinite(args.lastN) ? Math.floor(args.lastN) : 5))
+
+  const [seasonRows, currentRows] = await Promise.all([
+    db.$queryRaw<Array<{ season: number | null }>>(Prisma.sql`
+      SELECT max(season) AS season FROM player_game_stats WHERE "sportType" = 'NCAAF' AND "playerId" = ${player.playerId}`),
+    db.$queryRaw<Array<{ season: number | null }>>(Prisma.sql`
+      SELECT max(season) AS season FROM player_game_stats WHERE "sportType" = 'NCAAF'`),
+  ])
+  const currentSeason = currentRows[0]?.season ?? null
+  if (currentSeason == null) {
+    return 'NO college football game lines are stored yet (the per-game import is new). Offer his season totals (get_player_season_stats) instead; do not give a game line from memory.'
+  }
+  const season = requestedSeason ?? seasonRows[0]?.season ?? null
+  const header = `${player.name} (${player.position ?? '?'}, ${player.team ?? '?'}) — NCAAF${season != null ? ` ${season}` : ''}, per-game lines from CollegeFootballData:`
+  if (season == null) {
+    return [
+      header,
+      '- No game lines are stored for him. Either he has not recorded a stat, or his games have not been imported yet — do NOT report zeros; offer season totals instead.',
+    ].join('\n')
+  }
+  const staleSeason =
+    requestedSeason == null && season < currentSeason
+      ? `⚠ NO ${currentSeason} GAME LINES ARE STORED FOR HIM YET — the lines below are from ${season}, NOT this season. Do NOT present them as "last week"; offer his ${currentSeason} season totals instead.`
+      : null
+
+  const rows = await db.$queryRaw<GameRow[]>(Prisma.sql`
+    SELECT "playerId", season, "weekOrRound" AS week, team, opponent, game_date AS "gameDate", stat_payload AS "statPayload"
+    FROM player_game_stats
+    WHERE "sportType" = 'NCAAF' AND "playerId" = ${player.playerId} AND season = ${season}
+      ${week != null ? Prisma.sql`AND "weekOrRound" = ${week}` : Prisma.empty}
+    ORDER BY "weekOrRound" DESC
+    LIMIT ${week != null ? 3 : lastN}`)
+  if (rows.length === 0) {
+    return [
+      header,
+      week != null
+        ? `- No line is stored for week ${week}. Either he did not record a stat, or that week has not been imported yet — do NOT report it as zero.`
+        : `- No lines are stored for ${season}. Do NOT report zeros; offer season totals instead.`,
+    ].join('\n')
+  }
+
+  const lines = staleSeason ? [staleSeason, header] : [header]
+  for (const r of rows) {
+    const s = (r.statPayload && typeof r.statPayload === 'object' ? r.statPayload : {}) as Record<string, unknown>
+    const parts: string[] = []
+    for (const [key, label] of NCAAF_GAME_KEYS) {
+      const n = num(s[key])
+      if (n != null && n !== 0) parts.push(`${fmt(n)} ${label}`)
+    }
+    const opponent = typeof s._opponent === 'string' && s._opponent.trim() ? s._opponent.trim() : null
+    const where = s._homeAway === 'away' ? ' at ' : ' vs '
+    const when = r.gameDate ? ` (${new Date(r.gameDate).toISOString().slice(0, 10)})` : ''
+    lines.push(`- Week ${r.week}${opponent ? `${where}${opponent}` : ''}${when}: ${parts.length ? parts.join(', ') : 'appeared, no counting stats'}`)
+  }
+  lines.push('A week missing from this list means no recorded stat or not imported yet — never a zero.')
   return lines.join('\n')
 }
 

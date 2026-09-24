@@ -2,14 +2,18 @@ import 'server-only'
 import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 import { prisma } from '@/lib/prisma'
+import { createCfbdGameLogCollector, planCfbdGameLogs, type CfbdGameLogReport } from '@/lib/stats/cfbdGameLogs'
 
 /**
- * cfbdPlayerStats — NCAAF season stat lines from CollegeFootballData.
+ * cfbdPlayerStats — NCAAF season stat lines from CollegeFootballData, and (since 2026-09-23) the
+ * per-game lines from the same `/games/players` responses — see lib/stats/cfbdGameLogs.ts.
  *
- * Rolling Insights carries no college data (`fetched: 0` for NCAAF), so
- * `fantasy_stat_lines` had nothing for the sport, and compute-projections
- * correctly refused with "no fantasy_stat_lines found for sport=NCAAF". CFBD is
- * the only NCAAF feed we hold a key for, and it does have the stats.
+ * ⚠ CORRECTED 2026-09-23: this used to say "Rolling Insights carries no college data". It does —
+ * NCAAFB is on the SECOND RI account (`ROLLING_INSIGHTS_RSC_TOKEN2`; CLAUDE.md, GAPS.md) — and the
+ * claim is what kept college football out of the per-game import. CFBD remains the source here
+ * because the key, the shape and the ids (the same athlete ids as the season lines) are proven.
+ * `fantasy_stat_lines` had nothing for the sport before this, and compute-projections
+ * correctly refused with "no fantasy_stat_lines found for sport=NCAAF".
  *
  * SHAPE: /stats/player/season returns LONG format — one row per player per stat
  * type, 139,100 rows covering 14,442 players for 2025. This pivots to one row
@@ -36,7 +40,13 @@ const STAT_TTL_MS = 7 * 24 * 60 * 60 * 1000
  * actually appears in. Without it every projection is correctly refused, since
  * per-game rates would otherwise divide by an assumed number.
  */
-async function fetchGamesPlayed(season: number, key: string, maxWeek = 15): Promise<Map<string, number>> {
+async function fetchGamesPlayed(
+  season: number,
+  key: string,
+  maxWeek = 15,
+  /** Each week's raw games, handed on before they are discarded (the game-log collector). */
+  onWeek?: (week: number, games: unknown[]) => void,
+): Promise<Map<string, number>> {
   const appearances = new Map<string, Set<string>>()
 
   for (let week = 1; week <= maxWeek; week += 1) {
@@ -48,6 +58,12 @@ async function fetchGamesPlayed(season: number, key: string, maxWeek = 15): Prom
       if (!res.ok) continue
       const games = (await res.json()) as unknown
       if (!Array.isArray(games)) continue
+      // Never let the collector break the games-played count it rides along with.
+      try {
+        onWeek?.(week, games)
+      } catch {
+        /* reported by the collector itself */
+      }
 
       for (const game of games as Record<string, unknown>[]) {
         const gameId = String(game.id ?? '')
@@ -226,6 +242,8 @@ export type CfbdStatSyncResult = {
   gamesPlayedResolved: number
   skippedNoGames: number
   errors: string[]
+  /** Per-game lines kept from the same `/games/players` responses. Absent when not attempted. */
+  gameLogs?: CfbdGameLogReport
 }
 
 function cfbdKey(): string | null {
@@ -336,8 +354,24 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
 
   result.players = byPlayer.size
 
+  /*
+   * Game logs ride on the week loop below — same responses, no extra CFBD call. Planned from our
+   * own tables BEFORE the loop so only the weeks still needing a write are kept in memory. A
+   * planning failure (e.g. the DB) skips game logs for this run and nothing else.
+   */
+  const plan = await planCfbdGameLogs({ season, now }).catch((e: unknown) => {
+    result.gameLogs = {
+      weeksWritten: [],
+      weeksSkippedComplete: [],
+      weeksDeferred: [],
+      errors: [`plan: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`],
+    }
+    return null
+  })
+  const collector = plan ? createCfbdGameLogCollector(plan) : null
+
   // Derived separately because the season endpoint has no game count.
-  const gamesPlayed = await fetchGamesPlayed(season, key)
+  const gamesPlayed = await fetchGamesPlayed(season, key, 15, collector ? (w, g) => collector.offer(w, g) : undefined)
   result.gamesPlayedResolved = gamesPlayed.size
 
   const expiresAt = new Date(now.getTime() + STAT_TTL_MS)
@@ -432,6 +466,9 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
       }
     }
   }
+
+  // After the season lines, so a slow game-log write can never cost the season import.
+  if (collector) result.gameLogs = await collector.flush({ season })
 
   return result
 }
