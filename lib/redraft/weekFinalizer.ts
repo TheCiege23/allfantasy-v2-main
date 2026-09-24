@@ -120,6 +120,18 @@ export type WeekFinalizerDeps = {
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
+  /**
+   * Fill a PAST week's stat rows, so the sweep below can attempt it a second time.
+   *
+   * 🛑 WITHOUT THIS THE SWEEP RE-ATTEMPTS WEEKS IT CAN NEVER SATISFY. Score-sync reconciles
+   * exactly one week — `resolveSeasonWeekForRedraftSeason`'s current one — so a week that
+   * missed its window has whatever coverage it had then, forever, and the sweep refuses it
+   * every five minutes on data nothing is refreshing.
+   *
+   * Injected rather than imported because `playerWeeklyScoreService` is what would fill them
+   * and it already reaches this module's normalizers; a direct import would close the cycle.
+   */
+  syncWeekStats?: (args: { seasonId: string; week: number }) => Promise<void>
 }
 
 export type FinalizeRedraftWeekParams = {
@@ -494,17 +506,46 @@ export async function finalizeCompletedWeeksForSeason(
   let finalized = 0
 
   for (const week of weeks) {
-    const result = await finalizeRedraftWeek(
-      {
-        seasonId: params.seasonId,
-        week,
-        seasonType: params.seasonType,
-        graceMs: params.graceMs,
-        coverageFloor: params.coverageFloor,
-        dryRun: params.dryRun,
-      },
-      deps,
-    )
+    const attempt = () =>
+      finalizeRedraftWeek(
+        {
+          seasonId: params.seasonId,
+          week,
+          seasonType: params.seasonType,
+          graceMs: params.graceMs,
+          coverageFloor: params.coverageFloor,
+          dryRun: params.dryRun,
+        },
+        deps,
+      )
+
+    let result = await attempt()
+
+    /*
+     * 🛑 ONE RETRY, AND ONLY FOR THE ONE REFUSAL A BACKFILL CAN ANSWER.
+     *
+     * `stat_coverage_below_floor` on a PAST week is the signature of stats nobody has
+     * fetched, not of a week that should stay open — score-sync only ever reconciles the
+     * current week, so an older one keeps whatever coverage it had when it was current.
+     * Measured in production 2026-09-24 on the one native league that has played: week 2
+     * sat at 86/90 (95.6%) while week 1 sat at 62/90 (69%), and because the roller advances
+     * from `currentWeek`, that week 1 held the whole season on week 1.
+     *
+     * ⚠ FETCHING FIRST AND ASKING AFTERWARDS WOULD BE THE EXPENSIVE VERSION. The other
+     * refusals — unfinished slate, inside the grace period, no starters — are not about
+     * missing rows, and a week that seals on the first attempt costs nothing extra. A week
+     * that can never reach the floor costs one backfill per tick until it falls out of the
+     * lookback window, which is what bounds this.
+     */
+    if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
+      try {
+        await deps.syncWeekStats({ seasonId: params.seasonId, week })
+        result = await attempt()
+      } catch {
+        // A provider gap leaves the original refusal standing rather than inventing coverage.
+      }
+    }
+
     results.push(result)
     if (result.finalized) finalized += 1
     if (result.refusal) refusals[result.refusal] = (refusals[result.refusal] ?? 0) + 1

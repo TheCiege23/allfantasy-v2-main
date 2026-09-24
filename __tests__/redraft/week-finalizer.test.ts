@@ -441,3 +441,140 @@ describe('finalizeCompletedWeeksForSeason', () => {
     expect(result.refusals.season_not_found).toBe(2)
   })
 })
+
+/**
+ * 🛑 A PAST WEEK IS JUDGED ON STATS NOBODY HAS REFRESHED SINCE IT WAS CURRENT.
+ *
+ * Score-sync reconciles exactly one week — the one `resolveSeasonWeekForRedraftSeason` calls
+ * current — so a week that missed its window keeps whatever coverage it had then, and the
+ * sweep refuses it every five minutes on data nothing is updating. Measured in production
+ * 2026-09-24 on the one native league that has played: week 2 at 86/90 (95.6%) while week 1
+ * sat at 62/90 (69%), and because the roller advances from `currentWeek`, that week 1 held the
+ * entire season on week 1.
+ *
+ * So the sweep may fill a week's rows and try once more — for that refusal alone.
+ */
+describe('finalizeCompletedWeeksForSeason — backfilling a past week', () => {
+  /** Coverage that starts below the floor and rises only if `syncWeekStats` is called. */
+  function makeSweepPrisma(scored: Array<{ playerId: string; sport: string }>) {
+    return {
+      redraftSeason: { findFirst: vi.fn(async () => SEASON) },
+      redraftMatchup: {
+        findMany: vi.fn(async (args: AnyArgs) =>
+          // The sweep's own query asks for weeks that are NOT final; the per-week calls do not.
+          args.where?.status?.not === 'final' ? [{ week: 1 }] : [{ id: 'm1', status: 'active' }],
+        ),
+      },
+      sportsGame: { findMany: vi.fn(async () => [game('final')]) },
+      redraftRoster: { findMany: vi.fn(async () => [{ id: 'roster-1' }]) },
+      redraftRosterPlayer: {
+        findMany: vi.fn(async () => [starter('p1'), starter('p2'), starter('p3'), starter('p4')]),
+      },
+      playerWeeklyScore: {
+        findMany: vi.fn(async () => [...scored]),
+        createMany: vi.fn(async (args: AnyArgs) => ({ count: args.data.length })),
+        updateMany: vi.fn(async () => ({ count: 4 })),
+      },
+    } as any
+  }
+
+  it('fills the week and seals it on the second attempt', async () => {
+    const scored = [{ playerId: 'p1', sport: 'NFL' }, { playerId: 'p2', sport: 'NFL' }]
+    const prisma = makeSweepPrisma(scored)
+    const syncWeekStats = vi.fn(async ({ week }: { seasonId: string; week: number }) => {
+      expect(week).toBe(1)
+      scored.push({ playerId: 'p3', sport: 'NFL' }, { playerId: 'p4', sport: 'NFL' })
+    })
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn(async () => ({ updated: 1 })) as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).toHaveBeenCalledTimes(1)
+    expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 'season-1', week: 1 })
+    expect(result.finalized).toBe(1)
+    // The refusal that triggered the backfill is not reported — the week closed.
+    expect(result.refusals.stat_coverage_below_floor).toBeUndefined()
+    expect(result.results[0]?.coverage).toBe(1)
+  })
+
+  it('reports the refusal unchanged when the backfill cannot close the gap', async () => {
+    const prisma = makeSweepPrisma([{ playerId: 'p1', sport: 'NFL' }])
+    // A provider with nothing for that week: called, changes nothing.
+    const syncWeekStats = vi.fn(async () => {})
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).toHaveBeenCalledTimes(1)
+    expect(result.finalized).toBe(0)
+    // Counted ONCE, from the second attempt — not once per attempt.
+    expect(result.refusals.stat_coverage_below_floor).toBe(1)
+  })
+
+  it('leaves the original refusal standing when the backfill throws', async () => {
+    const prisma = makeSweepPrisma([{ playerId: 'p1', sport: 'NFL' }])
+    const syncWeekStats = vi.fn(async () => {
+      throw new Error('sleeper down')
+    })
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(result.finalized).toBe(0)
+    expect(result.refusals.stat_coverage_below_floor).toBe(1)
+  })
+
+  /**
+   * ⚠ THE REFUSAL HAS TO BE THE ONE A BACKFILL CAN ANSWER. An unfinished slate is not about
+   * missing rows, and fetching on every refusal would turn one tick into a provider sweep.
+   */
+  it('does not fetch for a refusal a backfill cannot answer', async () => {
+    const prisma = makeSweepPrisma([])
+    prisma.sportsGame.findMany = vi.fn(async () => [game('scheduled')])
+    const syncWeekStats = vi.fn(async () => {})
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).not.toHaveBeenCalled()
+    expect(result.refusals.games_not_final).toBe(1)
+  })
+
+  it('does not fetch for a week that seals on the first attempt', async () => {
+    const prisma = makeSweepPrisma([
+      { playerId: 'p1', sport: 'NFL' },
+      { playerId: 'p2', sport: 'NFL' },
+      { playerId: 'p3', sport: 'NFL' },
+      { playerId: 'p4', sport: 'NFL' },
+    ])
+    const syncWeekStats = vi.fn(async () => {})
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn(async () => ({ updated: 1 })) as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).not.toHaveBeenCalled()
+    expect(result.finalized).toBe(1)
+  })
+
+  it('writes nothing on a dry run, including the backfill', async () => {
+    const prisma = makeSweepPrisma([{ playerId: 'p1', sport: 'NFL' }])
+    const syncWeekStats = vi.fn(async () => {})
+
+    await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2, dryRun: true },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).not.toHaveBeenCalled()
+  })
+})
