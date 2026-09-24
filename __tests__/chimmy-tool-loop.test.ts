@@ -137,24 +137,46 @@ describe('runChimmyToolLoop', () => {
     const out = await runChimmyToolLoop(base)
 
     expect(out).toBeNull()
-    expect(h.create.mock.calls.length).toBeLessThanOrEqual(3)
+    expect(h.create.mock.calls.length).toBeLessThanOrEqual(4)
   })
 
   /*
    * If the model asks for another tool on the final turn there is no turn left
-   * to read the answer — paying for one more call would buy nothing.
+   * to read the answer — paying for one more call would buy nothing. The final
+   * turn is sent with tool_choice 'none' so that should not happen; if a
+   * provider ignores it, the loop still stops rather than executing.
    */
   it('does not spend a final call it cannot use', async () => {
     h.create
       .mockResolvedValueOnce(wantsTool('get_league_standings'))
       .mockResolvedValueOnce(wantsTool('get_head_to_head'))
       .mockResolvedValueOnce(wantsTool('get_upcoming_games'))
+      .mockResolvedValueOnce(wantsTool('get_trade_block'))
 
     await runChimmyToolLoop(base)
 
-    expect(h.create).toHaveBeenCalledTimes(3)
-    /* The third response was a tool call, so no fourth execution was attempted. */
-    expect(h.execute).toHaveBeenCalledTimes(2)
+    expect(h.create).toHaveBeenCalledTimes(4)
+    /* The fourth response was a tool call, so no fourth execution was attempted. */
+    expect(h.execute).toHaveBeenCalledTimes(3)
+  })
+
+  /*
+   * ⚠ THE LAST TURN MUST ANSWER. Before 2026-09-24 a model still fetching on its last turn returned
+   * null and the PUSH path paid for a second full journey. Now the final call forbids tools, so the
+   * results already fetched become an answer.
+   */
+  it('forces an answer on the final turn from what was already fetched', async () => {
+    h.create
+      .mockResolvedValueOnce(wantsTool('find_league_by_name'))
+      .mockResolvedValueOnce(wantsTool('optimize_my_lineup'))
+      .mockResolvedValueOnce(wantsTool('get_my_matchup'))
+      .mockResolvedValueOnce(answer('Start Reed over Bigsby: +5.0 points.'))
+
+    const out = await runChimmyToolLoop(base)
+
+    expect(out).toMatchObject({ text: 'Start Reed over Bigsby: +5.0 points.', turns: 4 })
+    const choices = h.create.mock.calls.map((c) => c[0].tool_choice)
+    expect(choices).toEqual(['auto', 'auto', 'auto', 'none'])
   })
 
   /*

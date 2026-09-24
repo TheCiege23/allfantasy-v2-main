@@ -7,6 +7,7 @@ import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
+import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 
 /**
  * Mounts the communications drawer (23a/23b) and the support modal (25b) once,
@@ -33,6 +34,8 @@ export type CommsDockProps = {
   pageLeagueId: string | null
   /** Tokens per Chimmy answer, from the real pricing matrix. Null = not charged. */
   chimmyTokenCost: number | null
+  /** Included Chimmy answers left today when the plan includes Chimmy (lib/chimmy/planAllowance.ts). */
+  chimmyPlanAllowance?: ChimmyPlanAllowanceView | null
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals?: string | null
   /** Current Core workflow. Sent as a validated key, never as free-form prompt text. */
@@ -67,6 +70,7 @@ export function CommsDock({
   leagues,
   pageLeagueId,
   chimmyTokenCost,
+  chimmyPlanAllowance = null,
   homeSignals = null,
   pageSurface = null,
   dockable = false,
@@ -187,6 +191,7 @@ export function CommsDock({
         leagues={leagues}
         pageLeagueId={pageLeagueId}
         chimmyTokenCost={chimmyTokenCost}
+        chimmyPlanAllowance={chimmyPlanAllowance}
         homeSignals={homeSignals}
         pageSurface={pageSurface}
         initialTab={tab}

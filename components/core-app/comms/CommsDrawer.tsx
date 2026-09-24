@@ -34,6 +34,13 @@ import {
 } from './ChimmyAnswerMode'
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import { readReadyScenario, type ReadyChimmyScenario } from '@/lib/chimmy/tradeScenarioTypes'
+import { readFollowUps } from '@/lib/chimmy/followUps'
+import {
+  describeAllowanceNote,
+  describeAnswerAllowance,
+  readPlanAllowanceView,
+  type ChimmyPlanAllowanceView,
+} from '@/lib/chimmy/planAllowanceView'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -135,6 +142,11 @@ export type CommsDrawerProps = {
   pageLeagueId: string | null
   /** Tokens per Chimmy message, read from the real pricing matrix. */
   chimmyTokenCost: number | null
+  /**
+   * The caller's included Chimmy answers today, when their plan includes Chimmy (AF Pro: 100 a day).
+   * Null for everyone else — they see the token price. Refreshed from every answer's meta after that.
+   */
+  chimmyPlanAllowance?: ChimmyPlanAllowanceView | null
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals?: string | null
   /** Validated server-side and used only to describe the Core workflow in view. */
@@ -272,6 +284,10 @@ type ChatTurn = {
   retryQuestion?: string | null
   /** Brought in from another scope's conversation when the scope changed. */
   carried?: boolean
+  /** What to ask next, from the server. Tapping fills the composer; it never sends. */
+  followUps?: string[] | null
+  /** What this answer did to the plan's included answers, when the caller's plan includes Chimmy. */
+  plan?: ChimmyPlanAllowanceView | null
 }
 
 /** How many earlier turns follow the user into another scope. */
@@ -450,6 +466,10 @@ type ChimmyEnvelope = {
     sourceLinks?: { label: string; href: string }[]
     staleness?: { staleMinutes?: number | null; warning?: unknown }
     syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
+    /** Validated by `readFollowUps` before anything renders it. */
+    followUps?: unknown
+    /** Validated by `readPlanAllowanceView` before anything renders it. */
+    planAllowance?: unknown
   }
 }
 
@@ -509,11 +529,14 @@ function ChimmyPanel({
   pageSurface,
   initialDraft,
   userId,
+  planAllowance = null,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
   onScope: (id: string | null) => void
   tokenCost: number | null
+  /** Included Chimmy answers left today, when the plan includes Chimmy. See CommsDrawerProps. */
+  planAllowance?: ChimmyPlanAllowanceView | null
   /** League tab: answers are visible to the whole league and say so. */
   publicMode: boolean
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
@@ -541,6 +564,11 @@ function ChimmyPanel({
     userId,
     threadKey(scopeId),
   )
+  /*
+   * The plan's included answers, as last reported: from the page on open, then from every answer's
+   * meta — so "37 of 100 left" moves as the user asks, without another request to find out.
+   */
+  const [planStatus, setPlanStatus] = useState<ChimmyPlanAllowanceView | null>(planAllowance)
 
   /*
    * 🛑 SWITCHING SCOPE STARTED A CONVERSATION FROM NOTHING. Threads are kept per scope, so moving to a
@@ -778,6 +806,7 @@ function ChimmyPanel({
               }
             : null
 
+        const answeredPlan = readPlanAllowanceView(payload.meta?.planAllowance)
         setTurns((t) => [
           ...t,
           {
@@ -810,8 +839,11 @@ function ChimmyPanel({
             scenario: readReadyScenario(payload.meta?.scenario),
             advice: readAdvice(payload),
             mode: answeredMode(payload.meta),
+            followUps: readFollowUps(payload.meta?.followUps),
+            plan: answeredPlan,
           },
         ])
+        if (answeredPlan) setPlanStatus(answeredPlan)
         // Asked from "All leagues", answered about one of yours: the conversation moves there.
         if (!scopeId && grounding?.grounded === true && typeof grounding.leagueId === 'string') {
           setPendingAdopt(grounding.leagueId)
@@ -851,9 +883,16 @@ function ChimmyPanel({
     [turns, scopeId, send, moveToScope],
   )
 
+  /*
+   * Lead with what Chimmy now COMPUTES from the league — the best lineup, the season simulation,
+   * this week's win probability — rather than questions any chatbot would take.
+   */
   const quickPrompts = scope
-    ? ['Who should I flex?', 'Any injuries I should know about?', 'Is this trade fair?']
-    : ['Which league needs me most?', 'What locks first today?', 'Where am I weakest?']
+    ? ['Set my best lineup for this week', 'What are my playoff odds?', 'How does my matchup look?', 'Is this trade fair?']
+    : ['Which league needs me most?', 'Which of my matchups are coin flips this week?', 'What locks first today?']
+
+  /* Follow-up chips render under the newest answer only; older ones would be stale suggestions. */
+  const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
 
   return (
     <div className="af-cm-panel">
@@ -1047,6 +1086,27 @@ function ChimmyPanel({
               {t.role === 'chimmy' && t.cost != null ? (
                 <span className="af-cm-cost af-num">{t.cost === 0 ? 'Not charged' : `${t.cost} tokens`}</span>
               ) : null}
+              {/* An answer the plan covered says so — "Included with AF Pro · 37 of 100 today". */}
+              {t.role === 'chimmy' && t.plan ? (
+                <span className="af-cm-cost af-cm-plan af-num" data-included={t.plan.included ? 'true' : 'false'}>
+                  {describeAnswerAllowance(t.plan)}
+                </span>
+              ) : null}
+
+              {/*
+                What to ask next. Same contract as the quick prompts: a tap fills the box and
+                spends nothing — sending is still the user's decision.
+              */}
+              {t.role === 'chimmy' && t.id === lastChimmyId && t.followUps?.length && !busy ? (
+                <div className="af-cm-quick af-cm-followups" role="group" aria-label="Ask next">
+                  {t.followUps.map((q) => (
+                    <button key={q} type="button" className="af-cm-quickbtn" onClick={() => setDraft(q)}>
+                      <span>{q}</span>
+                      <ArrowUpRight size={13} aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))
         )}
@@ -1151,9 +1211,11 @@ function ChimmyPanel({
         paths in the route answer for free, so "each answer costs" was untrue.
       */}
       <p className="af-cm-costnote">
-        {tokenCost != null
-          ? `AI answers may cost ${tokenCost} tokens. Free lookups and typing cost nothing.`
-          : 'Chimmy answers are included in your plan.'}
+        {planStatus
+          ? describeAllowanceNote(planStatus, tokenCost)
+          : tokenCost != null
+            ? `Chimmy answers may cost ${tokenCost} tokens. Free lookups and typing cost nothing.`
+            : 'Chimmy answers are included in your plan.'}
       </p>
     </div>
   )
@@ -1183,12 +1245,14 @@ function LeaguePanel({
   scopeId,
   onScope,
   chimmyTokenCost,
+  chimmyPlanAllowance = null,
   userId,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
   onScope: (id: string | null) => void
   chimmyTokenCost: number | null
+  chimmyPlanAllowance?: ChimmyPlanAllowanceView | null
   userId?: string
 }) {
   const [messages, setMessages] = useState<LeagueMessage[]>([])
@@ -1641,6 +1705,7 @@ function LeaguePanel({
           scopeId={scopeId}
           onScope={onScope}
           tokenCost={chimmyTokenCost}
+          planAllowance={chimmyPlanAllowance}
           publicMode
           homeSignals={null}
           pageSurface={null}
@@ -2020,6 +2085,7 @@ export function CommsDrawer({
   leagues,
   pageLeagueId,
   chimmyTokenCost,
+  chimmyPlanAllowance = null,
   homeSignals = null,
   pageSurface = null,
   initialTab = 'chimmy',
@@ -2188,6 +2254,7 @@ export function CommsDrawer({
             scopeId={scopeId}
             onScope={setScopeId}
             chimmyTokenCost={chimmyTokenCost}
+            chimmyPlanAllowance={chimmyPlanAllowance}
             userId={userId}
           />
         ) : tab === 'chimmy' ? (
@@ -2197,6 +2264,7 @@ export function CommsDrawer({
             scopeId={scopeId}
             onScope={setScopeId}
             tokenCost={chimmyTokenCost}
+            planAllowance={chimmyPlanAllowance}
             publicMode={false}
             homeSignals={homeSignals}
             pageSurface={pageSurface}

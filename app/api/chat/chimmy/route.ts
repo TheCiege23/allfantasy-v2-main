@@ -118,6 +118,15 @@ import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import { judgeChimmyDelivery } from '@/lib/chimmy/chargeOnDelivery'
+import { suggestChimmyFollowUps } from '@/lib/chimmy/followUps'
+import {
+  planAllowanceMeta,
+  readChimmyPlanAllowance,
+  releaseChimmyPlanAllowance,
+  takeChimmyPlanAllowance,
+  type ChimmyPlanAllowanceMeta,
+  type ChimmyPlanAllowanceState,
+} from '@/lib/chimmy/planAllowance'
 import {
   buildChimmyResponseForAssistantMode,
   normalizeChimmyAssistantMode,
@@ -416,10 +425,24 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   'If the question names a league — "KBFL", "my dynasty league" — call find_league_by_name FIRST, then the league tools. Without it nothing is selected and they read nothing.',
   'For "who is out / hurt / injured on my teams" questions, call get_my_injuries — it checks every league at once. Report only the designations it returns, with their dates, and never add an injury from memory.',
   'For a real player\'s stats (NFL, college football, MLB, NBA, NHL or college basketball — pass the sport: NCAAF, MLB, NBA, NHL or NCAAB), call get_player_season_stats for season totals, get_player_game_log for "last week" / "last night" / recent games, get_season_stat_leaders for "who leads the league in X", and get_real_standings for real team records. Quote the refresh time they give; if a tool says the numbers are from an earlier season, or that the player has not played recently, say exactly that — never present them as this season or last night.',
-  'For start/sit, drop, or "where am I weak" questions, call get_my_roster. It returns roster FACTS only — positions, teams, injury status — and NO projections or points, so reason about roles and health and never state projected scores or a ranking you did not receive.',
+  /*
+   * ── THE ANALYST TOOLS (2026-09-24) ──────────────────────────────────────────────────────────
+   * The loop could fetch facts but not run a single engine, so "who should I start" was answered
+   * from injury tags and "will I make the playoffs" from nothing. These route each decision question
+   * to the engine that already answers it on a /core screen.
+   */
+  'For "who should I start", "set my lineup" or "is my lineup right", call optimize_my_lineup: it prices the whole roster for this week under the league\'s own scoring and flags starters on a bye, injured or missing. For "A or B?" between two named players call compare_start_options. get_my_roster is roster FACTS only — it carries NO projections — so never quote projected points from it.',
+  'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
+  'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
+  'For playoff chances, what record they need, or who to root for, call get_playoff_outlook. For this week\'s opponent, win probability or which games are close, call get_my_matchup. Both also work with no league selected — they then cover every league the user is in.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
   'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
-  'Answer in a few sentences. Name the data you used.',
+  /*
+   * ⚠ "A FEW SENTENCES" MADE THE PAID ANSWER READ LIKE THE FREE ONE. The engines return a best
+   * lineup, a swing game, magic numbers — a two-sentence cap threw most of that away. Decisive
+   * first, then the evidence, then one move: the shape an analyst writes, still short.
+   */
+  'Answer like a sharp analyst: lead with the recommendation and its key number, then two to four short bullet reasons drawn from the tool data, then one concrete next step. Quote numbers exactly as the tools give them and name the data you used. No filler.',
 ].join(' ')
 
 const SPORTS_KEYWORDS = [
@@ -1171,6 +1194,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const userId = session?.user?.id ?? null
   const userEmail = session?.user?.email ?? null
 
+  /*
+   * Whether the caller's plan includes Chimmy, and how much of today's allowance is left
+   * (lib/chimmy/planAllowance.ts — AF Pro, 100 a day, owner's decision 2026-09-24). Read LAZILY and
+   * once: only the paths that would otherwise charge ask, so a free lookup never pays for an
+   * entitlement query.
+   */
+  let planAllowanceRead: Promise<ChimmyPlanAllowanceState | null> | null = null
+  const readPlanAllowance = (): Promise<ChimmyPlanAllowanceState | null> =>
+    (planAllowanceRead ??= userId
+      ? readChimmyPlanAllowance({ userId, email: userEmail }).catch(() => null)
+      : Promise.resolve(null))
+
   const limitRes = await runAiProtection(req, {
     action: 'chimmy',
     getUserId: async () => userId,
@@ -1676,8 +1711,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         : null
 
       const mayCharge = Boolean(userId && confirmTokenSpend && preview?.canSpend)
+      /*
+       * A plan that includes Chimmy covers this search too, consent or not — there is nothing to
+       * consent to when no tokens move. The allowance is TAKEN only once a sourced answer exists,
+       * on the same "pay for an answer, never for a refusal" rule as the charge below.
+       */
+      const searchPlan = await readPlanAllowance()
+      const planCoversSearch = Boolean(searchPlan && searchPlan.remaining > 0)
 
-      if (mayCharge) {
+      if (mayCharge || planCoversSearch) {
         const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
         const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
 
@@ -1689,18 +1731,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
          * cost AND withhold the answer. Losing the fee is bad; losing the fee
          * and the answer is worse.
          */
-        const ledger = await spendService
-          .spendTokensForRule({
-            userId: userId as string,
-            ruleCode: 'ai_chimmy_chat_message',
-            confirmed: confirmTokenSpend,
-            sourceType: 'chimmy_chat',
-            sourceId: conversationId,
-            description: 'Chimmy live web search answer',
-            metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
-            userEmail,
-          })
-          .catch(() => null)
+        const searchIncluded =
+          planCoversSearch && searchPlan && userId
+            ? await takeChimmyPlanAllowance({ userId, state: searchPlan })
+            : null
+        const ledger = searchIncluded || !mayCharge
+          ? null
+          : await spendService
+              .spendTokensForRule({
+                userId: userId as string,
+                ruleCode: 'ai_chimmy_chat_message',
+                confirmed: confirmTokenSpend,
+                sourceType: 'chimmy_chat',
+                sourceId: conversationId,
+                description: 'Chimmy live web search answer',
+                metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
+                userEmail,
+              })
+              .catch(() => null)
+        const searchPlanMeta: ChimmyPlanAllowanceMeta | null = searchIncluded
+          ? planAllowanceMeta(searchIncluded, true)
+          : searchPlan
+            ? planAllowanceMeta({ ...searchPlan, used: searchPlan.limit, remaining: 0 }, false)
+            : null
 
         const sourceLines = searched.citations.map((c) => `- ${c.label}: ${c.url}`).join('\n')
         const body = `${searched.text}\n\nSources consulted:\n${sourceLines}`
@@ -1726,6 +1779,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
              * not write, and saying otherwise would make the two look alike.
              */
             confidencePct: 70,
+            ...(searchPlanMeta ? { planAllowance: searchPlanMeta } : {}),
             providerStatus:
               searched.provider === 'claude'
                 ? { anthropic: 'ok', openai: 'skipped', deepseek: 'skipped', grok: 'skipped' }
@@ -2560,35 +2614,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const customRules = await customRulesTask
 
   const spendService = new TokenSpendService()
-  let tokenPreview: TokenSpendPreview | null = null
-  let tokenPreviewFailed = false
-  try {
-    tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
-  } catch (error) {
-    if (error instanceof TokenSpendRuleNotFoundError) {
-      return NextResponse.json(
-        {
-          error: error.message,
-          code: 'token_spend_rule_missing',
-        },
-        { status: 500 }
+  /*
+   * ⚠ `null as …`, NOT `: … = null`. Both are now assigned only inside `runTokenGate`, and TypeScript
+   * does not follow assignments made in a closure — with an annotated `= null` initialiser it narrows
+   * the outer reads to `null` for good, and every `tokenPreview.ruleCode` below becomes `never`.
+   */
+  let tokenPreview = null as TokenSpendPreview | null
+  let tokenPreviewFailed = false as boolean
+  /** The token preflight: preview the price, and ask for consent when the rule needs it. */
+  const runTokenGate = async (): Promise<NextResponse | null> => {
+    try {
+      tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+    } catch (error) {
+      if (error instanceof TokenSpendRuleNotFoundError) {
+        return NextResponse.json(
+          {
+            error: error.message,
+            code: 'token_spend_rule_missing',
+          },
+          { status: 500 }
+        )
+      }
+      tokenPreviewFailed = true
+      console.error(
+        '[api/chat/chimmy] Token preview failed, continuing without preflight:',
+        error instanceof Error ? error.message : error
       )
     }
-    tokenPreviewFailed = true
-    console.error(
-      '[api/chat/chimmy] Token preview failed, continuing without preflight:',
-      error instanceof Error ? error.message : error
-    )
+    if (!tokenPreviewFailed && tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
+      return NextResponse.json(
+        {
+          error: 'Token spend confirmation required before sending to Chimmy.',
+          code: 'token_confirmation_required',
+          preview: tokenPreview,
+        },
+        { status: 409 }
+      )
+    }
+    return null
   }
-  if (!tokenPreviewFailed && tokenPreview?.requiresConfirmation !== false && !confirmTokenSpend) {
-    return NextResponse.json(
-      {
-        error: 'Token spend confirmation required before sending to Chimmy.',
-        code: 'token_confirmation_required',
-        preview: tokenPreview,
-      },
-      { status: 409 }
-    )
+
+  /*
+   * ── CHIMMY IS INCLUDED IN AF PRO, 100 ANSWERS A DAY (owner's decision, 2026-09-24) ─────────────
+   * A plan that carries `ai_chat` with allowance left skips the token preflight entirely: no price,
+   * no consent prompt, no charge. The allowance is TAKEN at the spend point below — after the free
+   * trade-target return, so an undecided verdict costs nothing here either — and given back if no
+   * answer is delivered. Past the allowance, and for everyone without the plan, nothing changes.
+   */
+  const planState = await readPlanAllowance()
+  const planCovers = Boolean(planState && planState.remaining > 0)
+  if (!planCovers) {
+    const blocked = await runTokenGate()
+    if (blocked) return blocked
   }
 
   /*
@@ -2664,8 +2741,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
   }
 
+  /*
+   * The included answer, when the plan covers this turn. Taken atomically: if another request took
+   * the last one since the read above, this turn falls back to the token preflight it skipped —
+   * which asks for consent exactly as it would have for a free account.
+   */
+  let planIncluded: ChimmyPlanAllowanceState | null = null
+  if (planCovers && planState && userId) {
+    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    if (!planIncluded) {
+      const blocked = await runTokenGate()
+      if (blocked) return blocked
+    }
+  }
+  /*
+   * What this turn did with the allowance, for `meta.planAllowance`: included, or (for a plan holder
+   * past the allowance) charged in tokens because the day's answers were used.
+   */
+  let planMeta: ChimmyPlanAllowanceMeta | null = planIncluded
+    ? planAllowanceMeta(planIncluded, true)
+    : planState
+      ? planAllowanceMeta({ ...planState, used: planState.limit, remaining: 0 }, false)
+      : null
+
   let spendLedger: { id: string; balanceAfter: number } | null = null
-  if (!tokenPreviewFailed) {
+  if (!planIncluded && !tokenPreviewFailed) {
     try {
       const ledger = await spendService.spendTokensForRule({
         userId,
@@ -2744,6 +2844,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 ledgerId: spendLedger.id,
               }
             : undefined,
+        ...(planMeta ? { planAllowance: planMeta } : {}),
         providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
         leagueGrounding: tradeTargetGrounding,
         tradeTarget: { status: 'decided', verdict: v.verdict, player: tradeTargetResult.targetName },
@@ -2844,6 +2945,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                   select: { id: true, name: true, platform: true, season: true, lastSyncedAt: true },
                 })
                 .catch(() => null)
+      /*
+       * Headshot cards for the players the answer names — the push path always had them, the loop
+       * never did, so the answers that now run the lineup optimizer came back as bare text. Only for
+       * the session's own league: that is the roster packet already loaded above, and a league the
+       * model bound by name has no packet here (loading one would be a second full read per answer).
+       */
+      const loopPlayers =
+        boundLeague && leagueSnapshot && boundLeague.id === leagueSnapshot.id
+          ? buildChimmyPlayerCards({ answer: loopText, rosters: leagueSportsGrounding?.packet.rosters ?? null, sport })
+          : []
       return NextResponse.json({
         response: loopText,
         result: loopText,
@@ -2882,11 +2993,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
           dataSources: loop.toolsUsed,
+          /*
+           * The next questions worth asking — each one answerable by a tool, none of them sent until
+           * the user taps and then sends. Deterministic: see lib/chimmy/followUps.ts.
+           */
+          followUps: suggestChimmyFollowUps({ toolsUsed: loop.toolsUsed, leagueScoped: boundLeague != null }),
+          ...(planMeta ? { planAllowance: planMeta } : {}),
+          ...(loopPlayers.length > 0 ? { players: loopPlayers } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
-            caveats: [
-              'Answered by the experimental tool loop; the model chose which data to read.',
-            ],
+            /*
+             * ⚠ WAS "Answered by the experimental tool loop". The loop is the DEFAULT path and has
+             * been since the Claude switch; calling it experimental on every answer undercut exactly
+             * the answers that now run the real engines. What stays true is worth saying.
+             */
+            caveats: ['Chimmy chose which of your league data to read for this answer; the sources are listed.'],
           },
         },
       })
@@ -3896,6 +4017,13 @@ ${describedTradeCtx}`
         })
       if (refund) chargeRefund = { balanceAfter: refund.balanceAfter, reason: delivery.reason }
     }
+    /* The same deal for an included answer: a turn nobody answered does not use one up. */
+    if (!delivery.delivered && planIncluded && userId) {
+      await releaseChimmyPlanAllowance({ userId })
+      planMeta = planMeta
+        ? { ...planMeta, used: Math.max(0, planMeta.used - 1), released: true as const }
+        : planMeta
+    }
 
     const meta = {
       assistant: 'Chimmy',
@@ -3983,6 +4111,7 @@ ${describedTradeCtx}`
             ...(chargeRefund ? { refunded: true as const, refundReason: chargeRefund.reason } : {}),
           }
         : undefined,
+      ...(planMeta ? { planAllowance: planMeta } : {}),
       quantData: pecrOutput.quantData,
       trendData: pecrOutput.trendData,
       responseStructure: pecrOutput.responseStructure,
@@ -4096,6 +4225,7 @@ ${describedTradeCtx}`
       }
     )
   } catch (error) {
+    if (planIncluded && userId) await releaseChimmyPlanAllowance({ userId })
     if (spendLedger?.id) {
       await spendService
         .refundSpendByLedger({

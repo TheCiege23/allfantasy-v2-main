@@ -22,6 +22,12 @@
  *
  * Retire it when the flag has been on long enough to compare answers. Until then: send nothing new
  * here, and if you are about to add a caller, use `/api/chat/chimmy` instead.
+ *
+ * ⚠ CORRECTION (2026-09-24): "NOTHING CALLS THIS ROUTE" IS NO LONGER TRUE, if it ever was.
+ * `lib/chimmy-chat/ChimmyChatService.ts` (`sendChimmyMessage`) POSTs here, and it is mounted by
+ * `app/components/ChimmyChat.tsx` (the dashboard's left chat panel and /legacy) and
+ * `components/chimmy/ChimmyChatShell.tsx` (/chimmy/chat). Money rules here therefore reach real
+ * users — which is why the AF Pro allowance below had to be applied here as well as there.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -53,6 +59,12 @@ import { buildChimmyResponseStructure } from '@/lib/chimmy-chat/presentation'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { checkDailyCap, incrementDailyCap } from '@/lib/ai/dailyCaps'
+import {
+  readChimmyPlanAllowance,
+  releaseChimmyPlanAllowance,
+  takeChimmyPlanAllowance,
+  type ChimmyPlanAllowanceState,
+} from '@/lib/chimmy/planAllowance'
 import { tryDeterministicAnswer, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
 import { resolveLanguage } from '@/lib/i18n/constants'
 
@@ -597,11 +609,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(deterministicPayload, { status: 200 })
   }
 
+  /*
+   * ── AF PRO INCLUDES CHIMMY, 100 ANSWERS A DAY — HERE TOO ─────────────────────────────────────────
+   * This route still serves the dashboard's chat panel, /legacy and the /chimmy/chat shell (via
+   * `ChimmyChatService`) — see the correction in the header. It gated plan holders free, then HARD-STOPPED
+   * them at `DAILY_CAP_LIMITS.chimmy.pro` (30) with a 429 telling a paying subscriber to "upgrade".
+   * It now uses the same allowance as /api/chat/chimmy: answers left are included and counted; none
+   * left sends the plan holder down the token path a free account takes (`forceTokenFallback`).
+   */
+  const planState = await readChimmyPlanAllowance({ userId, email: session?.user?.email }).catch(() => null)
+
   const gate = await requireFeatureEntitlement({
     userId,
     userEmail: session?.user?.email,
     featureId: 'ai_chat',
     allowTokenFallback: true,
+    forceTokenFallback: Boolean(planState && planState.remaining <= 0),
     confirmTokenSpend: Boolean(parseResult.data.confirmTokenSpend),
     tokenRuleCode: 'ai_chimmy_chat_message',
     tokenSourceType: 'anthropic_chimmy_chat',
@@ -645,10 +668,39 @@ export async function POST(req: NextRequest) {
   }
   const tokenSpendId = gate.tokenSpend?.id ?? null
 
-  // ── Daily cap check ──────────────────────────────────────────────────────────
+  /*
+   * ── Daily cap check ──────────────────────────────────────────────────────────
+   * For a PLAN HOLDER the allowance above is the limit, and past it tokens are — so the hard cap
+   * applies only to accounts without the plan, exactly as before.
+   */
+  let planIncluded: ChimmyPlanAllowanceState | null = null
+  if (planState && !tokenSpendId) {
+    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    if (!planIncluded) {
+      /* Another request took the last included answer since the read above. The next send pays tokens. */
+      return NextResponse.json(
+        buildCompatibilityPayload(
+          {
+            error: `Today's ${planState.limit} included ${planState.planName} Chimmy answers are used. Send again to continue with tokens, or come back after midnight UTC.`,
+          },
+          429
+        ),
+        { status: 429 }
+      )
+    }
+  }
+  /** Refund the tokens, or hand back the included answer — whichever this turn used. */
+  const refundTurn = async () => {
+    await refundAnthropicTokenFallbackIfNeeded({
+      tokenSpendId,
+      userId,
+      leagueId: parseResult.data.userContext.leagueId ?? undefined,
+    })
+    if (planIncluded) await releaseChimmyPlanAllowance({ userId })
+  }
   const capTier = resolveCapTier(gate.decision.entitlement.plans)
-  const capResult = await checkDailyCap('chimmy', userId, capTier)
-  if (!capResult.allowed) {
+  const capResult = planState ? null : await checkDailyCap('chimmy', userId, capTier)
+  if (capResult && !capResult.allowed) {
     await refundAnthropicTokenFallbackIfNeeded({
       tokenSpendId,
       userId,
@@ -666,11 +718,7 @@ export async function POST(req: NextRequest) {
   // ── Deterministic shortcut (saves provider credits) ──────────────────────────
   const deterministicAnswer = await tryDeterministicAnswer(parseResult.data.message, afLang)
   if (deterministicAnswer !== null) {
-    await refundAnthropicTokenFallbackIfNeeded({
-      tokenSpendId,
-      userId,
-      leagueId: parseResult.data.userContext.leagueId ?? undefined,
-    })
+    await refundTurn()
     const deterministicPayload = buildCompatibilityPayload(
       { response: deterministicAnswer, result: deterministicAnswer, source: DETERMINISTIC_SOURCE },
       200
@@ -709,11 +757,7 @@ export async function POST(req: NextRequest) {
               )
 
               if (result.upgradeRequired) {
-                await refundAnthropicTokenFallbackIfNeeded({
-                  tokenSpendId,
-                  userId,
-                  leagueId: parseResult.data.userContext.leagueId ?? undefined,
-                })
+                await refundTurn()
                 push('done', buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId))
                 controller.close()
                 return
@@ -724,11 +768,7 @@ export async function POST(req: NextRequest) {
               push('done', buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId))
               controller.close()
             } catch (error) {
-              await refundAnthropicTokenFallbackIfNeeded({
-                tokenSpendId,
-                userId,
-                leagueId: parseResult.data.userContext.leagueId ?? undefined,
-              })
+              await refundTurn()
 
               console.error('[api/chimmy] Anthropic pipeline stream failed:', {
                 userId,
@@ -761,11 +801,7 @@ export async function POST(req: NextRequest) {
     const result = await runAgentPipeline(parseResult.data.message, anthropicContext)
 
     if (result.upgradeRequired) {
-      await refundAnthropicTokenFallbackIfNeeded({
-        tokenSpendId,
-        userId,
-        leagueId: parseResult.data.userContext.leagueId ?? undefined,
-      })
+      await refundTurn()
       return NextResponse.json(
         buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId),
         { status: 200 }
@@ -779,11 +815,7 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    await refundAnthropicTokenFallbackIfNeeded({
-      tokenSpendId,
-      userId,
-      leagueId: parseResult.data.userContext.leagueId ?? undefined,
-    })
+    await refundTurn()
 
     console.error('[api/chimmy] Anthropic pipeline execution failed:', {
       userId,

@@ -70,6 +70,11 @@ export type LineupFill = {
   unfilledSlots: string[]
   /** Slot names absent from the eligibility map — a caller must treat these as blocking. */
   unknownSlots: string[]
+  /**
+   * Which player took which slot, in the lineup's DECLARED slot order (not the fill order), so a
+   * reader can print "FLEX: Jayden Reed" rather than an unordered id list.
+   */
+  assignments: Array<{ slot: string; playerId: string }>
 }
 
 /**
@@ -102,6 +107,7 @@ export function fillLineup(
   const unknownSlots: string[] = []
   const unfilledSlots: string[] = []
   const starterIds: string[] = []
+  const byIndex: Array<{ index: number; slot: string; playerId: string }> = []
   let points = 0
 
   const starting = slots.filter((s) => !NON_STARTING_SLOTS.has(s.toUpperCase()))
@@ -114,7 +120,7 @@ export function fillLineup(
     // Most restrictive first; original order breaks ties so the result is deterministic.
     .sort((a, b) => a.size - b.size || a.index - b.index)
 
-  for (const { slot, elig } of ordered) {
+  for (const { slot, index, elig } of ordered) {
     if (!elig) {
       unknownSlots.push(slot)
       continue
@@ -126,10 +132,12 @@ export function fillLineup(
     }
     taken.add(pick.playerId)
     starterIds.push(pick.playerId)
+    byIndex.push({ index, slot, playerId: pick.playerId })
     points += pick.projectedPoints as number
   }
 
-  return { points, starterIds, unfilledSlots, unknownSlots }
+  const assignments = byIndex.sort((a, b) => a.index - b.index).map(({ slot, playerId }) => ({ slot, playerId }))
+  return { points, starterIds, unfilledSlots, unknownSlots, assignments }
 }
 
 /**

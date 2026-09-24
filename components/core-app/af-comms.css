@@ -2169,3 +2169,10 @@
 .af-cm-rich .af-cm-rich-h { color: var(--text); }
 .af-cm-rich code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--surface2, rgba(255,255,255,.06)); }
 .af-cm-rich .af-cm-rich-hr { border: 0; border-top: 1px solid var(--line2, var(--line)); margin: 10px 0; }
+
+/*
+ * Follow-up chips under the newest Chimmy answer. Top level, last in the file, for the same reason
+ * as the block above: the quick-prompt rules they reuse centre themselves with a large top margin
+ * for the empty state, which inside an answer would float the chips away from the text they follow.
+ */
+.af-cm-turn .af-cm-followups { justify-content: flex-start; margin-top: 10px; }

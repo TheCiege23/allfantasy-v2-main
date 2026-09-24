@@ -202,6 +202,7 @@ import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
 import { buildToolsHub } from '@/lib/core-app/toolsHub'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
+import { planAllowanceMeta, readChimmyPlanAllowance } from '@/lib/chimmy/planAllowance'
 import { getCoreActivitySnapshot } from '@/lib/core-app/coreActivity'
 import { isCoreSurfaceKey, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import CoreLeagueContextBar, {
@@ -1203,6 +1204,16 @@ export default async function AfCorePage({
    * /api/chat/chimmy actually spends against.
    */
   const chimmyTokenCost = getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null
+  /*
+   * AF Pro includes Chimmy, 100 answers a day (lib/chimmy/planAllowance.ts): a subscriber's drawer
+   * says "Included with AF Pro: N left today" instead of quoting a token price they will not pay.
+   * Null for plans without Chimmy and on any failure — the price then shows exactly as before.
+   */
+  const chimmyPlanState = await readChimmyPlanAllowance({
+    userId,
+    email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
+  }).catch(() => null)
+  const chimmyPlanAllowance = chimmyPlanState ? planAllowanceMeta(chimmyPlanState, chimmyPlanState.remaining > 0) : null
 
   /*
    * 23b docks the drawer beside the content on league-scoped screens — a roster
@@ -1466,6 +1477,7 @@ export default async function AfCorePage({
             : undefined,
         })),
         chimmyTokenCost,
+        chimmyPlanAllowance,
         dockable,
         supportEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null,
         /*
