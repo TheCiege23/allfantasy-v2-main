@@ -27,6 +27,7 @@ import {
   knownDailySportSeasons,
   resolveDailySportSeasonStart,
 } from '@/lib/season-week/dailySportSeasonStarts'
+import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -36,6 +37,8 @@ export type WeeklyScoreSyncSummary = {
   week: number
   rosteredPlayers: number
   cacheRowsRead: number
+  /** Daily-sport game rows in the window that were PRESEASON games, and so not scored. */
+  preseasonRowsSkipped?: number
   scoresUpserted: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
@@ -288,9 +291,22 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         sportType: { in: candidateSportKeys(sport) },
         gameDate: { gte: window.start, lt: window.end },
       },
-      select: { playerId: true, normalizedStatMap: true },
+      select: { playerId: true, normalizedStatMap: true, sportType: true, season: true, gameDate: true },
     })
     for (const row of gameRows) {
+      // A preseason game inside the window is not a fantasy game. `/live` returns them beside the
+      // regular season and nothing marked them until riSeasonType.ts (NHL preseason, 2026-09-21..).
+      if (
+        resolveStoredSeasonType({
+          normalizedStatMap: row.normalizedStatMap,
+          sport: row.sportType,
+          season: row.season,
+          gameDate: row.gameDate,
+        }) === 'pre'
+      ) {
+        summary.preseasonRowsSkipped = (summary.preseasonRowsSkipped ?? 0) + 1
+        continue
+      }
       const rows = dailyRowsByPlayer.get(row.playerId) ?? []
       rows.push(row.normalizedStatMap)
       dailyRowsByPlayer.set(row.playerId, rows)

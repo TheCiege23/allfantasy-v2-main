@@ -103,6 +103,25 @@ describe('fetchRiLiveGameLogRows', () => {
     expect(out.rows[0]?.season).toBe('2025')
   })
 
+  it('does not stamp a PRESEASON game with the regular season it was asked for', async () => {
+    // `/live` returns preseason games beside the regular season, and every row is labelled with
+    // the CALLER's season type — so this used to write NHL preseason as regular season.
+    const preseason = { ...nhlGame, game_ID: 'nhl-pre', season_type: 'Preseason' }
+    riFetchRows.mockResolvedValue(ok([preseason, nbaGame]))
+    const out = await fetchRiLiveGameLogRows({ sport: 'NHL', seasonType: 'regular', days: 1 })
+
+    expect(out.rows.some((r) => r.gameId === 'nhl-pre')).toBe(false)
+    expect(out.rows.some((r) => r.gameId === 'nba-1')).toBe(true)
+    expect(out.warnings.join(' ')).toMatch(/skipped 1 game/)
+  })
+
+  it('keeps a game whose season_type it cannot classify', async () => {
+    // Unknown is not a mismatch: dropping real games on an unrecognised label is the worse error.
+    riFetchRows.mockResolvedValue(ok([{ ...nbaGame, season_type: 'Exotic Round' }]))
+    const out = await fetchRiLiveGameLogRows({ sport: 'NBA', seasonType: 'regular', days: 1 })
+    expect(out.rows.length).toBe(2)
+  })
+
   it('treats a surviving 304 as unknown and writes nothing', async () => {
     // The contract's `304_conflict` is UNRESOLVED — cache artifact or empty set. Reporting "no
     // games" would be choosing one reading of a documented dispute.

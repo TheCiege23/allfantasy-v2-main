@@ -225,7 +225,19 @@ async function handle(req: NextRequest) {
         errors: Object.entries(perSport)
           .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
           .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
-        metadata: { days, deferredSports: deferred, explicitSport: explicit ?? null },
+        metadata: {
+          days,
+          deferredSports: deferred,
+          explicitSport: explicit ?? null,
+          // `season_type` labels riSeasonType.ts could not classify (GAPS N-13). Persisted here
+          // because the route's response is read by nobody; an NHL preseason / MLB postseason
+          // label we have not seen yet is how that gap gets closed without a probe.
+          unrecognizedSeasonTypes: Object.fromEntries(
+            Object.entries(perSport)
+              .map(([sport, v]) => [sport, (v as { unrecognizedSeasonTypes?: string[] }).unrecognizedSeasonTypes ?? []] as const)
+              .filter(([, labels]) => labels.length > 0),
+          ),
+        },
       },
       Date.now() - startedAt,
     )

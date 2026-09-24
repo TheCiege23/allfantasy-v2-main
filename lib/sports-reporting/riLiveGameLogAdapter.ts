@@ -2,6 +2,7 @@ import 'server-only'
 
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
 import { normalizeRiGameBox, recentDates } from '@/lib/sports-data/rollingInsightsGameLogs'
+import type { RiSeasonType } from '@/lib/sports-data/riSeasonType'
 import type {
   PlayerGameLogImportSport,
   ProviderGameLogRow,
@@ -67,6 +68,8 @@ export async function fetchRiLiveGameLogRows(input: {
   const errors: string[] = []
   const warnings: string[] = []
   const dates = recentDates(input.days ?? RI_LIVE_LOOKBACK_DAYS, input.now)
+  const requested = requestedSeasonType(input.seasonType)
+  let skippedOtherSeasonType = 0
 
   for (const date of dates) {
     const out = await riFetchRows('live', { sport: input.sport, date })
@@ -93,6 +96,16 @@ export async function fetchRiLiveGameLogRows(input: {
     for (const game of out.rows) {
       const box = normalizeRiGameBox(game)
       if (!box) continue
+      /*
+       * `/live` returns preseason, regular and playoff games alike, and every row below is
+       * stamped with the CALLER's season type. Without this check a regular-season import wrote
+       * NHL preseason games as regular season. Only a KNOWN mismatch is skipped: an unrecognised
+       * label keeps the old behaviour rather than dropping real games (see riSeasonType.ts).
+       */
+      if (box.seasonType && requested && box.seasonType !== requested) {
+        skippedOtherSeasonType += 1
+        continue
+      }
       for (const line of box.lines) {
         rows.push({
           provider: 'rolling_insights',
@@ -117,6 +130,12 @@ export async function fetchRiLiveGameLogRows(input: {
     }
   }
 
+  if (skippedOtherSeasonType > 0) {
+    warnings.push(
+      `${input.sport}: skipped ${skippedOtherSeasonType} game(s) whose season_type is not ${input.seasonType}.`,
+    )
+  }
+
   if (!rows.length && !errors.length && !warnings.length) {
     /*
      * Not an error, and saying so matters. NBA and NHL are dark from roughly mid-June to
@@ -129,4 +148,13 @@ export async function fetchRiLiveGameLogRows(input: {
   }
 
   return { rows, errors, warnings }
+}
+
+/** The importer's season-type spelling (`regular`, `postseason`, …) as an `RiSeasonType`. */
+function requestedSeasonType(value: string): RiSeasonType | null {
+  const v = value.trim().toLowerCase()
+  if (v === 'regular') return 'regular'
+  if (v === 'postseason' || v === 'post' || v === 'playoffs') return 'post'
+  if (v === 'preseason' || v === 'pre') return 'pre'
+  return null
 }

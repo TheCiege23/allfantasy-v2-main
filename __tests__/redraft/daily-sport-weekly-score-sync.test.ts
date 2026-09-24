@@ -151,6 +151,24 @@ describe('daily-sport weekly score sync', () => {
     expect(typeof written.create.fantasyPts).toBe('number')
   })
 
+  it('does not score a PRESEASON game that falls inside the week', async () => {
+    // `/live` returns preseason games beside the regular season; the ingest now labels them.
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NBA'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(rosterOf('NBA'))
+    prismaMock.playerGameStat.findMany.mockResolvedValue([
+      { playerId: 'p1', normalizedStatMap: { seasonType: 'regular', stats: { points: 20, rebounds: 5, assists: 4 } } },
+      { playerId: 'p1', normalizedStatMap: { seasonType: 'pre', stats: { points: 40, rebounds: 9, assists: 9 } } },
+      { playerId: 'p1', normalizedStatMap: { stats: { points: 25, rebounds: 4, assists: 9 } } },
+    ])
+
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(summary.preseasonRowsSkipped).toBe(1)
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0][0]
+    expect(written.create.stats).toMatchObject({ pts: 45, reb: 9, ast: 13 })
+  })
+
   it('reports unrecognized provider keys instead of scoring a silent zero', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NHL', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NHL'))
