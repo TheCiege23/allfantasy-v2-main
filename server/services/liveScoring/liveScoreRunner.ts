@@ -249,13 +249,28 @@ export async function runLiveScoringTickForSeason(
         select: { playerId: true, slotType: true },
       })
       const offensiveIds: string[] = []
+      /*
+       * 🛑 THE ROSTERED DEFENCES WERE ALREADY IN HAND HERE AND THROWN AWAY, AND THAT COST
+       * THE WHOLE SLEEPER BUDGET. This loop has always narrowed the OFFENSIVE fetch to
+       * rostered starters; the defence fetch below asked for every team on the slate. The
+       * NFL provider calls Sleeper once PER TEAM, so that was 32 calls per season per tick
+       * — measured on production 2026-09-24, 128 every two minutes across four seasons,
+       * 3,840/hour against a 1,000/hour cap. The cap is per provider, so the damage landed
+       * on `stats/nfl/week`, and the week finalizer then refused on coverage it could not fix.
+       */
+      const defenseTeams = new Set<string>()
       for (const s of starters) {
         if (!isScoringStarterSlot(s.slotType)) continue
-        if (!String(s.playerId).startsWith('nfl:def:')) offensiveIds.push(s.playerId)
+        const abbr = /^nfl:def:(.+)$/i.exec(String(s.playerId))?.[1]
+        if (abbr) defenseTeams.add(abbr.trim().toUpperCase())
+        else offensiveIds.push(s.playerId)
       }
       const [playerStats, defStats] = await Promise.all([
         provider.fetchPlayerStatsForGames({ ...query, games, playerIds: offensiveIds }),
-        provider.fetchTeamDefenseStatsForGames({ ...query, games }),
+        // ⚠ ALWAYS PASSED, NEVER OMITTED. An empty set means this season starts no defence,
+        // and it has to cost nothing — omitting the field would fall back to all 32 teams
+        // for precisely the leagues that need none of them.
+        provider.fetchTeamDefenseStatsForGames({ ...query, games, teamAbbrs: [...defenseTeams] }),
       ])
       const merged = new Map<string, Record<string, number>>()
       for (const [id, st] of playerStats) merged.set(id, st)
