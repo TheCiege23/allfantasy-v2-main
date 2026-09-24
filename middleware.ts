@@ -12,7 +12,7 @@ import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
-import { checkOriginLock, reportOriginLock } from "@/lib/http/originLock"
+import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http/originLock"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
@@ -599,8 +599,16 @@ export async function middleware(request: NextRequest) {
   // trusts them. Off unless CF_ORIGIN_AUTH_SECRET is set — see lib/http/originLock.
   const lock = checkOriginLock(request.headers, request.nextUrl.pathname)
   if (lock.action !== "allow") {
-    reportOriginLock(lock.reason, request.headers.get("host"), request.nextUrl.pathname, lock.action === "refuse" ? "enforce" : "report")
-    if (lock.action === "refuse") {
+    const host = request.headers.get("host")
+    const { pathname, search } = request.nextUrl
+    if (lock.action === "report") {
+      reportOriginLock(lock.reason, host, pathname, "would-refuse")
+    } else {
+      // Pages on a non-canonical host are sent back through Cloudflare; everything
+      // else is refused. The rules, and why, are in originLockRefusal.
+      const refusal = originLockRefusal({ method: request.method, pathname, search, host }, getPublicSiteHostname())
+      reportOriginLock(lock.reason, host, pathname, refusal.kind === "redirect" ? "redirected" : "refused")
+      if (refusal.kind === "redirect") return NextResponse.redirect(refusal.location, 308)
       return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/plain", "cache-control": "no-store" } })
     }
   }
