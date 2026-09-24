@@ -566,6 +566,49 @@ describe('finalizeCompletedWeeksForSeason — backfilling a past week', () => {
     expect(result.finalized).toBe(1)
   })
 
+  /**
+   * 🛑 A SPENT QUOTA AND AN EMPTY WEEK PRODUCE THE SAME COVERAGE NUMBER.
+   *
+   * `NflLiveStatsProvider.fetchPlayerStatsForGames` returns an EMPTY map when the rate limiter
+   * refuses it, so the sync writes nothing and the finalizer computes exactly the figure it
+   * would have computed if those players had not played. Measured 2026-09-24: week 1 refused at
+   * 0.721 while 19 of its 24 unscored starters had real lines in Sleeper's payload, unreachable
+   * because the team-defense fetch had spent the hour's 1,000 calls. The refusal sent the reader
+   * to the roster; the cause was a quota.
+   */
+  it('names the quota, not the coverage, when the backfill was rate limited', async () => {
+    const prisma = makeSweepPrisma([{ playerId: 'p1', sport: 'NFL' }])
+    const syncWeekStats = vi.fn(async () => ({ rateLimited: true }))
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(result.refusals.provider_rate_limited).toBe(1)
+    expect(result.refusals.stat_coverage_below_floor).toBeUndefined()
+    // The coverage figure is still reported — it is true, it is just not the cause.
+    expect(result.results[0]?.coverage).toBeCloseTo(0.25)
+  })
+
+  it('does not blame the quota for a week that sealed anyway', async () => {
+    const scored = [{ playerId: 'p1', sport: 'NFL' }]
+    const prisma = makeSweepPrisma(scored)
+    const syncWeekStats = vi.fn(async () => {
+      scored.push({ playerId: 'p2', sport: 'NFL' }, { playerId: 'p3', sport: 'NFL' }, { playerId: 'p4', sport: 'NFL' })
+      // Rate-limited for the NEXT caller, but this run still got its rows.
+      return { rateLimited: true }
+    })
+
+    const result = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-1', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn(async () => ({ updated: 1 })) as any, syncWeekStats },
+    )
+
+    expect(result.finalized).toBe(1)
+    expect(result.refusals.provider_rate_limited).toBeUndefined()
+  })
+
   it('writes nothing on a dry run, including the backfill', async () => {
     const prisma = makeSweepPrisma([{ playerId: 'p1', sport: 'NFL' }])
     const syncWeekStats = vi.fn(async () => {})

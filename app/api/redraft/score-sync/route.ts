@@ -203,12 +203,25 @@ async function runRedraftReconciliation() {
            * sweep calls it only when a week refuses for coverage.
            */
           syncWeekStats: async ({ seasonId, week }) => {
+            /*
+             * ⚠ ASKED BEFORE THE SYNC, BECAUSE AFTERWARDS IT IS UNANSWERABLE. The provider
+             * returns an empty map when it is refused and an empty map when the week genuinely
+             * has nothing, and neither the sync nor the finalizer can tell those apart from the
+             * rows that result. The same `canCall` the provider consults is the authority; it
+             * is a cheap read, and asking it here is what lets the refusal name a true cause.
+             */
+            const { rateLimitManager } = await import('@/lib/workers/rate-limit-manager')
+            const canCall = await rateLimitManager
+              .canCall('sleeper', 'stats/nfl/week')
+              .catch(() => true)
+
             await syncPlayerWeeklyScoresForRedraftSeason({
               seasonId,
               week,
               actorId: 'system:score-sync-backfill',
             })
             await recalculateMatchupsForSeasonWeek(seasonId, week)
+            return { rateLimited: !canCall }
           },
         },
       )
