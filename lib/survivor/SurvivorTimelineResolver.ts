@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 function toPositiveInt(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
@@ -95,8 +96,9 @@ export async function resolveSurvivorCurrentWeek(
     return latestMatchupFact.weekOrPeriod
   }
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { status: true },
   })
   if (draftSession?.status === 'completed') {

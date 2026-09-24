@@ -8,6 +8,7 @@ import { authOptions } from '@/lib/auth'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const draft = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!draft) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
   if (draft.status !== 'pre_draft') {
     return NextResponse.json({ error: 'Devy config cannot be changed after draft has started' }, { status: 400 })

@@ -10,6 +10,7 @@ import { buildDraftStartingEmail } from './draftEmails'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { getBaseUrl } from '@/lib/get-base-url'
 import type { DraftNotificationEventType, DraftNotificationPayload } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const DRAFT_ROOM_PATH = (leagueId: string) => `/league/${leagueId}/draft`
 
@@ -259,8 +260,9 @@ export async function createDraftNotificationForUsers(
  */
 export async function notifyOnTheClockAfterPick(leagueId: string): Promise<void> {
   try {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       include: { picks: { orderBy: { overall: 'asc' } } },
     })
     if (!session || session.status !== 'in_progress') return
@@ -417,8 +419,9 @@ async function buildDraftStartingEmailsByUser(
   leagueName: string,
 ): Promise<Map<string, { subject: string; html: string }>> {
   const out = new Map<string, { subject: string; html: string }>()
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { draftType: true, slotOrder: true },
   })
   if (!session || session.draftType === 'auction') return out

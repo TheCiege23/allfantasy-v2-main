@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type WarRoomLeagueSnapshot = {
   leagueId: string
@@ -28,8 +29,9 @@ export async function resolveWarRoomDraftSession(args: {
   sport: SupportedSport
   createIfMissing: boolean
 }) {
-  const existing = await prisma.draftSession.findUnique({
+  const existing = await prisma.draftSession.findFirst({
     where: { leagueId: args.leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       status: true,

@@ -9,6 +9,7 @@ import { sanitizeDraftChatPlayerContext } from '@/lib/draft-room/draft-chat-play
 import { buildDraftChatWireMessage } from '@/lib/draft-room/draft-chat-contract'
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import { parseLeaguePollPayload, type LeaguePollPayload } from '@/lib/league-chat/LeaguePollService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 function normalizedParsePoll(input: {
   body?: string | null
@@ -41,7 +42,7 @@ export async function loadDraftChatWireMessages(leagueId: string, userId: string
   const before = params.before
 
   const [draftSession, uiSettings] = await Promise.all([
-    prisma.draftSession.findUnique({ where: { leagueId }, select: { status: true } }),
+    prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
     getDraftUISettingsForLeague(leagueId),
   ])
   const syncOn = Boolean(uiSettings.liveDraftChatSyncEnabled) && activeLiveDraftSyncEligible(draftSession?.status)

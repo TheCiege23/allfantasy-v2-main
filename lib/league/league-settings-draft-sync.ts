@@ -2,6 +2,7 @@ import type { LeagueSettings } from '@prisma/client'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { pickTimerSecondsFromLeagueSettings } from '@/lib/league/league-settings-pick-timer'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type SlotRow = { slot: number; rosterId: string; displayName: string }
 
@@ -98,7 +99,7 @@ export async function syncDraftSessionFromLeagueSettings(
   ls: LeagueSettings,
   leagueTeamCount: number,
 ): Promise<void> {
-  const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return
 
   const timerSeconds = pickTimerSecondsFromLeagueSettings(ls.pickTimerPreset, ls.pickTimerCustomValue)

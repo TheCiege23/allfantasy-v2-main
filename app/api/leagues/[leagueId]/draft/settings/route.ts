@@ -23,6 +23,7 @@ import { getProviderStatus } from '@/lib/provider-config'
 import { notifyOrphanAiManagerAssigned } from '@/lib/draft-notifications'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,8 +94,9 @@ export async function GET(
       const [orphanRosterIds, recentLogs, dsAi] = await Promise.all([
         getOrphanRosterIdsForLeague(leagueId),
         getRecentAuditEntries(leagueId, { limit: 10 }),
-        prisma.draftSession.findUnique({
+        prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           select: { commissionerAiManagers: true, slotOrder: true },
         }),
       ])
@@ -279,8 +281,9 @@ export async function PATCH(
           where: { leagueId, ...CURRENT_TEAMS },
           select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, id: true, avatarUrl: true },
         }),
-        prisma.draftSession.findUnique({
+        prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           select: { teamCount: true },
         }),
       ])
@@ -317,9 +320,10 @@ export async function PATCH(
   const hasSessionFlags = Object.keys(sessionFlagsPatch).length > 0
 
   /** Live snake/linear drafts: never accept structural/config/order/sessionVariant mutations from settings PATCH while actively drafting (in_progress). Allow changes when paused. Room modal only sends UI prefs. */
-  const draftSessionRow = await prisma.draftSession.findUnique({
+  const draftSessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
-    select: { status: true },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, status: true },
   })
   const isActiveDraft =
     draftSessionRow &&
@@ -390,9 +394,12 @@ export async function PATCH(
 
     // Update draft session with randomized slot order if needed
     if (randomizedSlotOrder && randomizedSlotOrder.length > 0) {
+      // Keyed on the row read above rather than on `leagueId`, which is no longer unique.
+      // Absent session still throws, as the previous `update({ where: { leagueId } })` did.
+      if (!draftSessionRow) throw new Error('No draft session for this league to order')
       await Promise.all([
         prisma.draftSession.update({
-          where: { leagueId },
+          where: { id: draftSessionRow.id },
           data: { slotOrder: randomizedSlotOrder as unknown as Prisma.InputJsonValue },
         }),
         // Also save to league settings so it persists in the UI

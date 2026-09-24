@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { buildDeterministicPostDraftRecap } from '@/lib/post-draft/PostDraftRecapService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const prismaAny = prisma as any
 
@@ -152,8 +153,9 @@ export async function generateDraftRecapArtifact(leagueId: string) {
   const recap = await buildDeterministicPostDraftRecap(leagueId)
   if (!recap) return null
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true },
   })
 

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type ViewerAutopickPreference = {
   enabled: boolean
@@ -99,8 +100,9 @@ export async function getViewerAutopickPreferenceForLeague(
   leagueId: string,
   viewerUserId: string,
 ): Promise<ViewerAutopickPreference> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true },
   })
   if (!session) return defaults(await resolveProEligibility(viewerUserId))

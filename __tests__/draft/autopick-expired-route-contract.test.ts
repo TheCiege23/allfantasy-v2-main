@@ -95,6 +95,7 @@ vi.mock('@/lib/live-draft-engine/auth', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     draftSession: {
+      findFirst: (...a: unknown[]) => draftSessionFindUniqueMock(...a),
       findUnique: (...a: unknown[]) => draftSessionFindUniqueMock(...a),
     },
   },

@@ -46,6 +46,7 @@ import { resolveWeightedLotterySlotOrderForLeague } from '@/lib/draft/resolve-dr
 import { parseDispersalPoolConfig } from '@/lib/live-draft-engine/SpecialtyDraftPoolValidation'
 import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-configuration-gate-error'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * Same rules as session creation: LeagueSettings pick timer wins when present; else draft config + UI slow-draft mode.
@@ -95,8 +96,9 @@ export function computeEffectivePickTimerSeconds(
  * Reconcile overnight freeze: persist frozen pick seconds while inside the window; restore timerEndAt after exit.
  */
 export async function reconcileOvernightDraftTimerForLeague(leagueId: string, now: Date = new Date()): Promise<void> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       status: true,
@@ -259,7 +261,7 @@ export async function buildSlotOrderForLeague(leagueId: string): Promise<SlotOrd
 }
 
 async function repairDraftSessionSlotOrderIfNeeded(leagueId: string): Promise<void> {
-  const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return
   const teamCount = session.teamCount
   if (isCompleteSlotOrder(session.slotOrder, teamCount)) return
@@ -293,7 +295,7 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
   session: { id: string; leagueId: string; status: string; slotOrder: unknown; teamCount: number; rounds: number; draftType: string; thirdRoundReversal: boolean; timerSeconds: number | null; timerEndAt: Date | null; pausedRemainingSeconds: number | null; version: number; updatedAt: Date }
   created: boolean
 }> {
-  let session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  let session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (session) {
     return { session: session as any, created: false }
   }
@@ -363,8 +365,9 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
 }
 
 export async function getDraftSessionByLeague(leagueId: string) {
-  return prisma.draftSession.findUnique({
+  return prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
 }
@@ -638,7 +641,7 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     return { ok: false, reason: 'ROSTER_CONFIGURATION_INCOMPLETE' }
   }
 
-  const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.status !== 'pre_draft') return { ok: false, reason: 'session_not_ready' }
 
   const startedAtNow = new Date()
@@ -722,7 +725,7 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
 
 export async function pauseDraftSession(leagueId: string, pausedByUserId?: string | null): Promise<boolean> {
   const lockResult = await withControlLock(leagueId, async () => {
-    const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+    const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'in_progress') return false
     const now = new Date()
     const frozen = session.overnightFrozenPickSeconds
@@ -754,7 +757,7 @@ export async function pauseDraftSession(leagueId: string, pausedByUserId?: strin
 
 export async function resumeDraftSession(leagueId: string): Promise<boolean> {
   const lockResult = await withControlLock(leagueId, async () => {
-    const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+    const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || session.status !== 'paused') return false
     const [ls, config, uiSettings] = await Promise.all([
       prisma.leagueSettings.findUnique({ where: { leagueId } }),
@@ -809,7 +812,7 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
 
 export async function resetTimer(leagueId: string): Promise<boolean> {
   const lockResult = await withControlLock(leagueId, async () => {
-    const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+    const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session || (session.status !== 'in_progress' && session.status !== 'paused')) return false
     const [ls, config, uiSettings] = await Promise.all([
       prisma.leagueSettings.findUnique({ where: { leagueId } }),
@@ -878,7 +881,7 @@ export async function setTimerSeconds(
   seconds: number,
   options?: { resetCurrentTimer?: boolean }
 ): Promise<boolean> {
-  const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   const sec = Math.max(0, Math.min(86400, Math.round(seconds)))
   const data: Prisma.DraftSessionUpdateInput = {
@@ -928,8 +931,9 @@ export async function undoLastPick(
   leagueId: string,
   options?: { reason?: string; actorUserId?: string | null },
 ): Promise<boolean> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'desc' }, take: 1 } },
   })
   if (!session || session.picks.length === 0) return false
@@ -1026,8 +1030,9 @@ export async function swapDraftManagers(
     }
   }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, slotOrder: true, picks: { select: { overall: true } } },
   })
   if (!session) return { ok: false, code: 'NO_SESSION', error: 'No draft session for league' }
@@ -1121,7 +1126,7 @@ export async function swapDraftManagers(
 
 export async function completeDraftSession(leagueId: string): Promise<boolean> {
   const outcome = await prisma.$transaction(async (tx) => {
-    const session = await tx.draftSession.findUnique({ where: { leagueId } })
+    const session = await tx.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
     if (!session) return { ok: false as const, transitioned: false as const, lifecycle: null }
 
     /** Idempotent: board already finalized in DB — outer callers may heal artifacts. */
@@ -1215,7 +1220,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
  * Commissioner-only: reset draft to pre_draft (delete all picks, clear timer/auction state).
  */
 export async function resetDraftSession(leagueId: string): Promise<boolean> {
-  const session = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return false
   const outcome = await prisma.$transaction(async (tx) => {
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })

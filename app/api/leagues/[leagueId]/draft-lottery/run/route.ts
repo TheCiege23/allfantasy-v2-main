@@ -14,6 +14,7 @@ import {
 import { runWeightedLottery } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
 import { checkDynastyLotteryEligibility } from '@/lib/draft-lottery/dynastyYearGuard'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,15 +70,16 @@ export async function POST(
     where: { id: leagueId },
     select: { season: true },
   })
-  const sessionRow = await prisma.draftSession.findUnique({
+  const sessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true },
   })
 
   if (sessionRow?.status === 'pre_draft') {
     const slotOrder = result.slotOrder as SlotOrderEntry[]
     await prisma.draftSession.update({
-      where: { leagueId },
+      where: { id: sessionRow.id },
       data: {
         slotOrder: slotOrder as any,
         version: { increment: 1 },

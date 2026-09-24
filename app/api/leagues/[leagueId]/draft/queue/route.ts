@@ -22,6 +22,7 @@ import {
   stripAiQueueMetadata,
 } from '@/lib/live-draft-engine/draftQueueAiPreferences'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,8 +68,9 @@ export async function PUT(
     return NextResponse.json({ error: 'queue (array) required' }, { status: 400 })
   }
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       picks: {

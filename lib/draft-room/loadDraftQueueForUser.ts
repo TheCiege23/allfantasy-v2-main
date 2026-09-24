@@ -10,13 +10,15 @@ import {
   normalizeQueueEntries,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export async function loadDraftQueueForUser(leagueId: string, userId: string): Promise<{
   queue: QueueEntry[]
   removedUnavailable: number
 }> {
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       picks: {

@@ -6,6 +6,7 @@ import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -394,8 +395,9 @@ export async function syncCompletedDraftToRedraftSeason(
    * `not_redraft_league` therefore stays in the result type and is no longer produced.
    */
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: {
       picks: { orderBy: { overall: 'asc' } },
     },

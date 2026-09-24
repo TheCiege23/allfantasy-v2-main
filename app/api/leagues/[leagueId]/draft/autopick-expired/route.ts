@@ -29,6 +29,7 @@ import {
   notifyDraftIntelTierBreak,
 } from '@/lib/draft-notifications'
 import { publishDraftIntelForUpcomingManagers, sendDraftIntelDm } from '@/lib/draft-intelligence'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type AutoPickCandidate = {
   playerName: string
@@ -59,8 +60,9 @@ export async function POST(
   const rosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
   if (!rosterId) return NextResponse.json({ error: 'No roster for this league' }, { status: 403 })
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } }, queues: true },
   })
   if (!draftSession || draftSession.status !== 'in_progress') {

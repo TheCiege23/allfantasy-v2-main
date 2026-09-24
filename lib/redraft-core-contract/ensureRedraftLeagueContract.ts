@@ -9,6 +9,7 @@ import {
   normalizeRedraftDraftType,
   resolveRedraftScoringPreset,
 } from '@/lib/league-concepts/redraftDefaults'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type JsonRecord = Record<string, unknown>
 
@@ -268,12 +269,16 @@ export async function ensureRedraftLeagueContract(leagueId: string): Promise<{
       redraftExtendedSettings: true,
       redraftDraftProfile: true,
       redraftHomepageState: true,
-      draftSessions: true,
+      draftSessions: { orderBy: CURRENT_DRAFT_SESSION_ORDER, take: 1 },
       rosters: { select: { id: true } },
       teams: { select: { ownerName: true, teamName: true } },
     },
   })
   if (!league) return { ok: false, repaired: [], skippedReason: 'league_not_found' }
+
+  // The league's current draft. A league with only a completed draft still HAS one here, so
+  // the repair plan below never reads that as "no draft" and creates a second beside it.
+  const currentDraftSession = league.draftSessions[0] ?? null
 
   const plan = buildRedraftContractRepairPlan({
     sport: league.sport,
@@ -281,7 +286,7 @@ export async function ensureRedraftLeagueContract(leagueId: string): Promise<{
     isDynasty: league.isDynasty,
     teamCount: league.leagueSize,
     settings: isRecord(league.settings) ? league.settings : {},
-    draftSession: league.draftSessions,
+    draftSession: currentDraftSession,
     rosters: league.rosters,
     teams: league.teams,
   })
@@ -422,9 +427,9 @@ export async function ensureRedraftLeagueContract(leagueId: string): Promise<{
         },
       })
       repaired.push('draftSession')
-    } else if (plan.draftSession.shouldUpdate && league.draftSessions) {
+    } else if (plan.draftSession.shouldUpdate && currentDraftSession) {
       await tx.draftSession.update({
-        where: { id: league.draftSessions.id },
+        where: { id: currentDraftSession.id },
         data: {
           teamCount: plan.draftSession.data.teamCount,
           rounds: plan.draftSession.data.rounds,

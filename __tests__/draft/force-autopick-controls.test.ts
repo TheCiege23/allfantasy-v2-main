@@ -192,7 +192,7 @@ vi.mock('@/lib/draft-intelligence', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    draftSession: { findUnique: (...a: unknown[]) => draftSessionFindUniqueMock(...a) },
+    draftSession: { findFirst: (...a: unknown[]) => draftSessionFindUniqueMock(...a), findUnique: (...a: unknown[]) => draftSessionFindUniqueMock(...a) },
     roster: { findUnique: (...a: unknown[]) => rosterFindUniqueMock(...a) },
     league: { findUnique: (...a: unknown[]) => leagueFindUniqueMock(...a) },
     draftPickAuditLog: { create: (...a: unknown[]) => draftPickAuditLogCreateMock(...a) },

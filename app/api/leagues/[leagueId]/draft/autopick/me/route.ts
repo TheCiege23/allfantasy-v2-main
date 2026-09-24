@@ -15,6 +15,7 @@ import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import {
   setViewerAutopickPreference,
 } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,8 +35,9 @@ export async function POST(
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true },
   })
   if (!draftSession) return NextResponse.json({ error: 'No draft session found' }, { status: 404 })

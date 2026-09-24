@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const POST_DRAFT_ARTIFACT_STABLE_THROTTLE_MS = 60_000
 const MAX_THROTTLE_KEYS = 200
@@ -107,8 +108,9 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
  * Throttled on success to avoid redundant work on every poll; on failure the throttle entry is cleared so the next request retries.
  */
 export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: string): Promise<void> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { status: true },
   })
   if (session?.status !== 'completed') return
@@ -137,8 +139,9 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
  * Calls `completeDraftSession` which is idempotent when already completed.
  */
 export async function repairDraftCompletionIfBoardFull(leagueId: string): Promise<boolean> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, rounds: true, teamCount: true },
   })
   if (!session || session.status === 'completed') return false

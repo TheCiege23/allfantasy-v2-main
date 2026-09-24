@@ -31,6 +31,7 @@ import {
   sanitizeDraftChatStructuredSendMeta,
 } from '@/lib/draft-room/draft-chat-contract'
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   }
 
   const [draftSession, uiSettings] = await Promise.all([
-    prisma.draftSession.findUnique({ where: { leagueId }, select: { status: true } }),
+    prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
     getDraftUISettingsForLeague(leagueId),
   ])
   const syncOn = Boolean(uiSettings.liveDraftChatSyncEnabled) && isActiveLiveDraftStatus(draftSession?.status)

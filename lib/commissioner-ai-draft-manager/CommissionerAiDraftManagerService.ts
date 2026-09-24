@@ -8,6 +8,7 @@ import {
   type CommissionerAiManagersBlob,
   type CommissionerTradeRules,
 } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const MAX_AI_TEAMS = 4
 
@@ -67,8 +68,9 @@ export function buildApiResponse(
 }
 
 export async function getBlobForLeague(leagueId: string): Promise<CommissionerAiManagersBlob | null> {
-  const row = await prisma.draftSession.findUnique({
+  const row = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { commissionerAiManagers: true, slotOrder: true },
   })
   if (!row) return null
@@ -110,8 +112,17 @@ export async function validateAndMergeAssignments(
 }
 
 export async function saveCommissionerAiManagers(leagueId: string, blob: CommissionerAiManagersBlob): Promise<void> {
-  await prisma.draftSession.update({
+  // `leagueId` is no longer unique on DraftSession, so resolve the league's current draft
+  // first and write to that row by id. Absent session still throws, as the previous
+  // `update({ where: { leagueId } })` did.
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true },
+  })
+  if (!session) throw new Error(`No draft session for league ${leagueId}`)
+  await prisma.draftSession.update({
+    where: { id: session.id },
     data: {
       commissionerAiManagers: blob as object,
       version: { increment: 1 },

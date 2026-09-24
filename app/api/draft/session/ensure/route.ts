@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessLeague } from '@/lib/draft/access'
 import { getDraftIdFromSettings } from '@/app/league/[leagueId]/components/league-settings-modal-utils'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,22 +44,43 @@ export async function POST(req: Request) {
 
   const sleeperDraftId = getDraftIdFromSettings(league.settings)
 
-  const ds = await prisma.draftSession.upsert({
+  /**
+   * `leagueId` is no longer unique on DraftSession, so this is a find-then-write rather than
+   * an upsert.
+   *
+   * 🛑 It deliberately looks for ANY existing draft, not just an open one. "Ensure" must not
+   * quietly start a league's SECOND draft once the first has completed — beginning a rookie or
+   * dispersal draft is an explicit commissioner action, not a side effect of a page load.
+   *
+   * A concurrent pair of calls on a league with no draft can both reach the create; the partial
+   * unique index on `("leagueId") WHERE status <> 'completed'` is what makes the loser fail
+   * rather than produce two open drafts.
+   */
+  const existing = await prisma.draftSession.findFirst({
     where: { leagueId },
-    create: {
-      leagueId,
-      sportType: String(league.sport),
-      teamCount: league.leagueSize ?? 12,
-      rounds: 15,
-      sleeperDraftId: sleeperDraftId ?? undefined,
-      sessionKind: 'live',
-    },
-    update: {
-      sportType: String(league.sport),
-      teamCount: league.leagueSize ?? 12,
-      ...(sleeperDraftId ? { sleeperDraftId } : {}),
-    },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true },
   })
+
+  const ds = existing
+    ? await prisma.draftSession.update({
+        where: { id: existing.id },
+        data: {
+          sportType: String(league.sport),
+          teamCount: league.leagueSize ?? 12,
+          ...(sleeperDraftId ? { sleeperDraftId } : {}),
+        },
+      })
+    : await prisma.draftSession.create({
+        data: {
+          leagueId,
+          sportType: String(league.sport),
+          teamCount: league.leagueSize ?? 12,
+          rounds: 15,
+          sleeperDraftId: sleeperDraftId ?? undefined,
+          sessionKind: 'live',
+        },
+      })
 
   return NextResponse.json({ draftSessionId: ds.id, leagueId: ds.leagueId, sleeperDraftId: ds.sleeperDraftId })
 }

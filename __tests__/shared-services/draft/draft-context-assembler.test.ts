@@ -30,7 +30,7 @@ const {
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: mockLeagueFindUnique },
-    draftSession: { findUnique: mockDraftSessionFindUnique },
+    draftSession: { findUnique: mockDraftSessionFindUnique, findFirst: mockDraftSessionFindUnique },
     roster: { findUnique: mockRosterFindUnique },
     draftPick: { findMany: mockDraftPickFindMany },
   },

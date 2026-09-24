@@ -7,6 +7,7 @@
 import { prisma } from '@/lib/prisma'
 import { getDevyConfig } from '../DevyLeagueConfig'
 import type { DevyLeagueConfigShape } from '../types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type DevyPickType = 'startup_vet' | 'rookie' | 'devy'
 
@@ -60,8 +61,9 @@ async function readDraftSessionTradedPicks(leagueId: string): Promise<{
   }>
   sessionExists: boolean
 }> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { tradedPicks: true, devyConfig: true },
   })
   if (!session) return { picks: [], sessionExists: false }

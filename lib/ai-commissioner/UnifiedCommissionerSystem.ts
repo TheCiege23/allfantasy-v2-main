@@ -9,6 +9,7 @@ import {
   runAICommissionerCycle,
   toConfigView,
 } from './AICommissionerService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type SpecialtyModeKey =
   | 'guillotine'
@@ -192,8 +193,9 @@ export async function getUnifiedCommissionerAssessment(input: {
       prisma.integrityFlag.count({
         where: { leagueId: input.leagueId, status: { in: ['open', 'investigating'] } },
       }),
-      prisma.draftSession.findUnique({
+      prisma.draftSession.findFirst({
         where: { leagueId: input.leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { id: true, commissionerAiManagers: true, status: true },
       }),
       prisma.aiCommissionerActionLog.findMany({

@@ -61,6 +61,7 @@ import {
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -814,8 +815,9 @@ export async function getResolvedDraftPoolForLeague(
         leagueSettings: { select: { draftType: true } },
       },
     }),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       /* `teamCount` is here for the AI ADP context hash below - see the block comment there. */
       select: { devyConfig: true, c2cConfig: true, keeperSelections: true, draftType: true, teamCount: true },
     }),

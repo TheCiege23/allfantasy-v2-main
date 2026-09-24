@@ -22,7 +22,7 @@ vi.mock("@/lib/prisma", () => ({
       fn({
         roster: { findUnique: mocks.rosterFindUnique, count: mocks.rosterCount, create: mocks.rosterCreate },
         league: { findUnique: mocks.leagueFindUnique },
-        draftSession: { findUnique: mocks.draftSessionFindUnique },
+        draftSession: { findUnique: mocks.draftSessionFindUnique, findFirst: mocks.draftSessionFindUnique },
         userProfile: { findFirst: mocks.userProfileFindFirst },
         leagueTeam: { count: mocks.leagueTeamCount, create: mocks.leagueTeamCreate },
         growthAttribution: { upsert: mocks.growthAttributionUpsert },

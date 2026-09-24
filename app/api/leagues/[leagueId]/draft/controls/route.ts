@@ -59,6 +59,7 @@ import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -364,8 +365,9 @@ export async function POST(
       const requestedPlayerName = String(body.playerName ?? body.player_name ?? '').trim()
       const requestedPosition = String(body.position ?? '').trim()
 
-      const draftSession = await prisma.draftSession.findUnique({
+      const draftSession = await prisma.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         include: { picks: { orderBy: { overall: 'asc' } }, queues: true },
       })
       if (!draftSession || draftSession.status !== 'in_progress') {
@@ -727,8 +729,9 @@ export async function POST(
       }
       // Commit R — pass expectedOverall so Commit-M race semantics apply
       // even on commissioner skip writes.
-      const skipSession = await prisma.draftSession.findUnique({
+      const skipSession = await prisma.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { picks: { select: { id: true } } },
       })
       const expectedOverall = (skipSession?.picks.length ?? 0) + 1
@@ -777,7 +780,7 @@ export async function POST(
           const { isSalaryCapLeague, getSalaryCapConfig } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
           const { assignStartupAuctionContract } = await import('@/lib/salary-cap/AuctionStartupService')
           if (await isSalaryCapLeague(leagueId)) {
-            const draftSession = await prisma.draftSession.findUnique({ where: { leagueId } })
+            const draftSession = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
             if (draftSession) {
               const latestPick = await prisma.draftPick.findFirst({
                 where: { sessionId: draftSession.id },
