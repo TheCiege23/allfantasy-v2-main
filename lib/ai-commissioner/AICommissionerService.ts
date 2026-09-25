@@ -6,8 +6,8 @@ import type {
 } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
-import { createSystemMessage } from '@/lib/platform/chat-service'
-import { leagueChatThreadIdFromSettings } from '@/lib/league/leagueChatThreadLink'
+import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'
+import { commissionerAlertsText } from '@/lib/league-chat/chimmyCommissionerNotices'
 import { openaiChatText } from '@/lib/openai-client'
 import { buildAiCacheKey, readAiResultCache, writeAiResultCache } from '@/lib/ai-result-cache'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
@@ -178,18 +178,11 @@ export async function appendAICommissionerActionLog(input: {
   })
 }
 
-function summarizeForChat(created: AICommissionerAlertView[]): string {
-  if (created.length === 0) return 'AI Commissioner cycle completed with no new alerts.'
-  const top = created[0]
-  return `AI Commissioner generated ${created.length} new alert(s). Top: [${top.severity}] ${top.headline}`
-}
-
 async function fanOutCommissionerNotices(input: {
   leagueId: string
   sport: LeagueSport
   mode: AICommissionerNotificationMode
   commissionerUserId: string
-  threadId: string | null
   createdAlerts: AICommissionerAlertView[]
 }) {
   if (input.createdAlerts.length === 0 || input.mode === 'off') return
@@ -218,8 +211,22 @@ async function fanOutCommissionerNotices(input: {
       },
     })
   }
-  if ((input.mode === 'chat' || input.mode === 'both') && input.threadId) {
-    await createSystemMessage(input.threadId, 'commissioner_notice', summarizeForChat(input.createdAlerts))
+  /*
+   * 🛑 THE CHAT HALF USED TO GO NOWHERE. It posted "[AI Commissioner] …" into a platform thread named
+   * by `League.settings.leagueChatThreadId`, which nothing sets, so "chat" and "both" were silently
+   * the same as "in_app". It now goes to the league's OWN chat as Chimmy — Chimmy's name and badge,
+   * no "AI" label — once per cycle, and it counts against Chimmy's daily cap because nobody pressed a
+   * button for it (lib/league-chat/chimmyMoments.ts). Never throws.
+   */
+  if (input.mode === 'chat' || input.mode === 'both') {
+    const ids = input.createdAlerts.map((a) => a.alertId).sort()
+    await postChimmyMoment({
+      leagueId: input.leagueId,
+      kind: 'commissioner_alerts',
+      dedupeKey: `cycle:${ids[0]}:${ids.length}`,
+      text: commissionerAlertsText(input.createdAlerts),
+      card: { commissionerAlerts: { count: input.createdAlerts.length } },
+    })
   }
 }
 
@@ -311,15 +318,12 @@ export async function runAICommissionerCycle(input: {
     touchedAlerts += 1
   }
 
-  // Only a link that passes the one rule (lib/league/leagueChatThreadLink.ts); a DM or huddle is no link.
-  const threadId = leagueChatThreadIdFromSettings(input.leagueId, league.settings)
   const mode = normalizeNotificationMode(config.commissionerNotificationMode)
   await fanOutCommissionerNotices({
     leagueId: input.leagueId,
     sport: sport as LeagueSport,
     mode,
     commissionerUserId: league.userId,
-    threadId,
     createdAlerts,
   })
 

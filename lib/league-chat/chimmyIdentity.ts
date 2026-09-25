@@ -42,19 +42,35 @@ export const CHIMMY_MARKER_KEY = 'chimmy'
 export const CHIMMY_SERVER_KEYS = ['chimmy', 'chimmyMoment', 'chimmyPrivateReply', 'chimmyResponse'] as const
 
 /**
- * The moments Chimmy speaks up for on its own. `weekly_awards` and `trade` are posted today; the
- * rest are reserved for the moments built on `postChimmyMoment` next.
+ * What Chimmy posts. `weekly_awards`, `trade`, `commissioner_notice` and `commissioner_alerts` are
+ * posted today; `close_finish`, `upset` and `starter_injury` are reserved for the moments built on
+ * `postChimmyMoment` next.
+ *
+ *   - `commissioner_notice`  — a governance notice the COMMISSIONER chose to send ("Send notice" in
+ *                              the AI Commissioner panel). A person asked for it, so it skips the cap.
+ *   - `commissioner_alerts`  — the automatic governance cycle's summary, when the commissioner set
+ *                              notices to go to chat. Automatic, so it counts against the cap.
  */
-export const CHIMMY_MOMENT_KINDS = ['weekly_awards', 'trade', 'close_finish', 'upset', 'starter_injury'] as const
+export const CHIMMY_MOMENT_KINDS = [
+  'weekly_awards',
+  'trade',
+  'close_finish',
+  'upset',
+  'starter_injury',
+  'commissioner_notice',
+  'commissioner_alerts',
+] as const
 export type ChimmyMomentKind = (typeof CHIMMY_MOMENT_KINDS)[number]
 
-/** A short label drawn beside Chimmy's name. */
+/** A short label drawn beside Chimmy's name. Never "AI" — the post is Chimmy's. */
 export const CHIMMY_MOMENT_LABELS: Record<ChimmyMomentKind, string> = {
   weekly_awards: 'Weekly awards',
   trade: 'Trade take',
   close_finish: 'Close finish',
   upset: 'Upset',
   starter_injury: 'Injury',
+  commissioner_notice: 'Commissioner notice',
+  commissioner_alerts: 'Commissioner notice',
 }
 
 export function isChimmyMomentKind(value: unknown): value is ChimmyMomentKind {

@@ -8,12 +8,25 @@ import {
   toAlertView,
   updateAICommissionerAlertStatus,
 } from '@/lib/ai-commissioner'
-import { createSystemMessage } from '@/lib/platform/chat-service'
-import { leagueChatThreadIdFromSettings } from '@/lib/league/leagueChatThreadLink'
+import { chimmyDayKey, postChimmyMoment, type ChimmyMomentSkipReason } from '@/lib/league-chat/chimmyMoments'
+import { commissionerNoticeText } from '@/lib/league-chat/chimmyCommissionerNotices'
 
 export const dynamic = 'force-dynamic'
 
 type AlertMutationAction = 'approve' | 'dismiss' | 'snooze' | 'resolve' | 'reopen' | 'send_notice'
+
+/** Why a notice did not post, in words the commissioner can act on. */
+const NOTICE_REFUSALS: Record<ChimmyMomentSkipReason, { status: number; error: string }> = {
+  duplicate: { status: 409, error: 'That notice is already in league chat today.' },
+  disabled: {
+    status: 409,
+    error: 'Chimmy is switched off for this league. Turn on "Chimmy speaks up in league chat" under Automations to post notices.',
+  },
+  daily_cap: { status: 429, error: 'League chat has had enough from Chimmy today. Try again tomorrow.' },
+  invalid: { status: 400, error: 'That notice has nothing to post.' },
+  no_league: { status: 404, error: 'League not found.' },
+  error: { status: 502, error: 'Could not post the notice. Try again.' },
+}
 
 export async function PATCH(
   req: Request,
@@ -40,30 +53,30 @@ export async function PATCH(
   const action = String(body.action ?? '').trim().toLowerCase() as AlertMutationAction
   if (!action) return NextResponse.json({ error: 'action is required' }, { status: 400 })
 
+  /*
+   * 🛑 "SEND NOTICE" USED TO GO NOWHERE. It posted into a platform thread named by
+   * `League.settings.leagueChatThreadId`, which nothing ever sets (0 of 390 leagues), so every press
+   * answered "League chat thread is not linked" — and a failed post still came back 200. It now posts
+   * into the league's OWN chat, as Chimmy (lib/league-chat/chimmyMoments.ts): Chimmy's name and
+   * badge, no "AI" label, once per alert per day. A commissioner pressed the button, so it skips the
+   * daily cap; it still respects "Chimmy speaks up" being switched off, and says so.
+   */
   if (action === 'send_notice') {
-    const [league, alert] = await Promise.all([
-      prisma.league.findUnique({
-        where: { id: leagueId },
-        select: { settings: true },
-      }),
-      prisma.aiCommissionerAlert.findFirst({
-        where: { alertId, leagueId },
-      }),
-    ])
+    const alert = await prisma.aiCommissionerAlert.findFirst({ where: { alertId, leagueId } })
     if (!alert) return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
-    // Only a link that passes the one rule (lib/league/leagueChatThreadLink.ts); a DM or huddle is no link.
-    const threadId = leagueChatThreadIdFromSettings(leagueId, league?.settings)
-    if (!threadId) {
-      return NextResponse.json(
-        { error: 'League chat thread is not linked (leagueChatThreadId missing).' },
-        { status: 400 }
-      )
+    const now = new Date()
+    const posted = await postChimmyMoment({
+      leagueId,
+      kind: 'commissioner_notice',
+      dedupeKey: `alert:${alert.alertId}:${chimmyDayKey(now)}`,
+      text: commissionerNoticeText(alert),
+      card: { commissionerNotice: { alertType: alert.alertType, severity: alert.severity } },
+      now,
+    })
+    if (!posted.posted) {
+      const refusal = NOTICE_REFUSALS[posted.reason]
+      return NextResponse.json({ status: 'failed', reason: posted.reason, error: refusal.error }, { status: refusal.status })
     }
-    const sent = await createSystemMessage(
-      threadId,
-      'commissioner_notice',
-      `[AI Commissioner] ${alert.headline}: ${alert.summary}`
-    )
     await appendAICommissionerActionLog({
       leagueId,
       sport: alert.sport,
@@ -73,7 +86,8 @@ export async function PATCH(
       relatedAlertId: alert.alertId,
     })
     return NextResponse.json({
-      status: sent ? 'sent' : 'failed',
+      status: 'sent',
+      messageId: posted.messageId,
       alert: toAlertView(alert),
     })
   }

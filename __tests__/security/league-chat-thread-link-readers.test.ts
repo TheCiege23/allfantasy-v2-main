@@ -77,6 +77,9 @@ const h = vi.hoisted(() => {
     createPlatformThreadTypedMessage: vi.fn(async () => ({ id: 'typed-1' })),
     setMessageHiddenByMod: vi.fn(async () => true),
     createLeagueChatMessage: vi.fn(async () => ({ id: 'league-msg-1' })),
+    // The AI Commissioner's notices no longer read the link at all: they post into the league's own
+    // chat as Chimmy (lib/league-chat/chimmyMoments.ts). Spied, so "went to league chat" is visible.
+    postChimmyMoment: vi.fn(async () => ({ posted: true, messageId: 'chimmy-1' })),
   }
 })
 
@@ -91,6 +94,7 @@ vi.mock('@/lib/platform/chat-service', () => ({
   setMessageHiddenByMod: h.setMessageHiddenByMod,
 }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: h.createLeagueChatMessage }))
+vi.mock('@/lib/league-chat/chimmyMoments', () => ({ postChimmyMoment: h.postChimmyMoment, chimmyDayKey: () => '2026-09-25' }))
 vi.mock('@/lib/draft-notifications/DraftNotificationService', () => ({ getLeagueMemberAppUserIds: vi.fn(async () => []) }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: vi.fn(async () => {}) }))
 // The AI commissioner's analysis is not what is under test — one alert comes out of it, every time.
@@ -199,20 +203,27 @@ describe('POST /api/commissioner/leagues/[leagueId]/chat — broadcast, pin, rem
   })
 })
 
+/*
+ * The AI Commissioner's two chat paths no longer READ the link: both post into the league's own chat
+ * as Chimmy (lib/league-chat/chimmyMoments.ts), so a stored DM or huddle link has nothing to divert.
+ * These keep the property this file guards — nothing reaches a DM or huddle — and show where it goes.
+ */
 describe('AICommissionerService.runAICommissionerCycle — chat notices', () => {
-  it('does not post its notice into a stored DM link', async () => {
+  it('does not post its notice into a stored DM link — it goes to league chat as Chimmy', async () => {
     h.state.settings = { leagueChatThreadId: DM }
     const { runAICommissionerCycle } = await import('@/lib/ai-commissioner/AICommissionerService')
     const out = await runAICommissionerCycle({ leagueId: 'L1' })
     expect(out.createdAlerts).toHaveLength(1)
     expect(platformThreadsWritten()).toEqual([])
+    expect(h.postChimmyMoment).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', kind: 'commissioner_alerts' }))
   })
 
-  it("posts to the league's own room when that is the link (positive control)", async () => {
-    h.state.settings = { leagueChatThreadId: OWN_ROOM }
+  it('needs no link at all to reach league chat (positive control)', async () => {
+    h.state.settings = {}
     const { runAICommissionerCycle } = await import('@/lib/ai-commissioner/AICommissionerService')
     await runAICommissionerCycle({ leagueId: 'L1' })
-    expect(h.createSystemMessage).toHaveBeenCalledWith(OWN_ROOM, 'commissioner_notice', expect.any(String))
+    expect(h.postChimmyMoment).toHaveBeenCalledTimes(1)
+    expect(platformThreadsWritten()).toEqual([])
   })
 })
 
@@ -225,17 +236,19 @@ describe('PATCH /api/leagues/[leagueId]/ai-commissioner/alerts/[alertId] — sen
     })
   }
 
-  it('refuses to send into a stored DM link', async () => {
+  it('never sends into a stored DM link — the notice goes to league chat as Chimmy', async () => {
     h.state.settings = { leagueChatThreadId: DM }
     const res = await sendNotice()
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
     expect(platformThreadsWritten()).toEqual([])
+    expect(h.postChimmyMoment).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', kind: 'commissioner_notice' }))
   })
 
-  it("sends to the league's own room when that is the link (positive control)", async () => {
-    h.state.settings = { leagueChatThreadId: OWN_ROOM }
-    await sendNotice()
-    expect(h.createSystemMessage).toHaveBeenCalledWith(OWN_ROOM, 'commissioner_notice', expect.any(String))
+  it('needs no link at all to reach league chat (positive control)', async () => {
+    h.state.settings = {}
+    const res = await sendNotice()
+    expect(res.status).toBe(200)
+    expect(h.postChimmyMoment).toHaveBeenCalledTimes(1)
   })
 })
 

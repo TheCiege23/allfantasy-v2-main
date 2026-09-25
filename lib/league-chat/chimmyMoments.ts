@@ -44,10 +44,15 @@ import {
  *
  * SOMETIMES, NOT CONSTANTLY. At most `CHIMMY_DAILY_CAP` (4) moments per league per US-Eastern day,
  * counted by claiming one of four numbered day slots — also a primary-key insert, so the cap holds
- * under concurrency. Weekly awards are EXEMPT and do not use a slot: they are one scheduled post a
- * week that the commissioner already controls with its own switch. ⚠ A moment that finds the day full
- * is SPENT, not queued — its dedupe claim stays, so a Sunday-night close finish cannot surface on
- * Monday morning as stale news.
+ * under concurrency. Two kinds are EXEMPT and do not use a slot:
+ *   - weekly awards: one scheduled post a week that the commissioner already controls with its own
+ *     switch;
+ *   - a commissioner notice: the commissioner pressed "Send notice". The cap exists so Chimmy does not
+ *     speak up TOO OFTEN ON ITS OWN; a person asking for a post is not that, and refusing them because
+ *     Chimmy already carded four trades that day would be the wrong way round. The automatic
+ *     governance summary (`commissioner_alerts`) is Chimmy on its own, so it IS capped.
+ * ⚠ A moment that finds the day full is SPENT, not queued — its dedupe claim stays, so a Sunday-night
+ * close finish cannot surface on Monday morning as stale news.
  *
  * THE LEAGUE'S SWITCH. `League.settings.chimmySpeaksUp === false` (Commissioner Hub → Automations)
  * silences every moment, awards included. Default ON.
@@ -63,7 +68,7 @@ import {
 export const CHIMMY_DAILY_CAP = 4
 
 /** Kinds that neither check nor spend a daily slot. */
-const CAP_EXEMPT_KINDS: ReadonlySet<ChimmyMomentKind> = new Set<ChimmyMomentKind>(['weekly_awards'])
+const CAP_EXEMPT_KINDS: ReadonlySet<ChimmyMomentKind> = new Set<ChimmyMomentKind>(['weekly_awards', 'commissioner_notice'])
 
 const DEDUPE_PREFIX = 'chimmy-moment:v1:'
 const SLOT_PREFIX = 'chimmy-moment-slot:v1:'
