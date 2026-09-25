@@ -543,8 +543,9 @@ export default function MonetizationPurchaseSurface({
             ))}
           </div>
           <p className="mt-4 text-xs leading-relaxed text-white/55" data-testid="pricing-token-model-copy">
-            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for heavy-use features. Costs vary by
-            action; subscribers may get discounts on eligible rules.
+            {/* No subscriber discount: every plan's `discountedTokenSpendPct` is 0 (lib/tokens/subscription-policy.ts). */}
+            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for single AI actions, each
+            priced before you spend. A plan doesn&apos;t discount them, and they don&apos;t unlock a plan.
           </p>
         </section>
 

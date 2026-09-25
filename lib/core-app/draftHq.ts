@@ -626,7 +626,7 @@ export async function getDraftHqData(
     lottery: {
       available: false as const,
       reason:
-        'there is no lottery data in this system — no ball counts, no odds, nothing recorded. Odds derived from standings would be our invention, not this league’s rules',
+        'This league has no draft lottery on file — no ball counts or odds were imported, and we won’t make them up from the standings.',
     },
     queue: {
       available: false as const,

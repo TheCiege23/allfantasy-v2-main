@@ -258,12 +258,17 @@ async function buildWaiverIntel(
       recent: bids.slice(0, 6),
     },
     targets,
+    /*
+     * Shown to the manager word for word (components/decide/WaiverIntel.tsx), so it is written for
+     * them. `values.faab.formula` states the same rule for the model — Chimmy's grounding and the
+     * trade finder read it — and stays as it is.
+     */
     formulaNotes: [
       values
-        ? values.faab.formula
-        : 'Market value chart unavailable — bid suggestions are off until it syncs.',
-      `Bid cap: suggestions never exceed ${Math.round(BID_CAP_PCT * 100)}% of the budget.`,
-      'History = every WINNING waiver claim in this league since it was created (losing bids are not exposed by the platform API).',
+        ? `How a bid is suggested: our own rule, not market data — a full FAAB budget is treated as worth about the ${values.faab.anchorRank}th-best player, and a player's bid is his share of that.`
+        : 'Bid suggestions are off until the player value chart syncs.',
+      `No suggestion is more than ${Math.round(BID_CAP_PCT * 100)}% of the budget.`,
+      "The room's history counts every winning claim since this league began. The platform doesn't share losing bids.",
     ],
     missing,
   }

@@ -168,7 +168,7 @@ describe('landing banner', () => {
 
   it('asks a signed-out visitor to sign up while it is free, with founding pricing when it is on', () => {
     render(<LaunchBanner startsAt={LAUNCH} lang="en" signedIn={false} founding={founding} />)
-    expect(screen.getByRole('heading', { name: "Everything's free until Oct 15." })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Pro analysis is free until Oct 15.' })).toBeTruthy()
     expect(screen.getByText('Sign up now and lock in founding-member pricing.')).toBeTruthy()
     const cta = screen.getByTestId('launch-banner-cta')
     expect(cta.getAttribute('href')).toBe('/signup')
@@ -202,7 +202,7 @@ describe('landing banner', () => {
 
   it('speaks Spanish on the Spanish page', () => {
     render(<LaunchBanner startsAt={LAUNCH} lang="es" signedIn={false} founding={founding} />)
-    expect(screen.getByRole('heading', { name: 'Todo es gratis hasta el 15 de octubre.' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'El análisis Pro es gratis hasta el 15 de octubre.' })).toBeTruthy()
     expect(screen.getByTestId('launch-banner-cta').textContent).toBe('Regístrate gratis')
   })
 
@@ -219,7 +219,7 @@ describe('landing banner', () => {
       <LandingV4 lang="en" signedIn={false} launch={{ startsAt: LAUNCH, founding: null }} />
     )
     expect(withBanner).toContain('data-testid="launch-banner"')
-    expect(withBanner).toContain('Everything&#x27;s free until Oct 15.')
+    expect(withBanner).toContain('Pro analysis is free until Oct 15.')
     // The static server text, before any clock is read.
     expect(withBanner).toContain('Paid plans start Oct 15')
     // Above the hero, which is the point.
@@ -232,7 +232,7 @@ describe('offer strip', () => {
 
   it('shows the countdown and the founding line to a founding member before launch', () => {
     render(<LaunchOfferStrip offer={prelaunch({ audience: 'member', label: null })} surface="pricing" />)
-    expect(screen.getByText("Everything's free until Oct 15")).toBeTruthy()
+    expect(screen.getByText('Pro analysis is free until Oct 15')).toBeTruthy()
     expect(screen.getByRole('timer')).toBeTruthy()
     expect(screen.getByTestId('launch-founding-member').textContent).toMatch(/applied automatically at checkout/)
   })
@@ -241,7 +241,7 @@ describe('offer strip', () => {
     vi.setSystemTime(LAUNCH_MS + 60_000)
     render(<LaunchOfferStrip offer={{ startsAt: LAUNCH, prelaunch: false, founding: { audience: 'member', label: null } }} surface="pricing" />)
     expect(screen.queryByRole('timer')).toBeNull()
-    expect(screen.queryByText(/Everything's free/)).toBeNull()
+    expect(screen.queryByText(/is free until/)).toBeNull()
     expect(screen.getByTestId('launch-founding-member')).toBeTruthy()
   })
 
@@ -376,5 +376,29 @@ describe('launch copy voice', () => {
     expect(text.length).toBeGreaterThan(200)
     expect(text).not.toMatch(/\bAI\b/)
     expect(text).not.toMatch(/leverage|synergy|disrupt|revolutionary|game-changing/i)
+  })
+})
+
+describe('🛑 the launch copy never claims everything is free', () => {
+  /*
+   * Custom scoring tables and Chimmy past two questions a day are paid TODAY; only the /core depths
+   * wait for launch. "Everything's free until Oct 15" was the headline on the home, /pricing,
+   * /upgrade and /signup, and it was false.
+   */
+  it('names what is free, on every surface and in both languages', () => {
+    const texts: string[] = []
+    for (const signedIn of [true, false]) {
+      for (const lang of ['en', 'es'] as const) {
+        const c = landingBannerCopy({ startsAt: LAUNCH, lang, signedIn, founding: null })
+        texts.push(c.title, c.body)
+      }
+    }
+    for (const surface of ['pricing', 'upgrade', 'signup', 'core'] as const) {
+      const c = offerStripCopy({ startsAt: LAUNCH, surface, founding: null })
+      texts.push(c.title, c.body ?? '')
+    }
+    const all = texts.join(' | ')
+    expect(all).not.toMatch(/everything'?s free|every tool is open|todo es gratis|todas las herramientas/i)
+    expect(all).toMatch(/Competitive Edge/)
   })
 })
