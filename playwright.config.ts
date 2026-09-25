@@ -197,6 +197,15 @@ export default defineConfig({
         process.env.POSTGRES_URL_NON_POOLING ??
         '',
       PLAYWRIGHT_E2E: '1',
+      /*
+       * ⚠ PINNED PAST THE PAYWALL LAUNCH. The specs drive /core as users with no plan; from Oct 15
+       * the depth paywall (lib/core-app/coreDepthAccess.ts) locks Trade Center, Player Finder,
+       * Competitive Edge and Commissioner depth under them, and every spec touching those would
+       * fail — or quietly pass against a lock card. Far future unless a run sets it on purpose.
+       * A server started by hand and reused (`reuseExistingServer`) does not get this: start it
+       * with the same variable.
+       */
+      AF_PAYWALL_STARTS_AT: process.env.AF_PAYWALL_STARTS_AT ?? '2099-01-01T00:00:00.000Z',
     },
   },
 });
