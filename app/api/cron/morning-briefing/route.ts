@@ -234,18 +234,22 @@ export async function GET(req: NextRequest) {
             { status: 'success' as const, metadata: { disabled: true, reason: 'MORNING_BRIEFING_ENABLED is not 1' } },
     )
 
+    // `req.url`, not `req.nextUrl`: this handler is also called with a plain Request.
     const activationReminder = await activationReminderPhase(
-      (req.nextUrl.searchParams.get('activationReminder') ?? '').trim().toLowerCase(),
+      (new URL(req.url).searchParams.get('activationReminder') ?? '').trim().toLowerCase(),
     )
 
-    // Response bodies are unchanged from before the wrap moved — callers see exactly what they did,
-    // plus the reminder's report.
+    // Response bodies are unchanged from before the wrap moved — callers see exactly what they did.
+    // The reminder's report is added only once it does something: while it is disabled (the default)
+    // the body is byte-for-byte what it was.
+    const reminderReport =
+      'reason' in activationReminder && activationReminder.reason === 'disabled' ? {} : { activationReminder }
     if (!outcome.enabled) {
       return NextResponse.json({
         mode: 'cron' as const,
         enabled: false,
         note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.',
-        activationReminder,
+        ...reminderReport,
       })
     }
     return NextResponse.json({
@@ -254,7 +258,7 @@ export async function GET(req: NextRequest) {
       candidates: outcome.candidates,
       sent: outcome.sent,
       failed: outcome.failed,
-      activationReminder,
+      ...reminderReport,
     })
   }
 

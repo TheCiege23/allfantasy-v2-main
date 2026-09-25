@@ -21,7 +21,13 @@ vi.mock('@/lib/push-notifications/useWebPushSubscription', () => ({
   },
 }))
 
-import { PUSH_ASK_DISMISSED_KEY, PUSH_ASK_SNOOZE_MS, PushOptInPrompt, pushAskSnoozed } from '@/components/notifications/PushOptInPrompt'
+import {
+  PUSH_ASK_DISMISSED_KEY,
+  PUSH_ASK_SNOOZE_MS,
+  PushOptInPrompt,
+  pushAskSnoozed,
+  resetPushConfigCacheForTests,
+} from '@/components/notifications/PushOptInPrompt'
 
 const ASK = /Want this on your phone/
 
@@ -32,6 +38,7 @@ const CONFIGURED = { configured: true, vapidPublicKey: 'BPUBLICKEY' }
 
 beforeEach(() => {
   localStorage.clear()
+  resetPushConfigCacheForTests()
   h.state = { supported: true, permission: 'default', subscribed: false, busy: false, error: null }
   h.subscribe.mockReset()
   h.keyPassed = []
@@ -86,24 +93,35 @@ describe('PushOptInPrompt', () => {
     expect(pushAskSnoozed(String(at + 10_000), at)).toBe(false)
   })
 
-  it('stays hidden while snoozed', async () => {
+  it('stays hidden while snoozed — without asking the server anything', async () => {
     localStorage.setItem(PUSH_ASK_DISMISSED_KEY, String(Date.now() - 1000))
+    const { container } = render(<PushOptInPrompt />)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(container.innerHTML).toBe('')
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('asks the server once per page, however many answers it sits under', async () => {
+    const a = render(<PushOptInPrompt />)
+    await waitFor(() => expect(screen.getByText(ASK)).toBeTruthy())
+    a.unmount()
     render(<PushOptInPrompt />)
-    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
-    expect(screen.queryByText(ASK)).toBeNull()
+    await waitFor(() => expect(screen.getByText(ASK)).toBeTruthy())
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
   })
 
   it('never asks someone who already answered, or a server without push', async () => {
     for (const permission of ['granted', 'denied']) {
       h.state.permission = permission
       const { unmount, container } = render(<PushOptInPrompt />)
-      await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
       await new Promise((r) => setTimeout(r, 0))
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled()
       // Not merely no ask: no box at all — an empty card is still a card.
       expect(container.innerHTML).toBe('')
       unmount()
     }
     h.state.permission = 'default'
+    resetPushConfigCacheForTests()
     serverSays({ configured: false, vapidPublicKey: null })
     render(<PushOptInPrompt />)
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
@@ -111,9 +129,17 @@ describe('PushOptInPrompt', () => {
   })
 
   it('explains a refusal it just caused', async () => {
-    h.state.permission = 'denied'
-    h.state.error = 'Notifications are blocked for this site.'
-    render(<PushOptInPrompt />)
+    // The real sequence: asked, tapped, refused — the browser's answer arrives after the tap.
+    h.subscribe.mockImplementation(async () => {
+      h.state.permission = 'denied'
+      h.state.error = 'Notifications are blocked for this site.'
+      return false
+    })
+    const { rerender } = render(<PushOptInPrompt />)
+    await waitFor(() => screen.getByRole('button', { name: 'Turn on alerts' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on alerts' }))
+    await waitFor(() => expect(h.subscribe).toHaveBeenCalled())
+    rerender(<PushOptInPrompt />)
     await waitFor(() => expect(screen.getByText('Notifications are blocked for this site.')).toBeTruthy())
     expect(screen.queryByRole('button', { name: 'Turn on alerts' })).toBeNull()
   })
@@ -137,11 +163,12 @@ describe('PushOptInPrompt', () => {
     Object.defineProperty(navigator, 'maxTouchPoints', { value: 0, configurable: true })
   })
 
-  it('says nothing on a desktop browser without push', async () => {
+  it('says nothing on a desktop browser without push — and asks the server nothing', async () => {
     h.state.supported = false
     h.state.permission = 'unsupported'
-    render(<PushOptInPrompt />)
-    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
-    expect(screen.queryByText(/Home Screen|Want this/)).toBeNull()
+    const { container } = render(<PushOptInPrompt />)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(container.innerHTML).toBe('')
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
   })
 })

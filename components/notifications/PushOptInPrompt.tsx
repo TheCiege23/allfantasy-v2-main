@@ -45,6 +45,34 @@ export function needsHomeScreenForPush(): boolean {
   return standalone !== true && !window.matchMedia?.('(display-mode: standalone)')?.matches
 }
 
+type PushConfig = { configured: boolean; vapidPublicKey: string | null }
+
+/*
+ * One request per page, and only from a browser that could use the answer. The prompt remounts
+ * under every new answer; refetching the server's push key each time was a request per answer, and
+ * a browser with no push support has nothing to do with the key at all. A failed read is not
+ * cached, so the next mount may try again.
+ */
+let pushConfigRequest: Promise<PushConfig | null> | null = null
+
+function loadPushConfig(): Promise<PushConfig | null> {
+  if (!pushConfigRequest) {
+    pushConfigRequest = fetch('/api/push/subscribe')
+      .then((res) => res.json() as Promise<{ configured?: boolean; vapidPublicKey?: string | null }>)
+      .then((data) => ({ configured: Boolean(data.configured && data.vapidPublicKey), vapidPublicKey: data.vapidPublicKey ?? null }))
+      .catch(() => {
+        pushConfigRequest = null
+        return null
+      })
+  }
+  return pushConfigRequest
+}
+
+/** Tests only: forget the page's cached push config. */
+export function resetPushConfigCacheForTests(): void {
+  pushConfigRequest = null
+}
+
 const COPY = {
   chimmy: {
     ask: "Want this on your phone? I'll ping you before kickoff when a starter is out or your lineup needs a fix.",
@@ -57,32 +85,35 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
   const [configured, setConfigured] = useState(false)
   const [homeScreen, setHomeScreen] = useState(false)
   const [snoozed, setSnoozed] = useState(true)
+  const [checked, setChecked] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const { supported, permission, busy, error, subscribe } = useWebPushSubscription(vapidKey)
 
   useEffect(() => {
-    let cancelled = false
     try {
       setSnoozed(pushAskSnoozed(window.localStorage.getItem(PUSH_ASK_DISMISSED_KEY), Date.now()))
     } catch {
       setSnoozed(false) // blocked storage: ask; worst case it asks again next time
     }
     setHomeScreen(needsHomeScreenForPush())
-    void (async () => {
-      try {
-        const res = await fetch('/api/push/subscribe')
-        const data = (await res.json()) as { configured?: boolean; vapidPublicKey?: string | null }
-        if (cancelled) return
-        setConfigured(Boolean(data.configured && data.vapidPublicKey))
-        setVapidKey(data.vapidPublicKey ?? null)
-      } catch {
-        /* no key, no ask */
-      }
-    })()
+    setChecked(true)
+  }, [])
+
+  // Ask the server only when this browser could show the ask: never asked, not snoozed, and able
+  // to push — or an iPhone tab that can once it is on the Home Screen.
+  const couldAsk = checked && !snoozed && ((supported && permission === 'default') || homeScreen)
+  useEffect(() => {
+    if (!couldAsk) return
+    let cancelled = false
+    void loadPushConfig().then((cfg) => {
+      if (cancelled || !cfg) return
+      setConfigured(cfg.configured)
+      setVapidKey(cfg.vapidPublicKey)
+    })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [couldAsk])
 
   const dismiss = () => {
     setSnoozed(true)

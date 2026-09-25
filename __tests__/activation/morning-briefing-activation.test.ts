@@ -37,7 +37,8 @@ describe('morning-briefing — the activation reminder', () => {
   it('🛑 sends nothing until the deployment turns it on', async () => {
     const body = await call()
     expect(h.run).not.toHaveBeenCalled()
-    expect(body.activationReminder).toEqual({ ran: false, reason: 'disabled' })
+    // Disabled, the briefing's body is exactly what it was before the reminder existed.
+    expect(body).toEqual({ mode: 'cron', enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
   })
 
   it('runs and records its own heartbeat once enabled — even with the briefing itself off', async () => {
