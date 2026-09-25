@@ -2885,3 +2885,78 @@
     min-height: 44px;
   }
 }
+
+/*
+ * ── When Chimmy cannot answer: say why, and offer Try again ──
+ * The red line above says what went wrong (describeChimmyFailure); this row appears only when asking
+ * again could fix it, and the question is already back in the box.
+ */
+.af-cm-retryrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.af-cm-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cm-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (max-width: 720px) {
+  .af-cm-retry {
+    min-height: 44px;
+  }
+}
+
+/*
+ * ── A short screen: the keyboard is up, or the phone is on its side ──
+ * Live test 2026-09-25 (phone-18, 390x470): with the keyboard open, the header, the tabs, the "Who
+ * sees this" line and the full privacy note filled the top half, one message showed, and the
+ * footer's "Notification settings" sat on top of the message box. While you type, the conversation
+ * and the box win. Stepping aside: the privacy notes (read before you started typing, and the tab
+ * you are on still names the room), the footer, and the tab icons. Staying: the tabs, and the "Who
+ * sees this" line — the one sentence about the words you are typing right now.
+ *
+ * Two triggers, because keyboards shrink different viewports. useCommsKeyboardInset sets
+ * `data-keyboard` when only the VISUAL viewport shrinks (iOS Safari, Chrome). A browser that resizes
+ * the LAYOUT viewport never trips that hook; a short viewport height catches it, and a phone held
+ * sideways, which has the same problem with no keyboard at all. Each block is top level.
+ */
+.af-cm[data-keyboard='open'] .af-cm-privacy,
+.af-cm[data-keyboard='open'] .af-cm-privacy-mini,
+.af-cm[data-keyboard='open'] .af-cm-tab > svg {
+  display: none;
+}
+.af-cm[data-keyboard='open'] .af-cm-head { padding-top: 6px; }
+.af-cm[data-keyboard='open'] .af-cm-tabs { margin-top: 6px; }
+.af-cm[data-keyboard='open'] .af-cm-tab { min-height: 44px; padding-block: 2px; }
+.af-cm[data-keyboard='open'] .af-cm-audience { padding-block: 4px; }
+
+@media (max-height: 560px) {
+  .af-cm .af-cm-privacy,
+  .af-cm .af-cm-privacy-mini,
+  .af-cm .af-cm-foot,
+  .af-cm .af-cm-tab > svg {
+    display: none;
+  }
+  .af-cm .af-cm-head { padding-top: 6px; }
+  .af-cm .af-cm-tabs { margin-top: 6px; }
+  .af-cm .af-cm-tab { min-height: 44px; padding-block: 2px; }
+  .af-cm .af-cm-audience { padding-block: 4px; }
+}

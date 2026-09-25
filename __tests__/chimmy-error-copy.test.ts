@@ -22,7 +22,7 @@ describe('chimmy error copy', () => {
      * sentence in `error` (e.g. 409 token_confirmation_required), so keying the
      * copy map on `error` alone never matched and fell through to the fallback.
      */
-    expect(SRC).toContain('describeChimmyError(payload.code ?? payload.error)')
+    expect(SRC).toContain('describeChimmyFailure(res.status, payload.code ?? payload.error)')
   })
 
   /*
