@@ -33,5 +33,10 @@ declare module "next-auth/jwt" {
     id?: string
     sub?: string
     username?: string | null
+    /**
+     * The account-level Washington lock (lib/geo/accountGeoLock). Set ONLY from
+     * the database by the jwt callback; middleware.ts enforces it.
+     */
+    geoLock?: "full_block" | null
   }
 }

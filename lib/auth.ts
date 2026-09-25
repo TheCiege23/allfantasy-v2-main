@@ -21,6 +21,25 @@ import { getTierFromXP, getXPRemainingToNextTier } from "@/lib/xp-progression/Ti
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret";
 import { isPostOAuthRedirectPreservedPath } from "@/lib/auth/postOAuthRedirectPolicy";
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute";
+import { refreshAccountGeoLock } from "@/lib/geo/accountGeoLockServer";
+import type { JWT } from "next-auth/jwt";
+
+/**
+ * Stamp the account-level Washington lock onto the session token, from the
+ * DATABASE only — see lib/geo/accountGeoLock for the rule and its cost bounds.
+ * `undefined` from the refresh means the read failed: keep what the token had.
+ * Never throws; this runs inside the jwt callback.
+ */
+async function applyAccountGeoLock(token: JWT): Promise<void> {
+  const userId = typeof token.id === "string" ? token.id : typeof token.sub === "string" ? token.sub : null;
+  if (!userId) return;
+  try {
+    const lock = await refreshAccountGeoLock(userId);
+    if (lock !== undefined) token.geoLock = lock;
+  } catch (err) {
+    console.error("[auth] account geo lock refresh failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 /** Only used while `next build` evaluates API routes; never used at runtime on Vercel if env is set. */
 const BUILD_TIME_AUTH_SECRET_PLACEHOLDER =
@@ -750,6 +769,8 @@ export const authOptions: NextAuthOptions = {
               .catch(() => undefined)
             if (fresh !== undefined) token.username = fresh?.username ?? null
           }
+          // From the database, never from `updatePayload` — see applyAccountGeoLock.
+          await applyAccountGeoLock(token)
           return token
         }
 
@@ -760,6 +781,10 @@ export const authOptions: NextAuthOptions = {
           token.username = (user as { username?: string | null }).username ?? null;
           token.picture = user.image;
         }
+
+        // Sign-in included: a Washington sign-in over a normal connection is
+        // exactly the observation that locks the account (lib/geo/accountGeoLock).
+        await applyAccountGeoLock(token)
 
         return token;
       } catch (err) {
