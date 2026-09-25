@@ -230,6 +230,18 @@ export async function GET(request: Request) {
              */
           })
           addMatchupSeasonCounters(matchupSeasons, result?.matchups)
+          /*
+           * 🛑 THE SERVICE CATCHES ITS OWN BACKFILL ERROR and returns `backfill.success === false`
+           * rather than throwing, so the catch below never saw it and a failed league counted as
+           * refreshed — a fire where every backfill failed was recorded `success`, `ok: true`.
+           */
+          if (result?.backfill?.success === false) {
+            leaguesFailed += 1
+            if (errors.length < 5) {
+              errors.push(`${league.id}: backfill failed: ${result.backfill.failureMessage ?? result.backfill.status}`)
+            }
+            continue
+          }
           leaguesRefreshed += 1
         } catch (e) {
           // Per-league isolation: one bad league must not end the rotation for the rest.
@@ -269,5 +281,10 @@ export async function GET(request: Request) {
     }),
   )
 
-  return NextResponse.json({ ok: true, ...summary })
+  /*
+   * ⚠ `ok` mirrors decision-os-activity-ingest (`ok: failed === 0`) and the SyncJobRun row carries
+   * `partial`, as fantasy-os-exec-sync does — HTTP stays 200 because the fire itself ran. This was
+   * a hard-coded `ok: true`, which hid every per-league failure from the scheduler's log.
+   */
+  return NextResponse.json({ ok: summary.leaguesFailed === 0, ...summary })
 }
