@@ -45,7 +45,7 @@ const EMPTY_SEARCH_PARAMS: SearchParamsLike = {
 type PurchaseReturnIntent = 'none' | 'success' | 'cancelled' | 'failed'
 
 type PostPurchaseSyncApiResponse = {
-  syncStatus?: 'synced' | 'pending' | 'no_session'
+  syncStatus?: 'synced' | 'pending' | 'no_session' | 'refused'
   syncMessage?: string
   sessionId?: string | null
   syncEvidence?: {
@@ -69,6 +69,8 @@ export type PostPurchaseSyncPhase =
   | 'pending'
   | 'cancelled'
   | 'failed'
+  /** Refunded: the card's billing address was in a restricted state. Final — retrying cannot change it. */
+  | 'refused'
 
 function isSuccess(searchParams: SearchParamsLike): boolean {
   if (getSessionId(searchParams)) return true
@@ -294,6 +296,27 @@ export function usePostPurchaseSync(options: UsePostPurchaseSyncOptions = {}): U
           dispatchStateRefreshEvent({
             domain: 'tokens',
             reason: 'checkout_return_no_session',
+            source: 'usePostPurchaseSync',
+          })
+          return
+        }
+
+        /*
+         * Refused and refunded (lib/subscription/paidStateRefusal). Final, so no
+         * retry, no purchase tracking and no toast claiming anything was bought —
+         * the panel says what happened and that the money went back.
+         */
+        if (syncStatus === 'refused') {
+          setState({
+            phase: 'refused',
+            message: response?.syncMessage ?? null,
+            sessionId,
+            syncEvidence: evidence,
+          })
+          clearPurchaseParams()
+          dispatchStateRefreshEvent({
+            domain: 'subscriptions',
+            reason: 'checkout_return_refused',
             source: 'usePostPurchaseSync',
           })
           return

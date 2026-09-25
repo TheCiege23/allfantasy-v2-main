@@ -66,6 +66,8 @@ describe("buildStripeCheckoutSessionForSku — pricing-truth", () => {
       purchaseType: "subscription",
     })
     expect(params.allow_promotion_codes).toBe(true)
+    // The paid-state card check reads the billing address (lib/subscription/paidStateRefusal).
+    expect(params.billing_address_collection).toBe("required")
     expect(params.customer_email).toBe("buyer@example.com")
     expect(params.subscription_data?.metadata).toMatchObject({ sku: "af_pro_monthly" })
     expect(String(params.success_url)).toContain("https://app.example.com/pricing")

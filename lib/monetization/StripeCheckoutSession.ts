@@ -112,6 +112,13 @@ export async function buildStripeCheckoutSessionForSku(input: {
     metadata,
     success_url: successUrl,
     cancel_url: cancelUrl,
+    /*
+     * The paid-state card check reads the billing address the webhook receives
+     * (lib/subscription/paidStateRefusal). Left at "auto", Checkout collects only
+     * what the card network needs — often just a country and ZIP, sometimes less
+     * — so the check would have nothing to read on exactly the buyers it is for.
+     */
+    billing_address_collection: "required",
   }
   // `customer` and `customer_email` are mutually exclusive in the Checkout API.
   const customerId = input.stripeCustomerId?.trim()

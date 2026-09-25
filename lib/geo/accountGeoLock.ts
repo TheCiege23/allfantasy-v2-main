@@ -14,14 +14,23 @@
  *   - The lock is STICKY. A later normal visit from another state does not clear
  *     it, because an undetected residential proxy produces exactly that visit.
  *     The cost is a traveller seen in Seattle, who emails support.
- *   - Washington only. Paid-feature states are to be gated by the card's billing
- *     address instead (after the paywall's Stripe webhook work), NOT by the
- *     signup-state flag — so `paid_block` rows written at signup are ignored here.
+ *   - Washington only, for the FULL lock. Paid-feature states are gated by the
+ *     card's billing address instead, NOT by the signup-state flag — so
+ *     `paid_block` rows written at signup are ignored here.
+ *
+ * THE CARD LOCK (2026-09-25). A purchase whose card billing address is in a
+ * restricted state is refused and refunded by the Stripe webhook
+ * (lib/subscription/paidStateRefusal), which then sets `card_paid_block`: paid
+ * surfaces only, from anywhere, until support unlocks it. It is DELIBERATELY a
+ * different value from the signup route's `paid_block`, which records where a
+ * signup's IP appeared to be — the owner chose the card over that signal.
+ * A card-locked account later seen in Washington escalates to the full lock.
  *
  * STORAGE, WITHOUT A MIGRATION. It reuses the three AppUser columns the signup
  * route already writes and nothing ever read: `stateRestrictionLevel` =
- * "full_block" is the lock, `isStateRestricted` mirrors it, `detectedStateCode`
- * records the state that caused it.
+ * "full_block" or "card_paid_block" is the lock, `isStateRestricted` mirrors it,
+ * `detectedStateCode` records the state a full lock was SEEN in (the card lock
+ * leaves it alone — it is not a sighting).
  *
  * ⚠ COST. This runs inside the NextAuth `jwt` callback, which runs on every one of
  * ~2,259 `getServerSession` call sites. So: a normal request costs a header read
@@ -41,7 +50,16 @@ import { isTorExit, resolveEdgeGeo } from "./geoHeaders"
 import { isFullyBlocked } from "./restrictedStates"
 
 export const ACCOUNT_FULL_BLOCK = "full_block" as const
-export type AccountGeoLock = typeof ACCOUNT_FULL_BLOCK | null
+/** Paid surfaces only. Set when a purchase's card billing address was in a restricted state. */
+export const ACCOUNT_CARD_PAID_BLOCK = "card_paid_block" as const
+export type AccountGeoLock = typeof ACCOUNT_FULL_BLOCK | typeof ACCOUNT_CARD_PAID_BLOCK | null
+
+/** The lock a stored `stateRestrictionLevel` means. The signup route's `paid_block` means none. */
+export function accountGeoLockFromLevel(level: string | null | undefined): AccountGeoLock {
+  if (level === ACCOUNT_FULL_BLOCK) return ACCOUNT_FULL_BLOCK
+  if (level === ACCOUNT_CARD_PAID_BLOCK) return ACCOUNT_CARD_PAID_BLOCK
+  return null
+}
 
 export interface AccountLockStore {
   /** The account's lock, or `undefined` when the read FAILED — which must never read as "unlocked". */

@@ -18,6 +18,7 @@ import {
   findStripeCustomerIdForUser,
 } from "@/lib/monetization/stripeCustomerForUser"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
+import { enforcePaidAccountLock } from "@/lib/geo/enforcePaidAccountLock"
 import { buildSubscriptionMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
 import {
@@ -45,6 +46,10 @@ export async function POST(req: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // A card-locked account never reaches Stripe (lib/subscription/paidStateRefusal).
+    const accountLock = await enforcePaidAccountLock(session.user.id)
+    if (accountLock) return accountLock
 
     const body = (await req.json()) as CheckoutSubscriptionBody
     const sku = String(body?.sku ?? "").trim()
