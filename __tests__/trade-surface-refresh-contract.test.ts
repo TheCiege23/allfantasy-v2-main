@@ -32,7 +32,7 @@ describe('trade visibility contract', () => {
   })
 
   it('reconciles the core latest-trades feed and requests league-specific reasons', () => {
-    const page = read('app/core/[[...screen]]/page.tsx')
+    const page = read('app/core/(shell)/[[...screen]]/page.tsx')
     const leagueHome = read('lib/core-app/leagueHome.ts')
     for (const source of [page, leagueHome]) {
       expect(source).toContain('reconcileLive: true')

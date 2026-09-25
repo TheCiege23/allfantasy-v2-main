@@ -291,7 +291,7 @@ describe('the loaders skip what a locked viewer may not see', () => {
   }
   const count = (src: string, needle: string) => src.split(needle).length - 1
 
-  const PAGE = read('app/core/[[...screen]]/page.tsx')
+  const PAGE = read('app/core/(shell)/[[...screen]]/page.tsx')
 
   it('/core Player Finder: compare, trade visual, windows and presence each wait on player depth', () => {
     expect(guardOf(PAGE, 'const playerCompare =', 'getPlayerDetail(vsRef')).toContain('playerDepthOpen')

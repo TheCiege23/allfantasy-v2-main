@@ -219,6 +219,7 @@ import CoreLeagueContextBar, {
 } from '@/components/core-app/CoreLeagueContextBar'
 import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
+import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
@@ -1598,11 +1599,17 @@ export default async function AfCorePage({
         />
       ) : null}
 
-      <CoreScreenErrorBoundary resetKey={errorResetKey}>
-        <Suspense key={screenKey} fallback={<CoreScreenSkeleton />}>
-          {body}
-        </Suspense>
-      </CoreScreenErrorBoundary>
+      {/*
+        The screen area — the only part that swaps to a skeleton the moment a tab is clicked,
+        while the shell, league tabs and league bar above stay put (components/core-app/coreNavPending.tsx).
+      */}
+      <CoreScreenArea>
+        <CoreScreenErrorBoundary resetKey={errorResetKey}>
+          <Suspense key={screenKey} fallback={<CoreScreenSkeleton />}>
+            {body}
+          </Suspense>
+        </CoreScreenErrorBoundary>
+      </CoreScreenArea>
     </AfCoreShell>
   )
 }

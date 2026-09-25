@@ -30,7 +30,7 @@ export type ChatPageLeague = {
 
 /**
  * The dashboard league list, shaped for the panel — the same projection /core makes for the drawer
- * (`comms.leagues` in `app/core/[[...screen]]/page.tsx`), so a league reads the same in both.
+ * (`comms.leagues` in `app/core/(shell)/[[...screen]]/page.tsx`), so a league reads the same in both.
  *
  * ⚠ `platformLeagueId`, NOT `id`, IS WHAT A SLEEPER HAND-OFF LINK NEEDS. `id` is the AllFantasy
  * uuid and 404s off-site; the panel falls back to an in-app link when this is null.

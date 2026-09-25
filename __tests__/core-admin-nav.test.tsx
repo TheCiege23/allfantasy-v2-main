@@ -92,7 +92,7 @@ describe('/core Admin rail entry', () => {
  * a rail offering a door the page behind it refuses to open.
  */
 describe('/core admin gate wiring', () => {
-  const PAGE = readFileSync(resolve(process.cwd(), 'app/core/[[...screen]]/page.tsx'), 'utf8')
+  const PAGE = readFileSync(resolve(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
 
   it('resolves admin access with the same helper /admin uses', () => {
     expect(PAGE).toContain('getAdminAccessState')

@@ -152,7 +152,7 @@ function findElement(node: ReactNode, match: (el: AnyElement) => boolean): AnyEl
 }
 
 async function loadPage() {
-  return (await import('@/app/core/[[...screen]]/page')).default
+  return (await import('@/app/core/(shell)/[[...screen]]/page')).default
 }
 
 const pageArgs = (screen: string[], searchParams: Record<string, string>) => ({

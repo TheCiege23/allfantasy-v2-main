@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
 import CommsDock from '@/components/core-app/comms/CommsDock'
@@ -29,7 +29,8 @@ import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/S
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
+import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import '@/components/core-app/af-core.css'
@@ -1230,6 +1231,64 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
 
   /*
+   * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
+   * link marked `data-core-nav` lights that link and swaps the screen area for its skeleton at
+   * once; the rest of the shell stays as it is until the new render lands.
+   *
+   * ⚠ "LANDED" IS EITHER SIGNAL: the URL moved, or the server handed this shell a new render
+   * (`incoming` is a fresh object per RSC payload). The second covers a click whose server
+   * redirect ends on the URL already open, which would otherwise hold the skeleton until the
+   * safety timeout.
+   */
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const locationKey = `${pathname}?${searchParams?.toString() ?? ''}`
+  const [navPending, setNavPending] = useState<string | null>(null)
+  const navPendingRef = useRef<string | null>(null)
+  navPendingRef.current = navPending
+  const pendingLinkRef = useRef<Element | null>(null)
+  const clearNavPending = useCallback(() => {
+    pendingLinkRef.current?.removeAttribute('data-nav-pending')
+    pendingLinkRef.current = null
+    setNavPending(null)
+  }, [])
+  useEffect(() => {
+    clearNavPending()
+  }, [locationKey, incoming, clearNavPending])
+  useEffect(() => {
+    if (!navPending) return
+    // Safety net only: a navigation that never lands must not hide the screen forever.
+    const timer = window.setTimeout(clearNavPending, 30_000)
+    return () => window.clearTimeout(timer)
+  }, [navPending, clearNavPending])
+  const markNavigation = (event: React.MouseEvent<HTMLElement>) => {
+    const link = (event.target as Element | null)?.closest?.(`a[${CORE_NAV_ATTRIBUTE}]`)
+    if (!link) return
+    const target = pendingCoreNavTarget({
+      href: link.getAttribute('href'),
+      currentHref: window.location.href,
+      button: event.button,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      target: link.getAttribute('target'),
+      download: link.hasAttribute('download'),
+    })
+    if (!target) return
+    /*
+     * ⚠ A DOM ATTRIBUTE, NOT A PROP, AND THAT IS DELIBERATE. React owns `data-active` on these
+     * links and diffs it against its own last render, not the DOM — flipping it by hand could be
+     * left standing after the new render. `data-nav-pending` is not a prop anywhere, so React
+     * never touches it and removing it here is the only write it ever gets.
+     */
+    pendingLinkRef.current?.removeAttribute('data-nav-pending')
+    link.setAttribute('data-nav-pending', 'true')
+    pendingLinkRef.current = link
+    setNavPending(target)
+  }
+
+  /*
    * Rail speculation. See `railPrefetch.ts` for why Next's automatic prefetch warms the wrong
    * thing here and why a long rail turns it off — the decisions are pure and live there; this
    * holds only the per-mount state they need.
@@ -1306,6 +1365,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     const refresh = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
       if (shellRefreshPendingRef.current) return
+      // A tab click is already fetching a fresh render; a refresh landing first would clear its
+      // skeleton and flash the screen being left.
+      if (navPendingRef.current) return
       // The matchup board polls the same route on a better-informed cadence; two
       // timers on one route paid for two full renders every period.
       if (routeRefreshClaimed()) return
@@ -1511,6 +1573,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     <div
       className="af-core af-shell"
       data-league-first={props.leagueFirst ? 'true' : undefined}
+      data-nav-pending={navPending ? 'true' : undefined}
+      onClickCapture={markNavigation}
       /*
        * ⚠ THE ABSENT ATTRIBUTE IS A MEANINGFUL THIRD VALUE, NOT A FALSY 'false'.
        * Desktop CSS expands on `:not([data-rail-open='false'])`, so absent reads
@@ -1652,8 +1716,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 href={leagueHref}
                 /*
                  * ⚠ OFF ON A LONG RAIL, LEFT ALONE ON A SHORT ONE — the asymmetry is the
-                 * point. Next's automatic prefetch stops at this route's `loading.tsx`, so it
-                 * warms the skeleton the page is already showing and never the league data. On
+                 * point. Next's automatic prefetch stops at the nearest `loading.tsx` (now
+                 * app/core/loading.tsx, above the screens), so it never warms the league data. On
                  * a sixty-tile rail that is sixty requests that cannot help; on a short one it
                  * is cheap, bounded, and the only warming a touch device gets at all.
                  * See `railPrefetch.ts`.
@@ -1663,6 +1727,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 onMouseEnter={() => warmRailLeague(l.id)}
                 onFocus={() => warmRailLeague(l.id)}
                 className="af-rail-tile af-platform"
+                data-core-nav=""
                 data-platform={l.platform}
                 /*
                  * ⚠ THE RAIL NEVER SAID WHICH LEAGUE YOU ARE IN. The 2026-09-07
@@ -1852,6 +1917,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   <Link
                     href={item.href}
                     className="af-nav-item"
+                    data-core-nav=""
                     data-active={item.key === active}
                     aria-current={item.key === active ? 'page' : undefined}
                   >
@@ -2095,7 +2161,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             mount takes no `leagueId` — the shell does not know one.
           */}
           <ShellSignalsContext.Provider value={setPublishedSignals}>
-            <PlayerCardProvider>{children}</PlayerCardProvider>
+            <CoreNavPendingContext.Provider value={navPending != null}>
+              <PlayerCardProvider>{children}</PlayerCardProvider>
+            </CoreNavPendingContext.Provider>
           </ShellSignalsContext.Provider>
         </main>
       </div>
@@ -2122,6 +2190,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <Link
             href="/core"
             className="af-tabbar-item"
+            data-core-nav=""
             data-active={active !== 'live' && !mobileMoreOpen}
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
@@ -2131,6 +2200,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <Link
             href="/core/live"
             className="af-tabbar-item"
+            data-core-nav=""
             data-active={active === 'live' && !mobileMoreOpen}
             aria-current={active === 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
@@ -2182,6 +2252,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               key={item.key}
               href={item.href}
               className="af-tabbar-item"
+              data-core-nav=""
               data-active={item.key === active}
               aria-current={item.key === active ? 'page' : undefined}
             >
@@ -2244,7 +2315,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <div className="af-mobile-more-group">
                   <span className="af-label">Start something</span>
                   {LEAGUE_FIRST_PLAY_LINKS.map((item) => (
-                    <Link key={item.href} href={item.href} className="af-mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                    <Link key={item.href} href={item.href} className="af-mobile-more-link" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
                       <span className="af-mobile-more-icon" aria-hidden>{item.glyph}</span>
                       <span>{item.label}</span>
                     </Link>
@@ -2261,6 +2332,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       key={item.key}
                       href={item.href}
                       className="af-mobile-more-link"
+                      data-core-nav=""
                       data-active={item.key === active}
                       onClick={() => setMobileMoreOpen(false)}
                     >

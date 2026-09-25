@@ -55,7 +55,7 @@ describe('no page hands the frozen JWT image to the resolver', () => {
    */
   it.each([
     'app/league/[leagueId]/page.tsx',
-    'app/core/[[...screen]]/page.tsx',
+    'app/core/(shell)/[[...screen]]/page.tsx',
   ])('%s resolves from the database, not the session', (file) => {
     const src = read(file)
     expect(src).toContain('resolveDashboardAvatarUrl(')

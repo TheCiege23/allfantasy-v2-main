@@ -7,7 +7,7 @@ import { join } from 'node:path'
  * ALL FOUR of the canonical branches from `lib/league-access.ts`.
  *
  * ⚠ WHY THIS LIST IS AN AUTHORIZATION SURFACE AND NOT JUST A MENU. The /core rail
- * is built from `getDashboardLeagueListForUser`, and `app/core/[[...screen]]/page.tsx`
+ * is built from `getDashboardLeagueListForUser`, and `app/core/(shell)/[[...screen]]/page.tsx`
  * gates `?league=` on the result — "a league query is also an authorization
  * boundary". A league missing from this query is therefore a league the user
  * cannot reach anywhere in /core, by a link or by hand.

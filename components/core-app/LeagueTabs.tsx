@@ -123,6 +123,7 @@ export function LeagueTabs({
               key={key || 'overview'}
               href={key ? `/core/${key}${q}` : `/core${q}`}
               className="af-lt-tab"
+              data-core-nav=""
               data-active={active}
               aria-current={active ? 'page' : undefined}
             >
@@ -152,6 +153,8 @@ export function LeagueTabs({
                 <Link
                   href={href}
                   className="af-lt-tab"
+                  /* A tab click lights at once and swaps only the screen; see coreNavPending.tsx. */
+                  data-core-nav=""
                   data-active={active}
                   aria-current={active ? 'page' : undefined}
                 >
