@@ -2501,12 +2501,18 @@
 
 /* ── Desktop hover bar: three quick reactions, reply, more ── */
 
+/*
+ * V3 (live test 2026-09-25): the bar floated over the bubble (`top: -12px; left: 44px`) and covered
+ * the first line of the message and the reactions of the one above it — every row, measured. It now
+ * sits IN the row, beside the bubble on the side away from the speaker, in a lane the row always
+ * keeps. Showing it moves nothing, and it cannot cover a message. A narrow drawer keeps only "More"
+ * (which holds the reactions and Reply) so the lane costs a bubble 44px there, not 172.
+ */
 .af-cm-hoverbar { display: none; }
 @media (hover: hover) and (pointer: fine) {
   .af-cm-hoverbar {
-    position: absolute;
-    top: -12px;
-    left: 44px; /* just past the avatar, over the top edge of their bubble */
+    flex: none;
+    align-self: center;
     z-index: 2;
     display: flex;
     gap: 2px;
@@ -2518,19 +2524,29 @@
     opacity: 0;
     pointer-events: none;
   }
-  .af-cm-row[data-mine='true'] .af-cm-hoverbar { left: auto; right: 8px; }
+  .af-cm-row[data-mine='true'] .af-cm-hoverbar { order: -1; }
   .af-cm-row:hover .af-cm-hoverbar,
   .af-cm-row:focus-within .af-cm-hoverbar { opacity: 1; pointer-events: auto; }
 }
 .af-cm-hoverbtn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text2); font-size: 15px; cursor: pointer; }
 .af-cm-hoverbtn:hover { background: var(--chip); color: var(--text); }
+@container af-cm (max-width: 559px) {
+  .af-cm-hoverbar > .af-cm-hoverbtn:not(:last-child) { display: none; }
+}
 
 /* ── Jump to latest, and the one-line toast ── */
 
+/*
+ * V3 (live test 2026-09-25): the pill was `position: absolute` over the bottom of the list, so it sat
+ * on whatever message was there — measured on 81 of 138 scroll positions on a phone. It is now in
+ * the flow between the list and the composer: the list gives up the pill's height while it shows, so
+ * it floats above the box with room and never covers a message.
+ */
 .af-cm-jump {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
+  position: relative;
+  flex: none;
+  align-self: flex-end;
+  margin: 6px 14px 12px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
