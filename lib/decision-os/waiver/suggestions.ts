@@ -33,7 +33,6 @@ function buildScoringContext(input: WaiverAIEngineInput): WaiverScoringContext {
     faabBudget: input.leagueSettings.faabBudget ?? null,
     faabRemaining: input.leagueSettings.faabRemaining ?? null,
     rosterPlayers: roster,
-    rosterPositions: input.rosterPositions,
     teamNeeds: teamNeeds ?? {
       weakestSlots: [],
       biggestNeed: null,

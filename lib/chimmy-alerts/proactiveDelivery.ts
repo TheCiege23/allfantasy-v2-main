@@ -65,7 +65,8 @@ export interface ProactiveDeliveryDeps {
   alreadySent: (key: string) => Promise<boolean>
   /** Atomically claim this week's message for this user. False when someone already has. */
   claim: (key: string, expiresAt: Date) => Promise<boolean>
-  dispatch: (params: DispatchNotificationParams) => Promise<void>
+  /** The dispatcher now reports what it wrote; this caller does not need the counts. */
+  dispatch: (params: DispatchNotificationParams) => Promise<unknown>
   baseUrl: () => string
 }
 
