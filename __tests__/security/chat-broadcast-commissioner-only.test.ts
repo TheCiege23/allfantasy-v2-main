@@ -3,7 +3,10 @@
  * commissioner-announcement style. A broadcast now needs the head commissioner or a co-commissioner
  * of a league the thread belongs to, and that league is derived SERVER-SIDE:
  *   - `league:<id>` virtual rooms carry it in the id;
- *   - a platform thread belongs to the league(s) whose `settings.leagueChatThreadId` names it.
+ *   - a stored `settings.leagueChatThreadId` link counts only when it passes the write-side check
+ *     (lib/league/leagueChatThreadLink.ts): the league's own `league:<id>` room. A platform thread
+ *     records no league, so a link naming one — a DM or huddle the commissioner happens to be in —
+ *     is ignored, which also covers rows saved before the writers were checked.
  * The client's `leagueIds` (CommissionerBroadcastForm sends them) are never trusted.
  *
  * The REAL route runs. The League table is an in-memory fake whose `findMany` evaluates the JSON-path
@@ -62,10 +65,13 @@ beforeEach(() => {
   h.create.mockResolvedValue({ id: 'b-1', messageType: 'broadcast' })
   h.leagues = [
     { id: 'L-linked', settings: { leagueChatThreadId: 'thread-league-chat' } },
-    { id: 'L-mine', settings: { leagueChatThreadId: 'thread-my-league' } },
+    // Bad links already saved: my own leagues pointed at a DM and a huddle I am a member of (the
+    // real `createPlatformThreadTypedMessage` checks only membership, so it would post there).
+    { id: 'L-mine', settings: { leagueChatThreadId: 'thread-my-dm' } },
+    { id: 'L-mine-2', settings: { leagueChatThreadId: 'thread-my-huddle' } },
     { id: 'L-nolink', settings: {} },
   ]
-  h.roles = { 'L-linked': 'member', 'L-mine': 'commissioner', 'L-nolink': 'commissioner' }
+  h.roles = { 'L-linked': 'member', 'L-mine': 'commissioner', 'L-mine-2': 'co_commissioner', 'L-nolink': 'commissioner' }
 })
 
 describe('broadcast is for the commissioner of the league the thread belongs to', () => {
@@ -87,15 +93,34 @@ describe('broadcast is for the commissioner of the league the thread belongs to'
     expect(h.create).not.toHaveBeenCalled()
   })
 
-  it("lets the head commissioner broadcast into their league's linked chat (the CommissionerTab flow)", async () => {
-    const res = await broadcast('thread-my-league', { leagueIds: ['L-mine'], notifyEveryone: true })
+  it.each([
+    ['a DM', 'thread-my-dm', 'L-mine'],
+    ['a huddle', 'thread-my-huddle', 'L-mine-2'],
+  ])(
+    "ignores a bad link already stored — %s its own commissioner linked is not the league's chat",
+    async (_label, threadId, leagueId) => {
+      const res = await broadcast(threadId, { leagueIds: [leagueId], notifyEveryone: true })
+      expect(res.status).toBe(403)
+      expect(h.create).not.toHaveBeenCalled()
+    },
+  )
+
+  it('ignores a platform-thread link even for the commissioner of the league that stored it', async () => {
+    h.roles['L-linked'] = 'commissioner'
+    expect((await broadcast('thread-league-chat')).status).toBe(403)
+    expect(h.create).not.toHaveBeenCalled()
+  })
+
+  it("lets the head commissioner broadcast into their league's own room", async () => {
+    h.roles['L-linked'] = 'commissioner'
+    const res = await broadcast('league:L-linked', { leagueIds: ['L-linked'], notifyEveryone: true })
     expect(res.status).toBe(200)
-    expect(h.create).toHaveBeenCalledWith('u-me', 'thread-my-league', 'broadcast', { announcement: 'Trade deadline is Friday' })
+    expect(h.create).toHaveBeenCalledWith('u-me', 'league:L-linked', 'broadcast', { announcement: 'Trade deadline is Friday' })
   })
 
   it('lets a co-commissioner broadcast too', async () => {
     h.roles['L-linked'] = 'co_commissioner'
-    expect((await broadcast('thread-league-chat')).status).toBe(200)
+    expect((await broadcast('league:L-linked')).status).toBe(200)
     expect(h.create).toHaveBeenCalledTimes(1)
   })
 

@@ -3,6 +3,7 @@ import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createPlatformThreadTypedMessage } from '@/lib/platform/chat-service'
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from '@/lib/chat-core'
 import { getLeagueRole } from '@/lib/league/permissions'
+import { isLeagueOwnChatThread } from '@/lib/league/leagueChatThreadLink'
 import { prisma } from '@/lib/prisma'
 
 /*
@@ -17,8 +18,15 @@ import { prisma } from '@/lib/prisma'
  * put any league it runs there. The trusted links are:
  *
  *   - `league:<id>` virtual rooms — the id IS the league;
- *   - a platform thread named by `League.settings.leagueChatThreadId`, the link every commissioner
- *     surface already uses (CommissionerTab, CommissionerControlsPanel, the commissioner chat route).
+ *   - a thread named by `League.settings.leagueChatThreadId`, the link every commissioner surface
+ *     already uses (CommissionerTab, CommissionerControlsPanel, the commissioner chat route) — but
+ *     only when that link passes `isLeagueOwnChatThread`, the check every writer of the key makes.
+ *
+ * ⚠ THE LINK ITSELF WAS NOT TRUSTWORTHY (found 2026-09-25): every writer took any string, so a
+ * commissioner could link their own league to a DM or huddle they happen to be in and broadcast
+ * into it. A stored link that fails the write check is ignored here, which also covers rows saved
+ * before the writers were checked. lib/league/leagueChatThreadLink.ts says why no platform thread
+ * can pass.
  *
  * A thread with neither (a DM, an unlinked huddle) has no league, so there is nobody who is its
  * commissioner, and the broadcast is refused rather than guessed at.
@@ -34,7 +42,7 @@ async function leaguesOwningThread(threadId: string): Promise<string[]> {
     where: { settings: { path: ['leagueChatThreadId'], equals: threadId } },
     select: { id: true },
   })
-  return linked.map((league) => league.id)
+  return linked.filter((league) => isLeagueOwnChatThread(league.id, threadId)).map((league) => league.id)
 }
 
 export async function POST(req: NextRequest, { params }: { params: { threadId: string } }) {

@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
+import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 
 type EditableFeederLeagueSettings = {
   scoring: string
@@ -167,6 +168,11 @@ export async function PATCH(
 
     const { league, error } = await loadLeagueForTournament(tournamentId, leagueId)
     if (error) return error
+
+    // `changes` is merged into `settings` key by key, so it can carry the chat link. Only this
+    // league's own chat may be linked (lib/league/leagueChatThreadLink.ts).
+    const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, changes)
+    if (chatLinkRefusal) return NextResponse.json({ error: chatLinkRefusal }, { status: 400 })
 
     // Prepare old state for audit log
     const oldSettings = league.settings && typeof league.settings === 'object' ? league.settings : {}

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyUserPlatform } from '@/lib/tournament/tournamentMiniCommissionerNotifications'
+import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +69,10 @@ export async function POST(
 
   const prev = (league.settings as Record<string, unknown>) ?? {}
   const patch = (reqRow.proposedPatch as Record<string, unknown>) ?? {}
+  // A proposed patch is free-form JSON merged key by key, so it can carry the chat link. Only this
+  // league's own chat may be linked (lib/league/leagueChatThreadLink.ts); the request stays pending.
+  const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(reqRow.leagueId, patch)
+  if (chatLinkRefusal) return NextResponse.json({ error: chatLinkRefusal }, { status: 400 })
   const nextSettings = { ...prev, ...patch }
 
   await prisma.$transaction([

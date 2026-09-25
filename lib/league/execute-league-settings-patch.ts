@@ -23,6 +23,7 @@ import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
+import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -274,6 +275,11 @@ export async function executeLeagueSettingsPatch(
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
   }
+
+  // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
+  // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
+  const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
+  if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
 
   const updatedFieldNames: string[] = []
 
