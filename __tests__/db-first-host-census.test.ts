@@ -148,6 +148,13 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
   { name: 'platform-infra', why: 'email, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
+   * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
+   * extensions and remote config from it for /ingest/static and /ingest/array (an
+   * external rewrite forwarded cf-connecting-ip and Cloudflare 403'd it; see that route).
+   * Product analytics, not a read Postgres could serve.
+   */
+  { name: 'platform-infra', why: 'PostHog analytics SDK assets (extensions, remote config) proxied for the browser', test: /^us-assets\.i\.posthog\.com$/i },
+  /*
    * OUTBOUND PUBLISHING, moved out of the data-API ledger on 2026-08-28. We WRITE to
    * these; they are not reads that Postgres could have served, which is what the
    * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
