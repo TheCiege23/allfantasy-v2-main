@@ -153,7 +153,7 @@ describe('findPlayedAlias — a link to the other copy lands on the viewer’s',
 })
 
 describe('the /core page redirects a stale copy instead of dropping it', () => {
-  const page = readFileSync(resolve(__dirname, '..', 'app/core/[[...screen]]/page.tsx'), 'utf8')
+  const page = readFileSync(resolve(__dirname, '..', 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
   const block = page.slice(
     page.indexOf('if (selectedLeagueId && !selectedLeagueRow) {'),
     page.indexOf('if (selectedLeagueId && !selectedLeagueRow) {') + 1400,
