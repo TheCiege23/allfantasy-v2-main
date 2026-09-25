@@ -904,7 +904,7 @@ describe("POST /api/chat/chimmy contract", () => {
       const body = await res.json()
       expect(body.conversationId).toBe("chimmy:user-1")
       // No conversation key — that omission is what unions the legacy per-league rows.
-      expect(getRecentChatHistoryMock).toHaveBeenCalledWith({ userId: "user-1", limit: 80 })
+      expect(getRecentChatHistoryMock).toHaveBeenCalledWith({ userId: "user-1", limit: 80, throwOnError: true })
       expect(getRecentChatHistoryMock.mock.calls[0][0]).not.toHaveProperty("conversationId")
       // Each turn carries its OWN league, so a cross-league thread is not read as one league's.
       expect(body.turns.map((t: { text: string; leagueId: string | null }) => [t.text, t.leagueId])).toEqual([
@@ -975,10 +975,19 @@ describe("POST /api/chat/chimmy contract", () => {
       const ok = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
       expect((await ok.json()).turns).toHaveLength(2)
 
-      getRecentChatHistoryMock.mockRejectedValueOnce(new Error("db down"))
+      /*
+       * 🛑 E2 (2026-09-25): A FAILED READ IS A 5xx, NOT AN EMPTY THREAD. This used to pin
+       * `200 { turns: [] }`, which the drawer rendered as "Nothing asked yet." for someone with a
+       * real transcript. It now says the read failed, in words with no internals in them.
+       */
+      getRecentChatHistoryMock.mockRejectedValueOnce(new Error("db down at 10.0.0.1:5432"))
       const degraded = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
-      expect(degraded.status).toBe(200)
-      expect((await degraded.json()).turns).toEqual([])
+      expect(degraded.status).toBe(500)
+      const body = await degraded.json()
+      expect(body.turns).toBeUndefined()
+      expect(JSON.stringify(body)).not.toContain("10.0.0.1")
+      // The route asks the store to REPORT a failure rather than paper over it with [].
+      expect(getRecentChatHistoryMock.mock.calls.at(-1)?.[0]).toMatchObject({ throwOnError: true })
     })
 
     it("clamps the limit so one request cannot ask for the whole table", async () => {

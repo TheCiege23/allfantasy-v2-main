@@ -133,6 +133,8 @@ export function ThreadPanel({
   const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
   const [receipts, setReceipts] = useState<Array<{ userId: string; displayName: string | null; username: string | null; lastReadAt: string | null }>>([])
   const [error, setError] = useState<string | null>(null)
+  /** E2: the last message read FAILED — shown in place of "No messages yet.", never under it. */
+  const [readFailed, setReadFailed] = useState(false)
   /* In-flight reaction toggles win over the poll, as in league chat — see CommsDrawer. */
   const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
   const [reactionBusy, setReactionBusy] = useState<string | null>(null)
@@ -194,6 +196,7 @@ export function ThreadPanel({
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load messages.')
       if (activeThreadId.current !== thread.id) return
+      setReadFailed(false)
       /*
        * A poll already in flight when you blocked someone can land after the block with their
        * messages still in it; the people blocked from this panel stay out regardless.
@@ -219,7 +222,11 @@ export function ThreadPanel({
       setHiddenBlocked(data.hiddenBlockedCount ?? 0)
     } catch (e) {
       if (activeThreadId.current !== thread.id) return
-      setMessages([])
+      /*
+       * ⚠ KEEP WHAT IS ALREADY ON SCREEN. A failed poll used to clear the conversation; the error
+       * says the read failed, and the messages already shown are still true.
+       */
+      setReadFailed(true)
       setError(e instanceof Error ? e.message : 'Could not load messages.')
     }
   }, [])
@@ -246,6 +253,7 @@ export function ThreadPanel({
       /* A reply target belongs to one thread; it must not follow you into another. */
       setReplyTo(null)
       setMessages([])
+      setReadFailed(false)
       setHiddenBlocked(0)
       setReactionOverride({})
       setSearching(false)
@@ -812,10 +820,22 @@ export function ThreadPanel({
             />
           )}
           empty={
-            <div className="af-cm-empty">
-              <p className="af-cm-empty-t">No messages yet.</p>
-              <p className="af-cm-empty-b">Nobody outside this thread can read what you send here.</p>
-            </div>
+            readFailed ? (
+              <div className="af-cm-empty" role="alert">
+                <p className="af-cm-empty-t">Couldn&apos;t load this conversation.</p>
+                <p className="af-cm-empty-b">{error ?? 'Could not load messages.'}</p>
+                <div className="af-cm-retryrow">
+                  <button type="button" className="af-cm-retry" onClick={() => void loadMessages(openThread)}>
+                    Try again
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="af-cm-empty">
+                <p className="af-cm-empty-t">No messages yet.</p>
+                <p className="af-cm-empty-b">Nobody outside this thread can read what you send here.</p>
+              </div>
+            )
           }
           footer={
             <>
@@ -825,7 +845,7 @@ export function ThreadPanel({
                   {hiddenBlocked} message{hiddenBlocked === 1 ? '' : 's'} hidden from people you blocked.
                 </p>
               ) : null}
-              {error ? <p className="af-cm-error">{error}</p> : null}
+              {error && !(readFailed && messages.length === 0) ? <p className="af-cm-error">{error}</p> : null}
             </>
           }
         />

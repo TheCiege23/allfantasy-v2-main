@@ -205,7 +205,20 @@ export async function GET(
     return NextResponse.json({ error: 'Not a member' }, { status: 403 })
   }
 
-  const messages = await getPlatformThreadMessages(user.appUserId, threadId, limit)
+  /*
+   * E2 (2026-09-25): a failed read is a 503, never `200 { messages: [] }` — the client drew that as
+   * "No messages yet." over a conversation that has history. Empty threads still answer `[]`.
+   */
+  let messages: Awaited<ReturnType<typeof getPlatformThreadMessages>>
+  try {
+    messages = await getPlatformThreadMessages(user.appUserId, threadId, limit, { throwOnError: true })
+  } catch {
+    console.warn('[shared/chat/messages] message read failed')
+    return NextResponse.json(
+      { error: 'Messages are temporarily unavailable. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
   const visible = applyBlockedVisibility(messages, blockSet)
   return NextResponse.json({
     status: 'ok',

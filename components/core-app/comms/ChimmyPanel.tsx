@@ -516,7 +516,7 @@ export function ChimmyPanel({
     (id: string | null) => `${publicMode ? 'public:' : ''}${id ?? 'global'}`,
     [publicMode],
   )
-  const { turns, draft, setTurns, setDraft, carryInto } = useScopedConversation<ChatTurn>(
+  const { turns, draft, setTurns, setDraft, carryInto, historyFailed, retryHistory } = useScopedConversation<ChatTurn>(
     userId,
     threadKey(scopeId),
   )
@@ -962,7 +962,22 @@ export function ChimmyPanel({
 
       <div className="af-cm-thread">
         {scopeId && <ChimmyTrades key={scopeId} leagueId={scopeId} onAsk={setDraft} />}
-        {turns.length === 0 ? (
+        {turns.length === 0 && historyFailed ? (
+          /*
+           * E2: a failed history read is NOT "Nothing asked yet." — that told someone with a real
+           * transcript they had never asked Chimmy anything. Say the read failed, and offer it again.
+           */
+          <div className="af-cm-empty" role="alert">
+            <p className="af-cm-empty-t">Couldn&apos;t load your Chimmy history.</p>
+            <p className="af-cm-empty-b">Try again, or ask something new below.</p>
+            <div className="af-cm-retryrow">
+              <button type="button" className="af-cm-retry" onClick={retryHistory}>
+                <RotateCcw size={13} aria-hidden />
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : turns.length === 0 ? (
           <div className="af-cm-empty">
             <Sparkles className="af-cm-welcome-icon" size={28} aria-hidden />
             <p className="af-cm-empty-t">Nothing asked yet.</p>

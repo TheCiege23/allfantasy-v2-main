@@ -446,6 +446,12 @@ export async function getPlatformThreadMessages(
   appUserId: string,
   threadId: string,
   limit = 50,
+  /**
+   * `throwOnError`: rethrow a failed read instead of answering `[]`. The DM / huddle message GET
+   * sets it, because `[]` rendered as "No messages yet." over a database error (E2, 2026-09-25).
+   * Callers that filter the result (the pin board) keep the old `[]`.
+   */
+  options: { throwOnError?: boolean } = {},
 ): Promise<PlatformChatMessage[]> {
   const take = Math.max(1, Math.min(limit, 100))
 
@@ -477,10 +483,18 @@ export async function getPlatformThreadMessages(
       take,
     })
 
-    await (prisma as any).platformChatThreadMember.updateMany({
-      where: { threadId, userId: appUserId },
-      data: { lastReadAt: new Date() },
-    })
+    /*
+     * Marking the thread read is a side effect of reading it, not part of the answer: a failed
+     * write here used to throw away every message just read and answer `[]`.
+     */
+    try {
+      await (prisma as any).platformChatThreadMember.updateMany({
+        where: { threadId, userId: appUserId },
+        data: { lastReadAt: new Date() },
+      })
+    } catch {
+      /* The messages were read; an unread badge that lags one poll is the lesser failure. */
+    }
 
     const visible = rows.filter((r: any) => !(r.metadata as Record<string, unknown>)?.hiddenByMod)
     return visible.reverse().map((msg: any) => {
@@ -517,7 +531,8 @@ export async function getPlatformThreadMessages(
         metadata: Object.keys(baseMeta).length ? baseMeta : undefined,
       }
     })
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error
     return []
   }
 }

@@ -152,7 +152,19 @@ export async function appendChatHistory(input: AppendChatHistoryInput): Promise<
  * own id); omit it for the ordinary "everything this user has said" read.
  */
 export async function getRecentChatHistory(
-  conversationIdOrOptions: string | { userId: string; limit: number; conversationId?: string | null },
+  conversationIdOrOptions:
+    | string
+    | {
+        userId: string
+        limit: number
+        conversationId?: string | null
+        /**
+         * Rethrow a failed read instead of answering `[]`. A surface that SHOWS the transcript needs
+         * this: `[]` renders as "Nothing asked yet." for someone who has asked plenty (E2, 2026-09-25).
+         * Prompt memory leaves it off — an answer with no memory beats no answer at all.
+         */
+        throwOnError?: boolean
+      },
   limitArg?: number,
   userIdArg?: string
 ): Promise<ChatHistoryMessage[]> {
@@ -205,6 +217,7 @@ export async function getRecentChatHistory(
       )
       .reverse()
   } catch (error) {
+    if (!positional && conversationIdOrOptions.throwOnError) throw error
     console.warn('[ChatHistory] failed to query chat_history:', String(error))
     return []
   }

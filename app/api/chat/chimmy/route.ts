@@ -1168,7 +1168,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
    * a cross-league thread without implying every line is about the league now on screen.
    */
   const conversationId = buildChimmyConversationId({ userId })
-  const rows = await getRecentChatHistory({ userId, limit }).catch(() => [])
+  /*
+   * ⚠ A FAILED READ IS A 5xx, NOT `[]` (E2, 2026-09-25). `.catch(() => [])` here, on top of the
+   * store's own `[]`-on-error, meant a database blip answered `200 { turns: [] }` — and the drawer
+   * rendered that as "Nothing asked yet." for someone with a real transcript. Empty is an answer;
+   * failed is not, and the client can only tell them apart if the status does.
+   */
+  let rows: Awaited<ReturnType<typeof getRecentChatHistory>>
+  try {
+    rows = await getRecentChatHistory({ userId, limit, throwOnError: true })
+  } catch {
+    console.warn('[chimmy] history read failed')
+    return NextResponse.json({ error: "Couldn't load your Chimmy history." }, { status: 500 })
+  }
 
   return NextResponse.json({
     conversationId,
