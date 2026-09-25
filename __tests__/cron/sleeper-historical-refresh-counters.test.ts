@@ -81,7 +81,9 @@ describe('sleeper-historical-refresh counters', () => {
     const body = await res.json()
 
     const expected = { processed: 2, skippedComplete: 5, completedRefreshed: 1, leaguesWithError: 1 }
-    expect(body).toMatchObject({ ok: true, leaguesRefreshed: 2, leaguesFailed: 1 })
+    // ⚠ `ok` was hard-coded true, so a fire with a failed league read as clean. It now mirrors
+    // decision-os-activity-ingest: ok only when nothing failed.
+    expect(body).toMatchObject({ ok: false, status: 'partial', leaguesRefreshed: 2, leaguesFailed: 1 })
     expect(body.metadata.matchupSeasons).toEqual(expected)
     // The existing metadata is still there.
     expect(body.metadata).toMatchObject({ leagueCap: 25, budgetMs: 240_000 })
@@ -95,6 +97,51 @@ describe('sleeper-historical-refresh counters', () => {
     const body = await (await GET(request())).json()
     expect(body.metadata.matchupSeasons).toEqual(emptyMatchupSeasonCounters())
     expect(body.leaguesRefreshed).toBe(3)
+  })
+
+  /*
+   * 🛑 `syncSleeperHistoricalBackfillAfterImport` CATCHES ITS OWN BACKFILL ERROR and returns
+   * `backfill.success === false`, so the route's try/catch never fired and the league counted as
+   * refreshed. A fire where every backfill failed recorded `success` and answered `ok: true`.
+   */
+  it('counts a league whose backfill reported success=false as FAILED, not refreshed', async () => {
+    backfill.syncSleeperHistoricalBackfillAfterImport.mockImplementation(async ({ leagueId }: { leagueId: string }) =>
+      leagueId === 'L2'
+        ? {
+            attempted: true,
+            skipped: false,
+            backfill: {
+              success: false,
+              status: 'failed',
+              seasonsDiscovered: 0,
+              seasonsImported: 0,
+              seasonsSkipped: 0,
+              tradesPersisted: 0,
+              failureMessage: 'sleeper 503',
+            },
+          }
+        : { attempted: true, skipped: false, backfill: { success: true, status: 'complete', seasonsDiscovered: 1, seasonsImported: 1, seasonsSkipped: 0, tradesPersisted: 0 } },
+    )
+    const res = await GET(request())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ ok: false, status: 'partial', leaguesRefreshed: 2, leaguesFailed: 1, rowsWritten: 2 })
+    expect(body.errors).toEqual(['L2: backfill failed: sleeper 503'])
+
+    const outcome = telemetry.outcomes[0] as { status: string; rowsWritten: number; errors: string[] }
+    expect(outcome.status).toBe('partial')
+    expect(outcome.rowsWritten).toBe(2)
+    expect(outcome.errors).toEqual(['L2: backfill failed: sleeper 503'])
+  })
+
+  it('answers ok:true and success when every backfill succeeded', async () => {
+    backfill.syncSleeperHistoricalBackfillAfterImport.mockResolvedValue({
+      attempted: true,
+      skipped: false,
+      backfill: { success: true, status: 'complete', seasonsDiscovered: 1, seasonsImported: 0, seasonsSkipped: 1, tradesPersisted: 0 },
+    })
+    const body = await (await GET(request())).json()
+    expect(body).toMatchObject({ ok: true, status: 'success', leaguesRefreshed: 3, leaguesFailed: 0 })
   })
 
   it('still refuses an unauthorised caller before doing any work', async () => {
