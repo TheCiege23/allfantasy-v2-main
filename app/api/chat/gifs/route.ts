@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { isGifSearchConfigured, searchGifs } from '@/lib/rich-message/GIFIntegrationResolver'
+import { getGifProviderName, gifProviderForUrl, isGifSearchConfigured, searchGifs } from '@/lib/rich-message/GIFIntegrationResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +20,18 @@ function mapDbRow(r: DbGifRow) {
   return { id: r.id, giphyId: r.giphyId, url: r.url, previewUrl: r.previewUrl, title: r.title, width: r.width, height: r.height }
 }
 
+/*
+ * Attribution travels with the response: `provider` is the service the GIFs on screen came from, and
+ * `searchProvider` the one a search will ask. The picker used to print "Powered By GIPHY" whatever
+ * it showed; Klipy's terms want "Search KLIPY" in the box and credit under its GIFs.
+ */
+function attribution(urls: string[]) {
+  return {
+    provider: urls.map((u) => gifProviderForUrl(u)).find((p) => p != null) ?? null,
+    searchProvider: getGifProviderName(),
+  }
+}
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams?.get('q')?.trim() ?? ''
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '24'), 48)
@@ -36,7 +48,7 @@ export async function GET(req: NextRequest) {
         skip: offset,
       })
       const total = await prisma.chatGif.count({ where })
-      return NextResponse.json({ gifs: rows.map(mapDbRow), total })
+      return NextResponse.json({ gifs: rows.map(mapDbRow), total, ...attribution(rows.map((r) => r.url)) })
     }
 
     // Real live search when a GIF provider key is configured (GIPHY_API_KEY in this deploy) —
@@ -57,6 +69,8 @@ export async function GET(req: NextRequest) {
             })),
             total: live.length,
             source: live[0]?.provider ?? 'unknown',
+            provider: live[0]?.provider ?? null,
+            searchProvider: getGifProviderName(),
           })
         }
       } catch (e) {
@@ -88,7 +102,7 @@ export async function GET(req: NextRequest) {
           LIMIT ${limit}
         `
 
-    return NextResponse.json({ gifs: dbRows.map(mapDbRow), total: dbRows.length })
+    return NextResponse.json({ gifs: dbRows.map(mapDbRow), total: dbRows.length, ...attribution(dbRows.map((r) => r.url)) })
   } catch (e) {
     console.error('[api/chat/gifs]', e)
     return NextResponse.json({ gifs: [], total: 0, error: 'Failed to load GIFs' }, { status: 500 })

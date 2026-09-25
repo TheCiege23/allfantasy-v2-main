@@ -103,6 +103,7 @@ test.describe("@activation onboarding funnel click audit", () => {
 
     await gotoWithRetry(page, "/e2e/onboarding-funnel?step=league_prompt")
     await expect(page.getByTestId("onboarding-step-league-prompt")).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByTestId("onboarding-league-import-link")).toHaveAttribute("href", "/import")
     await expect(page.getByTestId("onboarding-league-create-link")).toBeVisible()
     await expect(page.getByTestId("onboarding-league-discover-link")).toBeVisible()
     await expect(page.getByTestId("onboarding-league-create-bracket-link")).toBeVisible()

@@ -73,6 +73,11 @@ export type ImportDoneProps = {
   note?: React.ReactNode
   /** 6d's "Open in {Platform}" deep link, resolved through the league-links gate. */
   sourceLink?: { href: string; label: string } | null
+  /**
+   * Chimmy's first job in the league just connected — its lineup, one tap away. The reason to
+   * connect at all, so it sits with Chimmy's note rather than in the button row.
+   */
+  chimmyAction?: { href: string; label: string } | null
 }
 
 export function ImportDone({
@@ -85,6 +90,7 @@ export function ImportDone({
   extraActions,
   note,
   sourceLink,
+  chimmyAction,
 }: ImportDoneProps) {
   return (
     <div className="af-done">
@@ -126,6 +132,14 @@ export function ImportDone({
       {noteText ? <p className="af-done-note">{noteText}</p> : null}
 
       {note ? <ChimmyNote>{note}</ChimmyNote> : null}
+
+      {chimmyAction ? (
+        <div className="af-done-chimmy">
+          <Link href={chimmyAction.href} className="af-btn af-done-alt" data-testid="import-done-chimmy">
+            {chimmyAction.label}
+          </Link>
+        </div>
+      ) : null}
 
       {/*
         THE "FIRST MEANINGFUL ACTION" ASK (spec item 12), and this is the moment.

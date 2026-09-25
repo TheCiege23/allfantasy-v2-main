@@ -264,6 +264,7 @@ async function DecisionsCard({
   return (
     <DecisionQueue
       issues={list}
+      noLeagues={scope.total === 0}
       scopeLabel={scope.label}
       scopeKey={scope.key}
       nowIso={now.toISOString()}
@@ -469,6 +470,7 @@ export function CoreHomeCards({
   leagueData,
   order,
   prefetch,
+  lead,
 }: {
   loads: HomeLoads
   now: Date
@@ -488,6 +490,11 @@ export function CoreHomeCards({
   order: HomeCardOrder
   /** What the prewarm needs beyond the queue itself. */
   prefetch: { unreadNotifications: number; gameDayActive: boolean }
+  /**
+   * Rendered above everything, in the all-leagues view — the "connect your league" card for someone
+   * whose team we do not know yet (ConnectLeagueCard). It renders nothing for everyone else.
+   */
+  lead?: ReactNode
 }) {
   const card = (name: HomeCardName, content: ReactNode, placeholderHeight?: number) => (
     /*
@@ -560,6 +567,12 @@ export function CoreHomeCards({
         </div>
       ) : (
         <>
+          {/* No `data-home-card`: that feeds the per-viewer card ORDER, and this card is not one of them. */}
+          {lead && !scope.scoped ? (
+            <CoreCardBoundary card="connect" resetKey={resetKey}>
+              <Suspense fallback={null}>{lead}</Suspense>
+            </CoreCardBoundary>
+          ) : null}
           {/*
             The five most urgent decisions lead the home — the user's instruction (2026-09-16),
             ahead of the news bands, because a decision is what the reader can act on. It replaced

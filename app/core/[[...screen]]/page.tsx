@@ -216,6 +216,7 @@ import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBounda
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
+import { ConnectLeagueCard } from '@/components/core-app/home/ConnectLeagueCard'
 import { traceCard } from '@/lib/observability/cardTelemetry'
 import {
   applyHomeScope,
@@ -4458,6 +4459,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               }),
             })}
             prefetch={{ unreadNotifications, gameDayActive: coreActivity.gameDayActive }}
+            lead={<ConnectLeagueCard userId={userId} leagueCount={playedLeagues.length} />}
           />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>

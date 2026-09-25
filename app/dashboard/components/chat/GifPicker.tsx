@@ -36,6 +36,29 @@ function GiphyAttributionFooter() {
   )
 }
 
+/*
+ * Klipy's terms: the search box says "Search KLIPY", and its GIFs carry its credit. Shown only when
+ * the GIFs on screen came from Klipy — the route reports which service they came from.
+ */
+function KlipyAttributionFooter() {
+  return (
+    <a
+      href="https://klipy.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[9px] font-semibold uppercase tracking-widest text-white/40 transition-colors hover:text-white/70"
+    >
+      Powered by KLIPY
+    </a>
+  )
+}
+
+export type GifProvider = 'klipy' | 'giphy' | 'tenor'
+
+function readProvider(value: unknown): GifProvider | null {
+  return value === 'klipy' || value === 'giphy' || value === 'tenor' ? value : null
+}
+
 export type GifItem = {
   id: string
   giphyId: string
@@ -75,6 +98,9 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
+  /** Who supplied the GIFs on screen, and who a search asks — both from the route. */
+  const [provider, setProvider] = useState<GifProvider | null>(null)
+  const [searchProvider, setSearchProvider] = useState<GifProvider | null>(null)
 
   useEffect(() => {
     setPage(0)
@@ -89,8 +115,10 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
       if (debounced.trim()) q.set('q', debounced.trim())
       if (category) q.set('category', category)
       const res = await fetch(`/api/chat/gifs?${q.toString()}`, { cache: 'no-store' })
-      const data = (await res.json()) as { gifs?: GifItem[] }
+      const data = (await res.json()) as { gifs?: GifItem[]; provider?: unknown; searchProvider?: unknown }
       const next = data.gifs ?? []
+      if (page === 0 || next.length > 0) setProvider(readProvider(data.provider))
+      setSearchProvider(readProvider(data.searchProvider))
       if (page === 0) {
         setGifs(next)
       } else {
@@ -116,7 +144,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search GIFs..."
+          placeholder={searchProvider === 'klipy' ? 'Search KLIPY' : 'Search GIFs...'}
           className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
           data-testid="gif-picker-search"
         />
@@ -190,7 +218,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
       </div>
 
       <div className="mt-1.5 flex flex-shrink-0 items-center justify-end border-t border-white/[0.06] pt-1.5">
-        <GiphyAttributionFooter />
+        {provider === 'klipy' ? <KlipyAttributionFooter /> : provider === 'giphy' ? <GiphyAttributionFooter /> : null}
       </div>
     </div>
   )

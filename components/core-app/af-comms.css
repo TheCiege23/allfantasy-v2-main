@@ -686,6 +686,44 @@
 .af-cm-rate-note { margin-left: 4px; }
 
 /*
+ * "Want this on your phone?" under the latest answer (components/notifications/PushOptInPrompt.tsx).
+ * A card, not a banner: it belongs to the answer above it, and it goes away on either button.
+ */
+.af-pushask {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+.af-pushask[data-state='on'] { border-color: var(--line2); background: var(--chip); }
+.af-pushask-text { margin: 0; }
+.af-pushask-error { margin: 6px 0 0; color: var(--warn); }
+.af-pushask-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.af-pushask-go,
+.af-pushask-later {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-pushask-go { border: 0; background: var(--accent); color: var(--accent-ink); }
+.af-pushask-later { border: 1px solid var(--line2); background: transparent; color: var(--text2); }
+.af-pushask-go:disabled,
+.af-pushask-later:disabled { cursor: default; opacity: 0.6; }
+.af-pushask-go:focus-visible,
+.af-pushask-later:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+
+/*
  * Players named in an answer. The headshot sits ON TOP of the initials, so a
  * dead CDN URL (the img hides itself on error) reveals the fallback rather than
  * a broken-image glyph — a face that fails must degrade to a letter, never to a

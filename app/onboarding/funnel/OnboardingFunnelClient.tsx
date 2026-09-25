@@ -370,17 +370,30 @@ export default function OnboardingFunnelClient({
       {/* League suggest */}
       {step === "league_prompt" && (
         <div data-testid="onboarding-step-league-prompt" className="space-y-6">
-          <h2 className="text-xl font-semibold text-white">Create or join a league</h2>
+          <h2 className="text-xl font-semibold text-white">Bring your league in</h2>
           <p className="text-white/80">
-            You&apos;re all set. Create your own league, discover leagues we suggest based on your sports, or join one with a code.
+            Already play on Sleeper, ESPN, Fantrax, MFL or Fleaflicker? Connect it and Chimmy starts checking your
+            lineup and your waiver wire. Read-only, about a minute. Or start a league here.
           </p>
+          {/*
+            Connect comes first (owner's call 2026-09-25). This step used to offer create, discover and
+            bracket only — never the import — while 75 of 77 users without a team had imported nothing,
+            and everything Chimmy does for you needs your team.
+          */}
           <div className="flex flex-col gap-3">
+            <Link
+              href="/import"
+              data-testid="onboarding-league-import-link"
+              className="min-h-[44px] inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 text-center touch-manipulation"
+            >
+              Connect your league
+            </Link>
             <Link
               href="/create-league"
               data-testid="onboarding-league-create-link"
-              className="min-h-[44px] inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 text-center touch-manipulation"
+              className="min-h-[44px] inline-flex items-center justify-center rounded-xl border border-cyan-400/50 px-4 py-2.5 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20 text-center touch-manipulation"
             >
-              Create league
+              Create a league
             </Link>
             <Link
               href="/discover/leagues"

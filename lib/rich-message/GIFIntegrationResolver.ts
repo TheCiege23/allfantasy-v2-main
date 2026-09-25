@@ -84,6 +84,26 @@ export function getGiphySearchUrl(query: string, limit = 12): string {
   return `https://api.giphy.com/v1/gifs/search?${params.toString()}`
 }
 
+/**
+ * Which service a GIF URL came from, for attribution. The picker's preloaded grid (`chat_gifs`) is
+ * filled from Klipy by lib/chat/catalogSync.ts — all 100 rows were `static.klipy.com` on 2026-09-25
+ * — while the picker said "Powered By GIPHY" under every one of them.
+ */
+export function gifProviderForUrl(url: string | null | undefined): "klipy" | "tenor" | "giphy" | null {
+  if (typeof url !== "string" || !url) return null
+  let host = ""
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+  const on = (domain: string) => host === domain || host.endsWith(`.${domain}`)
+  if (on("klipy.com") || on("klipy.ai")) return "klipy"
+  if (on("giphy.com")) return "giphy"
+  if (on("tenor.com") || host === "tenor.googleapis.com") return "tenor"
+  return null
+}
+
 /** Validate that a string looks like a GIF/image URL for paste-URL flow. */
 export function isValidGifOrImageUrl(url: string): boolean {
   const trimmed = url.trim()
