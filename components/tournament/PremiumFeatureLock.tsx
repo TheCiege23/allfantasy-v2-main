@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { AF_PLANS } from '@/lib/tournament/af-premium-plans'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 import { cn } from '@/lib/utils'
 
 export function PremiumFeatureLock({
@@ -28,7 +29,8 @@ export function PremiumFeatureLock({
         <span className="font-semibold">{featureLabel}</span> requires{' '}
         <span className="text-amber-50">{plan.label}</span>.
       </span>
-      <Link href="/settings" className="ml-auto font-semibold text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline">
+      {/* The plan's checkout — `/settings` sells nothing. */}
+      <Link href={upgradePathForPlan(requiredPlan)} className="ml-auto font-semibold text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline">
         View plans
       </Link>
     </div>

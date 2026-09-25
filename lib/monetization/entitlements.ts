@@ -27,7 +27,8 @@ export const ENTITLEMENTS = {
     // out every War Room subscriber for a feature that is squarely draft- and
     // trade-room intelligence.
     requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
-    upgradeUrl: '/pricing',
+    // AF Pro: the broadest plan that includes it. `/pricing` was a grid with nothing picked out.
+    upgradeUrl: '/pro',
     upgradeLabel: 'Unlock Manager Psychology',
     highlightParam: 'manager_psychology',
   },
@@ -205,7 +206,7 @@ export const ENTITLEMENTS = {
     label: 'Commissioner Waiver AI',
     description: 'AI-powered league-wide waiver tools: settings health check, suspicious behavior detection, collusion risk, and fairness analysis.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/pricing',
+    upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
     highlightParam: 'commissioner_waiver_ai',
   },
@@ -286,7 +287,8 @@ export const ENTITLEMENTS = {
     label: 'Dynasty Projections',
     description: 'Multi-year dynasty value projections with confidence scoring.',
     requiredPlan: ['af_war_room', 'af_supreme'],
-    upgradeUrl: '/war-room',
+    // Not `/war-room`: that is the product page, and it cannot take a payment.
+    upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
     highlightParam: 'dynasty_projections',
   },
@@ -295,7 +297,7 @@ export const ENTITLEMENTS = {
     label: 'Devy Rankings',
     description: 'AI-generated college player rankings with campus scoring and pro projection scores.',
     requiredPlan: ['af_war_room', 'af_supreme'],
-    upgradeUrl: '/war-room',
+    upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
   },
   war_room_draft_strategy: {
@@ -303,7 +305,7 @@ export const ENTITLEMENTS = {
     label: 'Draft Strategy AI',
     description: 'Real-time draft board advice with tier-break alerts and positional scarcity callouts.',
     requiredPlan: ['af_war_room', 'af_supreme'],
-    upgradeUrl: '/war-room',
+    upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
     highlightParam: 'draft_strategy',
   },
@@ -312,7 +314,7 @@ export const ENTITLEMENTS = {
     label: 'Pipeline Health Analysis',
     description: "AI assessment of your dynasty roster's campus/taxi/active pipeline health.",
     requiredPlan: ['af_war_room', 'af_supreme'],
-    upgradeUrl: '/war-room',
+    upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
   },
 } as const satisfies Record<string, EntitlementDef>
@@ -375,4 +377,8 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   autocoach: 'af_pro',
   dynasty_projections: 'af_war_room',
   draft_strategy: 'af_war_room',
+  manager_psychology: 'af_pro',
+  dispersal_draft: 'af_commissioner',
+  integrity_monitoring: 'af_commissioner',
+  commissioner_waiver_ai: 'af_commissioner',
 }

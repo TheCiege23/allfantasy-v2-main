@@ -38,6 +38,8 @@ const BLOCKER_COPY: Record<string, string> = {
     'This trade went through before AllFantasy started recording trade evidence, so there is nothing to restore it from.',
   ROSTER_CHANGED_SINCE_EXECUTION:
     'One of these rosters has changed since the trade went through. Reversing it now would also undo those later moves.',
+  PICK_CHANGED_SINCE_EXECUTION:
+    'A draft pick in this trade has been traded again, or its draft has already been set up, so it cannot be put back.',
   ALREADY_REVERSED: 'This trade has already been reversed.',
   TRADE_NOT_PROCESSED: 'This trade has not been processed yet, so there is nothing to reverse.',
   PROPOSAL_NOT_ACCEPTED: 'This trade has not been accepted, so there is nothing to reverse.',

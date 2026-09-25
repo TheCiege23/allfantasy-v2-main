@@ -22,6 +22,9 @@ const resolveTeamByeWeeks = vi.fn()
 const resolveProviderPlayers = vi.fn()
 const findManyFuturePick = vi.fn()
 const groupByDraftFact = vi.fn()
+const findFirstRedraftSeason = vi.fn()
+const findFirstDraftSession = vi.fn()
+const findUniqueDynastyConfig = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -52,6 +55,10 @@ vi.mock('@/lib/prisma', () => ({
     // The imported-league pick inventory: stored traded picks and the league's draft history.
     futureDraftPick: { findMany: (...args: unknown[]) => findManyFuturePick(...args) },
     draftFact: { groupBy: (...args: unknown[]) => groupByDraftFact(...args) },
+    // The native dynasty pick inventory: its newest season, any open draft, its rookie rounds.
+    redraftSeason: { findFirst: (...args: unknown[]) => findFirstRedraftSeason(...args) },
+    draftSession: { findFirst: (...args: unknown[]) => findFirstDraftSession(...args) },
+    dynastyLeagueConfig: { findUnique: (...args: unknown[]) => findUniqueDynastyConfig(...args) },
   },
 }))
 /*
@@ -915,3 +922,78 @@ describe('🛑 an imported league lists its real draft picks', () => {
   })
 })
 
+
+describe('🛑 a native dynasty league lists picks it can actually trade', () => {
+  /*
+   * A native league's `playerData.draftPicks` holds the players each team DRAFTED, so the picker
+   * found no pick to offer and a native team could never trade a future pick. It now lists every
+   * team's own picks for the next three rookie drafts, moved where a trade moved them — proposable,
+   * because the trade engine settles them.
+   */
+  const team = (id: string, externalId: string, platformUserId: string, teamName: string) => ({
+    id, externalId, platformUserId, claimedByUserId: null, teamName,
+    avatarUrl: null, wins: 0, losses: 0, ties: 0,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSession.mockResolvedValue({ user: { id: 'user-1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'manual', leagueType: 'dynasty', isDynasty: true, draftPickTrading: true, starters: null, settings: {},
+    })
+    findManyAppUser.mockResolvedValue([])
+    findManyLeagueTeam.mockResolvedValue([team('t1', 'R-1', 'user-1', 'Alpha'), team('t2', 'R-2', 'user-2', 'Bravo')])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    findManyRoster.mockResolvedValue([
+      // What a native roster's draftPicks really holds: drafted players, never pick objects.
+      { id: 'R-1', platformUserId: 'user-1', playerData: { players: [], draftPicks: [{ playerName: 'X', position: 'WR', playerId: 'p9' }] }, faabRemaining: 100 },
+      { id: 'R-2', platformUserId: 'user-2', playerData: { players: [] }, faabRemaining: 100 },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+    getPlayerValues.mockResolvedValue(new Map())
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    resolveProviderPlayers.mockResolvedValue(new Map())
+    findFirstRedraftSeason.mockResolvedValue({ season: 2026, status: 'active' })
+    findFirstDraftSession.mockResolvedValue(null)
+    findUniqueDynastyConfig.mockResolvedValue({ rookieDraftRounds: 2 })
+    // Bravo's 2027 1st now belongs to Alpha.
+    findManyFuturePick.mockResolvedValue([{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
+  })
+
+  type Pick = { pickId: string; season: number; round: number; label: string; proposable?: boolean; fromTeam?: string | null }
+  async function load() {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as { rosters: Array<{ rosterId: string; picks: Pick[] }>; pickCoverage?: string }
+    return { body, picksOf: (id: string) => body.rosters.find((r) => r.rosterId === id)!.picks }
+  }
+
+  it('lists own and acquired picks, all proposable, and never a drafted player as a pick', async () => {
+    const { body, picksOf } = await load()
+    // Alpha: its own 2 rounds × 3 drafts, plus Bravo's 2027 1st. Bravo: its own 6, less that pick.
+    expect(picksOf('R-1')).toHaveLength(7)
+    expect(picksOf('R-2')).toHaveLength(5)
+    expect(picksOf('R-1').find((p) => p.pickId === 'fdp:2027:1:R-2')).toMatchObject({ label: '2027 1st (Bravo)', fromTeam: 'Bravo', proposable: true })
+    for (const p of [...picksOf('R-1'), ...picksOf('R-2')]) {
+      expect(p.pickId.startsWith('fdp:')).toBe(true)
+      expect(p.proposable).toBe(true)
+    }
+    expect(body.pickCoverage).toBe('complete')
+  })
+
+  it('🛑 lists none when the league has pick trading switched off — the validator would refuse them', async () => {
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'manual', leagueType: 'dynasty', isDynasty: true, draftPickTrading: false, starters: null, settings: {},
+    })
+    const { picksOf } = await load()
+    expect(picksOf('R-1')).toEqual([])
+    expect(findFirstRedraftSeason).not.toHaveBeenCalled()
+  })
+
+  it('[control] an imported league never reads the native inventory', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty', isDynasty: true, settings: { status: 'in_season' } })
+    await load()
+    expect(findFirstRedraftSeason).not.toHaveBeenCalled()
+  })
+})

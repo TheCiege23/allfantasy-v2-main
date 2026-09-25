@@ -1,3 +1,4 @@
+import { withQueryParam } from "@/lib/monetization/checkout-urls"
 import { ENTITLEMENTS, type EntitlementDef } from "@/lib/monetization/entitlements"
 import { getPremiumMonetizationForFeature } from "@/lib/monetization/feature-monetization-matrix"
 import {
@@ -12,8 +13,8 @@ export type { SubscriptionFeatureId } from "@/lib/subscription/types"
 const PLAN_UPGRADE_URLS: Record<string, string> = {
   pro: "/pro",
   commissioner: "/commissioner-upgrade",
-  war_room: "/war-room",
-  supreme: "/pricing",
+  war_room: "/upgrade?plan=war_room",
+  supreme: "/upgrade?plan=supreme",
 }
 
 const PLAN_DISPLAY: Record<string, string> = {
@@ -100,5 +101,6 @@ export function getUpgradeUrlForFeature(featureId: SubscriptionFeatureId): strin
 export function getUpgradeUrlWithHighlightForFeature(featureId: SubscriptionFeatureId): string {
   const def = getGateDef(featureId)
   const h = typeof def.highlightParam === "string" && def.highlightParam.length > 0 ? def.highlightParam : undefined
-  return def.upgradeUrl + (h ? `?highlight=${encodeURIComponent(h)}` : "")
+  // Joined as a URL: an upgradeUrl can already carry `?plan=`.
+  return h ? withQueryParam(def.upgradeUrl, "highlight", h) : def.upgradeUrl
 }

@@ -10,6 +10,7 @@ import {
   removePlayerFromRosterData,
 } from '@/lib/waiver-wire/roster-utils'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
+import { parseInventoryPickId, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
 
 export type LeagueTradeTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -64,6 +65,8 @@ export async function applyTradeAssetsInTransaction(
     receiverRosterId: string
     participantRosterIds?: string[]
     assets: TradeAssetInput[]
+    /** Recorded on a native future pick's row as the trade that last moved it. */
+    tradeId?: string | null
   },
 ): Promise<void> {
   const participantIds = [...new Set([
@@ -102,6 +105,17 @@ export async function applyTradeAssetsInTransaction(
     if (a.itemType === 'rookie_pick' || a.itemType === 'future_pick' || a.itemType === 'devy_pick') {
       const ref = String(a.itemReference ?? '')
       if (!ref) throw new Error('Pick ref required')
+      // A native dynasty league's future pick lives in `future_draft_picks`, not in `playerData`.
+      if (parseInventoryPickId(ref)) {
+        await transferNativeFuturePick(tx, {
+          leagueId: input.leagueId,
+          ref,
+          fromRosterId: fromId,
+          toRosterId: toId,
+          tradeId: input.tradeId ?? null,
+        })
+        continue
+      }
       const fromData = dataByRoster.get(fromId)
       const toData = dataByRoster.get(toId)
       const pickObj = extractPickObject(fromData, ref)

@@ -20,6 +20,17 @@ const db = {
 }
 
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
+/*
+ * The native future-pick inventory and its writer have their own suite (native-future-picks.test.ts).
+ * Here they are spies, so what is pinned is the REVERSAL's use of them.
+ */
+const loadNativeFuturePicks = vi.fn()
+const transferNativeFuturePick = vi.fn()
+vi.mock('@/lib/league-trade-engine/nativeFuturePicks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/league-trade-engine/nativeFuturePicks')>()),
+  loadNativeFuturePicks: (...a: unknown[]) => loadNativeFuturePicks(...a),
+  transferNativeFuturePick: (...a: unknown[]) => transferNativeFuturePick(...a),
+}))
 vi.mock('@/lib/events', () => ({
   EVENT: { TRADE_CANCELED: 'transaction.trade.canceled' },
   getPlatformEvents: () => ({ emitInTx: emitInTxMock }),
@@ -268,5 +279,62 @@ describe('reverseGenericTrade', () => {
     if (res.ok) throw new Error('unreachable')
     expect(res.readiness.blockers).toContain('ALREADY_REVERSED')
     expect(db.tradeReversal.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('🛑 a trade that moved a native future pick', () => {
+  // Team 1 sent its 2027 1st to team 2. The pick lives in future_draft_picks, not the roster JSON.
+  const PICK = { itemReference: 'fdp:2027:1:r1', fromRosterId: 'r1', toRosterId: 'r2' }
+  const holding = (holder: string) => ({ ownerByPickId: new Map([[PICK.itemReference, holder]]) })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    emitInTxMock.mockResolvedValue({ eventId: 'evt-rev-1' })
+    worldMatchesAfterState()
+    const withItems = { id: 't-1', leagueId: 'l-1', status: 'processed', proposerRosterId: 'r1', receiverRosterId: 'r2', items: [PICK] }
+    db.afLeagueTrade.findUnique.mockResolvedValue(withItems)
+    db.afLeagueTrade.findUniqueOrThrow.mockResolvedValue(withItems)
+    loadNativeFuturePicks.mockResolvedValue(holding('r2'))
+    transferNativeFuturePick.mockResolvedValue(undefined)
+  })
+
+  it('is ready while the receiving team still holds it', async () => {
+    const { evaluateGenericTradeReversalReadiness } = await import('@/lib/league-trade-engine/tradeReversal')
+    expect(await evaluateGenericTradeReversalReadiness(db as never, 't-1')).toEqual({ ok: true, blockers: [], drift: [] })
+    expect(loadNativeFuturePicks).toHaveBeenCalledWith('l-1', db)
+  })
+
+  it('refuses once the pick has been traded on', async () => {
+    loadNativeFuturePicks.mockResolvedValue(holding('r3'))
+    const { evaluateGenericTradeReversalReadiness } = await import('@/lib/league-trade-engine/tradeReversal')
+    const r = await evaluateGenericTradeReversalReadiness(db as never, 't-1')
+    expect(r.blockers).toEqual(['PICK_CHANGED_SINCE_EXECUTION'])
+  })
+
+  it('refuses once the pick’s draft exists (it has left the tradeable horizon)', async () => {
+    loadNativeFuturePicks.mockResolvedValue({ ownerByPickId: new Map() })
+    const { evaluateGenericTradeReversalReadiness } = await import('@/lib/league-trade-engine/tradeReversal')
+    expect((await evaluateGenericTradeReversalReadiness(db as never, 't-1')).blockers).toEqual(['PICK_CHANGED_SINCE_EXECUTION'])
+  })
+
+  it('moves the pick back to the team that sent it, alongside the rosters', async () => {
+    const { reverseGenericTrade } = await import('@/lib/league-trade-engine/tradeReversal')
+    const res = await reverseGenericTrade({ tradeId: 't-1', actorUserId: 'u-commish', actorRole: 'commissioner', reason: 'collusion' })
+    expect(res.ok).toBe(true)
+    expect(transferNativeFuturePick).toHaveBeenCalledWith(db, {
+      leagueId: 'l-1',
+      ref: 'fdp:2027:1:r1',
+      fromRosterId: 'r2',
+      toRosterId: 'r1',
+      tradeId: 't-1',
+    })
+    expect(db.roster.update).toHaveBeenCalledTimes(2)
+  })
+
+  it('a trade without native picks never reads the pick inventory', async () => {
+    db.afLeagueTrade.findUnique.mockResolvedValue({ id: 't-1', leagueId: 'l-1', status: 'processed', proposerRosterId: 'r1', receiverRosterId: 'r2', items: [{ itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2' }] })
+    const { evaluateGenericTradeReversalReadiness } = await import('@/lib/league-trade-engine/tradeReversal')
+    await evaluateGenericTradeReversalReadiness(db as never, 't-1')
+    expect(loadNativeFuturePicks).not.toHaveBeenCalled()
   })
 })

@@ -27,6 +27,11 @@ import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import type { GenericRosterStateSnapshot } from '@/lib/league-trade-engine/tradeExecutionSnapshot'
+import {
+  loadNativeFuturePicks,
+  parseInventoryPickId,
+  transferNativeFuturePick,
+} from '@/lib/league-trade-engine/nativeFuturePicks'
 
 export type ReversalBlocker =
   | 'TRADE_NOT_FOUND'
@@ -36,6 +41,20 @@ export type ReversalBlocker =
   | 'ALREADY_REVERSED'
   | 'ROSTER_MISSING'
   | 'ROSTER_CHANGED_SINCE_EXECUTION'
+  | 'PICK_CHANGED_SINCE_EXECUTION'
+
+type TradeItemRef = { itemReference: string | null; fromRosterId: string; toRosterId: string }
+
+/**
+ * The trade's native dynasty future picks. They live in `future_draft_picks`, not in the roster
+ * JSON the snapshot restores — so without moving them back, a reversal returns the players and
+ * leaves the pick with the team that received it.
+ */
+function nativePickItems(items: TradeItemRef[] | null | undefined): Array<TradeItemRef & { itemReference: string }> {
+  return (items ?? []).filter(
+    (i): i is TradeItemRef & { itemReference: string } => parseInventoryPickId(String(i.itemReference ?? '')) != null,
+  )
+}
 
 export type ReversalReadiness = {
   ok: boolean
@@ -84,10 +103,27 @@ export async function evaluateGenericTradeReversalReadiness(
 
   const trade = await db.afLeagueTrade.findUnique({
     where: { id: tradeId },
-    select: { id: true, status: true, proposerRosterId: true, receiverRosterId: true },
+    select: {
+      id: true,
+      leagueId: true,
+      status: true,
+      proposerRosterId: true,
+      receiverRosterId: true,
+      items: { select: { itemReference: true, fromRosterId: true, toRosterId: true } },
+    },
   })
   if (!trade) return { ok: false, blockers: ['TRADE_NOT_FOUND'], drift }
   if (trade.status !== 'processed') blockers.push('TRADE_NOT_PROCESSED')
+
+  // Each native pick must still sit with the team that received it, and its draft must not exist
+  // yet — otherwise moving it back would undo a later trade, or change a draft already built.
+  const picks = nativePickItems(trade.items)
+  if (picks.length > 0) {
+    const inventory = await loadNativeFuturePicks(trade.leagueId, db)
+    for (const p of picks) {
+      if (inventory?.ownerByPickId.get(p.itemReference) !== p.toRosterId) blockers.push('PICK_CHANGED_SINCE_EXECUTION')
+    }
+  }
 
   const snapshot = await db.tradeExecutionSnapshot.findUnique({
     where: { tradeId },
@@ -157,7 +193,12 @@ export async function reverseGenericTrade(
 
       const trade = await tx.afLeagueTrade.findUniqueOrThrow({
         where: { id: input.tradeId },
-        select: { id: true, leagueId: true, status: true },
+        select: {
+          id: true,
+          leagueId: true,
+          status: true,
+          items: { select: { itemReference: true, fromRosterId: true, toRosterId: true } },
+        },
       })
       const snapshot = await tx.tradeExecutionSnapshot.findUniqueOrThrow({
         where: { tradeId: input.tradeId },
@@ -172,6 +213,17 @@ export async function reverseGenericTrade(
             playerData: state.playerData as Prisma.InputJsonValue,
             faabRemaining: state.faabRemaining,
           },
+        })
+      }
+      // The snapshot restores roster JSON only; a native future pick is moved back here, under
+      // the readiness check just re-run in this transaction.
+      for (const p of nativePickItems(trade.items)) {
+        await transferNativeFuturePick(tx, {
+          leagueId: trade.leagueId,
+          ref: p.itemReference,
+          fromRosterId: p.toRosterId,
+          toRosterId: p.fromRosterId,
+          tradeId: trade.id,
         })
       }
 

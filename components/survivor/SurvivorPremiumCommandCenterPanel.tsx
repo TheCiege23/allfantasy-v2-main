@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Lock, Sparkles, Coins } from 'lucide-react'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { AF_PLANS } from '@/lib/tournament/af-premium-plans'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 import {
   SURVIVOR_PREMIUM_COMMAND_TILES,
   canAccessSurvivorPremiumTile,
@@ -71,7 +72,7 @@ function SurvivorPremiumTileCard({
               Locked · {AF_PLANS[upgradePlan].label}
             </span>
             <Link
-              href="/settings"
+              href={upgradePathForPlan(upgradePlan)}
               className="font-semibold text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
             >
               Upgrade
