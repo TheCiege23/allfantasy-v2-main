@@ -92,17 +92,25 @@ export function readConfirmedPirateBase(settings: unknown): PirateBaseFormat | n
   return isPirateBaseFormat(c.baseFormat) ? c.baseFormat : null
 }
 
+/**
+ * The league type a PERSON confirmed, or null when nobody has — the one reader of
+ * `leagueTypeConfirmation.type`. A null here means every trait of the league is still the
+ * importer's reading of the host platform, which is what the grade's label has to say.
+ */
+export function readConfirmedLeagueConcept(settings: unknown): LeagueConceptType | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
+  const raw = (settings as Record<string, unknown>).leagueTypeConfirmation
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const confirmed = (raw as Record<string, unknown>).type
+  return isLeagueConceptType(confirmed) ? confirmed : null
+}
+
 /** Prefer the human-confirmed concept when an importer later rewrites League.leagueType. */
 export function resolveLeagueConcept(
   settings: unknown,
   storedType: string | null | undefined,
 ): LeagueConceptType | string | null {
-  if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
-    const raw = (settings as Record<string, unknown>).leagueTypeConfirmation
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      const confirmed = (raw as Record<string, unknown>).type
-      if (isLeagueConceptType(confirmed)) return confirmed
-    }
-  }
+  const confirmed = readConfirmedLeagueConcept(settings)
+  if (confirmed) return confirmed
   return typeof storedType === 'string' && storedType.trim() ? storedType.trim().toLowerCase() : null
 }
