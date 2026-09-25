@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useResendCooldown } from '@/hooks/useResendCooldown'
 import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
+import { EMAIL_VERIFY_LINK_LIFETIME } from '@/lib/auth/emailVerifyLink'
 import {
   BangGlyph,
   CheckGlyph,
@@ -612,10 +613,10 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
             <>Leagues and brackets need a verified email or phone. It only takes a minute.</>
           ) : email ? (
             <>
-              We sent a link to <strong>{email}</strong>. It expires in an hour.
+              We sent a link to <strong>{email}</strong>. It works for {EMAIL_VERIFY_LINK_LIFETIME}.
             </>
           ) : (
-            <>We&rsquo;ll send a link to the email on your account. It expires in an hour.</>
+            <>We&rsquo;ll send a link to the email on your account. It works for {EMAIL_VERIFY_LINK_LIFETIME}.</>
           )}
         </RecoverySub>
 

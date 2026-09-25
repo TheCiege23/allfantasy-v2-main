@@ -46,7 +46,8 @@ async function sendVerificationEmail(params: {
 
   const rawToken = makeToken(32)
   const tokenHash = sha256Hex(rawToken)
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+  const { emailVerifyLinkExpiresAt } = await import("@/lib/auth/emailVerifyLink")
+  const expiresAt = emailVerifyLinkExpiresAt()
 
   const tokenRecord = await (prisma as any).emailVerifyToken.create({
     data: { userId: params.userId, tokenHash, expiresAt },

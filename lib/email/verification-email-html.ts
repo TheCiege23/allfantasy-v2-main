@@ -27,6 +27,8 @@
  * with nothing to click. It is a second copy of the one link, not a second link.
  */
 
+import { EMAIL_VERIFY_LINK_LIFETIME } from '@/lib/auth/emailVerifyLink'
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -129,7 +131,7 @@ export function buildVerificationEmailHtml(opts: {
                 </tr>
               </table>
 
-              <p style="margin:22px 0 0;font-size:13px;color:#5b6485;">This link expires in 1 hour.</p>
+              <p style="margin:22px 0 0;font-size:13px;color:#5b6485;">This link works for ${EMAIL_VERIFY_LINK_LIFETIME}.</p>
 
               <!-- Plain-text fallback — the SAME destination as the button, shown
                    when the button is clipped or images/styles are blocked. -->
