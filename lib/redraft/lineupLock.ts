@@ -1,5 +1,5 @@
 /**
- * Redraft lineup-lock engine (NFL-first).
+ * Redraft lineup-lock engine (NFL, and NHL through its Eastern-day week window).
  *
  * Closes gap G1: players must lock when their real game kicks off so a manager
  * can't swap a player after their game has started. The lock is DERIVED from the
@@ -18,6 +18,9 @@
  * Emergency commissioner unlocks (postponements/data errors) always win.
  */
 import type { PrismaClient } from '@prisma/client'
+import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 
 export type LineupLockMode = 'per_player_kickoff' | 'first_game_of_week' | 'manual'
 
@@ -90,6 +93,24 @@ export function normalizeNflTeam(team: string | null | undefined): string {
   return NFL_TEAM_ALIASES[u] ?? u
 }
 
+/**
+ * The key a player's team and a game's team are matched on. NFL keeps its abbreviation aliases;
+ * any other sport compares the name itself — the NFL table would turn an NHL "LA" into "LAR".
+ * A team that matches no game fails open (not locked), exactly as a bye does.
+ */
+export function normalizeLockTeam(sport: string, team: string | null | undefined): string {
+  if (String(sport).toUpperCase() === 'NFL') return normalizeNflTeam(team)
+  // Full names from two feeds (Rolling Insights rosters, TheSportsDB games): drop accents and
+  // punctuation so "Montréal Canadiens" / "St. Louis Blues" match "Montreal Canadiens" / "St Louis Blues".
+  return String(team ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9 ]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+}
+
 export type WeekKickoffs = {
   /** Normalized team abbreviation → earliest kickoff (UTC) that week. */
   byTeam: Map<string, Date>
@@ -110,9 +131,53 @@ export async function buildWeekKickoffMap(
   const warnings: string[] = []
   const byTeam = new Map<string, Date>()
   let firstKickoff: Date | null = null
+  const sport = String(args.sport).toUpperCase()
 
-  if (String(args.sport).toUpperCase() !== 'NFL') {
-    warnings.push(`Lineup lock schedule lookup is wired for NFL only; ${args.sport} players are not locked.`)
+  /*
+   * 🛑 NHL PLAYERS NEVER LOCKED. This returned "NFL only" for every other sport, and a daily
+   * sport's matchup scores the WHOLE WEEK's games for whoever sits in a starter slot at scoring
+   * time — so a manager could start a player after his games were played, or bench one after a
+   * bad night. A daily sport now locks from the same games the week is closed on (`readWeekGames`,
+   * the Eastern-day window): each player at his team's FIRST game of the week under the default
+   * mode, or the whole lineup at the week's first game. Once his first game starts, the week he
+   * is scored for is fixed.
+   *
+   * ⚠ NCAAB IS NOT HERE: its `SportsGame` schedule is incomplete (see RI_SCHEDULE_SLATE_SPORTS),
+   * and a lock read from a partial slate would leave some teams unlocked with no warning.
+   */
+  if (sport !== 'NFL' && DATE_WINDOWED_SPORTS.includes(sport) && !RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
+    const seasonStart = resolveDailySportSeasonStart(sport, args.season)
+    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
+    if (!window) {
+      warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
+      return { byTeam, firstKickoff, warnings }
+    }
+    const games = await readWeekGames(prisma, {
+      sport,
+      season: args.season,
+      week: args.week,
+      seasonType: 'regular',
+      dateWindow: { start: new Date(window.start), end: new Date(window.end) },
+    })
+    for (const g of games) {
+      if (!g.startTime) continue
+      const kickoff = g.startTime
+      if (!firstKickoff || kickoff.getTime() < firstKickoff.getTime()) firstKickoff = kickoff
+      for (const team of [g.homeTeam, g.awayTeam]) {
+        const key = normalizeLockTeam(sport, team)
+        if (!key) continue
+        const existing = byTeam.get(key)
+        if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
+      }
+    }
+    if (games.length === 0) {
+      warnings.push(`No ${sport} games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
+    }
+    return { byTeam, firstKickoff, warnings }
+  }
+
+  if (sport !== 'NFL') {
+    warnings.push(`Lineup lock schedule lookup is wired for NFL and NHL only; ${args.sport} players are not locked.`)
     return { byTeam, firstKickoff, warnings }
   }
 
@@ -168,6 +233,7 @@ export type LockablePlayer = {
 }
 
 type LockContext = {
+  sport: string
   mode: LineupLockMode
   manualLocked: boolean
   overrides: LockOverride[]
@@ -184,7 +250,7 @@ async function loadLockContext(
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
       : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
-  return { mode, manualLocked: manualLockedWeeks.has(args.week), overrides, kickoffs }
+  return { sport: args.sport, mode, manualLocked: manualLockedWeeks.has(args.week), overrides, kickoffs }
 }
 
 function stampLineupLock<T extends LockablePlayer>(
@@ -198,7 +264,7 @@ function stampLineupLock<T extends LockablePlayer>(
       (o.rosterId == null || o.rosterId === scope.rosterId) &&
       (o.playerId == null || o.playerId === player.playerId),
   )
-  const playerKickoffUtc = ctx.kickoffs.byTeam.get(normalizeNflTeam(player.team)) ?? null
+  const playerKickoffUtc = ctx.kickoffs.byTeam.get(normalizeLockTeam(ctx.sport, player.team)) ?? null
   const isLocked = computeLineupLock({
     mode: ctx.mode,
     now: scope.now,

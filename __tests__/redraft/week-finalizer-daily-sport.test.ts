@@ -14,7 +14,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { DATE_WINDOWED_SPORTS, WEEK_KEYED_SPORTS, finalizeRedraftWeek } from '@/lib/redraft/weekFinalizer'
+import {
+  DATE_WINDOWED_SPORTS,
+  WEEK_KEYED_SPORTS,
+  finalizeCompletedWeeksForSeason,
+  finalizeRedraftWeek,
+} from '@/lib/redraft/weekFinalizer'
 
 type AnyArgs = Record<string, any>
 
@@ -299,5 +304,60 @@ describe('finalizeRedraftWeek — a daily sport', () => {
     )
 
     expect(result.refusal).toBe('sport_not_week_keyed')
+  })
+})
+
+/*
+ * 🛑 A DAILY-SPORT WEEK WAS SEALED WITHOUT ITS LAST DAY. Monday's box scores arrive with the Tuesday
+ * 07:00 UTC ingest, after the calendar has moved on, and score-sync only refreshes the current week — so
+ * a week already above the coverage floor sealed with its Monday-only starters at zero.
+ */
+describe('finalizeCompletedWeeksForSeason — a daily-sport week is refreshed once before it seals', () => {
+  function sweepPrisma(scored: string[]) {
+    const { prisma } = makePrisma([game('FT', '2026-09-29T23:00:00.000Z', 1), game('FT', LAST_PUCK, 1)], scored)
+    // The sweep asks for weeks that are NOT final; the per-week calls ask for the matchups.
+    prisma.redraftMatchup.findMany = vi.fn(async (args: AnyArgs) =>
+      args.where?.status?.not === 'final' ? [{ week: 1 }] : [{ id: 'm1', status: 'active' }],
+    )
+    prisma.redraftRosterPlayer.findMany = vi.fn(async () =>
+      ['p1', 'p2', 'p3', 'p4', 'p5'].map((playerId) => ({ playerId, sport: 'NHL', slotType: 'C' })),
+    )
+    prisma.playerWeeklyScore.findMany = vi.fn(async () => scored.map((playerId) => ({ playerId, sport: 'NHL' })))
+    return prisma
+  }
+
+  it('pulls in the late stats first, so the Monday starter is scored, not sealed at zero', async () => {
+    // 4 of 5 starters scored = 0.8, already at the floor: the old sweep sealed here and zeroed p5.
+    const scored = ['p1', 'p2', 'p3', 'p4']
+    const prisma = sweepPrisma(scored)
+    const syncWeekStats = vi.fn(async () => {
+      scored.push('p5') // Monday's box score, which the Tuesday ingest brought in
+    })
+
+    const out = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-nhl', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn(async () => ({ updated: 1 })) as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).toHaveBeenCalledTimes(1)
+    expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 'season-nhl', week: 1 })
+    expect(out.finalized).toBe(1)
+    expect(out.results[0]?.zeroedPlayerIds).toEqual([])
+    expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
+  })
+
+  it('does not fetch for a week that is not ready to seal (the dry run is the answer)', async () => {
+    const prisma = sweepPrisma(['p1', 'p2', 'p3', 'p4', 'p5'])
+    prisma.sportsGame.findMany = vi.fn(async () => [game('NS', LAST_PUCK, 1)])
+    const syncWeekStats = vi.fn(async () => {})
+
+    const out = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-nhl', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).not.toHaveBeenCalled()
+    expect(out.finalized).toBe(0)
+    expect(out.refusals.games_not_final).toBe(1)
   })
 })
