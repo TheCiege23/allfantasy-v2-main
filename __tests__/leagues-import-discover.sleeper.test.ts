@@ -130,4 +130,48 @@ describe('POST /api/leagues/import/discover Sleeper account discovery', () => {
     })
     expect(getUserLeaguesMock).not.toHaveBeenCalled()
   })
+
+  /*
+   * 🛑 A SLEEPER HANDLE ALREADY LINKED TO ANOTHER ALLFANTASY LOGIN. The stamp's unique violation was
+   * swallowed, discovery listed the leagues, and the preview then said "Link your Sleeper account" —
+   * advice this login can never follow. The route now says so, and only for that failure.
+   */
+  describe('the discovered handle is already linked to a different login', () => {
+    async function discoverWithStampError(error: unknown) {
+      const { prisma } = (await import('@/lib/prisma')) as unknown as { prisma: Record<string, unknown> }
+      prisma.userProfile = {
+        upsert: vi.fn().mockResolvedValue({ userId: 'u1', sleeperUserId: null }),
+        update: vi.fn().mockRejectedValue(error),
+      }
+      lookupSleeperUserMock.mockResolvedValue({
+        status: 'found',
+        user: { user_id: 'sleeper-user-1', username: 'theciege24', display_name: 'TheCiege24' },
+      })
+      getUserLeaguesMock.mockResolvedValue([])
+      const { POST } = await import('@/app/api/leagues/import/discover/route')
+      const res = await POST(
+        new Request('http://localhost/api/leagues/import/discover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'sleeper', accountIdentifier: 'theciege24' }),
+        }) as any,
+      )
+      delete prisma.userProfile
+      return res
+    }
+
+    it('reports handleLinkedElsewhere on a unique violation of the Sleeper id', async () => {
+      const res = await discoverWithStampError(
+        Object.assign(new Error('Unique constraint failed'), { code: 'P2002', meta: { target: ['sleeperUserId'] } }),
+      )
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ handleLinkedElsewhere: true })
+    })
+
+    it('stays silent for any other stamp failure', async () => {
+      const res = await discoverWithStampError(new Error('connection reset'))
+      expect(res.status).toBe(200)
+      expect(await res.json()).not.toHaveProperty('handleLinkedElsewhere')
+    })
+  })
 })

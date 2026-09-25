@@ -108,7 +108,7 @@ function getImportApiErrorMessage(
   if (data?.error?.includes('Connect Yahoo')) return 'Connect Yahoo in League Sync before importing from Yahoo.';
   if (data?.error?.includes('Connect ESPN')) return 'Connect ESPN in League Sync before importing private ESPN leagues.';
   if (data?.error?.includes('saved ESPN cookies')) return 'Reconnect ESPN in League Sync, then try importing again.';
-  if (data?.error?.includes('MFL API key')) return 'Save your MFL API key in League Sync before importing from MyFantasyLeague.';
+  if (data?.error?.includes('MFL API key')) return 'Save your MFL API key under Settings → Connected Accounts before importing from MyFantasyLeague.';
   return data?.error ?? fallback;
 }
 
@@ -156,6 +156,55 @@ function importRequestErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'Network error';
 }
 
+/** Shown when the server answered with something that is not JSON — an empty 500, an HTML error page. */
+export const IMPORT_SERVER_FAILURE_MESSAGE =
+  'Import failed on our side — nothing was changed. Try again in a minute.';
+
+/**
+ * Read an import route's body without trusting it to be JSON.
+ *
+ * 🛑 `await res.json()` ON AN EMPTY 500 THROWS "Unexpected end of JSON input", and the catch below
+ * used to hand THAT string to the screen as the user's error message. A proxy's HTML error page
+ * does the same with "Unexpected token '<'". Neither is something a person can act on, and both
+ * are what an import failure looked like whenever the server failed in a way it had not planned for.
+ *
+ * `null` means "there was no readable body" — the caller decides what to say, from the status.
+ */
+async function readImportResponseBody(res: Response): Promise<Record<string, unknown> | null> {
+  /* A Response-like without `text()` (a partial test double) still gets the defensive read. */
+  if (typeof res.text !== 'function') {
+    try {
+      const parsed: unknown = await res.json();
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  let text = '';
+  try {
+    text = await res.text();
+  } catch {
+    return null;
+  }
+  if (!text.trim()) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The error for a failed response, falling back to a human sentence when the body was unreadable. */
+function failedResponseMessage(
+  data: Record<string, unknown> | null,
+  status: number,
+  fallback: string
+): string {
+  if (!data) return status >= 500 || status === 0 ? IMPORT_SERVER_FAILURE_MESSAGE : fallback;
+  return getImportApiErrorMessage(data as { error?: string }, fallback);
+}
+
 export async function fetchImportPreview(
   provider: ImportProvider,
   sourceInput: string,
@@ -185,15 +234,16 @@ export async function fetchImportPreview(
         ...(options?.allowPreviewOnly ? { allowPreviewOnly: true } : {}),
       }),
     });
-    const data = await res.json();
+    const data = await readImportResponseBody(res);
     if (!res.ok) {
       return {
         ok: false,
-        error: getImportApiErrorMessage(data, 'Failed to load league'),
+        error: failedResponseMessage(data, res.status, 'Failed to load league'),
         status: res.status,
-        requiresAttestation: Boolean((data as { requiresAttestation?: boolean })?.requiresAttestation),
+        requiresAttestation: Boolean((data as { requiresAttestation?: boolean } | null)?.requiresAttestation),
       };
     }
+    if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };
     return { ok: true, data };
   } catch (e) {
     const message = importRequestErrorMessage(e);
@@ -221,6 +271,11 @@ export async function submitImportCreation(
      * resurrect a deleted league.
      */
     confirmReimportOfDeleted?: boolean
+    /**
+     * The `source_team_id` the importer picked as theirs, for a provider that cannot say (Fleaflicker).
+     * The server validates it against the league's rosters and uses it ONLY to claim that team.
+     */
+    claimSourceTeamId?: string
   }
 ): Promise<SubmitImportResult> {
   if (!isImportProviderAvailable(provider)) {
@@ -241,18 +296,20 @@ export async function submitImportCreation(
         ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
         ...(options?.force ? { force: true } : {}),
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
+        ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
       }),
     });
-    const data = await res.json();
+    const data = await readImportResponseBody(res);
     if (!res.ok) {
       return {
         ok: false,
-        error: getImportApiErrorMessage(data, 'Failed to create league'),
+        error: failedResponseMessage(data, res.status, 'Failed to create league'),
         status: res.status,
-        requiresAttestation: Boolean((data as { requiresAttestation?: boolean })?.requiresAttestation),
-        code: (data as { code?: string })?.code,
+        requiresAttestation: Boolean((data as { requiresAttestation?: boolean } | null)?.requiresAttestation),
+        code: (data as { code?: string } | null)?.code,
       };
     }
+    if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };
     /*
      * `existed` distinguishes a real import from an idempotent replay. The commit
      * route 200s for both — see its own note — so without this the bulk importer
@@ -260,7 +317,7 @@ export async function submitImportCreation(
      */
     return {
       ok: true,
-      data,
+      data: data as unknown as SubmitImportResult['data'],
       existed: Boolean((data as { existed?: boolean })?.existed),
       joinedExisting: Boolean((data as { joinedExisting?: boolean })?.joinedExisting),
     };
@@ -298,14 +355,15 @@ export async function discoverProviderLeagues(
         ...(options?.sport ? { sport: options.sport } : {}),
       }),
     });
-    const data = await res.json();
+    const data = await readImportResponseBody(res);
     if (!res.ok) {
       return {
         ok: false,
-        error: getImportApiErrorMessage(data, 'Failed to discover leagues'),
+        error: failedResponseMessage(data, res.status, 'Failed to discover leagues'),
         status: res.status,
       };
     }
+    if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };
     return { ok: true, data };
   } catch (e) {
     const message = importRequestErrorMessage(e);
