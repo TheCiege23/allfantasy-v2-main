@@ -77,6 +77,7 @@
     "audit:draft-player-pool": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-draft-player-pool.ts",
     "audit:player-identity-mismatches": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-player-identity-mismatches.ts",
     "audit:ri-mapping": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-rolling-insights-draft-mapping.ts",
+    "prove:purchase": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/prove-purchase-path.ts",
     "audit:ncaaf-widening": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-ncaaf-identity-widening.ts",
     "widen:ncaaf-identities": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/widen-ncaaf-identities.ts",
     "repair:ncaaf-identity-ids": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/repair-ncaaf-identity-ids.ts",
