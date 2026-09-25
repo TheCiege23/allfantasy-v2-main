@@ -332,9 +332,10 @@
   text-underline-offset: 2px;
 }
 
+/* 44px: the phone tap-target floor the mobile-auth lane measures on /core (40px failed it). */
 .af-core .af-btn.af-launch-strip-cta {
   align-self: flex-start;
-  min-height: 40px;
+  min-height: 44px;
   text-decoration: none;
 }
 
