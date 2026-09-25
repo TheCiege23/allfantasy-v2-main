@@ -14,6 +14,7 @@ import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
+import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -122,6 +123,22 @@ function sourceRank(source: string | null | undefined): number {
   if (s === 'sleeper') return 2
   if (s === 'backfill') return 1
   return 0
+}
+
+/**
+ * Whether the id a draft hands out for this row can ever be SCORED.
+ *
+ * 🛑 A DAILY SPORT IS SCORED ONLY THROUGH A NUMERIC ROLLING INSIGHTS ID. Its game logs are keyed on
+ * `PlayerIdentityMap.id`, reached from a roster id through `rollingInsightsId`
+ * (`lib/redraft/rosterGameLogIdBridge.ts`) — which maps numeric ids and nothing else. A `tsdb_…`
+ * id finds no game log, so a player drafted under it scores zero every week with no error; with
+ * enough of them on starters a week never reaches the finalizer's coverage floor and the season
+ * never advances. The tie-break below gave TheSportsDB rows (+60, and +100 for a photo) the win
+ * over Rolling Insights rows (+30) for the same name, position and team.
+ */
+export function isScorablePoolId(sport: string, row: { sleeperId?: string | null; externalId?: string | null }): boolean {
+  if (!isDailyStatSport(sport)) return true
+  return /^\d+$/.test(String(row.sleeperId ?? row.externalId ?? '').trim())
 }
 
 function sportsPlayerQuality(row: {
@@ -334,13 +351,32 @@ async function buildPlayerPoolForSport(
   // De-dupe by (name, position, team), preferring rows that have real image URLs
   // and explicit sleeper IDs. Some imports write duplicate players across sources,
   // and a low-quality duplicate can otherwise shadow a better row.
+  //
+  // A scorable id wins before any quality signal (see `isScorablePoolId`), and the photo is not
+  // lost with the row it came on: the best image among a player's duplicates is carried to the
+  // row that won.
   const bestByKey = new Map<string, (typeof rows)[number]>()
+  const bestImageByKey = new Map<string, { url: string; quality: number }>()
   for (const row of rows) {
     const key = `${String(row.name ?? '').trim().toLowerCase()}|${String(row.position ?? '').trim().toUpperCase()}|${String(row.team ?? '').trim().toUpperCase()}`
+    const quality = sportsPlayerQuality(row)
+    if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {
+      bestImageByKey.set(key, { url: String(row.imageUrl), quality })
+    }
     const current = bestByKey.get(key)
-    if (!current || sportsPlayerQuality(row) > sportsPlayerQuality(current)) {
+    const rowScorable = isScorablePoolId(sport, row)
+    const currentScorable = current ? isScorablePoolId(sport, current) : false
+    if (
+      !current ||
+      (rowScorable && !currentScorable) ||
+      (rowScorable === currentScorable && quality > sportsPlayerQuality(current))
+    ) {
       bestByKey.set(key, row)
     }
+  }
+  for (const [key, row] of bestByKey) {
+    const image = bestImageByKey.get(key)
+    if (image && !isHttpImage(row.imageUrl)) bestByKey.set(key, { ...row, imageUrl: image.url })
   }
 
   // Phase 27 fix: alphabetical order alone is not a fantasy-relevance signal.
