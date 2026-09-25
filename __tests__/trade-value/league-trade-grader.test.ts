@@ -65,7 +65,7 @@ vi.mock('@/lib/hybrid-valuation', () => {
   }
 })
 
-import { createLeagueTradeGrader, gradeDeal } from '@/lib/trade-value/leagueTradeGrader'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 
 beforeEach(() => {
   h.prices = new Map([

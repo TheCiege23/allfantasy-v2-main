@@ -27,7 +27,7 @@ import {
   buildDescribedTradeContext,
   extractPlayerNameCandidates,
 } from '@/lib/chimmy-trade/describedTradeEvaluator'
-import { gradeTrade } from '@/lib/trade-value/tradeGrade'
+import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 
 /* THE grade for 4000 out, 6000 in, by the real scale — an A for side 1, an F for side 2. */
 const oneGrade = vi.fn(async () =>

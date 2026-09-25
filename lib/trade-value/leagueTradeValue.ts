@@ -19,7 +19,7 @@
  * This module only combines them, caps the product, and totals the deal.
  */
 
-import { signedGapPct } from './tradeGrade'
+import { signedGapPct } from '@/lib/decision-os/trade/tradeGrade'
 
 export type LeagueValueAdjustmentKind = 'scoring' | 'need'
 

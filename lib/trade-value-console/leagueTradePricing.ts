@@ -23,7 +23,7 @@ import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLin
  * 🛑 MOVED OUT OF `runTradeConsoleAnalysis.ts` (2026-09-24) SO THERE IS ONE OF IT. The Trade Center
  * priced deals here and nowhere else could; every other surface (pending-offer cards, the /core
  * Trades list, Chimmy) ran its own pricer on its own chart and printed its own letter. Now the
- * console and `lib/trade-value/leagueTradeGrader.ts` both call these functions, so a deal priced on
+ * console and `lib/decision-os/trade/leagueTradeGrader.ts` both call these functions, so a deal priced on
  * any surface is priced by the same code on the same chart. The function bodies are unchanged; only
  * `resolveAssets` gained `resolveEnrichmentIds`, which the grader turns off (the Decision OS shadow
  * id is a console concern and costs a resolver call per player).

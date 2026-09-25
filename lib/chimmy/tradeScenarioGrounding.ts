@@ -8,9 +8,9 @@ import { extractPickMentions, pickLabel, type PickMention } from './tradePickMen
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { createLeagueTradeGrader, gradeDeal } from '@/lib/trade-value/leagueTradeGrader'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
-import type { GradeInputs } from '@/lib/trade-value/tradeGradeInputs'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import {
   allRosteredIds,
   findRosteredByName,
@@ -30,7 +30,7 @@ import type {
  *
  * Chimmy brief item 8 (scenario comparisons). The engines existed; nothing a chat question could
  * reach produced a before/after. This resolves a described trade against the league's real
- * rosters: the VALUE and the GRADE come from the one trade grader (`lib/trade-value/leagueTradeGrader.ts`)
+ * rosters: the VALUE and the GRADE come from the one trade grader (`lib/decision-os/trade/leagueTradeGrader.ts`)
  * — the same letter the Trade Center, the pending-offer cards and /core Trades give this deal — and
  * `evaluateCanonicalTrade` supplies the starting lineup before and after, when it can be computed
  * honestly.

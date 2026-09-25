@@ -32,9 +32,9 @@ import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSumma
 import type { League } from '@prisma/client'
 import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
-import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/trade-value/leagueTradeGrader'
-import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/trade-value/tradeGradeInputs'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 
 export const dynamic = 'force-dynamic'
@@ -52,7 +52,7 @@ async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, Non
 
 /**
  * ONE grader per request, loaded only if something open needs grading. It reads the league's chart
- * once and grades every open offer on it — see `lib/trade-value/leagueTradeGrader.ts`.
+ * once and grades every open offer on it — see `lib/decision-os/trade/leagueTradeGrader.ts`.
  */
 type GraderSource = () => Promise<LeagueTradeGrader | null>
 function lazyGrader(leagueId: string, userId: string): GraderSource {

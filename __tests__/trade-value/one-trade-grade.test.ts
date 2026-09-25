@@ -7,7 +7,7 @@
  * too). And the Trade Center's own label disagreed with its own letter. These pin the one scale.
  */
 import { describe, expect, it } from 'vitest'
-import { gradeTrade, mirrorTradeGrade, tradeGradeLabel, type TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import { gradeTrade, mirrorTradeGrade, tradeGradeLabel, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 const deal = (giveValue: number, getValue: number, extra: Partial<Parameters<typeof gradeTrade>[0]> = {}) =>
   gradeTrade({

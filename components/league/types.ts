@@ -1,6 +1,6 @@
 import type { LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { PublicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
@@ -234,7 +234,7 @@ export type LeagueTradeHistoryItem = {
     rosterImpact?: LineupImpactSummary | null
     /**
      * THE grade for an OPEN offer — the one every trade surface shows for this deal
-     * (`lib/trade-value/tradeGrade.ts`). Seen from the viewer's side when they are a party
+     * (`lib/decision-os/trade/tradeGrade.ts`). Seen from the viewer's side when they are a party
      * (`leagueGradeSide: 'viewer'`, roster need included), otherwise from the proposer's, without
      * need. Absent on completed rows, whose letters are a different question.
      */

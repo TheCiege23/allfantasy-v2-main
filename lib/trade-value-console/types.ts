@@ -4,7 +4,7 @@ import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-conte
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import type { LeagueValueAdjustment } from '@/lib/trade-value/leagueTradeValue'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 export type TradeSportFilter = 'ALL' | SupportedSport
 
@@ -244,7 +244,7 @@ export type TradeConsoleAnalyzeResult = {
   }
   /**
    * THE grade for this deal — letter, label and recommendation — from the one grader every trade
-   * surface uses (`lib/trade-value/leagueTradeGrader.ts`). The Trade Center reads its letters from
+   * surface uses (`lib/decision-os/trade/leagueTradeGrader.ts`). The Trade Center reads its letters from
    * here, so a deal shows the same letter here as on its pending-offer card and in Chimmy.
    */
   grade: TradeGradeView

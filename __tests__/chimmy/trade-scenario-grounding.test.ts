@@ -7,7 +7,7 @@ import {
 } from '@/lib/chimmy/tradeScenarioGrounding'
 import type { CanonicalTradeEvaluation } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
-import { gradeTrade, type TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import { gradeTrade, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
  * Chimmy item 8: a described trade, resolved against the league's real rosters and evaluated by

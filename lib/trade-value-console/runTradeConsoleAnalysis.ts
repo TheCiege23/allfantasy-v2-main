@@ -39,8 +39,8 @@ import {
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { clamp } from './sports-db-valuation'
 import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './leagueTradePricing'
-import { gradePricedSides } from '@/lib/trade-value/leagueTradeGrader'
-import { tradeGradeLabel } from '@/lib/trade-value/tradeGrade'
+import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
 import {
   benchAssetsNotInGive,
   inferThinPositionsFromRoster,
@@ -431,7 +431,7 @@ export async function runTradeConsoleAnalysis(
    * ⚠ THE LABEL READS OFF THE GRADE'S OWN BANDS (2026-09-24). It used to measure the gap against the
    * SUM of both sides at 4%/12% while the letter measured it against the LARGER side at 10%/25%, so
    * an 8% edge read "Slightly favors you" beside a C. One number decides both now — see
-   * `lib/trade-value/tradeGrade.ts`.
+   * `lib/decision-os/trade/tradeGrade.ts`.
    */
   const { label: fairnessLabel, sideAdvantage: gradedAdvantage } = tradeGradeLabel(percentDiff)
   const sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed' = gradedAdvantage

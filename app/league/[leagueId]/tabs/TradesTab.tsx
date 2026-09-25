@@ -8,7 +8,7 @@ import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
@@ -105,7 +105,7 @@ export type BuilderOffer = {
   /** From the VIEWER's side in both directions: what leaves their roster. */
   give: BuilderOfferAsset[]
   get: BuilderOfferAsset[]
-  /** THE grade for this offer, from the viewer's side (see `lib/trade-value/tradeGrade.ts`). */
+  /** THE grade for this offer, from the viewer's side (see `lib/decision-os/trade/tradeGrade.ts`). */
   leagueGrade?: TradeGradeView | null
   evaluation?: {
     action: 'accept' | 'counter' | 'decline' | 'review'

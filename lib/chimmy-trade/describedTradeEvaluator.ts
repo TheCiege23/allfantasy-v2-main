@@ -1,9 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { createLeagueTradeGrader, gradeDeal } from '@/lib/trade-value/leagueTradeGrader'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
-import type { GradeInputs } from '@/lib/trade-value/tradeGradeInputs'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { explainPlayerValue, type ScoringContext, type ValueBasis } from '@/lib/trade-value/valueEngine'
 import { newestProjectionSeason } from '@/lib/af-projections/readAfProjections'
 import { AF_SNAPSHOT_SCORING_FORMAT } from '@/lib/af-projections/types'

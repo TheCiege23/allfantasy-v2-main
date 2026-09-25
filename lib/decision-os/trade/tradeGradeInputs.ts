@@ -4,7 +4,7 @@
  * Each surface stores a deal its own way — a Sleeper offer as `PendingTradeAsset`, a native trade as
  * `AfLeagueTradeItem` rows, Chimmy as resolved names — and before 2026-09-24 each one priced its own
  * shape with its own pricer. Now they all convert to the console's `TradeAssetInput` and go through
- * `lib/trade-value/leagueTradeGrader.ts`.
+ * `lib/decision-os/trade/leagueTradeGrader.ts`.
  *
  * ⚠ PLAYERS ARE HANDED OVER BY NAME, NEVER BY A PROVIDER ID. The console's `playerId` is a
  * `SportsPlayerRecord.id`; a Sleeper id there misses, and a miss in `getPlayer` queues a background

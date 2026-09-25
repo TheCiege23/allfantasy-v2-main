@@ -5,7 +5,7 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
 import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
  * Inbox & Sent on the Trade Center.

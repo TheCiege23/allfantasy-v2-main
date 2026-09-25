@@ -27,9 +27,9 @@ import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { createLeagueTradeGrader, gradeDeal } from '@/lib/trade-value/leagueTradeGrader'
-import { gradeInputsFromPending } from '@/lib/trade-value/tradeGradeInputs'
-import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 
@@ -550,7 +550,7 @@ export type PendingOffer = {
   get: PendingOfferLine[]
   /**
    * THE grade for this offer, from the viewer's side — the same letter the Trade Center, the league
-   * page and Chimmy show for the same deal (`lib/trade-value/tradeGrade.ts`). It replaced a
+   * page and Chimmy show for the same deal (`lib/decision-os/trade/tradeGrade.ts`). It replaced a
    * share-of-traded-value letter (65/55/45/35) that graded a 1.5x deal B while the builder said A.
    */
   evaluation: TradeGradeView

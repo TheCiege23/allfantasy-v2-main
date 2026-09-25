@@ -3,7 +3,7 @@ import {
   gradeInputsFromNativeItems,
   gradeInputsFromPending,
   unpriceableReason,
-} from '@/lib/trade-value/tradeGradeInputs'
+} from '@/lib/decision-os/trade/tradeGradeInputs'
 
 describe('pending-offer assets → the one grader', () => {
   it('prices players by NAME — a Sleeper id handed to getPlayer queues a whole-sport import', () => {

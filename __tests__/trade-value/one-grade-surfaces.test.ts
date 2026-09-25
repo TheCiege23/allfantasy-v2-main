@@ -3,7 +3,7 @@
  *
  * Ten producers on seven scales is how a 1.5x deal read A in the Trade Center, B in /core Trades and
  * C on its pending-offer card. The fix is structural — one pricing path, one scale — so the guard is
- * structural too: each surface must call into `lib/trade-value/leagueTradeGrader.ts`, and none may
+ * structural too: each surface must call into `lib/decision-os/trade/leagueTradeGrader.ts`, and none may
  * keep a private letter of its own. A new surface that grades a deal belongs in this list.
  *
  * ⚠ Comments are stripped before matching, so a sentence ABOUT an old producer (and there are many
@@ -89,8 +89,8 @@ describe('positive controls — the guards can fail', () => {
   })
 
   it('the comment stripper leaves code and removes prose', () => {
-    expect(code('lib/trade-value/tradeGrade.ts')).toMatch(/export function gradeTrade\(/)
-    expect(code('lib/trade-value/tradeGrade.ts')).not.toMatch(/THE trade grade/)
+    expect(code('lib/decision-os/trade/tradeGrade.ts')).toMatch(/export function gradeTrade\(/)
+    expect(code('lib/decision-os/trade/tradeGrade.ts')).not.toMatch(/THE trade grade/)
   })
 
   it('the analyzer fetch shape matches the call it replaced', () => {
