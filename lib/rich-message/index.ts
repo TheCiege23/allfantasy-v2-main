@@ -13,7 +13,6 @@ export {
 export {
   isGifSearchConfigured,
   getGifProviderName,
-  getTenorSearchUrl,
   getGiphySearchUrl,
   isValidGifOrImageUrl,
   searchGifs,

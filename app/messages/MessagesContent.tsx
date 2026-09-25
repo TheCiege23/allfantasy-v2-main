@@ -42,10 +42,7 @@ import {
 import {
   EMOJI_LIST,
   appendEmoji,
-  isGifSearchConfigured,
-  getGifProviderName,
   isValidGifOrImageUrl,
-  searchGifs,
   validateImageFile,
   validateAttachmentFile,
   getMessagePayloadForImage,
@@ -57,6 +54,7 @@ import {
   resolveMediaViewerUrl,
 } from "@/lib/rich-message"
 import type { AttachmentPreview, GifSearchResult } from "@/lib/rich-message"
+import { fetchGifs, gifSearchPlaceholder, loadGifSearchProvider, type GifProvider } from "@/lib/rich-message/gifSearchClient"
 import {
   parseMentions,
   notifyMentions,
@@ -150,6 +148,22 @@ export default function MessagesContent() {
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null)
   const [gifUrlInput, setGifUrlInput] = useState("")
   const [gifUrlOpen, setGifUrlOpen] = useState(false)
+  /*
+   * Which service GIF search asks — read from our server when the picker first opens. Search runs
+   * through /api/chat/gifs (lib/rich-message/gifSearchClient.ts), never from the browser: this
+   * used to try the dead Tenor API with a key inlined into the page before every result.
+   */
+  const [gifSearchProvider, setGifSearchProvider] = useState<GifProvider | null>(null)
+  useEffect(() => {
+    if (!gifUrlOpen || gifSearchProvider) return
+    let cancelled = false
+    void loadGifSearchProvider().then((p) => {
+      if (!cancelled) setGifSearchProvider(p)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [gifUrlOpen, gifSearchProvider])
   const [gifSearchQuery, setGifSearchQuery] = useState("")
   const [gifSearchLoading, setGifSearchLoading] = useState(false)
   const [gifSearchResults, setGifSearchResults] = useState<GifSearchResult[]>([])
@@ -587,15 +601,15 @@ export default function MessagesContent() {
 
   const handleGifSearch = useCallback(async () => {
     const query = gifSearchQuery.trim()
-    if (!query || !isGifSearchConfigured()) return
+    if (!query || !gifSearchProvider) return
     setGifSearchLoading(true)
     try {
-      const results = await searchGifs(query, 16)
-      setGifSearchResults(results)
+      const { gifs } = await fetchGifs(query, 16)
+      setGifSearchResults(gifs)
     } finally {
       setGifSearchLoading(false)
     }
-  }, [gifSearchQuery])
+  }, [gifSearchQuery, gifSearchProvider])
 
   const canSend =
     canSendComposerMessage(input, attachmentPreview, sending) &&
@@ -1421,12 +1435,12 @@ export default function MessagesContent() {
                       className="absolute bottom-full left-3 mb-1 rounded-xl border p-3 shadow-lg z-10 w-80"
                       style={{ background: "var(--panel)", borderColor: "var(--border)" }}
                     >
-                      {isGifSearchConfigured() ? (
+                      {gifSearchProvider != null ? (
                         <p className="text-xs mode-muted mb-2">Search GIFs or paste a GIF/image URL.</p>
                       ) : (
                         <p className="text-xs mode-muted mb-2">Paste a GIF or image URL to send.</p>
                       )}
-                      {isGifSearchConfigured() && (
+                      {gifSearchProvider != null && (
                         <div className="mb-2">
                           <div className="flex gap-2 mb-2">
                             <div className="relative flex-1">
@@ -1441,7 +1455,7 @@ export default function MessagesContent() {
                                     void handleGifSearch()
                                   }
                                 }}
-                                placeholder={`Search ${getGifProviderName() || "GIF"}...`}
+                                placeholder={gifSearchPlaceholder(gifSearchProvider)}
                                 className="w-full rounded-lg border pl-7 pr-2 py-1.5 text-sm"
                                 style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
                               />

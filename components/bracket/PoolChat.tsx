@@ -7,6 +7,7 @@ import {
   Search, Loader2
 } from "lucide-react"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { fetchGifs, gifSearchPlaceholder, type GifProvider } from "@/lib/rich-message/gifSearchClient"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
 
 type ChatMember = {
@@ -736,60 +737,63 @@ function PollBubble({
   )
 }
 
-function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
+/*
+ * The pool chat's GIF picker. It called Tenor straight from the browser, with a key inlined into the
+ * page — and Google shut the Tenor API down on 2026-06-30, so it showed nothing at all. It now asks our
+ * own `/api/chat/gifs` (lib/rich-message/gifSearchClient.ts): the preloaded grid when the box is empty,
+ * a live search otherwise, and the credit of whichever service supplied what is on screen.
+ */
+export function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<GifResult[]>([])
   const [loading, setLoading] = useState(false)
   const [trending, setTrending] = useState<GifResult[]>([])
+  const [provider, setProvider] = useState<GifProvider | null>(null)
+  const [searchProvider, setSearchProvider] = useState<GifProvider | null>(null)
+  const latest = useRef(0)
 
-  const searchGifs = useCallback(async (q: string) => {
+  const load = useCallback(async (q: string) => {
+    const ticket = ++latest.current
     setLoading(true)
-    try {
-      const tenorKey = process.env.NEXT_PUBLIC_TENOR_API_KEY ?? ""
-      if (!tenorKey) { setLoading(false); return }
-      const endpoint = q.trim()
-        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${tenorKey}&client_key=allfantasy&limit=20&media_filter=gif,tinygif`
-        : `https://tenor.googleapis.com/v2/featured?key=${tenorKey}&client_key=allfantasy&limit=20&media_filter=gif,tinygif`
-      const res = await fetch(endpoint)
-      if (res.ok) {
-        const data = await res.json()
-        const gifs: GifResult[] = (data.results || []).map((r: any) => ({
-          id: r.id,
-          url: r.media_formats?.gif?.url || r.media_formats?.tinygif?.url || "",
-          preview: r.media_formats?.tinygif?.url || r.media_formats?.gif?.url || "",
-          title: r.title || "",
-        }))
-        if (q.trim()) setResults(gifs)
-        else setTrending(gifs)
-      }
-    } catch {}
+    const res = await fetchGifs(q, 24)
+    // A slower, older search must not overwrite a newer one.
+    if (ticket !== latest.current) return
+    const gifs: GifResult[] = res.gifs.map((g) => ({ id: g.id, url: g.url, preview: g.previewUrl || g.url, title: g.title || "" }))
+    if (q.trim()) setResults(gifs)
+    else setTrending(gifs)
+    setProvider(res.provider)
+    if (res.searchProvider) setSearchProvider(res.searchProvider)
     setLoading(false)
   }, [])
 
-  useEffect(() => { searchGifs("") }, [searchGifs])
+  useEffect(() => { void load("") }, [load])
 
   useEffect(() => {
-    const t = setTimeout(() => { if (query.trim()) searchGifs(query) }, 400)
+    if (!query.trim()) return
+    const t = setTimeout(() => { void load(query) }, 400)
     return () => clearTimeout(t)
-  }, [query, searchGifs])
+  }, [query, load])
 
   const displayGifs = query.trim() ? results : trending
 
   return (
-    <div className="px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", maxHeight: 280, overflowY: "auto" }}>
+    // Only the grid scrolls: the search box and the credit stay in view — the credit is part of the
+    // terms, and a credit you have to scroll to find is not much of one.
+    <div className="px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
       <div className="flex items-center gap-2 mb-2">
         <div className="flex-1 relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.2)" }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search GIFs..."
+            placeholder={gifSearchPlaceholder(searchProvider)}
+            aria-label="Search GIFs"
             className="w-full rounded-lg pl-8 pr-3 py-1.5 text-xs text-white outline-none placeholder-white/20"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
             autoFocus
           />
         </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-white/5">
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/5" aria-label="Close GIFs">
           <X className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.3)" }} />
         </button>
       </div>
@@ -797,12 +801,17 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
         <div className="flex items-center justify-center py-6">
           <Loader2 className="w-5 h-5 animate-spin" style={{ color: "rgba(255,255,255,0.2)" }} />
         </div>
+      ) : displayGifs.length === 0 ? (
+        <p className="py-6 text-center text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+          {query.trim() ? `No GIFs for "${query.trim()}". Try another word.` : "GIFs aren't available right now."}
+        </p>
       ) : (
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5" style={{ maxHeight: 208, overflowY: "auto" }}>
           {displayGifs.map((g) => (
             <button
               key={g.id}
               onClick={() => onSelect(g.url)}
+              aria-label={g.title ? `Send GIF: ${g.title}` : "Send GIF"}
               className="rounded-lg overflow-hidden hover:ring-2 hover:ring-orange-400/50 transition aspect-square"
             >
               <img src={g.preview} alt={g.title} className="w-full h-full object-cover" loading="lazy" />
@@ -810,7 +819,17 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
           ))}
         </div>
       )}
-      <p className="text-[9px] text-center mt-2" style={{ color: "rgba(255,255,255,0.15)" }}>Powered by Tenor</p>
+      {provider === "klipy" || provider === "giphy" ? (
+        <a
+          href={provider === "klipy" ? "https://klipy.com" : "https://giphy.com"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-[9px] text-center mt-2 uppercase tracking-widest"
+          style={{ color: "rgba(255,255,255,0.3)" }}
+        >
+          {provider === "klipy" ? "Powered by KLIPY" : "Powered by GIPHY"}
+        </a>
+      ) : null}
     </div>
   )
 }

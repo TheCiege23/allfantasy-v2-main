@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { isAllowedGifUrl } from "@/lib/rich-message/GIFIntegrationResolver"
 
 const messageInclude = {
   user: {
@@ -104,6 +105,13 @@ export async function POST(
 
   if (type === "gif") {
     if (!imageUrl) return NextResponse.json({ error: "GIF URL required" }, { status: 400 })
+    /*
+     * Only a GIF from a service we can name. This stored any URL at all as a GIF, which every
+     * member's browser then loaded — a tracking pixel or any other host, posted into a pool chat.
+     */
+    if (!isAllowedGifUrl(imageUrl)) {
+      return NextResponse.json({ error: "That GIF isn't from a GIF service we support." }, { status: 400 })
+    }
     const msg = await (prisma as any).bracketLeagueMessage.create({
       data: {
         leagueId: params.leagueId,
