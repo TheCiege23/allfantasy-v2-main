@@ -106,6 +106,9 @@ vi.mock('@/lib/decision-os/ingestion/platformActivityEmitter', () => ({
 }))
 vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({ fetchEspnActivityForSync: fetchEspnMock }))
 vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({ fetchYahooActivityForSync: vi.fn() }))
+// Mocked so an MFL league in the platform loop can never reach the real MyFantasyLeague API.
+const fetchMflMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/league-import/mfl/MflLeagueFetchService', () => ({ fetchMflActivityForSync: fetchMflMock }))
 vi.mock('@/lib/decision-os/ingestion/importedActivityNormalizer', () => ({
   buildManagerIdentityIndex: vi.fn(() => ({})),
 }))
@@ -336,5 +339,45 @@ describe('decision-os-activity-ingest rotation', () => {
     expect(untouched.length).toBeGreaterThan(0) // sanity: the cap actually excluded someone
     for (const id of untouched) expect(persisted[id]).toBe(oldTimestamp)
     for (const id of attemptedIds) expect(persisted[id]).not.toBe(oldTimestamp)
+  })
+})
+
+/*
+ * 🛑 `ok` WAS `summary.failed === 0`, WHICH COUNTS ONLY THE SLEEPER LOOP. An ESPN/Yahoo/MFL/
+ * Fleaflicker league that threw landed in `platform.failed` and the fire still answered ok:true.
+ * And the unfetched warning said "ESPN/Yahoo" — Yahoo's branch reports `fetched: true`
+ * unconditionally, so it can never be one; ESPN and MFL are the two that can.
+ */
+describe('decision-os-activity-ingest ok + platform warnings', () => {
+  function onlyPlatformLeague(platform: string) {
+    prismaMock.league.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: `L-${platform}`, platform, platformLeagueId: '919', season: 2026, sport: 'nfl', userId: 'u1', updatedAt: new Date() }])
+  }
+
+  it('answers ok:false when a platform (non-Sleeper) league failed', async () => {
+    onlyPlatformLeague('espn')
+    fetchEspnMock.mockRejectedValueOnce(new Error('espn 500'))
+    const body = await (await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))).json()
+    expect(body.failed).toBe(0)
+    expect(body.platform).toMatchObject({ failed: 1 })
+    expect(body.ok).toBe(false)
+  })
+
+  it('answers ok:true when nothing failed in either loop', async () => {
+    onlyPlatformLeague('espn')
+    const body = await (await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))).json()
+    expect(body.platform).toMatchObject({ failed: 0, processed: 1 })
+    expect(body.ok).toBe(true)
+  })
+
+  it('names an unfetched MFL feed without calling it ESPN/Yahoo', async () => {
+    onlyPlatformLeague('mfl')
+    fetchMflMock.mockResolvedValueOnce({ teams: [], transactions: [], transactionsFetched: false })
+    const body = await (await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))).json()
+    expect(body.platform).toMatchObject({ unfetched: 1, failed: 0 })
+    const outcome = syncRuns.find((r) => r.ctx.jobName !== undefined)!.outcome as { errors: string[] }
+    const line = outcome.errors.find((e) => /served no activity feed/.test(e))
+    expect(line).toBe('1 external-provider leagues (ESPN/MFL) served no activity feed')
   })
 })
