@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const h = vi.hoisted(() => ({ run: vi.fn(), record: vi.fn() }))
+const h = vi.hoisted(() => ({ run: vi.fn(), confirm: vi.fn(), record: vi.fn() }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
@@ -12,6 +12,7 @@ vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   recordSyncJobRun: h.record,
 }))
 vi.mock('@/lib/onboarding-retention/runActivationReminder', () => ({ runActivationReminder: h.run }))
+vi.mock('@/lib/onboarding-retention/runConfirmEmailReminder', () => ({ runConfirmEmailReminder: h.confirm }))
 
 import { GET } from '@/app/api/cron/morning-briefing/route'
 
@@ -21,6 +22,7 @@ import { GET } from '@/app/api/cron/morning-briefing/route'
  */
 
 const RUN = { dryRun: false, candidates: 3, sent: 2, due: { first: 2, second: 0 }, skipped: {}, failed: 0, notReached: 0, errors: [] }
+const CONFIRM = { dryRun: false, candidates: 5, sent: 4, due: { first: 3, second: 1 }, skipped: {}, failed: 0, notReached: 0, errors: [] }
 const call = async (qs = '') =>
   (await GET(new NextRequest(`https://worker.test/api/cron/morning-briefing${qs}`, { headers: { authorization: 'Bearer s3cret' } }))).json()
 
@@ -29,6 +31,7 @@ beforeEach(() => {
   vi.stubEnv('MORNING_BRIEFING_ENABLED', '0')
   vi.stubEnv('ACTIVATION_REMINDER_ENABLED', '')
   h.run.mockReset().mockResolvedValue(RUN)
+  h.confirm.mockReset().mockResolvedValue(CONFIRM)
   h.record.mockReset()
 })
 afterEach(() => vi.unstubAllEnvs())
@@ -37,7 +40,8 @@ describe('morning-briefing — the activation reminder', () => {
   it('🛑 sends nothing until the deployment turns it on', async () => {
     const body = await call()
     expect(h.run).not.toHaveBeenCalled()
-    // Disabled, the briefing's body is exactly what it was before the reminder existed.
+    expect(h.confirm).not.toHaveBeenCalled()
+    // Disabled, the briefing's body is exactly what it was before the reminders existed.
     expect(body).toEqual({ mode: 'cron', enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
   })
 
@@ -45,24 +49,37 @@ describe('morning-briefing — the activation reminder', () => {
     vi.stubEnv('ACTIVATION_REMINDER_ENABLED', '1')
     const body = await call()
     expect(h.run).toHaveBeenCalledWith({ dryRun: false })
+    expect(h.confirm).toHaveBeenCalledWith({ dryRun: false })
     expect(body.activationReminder).toEqual(RUN)
-    expect(h.record).toHaveBeenCalledTimes(1)
+    expect(body.confirmEmailReminder).toEqual(CONFIRM)
+    expect(h.record).toHaveBeenCalledTimes(2)
     expect(h.record.mock.calls[0]![0]).toMatchObject({ jobName: 'cron-activation-reminder' })
     expect(h.record.mock.calls[0]![1]).toMatchObject({ rowsRead: 3, rowsWritten: 2, status: 'success' })
+    // The confirm-your-email reminder writes its OWN heartbeat, with its own numbers.
+    expect(h.record.mock.calls[1]![0]).toMatchObject({ jobName: 'cron-confirm-email-reminder' })
+    expect(h.record.mock.calls[1]![1]).toMatchObject({ rowsRead: 5, rowsWritten: 4, status: 'success' })
   })
 
   it('a dry run works whatever the flag, and records nothing', async () => {
-    await call('?activationReminder=dry')
+    const body = await call('?activationReminder=dry')
     expect(h.run).toHaveBeenCalledWith({ dryRun: true })
+    expect(h.confirm).toHaveBeenCalledWith({ dryRun: true })
+    expect(body.confirmEmailReminder).toEqual(CONFIRM)
     expect(h.record).not.toHaveBeenCalled()
   })
 
   it('can be skipped for a run, and never fails the briefing', async () => {
     vi.stubEnv('ACTIVATION_REMINDER_ENABLED', '1')
-    expect((await call('?activationReminder=off')).activationReminder).toEqual({ ran: false, reason: 'off' })
+    const off = await call('?activationReminder=off')
+    expect(off.activationReminder).toEqual({ ran: false, reason: 'off' })
+    expect(off.confirmEmailReminder).toEqual({ ran: false, reason: 'off' })
     h.run.mockRejectedValue(new Error('db down'))
     const body = await call()
     expect(body.activationReminder).toEqual({ ran: false, reason: 'error', error: 'db down' })
+    // One reminder failing does not stop the other.
+    expect(body.confirmEmailReminder).toEqual(CONFIRM)
+    h.confirm.mockRejectedValue(new Error('smtp down'))
+    expect((await call()).confirmEmailReminder).toEqual({ ran: false, reason: 'error', error: 'smtp down' })
     expect(body.mode).toBe('cron')
   })
 
@@ -71,5 +88,6 @@ describe('morning-briefing — the activation reminder', () => {
     const res = await GET(new NextRequest('https://worker.test/api/cron/morning-briefing'))
     expect(res.status).toBe(401)
     expect(h.run).not.toHaveBeenCalled()
+    expect(h.confirm).not.toHaveBeenCalled()
   })
 })

@@ -14,6 +14,8 @@ import type { TradeCandidate as PatchTradeCandidate, TradeAsset as PatchTradeAss
 import { computeValueDeltaPct, previewFairnessLabel, FAIRNESS_DISPLAY } from '@/lib/trade-finder/score-candidate'
 import type { FairnessLabel } from '@/lib/trade-finder/score-candidate'
 import { getTradeAnalyzerAIChatUrl } from '@/lib/trade-analyzer/TradeToAIContextBridge'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 
 type Objective = 'WIN_NOW' | 'REBUILD' | 'BALANCED'
 type FinderMode = 'FAST' | 'DEEP'
@@ -830,11 +832,13 @@ export default function TradeFinderV2({
   const [mode, setMode] = useState<FinderMode>('FAST')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [response, setResponse] = useState<FinderResponse | null>(null)
   const [mmGoal, setMmGoal] = useState<MatchmakingGoal>('win_now')
   const [mmTargetPlayer, setMmTargetPlayer] = useState('')
   const [mmLoading, setMmLoading] = useState(false)
   const [mmError, setMmError] = useState('')
+  const [mmRefusal, setMmRefusal] = useState<PlanRefusal | null>(null)
   const [mmResponse, setMmResponse] = useState<MatchmakingResponse | null>(null)
   const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const [showAll, setShowAll] = useState(false)
@@ -887,6 +891,7 @@ export default function TradeFinderV2({
 
     setMmLoading(true)
     setMmError('')
+    setMmRefusal(null)
     setMmResponse(null)
 
     try {
@@ -908,6 +913,7 @@ export default function TradeFinderV2({
 
       const data = await res.json()
       if (!res.ok) {
+        setMmRefusal(readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() }))
         setMmError(data.error || 'Failed to find trade partners')
         return
       }
@@ -925,6 +931,7 @@ export default function TradeFinderV2({
 
     setLoading(true)
     setError('')
+    setRefusal(null)
     setResponse(null)
     setCurrentCardIndex(0)
     setShowAll(false)
@@ -955,6 +962,7 @@ export default function TradeFinderV2({
 
       const data = await res.json()
       if (!res.ok) {
+        setRefusal(readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() }))
         setError(data.error || 'Failed to find trades')
         return
       }
@@ -1243,11 +1251,13 @@ export default function TradeFinderV2({
             </div>
           )}
 
-          {mmError && (
+          {mmRefusal ? (
+            <PlanRefusalNotice refusal={mmRefusal} />
+          ) : mmError ? (
             <div className="p-4 bg-rose-500/10 border border-rose-400/20 rounded-xl">
               <p className="text-sm text-rose-300">{mmError}</p>
             </div>
-          )}
+          ) : null}
 
           {mmResponse && !mmLoading && (
             <div className="space-y-3">
@@ -1288,11 +1298,13 @@ export default function TradeFinderV2({
 
       {topTab === 'trades' && loading && <LoadingAnimation mode={mode} />}
 
-      {topTab === 'trades' && error && (
+      {topTab === 'trades' && refusal ? (
+        <PlanRefusalNotice refusal={refusal} />
+      ) : topTab === 'trades' && error ? (
         <div className="p-4 bg-rose-500/10 border border-rose-400/20 rounded-xl">
           <p className="text-sm text-rose-300">{error}</p>
         </div>
-      )}
+      ) : null}
 
       {topTab === 'trades' && response && !loading && recommendations.length > 0 && (
         <div className="space-y-4">

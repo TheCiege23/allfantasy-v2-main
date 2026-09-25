@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarRange, Compass, Loader2, Sparkles } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { LongTermCoachingAnalysis } from '@/lib/long-term-coaching/types'
@@ -40,6 +41,7 @@ export function LongTermCoachingModal({
   const [mode, setMode] = useState<(typeof MODES)[number]['id']>('auto')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [data, setData] = useState<LongTermCoachingAnalysis | null>(null)
   const [narrative, setNarrative] = useState<string | null>(null)
 
@@ -67,6 +69,7 @@ export function LongTermCoachingModal({
     }
     setLoading(true)
     setError(null)
+    setRefusal(null)
     setData(null)
     setNarrative(null)
     try {
@@ -85,6 +88,7 @@ export function LongTermCoachingModal({
         | { ok: true; analysis: LongTermCoachingAnalysis; aiNarrative: string | null }
         | { ok?: false; error?: string; message?: string; code?: string; upgradePath?: string }
       if (res.status === 403) {
+        setRefusal(readPlanRefusal(res.status, json, { returnTo: currentPathForReturn() }))
         setError(
           json && typeof json === 'object' && 'message' in json && typeof json.message === 'string'
             ? json.message
@@ -93,6 +97,7 @@ export function LongTermCoachingModal({
         return
       }
       if (!res.ok || !json || !('ok' in json) || json.ok !== true || !json.analysis) {
+        setRefusal(readPlanRefusal(res.status, json, { returnTo: currentPathForReturn() }))
         setError((json as { error?: string }).error ?? 'Request failed')
         return
       }
@@ -124,6 +129,7 @@ export function LongTermCoachingModal({
       wide
       loading={loading && !data}
       error={error}
+      refusal={refusal}
       empty={!loading && !data && !error}
       emptyMessage="Choose a league and horizon, then run analysis."
       chimmyPrompt={
