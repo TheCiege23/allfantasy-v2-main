@@ -48,6 +48,7 @@ import {
   type TradeEngineRosterContext,
 } from './roster-context-loader'
 import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { leagueToolAccessUserMessage } from '@/lib/ai-tools/league-tool-access-messages'
 import type { AiToolPayloadEnvelope } from '@/lib/intelligence/buildAiToolPayload'
 import type {
@@ -339,8 +340,21 @@ export async function runTradeConsoleAnalysis(
     mark,
   })
   const leagueGrade = graded.leagueGrade
-  /** THE grade — the same object every other trade surface shows for this deal. */
-  const grade = graded.grade
+  /**
+   * THE grade — the same object every other trade surface shows for this deal — with the league type
+   * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
+   * league) has no league type to name.
+   */
+  const grade = leagueRow
+    ? {
+        ...graded.grade,
+        leagueType: leagueTypeBasis({
+          settings: leagueRow.settings,
+          leagueType: leagueRow.leagueType,
+          platform: leagueRow.platform ?? null,
+        }),
+      }
+    : graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines
   const giveTotal = leagueGrade.totals.giveLeague

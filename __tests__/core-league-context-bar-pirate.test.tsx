@@ -122,7 +122,7 @@ describe('league type picker — Pirate', () => {
       url: '/api/leagues/lg-1/league-type',
       body: { type: 'pirate', baseFormat: 'redraft' },
     })
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved to Sports OS'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved — trades here are graded as Pirate'))
     expect((screen.getByLabelText('Rosters carry over?') as HTMLSelectElement).value).toBe('redraft')
   })
 
@@ -195,5 +195,62 @@ describe('league type picker — Pirate', () => {
     render(bar())
     expect(await screen.findByText('Pirate · Redraft')).toBeInTheDocument()
     expect(screen.queryByRole('combobox')).toBeNull()
+  })
+})
+
+/*
+ * 🛑 AN UNCONFIRMED LEAGUE TYPE IS SAID, AND CAN BE CONFIRMED AS SHOWN (2026-09-25). The select was
+ * pre-filled with the imported guess and looked exactly like an answer; choosing the value it
+ * already held fired no change, so a correct guess could never be confirmed. Every trade grade in
+ * the league is priced on this type.
+ */
+describe('league type — confirmed or not, and why it matters', () => {
+  it('🛑 an unconfirmed type says so, and one button confirms the type shown', async () => {
+    stubFetch({ canConfirm: true, storedType: 'redraft', confirmation: null })
+    render(bar())
+    const select = await loadedTypeSelect()
+    expect(select.value).toBe('redraft')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Not confirmed — your league type decides how every trade in this league is graded.',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Redraft' }))
+    await waitFor(() => expect(patches()).toHaveLength(1))
+    expect(patches()[0].body).toEqual({ type: 'redraft' })
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Saved — trades here are graded as Redraft'),
+    )
+    expect(screen.queryByRole('button', { name: /^Confirm / })).toBeNull()
+  })
+
+  it('shows the type the grades use, ahead of a stale column', async () => {
+    // A Sleeper keeper league: stored `redraft`, graded as keeper.
+    stubFetch({ canConfirm: true, storedType: 'redraft', gradedAs: { type: 'keeper' }, confirmation: null })
+    render(bar())
+    expect((await loadedTypeSelect()).value).toBe('keeper')
+    expect(screen.getByRole('button', { name: 'Confirm Keeper' })).toBeInTheDocument()
+  })
+
+  it('a confirmed type offers no confirm and no warning', async () => {
+    stubFetch({ canConfirm: true, storedType: 'dynasty', confirmation: { type: 'dynasty' } })
+    render(bar())
+    await loadedTypeSelect()
+    expect(screen.queryByRole('button', { name: /^Confirm / })).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('a member who cannot confirm still sees it is unconfirmed, with no button that would 403', async () => {
+    stubFetch({ canConfirm: false, storedType: 'redraft', confirmation: null })
+    render(bar())
+    expect(await screen.findByText('Redraft')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Not confirmed'))
+    expect(screen.queryByRole('button', { name: /^Confirm / })).toBeNull()
+  })
+
+  it('is the target of every grade’s "Confirm your league type" link', async () => {
+    stubFetch({ canConfirm: true, storedType: 'redraft', confirmation: null })
+    const { container } = render(bar())
+    await loadedTypeSelect()
+    expect(container.querySelector('#league-type')).not.toBeNull()
   })
 })

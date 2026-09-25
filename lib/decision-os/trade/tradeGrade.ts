@@ -36,6 +36,7 @@ import {
   projectedLetterFor,
   type GradeLetter,
 } from '@/lib/trade-intel/gradeScale'
+import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 
 export type TradeGradeAction = 'accept' | 'review' | 'counter' | 'decline'
 
@@ -86,12 +87,18 @@ export type TradeGradeView =
       /** Every asset, so a card can print the value it was graded on beside each one. */
       lines: TradeGradeLine[]
       moves: TradeGradeMove[]
+      /**
+       * The league type the grade was priced under and how we know it (see `leagueTypeGrading.ts`).
+       * Set by the league grader; absent where no league was read.
+       */
+      leagueType?: LeagueTypeBasis | null
     }
   | {
       graded: false
       /** Why there is no letter, in words a manager can act on. */
       reason: string
       basis: string | null
+      leagueType?: LeagueTypeBasis | null
     }
 
 /**

@@ -53,6 +53,15 @@ describe('platform evidence outranks a name', () => {
     expect(s.confidence).toBe('high')
   })
 
+  it('🛑 trusts Sleeper’s KEEPER flag — it used to be dropped, and "redraft" was offered', () => {
+    const s = suggestLeagueType({ name: 'Keep 3 League', isKeeper: true })
+    expect(s.suggested).toBe('keeper')
+    expect(s.confidence).toBe('high')
+    expect(s.reasons[0]).toBe('Sleeper reports this as a keeper league')
+    // [control] no flag, no keeper.
+    expect(suggestLeagueType({ name: 'Keep 3 League' }).suggested).toBe('redraft')
+  })
+
   it('trusts the dynasty flag when no specialty marker is present', () => {
     const s = suggestLeagueType({ name: 'The Last IDP Dynasty!!', isDynasty: true })
     expect(s.suggested).toBe('dynasty')

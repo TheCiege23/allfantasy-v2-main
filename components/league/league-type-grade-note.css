@@ -1,0 +1,47 @@
+/*
+ * LeagueTypeGradeNote — the league-type line beside a trade grade.
+ * Tokens come from the host screen (af-core / af-trade-center); the fallbacks keep it readable
+ * where a surface does not define them (the legacy league tab).
+ */
+.af-ltg {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted, #a3b2c2);
+  overflow-wrap: anywhere;
+}
+
+.af-ltg strong {
+  color: var(--text, #e6edf3);
+  font-weight: 700;
+}
+
+.af-ltg[data-confirmed='false'] {
+  padding: 6px 8px;
+  border: 1px solid var(--line2, #2a3746);
+  border-left: 3px solid var(--warn, #e3b341);
+  border-radius: 8px;
+  background: var(--surface2, rgba(20, 28, 39, 0.7));
+}
+
+.af-ltg-source {
+  color: var(--faint, #74869a);
+}
+
+.af-ltg-ask {
+  color: var(--text2, #c9d4df);
+}
+
+.af-ltg-link {
+  color: var(--accent, #3fd0e8);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.af-ltg-link:focus-visible {
+  outline: 2px solid var(--accent, #3fd0e8);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

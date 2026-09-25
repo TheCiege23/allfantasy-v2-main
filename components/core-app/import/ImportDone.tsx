@@ -78,6 +78,14 @@ export type ImportDoneProps = {
    * connect at all, so it sits with Chimmy's note rather than in the button row.
    */
   chimmyAction?: { href: string; label: string } | null
+  /**
+   * "What kind of league is this?" for the league just imported — the `LeagueTypeConfirm` card.
+   *
+   * 🛑 THE IMPORT NEVER ASKED (2026-09-25). Every trade in the league is graded on its type, and the
+   * import stored Sleeper's flag, a name match or the redraft default without a word to the manager.
+   * This is the first moment we can ask about a league we can name, so it is asked here.
+   */
+  leagueTypeCheck?: React.ReactNode
 }
 
 export function ImportDone({
@@ -91,6 +99,7 @@ export function ImportDone({
   note,
   sourceLink,
   chimmyAction,
+  leagueTypeCheck,
 }: ImportDoneProps) {
   return (
     <div className="af-done">
@@ -138,6 +147,12 @@ export function ImportDone({
           <Link href={chimmyAction.href} className="af-btn af-done-alt" data-testid="import-done-chimmy">
             {chimmyAction.label}
           </Link>
+        </div>
+      ) : null}
+
+      {leagueTypeCheck ? (
+        <div className="af-done-league-type" data-testid="import-done-league-type">
+          {leagueTypeCheck}
         </div>
       ) : null}
 

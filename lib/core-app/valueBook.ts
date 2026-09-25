@@ -44,6 +44,8 @@
 import {
   readConfirmedLeagueConcept,
   readConfirmedPirateBase,
+  readProviderDynastyFact,
+  readProviderKeeperFact,
   resolveLeagueConcept,
 } from '@/lib/league/leagueConceptOptions'
 
@@ -105,24 +107,11 @@ export function startsTwoQuarterbacks(positions: readonly unknown[]): boolean {
  */
 const ROSTER_DISSOLVING_CONCEPTS = new Set(['guillotine', 'survivor_guillotine', 'tournament'])
 
-/**
- * The host platform's own facts about a league, as the importer stored them in `League.settings`.
- * Only consulted where a human has not confirmed the league type — see `leagueVariantFor`.
+/*
+ * The host platform's own facts about a league (`readProviderDynastyFact` / `readProviderKeeperFact`,
+ * shared with the league-type label so the chart and the words beside it cannot disagree). Only
+ * consulted where a human has not confirmed the league type — see `leagueVariantFor`.
  */
-function providerSaysDynasty(settings: Record<string, unknown>): boolean {
-  return settings.isDynasty === true
-}
-
-function providerSaysKeeper(settings: Record<string, unknown>): boolean {
-  const rules = settings.conceptRules
-  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return false
-  const ext = (rules as Record<string, unknown>).extensions
-  if (!ext || typeof ext !== 'object' || Array.isArray(ext)) return false
-  const kp = (ext as Record<string, unknown>).keeperProvenance
-  if (!kp || typeof kp !== 'object' || Array.isArray(kp)) return false
-  const p = kp as Record<string, unknown>
-  return p.isKeeper === true && p.source === 'provider'
-}
 
 /**
  * Concepts whose rosters carry over, so future value is priced in — the ones
@@ -193,7 +182,7 @@ export function leagueVariantFor(
       type.includes('dynasty') ||
       DYNASTY_SHELL_CONCEPTS.has(type) ||
       (type === 'pirate' && pirateCarriesOver(settings)) ||
-      (specialtyOnABase && providerSaysDynasty(s)),
+      (specialtyOnABase && readProviderDynastyFact(s)),
     /*
      * 🛑 SLEEPER KEEPER LEAGUES WERE STORED, LABELLED AND PRICED AS REDRAFT (2026-09-25). The
      * importer maps Sleeper `settings.type` 1 to `keeperProvenance.isKeeper` — kept — but the
@@ -201,7 +190,7 @@ export function leagueVariantFor(
      * production that day. The provider's own keeper fact now counts UNLESS a human confirmed a
      * type; a confirmation always wins, including a confirmed `redraft`.
      */
-    keeper: type.includes('keeper') || (!confirmed && providerSaysKeeper(s)),
+    keeper: type.includes('keeper') || (!confirmed && readProviderKeeperFact(s)),
   }
 }
 

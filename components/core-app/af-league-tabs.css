@@ -201,6 +201,43 @@
 
 .af-lctx-type small:empty { display: none; }
 
+/*
+ * An UNCONFIRMED league type (2026-09-25): every trade grade in the league is priced on it, so the
+ * control says so — a warn-coloured edge and a Confirm button beside the select. `scroll-margin`
+ * so a grade's "Confirm your league type" link (`#league-type`) does not land it under a sticky
+ * header.
+ */
+.af-lctx-type { scroll-margin-top: 96px; }
+
+.af-lctx-type small {
+  max-width: 250px;
+  white-space: normal;
+}
+
+.af-lctx-type[data-confirmed='false'] select,
+.af-lctx-type[data-confirmed='false'] > span {
+  border-color: var(--warn, #e3b341);
+}
+
+.af-lctx-confirm {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  color: var(--accent-ink, #0c121b);
+  background: var(--accent);
+  font: 800 10px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.af-lctx-confirm:disabled { opacity: .5; cursor: default; }
+
+.af-lctx-confirm:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .af-lctx-chip {
   display: inline-flex;
   align-items: center;

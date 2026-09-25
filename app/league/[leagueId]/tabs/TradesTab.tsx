@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
+import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { PlayerImage } from '@/app/components/PlayerImage'
@@ -67,6 +69,8 @@ type YourTab = 'active' | 'completed'
 type LogFilter = 'all' | 'completed' | 'pending' | 'closed'
 
 type PanelResponse = {
+  /** The league type every grade here is priced under, and how we know it. */
+  leagueType?: LeagueTypeBasis | null
   tradeBlock?: LeagueTradeBlockPanelItem[]
   /** What the block can and cannot show on this platform; null for a native league. */
   tradeBlockNote?: string | null
@@ -1042,6 +1046,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [providerPending, setProviderPending] = useState(0)
   const [providerUrl, setProviderUrl] = useState<string | null>(null)
   const [pendingScan, setPendingScan] = useState<PanelResponse['pending'] | null>(null)
+  const [leagueTypeInfo, setLeagueTypeInfo] = useState<LeagueTypeBasis | null>(null)
   const [pendingOffers, setPendingOffers] = useState<BuilderOffer[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -1162,6 +1167,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
       setPendingScan(data?.pending && typeof data.pending === 'object' ? data.pending : null)
+      setLeagueTypeInfo(data?.leagueType && typeof data.leagueType === 'object' ? data.leagueType : null)
       const offers = Array.isArray(data?.pendingOffers) ? data.pendingOffers : []
       setPendingOffers(offers)
       const nowShown = new Set(offers.map((o) => `${o.provider}:${o.transactionId}`))
@@ -1359,6 +1365,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             Every deal in this league — and the ones with your name on them. Grades are scored against
             this league&rsquo;s own rules, so the same trade grades differently next door.
           </p>
+          {/*
+            Which rules: the league type, and whether anyone confirmed it. The control lives in the
+            /core league header, so the link goes there.
+          */}
+          <LeagueTypeGradeNote
+            basis={leagueTypeInfo}
+            confirmHref={`/core?league=${encodeURIComponent(league.id)}#league-type`}
+            className="max-w-[62ch]"
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {nflRedraftTradesShell ? (
