@@ -39,9 +39,12 @@ describe('redraft Trade Center rebuild — stepped flow contract', () => {
     expect(clientSrc).toContain('export type RedraftTradeAssetInput')
   })
 
-  it('gates draft-pick trading on the league setting and labels it reference-only', () => {
+  it('gates the draft-pick note on the league setting, and says picks are not offered here', () => {
+    // Picks were "reference-only" — recorded, never moved. Both validators now refuse them
+    // (DRAFT_PICK_NOT_SETTLED), so the modal must not promise a pick will be recorded.
     expect(tradeModalSrc).toContain('settings?.draftPickTrading')
-    expect(tradeModalSrc.toLowerCase()).toContain('reference-only')
+    expect(tradeModalSrc.toLowerCase()).not.toContain('reference-only')
+    expect(tradeModalSrc).toContain('Trade Center')
   })
 
   it('settles accepted trades for real (players + FAAB) on the accept path', () => {

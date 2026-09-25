@@ -97,6 +97,7 @@ import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradePropo
 type Asset = Parameters<typeof validateRedraftTradeProposalAtCreation>[0]['assets'][number]
 const player = (playerId: string, from: string, to: string): Asset => ({ fromRosterId: from, toRosterId: to, assetType: 'player', playerId, playerName: playerId })
 const faab = (amount: number, from: string, to: string): Asset => ({ fromRosterId: from, toRosterId: to, assetType: 'faab', metadata: { amount } })
+const pick = (from: string, to: string): Asset => ({ fromRosterId: from, toRosterId: to, assetType: 'draft_pick', pickSeason: 2027, pickRound: 1 })
 
 const validate = (assets: Asset[]) =>
   validateRedraftTradeProposalAtCreation({ leagueId: 'league-1', seasonId: 'season-1', proposerRosterId: 'alpha', receiverRosterId: 'beta', assets })
@@ -131,6 +132,12 @@ describe('NFL redraft: the canonical runtime validator decides', () => {
       ok: false,
       code: 'DUPLICATE_ASSET',
     })
+  })
+
+  it('🛑 refuses a draft pick: settlement has nothing to move it with (pick trading is ON in this league)', async () => {
+    await expect(
+      validate([player('alpha-rb', 'alpha', 'beta'), pick('beta', 'alpha')]),
+    ).resolves.toMatchObject({ ok: false, code: 'DRAFT_PICK_NOT_SETTLED', source: 'nfl_runtime' })
   })
 
   it("refuses a player whose game has kicked off, derived from the schedule", async () => {
@@ -170,5 +177,11 @@ describe('non-NFL redraft: the sport-agnostic fallback decides', () => {
       ok: false,
       code: 'DUPLICATE_ASSET',
     })
+  })
+
+  it('🛑 refuses a draft pick — the path a native dynasty league reaches, which checked nothing about picks', async () => {
+    await expect(
+      validate([player('alpha-rb', 'alpha', 'beta'), pick('beta', 'alpha')]),
+    ).resolves.toMatchObject({ ok: false, code: 'DRAFT_PICK_NOT_SETTLED', source: 'ownership_fallback' })
   })
 })
