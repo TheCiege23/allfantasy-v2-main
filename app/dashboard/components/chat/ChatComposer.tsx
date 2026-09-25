@@ -923,7 +923,8 @@ export function ChatComposer({
                   onClick={() => void handleSend()}
                   disabled={!canSend || sending}
                   className="af-chat-send rounded-lg p-1.5 text-white/40 transition-colors hover:bg-cyan-500/10 hover:text-cyan-400 disabled:opacity-40"
-                  aria-label={chatType === 'draft' ? 'Send message' : 'Send league message'}
+                  /* V11: league wording only in league chat — a DM or huddle is not a league message. */
+                  aria-label={chatType === 'league' ? 'Send league message' : 'Send message'}
                   data-testid={testIds?.send ?? 'league-chat-send'}
                 >
                   <Send size={14} strokeWidth={2} />

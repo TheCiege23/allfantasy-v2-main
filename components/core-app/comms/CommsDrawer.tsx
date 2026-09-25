@@ -695,7 +695,12 @@ export function CommsDrawer({
           <Link href="/settings?tab=notifications" className="af-cm-footlink">
             Notification settings
           </Link>
-          <span className="af-cm-footnote">Read-only · AllFantasy never writes to your platform</span>
+          {/*
+            V10: this said "Read-only · AllFantasy never writes to your platform" inside a chat you type
+            into. What is true is narrower, and it is the part that matters: we never change your
+            league on the platform it lives on.
+          */}
+          <span className="af-cm-footnote">AllFantasy never changes your league on Sleeper, ESPN or Yahoo.</span>
         </footer>
       </aside>
     </>

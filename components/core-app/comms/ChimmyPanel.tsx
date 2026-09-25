@@ -3,7 +3,7 @@
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { useScopedConversation } from './useScopedConversation'
-import { ArrowUpRight, ImagePlus, RotateCcw, Send, Sparkles, X } from 'lucide-react'
+import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Sparkles, X } from 'lucide-react'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyRichText } from './ChimmyRichText'
 import { ChimmyScenarioCard } from './ChimmyScenario'
@@ -992,7 +992,8 @@ export function ChimmyPanel({
                  */
                 <button key={q} type="button" className="af-cm-quickbtn" onClick={() => setDraft(q)}>
                   <span>{q}</span>
-                  <ArrowUpRight size={13} aria-hidden />
+                  {/* V9: a pencil, not ↗ — a tap writes the question into the box, it never sends. */}
+                  <PencilLine size={13} aria-hidden />
                 </button>
               ))}
             </div>
@@ -1162,7 +1163,7 @@ export function ChimmyPanel({
                   {t.followUps.map((q) => (
                     <button key={q} type="button" className="af-cm-quickbtn" onClick={() => setDraft(q)}>
                       <span>{q}</span>
-                      <ArrowUpRight size={13} aria-hidden />
+                      <PencilLine size={13} aria-hidden />
                     </button>
                   ))}
                 </div>
