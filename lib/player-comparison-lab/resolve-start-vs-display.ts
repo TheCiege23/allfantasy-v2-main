@@ -2,6 +2,7 @@
  * Resolve headshots for Start A vs B UI (best-effort DB lookup by name + sport).
  */
 
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { prisma } from '@/lib/prisma'
 import { buildPlayerMedia } from '@/lib/player-media'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -46,7 +47,7 @@ async function lookupHeadshot(args: {
       }))
 
     const headshotUrl =
-      row?.imageUrl?.trim() ||
+      toImageUrl(row?.imageUrl) ||
       (row?.sleeperId ? sleeperThumb(row.sleeperId) : null) ||
       null
 

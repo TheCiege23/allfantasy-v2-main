@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { buildHeadshotUrl, getTeamLogoUrl } from './player-media-urls'
 
 export type { SportKey } from './player-media-urls'
@@ -112,8 +113,8 @@ export async function attachPlayerMedia(player: {
         select: { imageUrl: true, team: true },
         orderBy: { fetchedAt: 'desc' },
       })
-      if (sportsPlayer?.imageUrl) {
-        dbImageUrl = sportsPlayer.imageUrl
+      if (toImageUrl(sportsPlayer?.imageUrl)) {
+        dbImageUrl = toImageUrl(sportsPlayer?.imageUrl)
         source = 'db'
       }
       if (sportsPlayer?.team && !dbTeamAbbr) {
@@ -287,7 +288,7 @@ export async function attachPlayerMediaBatch(
 
     const dbTeamAbbr = identity?.currentTeam || sportsPlayer?.team || sportsPlayerRecord?.team || null
     const effectiveTeam = dbTeamAbbr || p.teamAbbr
-    const dbImageUrl = sportsPlayerRecord?.headshotUrl || sportsPlayer?.imageUrl || null
+    const dbImageUrl = toImageUrl(sportsPlayerRecord?.headshotUrl) || toImageUrl(sportsPlayer?.imageUrl) || null
     const dbTeamLogoUrl = effectiveTeam
       ? teamAssetMap.get(`${p.sport.toUpperCase()}:${effectiveTeam}`) || sportsPlayerRecord?.logoUrl || null
       : sportsPlayerRecord?.logoUrl || null

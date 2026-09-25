@@ -5,6 +5,7 @@
  * Soccer: sport_type = SOCCER only. Positions: GKP/GK, DEF, MID, FWD (use options.position to filter). Soccer leagues load only soccer teams and players.
  * NFL IDP: same pool as NFL (sport_type = NFL). Include defensive players (DE, DT, LB, CB, S) in ingestion so they appear; use options.position (e.g. DE, DT, LB, CB, S) for position filter. Eligibility by slot uses PositionEligibilityResolver with formatType IDP.
  */
+import { toImageUrl } from '@/lib/media/imageUrl'
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { SportType, PoolPlayerRecord } from './types'
@@ -430,7 +431,7 @@ async function buildPlayerPoolForSport(
     experience: null,
     secondary_positions: [],
     metadata: {},
-    image_url: (r as { imageUrl?: string | null }).imageUrl ?? null,
+    image_url: toImageUrl((r as { imageUrl?: string | null }).imageUrl),
   }))
 
   const IDP_INDIVIDUAL_POSITIONS = new Set(['DE', 'DT', 'LB', 'CB', 'S'])

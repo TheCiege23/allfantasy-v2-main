@@ -3,6 +3,7 @@
  * Use from API route, DraftWorker, autopick fallback, and tests.
  */
 
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
@@ -2180,8 +2181,8 @@ export async function getResolvedDraftPoolForLeague(
           imageUrl:
             backfilledHeadshot ??
             sprHeadshotUrl ??
-            (row as RawRow).imageUrl ??
-            (poolMatch as { image_url?: string | null }).image_url ??
+            toImageUrl((row as RawRow).imageUrl) ??
+            toImageUrl((poolMatch as { image_url?: string | null }).image_url) ??
             null,
           sourcePlayerId,
           sourceSleeperId,
@@ -2200,7 +2201,7 @@ export async function getResolvedDraftPoolForLeague(
           injuryStatus: normalizedInjuryStatus,
           status: dbInjuryHit?.gameStatus ?? row.status ?? null,
           adp: resolvedAdp,
-          imageUrl: backfilledHeadshot ?? sprHeadshotUrl ?? (row as RawRow).imageUrl ?? null,
+          imageUrl: backfilledHeadshot ?? sprHeadshotUrl ?? toImageUrl((row as RawRow).imageUrl) ?? null,
           sourcePlayerId,
           sourceSleeperId,
         }
