@@ -92,6 +92,7 @@ import DraftHq from '@/components/core-app/screens/DraftHq'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
+import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
 import DraftBoard from '@/components/core-app/screens/DraftBoard'
 import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
@@ -1772,7 +1773,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * already sent is a client-only gate; the screens' own locks only decide what is drawn.
    */
   const corePaywallRead =
-    activeKey === 'players' || activeKey === 'trades' || activeKey === 'commissioner' || activeKey === 'waivers'
+    activeKey === 'players' ||
+    activeKey === 'trades' ||
+    activeKey === 'commissioner' ||
+    activeKey === 'waivers' ||
+    activeKey === 'draft-hq'
       ? resolveCorePaywall(userId, { email: viewerEmail, now })
       : Promise.resolve(null)
 
@@ -2334,6 +2339,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'draft-hq' && selectedLeagueId
       ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
+  // Competitive Edge on Draft HQ — read only for a viewer whose plan includes it.
+  const draftEdgeAccess = activeKey === 'draft-hq' ? (corePaywall?.competitive_edge ?? null) : null
+  const draftEdge = await loadDraftEdgeForScreen({
+    leagueId: draftHq ? selectedLeagueId : null,
+    access: draftEdgeAccess,
+    userId,
+  })
 
   /*
    * The per-league draft grid and clock, which Draft HQ now renders above its own
@@ -3909,7 +3921,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               inventory and grades read after it.
             */}
             {draftBoard ? <DraftBoard data={draftBoard} /> : null}
-            <DraftHq data={draftHq} />
+            <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
           </>
         ) : showAllLeagues || !homeDrafts ? (
           <PickALeague
