@@ -34,7 +34,12 @@ export type NflRedraftTradeSettings = {
   activeRosterLimit: number
   lockAllMoves: boolean
   deadlinePassed: boolean
-  pickExecutionStatus: 'supported' | 'reference_only' | 'disabled'
+  /**
+   * `supported`: a pick inventory exists and a proposal may move a pick. `unavailable`: pick trading is
+   * on but nothing here can move a pick, so a proposal offering one is refused (DRAFT_PICK_NOT_SETTLED).
+   * `disabled`: the league does not trade picks.
+   */
+  pickExecutionStatus: 'supported' | 'unavailable' | 'disabled'
 }
 
 export type NflRedraftTradePlayerInput = {
@@ -193,6 +198,7 @@ export type NflRedraftTradeValidationResult =
       ok: false
       code:
         | 'ASSET_DIRECTION_INVALID'
+        | 'DRAFT_PICK_NOT_SETTLED'
         | 'DRAFT_PICK_TRADING_DISABLED'
         | 'DUPLICATE_ASSET'
         | 'EXPIRED'
@@ -389,7 +395,7 @@ export function resolveNflRedraftTradeSettings(input: {
     activeRosterLimit: Math.max(1, positiveInt(input.activeRosterLimit, positiveInt(input.rules.roster.size, 0))),
     lockAllMoves: Boolean(input.rules.roster.lockAllMoves || input.rules.permissions.memberMovesLocked),
     deadlinePassed: Boolean(deadlineWeek && deadlineWeek > 0 && input.week > deadlineWeek),
-    pickExecutionStatus: draftPickTrading ? (input.pickInventorySupported ? 'supported' : 'reference_only') : 'disabled',
+    pickExecutionStatus: draftPickTrading ? (input.pickInventorySupported ? 'supported' : 'unavailable') : 'disabled',
   }
 }
 
@@ -538,6 +544,10 @@ function playerOwnerMap(teams: NflRedraftTradeTeamState[]): Map<string, { roster
   return out
 }
 
+/** Why a redraft proposal cannot carry a draft pick, and where picks are traded instead. */
+export const REDRAFT_DRAFT_PICK_REFUSAL =
+  'Draft picks cannot be traded in a redraft proposal: the pick would be recorded but never change hands. Dynasty leagues trade future picks in the Trade Center.'
+
 function validationFailure(
   code: Exclude<NflRedraftTradeValidationResult, { ok: true }>['code'],
   message: string,
@@ -642,8 +652,14 @@ export function validateNflRedraftTradeProposal(input: {
       if (!asset.pickSeason || !asset.pickRound) {
         return validationFailure('INVALID_ASSET', 'Draft pick assets require pickSeason and pickRound.')
       }
-      if (settings.pickExecutionStatus === 'reference_only') {
-        warnings.push('Draft pick asset recorded as reference-only; no redraft pick inventory was available to mutate.')
+      /*
+       * 🛑 A PICK HERE USED TO BE ACCEPTED AS "REFERENCE-ONLY" — recorded on the proposal and never moved.
+       * Settlement moves players and FAAB and has nothing to move a pick with, so "my 2027 1st for your
+       * WR" moved the WR and left the pick where it was. No redraft screen offers a pick; only a crafted
+       * request could, and it could get a player for a promise the league never keeps. Refused instead.
+       */
+      if (settings.pickExecutionStatus !== 'supported') {
+        return validationFailure('DRAFT_PICK_NOT_SETTLED', REDRAFT_DRAFT_PICK_REFUSAL)
       }
       continue
     }

@@ -531,8 +531,8 @@ export function TradeCenterModal({
                 ) : null}
                 {settings?.draftPickTrading ? (
                   <p className="rounded border border-sky-400/20 bg-sky-400/5 px-2 py-1 text-[10px] text-sky-200/70">
-                    Draft-pick trading is enabled — picks are recorded on the proposal as reference-only (no owned-pick
-                    inventory in redraft yet).
+                    Draft picks can’t be offered here — a pick would be recorded without ever changing hands.
+                    Dynasty leagues trade future picks in the Trade Center.
                   </p>
                 ) : null}
               </section>

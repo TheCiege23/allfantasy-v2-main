@@ -20,6 +20,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
+  REDRAFT_DRAFT_PICK_REFUSAL,
   resolveNflRedraftTradeRuntime,
   validateNflRedraftTradeProposal,
   type NflRedraftTradeAssetInput,
@@ -94,6 +95,11 @@ async function validateOwnershipFallback(
       if (amount <= 0) return fail('INVALID_ASSET', 'FAAB trade assets require a positive whole amount.')
       faabDelta.set(asset.fromRosterId, (faabDelta.get(asset.fromRosterId) ?? 0) - amount)
       faabDelta.set(asset.toRosterId, (faabDelta.get(asset.toRosterId) ?? 0) + amount)
+    } else if (asset.assetType === 'draft_pick') {
+      // No pick inventory on this path either, so a pick would change hands on paper only. This is
+      // the path a NATIVE DYNASTY league reaches — the NFL runtime refuses dynasty — and those leagues
+      // now trade real picks in the Trade Center (lib/league-trade-engine/nativeFuturePicks.ts).
+      return fail('DRAFT_PICK_NOT_SETTLED', REDRAFT_DRAFT_PICK_REFUSAL)
     }
   }
 

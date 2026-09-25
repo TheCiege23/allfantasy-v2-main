@@ -198,7 +198,7 @@ export function TradeCenter({
             Deadline: {settings.tradeDeadlineWeek ? `Week ${settings.tradeDeadlineWeek}` : 'none'}
           </span>
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
-            Pick trading: {settings.draftPickTrading ? 'on (reference-only)' : 'off'}
+            Pick trading: {settings.draftPickTrading ? 'on (not in redraft proposals)' : 'off'}
           </span>
         </div>
       ) : null}
@@ -223,8 +223,8 @@ export function TradeCenter({
           <div>
             <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
             <p className="mt-1 font-semibold text-white">
-              {runtime.settings.pickExecutionStatus === 'reference_only'
-                ? 'Reference-only'
+              {runtime.settings.pickExecutionStatus === 'unavailable'
+                ? 'Not in proposals'
                 : runtime.settings.pickExecutionStatus}
             </p>
           </div>
