@@ -10,7 +10,6 @@ import {
   pricePlayer,
   pricePick,
   compositeScore,
-  compositeTotal,
   type ValuationContext,
   type PricedAsset,
 } from '@/lib/hybrid-valuation'
@@ -52,6 +51,9 @@ import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/int
 import { clamp, sportsRecordToPricedAsset } from './sports-db-valuation'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import { analysisUnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { marketContextFor } from '@/lib/trade-intel/marketContext'
+import { gradeBaseOf, gradeOnLeagueValue, isNonPlayerLine } from './leagueGrade'
+import { loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 import {
   benchAssetsNotInGive,
   inferThinPositionsFromRoster,
@@ -524,6 +526,18 @@ export async function runTradeConsoleAnalysis(
     input.leagueSize ??
     leagueSnapshot?.leagueSize ??
     12
+  /*
+   * 🛑 THE LEAGUE'S OWN CHART, BY THE SAME RULE EVERY OTHER SURFACE PRICES IT WITH.
+   *
+   * This requested `isDynasty: true` for EVERY league, so a redraft trade was priced on dynasty
+   * values — a rookie's multi-year upside set against a veteran's one season, in a league where
+   * only this season exists. `marketContextFor` is the rule the Player Finder, the value book and
+   * the waiver pool already share (dynasty/keeper/superflex from `valueBook.leagueVariantFor`,
+   * reception weight from the league's own `scoring_settings`); the verdict now asks for the chart
+   * those surfaces show. Global mode (no league) keeps the old dynasty default, and says so.
+   */
+  const marketCtx = leagueRow ? marketContextFor(leagueRow.settings, leagueRow.leagueType, leagueSize) : null
+  const chartIsDynasty = marketCtx ? marketCtx.variant.dynasty || marketCtx.variant.keeper : true
   const tePremium =
     input.tePremium ??
     leagueSnapshot?.tePremiumHint ??
@@ -531,6 +545,7 @@ export async function runTradeConsoleAnalysis(
       leagueNormCtx.scoring.labels.tePremiumExtra > 0)
   const isSuperFlex =
     input.isSuperFlex ??
+    marketCtx?.variant.superflex ??
     leagueNormCtx?.scoring?.labels?.isSuperflex ??
     leagueSnapshot?.isSuperFlexHint ??
     false
@@ -539,7 +554,18 @@ export async function runTradeConsoleAnalysis(
     leagueSnapshot?.waiverBudget ??
     100
 
-  const pprNfl = pprForNflFromLeagueContext(leagueNormCtx, leagueRow)
+  /*
+   * The chart's reception weight is the league's, when the league states one: `scoringFit` measures
+   * each position's rule AGAINST the weight the chart was fetched with, so the two must be the same
+   * number or the adjustment is measured against a chart nobody requested.
+   */
+  const pprNfl = marketCtx
+    ? marketCtx.scoring.format === 'ppr'
+      ? 1
+      : marketCtx.scoring.format === 'half_ppr'
+        ? 0.5
+        : 0
+    : pprForNflFromLeagueContext(leagueNormCtx, leagueRow)
   const asOf = new Date().toISOString().slice(0, 10)
   /*
    * ⚠ TOLERANCE TIGHTENED FROM THE 6 h DEFAULT TO 2 h, WHICH MAKES VALUES FRESHER, NOT FASTER.
@@ -554,7 +580,7 @@ export async function runTradeConsoleAnalysis(
    */
   const fcPlayers = await getFantasyCalcValuesDbFirst(
     {
-      isDynasty: true,
+      isDynasty: chartIsDynasty,
       numQbs: isSuperFlex ? 2 : 1,
       numTeams: leagueSize,
       ppr: pprNfl,
@@ -637,8 +663,13 @@ export async function runTradeConsoleAnalysis(
     return { ok: false, error: 'Could not price assets on both sides.', code: 'VALIDATION' }
   }
 
+  /*
+   * ⚠ ONLY WITHOUT A LEAGUE. A flat ×1.15 for "has any TE premium" priced a 0.25 bonus and a 1.0
+   * bonus the same. In a league the premium is the league's actual reception rule, applied per
+   * position by `scoringFit` below as a visible adjustment; applying this too would count it twice.
+   */
   const applyTep = (assets: PricedAsset[]) => {
-    if (!tePremium) return assets
+    if (!tePremium || marketCtx) return assets
     const mult = 1.15
     return assets.map((a) => {
       if (a.position?.toUpperCase() === 'TE') {
@@ -662,14 +693,58 @@ export async function runTradeConsoleAnalysis(
   const gP = applyTep(givePriced)
   const tP = applyTep(getPriced)
 
-  const giveTotal = compositeTotal(gP)
-  const getTotal = compositeTotal(tP)
   const giveMarket = gP.reduce((s, a) => s + a.assetValue.marketValue, 0)
   const getMarket = tP.reduce((s, a) => s + a.assetValue.marketValue, 0)
 
+  /*
+   * ── THE VERDICT IS GRADED ON LEAGUE VALUE (Guap, 2026-09-24) ─────────────────────────────────
+   *
+   * 🛑 IT WAS GRADED ON A NUMBER NOBODY COULD SEE. `percentDiff` came from `compositeTotal` —
+   * `impactValue + vorpValue − risk`, where `impactValue` is the player's REDRAFT value — while every
+   * line on screen showed his dynasty MARKET value. A dynasty trade was shown in one currency and
+   * graded in another, and a manager checking the arithmetic could never make it add up.
+   *
+   * Now each line starts from its market value on THIS league's chart, is moved by this league's
+   * scoring and the viewer's roster need (each factor carried with its reason, see
+   * `lib/trade-value/leagueTradeValue.ts`), and the grade is the difference of those totals. The
+   * composite survives only where it always belonged: the driver model below (accept probability,
+   * lineup simulation), which is secondary and labelled as such.
+   */
+  let needFactors: NeedFactors | null = null
+  if (marketCtx && leagueRow && input.leagueId && input.userId) {
+    const toNeed = (lines: TradeConsolePlayerLine[], priced: PricedAsset[]) =>
+      lines.map((l, i) => ({
+        name: l.name,
+        position: isNonPlayerLine(l) ? null : l.position,
+        base: gradeBaseOf(l, priced[i]),
+      }))
+    needFactors = await loadViewerNeedFactors({
+      leagueId: input.leagueId.trim(),
+      userId: input.userId,
+      sport: String(effectiveSport),
+      starters: leagueRow.starters,
+      give: toNeed(giveLines, gP),
+      get: toNeed(getLines, tP),
+    })
+    mark('need_factors')
+  }
+
+  const leagueGrade = gradeOnLeagueValue({
+    giveLines,
+    getLines,
+    givePriced: gP,
+    getPriced: tP,
+    league: marketCtx ? { scoringSettings: marketCtx.scoring.settings } : null,
+    chart: { dynasty: chartIsDynasty, superflex: isSuperFlex, teams: leagueSize, ppr: pprNfl },
+    needFactors,
+  })
+  giveLines = leagueGrade.giveLines
+  getLines = leagueGrade.getLines
+  const giveTotal = leagueGrade.totals.giveLeague
+  const getTotal = leagueGrade.totals.getLeague
   const fairnessScore = computeValueFairness(getTotal, giveTotal)
-  const percentDiff =
-    giveTotal > 0 ? Math.round(((getTotal - giveTotal) / Math.max(giveTotal, getTotal, 1)) * 100) : 0
+  const percentDiff = leagueGrade.totals.percentDiff
+  const valueBasis = leagueGrade.valueBasis
 
   const giveAssets: Asset[] = gP.map((pa) => pricedAssetToEngineAsset(pa))
   const receiveAssets: Asset[] = tP.map((pa) => pricedAssetToEngineAsset(pa))
@@ -882,7 +957,20 @@ export async function runTradeConsoleAnalysis(
   const sfContext = isSuperFlex
     ? `\n\nLeague Format: Superflex — QBs carry extra trade weight.`
     : ''
-  const tepContext = tePremium ? `\n\nLeague Format: Tight End Premium (~15% TE boost).` : ''
+  /*
+   * The narrative is told what the grade is actually priced in. The old line claimed a flat "~15%
+   * TE boost", which in a league is no longer true — the premium is the league's own reception rule,
+   * per position, and it is listed per asset below.
+   */
+  const leagueAdjustmentLines = [...giveLines, ...getLines]
+    .filter((l) => (l.valueAdjustments ?? []).length > 0)
+    .slice(0, 8)
+    .map((l) => `${l.name}: ${(l.valueAdjustments ?? []).map((a) => `${a.factor > 1 ? '+' : '−'}${Math.abs(Math.round((a.factor - 1) * 100))}% (${a.reason})`).join('; ')}`)
+  const tepContext = marketCtx
+    ? `\n\nValues graded on: ${valueBasis.label}.${leagueAdjustmentLines.length > 0 ? ` League adjustments — ${leagueAdjustmentLines.join(' | ')}.` : ''}`
+    : tePremium
+      ? `\n\nLeague Format: Tight End Premium (~15% TE boost).`
+      : ''
   const scoringCtx = scoringSummaryLine ? `\n\n${scoringSummaryLine}` : ''
   const projContext =
     projectedImpactBlock.giveTotal != null && projectedImpactBlock.getTotal != null
@@ -1264,6 +1352,7 @@ export async function runTradeConsoleAnalysis(
     getTotal,
     giveMarket,
     getMarket,
+    valueBasis,
     degraded,
     dataGaps,
     dataSources: [effectiveSport === 'NFL' ? 'FantasyCalc' : 'sports_players', 'hybrid-valuation', 'trade-engine'],

@@ -57,6 +57,12 @@ export const TRADE_VERDICT_FIELDS = [
   'getTotal',
   'giveMarket',
   'getMarket',
+  /*
+   * Part of the VERDICT, not the depth: it names the rules the grade was priced under. A free user
+   * who sees a grade move must be able to see why, or the grade is exactly the invisible
+   * adjustment `lib/trade-value/leagueTradeValue.ts` exists to prevent.
+   */
+  'valueBasis',
   'degraded',
   'dataGaps',
   'dataSources',

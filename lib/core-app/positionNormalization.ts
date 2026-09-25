@@ -24,6 +24,14 @@ export const POSITION_ALIASES: Record<string, string> = {
   'running back': 'RB',
   'wide receiver': 'WR',
   'tight end': 'TE',
+  /*
+   * The same three with no space, as some `SportsPlayer` rows spell them ("RunningBack", "TightEnd",
+   * "WideReceiver") — seen beside short-code rows for the SAME Sleeper id on the staging copy,
+   * 2026-09-24. Without these a "TightEnd" row normalises to "TIGHTEND" and counts as no position.
+   */
+  runningback: 'RB',
+  widereceiver: 'WR',
+  tightend: 'TE',
   kicker: 'K',
   'place kicker': 'K',
   'defensive end': 'DE',
