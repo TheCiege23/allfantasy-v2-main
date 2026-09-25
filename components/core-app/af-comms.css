@@ -3107,3 +3107,37 @@
   white-space: nowrap;
 }
 .af-cm-threadrow-unread { position: relative; }
+
+/* ── Report / Block confirm steps and the huddle sheets ──────────────────────────────── */
+.af-cm-sheet-safety { display: flex; flex-direction: column; gap: 8px; padding: 10px 6px 4px; border-bottom: 1px solid var(--line); }
+.af-cm-sheet-safety-t { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.af-cm-sheet-safety-b { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text2); }
+.af-cm-sheet-safety-l { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.af-cm-sheet-select,
+.af-cm-sheet-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.af-cm-sheet-safety-err { margin: 0; font-size: 13px; line-height: 1.4; color: #fb7185; }
+.af-cm-sheet-btn[data-primary='true'] { color: var(--accent); font-weight: 700; }
+.af-cm-sheet-actions .af-cm-sheet-safety .af-cm-sheet-btn { border-bottom: 0; }
+
+.af-cm-members { display: flex; flex-direction: column; margin: 6px 0 0; padding: 0; list-style: none; }
+.af-cm-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.af-cm-member .af-cm-dmrow-av { width: 36px; height: 36px; }
+.af-cm-member-name { flex: 1; min-width: 0; overflow: hidden; font-size: 14px; color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
+.af-cm-member-you { color: var(--muted); }
+.af-cm-member-handle { flex: none; max-width: 40%; overflow: hidden; font-size: 12px; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }

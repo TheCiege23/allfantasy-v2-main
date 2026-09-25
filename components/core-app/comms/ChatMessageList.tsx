@@ -9,7 +9,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { ArrowDown, Copy, CornerUpLeft, MoreHorizontal, Pencil, Pin, SmilePlus, Trash2 } from 'lucide-react'
+import { ArrowDown, Ban, Copy, CornerUpLeft, Flag, MoreHorizontal, Pencil, Pin, SmilePlus, Trash2 } from 'lucide-react'
+import { REPORT_REASONS, type ReportReason } from '@/lib/moderation/shared'
 import { QUICK_REACTIONS, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { isNearBottom } from '@/lib/chat-core/useChatPolling'
@@ -113,6 +114,25 @@ export type ChatMessageListProps = {
   hasRichFor?: (m: ChatListMessage) => boolean
   /** A test id on the scrolling element itself (the draft room's specs find it by one). */
   scrollTestId?: string
+  /**
+   * Somebody else's message only. Absent means the action is not offered. Reject with the server's
+   * words to keep the sheet open and say what went wrong — the list never claims a report landed.
+   */
+  onReport?: (m: ChatListMessage, reason: ReportReason) => Promise<void>
+  /** Somebody else's message only. Reject to keep the sheet open with the reason on it. */
+  onBlock?: (m: ChatListMessage) => Promise<void>
+}
+
+/** What a reporter can pick. The route takes one of these; "Something else" is the default. */
+const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  spam: 'Spam',
+  harassment: 'Harassment or bullying',
+  hate_speech: 'Hate speech',
+  violence: 'Violence or threats',
+  nudity: 'Nudity or sexual content',
+  self_harm: 'Self-harm',
+  impersonation: 'Pretending to be someone',
+  other: 'Something else',
 }
 
 const LONG_PRESS_MS = 450
@@ -192,6 +212,8 @@ export function ChatMessageList({
   tagFor,
   hasRichFor,
   scrollTestId,
+  onReport,
+  onBlock,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -273,10 +295,10 @@ export function ChatMessageList({
 
   /* ── Feedback ── */
   const toastTimer = useRef<number | null>(null)
-  const say = useCallback((text: string) => {
+  const say = useCallback((text: string, ms = 1600) => {
     setToast(text)
     if (toastTimer.current != null) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), 1600)
+    toastTimer.current = window.setTimeout(() => setToast(null), ms)
   }, [])
   useEffect(() => () => {
     if (toastTimer.current != null) window.clearTimeout(toastTimer.current)
@@ -611,6 +633,7 @@ export function ChatMessageList({
 
       {menuMessage ? (
         <MessageActionSheet
+          key={menuMessage.id}
           message={menuMessage}
           mine={Boolean(viewerId) && menuMessage.authorId === viewerId}
           viewerId={viewerId}
@@ -669,6 +692,30 @@ export function ChatMessageList({
                 }
               : undefined
           }
+          /*
+           * Report and Block are for somebody ELSE's message, and only one with a person behind it:
+           * a system row has no author to report or block. The sheet stays open on a failure (the
+           * promise rejects) and only closes once the server said yes.
+           */
+          onReport={
+            onReport && menuMessage.authorId && menuMessage.authorId !== viewerId
+              ? async (reason) => {
+                  await onReport(menuMessage, reason)
+                  setMenuFor(null)
+                  say('Thanks — we’ll take a look.', 2600)
+                }
+              : undefined
+          }
+          onBlock={
+            onBlock && menuMessage.authorId && menuMessage.authorId !== viewerId
+              ? async () => {
+                  const name = menuMessage.authorName
+                  await onBlock(menuMessage)
+                  setMenuFor(null)
+                  say(`${name} is blocked.`, 2600)
+                }
+              : undefined
+          }
         />
       ) : null}
     </div>
@@ -691,6 +738,8 @@ function MessageActionSheet({
   pinBusy,
   onEdit,
   onDelete,
+  onReport,
+  onBlock,
 }: {
   message: ChatListMessage
   mine: boolean
@@ -707,11 +756,31 @@ function MessageActionSheet({
   pinBusy: boolean
   onEdit?: () => void
   onDelete?: () => void
+  onReport?: (reason: ReportReason) => Promise<void>
+  onBlock?: () => Promise<void>
 }) {
   const sheetRef = useRef<HTMLDivElement | null>(null)
   const firstRef = useRef<HTMLButtonElement | null>(null)
   const [fullPicker, setFullPicker] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  /* One confirm step at a time: Report (with an optional reason) or Block. */
+  const [safety, setSafety] = useState<null | 'report' | 'block'>(null)
+  const [reason, setReason] = useState<ReportReason>('other')
+  const [safetyBusy, setSafetyBusy] = useState(false)
+  const [safetyError, setSafetyError] = useState<string | null>(null)
+
+  const runSafety = async (action: () => Promise<void>, fallback: string) => {
+    if (safetyBusy) return
+    setSafetyBusy(true)
+    setSafetyError(null)
+    try {
+      await action()
+    } catch (err) {
+      // Said plainly, and the sheet stays open: a failed report must never read as a sent one.
+      setSafetyError(err instanceof Error && err.message ? err.message : fallback)
+      setSafetyBusy(false)
+    }
+  }
 
   useOverlayContainment({ active: true, containerRef: sheetRef, initialFocusRef: firstRef, onClose })
 
@@ -817,6 +886,96 @@ function MessageActionSheet({
                 <Trash2 size={16} aria-hidden /> Delete
               </button>
             )
+          ) : null}
+          {onReport && safety !== 'report' ? (
+            <button
+              type="button"
+              className="af-cm-sheet-btn"
+              onClick={() => {
+                setSafety('report')
+                setSafetyError(null)
+              }}
+            >
+              <Flag size={16} aria-hidden /> Report message
+            </button>
+          ) : null}
+          {onReport && safety === 'report' ? (
+            <form
+              className="af-cm-sheet-safety"
+              aria-label="Report this message"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void runSafety(() => onReport(reason), 'Could not send that report. Try again.')
+              }}
+            >
+              <p className="af-cm-sheet-safety-t">Report {message.authorName}’s message?</p>
+              <label className="af-cm-sheet-safety-l">
+                <span>Reason (optional)</span>
+                <select
+                  className="af-cm-sheet-select"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value as ReportReason)}
+                  disabled={safetyBusy}
+                >
+                  {REPORT_REASONS.map((r) => (
+                    <option key={r} value={r}>
+                      {REPORT_REASON_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {safetyError ? (
+                <p className="af-cm-sheet-safety-err" role="alert">
+                  {safetyError}
+                </p>
+              ) : null}
+              <span className="af-cm-sheet-confirm">
+                <button type="submit" className="af-cm-sheet-btn" data-danger="true" disabled={safetyBusy}>
+                  {safetyBusy ? 'Sending…' : 'Send report'}
+                </button>
+                <button type="button" className="af-cm-sheet-btn" onClick={() => setSafety(null)} disabled={safetyBusy}>
+                  Cancel
+                </button>
+              </span>
+            </form>
+          ) : null}
+          {onBlock && safety !== 'block' ? (
+            <button
+              type="button"
+              className="af-cm-sheet-btn"
+              data-danger="true"
+              onClick={() => {
+                setSafety('block')
+                setSafetyError(null)
+              }}
+            >
+              <Ban size={16} aria-hidden /> Block {message.authorName}
+            </button>
+          ) : null}
+          {onBlock && safety === 'block' ? (
+            <div className="af-cm-sheet-safety" role="group" aria-label={`Block ${message.authorName}`}>
+              <p className="af-cm-sheet-safety-t">Block {message.authorName}?</p>
+              <p className="af-cm-sheet-safety-b">You won’t see their messages, and they can’t DM you.</p>
+              {safetyError ? (
+                <p className="af-cm-sheet-safety-err" role="alert">
+                  {safetyError}
+                </p>
+              ) : null}
+              <span className="af-cm-sheet-confirm">
+                <button
+                  type="button"
+                  className="af-cm-sheet-btn"
+                  data-danger="true"
+                  disabled={safetyBusy}
+                  onClick={() => void runSafety(onBlock, 'Could not block them. Try again.')}
+                >
+                  {safetyBusy ? 'Blocking…' : 'Block'}
+                </button>
+                <button type="button" className="af-cm-sheet-btn" onClick={() => setSafety(null)} disabled={safetyBusy}>
+                  Cancel
+                </button>
+              </span>
+            </div>
           ) : null}
         </div>
 
