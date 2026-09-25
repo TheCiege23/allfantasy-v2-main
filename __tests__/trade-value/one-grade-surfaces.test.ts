@@ -25,6 +25,13 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade between rostered players' },
   { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade described in prose' },
+  /* Completed trades and receipts (2026-09-25). */
+  { file: 'lib/league-trade-engine/serverTradeDecision.ts', entry: /gradeDeal\(/, what: 'the proposal-time receipt' },
+  { file: 'lib/league-trade-engine/tradeLearningCapture.ts', entry: /gradeDeal\(/, what: 'native history "Now"' },
+  { file: 'lib/trade-intel/tradeExpectationLoader.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the letter before points arrive (email, history, dashboard)' },
+  { file: 'lib/core-app/recentTrades.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the dashboard trade band verdict' },
+  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTrade\(/, what: 'the /core Trades grade list' },
+  { file: 'lib/core-app/tradesBoard.ts', entry: /gradeArchivedTrade\(/, what: 'the cross-league trades board' },
 ]
 
 /* The private letters these surfaces used to print. Shapes, not words: a call, not a mention. */
@@ -33,6 +40,9 @@ const PRIVATE_LETTERS: ReadonlyArray<{ name: string; shape: RegExp }> = [
   { name: 'the share-of-value letter', shape: /evaluatePendingOffer\(/ },
   { name: 'a letter drawn from a bare percentDiff', shape: /projectedLetterFor\(/ },
   { name: "the canonical evaluation's letter", shape: /grade:\s*evaluation\.grade/ },
+  { name: 'the rank-space share grade', shape: /\bgradeTrade\(\s*\{\s*label:/ },
+  { name: 'the legacy canonical verdict', shape: /buildLegacyCanonicalGrade\(/ },
+  { name: 'a value edge on the mean of both sides', shape: /letterForValueEdge\(/ },
 ]
 
 describe.each(SURFACES)('$what', ({ file, entry }) => {
@@ -86,6 +96,9 @@ describe('positive controls — the guards can fail', () => {
     expect(PRIVATE_LETTERS[1]!.shape.test('evaluation: evaluatePendingOffer({')).toBe(true)
     expect(PRIVATE_LETTERS[2]!.shape.test('giveGrade: projectedLetterFor({ percentDiff: pd, hasSignal })')).toBe(true)
     expect(PRIVATE_LETTERS[3]!.shape.test('      grade: evaluation.grade,')).toBe(true)
+    expect(PRIVATE_LETTERS[4]!.shape.test("const g = gradeTrade(\n      { label: 'received', assets: recvGradeable },")).toBe(true)
+    expect(PRIVATE_LETTERS[5]!.shape.test('const graded = buildLegacyCanonicalGrade({')).toBe(true)
+    expect(PRIVATE_LETTERS[6]!.shape.test("const letter = insideNoise ? 'C' : letterForValueEdge(valueEdge)")).toBe(true)
   })
 
   it('the comment stripper leaves code and removes prose', () => {

@@ -248,7 +248,7 @@ export async function gradeDeal(
  * players. Never throws: an unreadable table means "no names", and the grade withholds on its own.
  */
 export async function loadNativePlayerNames(
-  items: ReadonlyArray<{ itemType: string | null | undefined; itemReference: string | null; metadata: unknown }>,
+  items: ReadonlyArray<{ itemType: string | null | undefined; itemReference: string | null; metadata?: unknown }>,
 ): Promise<(id: string) => string | null> {
   const ids = [
     ...new Set(

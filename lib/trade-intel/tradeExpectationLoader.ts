@@ -7,9 +7,7 @@ import { getSeasonStatsBoard, scoreStatLine } from '@/lib/sports-data/sleeperMar
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { buildTradeExpectation, withOneGrade, type TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
-import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
-import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { fetchLeagueRosters } from '@/lib/trade-intel/sleeperTradeSync'
 import { getDynastyProcessValues } from '@/lib/trade-intel/dynastyProcessSync'
 import { buildAfPickValues, buildAfValues, type PickEntries, type SourceEntries } from '@/lib/trade-intel/afValue'
@@ -26,45 +24,6 @@ import { buildAfPickValues, buildAfValues, type PickEntries, type SourceEntries 
  */
 
 /** The season before the trade's — the last one that actually happened. */
-/*
- * One grader per league, briefly memoised: a history page asks for an expectation per trade, and the
- * chart behind every one of them is the same. Five minutes is well inside the chart's own freshness.
- */
-const GRADER_TTL_MS = 5 * 60 * 1000
-const graders = new Map<string, { at: number; grader: Promise<LeagueTradeGrader | null> }>()
-function graderFor(leagueId: string): Promise<LeagueTradeGrader | null> {
-  const hit = graders.get(leagueId)
-  if (hit && Date.now() - hit.at < GRADER_TTL_MS) return hit.grader
-  const grader = createLeagueTradeGrader({ leagueId }).catch(() => null)
-  graders.set(leagueId, { at: Date.now(), grader })
-  return grader
-}
-
-/**
- * THE grade for a completed two-sided trade, from side one's point of view, on today's league values
- * and WITHOUT roster need — the trade has happened, so need has no honest answer. A pick whose draft
- * has already been held no longer exists as a pick, so it withholds the letter rather than being
- * priced as though it were still to come.
- */
-async function oneGradeForCompletedTrade(leagueId: string, trade: GradedTrade, season: number): Promise<TradeGradeView> {
-  const [a] = trade.sides
-  if (!a) return { graded: false, reason: 'the trade has no sides on record', basis: null }
-  const side = (players: GradedTrade['sides'][number]['playersIn'], picks: GradedTrade['sides'][number]['picksIn']): GradeInputs => {
-    const out: GradeInputs = { assets: players.map((p) => ({ kind: 'player' as const, name: p.name })), unpriceable: [] }
-    for (const pick of picks) {
-      const year = Number(pick.season)
-      if (Number.isFinite(year) && year >= season && pick.round > 0) out.assets.push({ kind: 'pick', year, round: pick.round })
-      else out.unpriceable.push(pick.label)
-    }
-    return out
-  }
-  return gradeDeal(await graderFor(leagueId), {
-    give: side(a.playersOut, a.picksOut),
-    get: side(a.playersIn, a.picksIn),
-    viewerSide: false,
-  })
-}
-
 function priorSeasonOf(trade: GradedTrade): string {
   const n = Number(trade.season)
   return Number.isFinite(n) ? String(n - 1) : trade.season
@@ -263,7 +222,9 @@ export async function loadTradeExpectation(
   })
 
   // The letter is THE grade (see `withOneGrade`); only a two-sided, market-only read is regraded.
-  if (!leagueRow?.id || expectation.evaluation.scope !== 'market-only' || trade.sides.length !== 2) return expectation
-  const oneGrade = await oneGradeForCompletedTrade(leagueRow.id, trade, Number(context.season)).catch(() => null)
+  if (expectation.evaluation.scope !== 'market-only') return expectation
+  const oneGrade = leagueRow?.id && trade.sides.length === 2
+    ? await oneGradeForCompletedTrade(leagueRow.id, trade, Number(context.season)).catch(() => null)
+    : null
   return withOneGrade(expectation, oneGrade)
 }

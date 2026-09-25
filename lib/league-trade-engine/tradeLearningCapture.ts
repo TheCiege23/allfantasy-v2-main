@@ -22,7 +22,7 @@ import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/tr
 import { getCalibratedWeights, calibrateAcceptProbability } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } from '@/lib/trade-engine/trade-event-logger'
 import type { Asset } from '@/lib/trade-engine/types'
-import { projectedLetterFor } from '@/lib/trade-intel/gradeScale'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
 
@@ -101,7 +101,7 @@ export function resolveLeagueScoringContext(league: TradeScoringLeague): {
 }
 
 export interface CurrentTradeMarketSnapshot {
-  grade: ReturnType<typeof projectedLetterFor>
+  grade: GradeLetter | null
   valueGiven: number | null
   valueReceived: number | null
   pricedAt: string
@@ -271,8 +271,8 @@ export async function captureLiveTradeOffer(input: {
   items: CaptureTradeItem[]
   league: League
   /**
-   * The proposal's ONE grade (the receipt's proposer letter). When supplied — even as null — it is
-   * the letter recorded, so this event cannot carry a different grade from the receipt beside it.
+   * The proposal's ONE grade (the receipt's proposer letter) — the only letter this event records,
+   * so it cannot carry a different grade from the receipt beside it. Null records no letter.
    */
   oneGradeLetter?: string | null
 }): Promise<string | null> {
@@ -295,11 +295,6 @@ export async function captureLiveTradeOffer(input: {
     const receiveResolved = receiveItems.map((item) => resolveItemValue(item, fcPlayers, isDynasty))
     const give: Asset[] = giveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-give-${idx}`))
     const receive: Asset[] = receiveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-recv-${idx}`))
-    const giveTotal = giveResolved.reduce((sum, item) => sum + item.value, 0)
-    const receiveTotal = receiveResolved.reduce((sum, item) => sum + item.value, 0)
-    const fullyPriced = [...giveResolved, ...receiveResolved].every((item) => item.resolved)
-    const percentDiff = giveTotal > 0 ? ((receiveTotal - giveTotal) / giveTotal) * 100 : null
-    const proposalGrade = projectedLetterFor({ percentDiff, hasSignal: fullyPriced })
 
     const calWeights = await getCalibratedWeights(undefined, { isSuperFlex, scoringType: undefined })
     const drivers: TradeDriverData = computeTradeDrivers(
@@ -337,7 +332,8 @@ export async function captureLiveTradeOffer(input: {
       rawAcceptProb: isotonicApplied ? drivers.acceptProbability : undefined,
       isotonicApplied,
       verdict: drivers.verdict,
-      grade: input.oneGradeLetter !== undefined ? input.oneGradeLetter : proposalGrade,
+      // THE grade (the receipt's proposer letter) — never a letter of this module's own.
+      grade: input.oneGradeLetter ?? null,
       confidenceScore: drivers.confidenceScore,
       driverSet: drivers.acceptDrivers?.map((d) => ({
         id: d.id,

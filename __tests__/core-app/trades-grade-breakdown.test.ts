@@ -25,16 +25,39 @@ vi.mock('@/lib/provider-trades/scanPendingSleeperTrades', () => ({
   scanPendingSleeperTrades: vi.fn(async () => null),
 }))
 
-/* Ranks only — the grade is computed in rank space, so a value here would prove nothing. */
-vi.mock('@/lib/player-values/latestPlayerValueSnapshots', () => ({
-  loadLatestPlayerValueSnapshots: vi.fn(async () => [
-    { sleeperId: 'p1', overallRank: 5, value: 9000, capturedAt: new Date('2026-09-19T00:00:00Z'), format: 'DYNASTY', qbFormat: 'SUPERFLEX' },
-    { sleeperId: 'p2', overallRank: 90, value: 3000, capturedAt: new Date('2026-09-19T00:00:00Z'), format: 'DYNASTY', qbFormat: 'SUPERFLEX' },
-  ]),
-}))
-vi.mock('@/lib/player-values/latestPickValueSnapshots', () => ({
-  loadLatestPickValueSnapshots: vi.fn(async () => []),
-}))
+/*
+ * THE ONE GRADE (2026-09-25): the list grades through `gradeArchivedTrade` on a league grader, no
+ * longer in rank space. The grader is faked by NAME — the only handle the list hands it — and the
+ * real `gradeArchivedTrade` runs, so the side orientation (received vs gave) is exercised for real.
+ */
+const PRICES: Record<string, number> = { 'Alpha Back': 9000, 'Beta Wide': 3000 }
+vi.mock('@/lib/player-analytics', () => ({ getPlayerAnalyticsBatch: vi.fn(async () => new Map()) }))
+vi.mock('@/lib/decision-os/trade/completedTradeGrade', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/decision-os/trade/completedTradeGrade')>()
+  const { gradeTrade } = await import('@/lib/decision-os/trade/tradeGrade')
+  const total = (xs: Array<{ kind: string; name?: string }>) => xs.reduce((s, x) => s + (PRICES[x.name ?? ''] ?? 0), 0)
+  return {
+    ...actual,
+    completedTradeGraderFor: async () => ({
+      leagueId: LEAGUE_ID,
+      chart: {},
+      grade: async (args: { give: Array<{ kind: string; name?: string }>; get: Array<{ kind: string; name?: string }> }) => {
+        const giveValue = total(args.give)
+        const getValue = total(args.get)
+        return gradeTrade({
+          giveValue, getValue, giveMarket: giveValue, getMarket: getValue, unpriced: 0,
+          giveCount: args.give.length, getCount: args.get.length, basis: 'Dynasty · Superflex · 12 teams · PPR',
+          scoringApplied: false, needApplied: false, needGap: null,
+          lines: [
+            ...args.give.map((a) => ({ side: 'give' as const, name: a.name ?? '', marketValue: PRICES[a.name ?? ''] ?? null, leagueValue: PRICES[a.name ?? ''] ?? null })),
+            ...args.get.map((a) => ({ side: 'get' as const, name: a.name ?? '', marketValue: PRICES[a.name ?? ''] ?? null, leagueValue: PRICES[a.name ?? ''] ?? null })),
+          ],
+          moves: [],
+        })
+      },
+    }),
+  }
+})
 
 vi.mock('@/lib/prisma', () => {
   const empty = new Proxy(

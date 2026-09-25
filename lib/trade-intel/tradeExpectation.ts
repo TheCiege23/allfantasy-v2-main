@@ -603,7 +603,15 @@ export function buildTradeExpectation(params: BuildParams): TradeExpectation {
  * rather than falling back to the old rule.
  */
 export function withOneGrade(exp: TradeExpectation, oneGrade: TradeGradeView | null): TradeExpectation {
-  if (exp.evaluation.scope !== 'market-only' || exp.sides.length !== 2) return exp
+  if (exp.evaluation.scope !== 'market-only') return exp
+  if (exp.sides.length !== 2) {
+    // One value gap cannot give three teams a letter each — the one grade withholds, so this does too.
+    return {
+      ...exp,
+      sides: exp.sides.map((s) => ({ ...s, projected: null })),
+      missing: [...exp.missing, 'grade withheld: only two-team trades are graded'],
+    }
+  }
   const [a, b] = exp.sides as [SideExpectation, SideExpectation]
   if (!oneGrade || !oneGrade.graded) {
     const why = oneGrade && !oneGrade.graded ? oneGrade.reason : 'the league grade could not be computed'

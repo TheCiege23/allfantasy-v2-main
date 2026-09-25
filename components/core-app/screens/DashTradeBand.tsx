@@ -19,11 +19,11 @@ import { TeamLogo } from '@/app/components/TeamLogo'
  * Each side therefore labels its basis and explains which contextual inputs
  * were available. A zero-signal result never appears as an earned C.
  *
- * The verdict that IS shown asks whether the deal was balanced ON THE DAY, by
- * market value of what each side received — the question a manager actually
- * asks the hour a trade lands, and one the canonical engine can answer now
- * because it prices a future pick properly instead of at zero. It renders only
- * when every asset on both sides priced; absent means exactly that.
+ * The verdict that IS shown is THE grade (lib/decision-os/trade/tradeGrade.ts):
+ * this league's values TODAY for what each side received — the same letter the
+ * Trade Center gives the deal. ⚠ It used to say "valued the day it was made",
+ * which was never true: the prices were always the newest on file. It renders
+ * only when every asset on both sides priced; absent means exactly that.
  *
  * ⚠ A PICK IS NAMED AS A PICK. "2027 4th", never the player it later became —
  * the two managers traded the pick, and resolving it would rewrite the deal
@@ -164,7 +164,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                   </span>
                   <span className="af-trade-conf af-num">
                     {' '}
-                    · valued the day it was made
+                    · on this league’s values today
                     {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
                   </span>
                 </p>
