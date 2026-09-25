@@ -32,13 +32,11 @@ const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
  * sweep before each week's main slate) sends under it, so its toggle is back.
  * Keep the set: the next category added before its sender goes here.
  *
- * `league_chat` (2026-09-25) is here for exactly that reason. Its sender exists and is wired into
- * the shared thread route's league-room branch, but the comms drawer posts league chat through
- * `/api/league/chat`, which does not call it yet — so a switch shown now would govern some league
- * messages and not others. Unhide it in the same change that wires `queueLeagueChatNotifications`
- * into that route.
+ * `league_chat` was hidden here for a day (2026-09-25) until `/api/league/chat` — the route the comms
+ * drawer posts league chat through — called `queueLeagueChatNotifications` as the shared thread
+ * route already did. Both senders are wired now, so its switch governs every league message.
  */
-const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set<NotificationCategoryId>(["league_chat"])
+const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set<NotificationCategoryId>()
 const VISIBLE_CATEGORY_IDS = NOTIFICATION_CATEGORY_IDS.filter((id) => !HIDDEN_CATEGORY_IDS.has(id))
 /*
  * The "all email" / "all push" switches cover the alerts a person already gets. An opt-in category
