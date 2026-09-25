@@ -360,13 +360,19 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
   }
 
   if (!input.skipChat && input.systemUserId) {
-    await postChopToLeagueChat({
-      leagueId: input.leagueId,
-      weekOrPeriod: input.weekOrPeriod,
-      choppedRosterIds,
-      displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
-      userId: input.systemUserId,
-    })
+    // Best-effort. The chop is already recorded; an announcement that fails must not turn a completed
+    // elimination into a failed one — the caller would retry a week that has already been chopped.
+    try {
+      await postChopToLeagueChat({
+        leagueId: input.leagueId,
+        weekOrPeriod: input.weekOrPeriod,
+        choppedRosterIds,
+        displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
+        userId: input.systemUserId,
+      })
+    } catch {
+      /* the league goes unannounced this week; the chop stands */
+    }
   }
 
   await appendEvent(input.leagueId, 'chop_animation_trigger', {
