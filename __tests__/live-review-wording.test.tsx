@@ -146,7 +146,7 @@ describe('Draft HQ wording', () => {
   })
 
   it('the /core page shows the live-draft board only when AllFantasy is running a draft', () => {
-    expect(src('app/core/[[...screen]]/page.tsx')).toContain('{draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}')
+    expect(src('app/core/(shell)/[[...screen]]/page.tsx')).toContain('{draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}')
   })
 })
 

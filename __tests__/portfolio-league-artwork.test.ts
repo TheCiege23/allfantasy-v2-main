@@ -15,7 +15,7 @@ const CSS = fs.readFileSync(
   'utf8',
 )
 const CORE_PAGE = fs.readFileSync(
-  path.join(process.cwd(), 'app', 'core', '[[...screen]]', 'page.tsx'),
+  path.join(process.cwd(), 'app', 'core', '(shell)', '[[...screen]]', 'page.tsx'),
   'utf8',
 )
 
