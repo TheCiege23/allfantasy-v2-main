@@ -231,7 +231,7 @@ export async function calculateScoreFromSportConfig(
       ? (sc.categoryPoints as Record<string, number>)
       : {}
   if (Object.keys(overrides).length === 0) {
-    // The sport's own panel store (NHL / NBA / NCAAB / soccer), else the existing NFL fallback.
+    // The sport's own panel store (NHL / NBA / NCAAB / NCAAF / soccer), else the existing NFL fallback.
     overrides = bridgeSportUiScoringStore(cfg.sport, league.settings) ?? bridgeLegacyNflScoringConfig(league)
   }
   categories = applyScoringPresetToRecPoints(categories, preset, overrides)
