@@ -49,7 +49,7 @@ export interface SubmitImportResult {
    * The server's own classification of a failure — 'LEAGUE_NOT_FOUND',
    * 'PROVIDER_UNAVAILABLE', 'ATTESTATION_REQUIRED', 'NOT_COMMISSIONER',
    * 'UNAUTHORIZED', 'CONNECTION_REQUIRED' — from `mapImportCommitErrorStatus` /
-   * `mapGateFailureStatus` in the commit route. Read THIS, not `status`, to decide
+   * `mapGateFailureStatus` (lib/league-import/commissionerGateResponse.ts). Read THIS, not `status`, to decide
    * what a failure means: `status` is the HTTP number (429 today; may be 503 for a
    * provider 5xx), and re-deriving "which numbers mean provider-unavailable" on the
    * client would be a second copy of a rule the server already owns — exactly the

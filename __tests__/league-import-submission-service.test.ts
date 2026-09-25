@@ -48,7 +48,7 @@ describe('LeagueCreationImportSubmissionService', () => {
    * ⚠ `code` IS THE SERVER'S OWN CLASSIFICATION, NOT ONE THE CLIENT RE-DERIVES.
    * The commit route now distinguishes LEAGUE_NOT_FOUND / PROVIDER_UNAVAILABLE /
    * ATTESTATION_REQUIRED / NOT_COMMISSIONER in its response body (see
-   * mapGateFailureStatus in app/api/leagues/import/commit/route.ts). Before this,
+   * mapGateFailureStatus in lib/league-import/commissionerGateResponse.ts). Before this,
    * `status` (the bare HTTP number) was the only signal that crossed the wire, and
    * a caller wanting the specific reason had to re-implement the mapping itself —
    * exactly the two-implementations-of-one-rule shape this repo has been bitten by

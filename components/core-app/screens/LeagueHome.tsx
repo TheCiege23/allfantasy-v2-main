@@ -513,9 +513,10 @@ export function LeagueHome({
         and those must both stay silent: a banner on every league is one nobody
         reads by the second week.
 
-        ⚠ AND IT NAMES THE PLATFORM. "We couldn't get your trade history" reads as
-        our failure and invites a support ticket; "Fleaflicker doesn't publish
-        trade history" is the truth and is something the reader can act on.
+        ⚠ AND IT NAMES THE PLATFORM, WITHOUT BLAMING IT. The sentence used to read
+        "Fleaflicker doesn't publish trade history"; a `missing` bucket only means
+        this import did not bring it across, so it now says exactly that and still
+        names where the league came from (see importCoverageSummary's header).
       */}
       {coverageSlot !== undefined ? (
         coverageSlot
