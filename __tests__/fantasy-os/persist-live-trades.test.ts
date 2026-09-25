@@ -28,6 +28,7 @@ const persistTradesForSeasonMock = vi.hoisted(() =>
       _season: number,
       _trades: unknown[],
       _rosterIdToOwner: Map<string, string>,
+      _platform?: string,
     ): Promise<number> => 0,
   ),
 )
@@ -75,9 +76,10 @@ function normalized(
     { source_team_id: '1', source_manager_id: 'ownerA' },
     { source_team_id: '2', source_manager_id: 'ownerB' },
   ],
+  provider: string = 'sleeper',
 ): NormalizedImportResult {
   return {
-    source: { source_provider: 'sleeper', source_league_id: 'L1', imported_at: '2026-09-05T00:00:00Z' },
+    source: { source_provider: provider, source_league_id: 'L1', imported_at: '2026-09-05T00:00:00Z' },
     league: { name: 'Test', season: 2026 },
     rosters,
     transactions,
@@ -202,6 +204,57 @@ describe('persistLiveTrades', () => {
   it('does no work and calls nothing when there are no transactions', async () => {
     const r = await run([])
     expect(r).toEqual({ tradesSeen: 0, rowsWritten: 0, skippedNoOwner: 0 })
+    expect(persistTradesForSeasonMock).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 NON-SLEEPER TRADES NEVER REACHED `LeagueTrade`. The filter above was Sleeper's word alone
+ * (`complete`), while ESPN says `processed`, Yahoo `successful`, MFL `completed` and Fleaflicker
+ * reports a whole lifecycle. The test DB held 0 non-Sleeper rows in LeagueTrade, ever. These pin
+ * the per-provider finality AND the platform label, which `persistTradesForSeason` used to
+ * hard-code to 'sleeper'.
+ */
+describe('persistLiveTrades — per-provider trade finality', () => {
+  async function runFor(provider: string, status: string) {
+    return persistLiveTrades({
+      platformLeagueId: 'L1',
+      season: 2026,
+      normalized: normalized([tx({ status })], undefined, provider),
+    })
+  }
+
+  it.each([
+    ['espn', 'processed'],
+    ['yahoo', 'successful'],
+    ['mfl', 'completed'],
+    ['fleaflicker', 'TRADE_ACCEPTED'],
+    ['fleaflicker', 'TRADE_ACCEPTED_FINAL'],
+    ['sleeper', 'complete'],
+  ])('writes a %s trade with status %s, labelled with its own platform', async (provider, status) => {
+    const r = await runFor(provider, status)
+    expect(r.tradesSeen).toBe(1)
+    expect(persistTradesForSeasonMock).toHaveBeenCalledTimes(1)
+    expect(persistTradesForSeasonMock.mock.calls[0][4]).toBe(provider)
+  })
+
+  it.each([
+    // Fleaflicker lifecycle stages where no asset moved (see fleaflickerTransactions.ts STATUS_PRIORITY).
+    ['fleaflicker', 'TRADE_PROPOSED'],
+    ['fleaflicker', 'TRADE_TO_REVIEW'],
+    ['fleaflicker', 'TRADE_REJECTED'],
+    ['fleaflicker', 'TRADE_VETOED'],
+    // A generic "final" word is NOT final for Fleaflicker — its feed only uses lifecycle names.
+    ['fleaflicker', 'completed'],
+    // Fantrax trades are INFERRED from roster snapshots, one row per player with synthetic ids.
+    ['fantrax', 'completed'],
+    // Sleeper stays exactly as it was: only its own word.
+    ['sleeper', 'completed'],
+    ['espn', 'pending'],
+    ['yahoo', 'proposed'],
+  ])('does NOT write a %s trade with status %s', async (provider, status) => {
+    const r = await runFor(provider, status)
+    expect(r.tradesSeen).toBe(0)
     expect(persistTradesForSeasonMock).not.toHaveBeenCalled()
   })
 })

@@ -100,7 +100,13 @@ export async function persistTradesForSeason(
   platformLeagueId: string,
   season: number,
   trades: NormalizedTradeFact[],
-  rosterIdToOwner: Map<string, string>
+  rosterIdToOwner: Map<string, string>,
+  /**
+   * `LeagueTrade.platform`. ⚠ This was hard-coded to "sleeper" on create; `persistLiveTrades` now
+   * writes ESPN/Yahoo/MFL/Fleaflicker trades through here too. Defaults to "sleeper" so the
+   * Sleeper-only callers (backfill-orchestrator, archiveFeedTrades) write exactly what they did.
+   */
+  platform: string = "sleeper"
 ): Promise<number> {
   if (trades.length === 0) return 0;
   const ownerIdsNeeded = new Set<string>();
@@ -174,7 +180,7 @@ export async function persistTradesForSeason(
           partnerRosterId: toPartnerRosterColumn(partnerRosterId),
           partnerName: null,
           tradeDate: t.created ? new Date(t.created) : null,
-          platform: "sleeper",
+          platform,
           sport: "nfl",
         },
       });

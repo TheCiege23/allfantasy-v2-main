@@ -1,6 +1,7 @@
 import type { EspnImportTransaction } from '@/lib/league-import/adapters/espn/types'
 import type { MflImportTransaction } from '@/lib/league-import/adapters/mfl/types'
 import type { YahooImportTransaction } from '@/lib/league-import/adapters/yahoo/types'
+import { isCompletedTrade, isFinalTransactionStatus } from '@/lib/league-import/transactionFinality'
 import type { ExternalIdentityMapping, NormalizedTransaction } from '@/lib/league-import/types'
 import {
   normalizeImportedActivityBatch,
@@ -56,8 +57,11 @@ export interface PlatformEmitterSkip {
   reason: 'UNSUPPORTED_TRANSACTION_TYPE' | 'TRANSACTION_NOT_COMPLETE'
 }
 
-/** Statuses the importers report for a transaction that actually happened. */
-const FINAL_STATUSES = new Set(['processed', 'executed', 'complete', 'completed', 'successful', 'success'])
+/*
+ * Statuses the importers report for a transaction that actually happened. ⚠ The sets live in
+ * `lib/league-import/transactionFinality.ts` now, because `persistLiveTrades` needs the same answer
+ * and had drifted to Sleeper's word alone. Behaviour here is unchanged.
+ */
 
 const ESPN_TYPE_MAP: Readonly<Record<string, ImportedActivityType>> = {
   trade: 'trade',
@@ -99,12 +103,7 @@ const NORMALIZED_TYPE_MAP: Readonly<Record<NormalizedTransaction['type'], Import
   drop: 'roster_move',
 }
 
-/** Fleaflicker emits the whole trade lifecycle; only these stages mean assets moved. */
-const FLEAFLICKER_FINAL_STATUSES = new Set(['trade_accepted', 'trade_accepted_final'])
-
-function isFinal(status: string | null | undefined): boolean {
-  return FINAL_STATUSES.has(String(status ?? '').trim().toLowerCase())
-}
+const isFinal = isFinalTransactionStatus
 
 function ownersOf(ids: readonly string[], teamOwnerMap: ReadonlyMap<string, string | null>): string[] {
   const out: string[] = []
@@ -303,7 +302,8 @@ export function emitFleaflickerTransactionActivity(
       skipped.push({ providerEventId, reason: 'UNSUPPORTED_TRANSACTION_TYPE' })
       continue
     }
-    if (activityType === 'trade' && !FLEAFLICKER_FINAL_STATUSES.has(String(tx.status ?? '').trim().toLowerCase())) {
+    // Fleaflicker emits the whole trade lifecycle; only accepted stages mean assets moved.
+    if (activityType === 'trade' && !isCompletedTrade('fleaflicker', tx.status)) {
       skipped.push({ providerEventId, reason: 'TRANSACTION_NOT_COMPLETE' })
       continue
     }
