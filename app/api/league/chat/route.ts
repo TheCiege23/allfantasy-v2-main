@@ -21,6 +21,7 @@ import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { resolveLeagueMentionIds } from '@/lib/chat-core/resolveMentionTargets'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -347,7 +348,7 @@ export async function POST(req: NextRequest) {
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      mentionedUserIds: mentionParsed.userMentions,
+      mentionedUserIds: await resolveLeagueMentionIds(leagueId, userId, mentionParsed.userMentions),
     })
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
@@ -415,7 +416,7 @@ export async function POST(req: NextRequest) {
   const created = await createLeagueChatMessage(leagueId, userId, bodyText, {
     metadata: finalMetadata,
     messageSubtype: mentionInfo.hasAll ? 'at_all' : null,
-    mentionedUserIds: mentionInfo.userMentions,
+    mentionedUserIds: await resolveLeagueMentionIds(leagueId, userId, mentionInfo.userMentions),
     parentMessageId,
   })
   if (!created) {
@@ -502,6 +503,7 @@ export async function POST(req: NextRequest) {
         actionHref: `/league/${encodeURIComponent(leagueId)}`,
         actionLabel: 'Open chat',
         meta: { leagueId, messageId: created.id },
+        dedupePrefix: `at_all:${created.id}`,
       })
     })
   }
