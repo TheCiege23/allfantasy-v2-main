@@ -90,6 +90,28 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
             error: guillotineErr instanceof Error ? guillotineErr.message : String(guillotineErr),
           })
         }
+
+        /*
+         * A zombie league's season start: team rows, the Whisperer, `status: 'active'`.
+         * Nothing else ever set `active`, so the scheduled resolver never ran a zombie week.
+         * Same placement and same reason as the guillotine shell above; non-fatal the same way.
+         */
+        try {
+          const { ensureZombieSeasonActivated } = await import('@/lib/zombie/activateNativeZombieLeague')
+          const zombie = await ensureZombieSeasonActivated({ leagueId, redraftSeasonId: summary.seasonId })
+          if (zombie.ok && zombie.activated) {
+            console.info('[postDraftFinalizeArtifacts] zombie league activated', {
+              leagueId,
+              zombieLeagueId: zombie.zombieLeagueId,
+              whispererPicked: zombie.whispererPicked,
+            })
+          }
+        } catch (zombieErr) {
+          console.error('[postDraftFinalizeArtifacts] zombie activation failed', {
+            leagueId,
+            error: zombieErr instanceof Error ? zombieErr.message : String(zombieErr),
+          })
+        }
       }
     }
   } catch (err) {

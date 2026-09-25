@@ -47,8 +47,20 @@ export async function selectWhisperer(
   })
 
   const leagueId = z.leagueId
-  const teams = await prisma.zombieLeagueTeam.findMany({ where: { leagueId } })
-  if (teams.length === 0) throw new Error('No zombie team rows — run assignTeams / roster sync first.')
+  const allTeams = await prisma.zombieLeagueTeam.findMany({ where: { leagueId } })
+  if (allTeams.length === 0) throw new Error('No zombie team rows — run assignTeams / roster sync first.')
+  /*
+   * The Whisperer is a person. An open seat (`open-slot-…`) or an orphaned one (`orphan-…`) is a
+   * roster nobody plays, and handing it the league's one special role would waste the season — so
+   * the draw is among managed teams whenever there are any.
+   */
+  const managedIds = new Set(
+    (await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }))
+      .filter((r) => r.platformUserId && !/^(open-slot-|orphan-)/.test(r.platformUserId))
+      .map((r) => r.id),
+  )
+  const managedTeams = allTeams.filter((t) => managedIds.has(t.rosterId))
+  const teams = managedTeams.length ? managedTeams : allTeams
 
   let pickRosterId: string | null = null
 
