@@ -241,6 +241,13 @@
   color: var(--muted);
 }
 
+/* The reasons arrive lower-case from the loaders ("no pre-draft queue has been saved…") and read
+   as fragments on the page. Sentence case here, not in every loader. */
+.af-dh-unavailable::first-letter,
+.af-dh-empty-text::first-letter {
+  text-transform: uppercase;
+}
+
 @media (max-width: 720px) {
   .af-dh-made-row {
     flex-wrap: wrap;

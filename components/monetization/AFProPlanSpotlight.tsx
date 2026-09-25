@@ -1,38 +1,39 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, Coins, Crown, Shield, Telescope } from 'lucide-react'
+import { CheckCircle2, Coins, Crown, Gem, Shield } from 'lucide-react'
 import {
   trackTokenPurchaseClicked,
   trackUpgradeEntryClicked,
 } from '@/lib/monetization-analytics'
+import { PLAN_FAMILY_INCLUDES, PLAN_FAMILY_SHORT_TAGLINE } from '@/lib/monetization/planIncludes'
 
-const AF_PRO_FEATURES = [
-  'Trade analyzer',
-  'Chat',
-  'Waivers',
-  'Player-specific planning',
-  'Matchup and player-specific recommendations',
-  'Player-focused insights',
-]
+/*
+ * ⚠ READ FROM THE PLAN CARDS' OWN SOURCE, NOT TYPED HERE. This list was a hand-written copy —
+ * "Trade analyzer, Chat, Waivers, Player-specific planning…" — that described no gate the app
+ * enforces, sitting directly above the plan card that lists the real ones. It now shows the same
+ * bullets as that card (lib/monetization/planIncludes.ts), so the two cannot disagree again.
+ */
+const AF_PRO_FEATURES = PLAN_FAMILY_INCLUDES.af_pro
 
+/* The three plans on sale. AF Legacy is not offered on the launch pricing, so it is not here. */
 const DIFFERENTIATION = [
   {
     title: 'AF Pro',
     icon: Crown,
-    copy: 'Player-specific tier for lineup and roster decisions.',
+    copy: PLAN_FAMILY_SHORT_TAGLINE.af_pro,
     tone: 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100',
   },
   {
     title: 'AF Commissioner',
     icon: Shield,
-    copy: 'League governance and commissioner automation tools.',
+    copy: PLAN_FAMILY_SHORT_TAGLINE.af_commissioner,
     tone: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
   },
   {
-    title: 'AF Legacy',
-    icon: Telescope,
-    copy: 'Draft room and long-horizon build workflows.',
+    title: 'AF Supreme',
+    icon: Gem,
+    copy: PLAN_FAMILY_SHORT_TAGLINE.af_supreme,
     tone: 'border-violet-400/35 bg-violet-500/10 text-violet-100',
   },
 ]
@@ -79,7 +80,8 @@ export function AFProPlanSpotlight({ className = '' }: { className?: string }) {
       </div>
 
       <p className="mt-1 text-xs text-white/65">
-        AF Pro is the player-specific tier. Use subscription access or tokens where policy allows.
+        Deep player and trade analysis, Competitive Edge, and Chimmy answers every day. Tokens pay
+        for single AI actions without a plan.
       </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">

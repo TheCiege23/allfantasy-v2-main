@@ -8,6 +8,7 @@ import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommend
 import type { WaiversData } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 
 /**
@@ -211,7 +212,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         null or an explicit empty rather than a fabricated bid, so mounting it
         does not weaken the honesty rule the withheld panel was protecting.
       */}
-      <WaiverIntel leagueId={data.league.id} />
+      <WaiverIntel leagueId={data.league.id} surface="core" />
 
       {/*
         ── Competitive Edge ─────────────────────────────────────────────
@@ -249,9 +250,13 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         Browse every available player
       </Link>
 
+      {/* A league AllFantasy runs takes its claims here; an imported one is only read. */}
       <p className="af-wv-footnote">
-        Claims are made on {data.league.platform === 'manual' ? 'your platform' : data.league.platform}.
-        AllFantasy only reads your league.
+        {data.league.platform === 'manual'
+          ? 'Claims are made on your platform. AllFantasy only reads your league.'
+          : platformLabel(data.league.platform) === 'AllFantasy'
+            ? 'Claims for this league are made here, on AllFantasy.'
+            : `Claims are made on ${platformLabel(data.league.platform)}. AllFantasy only reads your league.`}
       </p>
     </div>
   )

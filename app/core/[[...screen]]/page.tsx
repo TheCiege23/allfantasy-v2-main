@@ -3915,7 +3915,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               screen with a deadline measured in seconds. Settings, pick
               inventory and grades read after it.
             */}
-            {draftBoard ? <DraftBoard data={draftBoard} /> : null}
+            {/* Only when AllFantasy is running a draft here. Without one, every section of the board
+                said "no draft has been set up" — three times above Draft HQ's own record of the
+                draft the league already ran. */}
+            {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
           </>
         ) : showAllLeagues || !homeDrafts ? (

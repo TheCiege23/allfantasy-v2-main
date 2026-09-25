@@ -1368,7 +1368,7 @@ export async function getMyTeamData(
            * that no longer existed.
            */
           reason:
-            'we need prices for most of this league’s rosters to rank yours against them, and we do not have them yet',
+            'We need prices for most of this league’s rosters to rank yours against them, and we don’t have them yet.',
         },
     nextMatchup: matchup
       ? { available: true, data: matchup }
