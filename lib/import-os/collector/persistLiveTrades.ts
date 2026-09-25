@@ -166,6 +166,8 @@ export async function persistLiveTrades(input: {
     rosterIdToOwner,
     // ⚠ The writer used to hard-code 'sleeper' here; a Yahoo trade must not be labelled Sleeper.
     provider,
+    // …and 'nfl' for sport, so an imported NBA league's trades were labelled NFL.
+    normalized.league?.sport || undefined,
   )
 
   return { tradesSeen: trades.length, rowsWritten, skippedNoOwner }
