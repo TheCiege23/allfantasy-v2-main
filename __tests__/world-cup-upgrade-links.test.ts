@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { DAILY_CAP_LIMITS, checkDailyCap } from "@/lib/ai/dailyCaps"
+import { normalizePlanFamilyInput } from "@/lib/monetization/upgradeDestination"
 
 // ── Static source checks ──────────────────────────────────────────────────────
 
@@ -180,8 +181,13 @@ describe("Upgrade route target validity", () => {
       resolve(process.cwd(), "app/upgrade/page.tsx"),
       "utf-8"
     )
-    expect(upgradeSrc).toContain("af_pro")
-    expect(upgradeSrc).toContain("af_commissioner")
+    // The page reads `?plan=` through the shared normalizer (lib/monetization/upgradeDestination).
+    expect(upgradeSrc).toContain("normalizePlanFamilyInput")
     expect(upgradeSrc).toContain("focusPlanFamily")
+    // …which takes the spellings the World Cup CTAs link with.
+    expect(normalizePlanFamilyInput("af_pro")).toBe("af_pro")
+    expect(normalizePlanFamilyInput("af-pro")).toBe("af_pro")
+    expect(normalizePlanFamilyInput("af_commissioner")).toBe("af_commissioner")
+    expect(normalizePlanFamilyInput("af-commissioner")).toBe("af_commissioner")
   })
 })
