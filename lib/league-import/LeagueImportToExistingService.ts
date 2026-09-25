@@ -339,6 +339,7 @@ export async function applyImportedLeagueToExistingLeague(args: {
       existing: true,
       leagueTypeColumn: c.leagueTypeColumn,
       leagueTypeConfident: c.leagueTypeConfident,
+      existingSettings: currentSettings,
     })
     if (nextLeagueType) {
       updateData.leagueType = nextLeagueType

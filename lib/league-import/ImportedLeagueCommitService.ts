@@ -839,6 +839,7 @@ export async function persistImportedLeagueFromNormalization(
       existing: Boolean(existing),
       leagueTypeColumn: canonicalBundle?.leagueTypeColumn,
       leagueTypeConfident: canonicalBundle?.leagueTypeConfident,
+      existingSettings: existing?.settings,
     }),
     presetKey: canonicalBundle?.presetKey ?? undefined,
     scoringPresetId: canonicalBundle?.scoringPresetId ?? undefined,

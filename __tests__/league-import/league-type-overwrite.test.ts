@@ -127,6 +127,30 @@ describe('leagueTypeForUpdate — what actually reaches the column', () => {
     ).toBe('redraft')
   })
 
+  /*
+   * 🛑 A PERSON'S ANSWER OUTRANKS A CONFIDENT IMPORT (2026-09-25). Sleeper's `type: 2` is always
+   * confident, so a re-sync rewrote a league someone had confirmed as `zombie` back to `dynasty`.
+   */
+  it('never overwrites a league whose type a person confirmed — confident or not', () => {
+    const confirmed = { leagueTypeConfirmation: { type: 'zombie', confirmedByUserId: 'u1' } }
+    expect(
+      leagueTypeForUpdate({ existing: true, leagueTypeColumn: 'dynasty', leagueTypeConfident: true, existingSettings: confirmed }),
+    ).toBeUndefined()
+    // [control] the same confident write goes through when nobody confirmed anything.
+    expect(
+      leagueTypeForUpdate({ existing: true, leagueTypeColumn: 'dynasty', leagueTypeConfident: true, existingSettings: {} }),
+    ).toBe('dynasty')
+    // A confirmation that is not a known concept is not a confirmation.
+    expect(
+      leagueTypeForUpdate({
+        existing: true,
+        leagueTypeColumn: 'dynasty',
+        leagueTypeConfident: true,
+        existingSettings: { leagueTypeConfirmation: { type: 'nonsense' } },
+      }),
+    ).toBe('dynasty')
+  })
+
   it('writes nothing when there is no column value at all', () => {
     expect(
       leagueTypeForUpdate({ existing: false, leagueTypeColumn: null, leagueTypeConfident: true }),

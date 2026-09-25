@@ -41,7 +41,11 @@
  * right by accident.
  */
 
-import { readConfirmedPirateBase, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import {
+  readConfirmedLeagueConcept,
+  readConfirmedPirateBase,
+  resolveLeagueConcept,
+} from '@/lib/league/leagueConceptOptions'
 
 /** The three columns that identify a book in `PlayerValueSnapshot`. */
 export type ValueBook = {
@@ -59,8 +63,66 @@ export type ValueBook = {
   qbFormat: 'ONE_QB' | 'SUPERFLEX'
 }
 
-/** Slots that mean a league starts two quarterbacks. */
-const SUPERFLEX_SLOTS = new Set(['SUPER_FLEX', 'SUPERFLEX', 'QB/RB/WR/TE'])
+/**
+ * Slots that let a quarterback start in a SECOND lineup spot — Sleeper, ESPN (`OP`, which
+ * `EspnLeagueFetchService` maps to `SUPER_FLEX`), Yahoo (`Q/W/R/T`).
+ */
+const SUPERFLEX_SLOTS = new Set(['SUPER_FLEX', 'SUPERFLEX', 'SF', 'OP', 'QB/RB/WR/TE', 'QB/WR/RB/TE', 'Q/W/R/T'])
+
+/**
+ * Whether a league's lineup can start two quarterbacks. PURE; exported for tests.
+ *
+ * 🛑 THIS WAS AN EXACT MATCH ON SLEEPER'S SPELLING, AND EVERY OTHER IMPORTER WRITES `NAME:count`
+ * (2026-09-25). ESPN, Yahoo, MFL and Fantrax store `roster_positions` as `"SUPER_FLEX:2"` /
+ * `"QB:1"` (their adapters: `${slot}:${count}`), which never equals `"SUPER_FLEX"` — so an ESPN
+ * superflex league priced on the 1QB chart. And a TWO-QB league (two plain `QB` starts, no flex
+ * slot — 10 Sleeper leagues on production that day) priced 1QB too, though both formats trade
+ * quarterbacks at the same premium, which is why FantasyCalc has one `numQbs: 2` chart for both.
+ *
+ * ⚠ ANY FLEX-QB SLOT STILL MEANS SUPERFLEX ON ITS OWN, exactly as before — 29 Sleeper leagues list
+ * `SUPER_FLEX` and no plain `QB`; counting starts would have moved all of them off the chart they
+ * are on today. The second rule only ADDS leagues.
+ */
+export function startsTwoQuarterbacks(positions: readonly unknown[]): boolean {
+  let plainQb = 0
+  for (const raw of positions) {
+    const entry = String(raw ?? '').trim().toUpperCase()
+    if (!entry) continue
+    // `NAME:count`, where MFL can write a range (`QB:1-2`: up to two). A bare name counts once.
+    const m = /^(.*?):(\d+)(?:-(\d+))?$/.exec(entry)
+    const name = (m ? m[1] : entry).trim()
+    const count = m ? Number(m[3] ?? m[2]) : 1
+    if (!(count > 0)) continue
+    if (SUPERFLEX_SLOTS.has(name)) return true
+    if (name === 'QB') plainQb += count
+  }
+  return plainQb >= 2
+}
+
+/**
+ * Formats whose rosters DISSOLVE — drafted fresh, emptied as teams go out — so nothing carries into
+ * next season whatever the host platform's dynasty flag says. Always the redraft book.
+ */
+const ROSTER_DISSOLVING_CONCEPTS = new Set(['guillotine', 'survivor_guillotine', 'tournament'])
+
+/**
+ * The host platform's own facts about a league, as the importer stored them in `League.settings`.
+ * Only consulted where a human has not confirmed the league type — see `leagueVariantFor`.
+ */
+function providerSaysDynasty(settings: Record<string, unknown>): boolean {
+  return settings.isDynasty === true
+}
+
+function providerSaysKeeper(settings: Record<string, unknown>): boolean {
+  const rules = settings.conceptRules
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return false
+  const ext = (rules as Record<string, unknown>).extensions
+  if (!ext || typeof ext !== 'object' || Array.isArray(ext)) return false
+  const kp = (ext as Record<string, unknown>).keeperProvenance
+  if (!kp || typeof kp !== 'object' || Array.isArray(kp)) return false
+  const p = kp as Record<string, unknown>
+  return p.isKeeper === true && p.source === 'provider'
+}
 
 /**
  * Concepts whose rosters carry over, so future value is priced in — the ones
@@ -74,8 +136,12 @@ const SUPERFLEX_SLOTS = new Set(['SUPER_FLEX', 'SUPERFLEX', 'QB/RB/WR/TE'])
  * `efl` is a label that prices on the dynasty book and nothing else (user
  * decision, 2026-09-16). Exact ids, not substrings: `c2c` must not match an
  * unrelated string that happens to contain it.
+ *
+ * `salary_cap` joined 2026-09-25: the format rules (`leagueFormatRules.ts`) and the
+ * grading policy both treat it as a multi-season contract league, while this set
+ * priced it on the REDRAFT book — the verdict and the notes beside it disagreed.
  */
-const DYNASTY_SHELL_CONCEPTS = new Set(['devy', 'c2c', 'efl'])
+const DYNASTY_SHELL_CONCEPTS = new Set(['devy', 'c2c', 'efl', 'salary_cap'])
 
 /**
  * Whether a Pirate league carries rosters over.
@@ -102,18 +168,40 @@ export function leagueVariantFor(
   settings: unknown,
   leagueType: string | null
 ): { superflex: boolean; dynasty: boolean; keeper: boolean } {
-  const s = (settings ?? {}) as Record<string, unknown>
-  const positions = Array.isArray(s.roster_positions)
-    ? s.roster_positions.map((p) => String(p).toUpperCase())
-    : []
+  const s = (settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {}) as Record<string, unknown>
+  const positions = Array.isArray(s.roster_positions) ? s.roster_positions : []
   const type = (resolveLeagueConcept(settings, leagueType) ?? '').toLowerCase()
+  const confirmed = readConfirmedLeagueConcept(settings) != null
+  /*
+   * 🛑 A SPECIALTY FORMAT SITS ON A BASE, AND THE CONCEPT IS SINGLE-SELECT (2026-09-25). Confirming
+   * `zombie` or `best_ball` on a Sleeper DYNASTY league replaced the only word this read — so the
+   * league left the dynasty book the moment someone told us more about it. The host's own dynasty
+   * flag answers the base question for any format that does not settle it itself. A format whose
+   * rosters dissolve (`ROSTER_DISSOLVING_CONCEPTS`) settles it: redraft.
+   */
+  const specialtyOnABase =
+    type !== '' &&
+    type !== 'redraft' &&
+    type !== 'keeper' &&
+    type !== 'pirate' &&
+    !type.includes('dynasty') &&
+    !DYNASTY_SHELL_CONCEPTS.has(type) &&
+    !ROSTER_DISSOLVING_CONCEPTS.has(type)
   return {
-    superflex: positions.some((p) => SUPERFLEX_SLOTS.has(p)),
+    superflex: startsTwoQuarterbacks(positions),
     dynasty:
       type.includes('dynasty') ||
       DYNASTY_SHELL_CONCEPTS.has(type) ||
-      (type === 'pirate' && pirateCarriesOver(settings)),
-    keeper: type.includes('keeper'),
+      (type === 'pirate' && pirateCarriesOver(settings)) ||
+      (specialtyOnABase && providerSaysDynasty(s)),
+    /*
+     * 🛑 SLEEPER KEEPER LEAGUES WERE STORED, LABELLED AND PRICED AS REDRAFT (2026-09-25). The
+     * importer maps Sleeper `settings.type` 1 to `keeperProvenance.isKeeper` — kept — but the
+     * concept inference has no keeper branch, so the column says `redraft`: 16 leagues on
+     * production that day. The provider's own keeper fact now counts UNLESS a human confirmed a
+     * type; a confirmation always wins, including a confirmed `redraft`.
+     */
+    keeper: type.includes('keeper') || (!confirmed && providerSaysKeeper(s)),
   }
 }
 
