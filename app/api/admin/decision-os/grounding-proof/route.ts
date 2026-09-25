@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
     /** ⚠ Compare against the 3000ms ceiling in /api/chat/chimmy: at or above it, the live route
      *  is discarding this packet every turn while still paying to build it. */
     exceedsChatCeiling: Date.now() - startedAt >= 3000,
-    packet,
+    packet: { ...packet, managerPsychology: undefined, psychologyConsistency: undefined },
     serialized,
     serializedLength: serialized.length,
     /** The one-line verdict a reader actually wants first. */

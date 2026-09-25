@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -51,14 +52,14 @@ export async function POST(
       status: "generating",
       providerJobId: createResult.videoId,
       playbackUrl: null,
-      meta: {
+      meta: prismaJson.toPrismaJsonInput({
         ...previousMeta,
         heygen: createResult.payloadMetadata,
         retry: {
           at: new Date().toISOString(),
           previousJobId: episode.providerJobId ?? null,
         },
-      },
+      }),
       updatedAt: new Date(),
     },
   })

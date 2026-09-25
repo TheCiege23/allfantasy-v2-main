@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { publicDramaSummary } from './publicNarrative'
 import { buildTimelineForLeague } from './DramaTimelineBuilder'
 import { getDramaSportLabel, normalizeSportForDrama } from './SportDramaResolver'
 
@@ -60,6 +61,7 @@ export async function listDramaEvents(
   return events
     .map((e) => ({
       ...e,
+      summary: publicDramaSummary(e.dramaType, e.summary),
       sportLabel: getDramaSportLabel(e.sport),
       relatedManagerIds: Array.isArray(e.relatedManagerIds) ? (e.relatedManagerIds as string[]) : [],
       relatedTeamIds: Array.isArray(e.relatedTeamIds) ? (e.relatedTeamIds as string[]) : [],
@@ -77,6 +79,7 @@ export async function getDramaEventById(eventId: string): Promise<DramaEventView
   if (!e) return null
   return {
     ...e,
+    summary: publicDramaSummary(e.dramaType, e.summary),
     sportLabel: getDramaSportLabel(e.sport),
     relatedManagerIds: Array.isArray(e.relatedManagerIds) ? (e.relatedManagerIds as string[]) : [],
     relatedTeamIds: Array.isArray(e.relatedTeamIds) ? (e.relatedTeamIds as string[]) : [],

@@ -8,11 +8,12 @@ const WARN_MS = 4 * 60 * 1000 + 50 * 1000
 
 type VoiceRecorderProps = {
   leagueId: string
+  threadId?: string | null
   onComplete: (payload: { url: string; duration: number; mimeType: string; name: string }) => void
   onCancel: () => void
 }
 
-export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderProps) {
+export function VoiceRecorder({ leagueId, threadId, onComplete, onCancel }: VoiceRecorderProps) {
   const [seconds, setSeconds] = useState(0)
   const [bars, setBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0])
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -112,6 +113,7 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
             fd.append('file', blob, 'voice.webm')
             fd.append('type', 'voice')
             fd.append('leagueId', leagueId)
+            if (threadId) fd.append('threadId', threadId)
             const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
             const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
             if (!res.ok || !data.url) {

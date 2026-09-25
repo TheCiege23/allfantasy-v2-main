@@ -121,6 +121,7 @@ function assembleLeagueFacts(input: CanonicalWorldRawInput): LeagueFacts {
 
   return {
     leagueId: league.id,
+    teamCount: league.leagueSize ?? null,
     sport: league.sport,
     season: league.season,
     leagueType: league.leagueType,

@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import { randomUUID } from 'node:crypto'
 
 import { prisma } from '@/lib/prisma'
@@ -305,7 +306,7 @@ async function saveWorkingMemory(memory: WorkingMemory): Promise<void> {
       userId: memory.userId,
       eventType: WORKING_MEMORY_EVENT_TYPE,
       subject: memory.sessionId,
-      content: fallbackContent,
+      content: prismaJson.toPrismaJsonInput(fallbackContent),
       confidence: 1,
       expiresAt: null,
     },
@@ -316,7 +317,7 @@ async function saveWorkingMemory(memory: WorkingMemory): Promise<void> {
       teamId: null,
       eventType: WORKING_MEMORY_EVENT_TYPE,
       subject: memory.sessionId,
-      content: fallbackContent,
+      content: prismaJson.toPrismaJsonInput(fallbackContent),
       confidence: 1,
       expiresAt: null,
     },

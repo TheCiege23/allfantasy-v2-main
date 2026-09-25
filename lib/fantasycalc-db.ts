@@ -12,6 +12,12 @@ type CachedFantasyCalcPayload = {
   syncedAt: string
 }
 
+export type FantasyCalcSnapshotMetadata = {
+  settings: FantasyCalcSettings
+  observedAt: string
+  source: 'fantasycalc_cache' | 'fantasycalc_fetch'
+}
+
 export function buildFantasyCalcCacheKey(settings: FantasyCalcSettings): string {
   return `${KEY_PREFIX}dynasty:${settings.isDynasty ? '1' : '0'}:qbs:${settings.numQbs}:teams:${settings.numTeams}:ppr:${settings.ppr}`
 }
@@ -22,6 +28,9 @@ function parseCachedPayload(data: unknown): CachedFantasyCalcPayload | null {
   if (!Array.isArray(payload.players)) return null
   if (!payload.settings || typeof payload.settings !== 'object') return null
   if (typeof payload.syncedAt !== 'string') return null
+  const settings = payload.settings
+  if (typeof settings.isDynasty !== 'boolean' || ![1, 2].includes(settings.numQbs) ||
+    !Number.isInteger(settings.numTeams) || settings.numTeams < 1 || ![0, 0.5, 1].includes(settings.ppr)) return null
   return payload as CachedFantasyCalcPayload
 }
 
@@ -186,7 +195,7 @@ export async function readFantasyCalcValuesFromDb(
   }
 
   const parsed = parseCachedPayload(row.data)
-  if (!parsed) {
+  if (!parsed || buildFantasyCalcCacheKey(parsed.settings) !== cacheKey) {
     return { players: [], stale: false, syncedAt: null, expiresAt: row.expiresAt.toISOString() }
   }
 
@@ -215,20 +224,24 @@ export async function readFantasyCalcValuesFromDb(
  */
 export async function getFantasyCalcValuesDbFirst(
   settings: FantasyCalcSettings,
-  options?: { maxStaleMs?: number }
+  options?: { maxStaleMs?: number; onSnapshot?: (metadata: FantasyCalcSnapshotMetadata) => void }
 ): Promise<FantasyCalcPlayer[]> {
   const fromDb = await readFantasyCalcValuesFromDb(settings, { allowStale: true })
   const maxStale = options?.maxStaleMs ?? 1000 * 60 * 60 * 6
 
   if (fromDb.players.length > 0) {
     const syncedMs = fromDb.syncedAt ? Date.now() - new Date(fromDb.syncedAt).getTime() : Infinity
-    if (!fromDb.stale || syncedMs <= maxStale) {
+    // Expiration cannot override the caller's maximum observation age or make a future stamp valid.
+    if (Number.isFinite(syncedMs) && syncedMs >= 0 && syncedMs <= maxStale) {
+      options?.onSnapshot?.({ settings: { ...settings }, observedAt: fromDb.syncedAt!, source: 'fantasycalc_cache' })
       return fromDb.players
     }
   }
 
   const fresh = await fetchFantasyCalcValues(settings)
-  await writeFantasyCalcValuesToDb(settings, fresh)
+  const observedAt = new Date()
+  await writeFantasyCalcValuesToDb(settings, fresh, { syncedAt: observedAt })
+  options?.onSnapshot?.({ settings: { ...settings }, observedAt: observedAt.toISOString(), source: 'fantasycalc_fetch' })
   return fresh
 }
 

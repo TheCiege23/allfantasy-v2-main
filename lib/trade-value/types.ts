@@ -104,6 +104,21 @@ export interface AssetValueSnapshot {
     fit: { multiplier: number; reason: string } | null
     legality: { ok: boolean; reason?: string } | null
   } | null
+  /**
+   * `internalValue` with the format model's multiplier applied — the number that answers
+   * "what is this worth IN THIS LEAGUE", as opposed to what the market says it is worth.
+   *
+   * 🛑 A SECOND FIELD RATHER THAN AN OVERWRITE, ON PURPOSE. `internalValue` is deliberately
+   * the market baseline: a reader comparing this snapshot to one written before format
+   * models existed finds identical values, and a surface can show the base and the
+   * adjustment as two numbers a manager can argue with. Folding the multiplier into
+   * `internalValue` would deliver the same grade while destroying both properties, and
+   * `fitAdjustedValue`'s own comment warns against exactly that.
+   *
+   * Null when the format has no opinion on this asset — which is most assets in most
+   * leagues, and must read as "no adjustment", never as "adjusted to nothing".
+   */
+  formatAdjustedValue?: number | null
 }
 
 export interface TradeValueContext {
@@ -132,11 +147,28 @@ export interface TradeValueContext {
   /** Dynasty and keeper inference, for `readFormatRules` when no id resolves. Optional. */
   isDynasty?: boolean | null
   keeperCount?: number | null
+  /**
+   * The league's FULL season waiver budget, for pricing a FAAB asset — not a remaining balance.
+   *
+   * ⚠ ABSENT MEANS "NOT SUPPLIED", and `normalizedFaabValue` then assumes `FAAB_DEFAULT_BUDGET`.
+   * That fallback reproduces this engine's pre-2026-09-11 behaviour exactly, so an old caller
+   * that cannot supply it is not made worse — but a $200 or $1000 league priced under the
+   * fallback is wrong by the ratio of the budgets, which is the whole reason the field exists.
+   */
+  waiverBudget?: number | null
 }
 
 export interface SideTotals {
   rosterId: string
+  /** Sum of `internalValue` — the market baseline, unchanged by any format model. */
   total: number
+  /**
+   * Sum of `formatAdjustedValue ?? internalValue`.
+   *
+   * Equal to `total` whenever no asset on this side drew a format opinion, so a consumer
+   * can compare the two and tell whether the format moved this trade at all.
+   */
+  formatAdjustedTotal?: number
   assets: AssetValueSnapshot[]
 }
 

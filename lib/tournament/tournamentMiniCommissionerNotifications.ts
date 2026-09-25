@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 
 export async function notifyUserPlatform(
@@ -16,7 +17,7 @@ export async function notifyUserPlatform(
         body,
         productType: 'shared',
         severity: 'low',
-        meta: meta ?? {},
+        meta: prismaJson.toPrismaJsonInput(meta ?? {}),
       },
     })
   } catch (e) {

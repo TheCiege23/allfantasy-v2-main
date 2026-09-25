@@ -25,10 +25,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * function the route cannot call would let "never called" assertions pass forever without meaning
  * anything — the green-guard-that-cannot-fail this repo keeps paying for.
  */
-const { getServerSessionMock, resolveLeagueActivityTrendMock, authorizeLeagueReadMock } = vi.hoisted(() => ({
+const {
+  getServerSessionMock,
+  resolveLeagueActivityTrendMock,
+  authorizeLeagueReadMock,
+  readLeagueIntelligenceMock,
+  generateLeagueIntelligenceMock,
+} = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   resolveLeagueActivityTrendMock: vi.fn(),
   authorizeLeagueReadMock: vi.fn(),
+  readLeagueIntelligenceMock: vi.fn(),
+  generateLeagueIntelligenceMock: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
@@ -39,8 +47,20 @@ vi.mock('@/lib/decision-os/dashboard-intelligence', () => ({
 vi.mock('@/lib/decision-os/leagueReadAuthorization', () => ({
   authorizeLeagueRead: authorizeLeagueReadMock,
 }))
+/**
+ * Tripwires, not coverage: the route imports neither phase-3 module today. They are mocked so a
+ * regression that re-wires cached-dossier reads or whole-profile generation into this route is
+ * INTERCEPTED (and fails the not-called assertions below) instead of executing a real provider
+ * call inside a unit test.
+ */
+vi.mock('@/lib/decision-os/three-brain/phase3/readLeagueIntelligence', () => ({
+  readLeagueIntelligence: readLeagueIntelligenceMock,
+}))
+vi.mock('@/lib/decision-os/three-brain/phase3/generateLeagueIntelligence', () => ({
+  generateLeagueIntelligence: generateLeagueIntelligenceMock,
+}))
 
-import { GET } from '@/app/api/decision-os/manager-intelligence/route'
+import { GET, POST } from '@/app/api/decision-os/manager-intelligence/route'
 
 function req(url: string) {
   return new Request(url) as unknown as Parameters<typeof GET>[0]
@@ -135,5 +155,56 @@ describe('/api/decision-os/manager-intelligence route contract', () => {
      * `leagueTrend` is league-wide data, and this is what keeps a non-member from reading it.
      */
     expect(resolveLeagueActivityTrendMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a missing leagueId before the membership gate runs', async () => {
+    const res = await GET(req('http://localhost/api/decision-os/manager-intelligence'))
+    expect(res.status).toBe(400)
+    expect(authorizeLeagueReadMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['member', 'commissioner'] as const)(
+    'preserves activity but withholds profiles and stored analysis for %s (no-store, caller managerId ignored)',
+    async (role) => {
+      authorizeLeagueReadMock.mockResolvedValue({ authorized: true, role })
+      resolveLeagueActivityTrendMock.mockResolvedValue({
+        available: true,
+        periodsTracked: 2,
+        earliestPeriodKey: '2026-01',
+        latestPeriodKey: '2026-02',
+        latestEventCount: 8,
+        latestManagerCount: 3,
+        eventCountDelta: 2,
+        direction: 'increasing',
+      })
+
+      // A caller-supplied `managerId` must not steer anything: the gate is keyed on the SESSION user.
+      const res = await GET(
+        req('http://localhost/api/decision-os/manager-intelligence?leagueId=L1&managerId=someone-else'),
+      )
+
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Cache-Control')).toBe('no-store')
+      const body = await res.json()
+      expect(body.leagueTrend).toMatchObject({ available: true, latestEventCount: 8, eventCountDelta: 2 })
+      expect(body.managerDna).toBeNull()
+      expect(body.recommendations).toBeNull()
+      expect(body.intelligence).toMatchObject({ result: null, reason: 'decision_specific_evidence_required' })
+      expect(authorizeLeagueReadMock).toHaveBeenCalledWith('L1', 'u1')
+      expect(resolveLeagueActivityTrendMock).toHaveBeenCalledWith('L1')
+      expect(readLeagueIntelligenceMock).not.toHaveBeenCalled()
+    },
+  )
+
+  it('retired generation (POST) cannot spend tokens or call a provider — 410 before any session read', async () => {
+    const res = await POST(
+      new Request('http://localhost/api/decision-os/manager-intelligence?leagueId=L1', {
+        method: 'POST',
+        body: '{invalid',
+      }),
+    )
+    expect(res.status).toBe(410)
+    expect(generateLeagueIntelligenceMock).not.toHaveBeenCalled()
+    expect(getServerSessionMock).not.toHaveBeenCalled()
   })
 })

@@ -540,7 +540,7 @@ function Desktop({ data, leagueId }: { data: Dash34Data; leagueId: string | null
               </strong>
               <p className="af-d34-notice-p">
                 {data.totalLeagues === 0
-                  ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+                  ? 'Connect Sleeper, ESPN, Fantrax, MFL or Fleaflicker and your leagues appear here. Read-only, about a minute.'
                   : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
               </p>
               <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>
@@ -806,7 +806,7 @@ function Mobile({ data, leagueId }: { data: Dash34Data; leagueId: string | null 
           </strong>
           <p className="af-d34-notice-p">
             {data.totalLeagues === 0
-              ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+              ? 'Connect Sleeper, ESPN, Fantrax, MFL or Fleaflicker and your leagues appear here. Read-only, about a minute.'
               : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
           </p>
           <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>

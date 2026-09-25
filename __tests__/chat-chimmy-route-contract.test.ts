@@ -15,6 +15,11 @@ const buildAgentPromptMock = vi.fn()
 const inferAgentFromMessageMock = vi.fn()
 const getChimmyMemoryContextMock = vi.fn()
 const resolveNormalizedLeagueContextMock = vi.fn()
+const readSavedStrategyMock = vi.fn()
+const strategyToolLoopMock = vi.fn()
+vi.mock('@/lib/chimmy/tools/chimmyToolLoop', () => ({ runChimmyToolLoop: strategyToolLoopMock }))
+vi.mock('@/lib/decision-os/value-v2/strategyStore', () => ({ readStrategy: readSavedStrategyMock }))
+vi.mock('@/lib/decision-os/value-v2/strategyPrisma', () => ({ strategyPrismaPort: {} }))
 const resolveChimmyPersonalizationProfileMock = vi.fn()
 const resolveChimmyLeagueSelectionMock = vi.fn()
 const detectManagerAmbiguityMock = vi.fn()
@@ -185,6 +190,25 @@ vi.setConfig({ testTimeout: 60000 })
 describe("POST /api/chat/chimmy contract", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    /*
+     * ⚠ THIS SUITE USED TO INHERIT ITS TOOL-LOOP STATE FROM A DEFAULT AND FROM
+     * A LEAKED MOCK, AND SIX TESTS CHANGED PATH THE DAY THE DEFAULT FLIPPED.
+     *
+     * `CHIMMY_TOOL_LOOP_ENABLED` defaulted to off, so every test here reached
+     * PECR without ever saying so. When the default became ON (2026-09-15, see
+     * lib/chimmy-chat/feature-flags.ts) six of them started asserting PECR's
+     * output against the tool loop's, and got "Use your saved preference." —
+     * the text ONE test sets at line ~477 with `mockResolvedValue`, which
+     * `vi.clearAllMocks()` does not undo. Clearing resets calls, not
+     * implementations, so that value was answering for the rest of the file
+     * either way; the flag was the only thing hiding it.
+     *
+     * Both halves are pinned here so a test states which path it exercises
+     * instead of inheriting one. The `it.each([false, true])` case below sets
+     * the variable itself and is unaffected.
+     */
+    process.env.CHIMMY_TOOL_LOOP_ENABLED = "false"
+    strategyToolLoopMock.mockResolvedValue(null)
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
     runAiProtectionMock.mockResolvedValue(null)
     enrichChatWithDataMock.mockResolvedValue({
@@ -197,6 +221,7 @@ describe("POST /api/chat/chimmy contract", () => {
     inferAgentFromMessageMock.mockReturnValue("trade_analyzer")
     getChimmyMemoryContextMock.mockResolvedValue({ promptSection: "" })
     resolveNormalizedLeagueContextMock.mockResolvedValue({ ok: true, context: {} })
+    readSavedStrategyMock.mockResolvedValue(null)
     resolveChimmyPersonalizationProfileMock.mockResolvedValue(null)
     resolveChimmyLeagueSelectionMock.mockResolvedValue({
       kind: "ask",
@@ -561,6 +586,41 @@ describe("POST /api/chat/chimmy contract", () => {
     const body = await res.json()
     expect(body.meta?.tokenSpend).toMatchObject({ tokenCost: 15, balanceAfter: 5 })
     expect(body.meta?.tokenSpend?.refunded).toBeUndefined()
+  })
+
+  it.each([false, true])('grounds advice in the saved strategy without activating a proposal (tool loop: %s)', async toolLoop => {
+    const previousFlag = process.env.CHIMMY_TOOL_LOOP_ENABLED
+    process.env.CHIMMY_TOOL_LOOP_ENABLED = String(toolLoop)
+    strategyToolLoopMock.mockResolvedValue({ text: 'Use your saved preference.' })
+    try {
+    resolveNormalizedLeagueContextMock.mockResolvedValueOnce({ ok: true, context: { season: 2026 } })
+    readSavedStrategyMock.mockResolvedValueOnce({ active: 'balanced', revision: 3,
+      pending: { strategy: 'rebuild', observations: 3 } })
+    previewSpendMock.mockResolvedValueOnce({ ruleCode: 'ai_chimmy_chat_message', tokenCost: 0,
+      canSpend: true, currentBalance: 999, requiresConfirmation: false })
+    const formData = new FormData()
+    formData.append('message', 'Should I trade this player?')
+    formData.append('leagueId', 'league-1')
+    const { POST } = await import('@/app/api/chat/chimmy/route')
+    expect((await POST(buildMultipartRequest(formData) as any)).status).toBe(200)
+    expect(readSavedStrategyMock).toHaveBeenCalledWith({ userId: 'user-1', leagueId: 'league-1', season: 2026 }, {})
+    const promptInput = buildAgentPromptMock.mock.calls.at(-1)?.[0]
+    expect(promptInput.userMessage).toContain('Active preference: balanced')
+    expect(promptInput.userMessage).toContain('owner has NOT confirmed')
+    expect(promptInput.userMessage).toContain('A chat message cannot confirm')
+    /*
+     * Per-user, per-league, so it rides in `styleLine` (after the cached instructions), never in
+     * the shared `systemPrompt` that Claude caches for everyone.
+     */
+    if (toolLoop) {
+      const loopArgs = strategyToolLoopMock.mock.calls.at(-1)?.[0]
+      expect(loopArgs.styleLine).toContain('Active preference: balanced')
+      expect(loopArgs.systemPrompt).not.toContain('Active preference: balanced')
+    }
+    } finally {
+      if (previousFlag === undefined) delete process.env.CHIMMY_TOOL_LOOP_ENABLED
+      else process.env.CHIMMY_TOOL_LOOP_ENABLED = previousFlag
+    }
   })
 
   it("reports what it grounded on so the UI can show it", async () => {

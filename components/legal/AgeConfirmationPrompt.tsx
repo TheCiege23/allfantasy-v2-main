@@ -18,13 +18,36 @@
  * users being confused later, not to hold the app hostage. It returns on the next session
  * until confirmed.
  */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type CSSProperties } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { getTermsUrl, getPrivacyUrl } from "@/lib/legal/LegalRouteResolver"
 
 /** Session-scoped so a dismissal does not persist past the tab. */
 const DISMISS_KEY = "af_age_prompt_dismissed"
+
+const actionButtonBase: CSSProperties = {
+  minHeight: 44,
+  padding: "10px 14px",
+  borderRadius: 10,
+  fontSize: 14,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  cursor: "pointer",
+  textAlign: "center",
+}
+
+const primaryButton: CSSProperties = {
+  border: "1px solid var(--color-accent, #22d3ee)",
+  background: "var(--color-accent, #22d3ee)",
+  color: "var(--color-accent-ink, #05131a)",
+}
+
+const secondaryButton: CSSProperties = {
+  border: "1px solid var(--color-neutral-800, #2a2d3d)",
+  background: "transparent",
+  color: "var(--color-neutral-400, #a6accb)",
+}
 
 export default function AgeConfirmationPrompt() {
   const { status } = useSession()
@@ -96,24 +119,27 @@ export default function AgeConfirmationPrompt() {
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        background: "rgba(0,0,0,0.6)",
+        background: "rgba(0,0,0,0.72)",
       }}
     >
       <div
         style={{
           maxWidth: 420,
           width: "100%",
-          padding: 28,
-          borderRadius: "var(--radius-lg)",
-          border: "1px solid var(--color-neutral-800)",
-          background: "var(--color-surface)",
-          color: "var(--color-neutral-200)",
+          maxHeight: "calc(100dvh - 40px)",
+          overflowY: "auto",
+          padding: 24,
+          borderRadius: "var(--radius-lg, 16px)",
+          border: "1px solid var(--color-neutral-800, #2a2d3d)",
+          background: "var(--color-surface, #171926)",
+          color: "var(--color-neutral-200, #e4e7f5)",
+          boxShadow: "0 24px 60px rgba(0, 0, 0, 0.55)",
         }}
       >
         <h2 id="af-age-prompt-title" style={{ fontSize: 20, margin: "0 0 10px" }}>
           Quick confirmation
         </h2>
-        <p style={{ fontSize: 14, lineHeight: 1.6, margin: "0 0 18px", color: "var(--color-neutral-400)" }}>
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: "0 0 18px", color: "var(--color-neutral-400, #a6accb)" }}>
           We don&apos;t have your age confirmation on file. Please confirm you&apos;re 18 or
           older and agree to the{" "}
           <Link href={getTermsUrl()} style={{ fontWeight: 600 }}>
@@ -127,18 +153,30 @@ export default function AgeConfirmationPrompt() {
         </p>
 
         {error && (
-          <p role="alert" style={{ fontSize: 13, margin: "0 0 14px", color: "var(--color-error)" }}>
+          <p role="alert" style={{ fontSize: 13, margin: "0 0 14px", color: "var(--color-error, #ff6b6b)" }}>
             {error}
           </p>
         )}
 
-        <div style={{ display: "flex", gap: 10 }}>
+        {/*
+         * ⚠ `.btn` / `.btn-primary` DO NOT EXIST. Measured on the landing page:
+         * `document.styleSheets` contains ZERO rules matching `.btn`, so both
+         * controls rendered as bare centred text with no background, border,
+         * radius or weight — a legal modal whose two choices did not look like
+         * buttons at all. Same root cause as the panel above: this dialog mounts
+         * as a direct child of <body>, outside every scoped style block the app
+         * defines. Everything it needs is therefore self-contained here.
+         *
+         * Basis values are sized to the real content box: 375px viewport - 40px
+         * overlay padding - 2x24px panel padding = 287px, so 10rem + 6rem + 10px
+         * gap = 266px keeps both on one row with the primary visibly dominant.
+         */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           <button
             type="button"
             onClick={() => void confirm()}
             disabled={submitting}
-            className="btn btn-primary"
-            style={{ flex: 1, minHeight: 44 }}
+            style={{ ...actionButtonBase, flex: "1 1 10rem", ...primaryButton }}
           >
             {submitting ? "Saving…" : "I'm 18+ and agree"}
           </button>
@@ -146,8 +184,7 @@ export default function AgeConfirmationPrompt() {
             type="button"
             onClick={dismiss}
             disabled={submitting}
-            className="btn btn-secondary"
-            style={{ minHeight: 44 }}
+            style={{ ...actionButtonBase, flex: "1 1 6rem", ...secondaryButton }}
           >
             Not now
           </button>

@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -73,7 +74,7 @@ export async function POST(
   await prisma.$transaction([
     prisma.league.update({
       where: { id: reqRow.leagueId },
-      data: { settings: nextSettings },
+      data: { settings: prismaJson.toPrismaJsonInput(nextSettings) },
     }),
     prisma.legacyTournamentLeagueSettingRequest.update({
       where: { id: requestId },

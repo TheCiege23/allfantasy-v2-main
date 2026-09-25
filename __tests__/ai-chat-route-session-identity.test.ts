@@ -22,7 +22,7 @@ const {
     sleeperUsername: string
     displayName: string
     leagues: never[]
-    aiReports: never[]
+    aiReports: Array<{ rating: number; title: string; insights: Record<string, unknown> }>
   }
 
   const store = {
@@ -48,7 +48,7 @@ const {
       findUnique: vi.fn(async ({ where }: any) => {
         const user = store.legacyUsers.get(where.sleeperUsername)
         if (!user) return null
-        return { ...user, leagues: [], aiReports: [] }
+        return { ...user }
       }),
     },
     userProfile: {
@@ -119,7 +119,8 @@ vi.mock('@/lib/chimmy-context/flags', () => ({
 vi.mock('@/lib/chimmy-context/intel/intelligenceBundle', () => ({ buildIntelligenceBundle: vi.fn() }))
 vi.mock('@/lib/chimmy-context/telemetry/recordRun', () => ({ recordChimmyContextRun: vi.fn() }))
 
-import { POST } from '@/app/api/ai/chat/route'
+import { POST as routePost } from '@/app/api/ai/chat/route'
+const POST = (request: NextRequest) => routePost(request, {})
 
 const ROUTE_URL = 'http://localhost/api/ai/chat'
 
@@ -196,4 +197,20 @@ describe('POST /api/ai/chat — session-derived identity', () => {
     const body = await res.json()
     expect(body.legacy_context.display_name).toBe('Session User Real Name')
   })
+})
+
+it('keeps old inferred profile text out of the provider prompt and public chat context', async () => {
+  store.legacyUsers.get('sessionuserreal')!.aiReports = [{
+    rating: 82, title: 'PRIVATE_ARCHETYPE_TITLE',
+    insights: { archetype: 'PRIVATE_ARCHETYPE', strengths: ['PRIVATE_STRENGTH'], weaknesses: ['PRIVATE_WEAKNESS'] },
+  }]
+  const response = await POST(postRequest({ message: 'Show my career record', context_scope: { sleeper_username: 'sessionuserreal', include_legacy: true } }))
+  expect(response.status).toBe(200)
+  const body = await response.json()
+  expect(body.legacy_context).toEqual({ included: true, display_name: 'Session User Real Name' })
+  expect(runCostControlledOpenAITextMock).toHaveBeenCalled()
+  const prompt = JSON.stringify(runCostControlledOpenAITextMock.mock.calls)
+  expect(prompt).toContain('82')
+  expect(prompt).toContain('Session User Real Name')
+  expect(prompt).not.toMatch(/PRIVATE_ARCHETYPE|PRIVATE_STRENGTH|PRIVATE_WEAKNESS/)
 })

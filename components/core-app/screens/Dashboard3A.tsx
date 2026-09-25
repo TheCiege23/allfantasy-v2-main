@@ -540,7 +540,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
 
         <div className="af3a-import">
           <h4>Import a league</h4>
-          <p>Sleeper, ESPN or Yahoo. Read-only, takes about a minute.</p>
+          <p>Sleeper, ESPN, Fantrax, MFL or Fleaflicker. Read-only, takes about a minute.</p>
           <Link className="af3a-btn af3a-btn-accent af3a-btn-full" href="/import">
             Connect a platform
           </Link>

@@ -125,6 +125,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search emojis..."
+          aria-label="Search emojis"
           className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
         />
         <button type="button" onClick={onClose} className="text-[10px] text-white/40 hover:text-white">

@@ -65,6 +65,12 @@ model PlayerValueSnapshot {
   /// which is exactly where an edge lives and a natural confidence input.
   marketStdDev   Float?
 
+  /// Observed source-board axes. Null on legacy rows; never backfilled from today's defaults.
+  marketNumTeams Int?
+  marketPpr      Float?
+  /// Actual fetch observation time, separate from the UTC-day idempotency stamp below.
+  observedAt     DateTime? @db.Timestamptz(3)
+
   capturedAt DateTime @default(now())
 
   @@unique([sleeperId, source, format, qbFormat, capturedAt])
@@ -2771,6 +2777,42 @@ model OpponentTendency {
   @@index([leagueId])
   @@index([lastComputedAt])
   @@map("opponent_tendencies")
+}
+
+/// Owner-scoped strategy preferences. Observations can propose, but only the owner confirms a change.
+model DecisionStrategyState {
+  id               String   @id @default(cuid())
+  userId           String
+  leagueId         String
+  season           Int
+  active           String   @default("balanced") @db.VarChar(16)
+  revision         Int      @default(0)
+  pending          Json?
+  lastObservedWeek Int?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, leagueId, season])
+  @@map("decision_strategy_states")
+}
+
+/// Atomic audit trail: one event per accepted state revision, including evidence for observations.
+model DecisionStrategyEvent {
+  id        String   @id @default(cuid())
+  stateId   String
+  userId    String
+  leagueId  String
+  season    Int
+  revision  Int
+  action    String   @db.VarChar(16)
+  evidenceId String?
+  before    Json
+  after     Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([stateId, revision])
+  @@index([userId, leagueId, season, createdAt])
+  @@map("decision_strategy_events")
 }
 
 model StrategySnapshot {

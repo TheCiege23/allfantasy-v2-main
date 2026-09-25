@@ -5,6 +5,7 @@ import {
 } from '@/lib/relationship-insights'
 import { normalizeOptionalSportForRelationship } from '@/lib/relationship-insights/SportRelationshipResolver'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { publicRelationshipInsights } from '@/lib/relationship-insights/publicView'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export async function GET(
       syncGraphRivalryEdges,
     })
 
-    return NextResponse.json(insights)
+    return NextResponse.json(publicRelationshipInsights(insights), { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     console.error('[relationship-insights GET]', e)
     return NextResponse.json(
@@ -89,7 +90,7 @@ export async function POST(
 
     return NextResponse.json({
       orchestration,
-      insights,
+      insights: publicRelationshipInsights(insights),
     })
   } catch (e) {
     console.error('[relationship-insights POST]', e)

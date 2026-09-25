@@ -8,6 +8,7 @@
  *  - All consumers (AI, UI) read only from DB; the sync script populates the cache
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 import type { ApiChainSport } from '@/lib/workers/api-config'
 
@@ -489,8 +490,8 @@ export async function writePlayerValuationsToDb(
 
   await prisma.sportsDataCache.upsert({
     where: { cacheKey },
-    update: { data: payload, expiresAt },
-    create: { cacheKey, data: payload, expiresAt },
+    update: { data: prismaJson.toPrismaJsonInput(payload), expiresAt },
+    create: { cacheKey, data: prismaJson.toPrismaJsonInput(payload), expiresAt },
   })
 
   return { cacheKey, expiresAt, count: players.length }

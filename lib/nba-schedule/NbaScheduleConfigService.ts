@@ -4,6 +4,7 @@
  * Follows the same pattern as ScoringWindowResolver and MatchupCadenceResolver.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 import type { NbaScheduleConfig } from './types'
 import { DEFAULT_NBA_SCHEDULE_CONFIG } from './types'
@@ -62,7 +63,7 @@ export async function updateNbaScheduleConfig(
 
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: updates },
+    data: { settings: prismaJson.toPrismaJsonInput(updates) },
   })
 }
 

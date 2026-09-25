@@ -72,9 +72,15 @@ describe('leadersFromEvents', () => {
     expect(leaders[0].total).toBe(1)
   })
 
-  it('takes the newest cumulative value, not the first seen', () => {
-    const leaders = leadersFromEvents([ev({ value: 1 }), ev({ value: 3 }), ev({ value: 2 })], TD)
-    expect(leaders[0].total).toBe(3)
+  it('uses the latest total even when it corrects an earlier total downward', () => {
+    const leaders = leadersFromEvents([ev({ value: 3 }), ev({ value: 2, detectedAt: new Date('2026-08-27T23:31:00Z') }), ev({ value: 1, detectedAt: new Date('2026-08-27T23:29:00Z') })], TD)
+    expect(leaders[0].total).toBe(2)
+  })
+  it('accepts a correction to zero', () => {
+    expect(leadersFromEvents([ev(), ev({ value: 0, detectedAt: new Date('2026-08-27T23:31:00Z') })], TD)[0].total).toBe(0)
+  })
+  it('adds distinct games without duplicating repeated snapshots', () => {
+    expect(leadersFromEvents([ev({ gameId: 'one', value: 2 }), ev({ gameId: 'two', value: 1 }), ev({ gameId: 'one', value: 2 })], TD)[0].total).toBe(3)
   })
 
   it('adds a player’s rushing and receiving scores together', () => {

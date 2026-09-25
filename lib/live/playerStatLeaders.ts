@@ -11,11 +11,9 @@ import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
  * was missing was anything that read them to answer a question, so "who has the
  * most TDs today?" was refused as unanswerable while the answer sat in cache.
  *
- * ⚠ TAKE THE MAXIMUM CUMULATIVE VALUE, NEVER THE SUM OF DELTAS. Polling plus
- * retries re-emit the same change — the feed's own `idempotencyKey` exists
- * because of it — so adding deltas double-counts a touchdown every time a poll
- * overlaps. `value` is already the running total; the newest one per player and
- * stat is the truth.
+ * Use the newest cumulative value per player, game and stat, including downward
+ * corrections. Repeated polls must not add the same total again. Distinct games
+ * are summed only within the supplied feed window.
  *
  * ⚠ IT IS A SIX-HOUR ROLLING WINDOW OF AT MOST 200 EVENTS. That is a real limit,
  * not a detail: this can answer "today" and "right now" while games are on, and
@@ -58,8 +56,7 @@ export const FAMILY_LABEL: Record<StatFamily, string> = {
 export function leadersFromEvents(events: LiveEvent[], family: StatFamily): StatLeader[] {
   const matcher = FAMILY_MATCHERS[family]
 
-  /* player -> stat -> highest cumulative value seen for that stat. */
-  const byPlayer = new Map<string, { name: string; team: string | null; stats: Map<string, number> }>()
+  const byPlayer = new Map<string, { id: string; name: string; team: string | null; stats: Map<string, { stat: string; value: number; at: number }> }>()
 
   for (const event of events) {
     if (!event?.stat || !matcher.test(event.stat)) continue
@@ -68,20 +65,27 @@ export function leadersFromEvents(events: LiveEvent[], family: StatFamily): Stat
      * A negative cumulative value is a correction or a defensive stat sharing a
      * name; it is never a touchdown count. Dropping it beats reporting it.
      */
-    if (typeof event.value !== 'number' || !Number.isFinite(event.value) || event.value <= 0) continue
+    if (typeof event.value !== 'number' || !Number.isFinite(event.value) || (family === 'touchdowns' && event.value < 0)) continue
 
-    const key = event.playerId || event.playerName
-    if (!key) continue
+    const id = event.playerId || event.playerName
+    if (!id) continue
+    const key = `${event.sport ?? 'NFL'}:${id}`
+    const at = new Date(event.detectedAt).getTime()
+    if (!Number.isFinite(at)) continue
 
     const held = byPlayer.get(key) ?? {
+      id,
       name: event.playerName || 'Unknown player',
       team: event.team ?? null,
-      stats: new Map<string, number>(),
+      stats: new Map<string, { stat: string; value: number; at: number }>(),
     }
 
-    /* Newest cumulative wins; polls re-emit, so max is the safe reducer. */
-    const previous = held.stats.get(event.stat) ?? 0
-    if (event.value > previous) held.stats.set(event.stat, event.value)
+    // Totals are cumulative within one game. A later correction may lower them to zero.
+    const statKey = `${event.gameId}:${event.stat}`
+    const previous = held.stats.get(statKey)
+    if (!previous || at > previous.at || (at === previous.at && event.value > previous.value)) {
+      held.stats.set(statKey, { stat: event.stat, value: event.value, at })
+    }
 
     /* Team is often null early in a feed; keep the first real one seen. */
     if (!held.team && event.team) held.team = event.team
@@ -90,16 +94,15 @@ export function leadersFromEvents(events: LiveEvent[], family: StatFamily): Stat
   }
 
   const leaders: StatLeader[] = []
-  for (const [playerId, held] of byPlayer) {
+  for (const held of byPlayer.values()) {
     let total = 0
-    for (const value of held.stats.values()) total += value
-    if (total <= 0) continue
+    for (const entry of held.stats.values()) total += entry.value
     leaders.push({
-      playerId,
+      playerId: held.id,
       playerName: held.name,
       team: held.team,
       total,
-      stats: [...held.stats.keys()].sort(),
+      stats: [...new Set([...held.stats.values()].map(entry => entry.stat))].sort(),
     })
   }
 

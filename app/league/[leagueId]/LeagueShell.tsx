@@ -70,7 +70,7 @@ import { mapLeagueTeamsToSlots } from '@/lib/league/map-league-teams-to-slots'
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import AppShell from '@/app/components/AppShell'
-import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
+import { LeagueCommunicationsDrawer } from '@/components/decide/LeagueCommunicationsDrawer'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
@@ -1502,51 +1502,14 @@ export function LeagueShell({
         </AppShell>
       </div>
 
-      {mobileLeftOpen ? (
-        <div
-          className="fixed inset-0 z-[60] bg-black/60 md:hidden"
-          role="presentation"
-          onClick={() => setMobileLeftOpen(false)}
-        >
-          <div
-            className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] min-h-[50dvh] flex-col overflow-hidden rounded-t-[24px] border-t border-white/[0.07] bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('dashboard.shell.chat')}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-2">
-              <span className="h-1 w-10 shrink-0 rounded-full bg-white/20" aria-hidden />
-            </div>
-            <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.shell.chat')}</p>
-              <button
-                type="button"
-                onClick={() => setMobileLeftOpen(false)}
-                className="touch-manipulation inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
-                aria-label={t('dashboard.shell.closeChat')}
-              >
-                <X className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <LeftChatPanel
-                selectedLeague={selectedLeague}
-                activeLeagueId={league.id}
-                userId={userId}
-                userDisplayName={userName}
-                userImage={userImage}
-                rootId={null}
-                leagues={leagueList}
-                discordConnected={discordConnected}
-                commissionerLeagues={commissionerLeagues}
-                zombieChimmyPrefill={zombieChimmyPrefill}
-                initialOpenChat={initialOpenChat}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <div className="md:hidden">
+        <LeagueCommunicationsDrawer
+          selectedLeague={selectedLeague} activeLeagueId={league.id} userId={userId}
+          leagues={leagueList} commissionerLeagues={commissionerLeagues}
+          zombieChimmyPrefill={zombieChimmyPrefill} initialOpenChat={initialOpenChat}
+          open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)}
+        />
+      </div>
 
       {mobileRightOpen ? (
         <div
@@ -3034,4 +2997,3 @@ function LeagueHeader({
     </div>
   )
 }
-

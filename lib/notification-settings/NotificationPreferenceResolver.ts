@@ -48,7 +48,23 @@ export function resolveNotificationPreferences(
     ...(saved?.quietHours !== undefined && { quietHours: saved.quietHours }),
     ...(saved?.leagues !== undefined && { leagues: saved.leagues }),
   }
-  if (!saved?.categories) return { ...defaults, ...passthrough }
+  /*
+   * 🛑 `globalEnabled` MUST SURVIVE THE EARLY RETURN, AND IT DID NOT.
+   *
+   * `defaults` carries `globalEnabled: true`, so `{ ...defaults, ...passthrough }` overwrote a
+   * saved `false` with `true` for every user who had turned the master switch off WITHOUT also
+   * touching an individual category — which is the whole point of a master switch, and
+   * therefore the common way to reach this branch. `NotificationDispatcher` gates on
+   * `prefs.globalEnabled` as its first check, so those users kept receiving everything.
+   *
+   * ⚠ THE SAME SHAPE AS THE PASSTHROUGH BUG THIS FUNCTION ALREADY DOCUMENTS: a rebuilt object
+   * silently dropping a saved key. Found while proving that adding `draft_alerts` to the push
+   * allowlist had not widened anyone's opt-in — the "globally off" control went green when it
+   * should have gone red, which is exactly why that control was written.
+   */
+  if (!saved?.categories) {
+    return { ...defaults, globalEnabled: saved?.globalEnabled ?? true, ...passthrough }
+  }
   const categories = { ...defaults.categories }
   for (const id of NOTIFICATION_CATEGORY_IDS) {
     const s = saved.categories[id]

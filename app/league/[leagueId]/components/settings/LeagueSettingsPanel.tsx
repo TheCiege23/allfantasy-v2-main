@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
 import { COMMON_TIMEZONES } from '@/lib/timezone'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { getFormatsForSport, listLeagueFormats } from '@/lib/league/format-engine'
 import type { LeagueSport } from '@prisma/client'
 import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
@@ -50,6 +51,48 @@ export function LeagueSettingsPanel({
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
+
+  /*
+   * EVERY TYPE THIS LEAGUE COULD BE, from the same registry the create flow reads.
+   *
+   * 🛑 THIS CONTROL USED TO OFFER THREE OF TWELVE — Redraft, Keeper, Dynasty. Production
+   * runs eight distinct `leagueType` values, so a commissioner of a guillotine,
+   * tournament, zombie, survivor or salary-cap league opened this panel and saw NOTHING
+   * selected. That was survivable only while `leagueType` changed a label and nothing
+   * else; now that it syncs `isDynasty`, `guillotineMode` and `survivorMode`, one stray
+   * click on the first visible option would silently convert their league.
+   *
+   * Sourced from `getFormatsForSport` rather than a second hardcoded list, because a
+   * private copy of the format vocabulary is exactly how this drifted out of date the
+   * first time. `app/leagues/create/steps/FormatStep.tsx` reads the same function.
+   */
+  const leagueTypeOptions = useMemo(() => {
+    const options = getFormatsForSport(sport).map((format) => ({
+      id: format.id as string,
+      title: format.label,
+      description: format.description,
+    }))
+
+    /*
+     * ⚠ THE CURRENT TYPE IS ALWAYS PRESENT, even when it is not offered for this sport.
+     * A league whose format predates a sport-eligibility change must still render as
+     * selected — an unselected radio group is the precise failure this block prevents,
+     * and dropping the option would not undo the league's format, only hide it.
+     */
+    if (leagueType && !options.some((o) => o.id === leagueType)) {
+      const known = listLeagueFormats().find((f) => f.id === leagueType)
+      options.unshift({
+        id: leagueType,
+        title: known ? `${known.label} (current)` : `${leagueType} (current)`,
+        description: known
+          ? known.description
+          : 'This league\u2019s current format. Not offered for this sport \u2014 changing it cannot be undone here.',
+      })
+    }
+
+    return options
+  }, [sport, leagueType])
+
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
   const [preventBenchDrops, setPreventBenchDrops] = useState(Boolean(initialData.preventBenchDrops))
   const [lockMoves, setLockMoves] = useState(Boolean(initialData.lockAllMoves))
@@ -231,23 +274,7 @@ export function LeagueSettingsPanel({
             setLeagueType(v)
             debouncedSave({ leagueType: v })
           }}
-          options={[
-            {
-              id: 'redraft',
-              title: 'Redraft',
-              description: 'Full redraft each season; all players available.',
-            },
-            {
-              id: 'keeper',
-              title: 'Keeper',
-              description: 'Teams retain a configured number of players year to year.',
-            },
-            {
-              id: 'dynasty',
-              title: 'Dynasty',
-              description: 'Rosters carry over; rookie and free-agent drafts replenish talent.',
-            },
-          ]}
+          options={leagueTypeOptions}
         />
       </div>
 

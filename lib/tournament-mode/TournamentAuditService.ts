@@ -2,6 +2,7 @@
  * PROMPT 5: Tournament audit logging for advancement, elimination, overrides, tie resolution, lock, rebalance.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 
 export type TournamentAuditAction =
@@ -38,7 +39,7 @@ export async function logTournamentAudit(
       action,
       targetType: options.targetType ?? null,
       targetId: options.targetId ?? null,
-      metadata: (options.metadata ?? undefined) as Record<string, unknown> | undefined,
+      metadata: prismaJson.toPrismaNullableJsonInput((options.metadata ?? undefined) as Record<string, unknown> | undefined),
     },
   })
 }

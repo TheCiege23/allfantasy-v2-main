@@ -259,6 +259,34 @@ export function playsToLiveEvents(
       role: who.role,
       passerId: passer && passer !== who && passer.id != null ? String(passer.id) : null,
       passerName: passer && passer !== who ? passer.name : null,
+      /*
+       * The namespace for `gameId` / `playerId` on this event. Hardcoded because this feed is
+       * hardcoded: `refreshPlayByPlayFeed` requests `/play-by-play/NFL` and nothing else. When
+       * a second sport is wired up this must come from the caller, not stay 'NFL'.
+       */
+      sport: 'NFL',
+      /*
+       * ⚠ THE ONLY SOURCE HERE THAT KNOWS WHAT A PLAY IS. `sequence` identifies a real play, so
+       * two observations from this feed with different sequences are two different plays and
+       * must never be collapsed into one.
+       */
+      provider: 'rolling_insights_pbp',
+      /*
+       * The whole credited roster, preserved alongside the single subject above.
+       *
+       * `subjectOf` has to pick one player — a notification is filed under one — and for a
+       * passing touchdown it picks the receiver. `passerId` / `passerName` above keep the
+       * passer; this keeps everyone else the provider credited (and each one's position and
+       * team), at the only point in the pipeline where the provider still names them.
+       * Keeping the list costs one array copy per scoring play.
+       */
+      participants: play.players.map((p) => ({
+        id: p.id != null ? String(p.id) : null,
+        name: p.name,
+        role: p.role,
+        position: p.position,
+        team: p.teamAbbr,
+      })),
     })
   }
 

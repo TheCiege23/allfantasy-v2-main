@@ -466,9 +466,27 @@ export interface APISportsGame {
     name: string;
     season: string | null;
   };
+  /**
+   * 🛑 `name` AND `id` ARE NULLABLE BECAUSE THE VENDOR SHIPS THEM NULL. Production worker logs
+   * on 2026-09-10 carry `PrismaClientValidationError … Argument homeTeam must not be null` from
+   * `sportsGame.upsert` for both NFL and NCAAF payloads — an unresolved postseason slot, or an
+   * NCAAF fixture whose opponent is not yet set, arrives with the team object present and its
+   * name empty.
+   *
+   * ⚠ THIS WAS DECLARED `string` AND THAT DECLARATION WAS NOT HARMLESS. It made every
+   * consumer's `teamNameToAbbrev(name) || name` look total to the compiler when it returns
+   * `null` at runtime, so the one place that could have caught the bad write was the one place
+   * TypeScript had been told not to look. It is the same lesson `APISportsInjury.id` above
+   * records from the other direction: a field declared more certain than the payload is a lie
+   * the type system will then help you keep.
+   *
+   * Every consumer is now explicitly null-handling: `resolveApiSportsGameTeams` in this file,
+   * `lib/sports-router.ts` (drops unnameable fixtures from the normalized list rather than
+   * emitting a `null` name into a `string` field) and `lib/workers/providers/api-sports.ts`.
+   */
   teams: {
-    home: { id: number; name: string; logo: string | null };
-    away: { id: number; name: string; logo: string | null };
+    home: { id: number | null; name: string | null; logo: string | null };
+    away: { id: number | null; name: string | null; logo: string | null };
   };
   scores: {
     home: { total: number | null };
@@ -1172,38 +1190,122 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
     return 0;
   }
 
-  let synced = 0;
-  /*
-   * ⚠ A PER-ROW FAILURE MUST NOT BE ABLE TO FLOOD THE LOG, WHATEVER CAUSES IT.
-   *
-   * Measured 2026-09-10: API-Sports returned NCAAF fixtures whose away team had an id
-   * but no NAME, every one failed the non-null `awayTeam` column, and the handler below
-   * passed the whole Prisma error to `console.error` — which embeds the ENTIRE upsert
-   * invocation, `where` + `update` + `create`, per game. That saturated Railway's
-   * 500 logs/sec replica limit and dropped 6,008 messages in a burst.
-   *
-   * 🛑 THE DROPPED MESSAGES ARE THE REAL DAMAGE, NOT THE FAILED ROWS. Everything else on
-   * the replica went with them, so an absence in these logs stopped being evidence of
-   * anything — three unrelated checks could not be cleared while this was running.
-   *
-   * So the cap is on the MECHANISM, not on this one cause: whatever fails next gets the
-   * same first-N-then-count treatment, and only the error's first line is printed.
+  const result = await writeApiSportsGames(games, dbSport);
+
+  console.log(
+    `[API-Sports] ${dbSport} games — fetched ${result.fetched}, written ${result.written}, ` +
+      `deferred ${result.deferred}, failed ${result.failed}`,
+  );
+  if (result.deferred > 0) {
+    console.warn(
+      `[API-Sports] ${dbSport} deferred ${result.deferred} incomplete fixture(s) ` +
+        `(unresolved team name, no existing row to update). Sample ids: ` +
+        `${result.deferredSampleIds.join(', ')}`,
+    );
+  }
+
+  return result.written;
+}
+
+/**
+ * The counts a caller needs to tell "nothing to do" apart from "everything was rejected".
+ *
+ * ⚠ FOUR SEPARATE NUMBERS ON PURPOSE. `syncAPISportsGamesToDb` returns one integer and every
+ * caller reads it as "how many rows did we write" — which is correct, and is exactly why it
+ * cannot also carry the failure signal. Production logged `PrismaClientValidationError` from
+ * `sportsGame.upsert` on 2026-09-10 for NFL and NCAAF payloads while the sync reported a
+ * healthy count for every fixture that happened to be complete; Railway then dropped 8,501 log
+ * messages because each rejection printed a full error object.
+ */
+export type ApiSportsGameWriteResult = {
+  /** Fixtures the provider returned. */
+  fetched: number;
+  /** Rows created or updated. */
+  written: number;
+  /**
+   * Fixtures we deliberately did NOT write because a required team name was unresolved and no
+   * existing row could be updated. Not an error — the fixture is real and will be retried on the
+   * next sync, by which time the provider usually names both sides.
    */
-  const MAX_LOGGED_FAILURES = 5;
+  deferred: number;
+  /** Fixtures whose write threw. */
+  failed: number;
+  /** Bounded sample of deferred fixture ids, for the log line. */
+  deferredSampleIds: string[];
+};
+
+/*
+ * ⚠ A PER-ROW FAILURE MUST NOT BE ABLE TO FLOOD THE LOG, WHATEVER CAUSES IT.
+ *
+ * Measured 2026-09-10: API-Sports returned NCAAF fixtures whose away team had an id
+ * but no NAME, every one failed the non-null `awayTeam` column, and the handler
+ * passed the whole Prisma error to `console.error` — which embeds the ENTIRE upsert
+ * invocation, `where` + `update` + `create`, per game. That saturated Railway's
+ * 500 logs/sec replica limit and dropped 6,008 messages in a burst.
+ *
+ * 🛑 THE DROPPED MESSAGES ARE THE REAL DAMAGE, NOT THE FAILED ROWS. Everything else on
+ * the replica went with them, so an absence in these logs stopped being evidence of
+ * anything — three unrelated checks could not be cleared while this was running.
+ *
+ * So the cap is on the MECHANISM, not on this one cause: whatever fails next gets the
+ * same first-N-then-count treatment, and only the error's first line is printed — a
+ * Prisma validation error's `.message` itself carries the full invocation, so printing
+ * `.message` alone is not enough. See `firstLineOfError`.
+ */
+/** How many distinct write failures get a full log line before the rest are counted only. */
+const GAME_WRITE_LOG_CAP = 5;
+
+/** First line of an error's message, capped. Never the error object, never the whole message. */
+function firstLineOfError(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 200);
+}
+/** How many deferred fixture ids appear in the summary line. */
+const DEFERRED_SAMPLE_CAP = 10;
+
+/**
+ * Decide what a fixture's home/away names resolve to, without touching the database.
+ *
+ * 🛑 `SportsGame.homeTeam` AND `awayTeam` ARE REQUIRED STRINGS. The old code wrote
+ * `teamNameToAbbrev(name) || name`, which is `null` when the provider ships a fixture with no
+ * team named — a placeholder for a postseason slot, or an NCAAF fixture whose opponent is not
+ * yet set. Prisma then rejected the whole upsert. That is the right refusal from Prisma and the
+ * wrong handling from us: the fixture is legitimate, it simply is not nameable yet.
+ *
+ * ⚠ WE DO NOT INVENT A NAME. "TBD" would be indistinguishable from a real team to every reader
+ * downstream, and a fixture that later resolves would leave a "TBD" row behind under the same
+ * externalId. Unresolved means unresolved.
+ */
+export function resolveApiSportsGameTeams(g: APISportsGame): {
+  homeTeam: string | null;
+  awayTeam: string | null;
+  complete: boolean;
+} {
+  const rawHome = g.teams?.home?.name ?? null;
+  const rawAway = g.teams?.away?.name ?? null;
+  const homeTeam = rawHome ? teamNameToAbbrev(rawHome) || rawHome : null;
+  const awayTeam = rawAway ? teamNameToAbbrev(rawAway) || rawAway : null;
+  return { homeTeam, awayTeam, complete: Boolean(homeTeam && awayTeam) };
+}
+
+export async function writeApiSportsGames(
+  games: APISportsGame[],
+  dbSport: string,
+): Promise<ApiSportsGameWriteResult> {
+  let written = 0;
+  let deferred = 0;
   let failed = 0;
-  let unwritable = 0;
+  let loggedFailures = 0;
+  const deferredSampleIds: string[] = [];
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 60 * 1000);
 
   for (const g of games) {
-    const homeTeam = teamNameToAbbrev(g.teams.home.name) || g.teams.home.name;
-    const awayTeam = teamNameToAbbrev(g.teams.away.name) || g.teams.away.name;
-
-    // Guaranteed-to-fail rows are skipped, not attempted. See `isSyncableGameRow`.
-    if (!isSyncableGameRow(g)) {
-      unwritable++;
-      continue;
-    }
+    /*
+     * Guaranteed-to-fail rows are never upserted — the same test `isSyncableGameRow` makes, but
+     * not a bare skip: an incomplete fixture we have written before is refreshed around its
+     * stored names below, and only a never-seen one is deferred.
+     */
+    const { homeTeam, awayTeam } = resolveApiSportsGameTeams(g);
     const weekNum = g.game.week ? parseInt(g.game.week.replace(/\D/g, '')) || null : null;
     /*
      * ⚠ API-Sports' `status.long` IS A DIALECT NOTHING DOWNSTREAM SPEAKS. It emits
@@ -1233,70 +1335,148 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
      */
     const seasonType = normalizeSeasonType(g.game.stage) ?? normalizeSeasonType(g.game.week);
 
+    const externalId = String(g.game.id);
+
+    /*
+     * The shared field set. Team names are deliberately absent — they are added below only
+     * when the provider actually named both sides, so an incomplete payload can still refresh
+     * scores and status on a row whose names we already know without nulling them.
+     */
+    /*
+     * 🛑 TEAM IDS ARE PART OF THE IDENTITY THIS BRANCH PROTECTS, AND THEY WERE BEING NULLED.
+     *
+     * `mutableFields` deliberately omits `homeTeam`/`awayTeam` so a stored NAME survives an
+     * incomplete payload — but it recomputed `homeTeamId`/`awayTeamId` from the SAME nullable
+     * payload, so the recovery `update` kept the name and destroyed the provider id beside it.
+     * A row written complete on Monday (`homeTeam='KC'`, `homeTeamId='16'`) came back on
+     * Tuesday with `teams.home = { id: null, name: null }` — the exact shape this batch widened
+     * the type for — and ended up with a name and no id. `app/api/sports/route.ts` returns whole
+     * `SportsGame` rows with no `select`, so the nulled ids ship to clients, and any consumer
+     * joining on `homeTeamId` silently drops the row. `written++` counted it as healthy.
+     *
+     * Ids now follow the same rule as the names: written when the provider supplies them,
+     * left alone when it does not.
+     */
+    /*
+     * ⚠ `0` IS NOT AN ID, AND `!= null` LETS IT THROUGH. API-Sports ships `id: 0` on the same
+     * unresolved fixtures that ship a null name — a placeholder, not a team — and `0 != null`
+     * is true, so the old guard wrote the string `"0"` into `homeTeamId`. That is the same
+     * class of mistake as inventing a team NAME: a value that reads as real to every consumer
+     * downstream. Real API-Sports team ids are positive.
+     */
+    const teamIdOf = (id: number | null | undefined): string | null =>
+      typeof id === 'number' && Number.isFinite(id) && id > 0 ? String(id) : null;
+    const homeTeamId = teamIdOf(g.teams?.home?.id);
+    const awayTeamId = teamIdOf(g.teams?.away?.id);
+    const teamIdFields = {
+      ...(homeTeamId != null ? { homeTeamId } : {}),
+      ...(awayTeamId != null ? { awayTeamId } : {}),
+    };
+
+    const mutableFields = {
+      homeScore: g.scores.home.total,
+      awayScore: g.scores.away.total,
+      status: gameStatus,
+      startTime: g.game.date.timestamp ? new Date(g.game.date.timestamp * 1000) : null,
+      venue: g.game.venue?.name || null,
+      week: weekNum,
+      seasonType,
+      season: g.league.season ? parseInt(g.league.season) : null,
+      fetchedAt: now,
+      expiresAt,
+    };
+
+    // Narrowed with the values themselves, not a boolean flag: the upsert below needs
+    // TypeScript to know both are `string` by then, and `complete` would not tell it that.
+    if (!homeTeam || !awayTeam) {
+      /*
+       * An incomplete fixture is NOT dropped on the floor. If we have written this fixture
+       * before, its stored names are the known good ones — refresh everything else around
+       * them. That is the recovery path the audit asked for: a fixture that arrives nameless
+       * today and complete tomorrow converges, and one whose names we already hold keeps them.
+       */
+      try {
+        const existing = await prisma.sportsGame.findUnique({
+          where: { sport_externalId_source: { sport: dbSport, externalId, source: 'api_sports' } },
+          select: { id: true },
+        });
+        if (existing) {
+          await prisma.sportsGame.update({
+            where: { id: existing.id },
+            data: { ...mutableFields, ...teamIdFields },
+          });
+          written++;
+          continue;
+        }
+      } catch (err) {
+        failed++;
+        if (loggedFailures < GAME_WRITE_LOG_CAP) {
+          loggedFailures++;
+          console.error(
+            `[API-Sports] ${dbSport} incomplete-fixture recovery failed for ${externalId}:`,
+            firstLineOfError(err),
+          );
+        }
+        continue;
+      }
+
+      deferred++;
+      if (deferredSampleIds.length < DEFERRED_SAMPLE_CAP) deferredSampleIds.push(externalId);
+      continue;
+    }
+
     try {
       await prisma.sportsGame.upsert({
         where: {
           sport_externalId_source: {
             sport: dbSport,
-            externalId: String(g.game.id),
+            externalId,
             source: 'api_sports',
           },
         },
         update: {
           homeTeam,
           awayTeam,
-          homeTeamId: String(g.teams.home.id),
-          awayTeamId: String(g.teams.away.id),
-          homeScore: g.scores.home.total,
-          awayScore: g.scores.away.total,
-          status: gameStatus,
-          startTime: g.game.date.timestamp ? new Date(g.game.date.timestamp * 1000) : null,
-          venue: g.game.venue?.name || null,
-          week: weekNum,
-          seasonType,
-          season: g.league.season ? parseInt(g.league.season) : null,
-          fetchedAt: now,
-          expiresAt,
+          ...teamIdFields,
+          ...mutableFields,
         },
         create: {
           sport: dbSport,
-          externalId: String(g.game.id),
+          externalId,
           homeTeam,
           awayTeam,
-          homeTeamId: String(g.teams.home.id),
-          awayTeamId: String(g.teams.away.id),
-          homeScore: g.scores.home.total,
-          awayScore: g.scores.away.total,
-          status: gameStatus,
-          startTime: g.game.date.timestamp ? new Date(g.game.date.timestamp * 1000) : null,
-          venue: g.game.venue?.name || null,
-          week: weekNum,
-          seasonType,
-          season: g.league.season ? parseInt(g.league.season) : null,
           source: 'api_sports',
-          fetchedAt: now,
-          expiresAt,
+          ...teamIdFields,
+          ...mutableFields,
         },
       });
-      synced++;
+      written++;
     } catch (err) {
       failed++;
-      // First line only. Passing the error object prints the whole Prisma invocation.
-      if (failed <= MAX_LOGGED_FAILURES) {
-        const reason = (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 200);
-        console.error(`[API-Sports] Failed to sync game ${g.game.id}: ${reason}`);
-      } else if (failed === MAX_LOGGED_FAILURES + 1) {
-        console.error(`[API-Sports] Further game sync failures suppressed; total reported at the end.`);
+      /*
+       * ⚠ BOUNDED, AND THE FIRST LINE ONLY. Every rejected fixture used to print a full Prisma
+       * error object; on 2026-09-10 that exceeded Railway's 500-logs/second limit and 8,501
+       * messages were dropped — including, necessarily, whatever else the worker was saying.
+       * A log that destroys the rest of the log is worse than no log.
+       */
+      if (loggedFailures < GAME_WRITE_LOG_CAP) {
+        loggedFailures++;
+        console.error(
+          `[API-Sports] ${dbSport} game write failed for ${externalId}:`,
+          firstLineOfError(err),
+        );
       }
     }
   }
 
-  console.log(
-    `[API-Sports] Synced ${synced}/${games.length} ${dbSport} games` +
-      (unwritable ? ` (${unwritable} skipped: missing team name)` : '') +
-      (failed ? ` (${failed} failed)` : ''),
-  );
-  return synced;
+  if (failed > loggedFailures) {
+    console.error(
+      `[API-Sports] ${dbSport} suppressed ${failed - loggedFailures} further game write ` +
+        `failure log line(s) after the first ${GAME_WRITE_LOG_CAP}.`,
+    );
+  }
+
+  return { fetched: games.length, written, deferred, failed, deferredSampleIds };
 }
 
 export async function syncAPISportsPlayersToIdentityMap(opts?: { season?: string; sport?: 'NFL' | 'NCAAF' }): Promise<{ linked: number; created: number }> {
@@ -1746,6 +1926,10 @@ export async function syncAPISportsPlayerSeasonStatsToDb(
  * and no `name`. Every one failed the column, and the old handler logged the entire Prisma
  * invocation per game — 6,008 log messages dropped to Railway's replica rate limit in one burst.
  * Same shape as `isSyncableStandingRow` below, and the same reason.
+ *
+ * ⚠ Equivalent to `resolveApiSportsGameTeams(g).complete`, plus null-safety on `g` itself.
+ * `writeApiSportsGames` narrows on the resolved names directly rather than skipping on this,
+ * because an incomplete fixture with an existing row is refreshed, not dropped.
  */
 export function isSyncableGameRow(g: APISportsGame | null | undefined): boolean {
   const home = g?.teams?.home?.name;

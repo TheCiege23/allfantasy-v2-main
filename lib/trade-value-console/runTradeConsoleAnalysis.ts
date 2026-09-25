@@ -2,7 +2,7 @@
 
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
-import { compositeScore } from '@/lib/hybrid-valuation'
+import { compositeScore, type ValuationContext } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { buildInstantNegotiationToolkit, buildNegotiationToolkit } from '@/lib/trade-engine/negotiation-builder'
@@ -21,12 +21,17 @@ import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scop
 import { prisma } from '@/lib/prisma'
 import type { PhaseTimer } from '@/lib/logging/phaseTimer'
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
+import { toLeagueRosterConfig, describeRosterSlots } from '@/lib/league-context-engine/normalizeRosterSlots'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import {
   attachSportsNormalizationToChimmyPayload,
   resolveNormalizedPlayerSportsProfiles,
 } from '@/lib/sports-data-normalization'
 import { loadLeagueForTrade } from './league-loader'
+import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
+import { leagueRuntimeFromNormalized } from '@/lib/decision-os/value-v2/league'
+import { buildConsoleValueV2Shadow } from '@/lib/decision-os/value-v2/consoleShadow'
+import type { MarketObservationV2 } from '@/lib/decision-os/value-v2/market'
 import { snapshotFromLoaded } from './quick-badges'
 import { pricedAssetToEngineAsset } from './priced-asset-to-asset'
 import { buildTradeIntelligence } from './build-trade-intelligence'
@@ -60,6 +65,7 @@ import type {
   TradeConsoleRosterSummary,
   TradeConsoleSourceFlags,
   TradeConsoleValidation,
+  TradeConsoleValuationBasis,
 } from './types'
 
 /** Moved to `./leagueTradePricing` with the rest of the pricer; re-exported for its existing test. */
@@ -89,6 +95,33 @@ async function loadLeagueTradeHistoryNote(leagueId: string | null | undefined): 
   } catch {
     return null
   }
+}
+
+/**
+ * Did the no-league-chart PPR weight come from the league, or from the `return 1` at the end of
+ * `pprForNflFromLeagueContext`?
+ *
+ * Deliberately a MIRROR of `pprForNflFromLeagueContext` (now in `./leagueTradePricing`, with the
+ * rest of the pricer) rather than a refactor of it. That function returns a bare `0 | 0.5 | 1` and
+ * is called in places that only want the number; widening its return type would churn those call
+ * sites for no gain. The cost of a mirror is that the two must move together.
+ *
+ * ⚠ KEEP IN SYNC WITH `pprForNflFromLeagueContext` in `./leagueTradePricing`. If a branch is added
+ * there, add it here, or a real league setting will start reporting itself as an assumption.
+ * Only consulted when the chart had no `marketCtx` — with one, the chart's reception weight is the
+ * league's `scoring_settings.rec` and its origin is read off that directly.
+ */
+function pprOriginFromLeagueContext(
+  norm: NormalizedLeagueContext | null,
+  leagueRow: Awaited<ReturnType<typeof loadLeagueForTrade>> | null,
+): 'league' | 'assumed' {
+  const fmt = norm?.scoring?.labels?.receptionFormat
+  if (fmt === 'ppr' || fmt === 'half_ppr' || fmt === 'standard') return 'league'
+  const raw = (leagueRow?.scoring ?? '').toLowerCase()
+  if (raw.includes('half') || raw.includes('0.5')) return 'league'
+  if (raw.includes('standard') && !raw.includes('half')) return 'league'
+  if (raw.includes('ppr') || raw.includes('full')) return 'league'
+  return 'assumed'
 }
 
 function isMultisportLeague(settings: Record<string, unknown> | null | undefined): boolean {
@@ -251,7 +284,136 @@ export async function runTradeConsoleAnalysis(
     mark,
   })
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
-  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
+  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, leagueSize, pprNfl } = chart
+
+  /*
+   * THE LEAGUE'S OWN STARTING LINEUP, finally read rather than assumed.
+   *
+   * `leagueRosterConfig` is null when the platform gave us nothing usable, and that null
+   * is load-bearing: it makes hybrid-valuation keep its existing QB1/RB2/WR2/TE1 fallback
+   * instead of being handed a fabricated lineup. An invented roster config would be worse
+   * than the default, because it would look resolved to everything downstream.
+   */
+  const leagueRosterSlots = leagueNormCtx?.roster?.slots ?? null
+  const leagueRosterConfig = toLeagueRosterConfig(leagueRosterSlots, leagueSize)
+  const startingLineupLabel = describeRosterSlots(leagueRosterSlots)
+
+  /*
+   * The SHARED chart's valuation context, extended — never re-derived — with this league's real
+   * starting slots (replacement level) and the chart's own format, so hybrid-valuation can never be
+   * told a different league shape from the one the chart was fetched for.
+   *
+   * ⚠ THE ONE-GRADE INVARIANT STILL HOLDS. `rosterConfig` moves only VORP (`vorpValue`) inside
+   * `pricePlayer`; the grade reads `assetValue.marketValue` (`gradeBaseOf`), which does not consult
+   * it, and `isDynasty`/`ppr` only matter when no `fantasyCalcPlayers` are supplied — the chart
+   * always supplies them. Spread conditionally so an unresolved lineup leaves the key absent.
+   */
+  const nflCtx: ValuationContext = {
+    ...chart.nflCtx,
+    isDynasty: chart.chartIsDynasty,
+    ppr: pprNfl,
+    ...(leagueRosterConfig ? { rosterConfig: leagueRosterConfig } : {}),
+  }
+
+  /*
+   * Market observations for the Value V2 console shadow, keyed by enrichment player id.
+   *
+   * ⚠ EMPTY HERE, AND DELIBERATELY. An observation needs the FantasyCalc snapshot's metadata
+   * (`onSnapshot` on `getFantasyCalcValuesDbFirst`), and that fetch now lives inside
+   * `resolveLeagueTradeChart` — this module may not fetch the chart itself
+   * (`__tests__/trade-value/one-grade-surfaces.test.ts`). Until the shared chart surfaces that
+   * metadata the shadow runs without per-player observations, which it tolerates (all optional).
+   */
+  const marketObservationsById = new Map<string, MarketObservationV2>()
+
+  /*
+   * DECLARE WHAT WAS KNOWN AND WHAT WAS GUESSED, in the same breath as using it.
+   *
+   * Built HERE, immediately below the resolution above, because that is the only place
+   * the provenance is still visible. Further down `leagueSize` is just the number 12,
+   * indistinguishable from a league that genuinely has twelve teams. The origins mirror
+   * `resolveLeagueTradeChart`'s own fallback order — keep them in step with it.
+   */
+  const isDynastyResolved = chart.chartIsDynasty
+  const valuationSettings = {
+    leagueSize: {
+      value: leagueSize,
+      origin:
+        input.leagueSize != null
+          ? ('user' as const)
+          : leagueSnapshot?.leagueSize != null
+            ? ('league' as const)
+            : ('assumed' as const),
+    },
+    isSuperFlex: {
+      value: isSuperFlex,
+      origin:
+        input.isSuperFlex != null
+          ? ('user' as const)
+          : leagueNormCtx?.scoring?.labels?.isSuperflex != null || leagueSnapshot != null
+            ? ('league' as const)
+            : ('assumed' as const),
+    },
+    /*
+     * The chart's dynasty-ness is read from the league (`marketContextFor` → `leagueVariantFor`)
+     * whenever there is a league row; global mode keeps the dynasty default, and says so.
+     */
+    isDynasty: {
+      value: isDynastyResolved,
+      origin: marketCtx ? ('league' as const) : ('assumed' as const),
+    },
+    /*
+     * With a league chart the weight is `scoring_settings.rec` — and `marketContextFor` reads a
+     * MISSING `rec` as 0 (standard), which is a default, not a reading. Without one it came from
+     * `pprForNflFromLeagueContext`, mirrored by `pprOriginFromLeagueContext`.
+     */
+    ppr: {
+      value: pprNfl,
+      origin: marketCtx
+        ? typeof marketCtx.scoring.settings.rec === 'number'
+          ? ('league' as const)
+          : ('assumed' as const)
+        : input.leagueId?.trim()
+          ? pprOriginFromLeagueContext(leagueNormCtx, leagueRow)
+          : ('assumed' as const),
+    },
+    tePremium: {
+      value: tePremium,
+      origin:
+        input.tePremium != null
+          ? ('user' as const)
+          : leagueSnapshot != null || leagueNormCtx?.scoring?.labels?.tePremiumExtra != null
+            ? ('league' as const)
+            : ('assumed' as const),
+    },
+    /*
+     * Real when the platform gave us a lineup, assumed otherwise — and the assumed case
+     * still happens (a league imported without roster positions), so the disclosure below
+     * keeps working rather than becoming decoration.
+     */
+    startingLineup: leagueRosterConfig
+      ? { value: startingLineupLabel ?? 'league lineup', origin: 'league' as const }
+      : {
+          value: isSuperFlex ? 'QB1/RB2/WR2/TE1/FLEX3 (default)' : 'QB1/RB2/WR2/TE1/FLEX2 (default)',
+          origin: 'assumed' as const,
+        },
+  }
+
+  const assumedSettings = Object.entries(valuationSettings)
+    .filter(([, setting]) => setting.origin === 'assumed')
+    .map(([key]) => key)
+
+  const valuationBasis: TradeConsoleValuationBasis = {
+    hasAssumptions: assumedSettings.length > 0,
+    assumed: assumedSettings,
+    disclosure: assumedSettings.length
+      ? `Priced as a ${leagueSize}-team ${isDynastyResolved ? 'dynasty' : 'redraft'} league, ` +
+        `${isSuperFlex ? 'superflex' : '1QB'}, ${pprNfl === 1 ? 'full PPR' : pprNfl === 0.5 ? 'half PPR' : 'standard'}. ` +
+        `${assumedSettings.length === 1 ? 'This setting was' : 'These settings were'} assumed, not read from your league: ` +
+        `${assumedSettings.join(', ')}. Connect the league to price it on its own rules.`
+      : null,
+    settings: valuationSettings,
+  }
 
   let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {
     effectiveSport,
@@ -853,6 +1015,9 @@ export async function runTradeConsoleAnalysis(
     assets: { give: giveLines, get: getLines },
     drivers: driverPayload,
     dataGaps,
+    // Chimmy must be able to say "priced as 12-team 1QB, assumed" rather than
+    // narrating an assumed number as though it came from the user's league.
+    valuationBasis,
     degraded,
     rosterSummary: rosterSummaryOut,
     opponentRosterTargets: opponentRosterTargets ?? [],
@@ -933,6 +1098,14 @@ export async function runTradeConsoleAnalysis(
 
   return {
     ok: true,
+    ...(valueV2ShadowEnabled() ? { valueV2Shadow: buildConsoleValueV2Shadow({
+      give: givePriced, get: getPriced, sport: effectiveSport, isDynasty: chart.chartIsDynasty,
+      ppr: pprNfl, numTeams: leagueSize, isSuperFlex, capturedAt: new Date().toISOString(),
+      givePlayerIds: giveLines.map(line => line.enrichmentPlayerId ?? null),
+      getPlayerIds: getLines.map(line => line.enrichmentPlayerId ?? null),
+      observationsByPlayerId: marketObservationsById,
+      leagueRuntimeV2: leagueNormCtx ? leagueRuntimeFromNormalized(leagueNormCtx, leagueRow?.leagueSize ?? null) : undefined,
+    }) } : {}),
     analysisMode: leagueSnapshot ? 'league' : 'global',
     effectiveSport,
     analysisScope: leagueSnapshot ? 'league' : 'general',
@@ -952,6 +1125,7 @@ export async function runTradeConsoleAnalysis(
     valueBasis,
     grade,
     degraded,
+    valuationBasis,
     dataGaps,
     dataSources: [effectiveSport === 'NFL' ? 'FantasyCalc' : 'sports_players', 'hybrid-valuation', 'trade-engine'],
     lastUpdated: new Date().toISOString(),

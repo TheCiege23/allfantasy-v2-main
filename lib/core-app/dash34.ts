@@ -88,7 +88,8 @@ import type {
  * disagree about who is hurt. A miss shows nothing; it never shows "healthy",
  * because we cannot know that.
  *
- * Nothing here calls a provider. Every read is Postgres.
+ * Injury and value reads come from Postgres. Current Sleeper starter
+ * assignments are verified through currentSleeperRoster before alerting.
  */
 
 /** The list rows carry more than `UserLeague` declares; these are the fields used. */

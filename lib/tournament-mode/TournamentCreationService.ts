@@ -3,6 +3,7 @@
  * Creates tournament parent, conferences, batch of feeder leagues, round records, and invite distribution.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
@@ -68,7 +69,7 @@ export async function applyTournamentFeederInviteAndDraftShell(leagueId: string)
   await prisma.league.update({
     where: { id: leagueId },
     data: {
-      settings: nextSettings,
+      settings: prismaJson.toPrismaJsonInput(nextSettings),
     },
   })
   try {
@@ -168,10 +169,10 @@ export async function createTournament(input: CreateTournamentInput): Promise<{
       season: input.season ?? new Date().getFullYear(),
       variant: input.variant ?? 'black_vs_gold',
       creatorId: input.creatorId,
-      settings: settings as unknown as Record<string, unknown>,
-      hubSettings: mergeDefaultTournamentHubSettings(
+      settings: prismaJson.toPrismaJsonInput(settings as unknown as Record<string, unknown>),
+      hubSettings: prismaJson.toPrismaJsonInput(mergeDefaultTournamentHubSettings(
         (input.hubSettings ?? null) as Record<string, unknown> | null,
-      ) as unknown as Record<string, unknown>,
+      ) as unknown as Record<string, unknown>),
       status: 'qualification',
     },
   })

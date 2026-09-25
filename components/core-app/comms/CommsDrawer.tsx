@@ -2128,12 +2128,13 @@ function DiscordPanel({
                 Create a server in Discord (or use one you already have), invite the bot in, then link
                 a channel from the full Discord settings screen.
               </p>
-              <Link href="/core/discord" className="af-cm-linkbtn">
-                Set up Discord →
+              <Link href={`/core/discord?league=${encodeURIComponent(scopeId ?? '')}`} className="af-cm-linkbtn">
+                Connect an existing server →
               </Link>
               <a className="af-cm-linkbtn" href="https://discord.com/channels/@me" target="_blank" rel="noreferrer">
                 Open Discord to create a server ↗
               </a>
+              <p className="af-cm-empty-b">After creating it in Discord, return here to connect it. Connecting a server requires Manage Server permission or its owner’s help.</p>
             </>
           ) : (
             <>
@@ -2177,7 +2178,7 @@ function DiscordPanel({
                 Open channel ↗
               </a>
               {status.isCommissioner ? (
-                <Link href="/core/discord" className="af-cm-linkbtn">
+                <Link href={`/core/discord?league=${encodeURIComponent(scopeId ?? '')}`} className="af-cm-linkbtn">
                   Manage Discord
                 </Link>
               ) : null}
@@ -2211,6 +2212,21 @@ export function CommsDrawer({
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
+
+  /*
+   * af-comms.css sizes the phone overlay and the chat picker from `--af-comms-vh` (falling back to
+   * 100dvh). This is the only thing that sets it: the VISIBLE viewport height, which shrinks when a
+   * phone keyboard opens.
+   */
+  useEffect(() => {
+    if (!open) return
+    const viewport = window.visualViewport
+    const sync = () =>
+      panelRef.current?.style.setProperty('--af-comms-vh', `${viewport?.height ?? window.innerHeight}px`)
+    sync()
+    viewport?.addEventListener('resize', sync)
+    return () => viewport?.removeEventListener('resize', sync)
+  }, [open])
 
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:
@@ -2391,9 +2407,13 @@ export function CommsDrawer({
             userId={userId}
           />
         ) : tab === 'huddle' ? (
-          <ThreadPanel kind="group" privacy={HUDDLE_PRIVACY} />
+          /*
+            Keyed per kind: Huddle and DMs render the same component in the same slot, so without a
+            key a group thread left open in Huddle stayed open after switching straight to DMs.
+          */
+          <ThreadPanel key="huddle" kind="group" privacy={HUDDLE_PRIVACY} />
         ) : tab === 'dms' ? (
-          <ThreadPanel kind="dm" privacy={DM_PRIVACY} />
+          <ThreadPanel key="dms" kind="dm" privacy={DM_PRIVACY} />
         ) : (
           <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}

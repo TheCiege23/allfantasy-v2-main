@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -64,8 +65,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
   await prisma.legacyTournament.update({
     where: { id: tournamentId },
     data: {
-      hubSettings: nextHub,
-      settings: nextSettings,
+      hubSettings: prismaJson.toPrismaJsonInput(nextHub),
+      settings: prismaJson.toPrismaJsonInput(nextSettings),
     },
   })
 

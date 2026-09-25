@@ -4,6 +4,7 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { fetchChannelMessages, getBotUserId } from '@/lib/discord/bot'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { discordAvatarUrl } from '@/lib/discord/avatar'
+import { retryDiscordOutboundJobs } from '@/lib/discord/sync-outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,8 +16,12 @@ export async function GET(req: NextRequest) {
   }
 
   const botId = await getBotUserId()
+  if (!botId) {
+    return NextResponse.json({ error: 'Discord identity unavailable; synchronization paused' }, { status: 503 })
+  }
+  const outboundDelivered = await retryDiscordOutboundJobs()
   const rows = await prisma.discordLeagueChannel.findMany({
-    where: { syncEnabled: true, syncInbound: true },
+    where: { syncEnabled: true, syncInbound: true, surface: 'league_chat' },
     include: {
       guild: { select: { linkedByUserId: true } },
     },
@@ -43,7 +48,7 @@ export async function GET(req: NextRequest) {
     const after = row.lastSyncedMessageId
     let messages: Awaited<ReturnType<typeof fetchChannelMessages>>
     try {
-      messages = await fetchChannelMessages(row.channelId, { after, limit: 10 })
+      messages = await fetchChannelMessages(row.channelId, { after, limit: 100 })
     } catch {
       continue
     }
@@ -76,7 +81,10 @@ export async function GET(req: NextRequest) {
       }
 
       const text = (m.content ?? '').trim()
-      if (!text) {
+      const attachments = (m.attachments ?? []).filter(a => /^https:\/\/(cdn|media)\.discordapp\.(com|net)\//.test(a.url)).map(a => ({
+        url: a.url, type: a.content_type?.startsWith('image/') ? 'image' : a.content_type?.startsWith('video/') ? 'video' : 'file', mimeType: a.content_type,
+      }))
+      if (!text && !attachments.length) {
         maxId = m.id
         continue
       }
@@ -87,13 +95,14 @@ export async function GET(req: NextRequest) {
 
       const posterId = row.guild.linkedByUserId
 
-      const created = await createLeagueChatMessage(row.leagueId, posterId, text, {
+      const created = await createLeagueChatMessage(row.leagueId, posterId, text || 'Discord attachment', {
         sourceDiscord: true,
         discordMessageId: m.id,
         metadata: {
           discordAuthorName: authorName,
           discordAuthorAvatarUrl: avatarUrl,
           discordInbound: true,
+          attachments,
         },
       })
 
@@ -108,7 +117,7 @@ export async function GET(req: NextRequest) {
           },
         })
         processed += 1
-      }
+      } else break // Retain the cursor before a failed write so the next poll retries it.
 
       maxId = m.id
     }
@@ -121,5 +130,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, processed })
+  return NextResponse.json({ ok: true, processed, outboundDelivered })
 }

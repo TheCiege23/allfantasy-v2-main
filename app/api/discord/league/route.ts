@@ -6,6 +6,7 @@ import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 import { isBotConfigured, missingBotPermissions, createOrReuseChannelInvite } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { BRIDGE_SURFACES } from '@/lib/core-app/discordBridge'
+import { verifyGuildManager } from '@/lib/discord/guild-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
   })
 
   const link = await prisma.discordLeagueChannel.findFirst({
-    where: { leagueId },
+    where: { leagueId, surface: 'league_chat' },
     include: { guild: true },
   })
 
@@ -137,6 +138,28 @@ export async function PATCH(req: Request) {
   }
 
   /*
+   * The mapping is read first so the write below can be scoped to the exact row
+   * whose guild was just checked, and so enabling sync can require current
+   * Manage Server authority on THAT guild. Disabling never needs the external
+   * lookup — a commissioner can always turn their own bridge off.
+   */
+  const mapping = await prisma.discordLeagueChannel.findFirst({ where: { leagueId, surface } })
+  if (!mapping) {
+    return NextResponse.json(
+      {
+        error:
+          surface === DEFAULT_SURFACE
+            ? 'No league chat connection exists.'
+            : 'No channel mapped to that surface',
+      },
+      { status: 404 }
+    )
+  }
+  if (Object.values(data).some(Boolean) && !(await verifyGuildManager(session.user.id, mapping.guildId))) {
+    return NextResponse.json({ error: 'Connect Discord and verify Manage Server access before enabling sync.' }, { status: 403 })
+  }
+
+  /*
    * 🛑 SCOPED TO ONE SURFACE. This was `where: { leagueId }`, which writes EVERY
    * channel row the league has. `@@unique([leagueId, surface])` permits four —
    * league chat, trades/waivers, draft room, commissioner notes — so once the
@@ -162,7 +185,7 @@ export async function PATCH(req: Request) {
    * so a miss returns a count rather than throwing P2025.
    */
   const { count } = await prisma.discordLeagueChannel.updateMany({
-    where: { leagueId, surface },
+    where: { id: mapping.id, leagueId, surface },
     data,
   })
 

@@ -22,6 +22,10 @@ function namesEqual(left: string | null | undefined, right: string | null | unde
   return (left ?? '').trim().toLowerCase() === (right ?? '').trim().toLowerCase()
 }
 
+/** Real API-Sports team ids are positive; `0` is the unresolved-fixture placeholder. */
+const teamIdOf = (id: number | null | undefined): string | null =>
+  typeof id === 'number' && Number.isFinite(id) && id > 0 ? String(id) : null
+
 export const apiSportsProvider: ApiProvider = {
   name: 'api_sports',
   supports: ({ sport, dataType }: ApiFetchParams) =>
@@ -66,7 +70,10 @@ export const apiSportsProvider: ApiProvider = {
           name: player.name,
           position: player.position ?? player.group ?? null,
           team: teamNameToAbbrev(player.team?.name ?? null),
-          teamId: player.team ? String(player.team.id) : null,
+          // Same placeholder-`0` guard as the games path below. `player.team` being truthy says
+          // nothing about its id: an unassigned club arrives as `{ id: 0, name: … }`, and
+          // `String(0)` is `"0"`, which reads as a real team to every consumer.
+          teamId: teamIdOf(player.team?.id),
           number: player.number ?? null,
           height: player.height ?? null,
           weight: player.weight ? Number.parseInt(player.weight, 10) || null : null,
@@ -79,12 +86,36 @@ export const apiSportsProvider: ApiProvider = {
       case 'games':
       case 'schedule': {
         const games = await fetchAPISportsGames(season, { sport: sportTag })
-        return games.map((game) => ({
+        /*
+         * ⚠ A FIXTURE WITH NO TEAM NAMED IS OMITTED, NOT EMITTED WITH NULLS. API-Sports ships
+         * unresolved postseason slots and not-yet-set NCAAF opponents with the team object
+         * present and its name empty — the same payload that rejected `sportsGame.upsert` in
+         * `lib/api-sports.ts`. The provider type now says so, so this is a handled case rather
+         * than a shape the compiler had been told could not occur.
+         */
+        return games.flatMap((game) => {
+          const homeTeam = game.teams.home.name
+            ? teamNameToAbbrev(game.teams.home.name) ?? game.teams.home.name
+            : null
+          const awayTeam = game.teams.away.name
+            ? teamNameToAbbrev(game.teams.away.name) ?? game.teams.away.name
+            : null
+          if (!homeTeam || !awayTeam) return []
+          return [{
           id: String(game.game.id),
-          homeTeam: teamNameToAbbrev(game.teams.home.name) ?? game.teams.home.name,
-          awayTeam: teamNameToAbbrev(game.teams.away.name) ?? game.teams.away.name,
-          homeTeamId: String(game.teams.home.id),
-          awayTeamId: String(game.teams.away.id),
+          homeTeam,
+          awayTeam,
+          /*
+           * 🛑 `0` IS NOT AN ID, AND `!= null` LETS IT THROUGH. API-Sports ships `id: 0` as a
+           * placeholder on unresolved fixtures — sometimes with the NAMES resolved — and
+           * `0 != null` is true, so this stringified it to `"0"`. `lib/workers/schedule-importer.ts`
+           * accepts any string and writes it to `GameSchedule.homeTeamId`, giving a team id that
+           * reads as real to anything joining on it. `writeApiSportsGames` in `lib/api-sports.ts`
+           * guards this with `teamIdOf`; this parallel writer was named in that comment as
+           * already handling it and did not.
+           */
+          homeTeamId: teamIdOf(game.teams.home.id),
+          awayTeamId: teamIdOf(game.teams.away.id),
           date: game.game.date.date,
           status: game.game.status.long,
           season: game.league.season,
@@ -92,7 +123,8 @@ export const apiSportsProvider: ApiProvider = {
           homeScore: game.scores.home.total ?? null,
           awayScore: game.scores.away.total ?? null,
           source: 'api_sports',
-        }))
+          }]
+        })
       }
       case 'injuries': {
         const injuries = await fetchAPISportsInjuries(season, { sport: sportTag })

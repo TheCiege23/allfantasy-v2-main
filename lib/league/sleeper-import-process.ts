@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import pLimit from "p-limit";
 import { LeagueSport } from "@prisma/client";
 
@@ -483,12 +484,12 @@ export async function processLeague(
   await prisma.sportsDataCache.upsert({
     where: { cacheKey: `sleeper:league:${platformLeagueId}` },
     update: {
-      data: leagueData,
+      data: prismaJson.toPrismaJsonInput(leagueData),
       expiresAt: new Date(Date.now() + CACHE_TTL_MS),
     },
     create: {
       cacheKey: `sleeper:league:${platformLeagueId}`,
-      data: leagueData,
+      data: prismaJson.toPrismaJsonInput(leagueData),
       expiresAt: new Date(Date.now() + CACHE_TTL_MS),
     },
   });

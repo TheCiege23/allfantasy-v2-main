@@ -140,12 +140,21 @@ export async function computeRedraftTradeValueSnapshot(
   let formatAliasTags: string[] | null = null
   let formatIsDynasty: boolean | null = null
   let formatKeeperCount: number | null = null
+  /**
+   * The league's own waiver budget, so a FAAB asset is priced against the budget it comes out of.
+   *
+   * ⚠ NULL WHEN NO `leagueId` WAS SUPPLIED — `normalizedFaabValue` then falls back to
+   * `FAAB_DEFAULT_BUDGET`, which is the behaviour this path had before the column was read at
+   * all. The column's own `@default(100)` matches that fallback, so a league nobody configured
+   * prices identically either way; what changes is the league that DID set a different budget.
+   */
+  let formatWaiverBudget: number | null = null
   if (input.leagueId) {
     const league = await prisma.league.findUnique({
       where: { id: input.leagueId },
       select: {
         starters: true, settings: true, rosterSize: true, irSlots: true, taxiSlots: true,
-        leagueType: true, isDynasty: true, keeperCount: true,
+        leagueType: true, isDynasty: true, keeperCount: true, waiverBudget: true,
       },
     })
     if (league) {
@@ -153,6 +162,7 @@ export async function computeRedraftTradeValueSnapshot(
       formatAliasTags = readConceptAliasTags(league.settings)
       formatIsDynasty = league.isDynasty ?? null
       formatKeeperCount = league.keeperCount ?? null
+      formatWaiverBudget = league.waiverBudget ?? null
       const starterSlots = Array.isArray(league.starters)
         ? (league.starters as unknown[]).filter((x): x is string => typeof x === 'string')
         : null
@@ -314,6 +324,7 @@ export async function computeRedraftTradeValueSnapshot(
     aliasTags: formatAliasTags,
     isDynasty: formatIsDynasty,
     keeperCount: formatKeeperCount,
+    waiverBudget: formatWaiverBudget,
     scoring: input.scoring,
     rosterFormat: input.rosterFormat,
     capturedAt: new Date().toISOString(),

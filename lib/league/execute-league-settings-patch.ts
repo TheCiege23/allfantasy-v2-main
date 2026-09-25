@@ -10,6 +10,12 @@ import { prisma } from '@/lib/prisma'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
+import {
+  deriveLeagueTypeState,
+  leagueColumnsForType,
+  mergeSettingsForLeagueType,
+} from '@/lib/league/leagueTypeDerivedSync'
+import { listLeagueFormats } from '@/lib/league/format-engine'
 import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
@@ -284,6 +290,98 @@ export async function executeLeagueSettingsPatch(
       data: leaguePatch,
     })
     updatedFieldNames.push(...leagueKeys)
+  }
+
+  /*
+   * A LEAGUE-TYPE CHANGE HAS TO REACH THE FIELDS THAT PRICE TRADES.
+   *
+   * 🛑 `leagueType` ALONE CHANGES NOTHING THE VALUATION READS. The trade console prices
+   * off `isDynasty`; the format layer reads `conceptRules.extensions.aliasTags`. Saving
+   * only the label is how production ended up with four leagues whose `leagueType` and
+   * `isDynasty` disagree — the commissioner set the type, the engine never heard.
+   *
+   * ⚠ RUNS ONLY WHEN `leagueType` WAS ACTUALLY SUBMITTED. `leagueKeys` comes from the
+   * body, not from a diff, so re-saving the same type re-stamps provenance — deliberate,
+   * and the same rule keeperProvenance follows: submitting the field is the evidence a
+   * human chose it. Every other save leaves these columns untouched.
+   *
+   * ⚠ READ-MODIFY-WRITE ON `settings`, like the blocks below it. `league.settings` was
+   * loaded before the column update above and that update does not touch `settings`, so
+   * the copy in hand is still current.
+   */
+  if (leagueKeys.includes('leagueType')) {
+    const derived = deriveLeagueTypeState(String(body.leagueType))
+    if (derived) {
+      const prevSettings = (league.settings as Record<string, unknown> | null) ?? {}
+      await prisma.league.update({
+        where: { id: leagueId },
+        data: {
+          ...leagueColumnsForType(derived),
+          settings: mergeSettingsForLeagueType(
+            prevSettings,
+            derived,
+            String(body.leagueType),
+          ) as Prisma.InputJsonValue,
+        },
+      })
+      updatedFieldNames.push('leagueType_derived_sync')
+
+      /*
+       * TELL THE LEAGUE, because this is not a cosmetic setting any more.
+       *
+       * 🛑 THE CHANGE IS NOW LOAD-BEARING AND SILENT WITHOUT THIS. Before the sync above,
+       * switching type relabelled a page. Now it moves `isDynasty` — which selects the
+       * market board every trade in the league is priced against — and the elimination
+       * flags. A manager who valued a trade on Tuesday and re-ran it on Wednesday would
+       * see different numbers with nothing on screen explaining why.
+       *
+       * ⚠ ONLY ON AN ACTUAL CHANGE. `leagueKeys` reflects what was SUBMITTED, so the
+       * derived sync above deliberately re-runs on a same-value save (that is how
+       * provenance records a human's choice). Announcing that would post "changed from
+       * Dynasty to Dynasty" every time a commissioner touched the settings page, and a
+       * feed that cries wolf is worse than no feed.
+       *
+       * Non-fatal by construction: a settings save must not fail because a feed write did.
+       */
+      const previousType = league.leagueType ?? null
+      const nextType = String(body.leagueType)
+      if (previousType !== nextType) {
+        try {
+          const previousLabel = previousType
+            ? (listLeagueFormats().find((f) => f.id === previousType)?.label ?? previousType)
+            : 'Unset'
+          const nextLabel = listLeagueFormats().find((f) => f.id === derived.formatId)?.label ?? nextType
+          const pricedAs = derived.isDynasty ? 'dynasty' : 'redraft'
+
+          await prisma.activityEvent.create({
+            data: {
+              leagueId,
+              userId,
+              type: 'league_type_changed',
+              message:
+                `League type changed from ${previousLabel} to ${nextLabel}. ` +
+                `Trade values are now priced on the ${pricedAs} market board.`,
+              metadata: {
+                previousType,
+                nextType,
+                formatId: derived.formatId,
+                isDynasty: derived.isDynasty,
+                guillotineMode: derived.guillotineMode,
+                survivorMode: derived.survivorMode,
+                bestBallMode: derived.bestBallMode,
+                changedBy: userId,
+              },
+            },
+          })
+          updatedFieldNames.push('leagueType_activity_event')
+        } catch {
+          // A feed write must never fail a settings save.
+        }
+      }
+    }
+    // An unrecognized type leaves the derived fields alone rather than guessing. The label
+    // still saved above; `valuationBasis` on the trade result is what surfaces the
+    // resulting mismatch, instead of this silently picking a lifecycle on the user's behalf.
   }
 
   /*

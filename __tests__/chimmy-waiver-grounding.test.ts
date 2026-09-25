@@ -60,12 +60,13 @@ describe('buildWaiverContext', () => {
    * The whole point of the block. Rules without this line invite "you were
    * outbid on him" — fluent, specific, and entirely invented.
    */
-  it('states outright that no waiver activity is visible', async () => {
+  it('distinguishes these settings from separately retrieved claim history', async () => {
     const out = await buildWaiverContext('lg1', 'user-1')
 
-    expect(out).toContain('NO WAIVER ACTIVITY IS AVAILABLE')
-    expect(out).toMatch(/do NOT say who claimed, dropped or was outbid/i)
-    expect(out).toMatch(/do NOT report what a player went for/i)
+    expect(out).toContain('not claim history')
+    expect(out).toContain('Do not infer winning bids, failed claims, drops or transactions from settings')
+    expect(out).toContain('otherwise say claim history is unavailable for this answer')
+    expect(out).toContain('starting FAAB budget is not the remaining balance')
   })
 
   it('refuses to state a schedule that is not on file', async () => {
@@ -89,7 +90,7 @@ describe('buildWaiverContext', () => {
     const out = await buildWaiverContext('lg1', 'user-1')
 
     expect(out).toContain('WAIVER RULES')
-    expect(out).toContain('NO WAIVER ACTIVITY IS AVAILABLE')
+    expect(out).toContain('not claim history')
   })
 
   it('returns null when the league has no waiver settings', async () => {

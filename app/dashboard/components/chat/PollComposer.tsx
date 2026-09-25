@@ -46,11 +46,13 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
   }
 
   return (
-    <div className="mb-2 rounded-2xl border border-white/[0.08] bg-[#0c0c1e] p-4">
+    <div className="af-chat-picker mb-2 rounded-2xl border border-white/[0.08] bg-[#0c0c1e] p-4">
       <input
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder="Ask the league a question..."
+        placeholder="Ask a question..."
+        aria-label="Poll question"
+        maxLength={300}
         className="mb-3 w-full rounded-xl bg-white/[0.06] px-3 py-2.5 text-[13px] text-white outline-none placeholder:text-white/35"
         data-testid="poll-composer-question"
       />
@@ -66,6 +68,8 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
                 setOptions(next)
               }}
               placeholder={`Option ${i + 1}...`}
+              aria-label={`Poll option ${i + 1}`}
+              maxLength={200}
               className="min-w-0 flex-1 rounded-lg bg-white/[0.06] px-3 py-2 text-[12px] text-white outline-none placeholder:text-white/35"
             />
             {i >= 2 ? (
@@ -120,6 +124,7 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
               key={d.label}
               type="button"
               onClick={() => applyDuration(d.label, d.ms)}
+              aria-pressed={activeDur === d.label}
               className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
                 activeDur === d.label
                   ? 'border-cyan-500/30 bg-cyan-500/20 text-cyan-400'
@@ -143,6 +148,7 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
         <button
           type="button"
           onClick={submit}
+          disabled={!question.trim() || options.filter(o => o.trim()).length < 2}
           className="rounded-lg bg-cyan-500/20 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/30"
         >
           Create Poll

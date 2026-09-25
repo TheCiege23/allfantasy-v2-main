@@ -209,7 +209,61 @@ export type TradeIntelligence = {
   syncedDataHighlights?: string[]
 }
 
+/**
+ * Where one price-moving league setting came from.
+ *
+ * `league`  — read from this league's own settings or normalized context.
+ * `user`    — the caller set it explicitly on the request.
+ * `assumed` — nothing supplied it, so a default stood in.
+ */
+export type TradeConsoleValuationSetting = {
+  value: string | number | boolean
+  origin: 'league' | 'user' | 'assumed'
+}
+
+/**
+ * WHAT THIS TRADE WAS PRICED AS, AND HOW MUCH OF THAT WE ACTUALLY KNEW.
+ *
+ * 🛑 THE FAILURE THIS EXISTS TO PREVENT. Every setting below has a default, and the
+ * defaults are reasonable — 12 teams, one quarterback, full PPR, dynasty. They are
+ * also, for any league that is not those things, WRONG, and silently so. A superflex
+ * quarterback priced on a one-quarterback replacement level is not a rough answer; it
+ * is a confident answer to a question nobody asked, and it is indistinguishable in the
+ * response from a value we genuinely derived from the user's league.
+ *
+ * That indistinguishability was the whole defect. `dataGaps` already carried a prose
+ * sentence about global mode, but prose cannot be branched on, so every surface
+ * rendered an assumed number exactly like a real one. This block is the machine-readable
+ * version: a caller can gate on `hasAssumptions`, name the specific settings in
+ * `assumed`, and show `disclosure` to a human.
+ *
+ * ⚠ `startingLineup` is assumed on EVERY league path today, including a fully resolved
+ * one. `buildRosterConfig` in lib/hybrid-valuation.ts falls back to QB1/RB2/WR2/TE1 with
+ * a flex whenever no `rosterConfig` is supplied, and this analysis does not supply one.
+ * Replacement level — which is most of what a positional value IS — therefore comes from
+ * a default lineup rather than the league's real starting slots. Wiring the league's own
+ * lineup through is a separate change; until it lands, this field says so out loud
+ * rather than letting the omission pass as knowledge.
+ */
+export type TradeConsoleValuationBasis = {
+  /** True when any price-moving setting fell back to a default. */
+  hasAssumptions: boolean
+  /** Keys of the settings that were assumed — what a banner should name. */
+  assumed: string[]
+  /** One plain sentence, or null when nothing was assumed. */
+  disclosure: string | null
+  settings: {
+    leagueSize: TradeConsoleValuationSetting
+    isSuperFlex: TradeConsoleValuationSetting
+    isDynasty: TradeConsoleValuationSetting
+    ppr: TradeConsoleValuationSetting
+    tePremium: TradeConsoleValuationSetting
+    startingLineup: TradeConsoleValuationSetting
+  }
+}
+
 export type TradeConsoleAnalyzeResult = {
+  valueV2Shadow?: import('@/lib/decision-os/value-v2/shadow').ValueV2Shadow
   ok: true
   /** `league` = roster + scoring from a league row; `global` = sport/asset analysis without league. */
   analysisMode: 'league' | 'global'
@@ -249,6 +303,8 @@ export type TradeConsoleAnalyzeResult = {
    */
   grade: TradeGradeView
   degraded: boolean
+  /** Which league settings priced this trade, and which were defaults. */
+  valuationBasis: TradeConsoleValuationBasis
   dataGaps: string[]
   dataSources: string[]
   lastUpdated: string | null

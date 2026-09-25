@@ -131,6 +131,10 @@ export async function POST(
     return NextResponse.json({ status: "ok" })
   }
 
+  if (typeof body?.optionId === 'string') {
+    const ok = await votePollMessage(user.appUserId, threadId, messageId, body.optionId)
+    return NextResponse.json(ok ? { status: 'ok' } : { error: 'Poll unavailable, closed, or vote invalid' }, { status: ok ? 200 : 400 })
+  }
   const optionIndex = Number(body?.optionIndex)
   if (!Number.isInteger(optionIndex) || optionIndex < 0) {
     return NextResponse.json({ error: "optionIndex required (non-negative integer)" }, { status: 400 })

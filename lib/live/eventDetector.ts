@@ -90,6 +90,62 @@ export type LiveEvent = {
   passerName?: string | null
   /** The receiver, when an event is told from the passer's side ("TD pass to Drake London"). */
   receiverName?: string | null
+  /**
+   * The sport this event belongs to — the NAMESPACE for every id on this object.
+   *
+   * 🛑 `gameId` AND `playerId` ARE ONLY UNIQUE WITHIN A SPORT, AND NOTHING RECORDED THAT.
+   * Providers reuse short numeric ids across sports, and `PlayerIdentityMap` already carries a
+   * `sport` column precisely because an id alone does not identify an athlete here. Every key
+   * derived from this event — the notification-engine cooldown key, the per-play collapse below
+   * — must be namespaced, or an NBA game id can collide with an NFL one and suppress a real
+   * alert. That failure is silent: the notification simply never arrives.
+   *
+   * ⚠ OPTIONAL, AND ABSENCE IS "UNKNOWN", NEVER A DEFAULT SPORT. The play-by-play mapper sets
+   * it (that feed is NFL-only today). The box-score detector sets it when the caller passes
+   * `sport` in `DetectOptions` and leaves it undefined otherwise, because a `GameSnapshot`
+   * genuinely does not carry one. Consumers namespace on the literal string `unknown` rather
+   * than guessing, so two unknown-sport events can still collide with each other — which is the
+   * pre-existing behaviour, made visible instead of assumed away.
+   */
+  sport?: string
+  /**
+   * Which feed observed this event — `rolling_insights_pbp`, `box_score`, and so on.
+   *
+   * ⚠ NOT PART OF ANY DEDUPE NAMESPACE, DELIBERATELY. Two feeds reporting the SAME touchdown
+   * must collapse to one notification, so keying on the provider would defeat exactly the case
+   * it looks like it should serve. It is carried for provenance and for the collapse rule that
+   * has to decide WHICH of two observations to keep.
+   */
+  provider?: string
+  /**
+   * Everyone the play was credited to, not just the one player the event is filed under.
+   *
+   * ⚠ OPTIONAL, AND EVERY EXISTING PRODUCER AND CONSUMER IS UNAFFECTED. Only the
+   * play-by-play mapper populates it (`lib/live/rollingInsightsPlayByPlay.ts`); the box-score
+   * detector in this file cannot — a stat delta names one player by construction — and leaves
+   * it undefined. Readers must treat absence as "not known from this source", never as "the
+   * play had one participant".
+   *
+   * WHY IT EXISTS: `subjectOf` collapses a passing touchdown to a single subject, preferring
+   * the receiver. The passer is then gone by the time anything downstream could use him, so a
+   * manager who rosters only the quarterback cannot be reached and the message cannot name both
+   * players ("{QB} threw a {yards}-yard TD to {receiver}"). Carrying the roster here keeps that
+   * evidence alive.
+   *
+   * ⚠ CARRYING IS NOT FANNING OUT. Nothing yet resolves recipients from this list — that is a
+   * later batch — and adding it does not change who is notified today.
+   *
+   * Affected callers, all additive: `rollingInsightsPlayByPlay.playsToLiveEvents` writes it;
+   * `bigPlayNotifier.notifyBigPlays` copies it into notification meta; `playByPlayFeed` and
+   * `playFeedPresentation` pass `LiveEvent` through untouched.
+   */
+  participants?: Array<{
+    id: string | null
+    name: string
+    role: string
+    position: string | null
+    team: string | null
+  }>
 }
 
 /** Counter stats where any increase is exactly one scoring event. */
@@ -137,6 +193,13 @@ const LONG_STATS: Record<string, string> = {
 export type DetectOptions = {
   /** Yards at or above which a long gain is worth an alert. */
   bigPlayYards?: number
+  /**
+   * Namespace for the ids on every event produced — see `LiveEvent.sport`.
+   *
+   * A `GameSnapshot` carries no sport, so this is the only way a caller can supply one.
+   * Omitted means unknown, which is honest; it does not mean NFL.
+   */
+  sport?: string
 }
 
 function statOf(line: PlayerStatLine | undefined, key: string): number {
@@ -184,6 +247,15 @@ export function detectEvents(
         delta,
         value,
         detectedAt: next.capturedAt,
+        sport: opts.sport,
+        /*
+         * ⚠ NAMED SO THE COLLAPSE CAN TELL THE SOURCES APART. A cumulative stat transition is
+         * NOT a play id — it identifies a position in a running total, and two plays inside one
+         * poll window produce one transition. Everything downstream that reasons about "the
+         * same play" has to know that this observation cannot answer the question, and this is
+         * how it knows.
+         */
+        provider: 'box_score',
         // Keyed on the resulting VALUE, not the timestamp — a retry that sees the
         // same state produces the same key and dedupes cleanly.
         idempotencyKey: `${next.gameId}|${cur.playerId}|${stat}|${value}`,

@@ -2,6 +2,7 @@
  * Append-only guillotine event log (chop, commissioner override, media events).
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 import type { GuillotineEventType } from './types'
 
@@ -14,7 +15,7 @@ export async function appendEvent(
     data: {
       leagueId,
       eventType,
-      metadata: metadata ?? undefined,
+      metadata: prismaJson.toPrismaNullableJsonInput(metadata ?? undefined),
     },
   })
 }

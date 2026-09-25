@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/discord/poll-messages",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/decision-os-intelligence-maintenance",
       "schedule": "*/10 * * * *"
     },

@@ -473,14 +473,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  void syncOutboundLeagueChat({
+  await syncOutboundLeagueChat({
     leagueId,
     messageId: created.id,
     authorName: created.senderName ?? 'Manager',
     authorAvatarUrl: created.senderAvatarUrl ?? null,
     text: created.body,
     gifUrl: gifUrlFromMetadata(metadata),
-  }).catch(() => {})
+  }).catch(() => { console.error('[league-chat] Discord delivery could not be queued') })
 
   if (mentionInfo.hasAll) {
     const sender = await prisma.appUser.findUnique({

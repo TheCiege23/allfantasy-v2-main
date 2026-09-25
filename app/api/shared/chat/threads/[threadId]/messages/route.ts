@@ -198,12 +198,37 @@ export async function POST(
 
   const threadId = decodeURIComponent(params.threadId)
   const body = await req.json().catch(() => ({}))
-  const metadata =
+  let metadata =
     body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
       ? (body.metadata as Record<string, unknown>)
       : undefined
   const rawMessage = String(body?.body || body?.message || '').trim()
-  const messageType = String(body?.messageType || 'text')
+  const messageType = metadata?.poll ? 'poll' : String(body?.messageType || 'text')
+  if (messageType === 'poll' && metadata && !metadata.poll && Array.isArray(metadata.options)) {
+    metadata = { ...metadata, poll: {
+      question: metadata.question,
+      options: metadata.options.map(text => ({ text })),
+      closeAt: metadata.closeAt ?? new Date(Date.now() + 86_400_000).toISOString(),
+      allowMultiple: metadata.allowMultiple,
+      anonymous: metadata.anonymous,
+    } }
+    delete metadata.votes
+    delete metadata.closed
+    delete metadata.question
+    delete metadata.options
+  }
+  if (metadata?.poll) {
+    const p = metadata.poll as Record<string, unknown>
+    const options = Array.isArray(p.options) ? p.options : []
+    if (typeof p.question !== 'string' || !p.question.trim() || p.question.length > 300 || options.length < 2 || options.length > 10 ||
+        options.some(o => !o || typeof o !== 'object' || typeof (o as { text?: unknown }).text !== 'string' || !(o as { text: string }).text.trim() || (o as { text: string }).text.length > 200)) {
+      return NextResponse.json({ error: 'A poll needs a question and 2-10 non-empty options.' }, { status: 400 })
+    }
+    if (typeof p.closeAt !== 'string' || !Number.isFinite(Date.parse(p.closeAt)) || Date.parse(p.closeAt) <= Date.now()) {
+      return NextResponse.json({ error: 'Poll closing time must be in the future.' }, { status: 400 })
+    }
+    metadata = { ...metadata, poll: { question: p.question.trim(), options: options.map((o, i) => ({ id: `opt-${i}`, text: (o as { text: string }).text.trim(), votes: [] })), closeAt: p.closeAt, closed: false, allowMultiple: p.allowMultiple === true, anonymous: p.anonymous === true } }
+  }
   const message =
     messageType === 'poll' &&
     metadata &&
@@ -218,7 +243,9 @@ export async function POST(
               : {},
           closed: Boolean(metadata.closed),
         })
-      : rawMessage
+      : metadata?.poll && typeof (metadata.poll as Record<string, unknown>).question === 'string'
+        ? String((metadata.poll as Record<string, unknown>).question)
+        : rawMessage
   const source = normalizeLeagueChatSource(body?.source)
   const isChimmyPrompt = /^@chimmy\b/i.test(message)
   const parentMessageId =

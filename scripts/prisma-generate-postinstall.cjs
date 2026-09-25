@@ -56,9 +56,14 @@ function runPrismaGenerateOnce() {
    * client. Naming the schema removes the discovery step that can fail that way.
    */
   const schemaPath = path.join(root, 'prisma', 'schema.prisma')
-  const r = spawnSync(process.execPath, [prismaCli, 'generate', '--schema', schemaPath], {
+  const preload = path.join(__dirname, 'prisma-identical-engine-copy.cjs')
+  const args = [...(isWin ? ['--require', preload] : []), prismaCli, 'generate', '--schema', schemaPath]
+  const r = spawnSync(process.execPath, args, {
     cwd: root,
-    env: process.env,
+    env: { ...process.env, ...(isWin ? {
+      AF_PRISMA_IDENTICAL_ENGINE_COPY: '1',
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --require "${preload.split(path.sep).join('/')}"`.trim(),
+    } : {}) },
     encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'pipe'],
     maxBuffer: 24 * 1024 * 1024,

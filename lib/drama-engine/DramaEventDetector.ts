@@ -443,7 +443,7 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     pushCandidate({
       dramaType: 'REBUILD_PROGRESS',
       headline: `Rebuild watch: ${rc.profile.managerId} is gaining traction`,
-      summary: `Behavior profile (${rc.profile.profileLabels.join(', ')}) now aligns with upward competitive signals.`,
+      summary: 'Recorded competitive signals prompted a team progress update.',
       relatedManagerIds: toManagerIds([rc.profile.managerId]),
       relatedTeamIds: toManagerIds([rc.profile.managerId]),
       signal: {

@@ -5,6 +5,9 @@ import { getServerSession } from 'next-auth'
 import OpenAI from 'openai'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { readStrategy } from '@/lib/decision-os/value-v2/strategyStore'
+import { strategyPrismaPort } from '@/lib/decision-os/value-v2/strategyPrisma'
+import { strategyPrompt } from '@/lib/decision-os/value-v2/strategyPrompt'
 import { parseHomeSignals, renderHomeSignalsPrompt } from '@/lib/core-app/homeSignals'
 import { CORE_SURFACE_KEYS, renderCoreSurfacePrompt } from '@/lib/core-app/coreSurface'
 import {
@@ -448,6 +451,9 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   'For playoff chances, what record they need, or who to root for, call get_playoff_outlook. For this week\'s opponent, win probability or which games are close, call get_my_matchup. Both also work with no league selected — they then cover every league the user is in.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
   'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
+  'For league recommendations, get_my_roster includes verified scoring, roster-slot rules, current period and available waiver budget. Read it before a recommendation. For waivers also call get_available_players; never equate unrostered with claimable. For start/sit call get_player_projection for the actual candidates and requested week, and distinguish generic projections from league-rescored projections. Without required data, give a conditional recommendation and name the missing inputs instead of claiming a complete optimized lineup.',
+  'For a described trade, evaluate BOTH sides including the exact year and round of picks. Do not assume the hypothetical player is owned by the user. Read values and roster/format evidence; if a pick value or scoring rule is missing, do not fabricate a fair-value verdict. Explain what can be supported and ask for the missing detail.',
+  'General real-sport questions are in scope even without a league. Never label coaching, team, historical or live-stat questions off-topic just because a league tool cannot answer them.',
   'Quote numbers exactly as the tools give them. The voice below never licenses a number, player or fact no tool returned.',
 ].join(' ') +
   /*
@@ -504,6 +510,9 @@ const SPORTS_KEYWORDS = [
   /* MLB / NBA / NHL stat vocabulary (Phase 3, 2026-09-24). */
   'home run', 'homer', 'rbi', 'batting', 'pitching', 'strikeout', 'rebound', 'assist',
   'goalie', 'hat trick', 'three-pointer', 'last night', 'march madness', 'ncaa tournament',
+  /* Stat abbreviations ("TDs", "HRs"), a generic 'goal', and front-office / staff terms. */
+  'tds', ' td ', 'hrs', 'goal',
+  'montgomery', 'jets', 'manager', 'head coach', 'general manager',
 ]
 
 function hasSportsContent(text: string, hasImage: boolean): boolean {
@@ -1529,6 +1538,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     if (lce.ok) normalizedLeagueContext = lce.context
   }
 
+  const savedStrategyPrompt = normalizedLeagueContext && leagueId && userId
+    ? await readStrategy({ userId, leagueId, season: normalizedLeagueContext.season }, strategyPrismaPort)
+      .then(strategyPrompt).catch(() => undefined)
+    : undefined
+
   const sportExplicit =
     typeof sportRaw === 'string' && sportRaw.trim().length > 0
       ? normalizeToSupportedSport(sportRaw)
@@ -2381,6 +2395,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   const combinedMemorySection = [
+    savedStrategyPrompt,
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
     coreSurfaceBlock ?? undefined,
@@ -2945,10 +2960,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        *
        * And Chimmy's own track record with this user and with everyone, so "how good are your
        * picks?" is answered from graded calls instead of invented. Per-user, so it rides here,
-       * after the cached instructions — never inside them.
+       * after the cached instructions — never inside them. The saved league strategy too.
        */
       styleLine: [
         personalizationDirectives,
+        savedStrategyPrompt,
         renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
       ]
         .filter(Boolean)

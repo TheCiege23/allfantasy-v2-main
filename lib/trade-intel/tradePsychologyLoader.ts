@@ -85,16 +85,13 @@ export async function loadTradePsychology(input: {
 
     const evidence = summarizeEvidenceRecords(profile.evidence)
     const trade = evidence.dimensions.trade
-    const labels = Array.isArray(profile.profileLabels)
-      ? (profile.profileLabels as ProfileLabel[]).filter((l): l is ProfileLabel => typeof l === 'string')
-      : []
 
     return {
       rosterId: side.rosterId,
       managerName: side.managerName,
       // Only trade-dimension labels belong in a trade email. How someone drafts
       // is a real observation but says nothing about how they deal.
-      labels: labels.filter((l) => TRADE_LABELS.has(l)),
+      labels: [],
       tradeEvidenceCount: trade.evidenceCount,
       confidence: trade.confidence,
       shortfall: trade.sufficient
@@ -110,12 +107,3 @@ export async function loadTradePsychology(input: {
   const anyObserved = sides.some((s) => s.labels.length > 0)
   return { available: anyObserved, sides }
 }
-
-const TRADE_LABELS = new Set<ProfileLabel>([
-  'trade-heavy',
-  'aggressive',
-  'conservative',
-  'value-first',
-  'win-now',
-  'patient rebuilder',
-])

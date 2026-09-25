@@ -3035,6 +3035,33 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     let canonicalGradeApplied = false
     try {
       const canonical = legacyCanonical
+      if (!canonical) {
+        /*
+         * 🛑 SILENCE IS NOT A NEUTRAL OUTCOME HERE — IT IS THE BUG THAT STALLED THE FLIP GATE.
+         *
+         * This whole block used to live inside `if (canonical)`, so a request where
+         * `buildLegacyCanonicalGrade` returned null emitted NOTHING. On the surface the
+         * comment above calls "the highest-traffic trade surface in the product", that
+         * produced an empty sample stream, and `flipReadiness` cannot distinguish "this
+         * surface was never exercised" from "it was exercised and the canonical engine had
+         * nothing to say". Measured 2026-09-20: zero `legacy` rows had ever been written to
+         * `decision_parity_record`, while `console` carried six.
+         *
+         * A skip row is real evidence: it says the surface RAN, names the missing input, and
+         * makes the yield measurable. `ran: false` keeps it out of the agreement numerator —
+         * `flipReadiness` counts only rows carrying a verdict — so this cannot flatter the
+         * gate, only inform it.
+         */
+        recordTradeSurfaceShadow({
+          surface: 'legacy',
+          leagueId: leagueId || null,
+          assetsGive: assetsB.length,
+          assetsGet: assetsA.length,
+          surfaceVerdict: (data as { verdict?: string })?.verdict ?? null,
+          surfaceAnalysisMode: (data as { grade?: string })?.grade ?? 'llm_grade',
+          comparison: null,
+        })
+      }
       if (canonical) {
         const legacyAdvantage = legacyVerdictToAdvantage((data as { verdict?: string })?.verdict)
         const canonicalAdvantage = canonical.verdict ? legacyVerdictToAdvantage(canonical.verdict) : null

@@ -4,6 +4,7 @@
  * Validates premium access before saving premium stages.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 import type { PlayoffConfig } from './types'
 import { EMPTY_PLAYOFF_CONFIG } from './types'
@@ -86,12 +87,12 @@ export async function savePlayoffConfig(
   await prisma.league.update({
     where: { id: leagueId },
     data: {
-      settings: {
+      settings: prismaJson.toPrismaJsonInput({
         ...currentSettings,
         [`${PREFIX}data`]: newConfig,
         // Also update the standard playoff fields for backward compatibility
         playoffStartWeek: adjustment.newPlayoffStartWeek,
-      },
+      }),
     },
   })
 

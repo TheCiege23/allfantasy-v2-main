@@ -37,6 +37,8 @@
 import type { CanonicalWorld, WorldProvenance } from '@/lib/decision-os/world/facts'
 import { POSITION_SCARCITY, type ScoringContext } from '@/lib/trade-value/valueEngine'
 import { scoringContextFromCanonicalWorld } from './scoringContextFromWorld'
+import { leagueRuntimeFromWorld, type LeagueRuntimeV2 } from '@/lib/decision-os/value-v2/league'
+import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 import type { TeamProfile } from '@/lib/trade-value/types'
 import {
   profileForRoster,
@@ -82,6 +84,7 @@ export interface TradeLeagueContext {
  * Every field is honest-optional: unsourced ⇒ empty/null + raised in `TradeWorld.uncertainty`, never faked.
  */
 export interface MarketContext {
+  marketObservationByPlayerId?: CanonicalMemoEnrichment['marketObservationByPlayerId']
   /** ADP per player — from the provider-neutral `AdpDataRecord` seam. */
   adpByPlayerId: Record<string, number | null | undefined>
   /** Market value per player — Phase F enrichment; honest-empty today. */
@@ -130,6 +133,7 @@ export interface TradeConstraints {
  * not. Origin survives ONLY in `provenance`.
  */
 export interface TradeWorld {
+  leagueRuntimeV2?: LeagueRuntimeV2
   participants: TradeParticipant[]
   /** `CanonicalAsset` + direction. The asset stays purpose-blind in the world layer; direction lives here. */
   assets: TradeMovement[]
@@ -187,13 +191,13 @@ function participantFor(
 }
 
 function buildMarketContext(movements: TradeMovement[], enrich: CanonicalMemoEnrichment): MarketContext {
-  // Confidence = share of PLAYER movements that carry a real market signal (ADP or projection).
+  // Coverage includes every supplied valuation input, including market and league-specific IDP.
   const playerMovements = movements.filter((m) => m.asset.assetType === 'player')
   const withSignal = playerMovements.filter((m) => {
     const pid = m.asset.metadata.player?.playerId ?? null
     if (!pid) return false
-    return enrich.adpByPlayerId?.[pid] != null || enrich.projectionByPlayerId?.[pid] != null ||
-      enrich.marketValueByPlayerId?.[pid] != null || enrich.idpValueByPlayerId?.[pid] != null
+    return [enrich.adpByPlayerId?.[pid], enrich.projectionByPlayerId?.[pid], enrich.marketValueByPlayerId?.[pid], enrich.idpValueByPlayerId?.[pid]]
+      .some(value => typeof value === 'number' && Number.isFinite(value))
   })
   const confidence = playerMovements.length === 0
     ? 100
@@ -203,6 +207,7 @@ function buildMarketContext(movements: TradeMovement[], enrich: CanonicalMemoEnr
     adpByPlayerId: enrich.adpByPlayerId ?? {},
     marketValueByPlayerId: enrich.marketValueByPlayerId ?? {},
     ...(enrich.pickMarketValueByKey ? { pickMarketValueByKey: enrich.pickMarketValueByKey } : {}),
+    marketObservationByPlayerId: enrich.marketObservationByPlayerId,
     idpValueByPlayerId: enrich.idpValueByPlayerId ?? {},
     liquidityByPlayerId: enrich.liquidityByPlayerId ?? {},
     trend30dByPlayerId: enrich.trend30dByPlayerId ?? {},
@@ -297,6 +302,7 @@ export function resolveTradeWorld(input: ResolveTradeWorldInput): TradeWorld {
 
   return {
     participants: [proposer.participant, receiver.participant],
+    ...(valueV2ShadowEnabled() ? { leagueRuntimeV2: leagueRuntimeFromWorld(world) } : {}),
     assets: input.movements,
     teamProfiles,
     leagueContext,

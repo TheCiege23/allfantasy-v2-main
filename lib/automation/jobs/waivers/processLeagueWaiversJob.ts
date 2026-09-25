@@ -10,6 +10,7 @@
  * - `RealtimeEvent` — per-claim realtime fan-out.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { randomUUID } from "crypto"
 
 import { writeAutomationAuditLog } from "@/lib/automation/audit"
@@ -121,10 +122,10 @@ async function executeLockedWaiverProcess(input: {
       await publishRealtimeEvent({
         leagueId,
         eventType: "waivers.processing.completed",
-        payload: {
+        payload: prismaJson.toPrismaJsonInput({
           dryRun: true,
           summary,
-        },
+        }),
       })
       await enqueueLeagueChatNotification({
         leagueId,
@@ -140,7 +141,7 @@ async function executeLockedWaiverProcess(input: {
         entityId: leagueId,
         jobId: input.jobId,
         message: summary.message,
-        metadata: { dryRun: true, trigger, summary },
+        metadata: prismaJson.toPrismaJsonInput({ dryRun: true, trigger, summary }),
       })
       return {
         result: {
@@ -193,7 +194,7 @@ async function executeLockedWaiverProcess(input: {
       entityId: leagueId,
       jobId: input.jobId,
       message: summary.message,
-      metadata: { trigger, summary },
+      metadata: prismaJson.toPrismaJsonInput({ trigger, summary }),
     })
 
     return {

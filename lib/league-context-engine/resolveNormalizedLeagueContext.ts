@@ -8,6 +8,7 @@ import { normalizeLeagueScoring } from '@/lib/league-context-engine/normalizeSco
 import { resolveMatchupPeriod } from '@/lib/league-context-engine/resolvePeriod'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { parseRosterSlots } from '@/lib/league-context-engine/normalizeRosterSlots'
 import type {
   LeagueSourceType,
   NormalizedLeagueContext,
@@ -196,6 +197,7 @@ export async function resolveNormalizedLeagueContext(
     roster: {
       rosterSize: league.rosterSize,
       starters: league.starters,
+      slots: parseRosterSlots(league.starters),
       irSlots: league.irSlots,
       taxiSlots: league.taxiSlots,
       taxiAllowNonRookies: league.taxiAllowNonRookies,

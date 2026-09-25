@@ -3,6 +3,7 @@
  * Derives completion from profile, league count, and EngagementEvent; records milestones.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from "@/lib/prisma"
 import { getSettingsProfile } from "@/lib/user-settings/SettingsQueryService"
 import type {
@@ -186,7 +187,7 @@ export async function recordMilestone(
       data: {
         userId,
         eventType,
-        meta: meta ?? undefined,
+        meta: prismaJson.toPrismaNullableJsonInput(meta ?? undefined),
       },
     })
     return { ok: true }

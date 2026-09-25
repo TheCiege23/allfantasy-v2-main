@@ -3,6 +3,7 @@
  * Polls until completed/failed and persists playbackUrl or failure.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma';
 import { getHeyGenVideoStatus } from './HeyGenVideoService';
 
@@ -23,7 +24,7 @@ async function persistJobStatus(episodeId: string, data: {
     data: {
       status: data.status,
       playbackUrl: data.playbackUrl ?? null,
-      meta: data.meta,
+      meta: prismaJson.toPrismaNullableJsonInput(data.meta),
       updatedAt: new Date(),
     },
   });

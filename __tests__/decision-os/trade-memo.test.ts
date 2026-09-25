@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { resolveTradeEnrichment, type TradeEnrichmentPort } from '@/lib/decision-os/trade/enrichmentPort'
 
 import {
   buildCanonicalTradeMemo,
@@ -122,6 +123,46 @@ const FULL_ENRICHMENT: CanonicalMemoEnrichment = {
   projectionByPlayerId: { p1: 320, p2: 340 },
   positionByPlayerId: { p1: 'QB', p2: 'RB', pX: 'WR', pY: 'TE' },
 }
+
+it.each([false, true])('preserves source observations through both canonical memo paths (exact history metadata: %s)', async exact => {
+  vi.stubEnv('DECISION_OS_VALUE_V2_SHADOW_ENABLED', 'true')
+  try {
+    const enrichmentPort: TradeEnrichmentPort = {
+      loadAdp: async () => [], resolveMetadata: async () => ({ byId: new Map() }) as never,
+      loadProjections: async () => [], loadAfProjections: async () => [], loadIdpValue: async () => [],
+      loadMarketValue: async () => ['p1', 'p2'].map(sleeperId => ({ sleeperId, source: 'FANTASYCALC',
+        format: 'REDRAFT', qbFormat: 'ONE_QB', value: 4000, overallRank: null, positionRank: null,
+        trend30d: 21, tradeFrequency: 0.4, marketStdDev: 30, capturedAt: new Date('2026-09-09T00:00:00Z'),
+        ...(exact ? { observedAt: new Date('2026-09-09T10:00:00Z'), marketNumTeams: 12, marketPpr: 1 } : {}) })),
+    }
+    const resolved = await resolveTradeEnrichment({ sport: 'NFL', playerIds: ['p1', 'p2'],
+      valueFormat: { format: 'REDRAFT', qbFormat: 'ONE_QB' } }, enrichmentPort)
+    const input: BuildCanonicalTradeMemoInput = {
+      world: makeWorld({ provider: 'sleeper', assembledAt: '2026-09-09T12:00:00Z' }),
+      movements: makeMovements().filter(m => m.asset.assetType === 'player'),
+      proposerRosterId: 'rA', receiverRosterId: 'rB', enrichment: resolved.enrichment,
+    }
+    input.world.league.teamCount = 14
+    input.world.league.scoringSettings = { scoring_settings: { rec: 0.75, bonus_rec_te: 1.25 } }
+    input.world.league.rosterSettings = { starterSlots: ['QB', 'TE', 'SUPER_FLEX'], rosterSize: 12, irSlots: 2, taxiSlots: 4 }
+    const direct = buildCanonicalTradeMemo(input)
+    const throughWorld = buildTradeMemo(resolveTradeWorld(input))
+    expect(throughWorld).toEqual(direct)
+    const shadow = direct.snapshot.valueV2Shadow!
+    expect(shadow.assets).toHaveLength(2)
+    expect(shadow.assets[0].observation?.observedAt).toBe(exact ? '2026-09-09T10:00:00.000Z' : '2026-09-09T00:00:00.000Z')
+    expect(shadow.assets[0].observation?.standardDeviation).toBe(30)
+    if (exact) expect(shadow.assets[0].marketValue?.value).toBe(4000)
+    else {
+      expect(shadow.assets[0].marketValue).toBeNull()
+      expect(shadow.assets[0].gaps).toContain('market_cohort_incomplete')
+    }
+    expect(shadow.marketComplete).toBe(exact)
+    expect(shadow.league?.teamCount).toBe(14)
+    expect(shadow.league?.scoring).toContainEqual({ stat: 'rec', points: 1.25, positions: ['TE'] })
+    expect(shadow.league?.slots?.[2].eligiblePositions).toContain('QB')
+  } finally { vi.unstubAllEnvs() }
+})
 
 // The equivalent redraft memo (pure core of the redraft capture path) fed the SAME sources.
 function redraftReferenceSnapshot() {
@@ -507,6 +548,31 @@ describe('Phase E.3 — MarketContext: owned by TradeWorld, honest, never fabric
 })
 
 describe('Phase E.3 — buildTradeMemo consumes TradeWorld (engine reused, not re-implemented)', () => {
+  it('preserves market, IDP and price provenance through the world resolver', () => {
+    const enrichment: CanonicalMemoEnrichment = {
+      ...FULL_ENRICHMENT,
+      marketValueByPlayerId: { p1: 5000, p2: 4000 },
+      idpValueByPlayerId: { p1: 6000 },
+      liquidityByPlayerId: { p1: 0.001 },
+      trend30dByPlayerId: { p1: 300 },
+      thinlyPricedIds: ['p1'],
+    }
+    const input = memoInput(makeWorld({ provider: 'sleeper' }), enrichment)
+    const resolved = resolveTradeWorld(input)
+    expect(resolved.marketContext.marketValueByPlayerId).toEqual(enrichment.marketValueByPlayerId)
+    expect(buildTradeMemo(resolved)).toEqual(buildCanonicalTradeMemo(input))
+    const player = buildTradeMemo(resolved).snapshot.sides.flatMap(s => s.assets).find(a => a.playerId === 'p1')!
+    expect(player.sources.fantasyCalcValue).toBe(5000)
+    expect(player.sources.idpValue).toBe(6000)
+  })
+  it('counts market-only enrichment as available data on both memo paths', () => {
+    const input = memoInput(makeWorld({ provider: 'sleeper' }), {
+      marketValueByPlayerId: { p1: 5000, p2: 4000 },
+    })
+    const world = resolveTradeWorld(input)
+    expect(world.marketContext.confidence).toBe(100)
+    expect(buildTradeMemo(world)).toEqual(buildCanonicalTradeMemo(input))
+  })
   it('values via the world path equal the pure normalized* functions', () => {
     const memo = buildTradeMemo(resolveTradeWorld(memoInput(makeWorld({ provider: null }), FULL_ENRICHMENT)))
     const all = memo.snapshot.sides.flatMap((s) => s.assets)

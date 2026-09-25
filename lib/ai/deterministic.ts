@@ -1279,6 +1279,13 @@ export async function tryDeterministicAnswerDetailed(
   if (currentGames) {
     return currentGames.reliable ? answer(currentGames.text) : refusal(currentGames.text)
   }
+  // Recommendation tasks need combined league evidence, not a single matching cache.
+  if (/\b(waivers?|faab|who should i|who do i|start or sit|sit or start|my (roster|lineup)|evaluate.*trade|hypothetical trade)\b/i.test(message)) {
+    return null
+  }
+  if (/\b(coach|coaches|coaching|general manager)\b/i.test(message)) {
+    return refusal(`${reliableUnavailable(safeLocale)} I need a current, sourced staff directory for that team.`)
+  }
   if (/\bwhen\s+(does|is|do).*\bworld\s*cup\b.*\b(start|begin|kick\s*off)|\bworld\s*cup\b.*\b(start|begin|kick\s*off)\b/i.test(message)) {
     /*
      * Alone among these builders this one is async AND nullable, and its null

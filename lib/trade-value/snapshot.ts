@@ -60,6 +60,11 @@ function internalValueFor(
   currentSeason: number | null,
   scoring?: ScoringContext | null,
   dynastyMarket = false,
+  /**
+   * The league's FULL waiver budget from `context.waiverBudget` — the fallback when the asset's
+   * own `faabContext` did not carry an `originalBudget`. Absent ⇒ `FAAB_DEFAULT_BUDGET`.
+   */
+  waiverBudget?: number | null,
 ): number {
   switch (asset.kind) {
     case 'player':
@@ -95,7 +100,11 @@ function internalValueFor(
         marketValue: dynastyMarket ? asset.sources.fantasyCalcValue : null,
       })
     case 'faab':
-      return situationalFaabValue({ amount: asset.faabAmount, ...(asset.faabContext ?? {}) }).value
+      return situationalFaabValue({
+        amount: asset.faabAmount,
+        ...(asset.faabContext ?? {}),
+        originalBudget: asset.faabContext?.originalBudget ?? waiverBudget ?? null,
+      }).value
     case 'future_consideration':
     default:
       return 0
@@ -161,6 +170,12 @@ export function buildTradeValueSnapshot(input: {
    * ⚠ `internalValue` is computed exactly as before — `applyFormatFit` never touches it. A reader
    * comparing this snapshot to one written before format models existed will find identical
    * values, which is the property that makes the split safe to land.
+   *
+   * ⚠ THE OPINION NOW REACHES THE GRADE, via `formatAdjustedValue` below rather than by
+   * overwriting the line above. Until that field existed the fit was computed, stored, and
+   * then ignored by `sideFor` — so a guillotine league and a redraft league graded the same
+   * trade identically no matter what the model said. Keeping both numbers is what lets the
+   * verdict move while the market baseline stays inspectable.
    */
   const snapAssets: AssetValueSnapshot[] = input.assets.map((a) => ({
     kind: a.kind,
@@ -182,7 +197,7 @@ export function buildTradeValueSnapshot(input: {
     faabAmount: a.faabAmount ?? null,
     faabContext: a.faabContext ?? null,
     sources: a.sources,
-    internalValue: internalValueFor(a, currentSeason, input.scoring, dynastyMarket),
+    internalValue: internalValueFor(a, currentSeason, input.scoring, dynastyMarket, input.context.waiverBudget),
     /*
      * ⚠ A PLAYER ALWAYS HAS A BASIS; A PICK HAS ONE ONLY WHEN THE MARKET PRICED IT. A curve-priced
      * pick and FAAB consult no `sources`, so labelling them would name an input that had no part
@@ -216,7 +231,7 @@ export function buildTradeValueSnapshot(input: {
             aliasTags: input.context.aliasTags ?? null,
             isDynasty: input.context.isDynasty ?? null,
             keeperCount: input.context.keeperCount ?? null,
-            base: internalValueFor(a, currentSeason, input.scoring, dynastyMarket),
+            base: internalValueFor(a, currentSeason, input.scoring, dynastyMarket, input.context.waiverBudget),
             position: a.position,
             age: a.age ?? null,
             experience: a.experience ?? null,
@@ -233,9 +248,27 @@ export function buildTradeValueSnapshot(input: {
         : null,
   }))
 
+  /*
+   * `formatAdjustedValue` is derived here rather than inside the asset map because it needs the
+   * fit that map produces. Null when the model had no opinion — `?? internalValue` at the totals
+   * keeps "no opinion" meaning "no change" rather than "worth nothing".
+   */
+  for (const asset of snapAssets) {
+    const multiplier = asset.formatFit?.fit?.multiplier
+    asset.formatAdjustedValue =
+      typeof multiplier === 'number' && Number.isFinite(multiplier)
+        ? Math.round(asset.internalValue * multiplier)
+        : null
+  }
+
   const sideFor = (rosterId: string): SideTotals => {
     const assets = snapAssets.filter((x) => x.fromRosterId === rosterId)
-    return { rosterId, total: assets.reduce((s, x) => s + x.internalValue, 0), assets }
+    return {
+      rosterId,
+      total: assets.reduce((s, x) => s + x.internalValue, 0),
+      formatAdjustedTotal: assets.reduce((s, x) => s + (x.formatAdjustedValue ?? x.internalValue), 0),
+      assets,
+    }
   }
 
   const sideA = sideFor(input.proposerRosterId)

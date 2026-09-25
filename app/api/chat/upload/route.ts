@@ -10,7 +10,7 @@ const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp
 const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
 const VOICE_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'])
 
-const MAX_IMAGE = 25 * 1024 * 1024
+const MAX_IMAGE = 10 * 1024 * 1024
 const MAX_VIDEO = 100 * 1024 * 1024
 const MAX_VOICE = 5 * 1024 * 1024
 

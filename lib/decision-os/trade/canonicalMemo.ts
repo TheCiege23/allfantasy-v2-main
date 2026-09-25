@@ -21,6 +21,8 @@ import type { CanonicalAsset, CanonicalAssetType } from '@/lib/decision-os/world
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-value/snapshot'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { scoringContextFromCanonicalWorld } from './scoringContextFromWorld'
+import { leagueRuntimeFromWorld } from '@/lib/decision-os/value-v2/league'
+import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from '@/lib/trade-value/types'
 import type { ReceptionScoringFormat } from '@/lib/trade-value/valueEngine'
 // Type-only — the runtime edge is tradeWorld.ts → canonicalMemo.ts (it imports the leaf helpers). This
@@ -53,6 +55,7 @@ export interface CanonicalMemoEnrichment {
    * to the engine's curve and says so in the memo notes.
    */
   pickMarketValueByKey?: Record<string, number | null | undefined>
+  marketObservationByPlayerId?: Record<string, import('@/lib/decision-os/value-v2/market').MarketObservationV2 | null | undefined>
   /** ADP per player — from the provider-neutral `AdpDataRecord` (same source the redraft harness reads). */
   adpByPlayerId?: Record<string, number | null | undefined>
   /**
@@ -229,7 +232,7 @@ export function toEnrichedAsset(
 
   if (kind === 'future_consideration' && asset.assetType !== 'future_consideration') {
     notes.push(
-      `Asset class "${asset.assetType}" is not yet valued by the deterministic engine — modeled as a 0-value future_consideration.`,
+      `Asset class "${asset.assetType}" is unpriced — a complete trade grade is unavailable until it has a supported valuation.`,
     )
   }
   /*
@@ -294,6 +297,8 @@ export function toEnrichedAsset(
          * every consumer at once.
          */
         fantasyCalcValue: marketValue ?? null,
+        ...(playerId && enrich.marketObservationByPlayerId?.[playerId]
+          ? { marketObservation: enrich.marketObservationByPlayerId[playerId] } : {}),
         /*
          * ⚠ THE ONE CONSUMPTION. A defender reaches this leaf with a projection of about 0.3 —
          * the generic PPR line, which contains no defensive scoring whatsoever — and a market
@@ -444,7 +449,8 @@ export function computeMemoCompleteness(
   const players = enriched.filter((e) => e.kind === 'player')
   const enrichCoverage = players.length === 0
     ? 100
-    : Math.round((players.filter((e) => e.sources.adpValue != null || e.sources.projectionValue != null).length / players.length) * 100)
+    : Math.round((players.filter((e) => [e.sources.adpValue, e.sources.projectionValue, e.sources.fantasyCalcValue, e.sources.idpValue]
+      .some(value => typeof value === 'number' && Number.isFinite(value))).length / players.length) * 100)
   const profileScore = ((profiles.a ? 100 : 0) + (profiles.b ? 100 : 0)) / 2
   return Math.round(0.5 * assetRes + 0.25 * enrichCoverage + 0.25 * profileScore)
 }
@@ -469,6 +475,7 @@ export function buildCanonicalTradeMemo(input: BuildCanonicalTradeMemoInput): Ca
   const profiles = { a: proposer.profile, b: receiver.profile }
 
   const context: TradeValueContext = {
+    ...(valueV2ShadowEnabled() ? { leagueRuntimeV2: leagueRuntimeFromWorld(input.world) } : {}),
     sport: input.context?.sport ?? input.world.league.sport,
     leagueType: input.context?.leagueType ?? (input.world.league.isDynasty ? 'dynasty' : 'redraft'),
     scoring: input.context?.scoring ?? (typeof input.world.league.scoringPresetId === 'string' ? input.world.league.scoringPresetId : 'unknown'),
@@ -536,6 +543,7 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
   // Reconstruct the engine enrichment from the market interpretation the world owns. Lookups are
   // null-equivalent to the E.2 path (`{}` and `undefined` both yield `?.[id] ?? null === null`).
   const enrich: CanonicalMemoEnrichment = {
+    marketObservationByPlayerId: tradeWorld.marketContext.marketObservationByPlayerId,
     adpByPlayerId: tradeWorld.marketContext.adpByPlayerId,
     projectionByPlayerId: tradeWorld.marketContext.projectionByPlayerId,
     projectionScoringFormatByPlayerId: tradeWorld.marketContext.projectionScoringFormatByPlayerId,
@@ -571,6 +579,7 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
 
   const context: TradeValueContext = {
     sport: tradeWorld.leagueContext.sport,
+    ...(tradeWorld.leagueRuntimeV2 ? { leagueRuntimeV2: tradeWorld.leagueRuntimeV2 } : {}),
     leagueType: tradeWorld.leagueContext.leagueType,
     scoring: tradeWorld.leagueContext.scoring,
     rosterFormat: tradeWorld.leagueContext.rosterFormat,

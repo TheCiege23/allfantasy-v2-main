@@ -1,6 +1,7 @@
 /**
  * [UPDATED] POST: Bulk update league names, themes, or settings for tournament child leagues.
  */
+import * as prismaJson from '@/lib/prisma-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tou
     if (bannerUrl !== undefined) newHub.bannerUrl = bannerUrl || null
     await prisma.legacyTournament.update({
       where: { id: tournamentId },
-      data: { settings: { ...currentSettings, hubSettings: newHub } },
+      data: { settings: prismaJson.toPrismaJsonInput({ ...currentSettings, hubSettings: newHub }) },
     })
   }
 

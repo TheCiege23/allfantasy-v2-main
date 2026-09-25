@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { mutatePlatformPoll, visiblePlatformPoll } from '@/lib/chat-core/platformPolls'
 import type { PlatformChatMessage, PlatformChatThread } from '@/types/platform-shared'
 import { getDefaultChatSport, resolveSportForChatRoom } from '@/lib/chat-core'
 
@@ -431,9 +432,9 @@ export async function getPlatformThreadMessages(
         senderAvatarUrl: msg.sender?.avatarUrl ?? null,
         senderAvatarPreset: msg.sender?.profile?.avatarPreset ?? null,
         messageType: msg.messageType || 'text',
-        body: isDeleted ? '[message deleted]' : msg.body || '',
+        body: isDeleted ? '[message deleted]' : visiblePlatformPoll(msg.body || '', baseMeta, appUserId).body,
         createdAt: toIso(msg.createdAt),
-        metadata: Object.keys(baseMeta).length ? baseMeta : undefined,
+        metadata: isDeleted ? undefined : visiblePlatformPoll(msg.body || '', baseMeta, appUserId).metadata as Record<string, unknown> | undefined,
       }
     })
   } catch {
@@ -508,9 +509,9 @@ export async function searchPlatformThreadMessages(
         senderAvatarUrl: msg.sender?.avatarUrl ?? null,
         senderAvatarPreset: msg.sender?.profile?.avatarPreset ?? null,
         messageType: msg.messageType || 'text',
-        body: isDeleted ? '[message deleted]' : msg.body || '',
+        body: isDeleted ? '[message deleted]' : visiblePlatformPoll(msg.body || '', baseMeta, appUserId).body,
         createdAt: toIso(msg.createdAt),
-        metadata: Object.keys(baseMeta).length ? baseMeta : undefined,
+        metadata: isDeleted ? undefined : visiblePlatformPoll(msg.body || '', baseMeta, appUserId).metadata as Record<string, unknown> | undefined,
       }
     })
   } catch {
@@ -943,92 +944,17 @@ export async function createSystemMessage(
  * Record a poll vote. One vote per user; voting again overwrites.
  * Body must be JSON { question, options, votes?: { [optionIndex]: userId[] } }.
  */
-export async function votePollMessage(
-  appUserId: string,
-  threadId: string,
-  messageId: string,
-  optionIndex: number,
-): Promise<boolean> {
-  try {
-    const member = await (prisma as any).platformChatThreadMember.findFirst({
-      where: { threadId, userId: appUserId, isBlocked: false },
-      select: { id: true },
-    })
-    if (!member) return false
-
-    const msg = await (prisma as any).platformChatMessage.findFirst({
-      where: { id: messageId, threadId, messageType: 'poll' },
-      select: { id: true, body: true },
-    })
-    if (!msg?.body) return false
-
-    let payload: { question?: string; options?: string[]; votes?: Record<string, string[]>; closed?: boolean } = {}
-    try {
-      payload = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body
-    } catch {
-      return false
-    }
-    if (payload.closed) return false
-    const options = Array.isArray(payload.options) ? payload.options : []
-    if (optionIndex < 0 || optionIndex >= options.length) return false
-
-    const votes: Record<string, string[]> = typeof payload.votes === 'object' && payload.votes !== null
-      ? { ...payload.votes }
-      : {}
-    const key = String(optionIndex)
-    for (const k of Object.keys(votes)) {
-      votes[k] = (votes[k] || []).filter((id) => id !== appUserId)
-    }
-    if (!votes[key]) votes[key] = []
-    if (!votes[key].includes(appUserId)) votes[key].push(appUserId)
-
-    const newBody = JSON.stringify({ ...payload, votes })
-    await (prisma as any).platformChatMessage.update({
-      where: { id: messageId },
-      data: { body: newBody, updatedAt: new Date() },
-    })
-    return true
-  } catch {
-    return false
-  }
+export async function votePollMessage(appUserId: string, threadId: string, messageId: string, optionIndex: number | string): Promise<boolean> {
+  try { return await mutatePlatformPoll(appUserId, threadId, messageId, optionIndex) }
+  catch { return false }
 }
 
 /**
  * Close (resolve) a poll so no more votes can be cast. Caller must be thread member.
  */
-export async function closePollMessage(
-  appUserId: string,
-  threadId: string,
-  messageId: string,
-): Promise<boolean> {
-  try {
-    const member = await (prisma as any).platformChatThreadMember.findFirst({
-      where: { threadId, userId: appUserId, isBlocked: false },
-      select: { id: true },
-    })
-    if (!member) return false
-
-    const msg = await (prisma as any).platformChatMessage.findFirst({
-      where: { id: messageId, threadId, messageType: 'poll' },
-      select: { id: true, body: true },
-    })
-    if (!msg?.body) return false
-
-    let payload: Record<string, unknown> = {}
-    try {
-      payload = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body
-    } catch {
-      return false
-    }
-    const newBody = JSON.stringify({ ...payload, closed: true })
-    await (prisma as any).platformChatMessage.update({
-      where: { id: messageId },
-      data: { body: newBody, updatedAt: new Date() },
-    })
-    return true
-  } catch {
-    return false
-  }
+export async function closePollMessage(appUserId: string, threadId: string, messageId: string): Promise<boolean> {
+  try { return await mutatePlatformPoll(appUserId, threadId, messageId, null) }
+  catch { return false }
 }
 
 /**

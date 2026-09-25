@@ -156,6 +156,90 @@
         "AF_NEXT_DIST_DIR": ".next-dev-gtm",
         "NODE_OPTIONS": "--max-old-space-size=6144"
       }
+    },
+    {
+      "// next-dev-player-finder": "Player Finder session's server (app/dev/player-finder-preview renders). Own dist dir per the convention above.",
+      "name": "next-dev-player-finder",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-player-finder",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-player-card": "Player card pop-up session's server (app/dev/player-card-preview renders). Own dist dir per the convention above.",
+      "name": "next-dev-player-card",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-player-card",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-mobile-qa": "Mobile-viewport QA session. Own dist dir per the convention above. DEV_AUTH_BYPASS_* are not secrets — the bypass is gated on NODE_ENV !== production in lib/auth.ts, and the email is set to an EXISTING account so ensureDevAuthUser FINDS rather than CREATES a row. Reads whatever DATABASE_URL .env.local holds; this config adds no connection string of its own.",
+      "name": "next-dev-mobile-qa",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-mobile-qa",
+        "NODE_OPTIONS": "--max-old-space-size=6144",
+        "DEV_AUTH_BYPASS_ENABLED": "true",
+        "DEV_AUTH_BYPASS_EMAIL": "cjabar.henson@gmail.com",
+        "// bypass-identity": "ensureDevAuthUser matches on id OR email OR username, and .env.local sets DEV_AUTH_BYPASS_USERNAME=local_dev_user — a username the allfantasysportsapp account now actually carries. Leaving those set lets the OR resolve to THAT row instead of the email one, i.e. signing in as the wrong account. These two are deliberately unmatchable so the email clause is the only one that can hit.",
+        "DEV_AUTH_BYPASS_USER_ID": "af-mobile-qa-no-match",
+        "DEV_AUTH_BYPASS_USERNAME": "af-mobile-qa-no-match"
+      }
+    },
+    {
+      "// next-dev-rail": "League-rail review server (the expanded rail on any /core screen). Own dist dir per the convention above. Signs in as the account whose 94 claimed teams and 7 unpaired elimination leagues are the only rows that exercise this surface — by USER_ID, because ensureDevAuthUser matches on id OR email OR username and the other two are deliberately unmatchable so the id clause is the only one that can hit. Reads whatever DATABASE_URL .env.local holds; this config adds no connection string of its own. ⚠ Review a NON-HOME /core screen: the home fires recordDashboardActivation, which is a production write.",
+      "name": "next-dev-rail",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-rail",
+        "NODE_OPTIONS": "--max-old-space-size=6144",
+        "DEV_AUTH_BYPASS_ENABLED": "true",
+        "DEV_AUTH_BYPASS_USER_ID": "9791bae0-e47f-418a-ae40-285f6a2e7887",
+        "DEV_AUTH_BYPASS_EMAIL": "af-rail-review-no-match@example.invalid",
+        "DEV_AUTH_BYPASS_USERNAME": "af-rail-review-no-match"
+      }
+    },
+    {
+      "// next-dev-waiver-latency": "Waiver packet latency profiling. Its own dist dir: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at 'Starting...' forever, so it must not share one with a concurrent session.",
+      "name": "next-dev-waiver-latency",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-waiver-latency",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
     }
   ]
 }

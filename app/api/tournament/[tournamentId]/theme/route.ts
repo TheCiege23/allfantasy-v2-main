@@ -3,6 +3,7 @@
  * GET: Returns current tournament theme/banner settings.
  * PATCH: Updates tournament theme/banner (commissioner only).
  */
+import * as prismaJson from '@/lib/prisma-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -76,8 +77,8 @@ export async function PATCH(
   await prisma.legacyTournament.update({
     where: { id: tournamentId },
     data: {
-      hubSettings: newHub,
-      settings: currentSettings,
+      hubSettings: prismaJson.toPrismaJsonInput(newHub),
+      settings: prismaJson.toPrismaJsonInput(currentSettings),
     },
   })
 

@@ -55,6 +55,10 @@ describe('current Sleeper lineup', () => {
     mockRosters([{ roster_id: 3, owner_id: 'owner', players: ['hill'], starters: [null, '', 'hill'] }])
     expect((await currentSleeperRoster('league', { platformUserId: 'owner' }))?.starters).toEqual(['0', '0', 'hill'])
   })
+  it('preserves null empty-slot positions instead of shifting a FLEX player into QB', async () => {
+    get.mockResolvedValue([{ roster_id: 3, owner_id: 'owner', players: ['hill'], starters: [null, '', 'hill'] }])
+    expect((await currentSleeperRoster('league', { platformUserId: 'owner' }))?.starters).toEqual(['0', '0', 'hill'])
+  })
   it('fails closed on contradictory slots and thrown provider failures', async () => {
     mockRosters([{ roster_id: 3, owner_id: 'owner', players: ['ir'], starters: ['ir'], reserve: ['ir'] }])
     expect(await currentSleeperRoster('league', { platformUserId: 'owner' })).toBeNull()

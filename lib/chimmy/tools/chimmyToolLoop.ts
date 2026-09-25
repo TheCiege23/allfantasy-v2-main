@@ -65,7 +65,7 @@ import {
 const MAX_TOOL_TURNS = 4
 
 /** Below the 25s provider default, since several of these run in series. */
-const TURN_TIMEOUT_MS = 20_000
+const TURN_TIMEOUT_MS = 12_000
 
 const XAI_BASE_URL = 'https://api.x.ai/v1'
 const DEFAULT_MODEL = 'grok-4-0709'

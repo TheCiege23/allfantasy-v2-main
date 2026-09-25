@@ -4,6 +4,7 @@
  * Fills Gaps 2+3: Elimination → Elite Eight → Championship pipeline.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -81,7 +82,7 @@ export async function condenseRound(
       const latest = await prisma.legacyTournament.findUnique({ where: { id: tournamentId }, select: { settings: true } })
       const s = (latest?.settings as Record<string, unknown>) ?? {}
       delete s._advancementInFlight
-      await prisma.legacyTournament.update({ where: { id: tournamentId }, data: { settings: s } })
+      await prisma.legacyTournament.update({ where: { id: tournamentId }, data: { settings: prismaJson.toPrismaJsonInput(s) } })
     } catch { /* non-fatal */ }
   }
 

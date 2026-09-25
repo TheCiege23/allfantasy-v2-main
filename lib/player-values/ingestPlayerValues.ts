@@ -25,10 +25,10 @@ import { prisma } from '@/lib/prisma'
 const FANTASYCALC_CURRENT = 'https://api.fantasycalc.com/values/current'
 
 const COMBOS = [
-  { format: 'DYNASTY', qbFormat: 'SUPERFLEX', url: 'isDynasty=true&numQbs=2&numTeams=12&ppr=1' },
-  { format: 'DYNASTY', qbFormat: 'ONE_QB', url: 'isDynasty=true&numQbs=1&numTeams=12&ppr=1' },
-  { format: 'REDRAFT', qbFormat: 'SUPERFLEX', url: 'isDynasty=false&numQbs=2&numTeams=12&ppr=1' },
-  { format: 'REDRAFT', qbFormat: 'ONE_QB', url: 'isDynasty=false&numQbs=1&numTeams=12&ppr=1' },
+  { format: 'DYNASTY', qbFormat: 'SUPERFLEX', numQbs: 2, numTeams: 12, ppr: 1 },
+  { format: 'DYNASTY', qbFormat: 'ONE_QB', numQbs: 1, numTeams: 12, ppr: 1 },
+  { format: 'REDRAFT', qbFormat: 'SUPERFLEX', numQbs: 2, numTeams: 12, ppr: 1 },
+  { format: 'REDRAFT', qbFormat: 'ONE_QB', numQbs: 1, numTeams: 12, ppr: 1 },
 ] as const
 
 type FcRow = {
@@ -48,6 +48,7 @@ export type ComboResult = {
   /** Pick rows stored for this combo. Was `picksFiltered` while picks were discarded. */
   picksStored: number
   stored: number
+  invalidRows?: number
   /** Present only when this combo did not complete. */
   skipped?: string
 }
@@ -83,8 +84,11 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
 
   for (const combo of COMBOS) {
     let rows: FcRow[]
+    let observedAt: Date
     try {
-      const res = await fetch(`${FANTASYCALC_CURRENT}?${combo.url}`, {
+      const query = new URLSearchParams({ isDynasty: String(combo.format === 'DYNASTY'),
+        numQbs: String(combo.numQbs), numTeams: String(combo.numTeams), ppr: String(combo.ppr) })
+      const res = await fetch(`${FANTASYCALC_CURRENT}?${query}`, {
         // Identify ourselves: if we ever cause a problem, they should be able to email us
         // rather than block us.
         headers: { 'User-Agent': 'AllFantasy/1.0 (allfantasysportsapp@gmail.com)' },
@@ -102,7 +106,10 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
         })
         continue
       }
-      rows = (await res.json()) as FcRow[]
+      const payload: unknown = await res.json()
+      if (!Array.isArray(payload)) throw new Error('Invalid market response: expected rows')
+      rows = payload as FcRow[]
+      observedAt = new Date()
     } catch (e) {
       // One combo failing must not lose the other three.
       partial = true
@@ -144,9 +151,28 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
      * ⚠ THE `sleeperId` HALF OF THE OLD PREDICATE IS KEPT. It is what drops rows carrying no
      * id at all; only the position half is gone. Picks DO carry a (synthetic) `sleeperId`.
      */
-    const usable = rows.filter((r) => r.player?.sleeperId)
+    const usable = rows.filter((r) => r?.player?.sleeperId)
+    /*
+     * A row is stored only if it carries a finite, non-negative value, a name, and an id no
+     * other row in this combo shares — an ambiguous identity is refused rather than settled by
+     * whichever copy `skipDuplicates` happened to keep. Picks go through the same checks: they
+     * are stored now, so a malformed pick is as wrong as a malformed player.
+     */
+    const idCounts = new Map<string, number>()
+    for (const row of usable) {
+      const id = String(row.player.sleeperId)
+      idCounts.set(id, (idCounts.get(id) ?? 0) + 1)
+    }
+    const valid = usable.filter(r => Number.isFinite(r.value) && r.value >= 0 &&
+      typeof r.player.name === 'string' && r.player.name.trim() &&
+      idCounts.get(String(r.player.sleeperId)) === 1)
+    // Pick rows in the written batch (same basis `stored` used before it read the insert count).
+    const picksStored = valid.filter((r) => r.player.position === 'PICK').length
+    // Every fetched row NOT written is invalid now that picks are kept — an id-less one included.
+    const invalidRows = rows.length - valid.length
+    if (invalidRows > 0) partial = true
 
-    const data = usable.map((r) => ({
+    const data = valid.map((r) => ({
       // IDs are strings even when numeric-looking — cast explicitly.
       sleeperId: String(r.player.sleeperId),
       name: r.player.name,
@@ -161,17 +187,31 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
       // `maybe*` fields are nullable BY DESIGN — null means unknown, never zero.
       tradeFrequency: r.maybeTradeFrequency ?? null,
       marketStdDev: r.maybeMovingStandardDeviation ?? null,
+      marketNumTeams: combo.numTeams,
+      marketPpr: combo.ppr,
+      observedAt,
       capturedAt,
     }))
 
-    await prisma.playerValueSnapshot.createMany({ data, skipDuplicates: true })
-    stored += data.length
+    let inserted: number
+    try {
+      const result = await prisma.playerValueSnapshot.createMany({ data, skipDuplicates: true })
+      inserted = result.count
+    } catch (error) {
+      partial = true
+      combos.push({ format: combo.format, qbFormat: combo.qbFormat, fetched: rows.length,
+        picksStored: 0, stored: 0, invalidRows,
+        skipped: error instanceof Error ? error.message.slice(0, 80) : 'storage failed' })
+      continue
+    }
+    stored += inserted
     combos.push({
       format: combo.format,
       qbFormat: combo.qbFormat,
       fetched: rows.length,
-      picksStored: usable.filter((r) => r.player?.position === 'PICK').length,
-      stored: data.length,
+      picksStored,
+      stored: inserted,
+      invalidRows,
     })
   }
 

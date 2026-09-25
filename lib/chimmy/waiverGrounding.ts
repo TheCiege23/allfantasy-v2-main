@@ -117,7 +117,7 @@ export async function buildWaiverContext(leagueId: string, userId: string): Prom
    * rules will happily narrate claims it cannot see.
    */
   lines.push(
-    'NO WAIVER ACTIVITY IS AVAILABLE. We hold zero waiver claims and zero waiver transactions for any league. Do NOT say who claimed, dropped or was outbid on anyone, do NOT report what a player went for, and do NOT imply a claim succeeded or failed. Answer rules questions only, and say the claim history is not something you can see.',
+    'This block contains waiver settings and any stored personal budget, not claim history. Do not infer winning bids, failed claims, drops or transactions from settings. Use separately retrieved league activity if available; otherwise say claim history is unavailable for this answer. Add/drop advice must also read the roster and available-player tools. Unrostered does not prove a player is claimable, and the starting FAAB budget is not the remaining balance.',
   )
 
   return lines.join('\n')

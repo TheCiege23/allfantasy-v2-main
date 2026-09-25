@@ -145,6 +145,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={searchProvider === 'klipy' ? 'Search KLIPY' : 'Search GIFs...'}
+          aria-label="Search GIFs"
           className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
           data-testid="gif-picker-search"
         />
@@ -187,6 +188,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
               <button
                 key={`${g.id}-${g.giphyId}-${g.previewUrl}`}
                 type="button"
+                aria-label={g.title ? `Select GIF: ${g.title}` : 'Select GIF'}
                 onClick={() => {
                   onSelect({
                     id: g.id,

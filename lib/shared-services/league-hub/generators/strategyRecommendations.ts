@@ -37,7 +37,7 @@ export interface StrategyClassificationResult {
 
 const MIN_WEEKS_FOR_EVIDENCE = 3
 
-export function classifyStrategy(context: UserOsContext): StrategyClassificationResult | null {
+export function classifyStrategy(context: Pick<UserOsContext, 'viewerTeam' | 'standings' | 'currentWeek' | 'isDynasty'>): StrategyClassificationResult | null {
   if (!context.viewerTeam || context.standings.length < 2) return null
 
   if (context.currentWeek < MIN_WEEKS_FOR_EVIDENCE) {
@@ -56,6 +56,7 @@ export function classifyStrategy(context: UserOsContext): StrategyClassification
     return b.pointsFor - a.pointsFor
   })
   const rankIndex = sorted.findIndex((t) => t.teamId === context.viewerTeam?.teamId)
+  if (rankIndex < 0) return null
   const teamCount = sorted.length
   const percentile = teamCount > 1 ? 1 - rankIndex / (teamCount - 1) : 0.5
   const games = context.viewerTeam.wins + context.viewerTeam.losses + context.viewerTeam.ties

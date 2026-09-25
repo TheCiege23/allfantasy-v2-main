@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { publicDramaSummary } from './publicNarrative'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { normalizeSportForDrama } from './SportDramaResolver'
 
@@ -119,7 +120,7 @@ function toView(e: {
     season: e.season,
     dramaType: e.dramaType,
     headline: e.headline,
-    summary: e.summary,
+    summary: publicDramaSummary(e.dramaType, e.summary),
     relatedManagerIds: Array.isArray(e.relatedManagerIds) ? (e.relatedManagerIds as string[]) : [],
     relatedTeamIds: Array.isArray(e.relatedTeamIds) ? (e.relatedTeamIds as string[]) : [],
     relatedMatchupId: e.relatedMatchupId,

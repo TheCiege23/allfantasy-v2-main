@@ -2,6 +2,7 @@
  * ReferralService — referral codes, attribution, onboarding tracking, and stats.
  */
 
+import * as prismaJson from '@/lib/prisma-json'
 import { Prisma } from "@prisma/client"
 import crypto from "crypto"
 import { prisma } from "@/lib/prisma"
@@ -137,7 +138,7 @@ export async function recordShare(
         codeId: code?.id,
         type: "share",
         channel,
-        metadata: metadata ?? undefined,
+        metadata: prismaJson.toPrismaNullableJsonInput(metadata ?? undefined),
       },
     })
 
@@ -299,7 +300,7 @@ export async function recordReferralOnboardingStep(
         referralId: referral.id,
         type: "onboarding_step",
         onboardingStep: step,
-        metadata: metadata ?? undefined,
+        metadata: prismaJson.toPrismaNullableJsonInput(metadata ?? undefined),
       },
     })
   })

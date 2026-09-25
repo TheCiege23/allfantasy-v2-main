@@ -1,6 +1,6 @@
 'use client'
 
-import { Send } from 'lucide-react'
+import { Send, Smile, ChartNoAxesColumn, Mic, ImagePlus, Video } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AttachmentPreview, type PendingGif, type PollDraft, type UploadedAttachment } from './AttachmentPreview'
@@ -93,6 +93,40 @@ export function ChatComposer({
   const [bbSuggest, setBbSuggest] = useState<{ type: string; options: string[] } | null>(null)
   const [globalModalOpen, setGlobalModalOpen] = useState(false)
   const [cursorPos, setCursorPos] = useState(0)
+  const draftKey = currentUserId ? `af:chat-draft:${currentUserId}:${chatType}:${threadId || leagueId}` : null
+  const [loadedDraftKey, setLoadedDraftKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (!draftKey) return
+    try { setText(sessionStorage.getItem(draftKey)?.slice(0, 10000) ?? '') } catch { setText('') }
+    setLoadedDraftKey(draftKey)
+  }, [draftKey])
+  useEffect(() => {
+    if (!draftKey || loadedDraftKey !== draftKey) return
+    try {
+      if (text) sessionStorage.setItem(draftKey, text.slice(0, 10000))
+      else sessionStorage.removeItem(draftKey)
+    } catch { /* Sending still works when browser storage is unavailable. */ }
+  }, [text, draftKey, loadedDraftKey])
+
+  const lastTypingSent = useRef(0)
+  useEffect(() => {
+    if (!threadId) return
+    const timer = window.setTimeout(() => {
+      if (text.trim() && Date.now() - lastTypingSent.current < 3000) return
+      lastTypingSent.current = text.trim() ? Date.now() : 0
+      void fetch(`/api/shared/chat/threads/${encodeURIComponent(threadId)}/typing`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isTyping: Boolean(text.trim()) }),
+      }).catch(() => {})
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [text, threadId])
+  useEffect(() => () => {
+    if (threadId) void fetch(`/api/shared/chat/threads/${encodeURIComponent(threadId)}/typing`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isTyping: false }), keepalive: true,
+    }).catch(() => {})
+  }, [threadId])
 
   const { suggestions: mentionSuggestions, trigger: mentionTrigger } = useMentionAutocomplete({
     text,
@@ -379,7 +413,7 @@ export function ChatComposer({
         onEditPoll={() => setActivePicker('poll')}
       />
 
-      <div className="relative w-full">
+      <div className="af-chat-composer relative w-full">
         {activePicker === 'gif' ? (
           <div className="absolute bottom-full left-0 right-0 z-50 mb-1">
             <GifPicker
@@ -485,6 +519,7 @@ export function ChatComposer({
               }
             }}
             placeholder={placeholder}
+            aria-label={chatType === 'dm' ? 'Direct message' : chatType === 'huddle' ? 'Huddle message' : 'League message'}
             rows={1}
             className="w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-[1.4] text-white outline-none placeholder:text-white/30 min-h-[36px] max-h-[120px] overflow-y-auto"
             data-testid="league-chat-textarea"
@@ -493,6 +528,7 @@ export function ChatComposer({
           {isRecording ? (
             <VoiceRecorder
               leagueId={leagueId}
+              threadId={threadId}
               onComplete={(p) => {
                 setAttachments((a) => [
                   ...a,
@@ -523,32 +559,36 @@ export function ChatComposer({
                   className={toolBtn(activePicker === 'emoji')}
                   onClick={() => setActivePicker((p) => (p === 'emoji' ? null : 'emoji'))}
                   aria-label="Emoji"
+                  title="Emoji"
                 >
-                  😀
+                  <Smile size={18} />
                 </button>
                 <button
                   type="button"
                   className={toolBtn(activePicker === 'poll')}
                   onClick={() => setActivePicker((p) => (p === 'poll' ? null : 'poll'))}
                   aria-label="Poll"
+                  title="Create a poll"
                 >
-                  📊
+                  <ChartNoAxesColumn size={18} />
                 </button>
                 <button
                   type="button"
                   className={toolBtn(false)}
                   onClick={() => setIsRecording(true)}
                   aria-label="Voice note"
+                  title="Record a voice note"
                 >
-                  🎤
+                  <Mic size={18} />
                 </button>
                 <button
                   type="button"
                   className={toolBtn(false)}
                   onClick={() => imageInputRef.current?.click()}
                   aria-label="Photo"
+                  title="Upload a photo"
                 >
-                  📷
+                  <ImagePlus size={18} />
                 </button>
                 <input
                   ref={imageInputRef}
@@ -562,8 +602,9 @@ export function ChatComposer({
                   className={toolBtn(false)}
                   onClick={() => videoInputRef.current?.click()}
                   aria-label="Video"
+                  title="Upload a video"
                 >
-                  🎥
+                  <Video size={18} />
                 </button>
                 <input
                   ref={videoInputRef}
@@ -580,7 +621,7 @@ export function ChatComposer({
                   onClick={() => void handleSend()}
                   disabled={!canSend || sending}
                   className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-cyan-500/10 hover:text-cyan-400 disabled:opacity-40"
-                  aria-label="Send league message"
+                  aria-label={chatType === 'dm' ? 'Send direct message' : chatType === 'huddle' ? 'Send Huddle message' : 'Send league message'}
                   data-testid="league-chat-send"
                 >
                   <Send size={14} strokeWidth={2} />

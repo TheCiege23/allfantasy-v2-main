@@ -1,3 +1,4 @@
+import * as prismaJson from '@/lib/prisma-json'
 import { prisma } from '@/lib/prisma'
 import type { ReputationRuntimeConfig, ReputationScoreWeights, ReputationSport, ReputationTier } from './types'
 import { normalizeSportForReputation } from './SportReputationResolver'
@@ -107,11 +108,11 @@ export async function upsertReputationRuntimeConfig(input: {
       sport: current.sport,
       season: current.season,
       tierThresholds,
-      scoreWeights,
+      scoreWeights: prismaJson.toPrismaJsonInput(scoreWeights),
     },
     update: {
       tierThresholds,
-      scoreWeights,
+      scoreWeights: prismaJson.toPrismaJsonInput(scoreWeights),
     },
   })
   return {

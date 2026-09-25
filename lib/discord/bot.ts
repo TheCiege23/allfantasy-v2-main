@@ -86,8 +86,12 @@ function slugifyLeagueName(name: string): string {
 
 export async function createLeagueChannel(
   guildId: string,
-  leagueName: string
+  leagueName: string,
+  memberDiscordIds: string[],
 ): Promise<{ channelId: string; channelName: string }> {
+  const botId = await getBotUserId()
+  if (!botId) throw new Error('Cannot establish private channel permissions without bot identity')
+  const overwrites = privateChannelOverwrites(guildId, botId, memberDiscordIds)
   const parentId = await ensureCategory(guildId)
   const name = slugifyLeagueName(leagueName)
   const res = await fetch(`${DISCORD_BASE}/guilds/${guildId}/channels`, {
@@ -97,6 +101,7 @@ export async function createLeagueChannel(
       type: 0,
       name,
       parent_id: parentId,
+      permission_overwrites: overwrites,
       topic: 'League chat synced from AllFantasy.ai 🏈',
     }),
   })
@@ -120,20 +125,30 @@ export function privateChannelOverwrites(guildId: string, botId: string, memberI
   ]
 }
 
+/** Used only to clean up a newly created, unmapped channel after a database failure. */
+export async function deleteUnmappedChannel(channelId: string): Promise<void> {
+  const response = await fetch(`${DISCORD_BASE}/channels/${channelId}`, { method: 'DELETE', headers: botHeaders(), signal: AbortSignal.timeout(10_000) })
+  if (!response.ok && response.status !== 404) throw new Error('Could not clean up unmapped Discord channel')
+}
+
 export async function postMessage(
   channelId: string,
   content: string,
-  embeds?: DiscordEmbed[]
+  embeds?: DiscordEmbed[],
+  nonce?: string,
 ): Promise<string> {
   const payload: Record<string, unknown> = {}
   if (content) payload.content = content
   else if (embeds?.length) payload.content = '\u200b'
   else payload.content = ''
   payload.embeds = embeds?.length ? embeds : []
+  payload.allowed_mentions = { parse: [] }
+  if (nonce) { payload.nonce = nonce; payload.enforce_nonce = true }
   const res = await fetch(`${DISCORD_BASE}/channels/${channelId}/messages`, {
     method: 'POST',
     headers: botHeaders(),
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(12_000),
   })
   if (!res.ok) {
     const t = await res.text()
@@ -152,6 +167,7 @@ export async function postLeagueChatEmbed(
     gifUrl?: string
     leagueName: string
     leagueId: string
+    nonce?: string
   }
 ): Promise<string> {
   const embed: DiscordEmbed = {
@@ -165,7 +181,7 @@ export async function postLeagueChatEmbed(
     timestamp: new Date().toISOString(),
     ...(opts.gifUrl ? { image: { url: opts.gifUrl } } : {}),
   }
-  return postMessage(channelId, '', [embed])
+  return postMessage(channelId, '', [embed], opts.nonce)
 }
 
 export async function postNotificationEmbed(
@@ -205,6 +221,7 @@ export async function createWebhook(
 export type DiscordApiMessage = {
   id: string
   content: string
+  attachments?: Array<{ url: string; content_type?: string; filename?: string }>
   author?: { id: string; username?: string; global_name?: string | null; avatar?: string | null }
   embeds?: unknown[]
 }
@@ -215,7 +232,7 @@ export async function fetchChannelMessages(
 ): Promise<DiscordApiMessage[]> {
   const u = new URL(`${DISCORD_BASE}/channels/${channelId}/messages`)
   if (query.after) u.searchParams.set('after', query.after)
-  u.searchParams.set('limit', String(Math.min(query.limit ?? 10, 10)))
+  u.searchParams.set('limit', String(Math.max(1, Math.min(query.limit ?? 100, 100))))
   const res = await fetch(u.toString(), { headers: botHeaders() })
   if (!res.ok) {
     const t = await res.text()

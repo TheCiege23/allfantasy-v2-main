@@ -519,16 +519,39 @@ async function fetchFromAPISports(
       case 'games':
       case 'schedule': {
         const games = await fetchAPISportsGames(currentSeason);
-        return games.map((g: APISportsGame): NormalizedGame => ({
-          id: String(g.game.id),
-          homeTeam: apiSportsTeamToAbbrev(g.teams.home.name) || g.teams.home.name,
-          awayTeam: apiSportsTeamToAbbrev(g.teams.away.name) || g.teams.away.name,
-          date: g.game.date.date,
-          status: g.game.status.long,
-          season: g.league.season,
-          venue: g.game.venue?.name || null,
-          source: 'api_sports',
-        }));
+        /*
+         * ⚠ AN UNNAMEABLE FIXTURE IS DROPPED, NOT EMITTED WITH A NULL NAME.
+         *
+         * `NormalizedGame.homeTeam` is a required `string` and this used to fill it with
+         * `apiSportsTeamToAbbrev(name) || name`, which is `null` when API-Sports ships a
+         * fixture whose team is not yet set (an unresolved postseason slot, an NCAAF opponent
+         * still TBD). The declared provider type said that could not happen; it does, and it
+         * is what rejected the parallel `sportsGame.upsert` in `lib/api-sports.ts`.
+         *
+         * Omitting the row is the honest answer for a READ path: a caller asking for the
+         * schedule gets the fixtures we can actually name, rather than one carrying a `null`
+         * where a team belongs, or an invented "TBD" that reads as a real club. The write path
+         * defers the same fixtures and counts them — see `writeApiSportsGames`.
+         */
+        return games.flatMap((g: APISportsGame): NormalizedGame[] => {
+          const homeTeam = g.teams.home.name
+            ? apiSportsTeamToAbbrev(g.teams.home.name) || g.teams.home.name
+            : null;
+          const awayTeam = g.teams.away.name
+            ? apiSportsTeamToAbbrev(g.teams.away.name) || g.teams.away.name
+            : null;
+          if (!homeTeam || !awayTeam) return [];
+          return [{
+            id: String(g.game.id),
+            homeTeam,
+            awayTeam,
+            date: g.game.date.date,
+            status: g.game.status.long,
+            season: g.league.season,
+            venue: g.game.venue?.name || null,
+            source: 'api_sports',
+          }];
+        });
       }
       case 'stats': {
         if (!identifier) return null;

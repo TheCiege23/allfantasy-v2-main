@@ -4,6 +4,7 @@
  */
 
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
+import type { NormalizedRosterSlots } from './normalizeRosterSlots'
 
 /** Re-export for tool imports */
 export type LeagueContextEngineErrorCode = LeagueToolAccessErrorCode
@@ -141,7 +142,13 @@ export type NormalizedLeagueContext = {
   scoring: NormalizedScoringRules
   roster: {
     rosterSize: number | null
+    /** Raw platform payload, preserved verbatim. Prefer `slots` for anything typed. */
     starters: unknown
+    /**
+     * The starting lineup, parsed into counts. Null when the platform gave us nothing
+     * usable — which a consumer must treat as "unknown", never as a default lineup.
+     */
+    slots: NormalizedRosterSlots | null
     irSlots: number | null
     taxiSlots: number | null
     taxiAllowNonRookies: boolean | null

@@ -528,6 +528,39 @@ export function TradeValueModal({
     | undefined
 
   const summaryLineRes = typeof result?.summaryLine === 'string' ? result.summaryLine : null
+
+  /*
+   * WHAT THIS TRADE WAS PRICED AS, SAID BEFORE THE GRADE RATHER THAN UNDER IT.
+   *
+   * 🛑 `dataGaps` ALREADY CARRIED THIS AND NOBODY SAW IT. It renders as prose at the
+   * very bottom of the panel, below the player lines — a user reads the number, forms a
+   * view, and never scrolls to the sentence explaining the number was computed for a
+   * generic 12-team 1QB PPR dynasty league rather than theirs. A disclosure placed after
+   * the thing it qualifies is decoration.
+   *
+   * `valuationBasis` is the machine-readable version, so this can branch instead of
+   * pattern-matching prose: `hasAssumptions` gates the banner, `assumed` names the
+   * fields, and `disclosure` is one sentence written server-side next to the values it
+   * describes — which is the only place that knows whether each one was read or guessed.
+   */
+  const valuationBasis = (result?.valuationBasis ?? null) as
+    | {
+        hasAssumptions?: boolean
+        assumed?: string[]
+        disclosure?: string | null
+        settings?: Record<string, { value: unknown; origin: string }>
+      }
+    | null
+  const basisDisclosure =
+    valuationBasis?.hasAssumptions && typeof valuationBasis.disclosure === 'string'
+      ? valuationBasis.disclosure
+      : null
+  /**
+   * The league was selected but a price-moving setting still had to be guessed — a
+   * sharper failure than global mode, because the user believes they connected it.
+   */
+  const basisIsLeagueScoped =
+    (result?.analysisMode as string) === 'league' && !isGlobalLeague
   const timeCtx = result?.timeContext as
     | { userLocalTime?: string; userTimezone?: string; timezoneMismatch?: boolean }
     | undefined
@@ -661,6 +694,22 @@ export function TradeValueModal({
       ) : error ? (
         <div className="mb-3 rounded-[10px] border border-[#f06060]/25 bg-[rgba(240,96,96,0.08)] px-3 py-2 text-[12px] text-[#f08080]">
           {error}
+        </div>
+      ) : null}
+
+      {basisDisclosure ? (
+        <div
+          className={`mb-3 rounded-[10px] border px-3 py-2 text-[11px] leading-snug ${
+            basisIsLeagueScoped
+              ? 'border-amber-400/30 bg-amber-500/[0.08] text-amber-100'
+              : 'border-[#6b7280]/30 bg-[rgba(107,114,128,0.08)] text-[#c8cede]'
+          }`}
+          role="status"
+        >
+          <span className="font-semibold">
+            {basisIsLeagueScoped ? 'Some league settings were assumed' : 'Generic estimate'}
+          </span>
+          <span className="opacity-90"> — {basisDisclosure}</span>
         </div>
       ) : null}
 

@@ -387,6 +387,204 @@ function severityFor(event: LiveEvent): NotificationEvent['severity'] {
   return 'low'
 }
 
+/** Scoring events — the ones that win a same-play tie against a yardage alert. */
+const SCORING_TYPES: ReadonlySet<LiveEvent['type']> = new Set([
+  'TOUCHDOWN',
+  'DEFENSIVE_SCORE',
+  'SPECIAL_TEAMS_SCORE',
+])
+
+/**
+ * Which yardage stat belongs to which scoring stat, so a collapse only ever fires
+ * within one phase of the game.
+ *
+ * ⚠ A RUSHING TD MUST NOT SWALLOW A RECEIVING GAIN. Keying the collapse on the player alone
+ * would drop a genuine 30-yard catch because the same player also punched one in from the
+ * three on a different play. The pairing is the narrowest thing that still fixes the case the
+ * blueprint names.
+ */
+const SCORING_STAT_FOR_YARDS: Record<string, string> = {
+  rushing_yards: 'rushing_touchdowns',
+  receiving_yards: 'receiving_touchdowns',
+  passing_yards: 'passing_touchdowns',
+  /*
+   * 🛑 THE `*_long` FALLBACK STATS WERE MISSING, AND THEY ARE THE ONES THAT FIRE ON A MULTI-TOUCH
+   * WINDOW.
+   *
+   * `lib/live/eventDetector.ts` has two yardage paths. The exact one pairs a yardage delta with
+   * its attempt counter and only emits when attempts rose by exactly one; when a poll window
+   * contains two carries it stays silent and the LONGEST-GAIN fallback emits instead, with
+   * `stat` = `rushing_long` / `receiving_long` / `passing_long`. Those keys were absent here, so
+   * `pairedScoringStat` was `undefined`, the guard returned early, and a 42-yard rushing
+   * touchdown in a two-carry window produced BOTH "Touchdown" and "Big play" — the exact
+   * duplicate this function exists to remove, in precisely the window where the fallback is the
+   * only detector that fires.
+   */
+  rushing_long: 'rushing_touchdowns',
+  receiving_long: 'receiving_touchdowns',
+  passing_long: 'passing_touchdowns',
+}
+
+/**
+ * The play an event belongs to, when the source can say — otherwise `null`.
+ *
+ * 🛑 THIS DISTINCTION IS THE WHOLE CORRECTNESS OF THE COLLAPSE BELOW, AND ITS FIRST VERSION
+ * DID NOT MAKE IT. Play-by-play keys are `pbp:${gameId}:${sequence}:${type}`, so everything
+ * before the last colon identifies a PLAY. Box-score keys are
+ * `${gameId}|${playerId}|${stat}|${value}` — a cumulative stat position, which identifies no
+ * play at all, because the source cannot see plays.
+ *
+ * ⚠ SPLIT ON THE LAST COLON, NOT THE THIRD. A provider game id may itself contain a colon;
+ * the type suffix never does, because it comes from a closed enum.
+ */
+export function playIdentityOf(event: LiveEvent): string | null {
+  const key = event.idempotencyKey
+  if (typeof key !== 'string' || !key.startsWith('pbp:')) return null
+  const cut = key.lastIndexOf(':')
+  if (cut <= 4) return null
+  // Namespaced: a play id is only unique inside its sport.
+  return `${namespaceOf(event)}|${key.slice(0, cut)}`
+}
+
+/**
+ * The namespace every id on a `LiveEvent` lives inside.
+ *
+ * ⚠ `unknown` IS A REAL VALUE, NOT A FALLBACK TO NFL. A source that does not report its sport
+ * gets its own namespace and can still collide with another unknown-sport source — which is
+ * exactly the pre-existing behaviour, kept visible rather than papered over with a guess. It is
+ * never silently treated as football.
+ */
+function namespaceOf(event: LiveEvent): string {
+  return event.sport ? String(event.sport).toUpperCase() : 'unknown'
+}
+
+/**
+ * The score itself, independent of which feed observed it.
+ *
+ * 🛑 RETURNS TWO KEYS, BECAUSE ONE OF THEM COULD NEVER MATCH ACROSS SOURCES.
+ *
+ * The cross-source rule exists so two feeds reporting one touchdown produce one alert. It
+ * compared a single namespaced key — and the two feeds do not agree on the namespace:
+ * `rollingInsightsPlayByPlay` hardcodes `sport: 'NFL'` while `detectEvents` sets
+ * `sport: opts.sport`, which no caller supplies, so `namespaceOf` yields the literal
+ * `'unknown'`. `NFL|g|p|TOUCHDOWN` versus `unknown|g|p|TOUCHDOWN`: the sets could never
+ * intersect and the whole block was unreachable.
+ *
+ * ⚠ THE FIX IS NOT TO DEFAULT THE UNKNOWN SIDE TO NFL. That would reinstate exactly the
+ * cross-sport collision the namespace was added to prevent. Instead a scoring observation
+ * publishes both its namespaced key AND a namespace-free one, and a candidate consults the
+ * bare key ONLY when it genuinely does not know its own sport. Two events that both name a
+ * sport still compare namespaced, so a real NBA/NFL id collision is still kept apart.
+ *
+ * ⚠ AND THE TEST FOR THIS BLOCK WAS PAPERING OVER IT — it hand-supplied `sport: 'NFL'` on a
+ * box-score fixture, a field `detectEvents` only ever sets from `opts.sport`, so the assertion
+ * passed on a configuration production cannot produce.
+ */
+function scoreIdentitiesOf(event: LiveEvent): { namespaced: string; bare: string } {
+  const bare = `${event.gameId}|${event.playerId}|${event.type}`
+  return { namespaced: `${namespaceOf(event)}|${bare}`, bare }
+}
+
+/**
+ * One play, one alert: a 25-yard touchdown is a touchdown, not a touchdown plus a 20+ gain.
+ *
+ * 🛑 THE FIRST VERSION OF THIS FUNCTION DELETED REAL BIG PLAYS AND THIS IS THE CORRECTION.
+ * It collapsed on `(gameId, playerId, stat family)` across the whole batch, with no notion of
+ * which PLAY each event came from. On the box-score source that is defensible. On the
+ * play-by-play source it is simply wrong, and that is the source this pipeline actually runs:
+ * `refreshPlayByPlayFeed` notifies on `fresh`, every play discovered since the cursor, so one
+ * batch routinely spans a whole drive. A 25-yard run at sequence 40 and a one-yard touchdown at
+ * sequence 88 are two plays, both alertable, and the old rule threw the run away — breaking the
+ * blueprint's "notify on every gain of at least 20 yards" to fix a duplicate that source never
+ * produced.
+ *
+ * So the collapse is now scoped to a PLAY where the source knows what a play is:
+ *
+ *   play-by-play  collapse only within one `pbp:${gameId}:${sequence}`. In practice `classify`
+ *                 short-circuits on `isTouchdown` and emits one event per play, so this is a
+ *                 safety net rather than a working rule — which is exactly what it should have
+ *                 been from the start.
+ *   box score     collapse a same-family yardage event against a same-tick scoring event, as
+ *                 before. This source derives events from cumulative stat deltas and genuinely
+ *                 cannot separate two plays inside one poll window.
+ *
+ * ⚠ THE SOURCES ARE NEVER CROSSED. A play-by-play touchdown cannot suppress a box-score gain
+ * or the reverse: they key on different things, and letting one vote on the other reintroduces
+ * the bug in a form that only appears when both feeds are live at once.
+ *
+ * ⚠ THE BOX-SCORE LIMIT REMAINS, STATED RATHER THAN HIDDEN. A 30-yard run and a later short
+ * touchdown in the same tick and the same phase still collapse to the touchdown. That is the
+ * safe direction to be wrong in — the score is the more important message — and it is precisely
+ * what the play-by-play source resolves. Do not "fix" it by widening the window.
+ */
+export function collapseScoringDuplicates(events: LiveEvent[]): LiveEvent[] {
+  /** Plays that scored, from sources that know what a play is. Namespaced by sport. */
+  const scoringPlayIds = new Set<string>()
+  /** `sport|game|player|scoringStat`, from sources that do not. */
+  const scoringStatsWithoutPlayId = new Set<string>()
+  /** Scores a play-scoped source has already reported — namespaced AND bare, see above. */
+  const scoresWithPlayIdentity = new Set<string>()
+
+  for (const e of events) {
+    if (!SCORING_TYPES.has(e.type)) continue
+    const playId = playIdentityOf(e)
+    if (playId) {
+      scoringPlayIds.add(playId)
+      const ids = scoreIdentitiesOf(e)
+      scoresWithPlayIdentity.add(ids.namespaced)
+      scoresWithPlayIdentity.add(ids.bare)
+    } else {
+      scoringStatsWithoutPlayId.add(`${namespaceOf(e)}|${e.gameId}|${e.playerId}|${e.stat}`)
+    }
+  }
+  if (scoringPlayIds.size === 0 && scoringStatsWithoutPlayId.size === 0) return events
+
+  return events.filter((e) => {
+    const playId = playIdentityOf(e)
+
+    /*
+     * ── Cross-source: one touchdown, one alert, however many feeds saw it. ──
+     *
+     * 🛑 BOTH FEEDS CAN REPORT THE SAME SCORE AND THEIR KEYS WILL NEVER MATCH.
+     * A play-by-play touchdown keys on `pbp:game:sequence:TYPE`; the box-score detector keys
+     * the same touchdown on `game|player|rushing_touchdowns|1`. Nothing about those two strings
+     * is comparable, so every dedupe downstream — the engine's cooldown included — treats them
+     * as two events and the user's phone buzzes twice for one score.
+     *
+     * The play-scoped observation wins because it carries real play identity, a description and
+     * the full participant list. The box-score one is dropped.
+     *
+     * ⚠ ONLY THE OBSERVATION WITHOUT A PLAY ID IS EVER DROPPED HERE. Two play-scoped
+     * touchdowns by the same player in one batch are two different plays — a second-quarter
+     * score and a fourth-quarter score — and both survive, because both have a play id.
+     */
+    if (SCORING_TYPES.has(e.type)) {
+      if (playId) return true
+      const ids = scoreIdentitiesOf(e)
+      /*
+       * An observation that knows its sport compares namespaced; one that does not falls back
+       * to the bare key, which is the only way two feeds that disagree about the namespace can
+       * recognise the same score. Never the reverse — a known sport is never widened.
+       */
+      const key = e.sport ? ids.namespaced : ids.bare
+      return !scoresWithPlayIdentity.has(key)
+    }
+
+    if (e.type !== 'BIG_PLAY') return true
+
+    if (playId) {
+      // Play-scoped source: only the SAME play's score can absorb this yardage event.
+      return !scoringPlayIds.has(playId)
+    }
+
+    const pairedScoringStat = SCORING_STAT_FOR_YARDS[e.stat]
+    if (!pairedScoringStat) return true
+    return !scoringStatsWithoutPlayId.has(
+      `${namespaceOf(e)}|${e.gameId}|${e.playerId}|${pairedScoringStat}`,
+    )
+  })
+}
+
 /**
  * The same play told from the passer's side: "Kirk Cousins 34-yard TD pass to
  * Drake London". A passing touchdown scores for the QB's managers too, and the
@@ -435,6 +633,13 @@ function notificationFor(
      */
     skipChannels: { email: true, sms: true },
     meta: {
+      /*
+       * ⚠ CARRIED SO THE COOLDOWN KEY IS NAMESPACED. `notification-engine.buildSourceKey`
+       * folds `meta.sport` into the key; without it an NBA game id and an NFL one can produce
+       * the same key and silently suppress a real alert. Absent means unknown, not NFL.
+       */
+      sport: event.sport,
+      provider: event.provider,
       gameId: event.gameId,
       playerId: event.playerId,
       playerName: event.playerName,
@@ -452,9 +657,17 @@ function notificationFor(
        * touchdown that was overturned.
        *
        * It is also what makes each play its OWN notification in the engine's
-       * cooldown key — see `buildSourceKey`.
+       * cooldown key — see `buildSourceKey`. That is what stops a 22-yard gain
+       * suppressing the touchdown that follows it inside the ten-minute window;
+       * removing this field does not break the send — it silently reinstates that bug.
        */
       idempotencyKey: event.idempotencyKey,
+      /*
+       * Passer / receiver / returner / defender, where the source names them. Only the
+       * play-by-play feed supplies this; the box-score detector leaves it undefined, so a
+       * reader must treat absence as "not known", never as "one participant".
+       */
+      participants: event.participants ?? null,
       /*
        * One device notification per play. The dispatcher's default tag is one
        * per category, so a second touchdown would silently replace the first on
@@ -476,12 +689,14 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     return { eventsConsidered: 0, eventsAlertable: 0, notificationsSent: 0, skipped: 'no-events' }
   }
 
-  const alertable = events.filter((e) => {
-    if (!ALERTABLE.has(e.type)) return false
-    // The correction guard. A stat that went down is a revision, not a play.
-    if (typeof e.delta === 'number' && e.delta < 0) return false
-    return true
-  })
+  const alertable = collapseScoringDuplicates(
+    events.filter((e) => {
+      if (!ALERTABLE.has(e.type)) return false
+      // The correction guard. A stat that went down is a revision, not a play.
+      if (typeof e.delta === 'number' && e.delta < 0) return false
+      return true
+    }),
+  )
 
   if (alertable.length === 0) {
     return { eventsConsidered: events.length, eventsAlertable: 0, notificationsSent: 0, skipped: null }

@@ -20,6 +20,21 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "lineup_reminders",
   "league_drama",
   "commissioner_alerts",
+  /*
+   * 🛑 `draft_alerts` WAS MISSING WHILE `draft_intel_alerts` WAS PRESENT, WHICH IS THE WORST
+   * ARRANGEMENT OF THE TWO. `DraftNotificationService.resolveCategoryForEvent` sends everything
+   * that is not an AI-intelligence event — ON THE CLOCK included, plus the pick timer, pause /
+   * resume, slow-draft and commissioner events — to `draft_alerts`. So the ONE draft alert
+   * people actually need their phone to buzz for could never reach the push transport, however
+   * completely they had opted in, while Chimmy's draft-recap DM could.
+   *
+   * The category itself was never the problem: it is a real `NotificationCategoryId` with a
+   * label and a settings toggle ("Draft alerts (on the clock, timer, trade offers)"), so a user
+   * turning it on saw a switch that governed in-app and email and silently did nothing for
+   * push. Opt-in, authentication, effective preferences and quiet hours are unchanged — this
+   * only stops the dispatcher discarding the category before any of them are consulted.
+   */
+  "draft_alerts",
   "draft_intel_alerts",
   "autocoach",
   "injury_alerts",

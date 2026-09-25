@@ -27,6 +27,7 @@
  * values remain absent/null so the engine degrades honestly rather than inventing a value.
  */
 import type { CanonicalMemoEnrichment } from './canonicalMemo'
+import { playerValueRowObservation } from '@/lib/decision-os/value-v2/marketAdapters'
 import { loadAdpRecords, type AdpRecordRow } from './loader'
 import { resolvePlayerMetadata, type PlayerMetadataResult } from '@/lib/decision-os/world'
 import {
@@ -274,6 +275,7 @@ export async function resolveTradeEnrichment(
   /* AF per-game projections only — see the AF block below for why this map has no fallback. */
   const perGameProjectionByPlayerId: Record<string, number | null> = {}
   const marketValueByPlayerId: Record<string, number | null> = {}
+  const marketObservationByPlayerId: NonNullable<CanonicalMemoEnrichment['marketObservationByPlayerId']> = {}
   const liquidityByPlayerId: Record<string, number | null> = {}
   const trend30dByPlayerId: Record<string, number | null> = {}
   const thinlyPricedIds: string[] = []
@@ -438,6 +440,8 @@ export async function resolveTradeEnrichment(
       for (const r of rows) {
         if (!r.sleeperId || seen.has(r.sleeperId)) continue
         seen.add(r.sleeperId)
+        if (r.format !== args.valueFormat.format || r.qbFormat !== args.valueFormat.qbFormat || !ids.includes(r.sleeperId)) continue
+        marketObservationByPlayerId[r.sleeperId] = playerValueRowObservation(r)
         if (typeof r.value === 'number' && Number.isFinite(r.value)) {
           marketValueByPlayerId[r.sleeperId] = r.value
           marketValueResolved += 1
@@ -527,6 +531,7 @@ export async function resolveTradeEnrichment(
       perGameProjectionByPlayerId,
       marketValueByPlayerId,
       ...(pickMarketValueByKey ? { pickMarketValueByKey } : {}),
+      marketObservationByPlayerId,
       idpValueByPlayerId,
       liquidityByPlayerId,
       trend30dByPlayerId,
