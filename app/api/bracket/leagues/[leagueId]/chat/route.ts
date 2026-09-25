@@ -5,13 +5,16 @@ import { prisma } from "@/lib/prisma"
 import { isAllowedGifUrl } from "@/lib/rich-message/GIFIntegrationResolver"
 import { sanitizeClientImageUrl } from "@/lib/chat-core/clientMessageInput"
 
+/*
+ * 🛑 NEVER SELECT `email` HERE. This include is returned to every member of the pool, and it carried
+ * each author's and reactor's email address (found 2026-09-25). Names are display name, then username.
+ */
 const messageInclude = {
   user: {
     select: {
       id: true,
       displayName: true,
       username: true,
-      email: true,
       avatarUrl: true,
       profile: { select: { avatarPreset: true } },
     },
@@ -21,7 +24,7 @@ const messageInclude = {
       id: true,
       message: true,
       type: true,
-      user: { select: { id: true, displayName: true, username: true, email: true } },
+      user: { select: { id: true, displayName: true, username: true } },
     },
   },
   reactions: {
@@ -29,7 +32,7 @@ const messageInclude = {
       id: true,
       emoji: true,
       userId: true,
-      user: { select: { id: true, displayName: true, username: true, email: true } },
+      user: { select: { id: true, displayName: true, username: true } },
     },
   },
 }

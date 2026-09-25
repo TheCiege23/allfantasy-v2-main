@@ -13,21 +13,21 @@ import { IdentityImageRenderer } from "@/components/identity/IdentityImageRender
 type ChatMember = {
   id: string
   userId: string
-  user: { displayName: string | null; username: string | null; email: string }
+  user: { displayName: string | null; username: string | null }
 }
 
 type ReactionData = {
   id: string
   emoji: string
   userId: string
-  user: { id: string; displayName: string | null; username: string | null; email: string }
+  user: { id: string; displayName: string | null; username: string | null }
 }
 
 type ReplyData = {
   id: string
   message: string
   type: string
-  user: { id: string; displayName: string | null; username: string | null; email: string }
+  user: { id: string; displayName: string | null; username: string | null }
 }
 
 type ChatMessage = {
@@ -44,8 +44,7 @@ type ChatMessage = {
     id: string
     displayName: string | null
     username: string | null
-    email: string
-    avatarUrl?: string | null
+      avatarUrl?: string | null
     profile?: { avatarPreset?: string | null } | null
   }
 }
@@ -78,11 +77,11 @@ function getUserColor(userId: string): string {
   return USER_COLORS[Math.abs(hash) % USER_COLORS.length]
 }
 
-function getUserName(user: { displayName: string | null; username?: string | null; email: string }): string {
+function getUserName(user: { displayName: string | null; username?: string | null }): string {
   return user.displayName || user.username || "User"
 }
 
-function getUserInitials(user: { displayName: string | null; username?: string | null; email: string }): string {
+function getUserInitials(user: { displayName: string | null; username?: string | null }): string {
   const name = getUserName(user)
   return name.slice(0, 2).toUpperCase()
 }
