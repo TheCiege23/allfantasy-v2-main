@@ -196,7 +196,8 @@ export async function runTradeConsoleAnalysis(
     for (const side of [...give, ...get]) {
       if (side.kind !== 'player') continue
       if (side.playerId) {
-        const r = await getPlayer(side.playerId.trim())
+        // The league's sport reads a bare roster id (a Sleeper id) — see `getPlayer`.
+        const r = await getPlayer(side.playerId.trim(), { sport: side.sportHint ?? leagueSnapshot?.sport ?? null })
         if (r?.sport) sportSet.add(normalizeToSupportedSport(r.sport))
       } else if (side.sportHint) {
         sportSet.add(normalizeToSupportedSport(side.sportHint))

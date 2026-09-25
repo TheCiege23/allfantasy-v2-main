@@ -335,7 +335,7 @@ async function metaCardsForSport(args: {
   for (const row of rows) {
     if (out.length >= args.limit) break
     const rowSport = normalizeToSupportedSport(row.sport)
-    const dbPlayer = await getPlayer(row.playerId).catch(() => null)
+    const dbPlayer = await getPlayer(row.playerId, { sport: rowSport }).catch(() => null)
     const pos = dbPlayer?.position ?? '—'
     if (args.position !== 'ALL' && !matchesPositionFilter(pos, args.position, rowSport)) continue
     const enrich = await enrichHeadshot(row.playerId)

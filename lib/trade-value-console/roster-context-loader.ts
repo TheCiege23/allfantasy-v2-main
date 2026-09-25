@@ -160,7 +160,7 @@ async function rosterIdsToAssets(args: {
 
   for (const id of ids) {
     try {
-      const row = await getPlayer(id)
+      const row = await getPlayer(id, { sport: args.sport })
       if (row) {
         const pa = sportsRecordToPricedAsset(row)
         if (pa) {
