@@ -436,6 +436,16 @@ export default function MessagesContent() {
     }
   }, [selectedThreadId, loadMessages, loadPinned, loadThreadMembers])
 
+  /*
+   * An uploaded attachment belongs to the conversation it was uploaded into: it is stored
+   * privately under that thread and served only to its members. Carrying it over to another
+   * conversation would post a photo that conversation's members cannot open, so switching
+   * conversations drops the pending attachment.
+   */
+  useEffect(() => {
+    clearAttachmentState(setAttachmentPreview, setUploadError)
+  }, [selectedThreadId])
+
   useEffect(() => {
     if (!focusedMessageId) return
     const target = document.getElementById(`message-row-${focusedMessageId}`)
@@ -537,11 +547,18 @@ export default function MessagesContent() {
         setUploadError(result.error ?? "Invalid image")
         return
       }
+      if (!selectedThreadId) {
+        setUploadError("Open a conversation first")
+        return
+      }
       setUploadError(null)
       setUploading(true)
       try {
         const formData = new FormData()
         formData.append("file", file)
+        // Photos are private to this conversation: the server stores them only after proving
+        // you are in it, and serves them back only to its members.
+        formData.append("threadId", selectedThreadId)
         const res = await fetch("/api/shared/chat/upload", { method: "POST", body: formData })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -554,7 +571,7 @@ export default function MessagesContent() {
         setUploading(false)
       }
     },
-    []
+    [selectedThreadId]
   )
 
   const handleFileSelect = useCallback(
@@ -567,11 +584,16 @@ export default function MessagesContent() {
         setUploadError(validation.error ?? "Invalid file")
         return
       }
+      if (!selectedThreadId) {
+        setUploadError("Open a conversation first")
+        return
+      }
       setUploadError(null)
       setUploading(true)
       try {
         const formData = new FormData()
         formData.append("file", file)
+        formData.append("threadId", selectedThreadId)
         const res = await fetch("/api/shared/chat/upload", { method: "POST", body: formData })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -584,7 +606,7 @@ export default function MessagesContent() {
         setUploading(false)
       }
     },
-    []
+    [selectedThreadId]
   )
 
   const handleGifUrlSubmit = useCallback(() => {

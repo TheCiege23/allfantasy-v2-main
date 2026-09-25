@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { getPrivateChatFile, putPrivateChatFile, privateChatStorageConfigured } from '@/lib/chat-core/privateStorage'
-import { prisma } from '@/lib/prisma'
+import {
+  canAccessChatUploadScope,
+  canAccessLeague,
+  canAccessThread,
+  chatUploadReadUrl,
+  parseChatUploadPath,
+} from '@/lib/chat-core/chatUploadAccess'
 import { requireAuth } from '@/lib/auth-guard'
 
 export const dynamic = 'force-dynamic'
@@ -18,37 +24,11 @@ function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
 }
 
-/**
- * Membership of a platform chat thread — the DM and huddle equivalent of
- * `canAccessLeague`.
- *
- * ⚠ WITHOUT THIS, UPLOADS WERE LEAGUE-ONLY. The route required a `leagueId` and
- * 400'd without one, so attaching an image in a DM or a huddle failed with
- * "leagueId required" — a message about a concept those chats do not have. The
- * gate is the same shape as the league one: prove the caller is IN the thread,
- * never just that the thread exists.
+/*
+ * `canAccessLeague` / `canAccessThread` live in `lib/chat-core/chatUploadAccess.ts` now, so
+ * `/api/shared/chat/upload` (the /messages composer) authorises against the SAME rule
+ * instead of a copy of it.
  */
-async function canAccessThread(threadId: string, userId: string) {
-  const member = await prisma.platformChatThreadMember.findFirst({
-    where: { threadId, userId, isBlocked: false },
-    select: { id: true },
-  })
-  return Boolean(member)
-}
-
-async function canAccessLeague(leagueId: string, userId: string) {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: {
-      id: true,
-      userId: true,
-      teams: { select: { claimedByUserId: true } },
-    },
-  })
-  if (!league) return false
-  if (league.userId === userId) return true
-  return league.teams.some((team) => team.claimedByUserId === userId)
-}
 
 /**
  * 🛑 THE GATE IS A SESSION PLUS MEMBERSHIP, NOT AGE CONFIRMATION.
@@ -160,7 +140,7 @@ export async function POST(req: NextRequest) {
     const pathname = await putPrivateChatFile(key, file, mimeType)
 
     return NextResponse.json({
-      url: `/api/chat/upload?path=${encodeURIComponent(pathname)}`,
+      url: chatUploadReadUrl(pathname),
       type,
       mimeType,
       size,
@@ -175,9 +155,11 @@ export async function GET(req: NextRequest) {
   const auth = await requireAuth()
   if (!auth.ok) return auth.response
   const path = req.nextUrl.searchParams.get('path') ?? ''
-  const match = /^chat\/(thread\/)?([a-zA-Z0-9_-]+)\/(image|video|voice)\/([a-zA-Z0-9_.-]+)$/.exec(path)
-  if (!match || path.includes('..')) return NextResponse.json({ error: 'Invalid attachment path' }, { status: 400 })
-  const allowed = match[1] ? await canAccessThread(match[2], auth.userId) : await canAccessLeague(match[2], auth.userId)
+  // One parser for every private chat attachment: the drawer's league/thread uploads and the
+  // /messages composer's (`app/api/shared/chat/upload`), including its bracket-room and file paths.
+  const parsed = parseChatUploadPath(path)
+  if (!parsed) return NextResponse.json({ error: 'Invalid attachment path' }, { status: 400 })
+  const allowed = await canAccessChatUploadScope(parsed.scope, auth.userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!privateChatStorageConfigured()) return NextResponse.json({ error: 'Private chat storage is not configured' }, { status: 503 })
   try {
@@ -187,7 +169,8 @@ export async function GET(req: NextRequest) {
       'Content-Type': blob.contentType,
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',
-      'Content-Disposition': 'inline',
+      // A document (PDF / text / CSV from /messages) downloads rather than rendering on our origin.
+      'Content-Disposition': parsed.media === 'file' ? 'attachment' : 'inline',
       'Vary': 'Cookie',
     } })
   } catch { return NextResponse.json({ error: 'Attachment unavailable' }, { status: 502 }) }
