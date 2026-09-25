@@ -1,17 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Search } from 'lucide-react'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
-import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
-import { MessageTime } from './MessageTime'
+import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
-import { QuotedMessage } from './QuotedMessage'
 import { SeenBy } from './SeenBy'
-import { MessageReactions } from './MessageReactions'
-import { readReactions } from '@/lib/chat-core/messageReactions'
+import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { useSession } from 'next-auth/react'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
+import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
+import { ChatSearch } from './ChatSearch'
+import { useTypingSignal } from './useTypingSignal'
 
 /**
  * DMs and Huddle, on the platform chat threads that already exist.
@@ -60,10 +61,28 @@ type PlatformMessage = {
   senderUserId: string | null
   senderName: string
   senderUsername?: string | null
+  /** Sent by the endpoint since it existed and never drawn until the bubble layout. */
+  senderAvatarUrl?: string | null
+  /** `gif` rows from /messages carry the GIF's URL as the body. */
+  messageType?: string | null
   body: string
   createdAt: string
   /** GIFs, media and polls. The endpoint returns it; dropping it hid them. */
   metadata?: Record<string, unknown> | null
+}
+
+function toListMessage(m: PlatformMessage): ChatListMessage {
+  return {
+    id: m.id,
+    authorId: m.senderUserId,
+    authorName: m.senderName || m.senderUsername || 'Someone',
+    avatarUrl: m.senderAvatarUrl ?? null,
+    body: m.body ?? '',
+    createdAt: m.createdAt,
+    parentMessageId: m.parentMessageId ?? null,
+    metadata: m.metadata ?? null,
+    messageType: m.messageType ?? null,
+  }
 }
 
 export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: string }) {
@@ -79,8 +98,13 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
   const [receipts, setReceipts] = useState<Array<{ userId: string; displayName: string | null; username: string | null; lastReadAt: string | null }>>([])
   const [error, setError] = useState<string | null>(null)
-  const endRef = useRef<HTMLDivElement | null>(null)
-  const streamRef = useRef<HTMLDivElement | null>(null)
+  /* In-flight reaction toggles win over the poll, as in league chat — see CommsDrawer. */
+  const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
+  const [reactionBusy, setReactionBusy] = useState<string | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
+  /** The whole open conversation — the drop target for photos. */
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const activeThreadId = useRef<string | null>(null)
   useEffect(() => () => { activeThreadId.current = null }, [])
 
@@ -145,15 +169,10 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   }, [])
 
   /*
-   * Only follow new messages when the reader is already at the bottom. With
-   * polling on, scrolling unconditionally would yank the view away from somebody
-   * reading back through the thread every few seconds.
+   * Following new messages only when the reader is already at the bottom — and
+   * offering "N new ↓" when they are not — now lives in ChatMessageList, so the
+   * league tab and this one cannot disagree about it.
    */
-  useEffect(() => {
-    if (isNearBottom(streamRef.current)) {
-      endRef.current?.scrollIntoView({ block: 'end' })
-    }
-  }, [messages.length])
 
   // Near-realtime: without this a message only appeared when the thread was reopened.
   useChatPolling({
@@ -172,6 +191,8 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
       setReplyTo(null)
       setMessages([])
       setHiddenBlocked(0)
+      setReactionOverride({})
+      setSearching(false)
       void loadMessages(thread)
     },
     [loadMessages],
@@ -319,6 +340,107 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
     }
   }, [openThread, busy])
 
+  /*
+   * Reactions, with the same optimistic override the league tab uses: the chip
+   * moves on tap, and the 4–8s poll cannot snap it back mid-request.
+   */
+  const toggleReaction = useCallback(
+    async (m: ChatListMessage, emoji: string) => {
+      if (!openThread || reactionBusy) return
+      const current = reactionOverride[m.id] ?? readReactions(m.metadata, viewerId)
+      const next = toggleReactionLocally(current, emoji)
+      const adding = next.some((r) => r.emoji === emoji && r.mine)
+      setReactionOverride((prev) => ({ ...prev, [m.id]: next }))
+      setReactionBusy(m.id)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/reactions`,
+          {
+            method: adding ? 'POST' : 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emoji }),
+          },
+        )
+        if (!res.ok) throw new Error('Could not update reaction.')
+        await loadMessages(openThread)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not update reaction.')
+      } finally {
+        setReactionOverride((prev) => {
+          const rest = { ...prev }
+          delete rest[m.id]
+          return rest
+        })
+        setReactionBusy(null)
+      }
+    },
+    [openThread, reactionBusy, reactionOverride, viewerId, loadMessages],
+  )
+
+  /* Your own messages only — the route checks the sender, this only decides what is offered. */
+  const editMessage = useCallback(
+    async (m: ChatListMessage, nextBody: string) => {
+      if (!openThread) throw new Error('no conversation open')
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: nextBody }) },
+      )
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Could not save that edit.')
+      await loadMessages(openThread)
+    },
+    [openThread, loadMessages],
+  )
+
+  const deleteMessage = useCallback(
+    async (m: ChatListMessage) => {
+      if (!openThread) throw new Error('no conversation open')
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) throw new Error('Could not delete that message.')
+      await loadMessages(openThread)
+    },
+    [openThread, loadMessages],
+  )
+
+  /*
+   * Everybody this panel can already name: the read-receipt rows (every member of
+   * the thread, with names) and whoever has spoken. Used for "who reacted" and for
+   * the `@` list — no extra request, and never an id on screen.
+   */
+  const people = useMemo(() => {
+    const byId = new Map<string, { name: string; username: string | null; avatarUrl: string | null }>()
+    for (const r of receipts) {
+      byId.set(r.userId, { name: r.displayName || r.username || '', username: r.username, avatarUrl: null })
+    }
+    for (const m of messages) {
+      if (!m.senderUserId) continue
+      const had = byId.get(m.senderUserId)
+      byId.set(m.senderUserId, {
+        name: had?.name || m.senderName || m.senderUsername || '',
+        username: had?.username ?? m.senderUsername ?? null,
+        avatarUrl: m.senderAvatarUrl ?? had?.avatarUrl ?? null,
+      })
+    }
+    return byId
+  }, [receipts, messages])
+
+  const nameForUserId = useCallback((id: string) => people.get(id)?.name || null, [people])
+
+  const mentionMembers = useMemo(
+    () =>
+      Array.from(people.entries())
+        .filter(([id, p]) => id !== viewerId && p.username)
+        .map(([, p]) => ({ username: p.username as string, displayName: p.name, avatarUrl: p.avatarUrl })),
+    [people, viewerId],
+  )
+
+  const listMessages = useMemo(() => messages.map(toListMessage), [messages])
+
+  const signalTyping = useTypingSignal(openThread?.id ?? null)
+
   const start = useCallback(async () => {
     const names = invite
       .split(',')
@@ -357,7 +479,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
 
   if (openThread) {
     return (
-      <div className="af-cm-panel">
+      <div className="af-cm-panel af-cm-convo" ref={panelRef}>
         <div className="af-cm-privacy">{privacy}</div>
 
         <div className="af-cm-threadhead">
@@ -381,86 +503,109 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             >
               {openThread.isMuted ? '🔕' : '🔔'}
             </button>
+            <button
+              type="button"
+              className="af-cm-mute"
+              data-on={searching}
+              aria-pressed={searching}
+              onClick={() => setSearching((v) => !v)}
+              aria-label="Search this conversation"
+              title="Search this conversation"
+            >
+              <Search size={15} aria-hidden />
+            </button>
           </span>
         </div>
 
-        <div className="af-cm-thread" ref={streamRef}>
-          {messages.length === 0 ? (
+        {searching ? (
+          <ChatSearch
+            threadId={openThread.id}
+            onClose={() => setSearching(false)}
+            onJump={(id) => {
+              if (!document.getElementById(`af-cm-msg-${id}`)) return false
+              setFocusRequest({ id, nonce: Date.now() })
+              return true
+            }}
+          />
+        ) : null}
+
+        <ChatMessageList
+          messages={listMessages}
+          viewerId={viewerId}
+          label={`Messages in ${openThread.title || 'this conversation'}`}
+          reactionsFor={(m) => reactionOverride[m.id] ?? readReactions(m.metadata, viewerId)}
+          reactionBusyId={reactionBusy}
+          onToggleReaction={(m, emoji) => void toggleReaction(m, emoji)}
+          onReply={(m) => setReplyTo(messages.find((x) => x.id === m.id) ?? null)}
+          onEdit={editMessage}
+          onDelete={deleteMessage}
+          nameForUserId={nameForUserId}
+          focusRequest={focusRequest}
+          renderRich={(m) => (
+            <RichMessage
+              metadata={m.metadata}
+              messageType={m.messageType}
+              body={m.body}
+              viewerUserId={viewerId}
+              onVote={(optionId) => {
+                void fetch(
+                  `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/vote`,
+                  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionId }) },
+                )
+                  .then(async (r) => {
+                    if (!r.ok) throw new Error('Could not record vote. The poll may be closed.')
+                    await loadMessages(openThread)
+                  })
+                  .catch((e) => setError(e.message))
+              }}
+              onClosePoll={
+                m.authorId === viewerId
+                  ? () => {
+                      void fetch(
+                        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/close-poll`,
+                        { method: 'POST' },
+                      )
+                        .then(async (r) => {
+                          if (!r.ok) throw new Error('Could not close poll.')
+                          await loadMessages(openThread)
+                        })
+                        .catch((e) => setError(e.message))
+                    }
+                  : undefined
+              }
+            />
+          )}
+          empty={
             <div className="af-cm-empty">
               <p className="af-cm-empty-t">No messages yet.</p>
-              <p className="af-cm-empty-b">
-                Nobody outside this thread can read what you send here.
-              </p>
+              <p className="af-cm-empty-b">Nobody outside this thread can read what you send here.</p>
             </div>
-          ) : (
-            messages.map((m) => {
-              const parent = m.parentMessageId
-                ? messages.find((x) => x.id === m.parentMessageId)
-                : undefined
-              return (
-                <div key={m.id} className="af-cm-msg" id={`af-cm-msg-${m.id}`}>
-                  {m.parentMessageId ? (
-                    <QuotedMessage
-                      author={parent?.senderName ?? null}
-                      text={parent ? censorProfanity(parent.body) : null}
-                      onJump={
-                        parent
-                          ? () =>
-                              document
-                                .getElementById(`af-cm-msg-${parent.id}`)
-                                ?.scrollIntoView({ block: 'center' })
-                          : undefined
-                      }
-                    />
-                  ) : null}
-                  <span className="af-cm-msg-head">
-                    <span className="af-cm-msg-author">{m.senderName}</span>
-                    <MessageTime value={m.createdAt} />
-                    <button
-                      type="button"
-                      className="af-cm-reply-btn"
-                      onClick={() => setReplyTo(m)}
-                      aria-label={`Reply to ${m.senderName}`}
-                    >
-                      Reply
-                    </button>
-                  </span>
-                  <span className="af-cm-msg-text">{censorProfanity(m.body)}</span>
-                  <RichMessage metadata={m.metadata} viewerUserId={viewerId}
-                    onVote={optionId => { void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionId }) }).then(async r => { if (!r.ok) throw new Error('Could not record vote. The poll may be closed.'); await loadMessages(openThread) }).catch(e => setError(e.message)) }}
-                    onClosePoll={m.senderUserId === viewerId ? () => { void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/close-poll`, { method: 'POST' }).then(async r => { if (!r.ok) throw new Error('Could not close poll.'); await loadMessages(openThread) }).catch(e => setError(e.message)) } : undefined}
-                  />
-                  <MessageReactions reactions={readReactions(m.metadata, viewerId)} onToggle={emoji => {
-                    void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/reactions`, {
-                      method: readReactions(m.metadata, viewerId).some(r => r.emoji === emoji && r.mine) ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
-                    }).then(async r => { if (!r.ok) throw new Error('Could not update reaction.'); await loadMessages(openThread) }).catch(e => setError(e.message))
-                  }} />
-                </div>
-              )
-            })
-          )}
-          {hiddenBlocked > 0 ? (
-            /* Say it rather than leaving a silent gap in the transcript. */
-            <p className="af-cm-empty-b">
-              {hiddenBlocked} message{hiddenBlocked === 1 ? '' : 's'} hidden from people you blocked.
-            </p>
-          ) : null}
-          {error ? <p className="af-cm-error">{error}</p> : null}
-          <div ref={endRef} />
-        </div>
+          }
+          footer={
+            <>
+              {hiddenBlocked > 0 ? (
+                /* Say it rather than leaving a silent gap in the transcript. */
+                <p className="af-cm-empty-b">
+                  {hiddenBlocked} message{hiddenBlocked === 1 ? '' : 's'} hidden from people you blocked.
+                </p>
+              ) : null}
+              {error ? <p className="af-cm-error">{error}</p> : null}
+            </>
+          }
+        />
 
         {/*
           The same composer the league chat uses. `leagueId` is empty because a
-          DM has none: the mention hook then offers only its static suggestions
-          (and correctly withholds @all from a one-to-one), and uploads authorise
-          against `threadId` instead.
+          DM has none, so the league member search has nothing to ask — the
+          thread's own members come in through `mentionMembers` instead, and
+          uploads authorise against `threadId`.
         */}
         {/*
           Seen-by, on the LAST message you sent and nowhere else. Marking every
           message would be a column of noise, and the only one anybody actually
           wonders about is the most recent thing they said.
         */}
-        <SeenBy messages={messages} receipts={receipts} />
+        <SeenBy messages={messages} receipts={receipts} viewerUserId={viewerId} />
 
         {/*
           ⚠ HONEST ABOUT BEING LATE. Chat refreshes every 4-8s, so this can
@@ -499,6 +644,9 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           chatType={kind === 'dm' ? 'dm' : 'huddle'}
           placeholder="Message"
           onSend={sendPayload}
+          dropZoneRef={panelRef}
+          onTypingChange={signalTyping}
+          mentionMembers={mentionMembers}
         />
       </div>
     )

@@ -93,6 +93,32 @@ export function computeVisibleHeight(s: ViewportSample): number | null {
 }
 
 /**
+ * The visible region itself, in LAYOUT-viewport coordinates, while a keyboard is
+ * covering part of the screen — or `null` to leave the stylesheet alone.
+ *
+ * For a FIXED panel (the comms drawer) rather than an element in the flow:
+ * `computeVisibleHeight` sizes something from where it already starts, whereas a
+ * fixed dialog has to MOVE as well — iOS scrolls the visual viewport to reveal a
+ * focused field, so a panel pinned to the layout viewport's top ends up with its
+ * header scrolled off and its composer under the keyboard. Anchoring it to
+ * `offsetTop` with the visual height keeps both on screen.
+ *
+ * ⚠ SAME THRESHOLD, SAME REASONING as above, plus one more false positive: a
+ * PINCH-ZOOMED page also has a visual viewport smaller than the layout one. That
+ * is not a keyboard, and resizing the drawer to the zoomed region would be wrong,
+ * so a scale above 1 leaves the stylesheet alone.
+ */
+export function computeKeyboardViewport(
+  s: Pick<ViewportSample, 'visualHeight' | 'visualOffsetTop' | 'innerHeight'> & { scale?: number },
+): { top: number; height: number } | null {
+  if (typeof s.scale === 'number' && s.scale > 1.01) return null
+  const inset = s.innerHeight - s.visualHeight
+  if (!Number.isFinite(inset) || inset < KEYBOARD_MIN_INSET) return null
+  if (!(s.visualHeight > 0)) return null
+  return { top: Math.max(0, s.visualOffsetTop || 0), height: s.visualHeight }
+}
+
+/**
  * Track the visible height available to `ref`, or `null` when the stylesheet
  * should be left alone.
  *

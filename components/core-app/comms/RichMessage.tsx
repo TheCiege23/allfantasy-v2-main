@@ -14,13 +14,23 @@
  * inside a message list — one bad row must not blank the whole conversation.
  */
 
+import { useState } from 'react'
 import { readViewerPoll } from '@/lib/chat-core/messagePolls'
+import { gifCredit, readGif, readSafeGif } from '@/lib/rich-message/RichMessageRenderer'
+import { getSafeMessageMediaUrl } from '@/lib/rich-message/safeMedia'
 import { MessagePoll } from './MessagePoll'
 import { TradeCardView } from './TradeCardView'
+import { ImageViewer } from './ImageViewer'
+
+/*
+ * The GIF parse lives beside the /messages renderer, so both surfaces read BOTH
+ * wire shapes through one function. Re-exported here for existing importers.
+ */
+export { readGif, readSafeGif }
+export type { SafeGif } from '@/lib/rich-message/RichMessageRenderer'
 
 export type RichMetadata = Record<string, unknown> | null | undefined
 
-type Gif = { previewUrl: string; url: string; title: string }
 type Attachment = { type: string; url: string; mimeType?: string; duration?: number }
 type Poll = { question: string; options: Array<{ id: string; text: string; votes: string[] }> }
 type TradeAsset = { id: string; name: string | null; position?: string | null; team?: string | null }
@@ -36,32 +46,6 @@ type TradeCard = {
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
-}
-
-/**
- * A GIF arrives in two shapes: a nested `gif` object, or flat `gifUrl` /
- * `previewUrl` keys. Both are written by the same composer depending on path,
- * so both are read here.
- */
-export function readGif(meta: RichMetadata): Gif | null {
-  if (!meta) return null
-  const nested = meta.gif
-  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
-    const g = nested as Record<string, unknown>
-    const preview = str(g.previewUrl)
-    const url = str(g.url)
-    if (preview || url) {
-      return {
-        previewUrl: preview ?? url ?? '',
-        url: url ?? preview ?? '',
-        title: str(g.title) ?? 'GIF',
-      }
-    }
-  }
-  const preview = str(meta.previewUrl) ?? str(meta.gifUrl)
-  const url = str(meta.gifUrl) ?? preview
-  if (!preview && !url) return null
-  return { previewUrl: preview ?? url ?? '', url: url ?? preview ?? '', title: str(meta.gifTitle) ?? 'GIF' }
 }
 
 export function readAttachments(meta: RichMetadata): Attachment[] {
@@ -150,6 +134,8 @@ export function RichMessage({
   viewerUserId,
   onVote,
   onClosePoll,
+  messageType,
+  body,
 }: {
   metadata: RichMetadata
   /*
@@ -161,9 +147,13 @@ export function RichMessage({
   onVote?: (optionId: string) => void
   /** Only passed when the viewer wrote the poll or runs the league. */
   onClosePoll?: () => void
+  /** With `body`, lets a type-`gif` row (URL as body) render as the GIF it is. */
+  messageType?: string | null
+  body?: string | null
 }) {
-  const gif = readGif(metadata)
-  const attachments = readAttachments(metadata)
+  const [viewing, setViewing] = useState<string | null>(null)
+  const gif = readSafeGif(metadata, messageType, body)
+  const attachments = readSafeAttachments(metadata)
   const poll = readPoll(metadata)
   const trade = readTradeCard(metadata)
   const viewerPoll = onVote ? readViewerPoll(metadata, viewerUserId ?? null) : null
@@ -175,16 +165,29 @@ export function RichMessage({
         <figure className="af-cm-gif">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={gif.previewUrl || gif.url} alt={gif.title} loading="lazy" />
-          {/* Giphy's terms require visible attribution wherever their GIFs render. */}
-          <figcaption>via GIPHY</figcaption>
+          {/* Each GIF service's terms require visible attribution wherever its GIFs render. */}
+          <figcaption>{gifCredit(gif.provider)}</figcaption>
         </figure>
       ) : null}
 
       {attachments.map((a) => {
         if (a.type === 'image') {
+          /*
+           * A button around the picture, not a bare <img>: tapping opens the whole
+           * frame. Sleeper's reviews complain that enlarging a chat image crops a
+           * quarter of it — the viewer fits the full picture instead.
+           */
           return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={a.url} className="af-cm-attach" src={a.url} alt="" loading="lazy" />
+            <button
+              key={a.url}
+              type="button"
+              className="af-cm-attach-btn"
+              onClick={() => setViewing(a.url)}
+              aria-label="Open image full size"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="af-cm-attach" src={a.url} alt="" loading="lazy" />
+            </button>
           )
         }
         if (a.type === 'video') {
@@ -216,7 +219,32 @@ export function RichMessage({
           ))}
         </div>
       ) : null}
+
+      {viewing ? <ImageViewer src={viewing} onClose={() => setViewing(null)} /> : null}
     </div>
+  )
+}
+
+/**
+ * Attachments whose URL is safe to put in a src: https or a same-origin path.
+ * `readAttachments` is the raw parse; this is what actually renders.
+ */
+export function readSafeAttachments(meta: RichMetadata): Attachment[] {
+  const out: Attachment[] = []
+  for (const a of readAttachments(meta)) {
+    const url = getSafeMessageMediaUrl(a.url)
+    if (url) out.push({ ...a, url })
+  }
+  return out
+}
+
+/** Whether `RichMessage` will draw anything — the bubble uses it to drop "🎬 GIF"-style fallback labels. */
+export function hasRichContent(metadata: RichMetadata, messageType?: string | null, body?: string | null): boolean {
+  return Boolean(
+    readSafeGif(metadata, messageType, body) ||
+      readSafeAttachments(metadata).length > 0 ||
+      readPoll(metadata) ||
+      readTradeCard(metadata),
   )
 }
 

@@ -2386,3 +2386,333 @@
   .af-cm-foot { padding: 8px 14px; }
   .af-cm-footnote { display: none; }
 }
+
+/*
+ * ══ Conversation pass — 2026-09-25 (owner: "fix the League, DM and huddle messages
+ *    issues … your side / their side … fix the message box hidden issue … can the
+ *    chat bubble be moved") ══
+ *
+ * Appended as its own layer, TOP LEVEL, after the container query above — never
+ * inside another block. CLAUDE.md records what happens when a new `@media` lands
+ * inside an existing one: every rule below the insertion point silently moves into
+ * the narrower query. Each query here opens and closes on its own.
+ *
+ * ⚠ THE DEAD RULE IS LIVE NOW. `.af-cm .af-chat-picker` (max-height against the
+ * visible height) matched no element — the composer's picker wrappers never
+ * carried the class. They do now, so the rule below also has something to hold.
+ */
+
+/* ── Layout: the list owns the scroller, the wrap owns the overlays ── */
+
+.af-cm-convo { position: relative; }
+.af-cm-chatwrap { position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.af-cm-thread.af-cm-chat { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 18px; text-align: left; }
+
+.af-cm-day { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.af-cm-day::before,
+.af-cm-day::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+/* ── Rows and bubbles: theirs left with an avatar, yours right in the accent ── */
+
+.af-cm-row { position: relative; display: flex; align-items: flex-start; gap: 8px; max-width: 100%; padding: 1px 0; }
+.af-cm-row[data-run-start='true'] { margin-top: 8px; }
+.af-cm-row[data-mine='true'] { justify-content: flex-end; }
+
+.af-cm-avatar,
+.af-cm-avatar-gap { flex: none; width: 32px; height: 32px; }
+.af-cm-avatar { display: grid; place-items: center; overflow: hidden; margin-top: 18px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line2); }
+.af-cm-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-cm-avatar-initials { font-size: 11px; font-weight: 800; color: var(--text2); }
+
+.af-cm-col { display: flex; min-width: 0; max-width: min(80%, 520px); flex-direction: column; align-items: flex-start; gap: 3px; }
+.af-cm-row[data-mine='true'] .af-cm-col { align-items: flex-end; }
+.af-cm-col > .af-cm-msg-author { padding-left: 4px; font-size: 11.5px; color: var(--text2); }
+
+.af-cm-bubble {
+  position: relative;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-tap-highlight-color: transparent;
+}
+.af-cm-bubble-text { margin: 0; white-space: pre-wrap; }
+.af-cm-bubble .af-cm-rich { margin-top: 6px; }
+.af-cm-bubble .af-cm-rich:first-child { margin-top: 0; }
+/* A GIF or photo on its own needs no bubble around it. */
+.af-cm-bubble:has(> .af-cm-rich:only-child) { padding: 0; background: transparent; }
+
+/* The corner facing the speaker squares off inside a run, so a run reads as one voice. */
+.af-cm-row:not([data-mine='true']):not([data-run-start='true']) .af-cm-bubble { border-top-left-radius: 6px; }
+.af-cm-row:not([data-mine='true']):not([data-run-end='true']) .af-cm-bubble { border-bottom-left-radius: 6px; }
+.af-cm-row[data-mine='true'] .af-cm-bubble { background: var(--accent); color: var(--accent-ink); }
+.af-cm-row[data-mine='true']:not([data-run-start='true']) .af-cm-bubble { border-top-right-radius: 6px; }
+.af-cm-row[data-mine='true']:not([data-run-end='true']) .af-cm-bubble { border-bottom-right-radius: 6px; }
+.af-cm-row[data-mine='true'] .af-cm-bubble:has(> .af-cm-rich:only-child) { background: transparent; }
+
+.af-cm-bubble[data-deleted='true'] { background: transparent; box-shadow: inset 0 0 0 1px var(--line2); color: var(--muted); }
+.af-cm-row[data-mine='true'] .af-cm-bubble[data-deleted='true'] { background: transparent; color: var(--muted); }
+.af-cm-bubble-deleted { font-style: italic; }
+
+.af-cm-mention { font-weight: 700; color: var(--accent); }
+.af-cm-row[data-mine='true'] .af-cm-mention { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+.af-cm-bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-cm-row[data-menu='true'] .af-cm-bubble { box-shadow: 0 0 0 2px var(--accent-line); }
+.af-cm-row[data-flash='true'] .af-cm-bubble { box-shadow: 0 0 0 3px var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-row[data-flash='true'] .af-cm-bubble { animation: af-cm-flash 1.6s ease-out forwards; }
+}
+@keyframes af-cm-flash {
+  0%, 45% { box-shadow: 0 0 0 3px var(--accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Long-press is the menu on touch; the OS text callout would fight it. Copy is in the menu. */
+@media (hover: none) {
+  .af-cm-bubble { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+}
+
+.af-cm-meta { padding: 0 4px; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.af-cm-edited { font-style: italic; }
+.af-cm-row .af-cm-quote { max-width: 100%; }
+
+/* Rich content inside a bubble: never cropped, a little taller than the flat rows allowed. */
+.af-cm-bubble .af-cm-gif img,
+.af-cm-bubble .af-cm-attach { max-height: 240px; object-fit: contain; }
+.af-cm-attach-btn { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.af-cm .af-cm-attach-btn[aria-label] { min-width: 0; min-height: 0; }
+.af-cm-row[data-mine='true'] .af-cm-gif figcaption { color: var(--faint); }
+
+/*
+ * Reaction chips in a row: the TARGET is 44px (the drawer's rule for anything
+ * labelled), the visible pill is 28px — drawn by a pseudo-element so the row
+ * does not grow a fat band under every reacted message.
+ */
+.af-cm-row .af-cm-rx { margin: -8px 0; gap: 2px; }
+.af-cm-row .af-cm-rx-chip { position: relative; min-height: 44px; padding: 0 9px; border: 0; background: none; }
+.af-cm-row .af-cm-rx-chip::before { content: ''; position: absolute; inset: 8px 0; border: 1px solid var(--line2); border-radius: 999px; background: var(--chip); }
+.af-cm-row .af-cm-rx-chip[data-mine='true']::before { border-color: var(--accent); background: var(--accent-soft); }
+.af-cm-row .af-cm-rx-chip > * { position: relative; }
+
+/* ── Desktop hover bar: three quick reactions, reply, more ── */
+
+.af-cm-hoverbar { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .af-cm-hoverbar {
+    position: absolute;
+    top: -12px;
+    left: 44px; /* just past the avatar, over the top edge of their bubble */
+    z-index: 2;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--line2);
+    border-radius: 999px;
+    background: var(--surface2);
+    box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.9);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .af-cm-row[data-mine='true'] .af-cm-hoverbar { left: auto; right: 8px; }
+  .af-cm-row:hover .af-cm-hoverbar,
+  .af-cm-row:focus-within .af-cm-hoverbar { opacity: 1; pointer-events: auto; }
+}
+.af-cm-hoverbtn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text2); font-size: 15px; cursor: pointer; }
+.af-cm-hoverbtn:hover { background: var(--chip); color: var(--text); }
+
+/* ── Jump to latest, and the one-line toast ── */
+
+.af-cm-jump {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.85);
+  cursor: pointer;
+}
+.af-cm-jump[data-new='true'] { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+
+.af-cm-toast {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  z-index: 4;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ── Message actions: one sheet on every device, anchored over the conversation ── */
+
+.af-cm-sheet-scrim { position: fixed; inset: 0; z-index: 8; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.45); }
+.af-cm-sheet {
+  width: min(100% - 16px, 440px);
+  max-height: calc(100% - 8px);
+  overflow-y: auto;
+  margin: 0 8px 8px;
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  background: var(--surface2);
+  box-shadow: 0 -12px 40px -16px rgba(0, 0, 0, 0.9);
+  overscroll-behavior: contain;
+}
+.af-cm-sheet-preview { display: flex; min-width: 0; gap: 6px; margin: 0 0 10px; font-size: 12px; color: var(--text2); }
+.af-cm-sheet-preview span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
+.af-cm-sheet-react { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.af-cm .af-cm-sheet-emoji[aria-label] { display: grid; place-items: center; min-width: 0; min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: var(--chip); color: var(--text2); font-size: 22px; line-height: 1; cursor: pointer; }
+.af-cm .af-cm-sheet-emoji[data-on='true'] { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.af-cm-sheet-picker { margin-top: 8px; }
+.af-cm-sheet-who { margin-top: 10px; }
+.af-cm-sheet-who ul { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text2); }
+.af-cm-sheet-who li { padding: 3px 0; }
+.af-cm-sheet-label { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.af-cm-sheet-actions { display: flex; flex-direction: column; margin-top: 10px; border-top: 1px solid var(--line); }
+.af-cm-sheet-btn { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.af-cm-sheet-btn:hover { background: var(--chip); }
+.af-cm-sheet-btn[data-danger='true'] { color: #fb7185; }
+.af-cm-sheet-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 44px; font-size: 13px; color: var(--text2); }
+.af-cm-sheet-confirm .af-cm-sheet-btn { border-bottom: 0; }
+.af-cm-sheet-close { width: 100%; min-height: 44px; margin-top: 8px; border: 0; border-radius: 12px; background: var(--chip); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+
+/* ── Editing your own message, in place ── */
+
+.af-cm-edit { display: flex; min-width: min(260px, 62vw); flex-direction: column; gap: 6px; }
+.af-cm-edit-input { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; font-size: 14px; resize: vertical; }
+.af-cm-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.af-cm-edit-btn { min-height: 36px; padding: 0 12px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.af-cm-edit-btn[data-primary='true'] { border-color: transparent; background: var(--bg); color: var(--accent); }
+.af-cm-edit-error { margin: 0; font-size: 12px; }
+
+/* ── Search this chat ── */
+
+.af-cm-search { flex: none; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.af-cm-search-bar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px 0 14px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.af-cm-search-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; outline: none; }
+.af-cm-search-x { display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.af-cm-search-results { max-height: min(240px, 38vh); overflow-y: auto; margin-top: 6px; border-radius: 12px; background: var(--surface2); }
+.af-cm-search-hit { display: flex; width: 100%; min-height: 44px; flex-direction: column; gap: 2px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.af-cm-search-hit:hover { background: var(--chip); }
+.af-cm-search-who { font-size: 11px; font-weight: 700; color: var(--text2); }
+.af-cm-search-who span { font-weight: 500; color: var(--muted); }
+.af-cm-search-text { display: -webkit-box; overflow: hidden; font-size: 13px; line-height: 1.4; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.af-cm-search-hit[data-expanded='true'] .af-cm-search-text { display: block; -webkit-line-clamp: unset; }
+.af-cm-search-note { margin: 0; padding: 8px 12px; font-size: 12px; color: var(--muted); }
+.af-cm-search-toggle { display: inline-flex; align-items: center; gap: 5px; }
+/* Title, mute and search on one row; both controls get a full 44px target. */
+.af-cm-threadhead .af-cm-threadtitle { display: flex; flex: 1; min-width: 0; align-items: center; gap: 2px; }
+.af-cm-threadtitle .af-cm-mute { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; margin-left: 0; font-size: 14px; color: var(--text2); }
+.af-cm-threadtitle .af-cm-mute:first-of-type { margin-left: auto; }
+
+/* ── Photos dropped onto the conversation ── */
+
+.af-cm-convo[data-af-drop='active']::after {
+  content: 'Drop photos to add them';
+  position: absolute;
+  inset: 8px;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: rgba(9, 14, 18, 0.86);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.af-cm .af-chat-uploading { padding: 0 4px; }
+
+/* ── The full-size image viewer (fills the drawer; the drawer is its containing block) ── */
+
+.af-cm-viewer { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; background: rgba(3, 4, 8, 0.94); }
+.af-cm-viewer-img { max-width: 100%; max-height: calc(100% - 64px); border-radius: 8px; object-fit: contain; }
+.af-cm-viewer-bar { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.af-cm-viewer-link { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 700; color: var(--accent); }
+.af-cm-viewer-x { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--surface); color: var(--text); cursor: pointer; }
+
+/*
+ * ── Pickers inside the drawer ──
+ * Eight forced 44px emoji tiles are 352px plus gaps — wider than a phone's drawer,
+ * so the last column hung off the edge. Columns now fit the width at 44px each.
+ */
+.af-cm .af-chat-picker .grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); }
+.af-cm .af-chat-picker .grid > button[aria-label] { min-width: 0; }
+.af-cm .af-chat-picker > * { max-width: 100%; }
+
+/*
+ * ── The on-screen keyboard ──
+ * `useCommsKeyboardInset` sets these only while a keyboard covers the screen:
+ * the panel pins to the VISIBLE region so the composer sits right above the keys.
+ * Higher specificity than every mode/width rule above, on purpose.
+ */
+.af-cm[data-mode][data-keyboard='open'] {
+  top: calc(var(--af-comms-vv-top, 0px) + 6px);
+  bottom: auto;
+  height: calc(var(--af-comms-vh, 100dvh) - 12px);
+  max-height: none;
+  animation: none;
+}
+.af-cm[data-keyboard='open'] .af-cm-foot { display: none; }
+
+/* On phones the text box and search field stay at 16px, or iOS zooms the page on focus. */
+@media (max-width: 720px) {
+  .af-cm-search-input,
+  .af-cm-edit-input { font-size: 16px; }
+}
+
+/* ── The bubble can be dragged: the browser must not scroll or select under the finger ── */
+
+.af-cm-launch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.af-cm-launch[data-dragging='true'] { cursor: grabbing; transform: scale(1.08); box-shadow: 0 24px 48px -16px rgba(34, 211, 238, 0.7); }
+
+/*
+ * ── The composer sizes to its content ──
+ * 🛑 ChatComposer's root is `flex-1`, written for a horizontal home. In the
+ * drawer's COLUMN that made it split the free height 50/50 with the conversation:
+ * a band of dead space under the message box and half the room for messages —
+ * measured in the 390px and 1280px screenshots of this pass before the fix.
+ */
+.af-cm [data-testid='league-chat-composer'] { flex: none; padding: 6px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
+.af-cm[data-keyboard='open'] [data-testid='league-chat-composer'] { padding-bottom: 6px; }
+.af-cm-convo > .af-cm-typing-note { margin: 0; padding: 2px 16px 4px; }
+.af-cm-sheet-preview b { flex: none; white-space: nowrap; }
+
+/*
+ * Six composer tools and send on one row of a phone drawer: 40px wide, still 44px
+ * tall. "Ask Chimmy" is dropped on a narrow PANEL only — the league tab's
+ * "@chimmy — ask the league's AI, publicly" sits right above it doing the same job.
+ */
+.af-cm .af-chat-tool[aria-label] { min-width: 40px; }
+/* Range syntax on purpose: comms-drawer-fit.test.tsx finds the fit pass as the LAST "(max-width: 520px)" block. */
+@container af-cm (width <= 520px) {
+  .af-cm .af-chat-ask-chimmy { display: none; }
+}
+
+/* The strips between the conversation and the box keep the panel's own gutter. */
+.af-cm-convo > .af-cm-seenby { margin: 0; padding: 2px 16px 0; }
+.af-cm-convo > .af-cm-replybar { margin: 4px 12px 0; border-radius: 0 8px 8px 0; align-items: center; font-size: 11.5px; }
+.af-cm .af-cm-convo > .af-cm-replybar .af-cm-replybar-x { min-width: 44px; min-height: 44px; margin: -10px -8px -10px auto; }

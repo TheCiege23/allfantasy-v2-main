@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { MessageSquare } from 'lucide-react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
+import { useDraggableLauncher } from './useDraggableLauncher'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -146,13 +147,32 @@ export function CommsDock({
 
   const close = useCallback(() => setOpen(false), [])
 
+  /*
+   * The bubble can be dragged anywhere along either edge and remembers where, per
+   * device class — see useDraggableLauncher. It is still UNMOUNTED while the
+   * drawer is open, which is what guarantees it never sits on top of the
+   * composer: there is nothing to cover it with.
+   */
+  const launchRef = useRef<HTMLButtonElement | null>(null)
+  const launcher = useDraggableLauncher(launchRef, !open)
+
   return (
     <>
       {!open ? (
         <button
+          ref={launchRef}
           type="button"
           className="af-cm-launch"
-          onClick={() => setOpen(true)}
+          style={launcher.style}
+          data-dragging={launcher.dragging || undefined}
+          data-moved={launcher.moved || undefined}
+          {...launcher.handlers}
+          onClick={() => {
+            /* The click a browser fires at the end of a drag is not a tap. */
+            if (launcher.consumeDragClick()) return
+            setOpen(true)
+          }}
+          title="Open chat — drag to move"
           aria-label={
             mentions > 0
               ? `Open communications (${mentions} mention${mentions === 1 ? '' : 's'}, ${unread} unread)`
