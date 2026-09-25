@@ -250,7 +250,7 @@ describe('buildLeagueDataCoverage — why a row is empty', () => {
 
     expect(row(coverage, 'trades')).toMatchObject({
       status: 'not_published',
-      detail: 'Fleaflicker doesn’t publish trade history for this league.',
+      detail: 'We couldn’t bring across trade history from Fleaflicker for this league yet.',
     })
     /* The claim covers one bucket, not the league. */
     expect(row(coverage, 'drafts').status).toBe('none')

@@ -494,7 +494,7 @@ function emptyDiscoveryMessage(provider: ImportProvider): string {
  * not the same problem — one never resolves on retry, the other reliably does once
  * the pacing backoff below has let the provider cool down — and collapsing both into
  * one "Failed" badge told the user nothing about which retry was worth making. See
- * `mapGateFailureStatus` in app/api/leagues/import/commit/route.ts, which is what
+ * `mapGateFailureStatus` in lib/league-import/commissionerGateResponse.ts, which is what
  * makes `res.status` carry this distinction now instead of a flat 403.
  */
 const BULK_STATUS_LABEL: Record<
@@ -1397,8 +1397,8 @@ export function ImportV4({
        * ⚠ 404 vs 429/503, NOT ONE "FAILED" BUCKET. Keyed on `res.status` rather than
        * `res.code` because `res.status` is the one signal BOTH server-side failure
        * paths set correctly today — the commissioner gate and the normalization
-       * pipeline (see mapGateFailureStatus / mapImportCommitErrorStatus in
-       * app/api/leagues/import/commit/route.ts) — while `code` is only populated on
+       * pipeline (see mapGateFailureStatus in lib/league-import/commissionerGateResponse.ts
+       * and mapImportCommitErrorStatus in app/api/leagues/import/commit/route.ts) — while `code` is only populated on
        * the gate path so far. A 404 means this league id does not exist and never
        * will; a 429/503 means the provider itself is unavailable right now and a
        * retry — especially after the backoff below — is expected to work.

@@ -238,7 +238,9 @@ export function buildLeagueDataCoverage(input: LeagueDataCoverageInput): LeagueD
       return {
         ...base,
         status: 'not_published',
-        detail: `${label} doesn’t publish ${key === 'standings' ? 'standings' : key === 'drafts' ? 'draft results' : 'trade history'} for this league.`,
+        // ⚠ Not "<Platform> doesn't publish…": `missing` only means this import did not bring it
+        // across. See the header of lib/league-import/importCoverageSummary.ts.
+        detail: `We couldn’t bring across ${key === 'standings' ? 'standings' : key === 'drafts' ? 'draft results' : 'trade history'} from ${label} for this league yet.`,
       }
     }
 

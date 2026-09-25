@@ -33,10 +33,12 @@ export type LeagueTabsProps = {
   /**
    * The platform's short name — "Sleeper", "ESPN" — for the absent-view notes.
    *
-   * ⚠ IT NAMES THE PROVIDER FOR THE REASON `importCoverageSummary` ALREADY
-   * STATES IN ITS OWN HEADER: "We couldn't get your trade history" reads as our
-   * failure and invites a support ticket; "Fleaflicker doesn't publish trade
-   * history" is the truth and is something the reader can act on.
+   * ⚠ IT NAMES THE PROVIDER, BUT NO LONGER BLAMES IT. This said "Fleaflicker
+   * doesn't publish trade history", and `importCoverageSummary`'s header records
+   * why that was retired: a `missing` bucket means only that THIS import did not
+   * bring it across — our adapter may not read an endpoint the platform has, or
+   * one call failed. So the note says what is true in every case and still
+   * names where the league came from.
    */
   platform?: string | null
   /**
@@ -175,10 +177,10 @@ export function LeagueTabs({
         be on when you go looking for Trades.
 
         ⚠ AND THE THREE REASONS ARE NOT THE SAME KIND, which is why this is a
-        list and not one sentence. "No week has been scored yet" is temporary
-        and ours; "the platform doesn't publish this" is permanent and theirs.
-        Collapsing them would tell someone to wait for something that is never
-        coming, or to give up on something that arrives on Sunday.
+        list and not one sentence. "No week has been scored yet" arrives on
+        Sunday by itself; "we couldn't bring this across from <Platform>" does
+        not, and may never. Collapsing them would tell someone to wait for
+        something that is not coming, or to give up on something that is.
       */}
       {notes.length > 0 ? (
         <ul className="af-lt-absent" aria-label="Views not available for this league">
@@ -210,7 +212,7 @@ export function describeHiddenTabs({
   platform?: string | null
 }): string[] {
   const notes: string[] = []
-  const label = (platform ?? '').trim() || 'This platform'
+  const label = (platform ?? '').trim() || 'this platform'
 
   /*
    * ⚠ `=== false`, NOT `!hasScoredWeek`. `null` means the signal was not read —
@@ -224,10 +226,10 @@ export function describeHiddenTabs({
     )
   }
   if (!tradeSupported) {
-    notes.push(`${label} doesn’t publish trade history, so there is no Trades view for this league.`)
+    notes.push(`We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
   }
   if (!draftSupported) {
-    notes.push(`${label} doesn’t publish draft results, so there is no Draft HQ view for this league.`)
+    notes.push(`We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
   }
   return notes
 }
