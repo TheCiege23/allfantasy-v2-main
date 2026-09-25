@@ -62,8 +62,14 @@ async function uniqueJoinCode(tx: Tx): Promise<string> {
 }
 
 function leagueModeColumns(formatId: LeagueFormatId): Partial<Prisma.LeagueUncheckedCreateInput> {
+  const isDynasty = formatId === 'dynasty' || formatId === 'devy' || formatId === 'c2c' || formatId === 'salary_cap'
   return {
-    isDynasty: formatId === 'dynasty' || formatId === 'devy' || formatId === 'c2c' || formatId === 'salary_cap',
+    isDynasty,
+    // 🛑 `draftPickTrading` defaults to false, and nothing at create set it — so every native dynasty
+    // league refused future-pick trades (PICK_TRADING_BLOCKED) until a commissioner found the toggle.
+    // A league that holds a rookie draft every year trades its picks by default; the commissioner can
+    // still switch it off.
+    draftPickTrading: isDynasty,
     bestBallMode: formatId === 'best_ball',
     guillotineMode: formatId === 'guillotine',
     survivorMode: formatId === 'survivor',

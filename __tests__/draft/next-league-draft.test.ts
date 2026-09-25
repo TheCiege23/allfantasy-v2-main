@@ -20,12 +20,16 @@ const m = vi.hoisted(() => ({
   ensureShell: vi.fn(),
   carry: vi.fn(),
   logAction: vi.fn(),
+  pickFindMany: vi.fn(),
+  pickUpdateMany: vi.fn(),
+  draftSessionUpdate: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => {
   const tx = {
-    draftSession: { create: m.draftSessionCreate },
+    draftSession: { create: m.draftSessionCreate, update: m.draftSessionUpdate },
     league: { update: m.leagueUpdate },
+    futureDraftPick: { findMany: m.pickFindMany, updateMany: m.pickUpdateMany },
   }
   return {
     prisma: {
@@ -121,6 +125,9 @@ beforeEach(() => {
     matchups: [{ homeRosterId: 's-a', awayRosterId: 's-c', winnerRosterId: 's-a', nextMatchupId: null }],
   })
   m.keeperFindMany.mockResolvedValue([])
+  m.pickFindMany.mockResolvedValue([])
+  m.pickUpdateMany.mockResolvedValue({ count: 0 })
+  m.draftSessionUpdate.mockResolvedValue({})
 })
 
 describe('rookie order', () => {
@@ -216,6 +223,46 @@ describe('createNextLeagueDraft', () => {
     expect(m.leagueUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ lifecycleState: 'pre_draft' }) }),
     )
+  })
+
+  it('native dynasty: a future pick traded last season is on the new owner’s clock', async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ platform: 'manual' }))
+    m.seasonFindMany.mockResolvedValue([{ id: 'season-1', season: 2026, status: 'complete' }])
+    m.ensureShell.mockResolvedValue({ id: 'season-2', season: 2027 })
+    m.redraftRosterFindMany.mockResolvedValue(lastSeason)
+    m.dynastyFindUnique.mockResolvedValue({ rookieDraftRounds: 4, rookieDraftType: 'linear', rookiePickOrderMethod: 'reverse_standings' })
+    // Team B traded its 2027 1st to Team A.
+    m.pickFindMany.mockResolvedValue([{ id: 'fp-1', round: 1, originalRosterId: 'R-b', currentOwnerId: 'R-a' }])
+
+    const r = await createNextLeagueDraft('L1', 'commish')
+
+    expect(r).toMatchObject({ ok: true, tradedPicksApplied: 1 })
+    expect(m.pickFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { leagueId: 'L1', pickSeason: 2027, status: 'active' } }),
+    )
+    expect(m.draftSessionUpdate).toHaveBeenCalledWith({
+      where: { id: 'draft-2' },
+      data: {
+        tradedPicks: [expect.objectContaining({ round: 1, originalRosterId: 'R-b', newRosterId: 'R-a', season: '2027' })],
+      },
+    })
+    expect(m.pickUpdateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['fp-1'] } },
+      data: expect.objectContaining({ status: 'used', usedInDraftSessionId: 'draft-2' }),
+    })
+  })
+
+  it('an imported league’s pick rows are never read (they are provider team ids)', async () => {
+    m.leagueFindUnique.mockResolvedValue(league({ platform: 'sleeper' }))
+    m.seasonFindMany.mockResolvedValue([{ id: 'season-1', season: 2026, status: 'complete' }])
+    m.ensureShell.mockResolvedValue({ id: 'season-2', season: 2027 })
+    m.redraftRosterFindMany.mockResolvedValue(lastSeason)
+
+    const r = await createNextLeagueDraft('L1', 'commish')
+
+    expect(r).toMatchObject({ ok: true, tradedPicksApplied: 0 })
+    expect(m.pickFindMany).not.toHaveBeenCalled()
+    expect(m.pickUpdateMany).not.toHaveBeenCalled()
   })
 
   it('keeper: a full draft with last draft settings and every locked keeper on the board', async () => {

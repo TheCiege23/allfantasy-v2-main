@@ -359,9 +359,13 @@ describe('createCanonicalLeagueInTransaction contract', () => {
       }),
     )
 
-    if (specialty === 'dynasty' || specialty === 'devy' || specialty === 'c2c') {
+    const dynastyFamily = specialty === 'dynasty' || specialty === 'devy' || specialty === 'c2c'
+    if (dynastyFamily) {
       expect(tx.dynastyLeagueConfig.upsert).toHaveBeenCalledTimes(1)
     }
+    // A league that holds a rookie draft every year trades its picks by default; the column's own
+    // default (false) left every native dynasty league refusing them until someone found the toggle.
+    expect(tx.league.create.mock.calls[0]?.[0].data.draftPickTrading).toBe(dynastyFamily)
     if (specialty === 'idp') {
       expect(tx.idpLeagueConfig.upsert).toHaveBeenCalledTimes(1)
     }
