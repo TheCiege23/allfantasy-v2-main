@@ -4,6 +4,7 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { prisma } from '@/lib/prisma'
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from '@/lib/chat-core'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
+import { resolveMentionedMemberIds } from '@/lib/chat-core/resolveMentionTargets'
 
 export async function GET() {
   return NextResponse.json({ status: 'ok', mentions: [] })
@@ -40,15 +41,40 @@ export async function POST(req: NextRequest) {
     return lower !== 'all' && lower !== 'global' && lower !== 'chimmy'
   })
 
-  if (isLeagueVirtualRoom(threadId)) {
-    const leagueId = getLeagueIdFromVirtualRoom(threadId)
+  /*
+   * 🛑 WHO A MENTION CAN REACH: the members of the room the message was posted in, never the whole
+   * platform. This route used to look each @name up across every AllFantasy account, so "@mike" in
+   * any chat notified — and emailed — every account called mike (owner's call 2026-09-25: "fix both
+   * security holes now"). The room's members are resolved once and every target must be one of them.
+   */
+  const isLeague = isLeagueVirtualRoom(threadId)
+  const leagueId = isLeague ? getLeagueIdFromVirtualRoom(threadId) : null
+  let memberIds: string[] = []
+  /** The league chat route already announced @all for this message (as a league announcement). */
+  let allAlreadyAnnounced = false
+
+  if (isLeague) {
     if (!leagueId) return NextResponse.json({ error: 'Invalid league room' }, { status: 400 })
     const leagueMessage = await (prisma as any).leagueChatMessage.findFirst({
       where: { id: messageId, leagueId, userId: user.appUserId },
-      select: { id: true },
+      select: { id: true, messageSubtype: true },
     })
     if (!leagueMessage) {
       return NextResponse.json({ error: 'Message not found or not owned by user' }, { status: 403 })
+    }
+    allAlreadyAnnounced = leagueMessage.messageSubtype === 'at_all'
+    const bracketMember = await (prisma as any).bracketLeagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId: user.appUserId } },
+      select: { id: true },
+    })
+    if (bracketMember) {
+      const rows = await (prisma as any).bracketLeagueMember.findMany({
+        where: { leagueId },
+        select: { userId: true },
+      })
+      memberIds = (rows as Array<{ userId: string }>).map((r) => r.userId)
+    } else {
+      memberIds = await getLeagueMemberUserIds(leagueId)
     }
   } else {
     const member = await (prisma as any).platformChatThreadMember.findFirst({
@@ -63,68 +89,52 @@ export async function POST(req: NextRequest) {
     if (!ownMessage) {
       return NextResponse.json({ error: 'Message not found or not owned by user' }, { status: 403 })
     }
+    const rows = await (prisma as any).platformChatThreadMember.findMany({
+      where: { threadId, isBlocked: false },
+      select: { userId: true },
+    })
+    memberIds = (rows as Array<{ userId: string }>).map((r) => r.userId)
   }
 
   const sender = await (prisma as any).appUser.findUnique({
     where: { id: user.appUserId },
-    select: { displayName: true, username: true, email: true },
+    select: { displayName: true, username: true },
   })
-  const senderName = sender?.displayName || sender?.username || sender?.email || 'Someone'
+  // Never the sender's email: this text goes into other people's bell, push and inbox.
+  const senderName = sender?.displayName || sender?.username || 'Someone'
 
-  const userIds = new Set<string>()
+  const named = await resolveMentionedMemberIds({
+    tokens: userMentionTokens,
+    memberIds,
+    senderUserId: user.appUserId,
+  })
+  const userIds = new Set<string>(named)
 
-  if (userMentionTokens.length > 0) {
-    const users = await (prisma as any).appUser.findMany({
-      where: {
-        OR: userMentionTokens.map((username) => ({
-          username: { equals: username, mode: 'insensitive' as const },
-        })),
-        id: { not: user.appUserId },
-      },
-      select: { id: true },
-    })
-    for (const row of users as Array<{ id: string }>) {
-      userIds.add(row.id)
+  /*
+   * @all. In a league room the league chat route has already told every member (a "League
+   * announcements" notification, when it stored the message as `at_all`); adding a "Chat mentions"
+   * notification here sent everyone two of each — two emails, two pushes. Only rooms nothing else
+   * announced (DMs, huddles, bracket pools) are expanded here.
+   */
+  if (hasAllMention && !allAlreadyAnnounced) {
+    for (const id of memberIds) {
+      if (id !== user.appUserId) userIds.add(id)
     }
   }
 
-  if (hasAllMention) {
-    if (isLeagueVirtualRoom(threadId)) {
-      const leagueId = getLeagueIdFromVirtualRoom(threadId)
-      if (!leagueId) return NextResponse.json({ error: 'Invalid league room' }, { status: 400 })
-      const bracketMember = await (prisma as any).bracketLeagueMember.findUnique({
-        where: { leagueId_userId: { leagueId, userId: user.appUserId } },
-        select: { id: true },
-      })
-      if (bracketMember) {
-        const rows = await (prisma as any).bracketLeagueMember.findMany({
-          where: { leagueId },
-          select: { userId: true },
-        })
-        for (const row of rows as Array<{ userId: string }>) {
-          if (row.userId !== user.appUserId) userIds.add(row.userId)
-        }
-      } else {
-        const ids = await getLeagueMemberUserIds(leagueId)
-        for (const id of ids) {
-          if (id !== user.appUserId) userIds.add(id)
-        }
-      }
-    } else {
-      const rows = await (prisma as any).platformChatThreadMember.findMany({
-        where: { threadId, isBlocked: false },
-        select: { userId: true },
-      })
-      for (const row of rows as Array<{ userId: string }>) {
-        if (row.userId !== user.appUserId) userIds.add(row.userId)
-      }
-    }
+  /*
+   * Record who the message named, so the launcher's "@" badge can count it: getChatUnread counts
+   * DM/huddle mentions from `mentionedUserIds`, which nothing ever wrote — so the "@" never lit.
+   * League messages are stored with ids by the league chat route itself.
+   */
+  if (!isLeague && userIds.size > 0) {
+    await (prisma as any).platformChatMessage
+      .update({ where: { id: messageId }, data: { mentionedUserIds: Array.from(userIds) } })
+      .catch(() => {})
   }
 
   const targetIds = Array.from(userIds)
   if (targetIds.length > 0) {
-    const isLeague = isLeagueVirtualRoom(threadId)
-    const leagueId = isLeague ? getLeagueIdFromVirtualRoom(threadId) : null
     const actionHref = isLeague && leagueId
       ? `/league/${encodeURIComponent(leagueId)}`
       : `/messages?thread=${encodeURIComponent(threadId)}&message=${encodeURIComponent(messageId)}`
@@ -142,6 +152,8 @@ export async function POST(req: NextRequest) {
       actionHref,
       actionLabel: isLeague ? 'Open league chat' : 'Open mention',
       meta: { threadId, messageId, chatThreadId: threadId, leagueId: leagueId ?? undefined },
+      // A retried request must not stack a second bell row per person.
+      dedupePrefix: `mention:${messageId}`,
     })
   }
 

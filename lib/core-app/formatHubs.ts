@@ -730,10 +730,22 @@ export async function readMentions(
   inFormat: Array<Pick<MemberLeague, 'id' | 'name'>>,
 ): Promise<HubMention[]> {
   const nameById = new Map(inFormat.map((m) => [m.id, m.name?.trim() || 'Unnamed league']))
+  /*
+   * Rows written before 2026-09-25 hold the typed @USERNAME, not the user id (the league chat route
+   * stored the wrong thing), so a search by id alone found nothing and this list was always empty.
+   * New rows hold ids; old rows are matched by the reader's username as typed, in either case.
+   */
+  let legacyNames: string[] = []
+  try {
+    const me = await prisma.appUser.findUnique({ where: { id: userId }, select: { username: true } })
+    if (me?.username) legacyNames = Array.from(new Set([me.username, me.username.toLowerCase()]))
+  } catch {
+    // Without the name, old rows are simply not matched; new rows (ids) still are.
+  }
   const rows = await prisma.leagueChatMessage.findMany({
     where: {
       leagueId: { in: inFormat.map((m) => m.id) },
-      mentionedUserIds: { has: userId },
+      AND: [{ OR: [{ mentionedUserIds: { has: userId } }, ...legacyNames.map((n) => ({ mentionedUserIds: { has: n } }))] }],
       // A private @chimmy reply is only ever the asker's.
       OR: [{ isPrivate: false }, { visibleToUserId: userId }],
     },
