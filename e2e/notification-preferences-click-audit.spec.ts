@@ -215,9 +215,9 @@ test.describe("@db @notifications notification preferences click audit", () => {
     await globalToggle.uncheck()
 
     // Category expand/collapse and toggle wiring. `lineup_reminders` was hidden
-    // while nothing sent it; Chimmy's lineup check does now, so its toggle is
-    // back under the name that says what it governs.
-    await expect(page.getByRole("button", { name: /Chimmy's lineup check before kickoff/i }).first()).toBeVisible()
+    // while nothing sent it; Chimmy's weekly lineup and waiver checks do now, so
+    // its toggle is back under the name that says what it governs.
+    await expect(page.getByRole("button", { name: /Chimmy's weekly lineup & waiver checks/i }).first()).toBeVisible()
     const matchupHeader = page.getByRole("button", { name: /Matchup results/i }).first()
     if ((await matchupHeader.getAttribute("aria-expanded")) !== "true") {
       await matchupHeader.click()

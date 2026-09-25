@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   loadPrefs: vi.fn(),
   dispatch: vi.fn(),
   runLineupCheck: vi.fn(),
+  runWaiverCheck: vi.fn(),
   recordSyncJobRun: vi.fn(),
   findFirst: vi.fn(),
 }))
@@ -31,6 +32,9 @@ vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotificat
 vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => []) }))
 vi.mock('@/lib/notifications/pushGate', () => ({ decidePushForUser: vi.fn(async () => ({ allowed: false, reason: 'test' })) }))
 vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLineupCheck }))
+// Mocked, not left real: unmocked, it ran against the stub prisma above and failed into
+// `{ reason: 'error' }` on every test — green, and exercising nothing.
+vi.mock('@/lib/chimmy-alerts/runWaiverCheck', () => ({ runWaiverCheck: h.runWaiverCheck }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
   recordSyncJobRun: h.recordSyncJobRun,
@@ -39,10 +43,10 @@ vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
 import { GET } from '@/app/api/cron/alert-sweep/route'
 
 /**
- * The injured-starter sweep and Chimmy's lineup check share this route. Two things are pinned:
- * the Settings panel's Chimmy "Lineup" mute reaches the sweep (it used to reach only the alert
- * engine, which the sweep does not run), and the lineup check rides along without ever being able
- * to break the sweep.
+ * The injured-starter sweep and Chimmy's two weekly checks share this route. Pinned: the Settings
+ * panel's Chimmy "Lineup" mute reaches the sweep (it used to reach only the alert engine, which the
+ * sweep does not run), and the lineup and waiver checks ride along without ever being able to break
+ * the sweep — or each other.
  */
 
 const alert = (leagueId: string, player: string, urgencySignal: number) => ({
@@ -66,6 +70,7 @@ beforeEach(() => {
   h.findFirst.mockResolvedValue(null)
   h.dispatch.mockResolvedValue(undefined)
   h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
+  h.runWaiverCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, firstKickoff: null })
 })
 
 describe('alert sweep — Chimmy alert controls', () => {
@@ -162,6 +167,76 @@ describe('alert sweep — the lineup check rides along', () => {
     await call('userId=u1')
     h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
     await call('')
+    expect(h.recordSyncJobRun).not.toHaveBeenCalled()
+  })
+})
+
+describe('alert sweep — the waiver check rides along too', () => {
+  const ranWaivers = {
+    ran: true,
+    dryRun: false,
+    week: { season: '2026', week: 4 },
+    firstKickoff: '2026-10-02T00:15:00.000Z',
+    users: 5,
+    outcomes: { sent: 3, no_picks: 2 },
+    notReached: 0,
+    picks: 4,
+    previews: [],
+    errors: [],
+  }
+
+  it('runs after the lineup check with the same scope, and reports under `waiverCheck`', async () => {
+    const body = await (await call('userId=u1&dryRun=1')).json()
+    expect(h.runWaiverCheck).toHaveBeenCalledWith({ dryRun: true, force: false, userId: 'u1', budgetMs: expect.any(Number) })
+    expect(h.runWaiverCheck.mock.calls[0]![0].budgetMs).toBeLessThanOrEqual(90_000)
+    expect(h.runLineupCheck.mock.invocationCallOrder[0]!).toBeLessThan(h.runWaiverCheck.mock.invocationCallOrder[0]!)
+    expect(body.waiverCheck).toEqual({ ran: false, reason: 'early', week: null, firstKickoff: null })
+  })
+
+  it('has its own force and off switches, independent of the lineup check', async () => {
+    await call('userId=u1&waiverCheck=force')
+    expect(h.runWaiverCheck).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
+    expect(h.runLineupCheck).toHaveBeenLastCalledWith(expect.objectContaining({ force: false }))
+    h.runWaiverCheck.mockClear()
+    h.runLineupCheck.mockClear()
+    const body = await (await call('userId=u1&waiverCheck=off')).json()
+    expect(h.runWaiverCheck).not.toHaveBeenCalled()
+    expect(h.runLineupCheck).toHaveBeenCalledTimes(1)
+    expect(body.waiverCheck).toEqual({ ran: false, reason: 'disabled' })
+  })
+
+  it('🛑 a lineup check that throws does not stop the waiver check, and vice versa', async () => {
+    h.runLineupCheck.mockRejectedValue(new Error('optimizer exploded'))
+    h.runWaiverCheck.mockResolvedValue(ranWaivers)
+    let body = await (await call('userId=u1')).json()
+    expect(body.lineupCheck).toMatchObject({ ran: false, reason: 'error' })
+    expect(body.waiverCheck).toEqual(ranWaivers)
+
+    h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
+    h.runWaiverCheck.mockRejectedValue(new Error('board exploded'))
+    const res = await call('userId=u1')
+    body = await res.json()
+    expect(res.status).toBe(200)
+    expect(h.dispatch).toHaveBeenCalled()
+    expect(body.waiverCheck).toEqual({ ran: false, reason: 'error', error: 'board exploded' })
+  })
+
+  it('records `cron-chimmy-waiver-check` only on a scheduled run that ran for users', async () => {
+    h.runWaiverCheck.mockResolvedValue(ranWaivers)
+    await call('')
+    expect(h.recordSyncJobRun).toHaveBeenCalledTimes(1)
+    expect(h.recordSyncJobRun.mock.calls[0]![0]).toMatchObject({ jobName: 'cron-chimmy-waiver-check' })
+    expect(h.recordSyncJobRun.mock.calls[0]![1]).toMatchObject({
+      rowsRead: 5,
+      rowsWritten: 3,
+      status: 'success',
+      metadata: expect.objectContaining({ picks: 4 }),
+    })
+
+    h.recordSyncJobRun.mockClear()
+    await call('userId=u1')
+    await call('dryRun=1')
+    await call('waiverCheck=force')
     expect(h.recordSyncJobRun).not.toHaveBeenCalled()
   })
 })

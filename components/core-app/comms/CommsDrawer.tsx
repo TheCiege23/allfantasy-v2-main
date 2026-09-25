@@ -26,6 +26,7 @@ import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyRichText } from './ChimmyRichText'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
+import { ChimmyAnswerRating } from './ChimmyAnswerRating'
 import {
   ChimmyAnswerModeToggle,
   answeredMode,
@@ -36,6 +37,8 @@ import {
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import { readReadyScenario, type ReadyChimmyScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { readFollowUps } from '@/lib/chimmy/followUps'
+import { drawerFeedbackSurface, type ChimmyFeedbackValue } from '@/lib/chimmy-chat/feedback-events'
+import { questionEntry } from '@/lib/chimmy-context/telemetry/questionEntry'
 import {
   describeAllowanceNote,
   describeAnswerAllowance,
@@ -290,6 +293,15 @@ type ChatTurn = {
   followUps?: string[] | null
   /** What this answer did to the plan's included answers, when the caller's plan includes Chimmy. */
   plan?: ChimmyPlanAllowanceView | null
+  /**
+   * Set only on a delivered answer — never on a refusal, a carried turn or an error — and it is
+   * what makes the thumbs render. Unique, because turn ids repeat across scopes and sessions.
+   */
+  answerId?: string | null
+  /** The tools the answer used, from the route's `meta.toolsUsed`. What a rating is about. */
+  tools?: string[] | null
+  /** The thumbs the user gave this answer, kept so reopening the drawer shows it. */
+  rating?: ChimmyFeedbackValue | null
 }
 
 /** How many earlier turns follow the user into another scope. */
@@ -476,6 +488,8 @@ type ChimmyEnvelope = {
     syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
     /** Validated by `readFollowUps` before anything renders it. */
     followUps?: unknown
+    /** The tools a tool-loop answer used, in order. Validated by `readToolsUsed`. */
+    toolsUsed?: unknown
     /** Validated by `readPlanAllowanceView` before anything renders it. */
     planAllowance?: unknown
   }
@@ -516,6 +530,18 @@ function readEvidence(payload: ChimmyEnvelope): ChimmyEvidence | null {
  * The advice an answer put on file, or null. Only an `add` with a key and a name is kept — a
  * half-shaped object would render a button that sends an unusable vote.
  */
+/** The tool names an answer reports, or an empty list. Anything that is not a short name is dropped. */
+export function readToolsUsed(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((t): t is string => typeof t === 'string' && /^[\w.:-]{1,64}$/.test(t)).slice(0, 12)
+}
+
+function newAnswerId(): string {
+  const c = typeof globalThis !== 'undefined' ? (globalThis as { crypto?: { randomUUID?: () => string } }).crypto : undefined
+  if (c?.randomUUID) return c.randomUUID()
+  return `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export function readAdvice(payload: ChimmyEnvelope): ChimmyAdviceRef | null {
   const a = payload.meta?.advice
   if (!a || a.type !== 'add') return null
@@ -876,6 +902,8 @@ function ChimmyPanel({
             mode: answeredMode(payload.meta),
             followUps: readFollowUps(payload.meta?.followUps),
             plan: answeredPlan,
+            answerId: newAnswerId(),
+            tools: readToolsUsed(payload.meta?.toolsUsed),
           },
         ])
         if (answeredPlan) setPlanStatus(answeredPlan)
@@ -1126,6 +1154,23 @@ function ChimmyPanel({
                 <span className="af-cm-cost af-cm-plan af-num" data-included={t.plan.included ? 'true' : 'false'}>
                   {describeAnswerAllowance(t.plan)}
                 </span>
+              ) : null}
+
+              {/*
+                Thumbs up / down — delivered answers only. Tagged with the tools the answer used
+                and the screen it was asked from, so a rating joins to the question it is about.
+              */}
+              {t.role === 'chimmy' && t.answerId ? (
+                <ChimmyAnswerRating
+                  answerId={t.answerId}
+                  rating={t.rating ?? null}
+                  leagueId={(t.grounding?.grounded === true ? t.grounding.leagueId : null) ?? scopeId ?? null}
+                  surface={drawerFeedbackSurface(pageSurface, Boolean(scopeId))}
+                  mode={t.mode ?? answerMode}
+                  entry={questionEntry({ coreSurface: pageSurface })}
+                  tools={t.tools ?? []}
+                  onRated={(rating) => setTurns((all) => all.map((x) => (x.id === t.id ? { ...x, rating } : x)))}
+                />
               ) : null}
 
               {/*

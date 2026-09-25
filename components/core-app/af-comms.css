@@ -646,6 +646,46 @@
 .af-cm-follow-note[data-tone='bad'] { color: var(--warn); }
 
 /*
+ * Thumbs up / down under a delivered answer (ChimmyAnswerRating.tsx). Quieter than "Did it":
+ * icon-only, no border even when chosen. Square at 44px because the drawer's labelled-icon-button
+ * rule (`.af-cm :is(button[aria-label], …)`) already makes them 44px tall for a thumb on a phone.
+ */
+.af-cm-rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  margin-left: -10px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-cm-rate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.af-cm-rate-btn:hover { color: var(--text2); background: var(--chip); }
+.af-cm-rate-btn:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+
+.af-cm-rate-btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-cm-rate-note { margin-left: 4px; }
+
+/*
  * Players named in an answer. The headshot sits ON TOP of the initials, so a
  * dead CDN URL (the img hides itself on error) reveals the fallback rather than
  * a broken-image glyph — a face that fails must degrade to a letter, never to a

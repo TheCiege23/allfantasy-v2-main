@@ -181,6 +181,9 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
         ? (meta.providerStatus as Record<string, string>)
         : undefined,
     recommendedTool: typeof meta.recommendedTool === "string" ? meta.recommendedTool : undefined,
+    toolsUsed: Array.isArray(meta.toolsUsed)
+      ? meta.toolsUsed.filter((t): t is string => typeof t === "string" && t.length > 0).slice(0, 12)
+      : undefined,
     orchestration:
       meta.orchestration && typeof meta.orchestration === "object" && !Array.isArray(meta.orchestration)
         ? (meta.orchestration as ChimmyMessageMeta["orchestration"])

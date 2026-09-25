@@ -4,6 +4,7 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { preferenceMuteReason, type ChimmyAlertPreferenceMuteReason } from './ChimmyAlertSuppressionEngine'
+import { chimmyChatHref, type ProactiveFrom } from './proactiveLinks'
 import type { ChimmyAlertUserPreferences } from './types'
 
 /**
@@ -201,10 +202,13 @@ export function lineupCheckDedupeKey(season: string | number, week: number): str
   return `chimmy-lineup-check:${season}-w${week}`
 }
 
-/** Opens Chimmy in that league with the lineup question already typed — one tap to send. */
-export function lineupCheckHref(leagueId: string): string {
-  const q = new URLSearchParams({ prompt: LINEUP_CHECK_PROMPT, leagueId, sport: 'NFL' })
-  return `/chimmy/chat?${q.toString()}`
+/**
+ * Opens Chimmy in that league with the lineup question already typed — one tap to send — tagged
+ * with where it was opened from (bell/phone by default, the email passes its own), so an open can
+ * be counted: see `proactiveLinks.ts`.
+ */
+export function lineupCheckHref(leagueId: string, from: ProactiveFrom = 'lineup_check'): string {
+  return chimmyChatHref({ prompt: LINEUP_CHECK_PROMPT, leagueId, from })
 }
 
 /* ── What it says ─────────────────────────────────────────────────────────────────────────────── */
@@ -289,7 +293,7 @@ export function renderLineupCheck(
       const lines = ordered(l.issues)
         .map((i) => `<div style="margin:0 0 6px 0;color:#d4d4d8">• ${escapeHtml(describeIssue(i, l.week))}</div>`)
         .join('')
-      const ask = `<a href="${escapeHtml(`${base}${lineupCheckHref(l.leagueId)}`)}" style="color:#ffffff;font-weight:700;text-decoration:underline">Ask Chimmy to set this lineup →</a>`
+      const ask = `<a href="${escapeHtml(`${base}${lineupCheckHref(l.leagueId, 'lineup_check_email')}`)}" style="color:#ffffff;font-weight:700;text-decoration:underline">Ask Chimmy to set this lineup →</a>`
       return `<div style="margin:0 0 16px 0">
   <div style="font-size:15px;font-weight:800;color:#ffffff;margin:0 0 6px 0">${escapeHtml(l.leagueName.trim() || 'Your league')}</div>
   ${lines}
@@ -306,7 +310,7 @@ export function renderLineupCheck(
         : `I found ${fixes} things to fix before kickoff`,
     sub: "Your lineups against this week's projections, scored under each league's own rules. Players whose games have started are left alone.",
     bodyHtml: blocks,
-    cta: { href: `${base}${actionHref}`, label: 'Open Chimmy' },
+    cta: { href: `${base}${lineupCheckHref(withIssues[0]!.leagueId, 'lineup_check_email')}`, label: 'Open Chimmy' },
     baseUrl: opts.baseUrl ?? null,
   })
 

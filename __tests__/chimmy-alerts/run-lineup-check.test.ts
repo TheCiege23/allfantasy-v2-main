@@ -250,6 +250,16 @@ describe('runLineupCheck', () => {
     expect(sent.meta).toMatchObject({ leagueIds: ['L1', 'L2'], week: 3, class: 'lineup' })
   })
 
+  it('🛑 names one REAL league once — two AF copies of the same Sleeper league are one line, not two', async () => {
+    const copy = { platform: 'sleeper', platformLeagueId: 'S-1', season: 2026 }
+    deps.loadAudience = vi.fn(async () => new Map([['u1', [league('B', copy), league('A', copy), league('C')]]]))
+    await runLineupCheck({}, deps)
+    const sent = vi.mocked(deps.dispatch).mock.calls[0]![0]
+    // A tie on issues keeps the lower id, every time; the manual league C is its own league.
+    expect(sent.meta).toMatchObject({ leagueIds: ['A', 'C'] })
+    expect(sent.title).toBe("Chimmy's lineup check: 2 fixes across 2 leagues")
+  })
+
   it('stops starting new users past its budget and says how many it did not reach', async () => {
     deps.loadAudience = vi.fn(async () => new Map([['u1', [league('L1')]], ['u2', [league('L2')]]]))
     const run = await runLineupCheck({ budgetMs: 0 }, deps)
