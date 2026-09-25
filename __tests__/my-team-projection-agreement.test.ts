@@ -55,7 +55,7 @@ vi.mock('@/lib/prisma', () => {
   return { prisma, default: prisma }
 })
 
-const live = vi.hoisted(() => ({ starters: [] as string[] }))
+const live = vi.hoisted(() => ({ starters: [] as string[], weekStarters: null as Record<string, string[]> | null }))
 
 // Sleeper's live weekly lineup — what the header and the roster rows show.
 vi.mock('@/lib/core-app/currentSleeperRoster', () => ({
@@ -64,6 +64,7 @@ vi.mock('@/lib/core-app/currentSleeperRoster', () => ({
     starters: [...live.starters],
     reserve: [],
     taxi: [],
+    weekStarters: live.weekStarters,
     verification: { checkedAt: '2026-09-25T12:00:00.000Z', source: 'Sleeper', week: 3, slots: ['QB', 'RB', 'WR'] },
   })),
 }))
@@ -89,6 +90,7 @@ const RECEPTIONS: Record<string, number> = {
   o1: 10,
   o2: 15, // OUT
   o3: 8,
+  oLive: 20, // in the opponent's live lineup only
 }
 const OUT = new Set(['rb1', 'o2'])
 const nameOf = (id: string) => `Player ${id}`
@@ -180,6 +182,7 @@ describe('My Team — the header and the projected-matchup card agree', () => {
 
   beforeEach(() => {
     live.starters = ['qb1', 'rb1', 'wrLive']
+    live.weekStarters = null
     answerDb()
   })
 
@@ -218,5 +221,14 @@ describe('My Team — the header and the projected-matchup card agree', () => {
     const { header, card } = await load()
     expect(header.afTotal).toBe(45)
     expect(card.you.projected).toBe(45)
+  })
+
+  it("🛑 the opponent is priced from THEIR live lineup too, not the row the last sync stored", async () => {
+    // Stored: o1, o2 (OUT), o3. Live this week they benched o2 and started oLive.
+    live.weekStarters = { '4': ['qb1', 'rb1', 'wrLive'], '9': ['o1', 'oLive', 'o3'] }
+    const { card } = await load()
+    // o1 10 + oLive 20 + o3 8. The stored lineup would say 18.
+    expect(card.opponent?.projected).toBe(38)
+    expect(card.opponent?.projectedFrom).toBe(3)
   })
 })

@@ -371,6 +371,42 @@ describe('getNextMatchup with a caller-supplied lineup and pricer', () => {
     expect(mocks.lookupProjections).not.toHaveBeenCalled()
   })
 
+  it("🛑 prices the OPPONENT from the live lineup for this week, not the stored row", async () => {
+    const seen: Array<[string, readonly string[]]> = []
+    const priceLineups = vi.fn(async (lineups: ReadonlyMap<string, readonly string[]>) => {
+      seen.push(...lineups)
+      return new Map([...lineups].map(([rid, ids]) => [rid, { projected: ids.length * 7, projectedFrom: ids.length }]))
+    })
+    const m = await runWith({
+      myStarters: ['live-a'],
+      liveStarters: { week: 1, byRosterId: { '3': ['ignored-mine'], '7': ['d', '0', 'live-f', 'live-g'] } },
+      priceLineups,
+    })
+
+    // Yours is still the lineup the caller passed; theirs is the live one, holes dropped.
+    expect(seen).toEqual([
+      ['3', ['live-a']],
+      ['7', ['d', 'live-f', 'live-g']],
+    ])
+    expect(m?.opponent?.projected).toBe(21)
+    expect(m?.opponent?.starterCount).toBe(3)
+  })
+
+  it('a live lineup for ANOTHER week is ignored, and a roster it does not cover keeps the stored row', async () => {
+    const seen: Array<[string, readonly string[]]> = []
+    const priceLineups = vi.fn(async (lineups: ReadonlyMap<string, readonly string[]>) => {
+      seen.push(...lineups)
+      return new Map([...lineups].map(([rid, ids]) => [rid, { projected: ids.length, projectedFrom: ids.length }]))
+    })
+    await runWith({ liveStarters: { week: 2, byRosterId: { '7': ['next-week'] } }, priceLineups })
+    await runWith({ liveStarters: { week: 1, byRosterId: { '99': ['someone-else'] } }, priceLineups })
+
+    expect(seen.filter(([rid]) => rid === '7')).toEqual([
+      ['7', ['d', 'e']],
+      ['7', ['d', 'e']],
+    ])
+  })
+
   it('a pricer that throws leaves both sides unpriced rather than taking the card down', async () => {
     const m = await runWith({ priceLineups: async () => { throw new Error('boom') } })
     expect(m?.you.projected).toBeNull()

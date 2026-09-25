@@ -1400,6 +1400,11 @@ export async function getMyTeamData(
         projectionWeek,
         // The lineup the header and the roster rows show — Sleeper's live one where we have it.
         myStarters: projectedIds,
+        // And the opponent's, from the same Sleeper read; ignored unless it is for this week.
+        liveStarters:
+          liveRoster?.weekStarters && liveRoster.verification.week != null
+            ? { week: liveRoster.verification.week, byRosterId: liveRoster.weekStarters }
+            : null,
         priceLineups,
       }).catch(() => null)
     : null
