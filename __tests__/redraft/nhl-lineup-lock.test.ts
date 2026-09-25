@@ -97,6 +97,84 @@ describe('NHL lineup lock', () => {
   })
 })
 
+/*
+ * 🛑 NBA PLAYERS NEVER LOCKED EITHER. The lock keys on DATE_WINDOWED_SPORTS, and NBA was not in it,
+ * so an NBA manager got the same free swap NHL had: start a player after his games were played.
+ * NBA 2026 opens Tuesday 2026-10-20; week 1 is Oct 20 – Oct 26 in Eastern days.
+ */
+const NBA_GAMES: Game[] = [
+  // Preseason, Fri Oct 16 — before the opener. Must lock nobody for week 1.
+  { homeTeam: 'Boston Celtics', awayTeam: 'Toronto Raptors', startTime: new Date('2026-10-16T23:30:00.000Z'), status: 'FT' },
+  // Opening night, Tue Oct 20: 7:30pm ET, and a 10pm ET tip whose UTC instant is already Oct 21.
+  { homeTeam: 'Oklahoma City Thunder', awayTeam: 'Houston Rockets', startTime: new Date('2026-10-20T23:30:00.000Z'), status: 'FT' },
+  { homeTeam: 'Los Angeles Lakers', awayTeam: 'Golden State Warriors', startTime: new Date('2026-10-21T02:00:00.000Z'), status: 'FT' },
+  // Fri Oct 23, 7pm ET.
+  { homeTeam: 'Philadelphia 76ers', awayTeam: 'Portland Trail Blazers', startTime: new Date('2026-10-23T23:00:00.000Z'), status: 'NS' },
+  // Week 2.
+  { homeTeam: 'Boston Celtics', awayTeam: 'New York Knicks', startTime: new Date('2026-10-27T23:30:00.000Z'), status: 'NS' },
+]
+
+const NBA_PLAYERS = [
+  { playerId: 'sga', team: 'Oklahoma City Thunder' },
+  { playerId: 'lebron', team: 'Los Angeles Lakers' },
+  { playerId: 'embiid', team: 'Philadelphia 76ers' },
+  // His team's preseason game is before the opener and its first real game is in week 2.
+  { playerId: 'tatum', team: 'Boston Celtics' },
+]
+
+async function nbaLocksAt(now: string, leagueSettings: unknown = {}, games = NBA_GAMES) {
+  const { players, warnings } = await hydrateRedraftLineupLocks(schedule(games), {
+    sport: 'NBA',
+    season: 2026,
+    week: 1,
+    rosterId: 'r1',
+    leagueSettings,
+    players: NBA_PLAYERS,
+    now: new Date(now),
+  })
+  return { locked: Object.fromEntries(players.map((p) => [p.playerId, p.isLocked])), warnings }
+}
+
+describe('NBA lineup lock', () => {
+  it('locks a player once his team’s first game of the week has tipped, and no one else', async () => {
+    const { locked, warnings } = await nbaLocksAt('2026-10-21T12:00:00.000Z')
+    expect(locked).toEqual({ sga: true, lebron: true, embiid: false, tatum: false })
+    expect(warnings).toEqual([])
+  })
+
+  it('the 10pm ET opener locks at its own tip, not at the earlier game', async () => {
+    const { locked } = await nbaLocksAt('2026-10-21T00:30:00.000Z')
+    expect(locked).toMatchObject({ sga: true, lebron: false })
+  })
+
+  it('first_game_of_week locks the whole lineup at opening night’s first tip — not at a preseason game', async () => {
+    const before = await nbaLocksAt('2026-10-20T20:00:00.000Z', { sportConfig: { lineupLockType: 'first_game_of_week' } })
+    expect(Object.values(before.locked).some(Boolean)).toBe(false)
+    const after = await nbaLocksAt('2026-10-20T23:31:00.000Z', { sportConfig: { lineupLockType: 'first_game_of_week' } })
+    expect(Object.values(after.locked).every(Boolean)).toBe(true)
+  })
+
+  it('an empty NBA week falls open with a warning, never locks by guess', async () => {
+    const { locked, warnings } = await nbaLocksAt('2026-10-23T12:00:00.000Z', {}, [])
+    expect(Object.values(locked).some(Boolean)).toBe(false)
+    expect(warnings[0]).toContain('No NBA games found')
+  })
+
+  it('[control] a sport with no week window names the sports that DO lock, NBA among them', async () => {
+    const { warnings } = await hydrateRedraftLineupLocks(schedule(NBA_GAMES), {
+      sport: 'MLB',
+      season: 2026,
+      week: 1,
+      rosterId: 'r1',
+      leagueSettings: {},
+      players: NBA_PLAYERS,
+      now: new Date('2026-10-23T12:00:00.000Z'),
+    })
+    expect(warnings[0]).toContain('not locked')
+    expect(warnings[0]).toContain('NBA')
+  })
+})
+
 describe('normalizeLockTeam', () => {
   it('matches full names across feeds without the NFL alias table', () => {
     expect(normalizeLockTeam('NHL', 'St. Louis Blues')).toBe(normalizeLockTeam('NHL', 'St Louis Blues'))

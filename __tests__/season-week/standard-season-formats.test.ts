@@ -35,7 +35,14 @@ vi.mock('@/lib/schedule-runtime/canonicalScheduleRuntime', () => ({
   planCanonicalScheduleWeekTransition: vi.fn(),
 }))
 
-import { resolveNflRedraftScheduleRuntime } from '@/lib/schedule-runtime/resolveNflRedraftScheduleRuntime'
+import {
+  advanceNflRedraftScheduleWeek,
+  resolveNflRedraftScheduleRuntime,
+} from '@/lib/schedule-runtime/resolveNflRedraftScheduleRuntime'
+import { resolveNflRedraftPlayoffRuntime } from '@/lib/playoff-runtime/resolveNflRedraftPlayoffRuntime'
+import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
+import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
+import { planCanonicalScheduleWeekTransition } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
 import { runsStandardWeeklySeason, seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { computeWeeklyMedianResults } from '@/lib/redraft/medianGame'
 import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
@@ -67,6 +74,9 @@ describe('which leagues the weekly season covers', () => {
     ['NFL', 'devy', true],
     ['NHL', 'redraft', true],
     ['NCAAB', 'dynasty', true],
+    ['NBA', 'redraft', true],
+    ['NBA', 'keeper', true],
+    ['NBA', 'guillotine', false],
     ['NFL', 'guillotine', false],
     ['NFL', 'survivor', false],
     ['NFL', 'zombie', false],
@@ -86,6 +96,7 @@ describe('which leagues the weekly season covers', () => {
     ['NFL', 'dynasty'],
     ['NFL', 'best_ball'],
     ['NHL', 'redraft'],
+    ['NBA', 'redraft'],
   ])('the schedule runtime resolves a %s %s season (it refused all of these)', async (sport, format) => {
     const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: 'season-1' }, { loadRules: async () => rules(sport, format) })
     expect(resolved.ok).toBe(true)
@@ -94,6 +105,51 @@ describe('which leagues the weekly season covers', () => {
   it('still refuses a format with its own engine', async () => {
     const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: 'season-1' }, { loadRules: async () => rules('NFL', 'guillotine') })
     expect(resolved).toEqual({ ok: false, reason: 'not_nfl_redraft' })
+  })
+})
+
+/*
+ * 🛑 AN NBA LEAGUE COULD NEVER LEAVE WEEK 1, AND NOTHING SAID SO. NBA was outside
+ * `SEASON_CAPABLE_SPORTS`, so the schedule runtime answered `not_nfl_redraft` — which the hourly
+ * roller files as FORMAT_NOT_SUPPORTED (a permanent hold, deliberately not counted as a failure),
+ * the commissioner's manual advance refused, and the playoff runtime refused the bracket.
+ */
+describe('an NBA league runs the standard weekly season', () => {
+  it('advance_week — the roller’s and the commissioner’s path — reaches the week transition', async () => {
+    vi.mocked(resolveCanonicalLeagueRules).mockResolvedValue(rules('NBA', 'redraft'))
+    vi.mocked(resolveNflRedraftRosterRuntime).mockResolvedValue(null as never)
+    // The transition's own guard answers; the point is that the sport gate no longer does.
+    vi.mocked(planCanonicalScheduleWeekTransition).mockReturnValue({
+      ok: false,
+      code: 'INCOMPLETE_WEEK',
+      message: 'week 3 has unfinalized matchups',
+    } as never)
+
+    const applied = await advanceNflRedraftScheduleWeek({ seasonId: 'season-1', action: 'advance_week', week: 3 })
+
+    expect(applied).toMatchObject({ ok: false, code: 'INCOMPLETE_WEEK' })
+    expect(planCanonicalScheduleWeekTransition).toHaveBeenCalledTimes(1)
+  })
+
+  it('the playoff runtime builds an NBA bracket state instead of refusing it', async () => {
+    const roster = (id: string) => ({
+      id, ownerId: `o-${id}`, ownerName: id, teamName: id, wins: 0, losses: 0, ties: 0,
+      pointsFor: 0, pointsAgainst: 0, playoffSeed: null, isEliminated: false,
+    })
+    const resolved = await resolveNflRedraftPlayoffRuntime(
+      {
+        preloadedSeason: {
+          id: 'season-nba', leagueId: 'league-nba', sport: 'NBA', season: 2026, status: 'active',
+          currentWeek: 20, playoffStartWeek: 20, totalWeeks: 22,
+          rosters: [roster('r1'), roster('r2')], playoffRounds: [], playoffBracket: null,
+        } as never,
+      },
+      // No league rules row: the runtime falls back to rules built from the season itself.
+      { loadRules: async () => null },
+    )
+
+    expect(resolved.ok).toBe(true)
+    if (resolved.ok) expect(resolved.season.sport).toBe('NBA')
   })
 })
 

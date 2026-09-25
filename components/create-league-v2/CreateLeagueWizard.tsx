@@ -307,11 +307,12 @@ export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onCh
           const selected = state.sport === sport
           const media = SPORT_MEDIA[sport]
           /*
-           * ⚠ SAY WHAT WILL NOT WORK, AT THE MOMENT OF CHOOSING. Only NFL can
-           * run a season end to end — every other sport throws on weekly stat
-           * sync, so its matchups never finalize and the league sits at week 1
+           * ⚠ SAY WHAT WILL NOT WORK, AT THE MOMENT OF CHOOSING. A sport outside
+           * `SEASON_CAPABLE_SPORTS` (lib/sport-scope.ts) cannot run a season end
+           * to end: its matchups never finalize and the league sits at week 1
            * forever with nothing red anywhere. Choosing the sport is the last
-           * point where that is cheap to know.
+           * point where that is cheap to know. That list is the authority — this
+           * comment once said "only NFL" long after it stopped being true.
            *
            * ⚠ LABELLED, NOT BLOCKED, AND THAT IS A DELIBERATE CHOICE. The tile
            * supports `disabled`, and using it would also remove draft-only and

@@ -1,5 +1,6 @@
 /**
- * Redraft lineup-lock engine (NFL, and NHL through its Eastern-day week window).
+ * Redraft lineup-lock engine (NFL, and the daily sports whose slate is in `SportsGame` — NHL and
+ * NBA — through their Eastern-day week window).
  *
  * Closes gap G1: players must lock when their real game kicks off so a manager
  * can't swap a player after their game has started. The lock is DERIVED from the
@@ -142,8 +143,16 @@ export async function buildWeekKickoffMap(
    * mode, or the whole lineup at the week's first game. Once his first game starts, the week he
    * is scored for is fixed.
    *
+   * The branch keys on the lists, not on a sport name, so NBA locked the moment it joined
+   * `DATE_WINDOWED_SPORTS`. Its roster teams are Rolling Insights full names ("Oklahoma City
+   * Thunder", fixtures/live.NBA.json) and its games are TheSportsDB's `strHomeTeam`/`strAwayTeam`.
+   * ⚠ No NBA TheSportsDB fixture is committed, so the two spellings have not been compared: a team
+   * the feeds name differently ("LA Clippers" / "Los Angeles Clippers") fails open, as a bye does.
+   *
    * ⚠ NCAAB IS NOT HERE: its `SportsGame` schedule is incomplete (see RI_SCHEDULE_SLATE_SPORTS),
-   * and a lock read from a partial slate would leave some teams unlocked with no warning.
+   * and a lock read from a partial slate would leave some teams unlocked with no warning. Its
+   * complete slate — the Rolling Insights schedule the finalizer reads — cannot stand in either:
+   * `ScheduleGame` stores no team names, so there is nothing to match a player's team against.
    */
   if (sport !== 'NFL' && DATE_WINDOWED_SPORTS.includes(sport) && !RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
@@ -177,7 +186,9 @@ export async function buildWeekKickoffMap(
   }
 
   if (sport !== 'NFL') {
-    warnings.push(`Lineup lock schedule lookup is wired for NFL and NHL only; ${args.sport} players are not locked.`)
+    // Named from the lists, so this cannot go stale again when the next sport joins.
+    const lockable = ['NFL', ...DATE_WINDOWED_SPORTS.filter((s) => !RI_SCHEDULE_SLATE_SPORTS.includes(s))]
+    warnings.push(`Lineup lock schedule lookup is wired for ${lockable.join(', ')} only; ${args.sport} players are not locked.`)
     return { byTeam, firstKickoff, warnings }
   }
 
