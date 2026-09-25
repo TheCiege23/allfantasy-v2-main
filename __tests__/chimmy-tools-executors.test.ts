@@ -142,6 +142,22 @@ describe('tool specs', () => {
       'evaluate_waiver_move',
       'get_playoff_outlook',
       'get_my_matchup',
+      /*
+       * League chat and the waiver wire (2026-09-25). Both SELECT-only and gated on the proven
+       * league: the chat tool reads ONLY the public league channel of `LeagueChatMessage` (never a
+       * DM, Huddle or private row — see __tests__/chimmy/tools/league-chat-tool.test.ts), and the
+       * waiver tool reads the native engine's tables or what an import stored.
+       */
+      'get_league_chat',
+      'get_waiver_status',
+      /*
+       * 🛑 THE TWO PROPOSE TOOLS ARE ON THIS LIST ONLY BECAUSE THEY WRITE NOTHING. Each returns
+       * prose and adds a confirm card to the context; the lineup engine and the trade service are
+       * reached only from /api/chimmy/actions/confirm, behind the user's tap and a signed token.
+       * Pinned in __tests__/chimmy/actions/lineup-action.test.ts and trade-action.test.ts.
+       */
+      'propose_lineup_change',
+      'propose_trade',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

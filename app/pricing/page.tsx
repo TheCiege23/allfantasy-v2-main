@@ -19,12 +19,16 @@ import { pricingIntentRedirect } from "@/lib/monetization/upgradeDestination";
  * this file a reader cannot see updating, so a number here would rot silently
  * while the visible page stayed correct — the same failure in a place nobody
  * checks.
+ *
+ * ⚠ AND IT NAMES ONLY THE PLANS THIS PAGE SELLS. It listed AF Legacy, which has
+ * been off this grid since 2026-09-24 (see LANE_ORDER in PricingV4) — a search
+ * result promising a plan the page does not show.
  */
 
 export const metadata: Metadata = buildSeoMeta({
   title: "Pricing & Plans — AllFantasy.ai | Fantasy Tools & Subscriptions",
   description:
-    "Compare AF Pro, AF Legacy, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
+    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
   canonicalPath: "/pricing",
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:

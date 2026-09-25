@@ -11,11 +11,14 @@ import {
   buildStripeCheckoutClientReferenceId,
   type StripeCheckoutPurchaseType,
 } from "@/lib/monetization/StripeCheckoutLinkRegistry"
+import { getFoundingCouponId } from "@/lib/monetization/foundingMember"
 
 export type StripeCheckoutSessionResult = {
   url: string
   sessionId: string
   purchaseType: StripeCheckoutPurchaseType
+  /** The founding-member coupon rode this session (see lib/monetization/foundingMember.ts). */
+  foundingDiscountApplied: boolean
 }
 
 /**
@@ -39,11 +42,17 @@ export type StripeCheckoutSessionResult = {
  * responds 503 (same graceful degradation as the old link registry when the link
  * env var was unset). No hard failure, no charge from an unknown price.
  *
- * Coupons: a sponsor code the route has VALIDATED arrives with its percentage and
- * is applied as a Stripe coupon on the session (see ensureStripeSponsorCoupon).
- * Without one, Stripe-native `allow_promotion_codes` lets the customer type any
- * Stripe promotion code (e.g. a founding-member code) on the Checkout page. The two
- * are mutually exclusive in the Checkout API, so exactly one is sent.
+ * Coupons — exactly ONE of these is sent, because Stripe Checkout rejects a session
+ * carrying both `discounts` and `allow_promotion_codes`:
+ *   1. a sponsor code the route has VALIDATED arrives with its percentage and is
+ *      applied as a Stripe coupon (see ensureStripeSponsorCoupon). It wins because
+ *      the buyer typed it and the page already showed them that discount;
+ *   2. otherwise a founding member (account created before the paywall start) buying
+ *      a SUBSCRIPTION gets the `STRIPE_FOUNDING_COUPON_ID` coupon — only when that env
+ *      var is set, and never on a token pack;
+ *   3. otherwise Stripe-native `allow_promotion_codes` lets the customer type any
+ *      Stripe promotion code on the Checkout page — exactly the behaviour before
+ *      founding pricing existed.
  */
 export async function buildStripeCheckoutSessionForSku(input: {
   sku: MonetizationSku
@@ -55,6 +64,11 @@ export async function buildStripeCheckoutSessionForSku(input: {
   couponCode?: string | null
   /** The validated sponsor code's discount. Required for the discount to be CHARGED. */
   couponPercentOff?: number | null
+  /**
+   * The buyer's account predates the paywall (lib/monetization/foundingMember.ts). The caller
+   * decides eligibility; this builder decides whether the coupon may ride THIS session.
+   */
+  foundingMember?: boolean | null
   env?: NodeJS.ProcessEnv
 }): Promise<StripeCheckoutSessionResult | null> {
   const env = input.env ?? process.env
@@ -119,17 +133,55 @@ export async function buildStripeCheckoutSessionForSku(input: {
    * charged one.
    */
   const percentOff = input.couponPercentOff ?? 0
+  /*
+   * Subscriptions only: a token pack is pay-per-use, and founding pricing is a price on a
+   * plan. `mode` is checked as well as the catalog type so a one-off payment never carries it.
+   */
+  const foundingCouponId =
+    input.foundingMember === true && item.type === "subscription" && mode === "subscription"
+      ? getFoundingCouponId(env)
+      : null
+  let foundingDiscountApplied = false
   if (couponCode && percentOff > 0) {
     const couponId = await ensureStripeSponsorCoupon(stripe, couponCode, percentOff)
     params.discounts = [{ coupon: couponId }]
+  } else if (foundingCouponId) {
+    params.discounts = [{ coupon: foundingCouponId }]
+    foundingDiscountApplied = true
   } else {
     params.allow_promotion_codes = true
   }
 
-  const session = await stripe.checkout.sessions.create(params)
+  let session: Stripe.Checkout.Session
+  try {
+    session = await stripe.checkout.sessions.create(params)
+  } catch (error) {
+    /*
+     * ⚠ THE FOUNDING COUPON MUST NEVER BE THE REASON A CUSTOMER CANNOT PAY. It is an env var
+     * pointing at a Stripe object the owner manages by hand: deleted, expired, capped at its
+     * max redemptions, or created in the other Stripe mode, and Stripe rejects the WHOLE
+     * session. So a rejected request that carried it is retried once exactly as if founding
+     * pricing were off. Anything else wrong with the request fails the retry the same way and
+     * still throws.
+     */
+    if (!foundingDiscountApplied || !isStripeInvalidRequest(error)) throw error
+    console.warn("[checkout] founding coupon rejected by Stripe; retrying without it", {
+      code: (error as { code?: unknown })?.code ?? null,
+      param: (error as { param?: unknown })?.param ?? null,
+    })
+    delete params.discounts
+    params.allow_promotion_codes = true
+    foundingDiscountApplied = false
+    session = await stripe.checkout.sessions.create(params)
+  }
   if (!session.url) return null
 
-  return { url: session.url, sessionId: session.id, purchaseType }
+  return { url: session.url, sessionId: session.id, purchaseType, foundingDiscountApplied }
+}
+
+function isStripeInvalidRequest(error: unknown): boolean {
+  const e = error as { type?: unknown; rawType?: unknown } | null
+  return e?.type === "StripeInvalidRequestError" || e?.rawType === "invalid_request_error"
 }
 
 /**

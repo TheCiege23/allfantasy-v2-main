@@ -1,3 +1,5 @@
+import { CHIMMY_PLAN_DAILY_INCLUDED } from "@/lib/chimmy/planAllowanceView"
+
 export type PlanFamilyKey =
   | "af_pro"
   | "af_commissioner"
@@ -42,10 +44,20 @@ export const PLAN_FAMILY_SHORT_TAGLINE: Record<PlanFamilyKey, string> = {
 
 /** Bullets for pricing cards (short lines for narrow columns). */
 export const PLAN_FAMILY_INCLUDES: Record<PlanFamilyKey, readonly string[]> = {
+  /*
+   * ⚠ WHAT AF PRO UNLOCKS FROM OCT 15, NOT BRACKET TOOLS. These bullets used to sell bracket
+   * grading, dark horses and upset finders — a tournament product — on the card for the plan whose
+   * paywall is the /core depth. They now name the gates themselves: player_depth, trade_depth and
+   * competitive_edge (lib/core-app/coreDepthAccess.ts), start/sit (`start_sit` → af_pro in
+   * lib/monetization/entitlements.ts), and the Chimmy allowance, read from the one constant the
+   * counter enforces so the card cannot promise a different number.
+   */
   af_pro: [
-    "Advanced Chimmy, bracket grading, and matchup analysis",
-    "Dark horse, upset finder, confidence, and pick comparison",
-    "Game-day lineup calls scored by your league's own settings",
+    `${CHIMMY_PLAN_DAILY_INCLUDED} Chimmy answers a day`,
+    "Player deep dives: trade, compare and verdict views, market and history",
+    "The full trade breakdown: the why, value layers, counters and partners",
+    "Competitive Edge: what the manager across the table has actually done",
+    "Start/sit calls and trade analysis",
   ],
   af_commissioner: [
     // ⚠ Lock settings and invites were listed here and are FREE — every commissioner

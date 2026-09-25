@@ -1,0 +1,391 @@
+/*
+ * Launch countdown, landing banner and offer strips (components/launch/*).
+ *
+ * ⚠ EVERY COLOUR GOES THROUGH A `--lc-*` VARIABLE, AND THIS IS NOT STYLE. These components render
+ * in two worlds: inside `.af-core` (landing, /pricing, /signup, /core), where the design tokens
+ * exist and follow light/dark mode, and inside the Tailwind purchase surface on /upgrade, which is
+ * always dark and has NO `.af-core` scope. Reading `var(--text)` there would pick up
+ * app/globals.css's unrelated `:root` value — dark text on a dark page in light mode. So the bare
+ * rules carry dark-page fallbacks, and the `.af-core` block below maps them onto the real tokens.
+ */
+
+.af-lc,
+.af-launch-banner,
+.af-launch-strip {
+  --lc-text: #eef0fa;
+  --lc-muted: #a3aacb;
+  --lc-accent: #22d3ee;
+  --lc-accent-ink: #04050c;
+  --lc-accent-soft: rgba(34, 211, 238, 0.1);
+  --lc-accent-line: rgba(34, 211, 238, 0.3);
+  --lc-surface: rgba(255, 255, 255, 0.04);
+  --lc-line: rgba(255, 255, 255, 0.13);
+}
+
+.af-core .af-lc,
+.af-core .af-launch-banner,
+.af-core .af-launch-strip {
+  --lc-text: var(--text);
+  --lc-muted: var(--muted);
+  --lc-accent: var(--accent);
+  --lc-accent-ink: var(--accent-ink);
+  --lc-accent-soft: var(--accent-soft);
+  --lc-accent-line: var(--accent-line);
+  --lc-surface: var(--surface);
+  --lc-line: var(--line2);
+}
+
+/* ── The countdown ───────────────────────────────────────────────────── */
+
+.af-lc {
+  display: inline-flex;
+  align-items: center;
+  color: var(--lc-text);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Server text before the clock starts — styled as a pill so it reads as deliberate, not as a gap. */
+.af-lc-static {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lc-accent-line);
+  background: var(--lc-accent-soft);
+  color: var(--lc-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.af-lc-segs {
+  display: flex;
+  gap: 6px;
+}
+
+.af-lc-seg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 7px 6px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--lc-line);
+  background: var(--lc-surface);
+}
+
+.af-lc-num {
+  font-size: 20px;
+  line-height: 1.05;
+  font-weight: 800;
+  color: var(--lc-text);
+}
+
+.af-lc-unit {
+  margin-top: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+
+.af-lc[data-size='lg'] .af-lc-segs {
+  gap: 8px;
+}
+.af-lc[data-size='lg'] .af-lc-seg {
+  min-width: 64px;
+  padding: 10px 8px 8px;
+  border-radius: 12px;
+}
+.af-lc[data-size='lg'] .af-lc-num {
+  font-size: 28px;
+}
+
+/* Inline: "19d 04h 12m 08s" — for a one-line bar. */
+.af-lc[data-size='sm'] .af-lc-segs {
+  gap: 7px;
+}
+.af-lc[data-size='sm'] .af-lc-seg {
+  flex-direction: row;
+  align-items: baseline;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.af-lc[data-size='sm'] .af-lc-num {
+  font-size: 13.5px;
+}
+.af-lc[data-size='sm'] .af-lc-unit {
+  margin: 0 0 0 1px;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.af-lc[data-size='sm'] .af-lc-static {
+  min-height: 0;
+  padding: 2px 10px;
+  font-size: 11.5px;
+}
+
+/* ── Landing banner ──────────────────────────────────────────────────── */
+
+.af-launch-banner {
+  display: grid;
+  gap: 16px;
+  margin: 16px 16px 0;
+  padding: 18px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--lc-accent-line);
+  background:
+    radial-gradient(520px 220px at 0% 0%, var(--lc-accent-soft), transparent 70%),
+    var(--lc-surface);
+  color: var(--lc-text);
+}
+
+.af-launch-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lc-accent);
+}
+
+.af-launch-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--lc-accent);
+  box-shadow: 0 0 0 0 var(--lc-accent-line);
+  animation: af-launch-pulse 2s ease-out infinite;
+}
+
+@keyframes af-launch-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--lc-accent-line);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-launch-dot {
+    animation: none;
+  }
+}
+
+.af-launch-banner-title {
+  margin: 8px 0 0;
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--lc-text);
+  /* Keeps "Oct 15." together on a phone instead of stranding "15." on its own line. */
+  text-wrap: balance;
+}
+
+.af-launch-banner-body {
+  margin: 6px 0 0;
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--lc-muted);
+}
+
+/*
+ * Reserve the live clock's height, so the server's static text swapping for the digits on mount
+ * does not shove the hero down (measured: 35px of layout shift on a phone without this).
+ */
+.af-launch-banner-clock {
+  display: flex;
+  align-items: center;
+  min-height: 68px;
+}
+
+/* On a phone the four boxes share the full width, so the clock reads at a glance. */
+.af-launch-banner-clock .af-lc,
+.af-launch-banner-clock .af-lc-segs {
+  width: 100%;
+}
+.af-launch-banner-clock .af-lc-seg {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/*
+ * (0,3,0) on purpose: `.af-core .af-btn` is (0,2,0) and sets a 36px min-height, which would
+ * otherwise win and shrink this below a comfortable tap target — the trap af-landing.css records
+ * for `.af-lp-cta-lg`.
+ */
+.af-core .af-btn.af-launch-cta {
+  min-height: 46px;
+  padding: 0 22px;
+  font-size: 14px;
+  text-decoration: none;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .af-launch-banner {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 28px;
+    margin: 24px 40px 0;
+    padding: 22px 26px;
+  }
+  .af-launch-banner-title {
+    font-size: 26px;
+  }
+  .af-launch-banner-clock .af-lc,
+  .af-launch-banner-clock .af-lc-segs {
+    width: auto;
+  }
+  .af-launch-banner-clock .af-lc-seg {
+    flex: none;
+    min-width: 64px;
+  }
+  .af-core .af-btn.af-launch-cta {
+    width: auto;
+  }
+}
+
+/* ── Offer strip (/pricing, /upgrade, /signup, /core) ─────────────────── */
+
+.af-launch-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--lc-accent-line);
+  background: var(--lc-accent-soft);
+  color: var(--lc-text);
+  text-align: left;
+}
+
+.af-launch-strip-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-launch-strip-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 800;
+  color: var(--lc-text);
+}
+
+.af-launch-strip-body {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lc-muted);
+}
+
+.af-launch-strip-founding {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--lc-text);
+}
+
+/* The /core home card: the clock as a compact pill, so the card does not push the queue down. */
+.af-launch-strip[data-surface='core'] .af-lc[data-size='sm'][data-state='live'] {
+  align-self: flex-start;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--lc-line);
+  background: var(--lc-surface);
+}
+
+.af-launch-star {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--lc-accent);
+}
+
+.af-launch-link {
+  color: var(--lc-accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.af-core .af-btn.af-launch-strip-cta {
+  align-self: flex-start;
+  min-height: 40px;
+  text-decoration: none;
+}
+
+@media (min-width: 720px) {
+  .af-launch-strip-main {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+}
+
+/* /signup: a slim bar across the top of the page rather than a card. */
+.af-launch-signup-wrap {
+  background: var(--bg);
+}
+
+.af-launch-strip[data-surface='signup'] {
+  gap: 6px;
+  padding: 10px 16px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  align-items: center;
+  text-align: center;
+}
+
+.af-launch-strip[data-surface='signup'] .af-launch-strip-main {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+}
+
+.af-launch-strip[data-surface='signup'] .af-launch-strip-title {
+  font-size: 13.5px;
+}
+
+.af-launch-strip[data-surface='signup'] .af-launch-strip-body {
+  display: inline;
+  margin: 0 0 0 6px;
+}
+
+.af-launch-strip[data-surface='signup'] .af-launch-strip-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+}
+
+.af-launch-strip[data-surface='signup'] .af-launch-strip-founding {
+  justify-content: center;
+  font-size: 12.5px;
+}

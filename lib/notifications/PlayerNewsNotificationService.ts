@@ -20,6 +20,7 @@ import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
 import { listFollowerIdsForPlayer } from '@/lib/follows/playerFollows'
+import { alreadyToldAbout, recordToldAbout } from '@/lib/notifications/playerNewsRepeatGuard'
 
 type OptionalPlayerNewsNotificationModel = {
   findFirst?: (args: unknown) => Promise<unknown>
@@ -325,6 +326,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   noRoster: number
   /** Rows fetched but never considered because the budget ran out. Zero means the run completed. */
   deferred: number
+  /** People not alerted because they were already told this story, or this status, recently. */
+  repeatsSuppressed: number
 }> {
   const limit = input?.limit ?? 40
   const lookbackHours = input?.lookbackHours ?? 24
@@ -353,6 +356,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let followerRecipients = 0
   let noRoster = 0
   let deferred = 0
+  let repeatsSuppressed = 0
   const stamped: string[] = []
 
   for (let i = 0; i < rows.length; i += 1) {
@@ -412,9 +416,28 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const rostered = new Set<string>()
     for (const ids of byLeague.values()) for (const id of ids) rostered.add(id)
     const followers = await listFollowerIdsForPlayer(row.sport, row.playerName).catch(() => null)
-    const followersOnly = (followers ?? []).filter((id) => !rostered.has(id))
+    const allFollowersOnly = (followers ?? []).filter((id) => !rostered.has(id))
 
-    if (byLeague.size === 0 && followersOnly.length === 0) { noRoster++; continue }
+    if (byLeague.size === 0 && allFollowersOnly.length === 0) { noRoster++; continue }
+
+    /*
+     * ONE ALERT PER PERSON PER STORY. Everyone already told this story (or this player's same status
+     * inside a day) is dropped — see playerNewsRepeatGuard.ts for the seven-emails-in-two-days case
+     * that made this necessary. And a manager who rosters the player in three leagues is told once,
+     * under the first league, not three times: `dedupePrefix` only ever collapsed the bell row.
+     */
+    const news = { sport: row.sport, playerName: row.playerName, headline: row.headline, category }
+    const told = await alreadyToldAbout([...rostered, ...allFollowersOnly], news)
+    const assigned = new Set<string>(told)
+    for (const [leagueId, ids] of byLeague) {
+      const fresh = new Set([...ids].filter((id) => !assigned.has(id)))
+      for (const id of fresh) assigned.add(id)
+      if (fresh.size > 0) byLeague.set(leagueId, fresh)
+      else byLeague.delete(leagueId)
+    }
+    const followersOnly = allFollowersOnly.filter((id) => !told.has(id))
+    repeatsSuppressed += told.size
+    if (byLeague.size === 0 && followersOnly.length === 0) continue
 
     const icon = CATEGORY_ICONS[category] ?? '📰'
     const label = CATEGORY_LABELS[category] ?? 'News'
@@ -451,6 +474,9 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       recipients += followersOnly.length
       followerRecipients += followersOnly.length
     }
+    const toldNow: string[] = followersOnly.slice()
+    for (const ids of byLeague.values()) toldNow.push(...ids)
+    await recordToldAbout(toldNow, news)
     notified++
   }
 
@@ -462,5 +488,5 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   // `scanned` counts rows actually considered, not rows fetched — otherwise a truncated run
   // reports the same number as a complete one and the deferral is invisible in the response.
-  return { scanned: stamped.length, notified, recipients, followerRecipients, noRoster, deferred }
+  return { scanned: stamped.length, notified, recipients, followerRecipients, noRoster, deferred, repeatsSuppressed }
 }

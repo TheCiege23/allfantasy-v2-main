@@ -39,6 +39,11 @@ let fetchMock: ReturnType<typeof vi.fn>
 /** The drawer's own history read, which must never consume a queued POST answer. */
 const isHistoryRead = (url: unknown, init?: { method?: string }) =>
   String(url).startsWith('/api/chat/chimmy?') && (init?.method ?? 'GET').toUpperCase() === 'GET'
+/**
+ * Opening the Chimmy tab also POSTs `/api/chat/unread` to clear Chimmy's weekly checks from the chat
+ * bubble (2026-09-25) — the same trap as the history read, reached by a POST this time.
+ */
+const isBadgeClear = (url: unknown) => String(url) === '/api/chat/unread'
 
 const chimmyPosts = () => fetchMock.mock.calls.filter(([url]) => String(url) === '/api/chat/chimmy')
 const sentMode = (i: number) => (chimmyPosts()[i]![1].body as FormData).get('assistantMode')
@@ -72,7 +77,9 @@ beforeEach(() => {
   fetchMock = vi.fn((url: unknown, init?: { method?: string }) =>
     isHistoryRead(url, init)
       ? Promise.resolve(jsonResponse(200, { turns: [] }))
-      : postMock(url, init),
+      : isBadgeClear(url)
+        ? Promise.resolve(jsonResponse(200, { ok: true }))
+        : postMock(url, init),
   )
   vi.stubGlobal('fetch', fetchMock)
 })

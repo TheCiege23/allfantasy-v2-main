@@ -1,8 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, Crown, Shield, Telescope, WandSparkles } from 'lucide-react'
+import { CheckCircle2, Crown, Shield, WandSparkles } from 'lucide-react'
 import { trackUpgradeEntryClicked } from '@/lib/monetization-analytics'
+import { getMonetizationCatalogItemBySku } from '@/lib/monetization/catalog'
+
+/*
+ * ⚠ AF SUPREME IS AF PRO + AF COMMISSIONER. IT DOES NOT INCLUDE AF LEGACY.
+ * SUPREME_INCLUDED_PLAN_IDS (lib/subscription/feature-access.ts) has been [pro, commissioner]
+ * since Legacy was split out, but this spotlight — shown on /upgrade?plan=supreme — went on listing
+ * Legacy under "Bundle inheritance", promising "all premium plan families", and offering a
+ * "From AF Legacy" switch that would have cost a Legacy subscriber their draft tools.
+ *
+ * ⚠ AND ITS YEARLY PRICE WAS TYPED IN: "$199.99 yearly" while checkout charges the catalog's
+ * figure. Both prices are now read from the catalog, the same source the charge uses.
+ */
+function supremePrice(sku: 'af_supreme_monthly' | 'af_supreme_yearly'): string | null {
+  const amount = getMonetizationCatalogItemBySku(sku)?.amountUsd
+  return amount == null ? null : `$${amount.toFixed(2)}`
+}
+const SUPREME_MONTHLY = supremePrice('af_supreme_monthly')
+const SUPREME_YEARLY = supremePrice('af_supreme_yearly')
 
 const INCLUDED_PLANS = [
   {
@@ -17,18 +35,12 @@ const INCLUDED_PLANS = [
     copy: 'League governance, automation, and commissioner intelligence controls.',
     tone: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
   },
-  {
-    title: 'AF Legacy',
-    icon: Telescope,
-    copy: 'Draft strategy, prep, and long-horizon roster construction workflows.',
-    tone: 'border-violet-400/35 bg-violet-500/10 text-violet-100',
-  },
 ]
 
 const SIMPLE_VALUE_POINTS = [
-  'One subscription unlocks all premium plan families.',
-  'No plan-matching decisions across tools.',
-  'Use the same premium tier across player, commissioner, and draft workflows.',
+  'One subscription unlocks AF Pro and AF Commissioner.',
+  'Costs less than buying the two separately.',
+  'AF Legacy is not included — it is sold on its own.',
 ]
 
 export function AFSupremeBundleSpotlight({ className = '' }: { className?: string }) {
@@ -66,22 +78,26 @@ export function AFSupremeBundleSpotlight({ className = '' }: { className?: strin
       </div>
 
       <p className="mt-1 text-xs text-white/70">
-        Simplest premium option: AF Pro + AF Commissioner + AF Legacy in one subscription.
+        AF Pro and AF Commissioner in one subscription. AF Legacy is sold separately.
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <span
-          className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100"
-          data-testid="af-supreme-price-monthly"
-        >
-          $19.99 monthly
-        </span>
-        <span
-          className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100"
-          data-testid="af-supreme-price-yearly"
-        >
-          $199.99 yearly
-        </span>
+        {SUPREME_MONTHLY ? (
+          <span
+            className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100"
+            data-testid="af-supreme-price-monthly"
+          >
+            {SUPREME_MONTHLY} monthly
+          </span>
+        ) : null}
+        {SUPREME_YEARLY ? (
+          <span
+            className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100"
+            data-testid="af-supreme-price-yearly"
+          >
+            {SUPREME_YEARLY} yearly
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -152,21 +168,7 @@ export function AFSupremeBundleSpotlight({ className = '' }: { className?: strin
         >
           From AF Commissioner
         </Link>
-        <Link
-          href="/upgrade?plan=supreme&from=war_room"
-          onClick={() =>
-            trackUpgradeEntryClicked({
-              targetPlan: 'supreme',
-              sourcePlan: 'war_room',
-              surface: 'af_supreme_spotlight',
-              pagePath: window.location.pathname,
-            })
-          }
-          className="rounded-full border border-violet-400/35 bg-violet-500/10 px-2 py-0.5 text-violet-100 hover:bg-violet-500/20"
-          data-testid="af-supreme-switch-from-war-room"
-        >
-          From AF Legacy
-        </Link>
+        {/* No "From AF Legacy": Supreme does not include Legacy, so that switch would take tools away. */}
       </div>
     </section>
   )

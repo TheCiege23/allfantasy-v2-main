@@ -1,10 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { MessageSquare } from 'lucide-react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
+import { useDraggableLauncher } from './useDraggableLauncher'
+import { useChatBadge } from './useChatBadge'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -146,18 +148,39 @@ export function CommsDock({
 
   const close = useCallback(() => setOpen(false), [])
 
+  /*
+   * The bubble can be dragged anywhere along either edge and remembers where, per
+   * device class — see useDraggableLauncher. It is still UNMOUNTED while the
+   * drawer is open, which is what guarantees it never sits on top of the
+   * composer: there is nothing to cover it with.
+   */
+  const launchRef = useRef<HTMLButtonElement | null>(null)
+  const launcher = useDraggableLauncher(launchRef, !open)
+  /* The server's count, kept current between page loads — see useChatBadge. */
+  const badge = useChatBadge(unread, mentions, open)
+
   return (
     <>
       {!open ? (
         <button
+          ref={launchRef}
           type="button"
           className="af-cm-launch"
-          onClick={() => setOpen(true)}
+          style={launcher.style}
+          data-dragging={launcher.dragging || undefined}
+          data-moved={launcher.moved || undefined}
+          {...launcher.handlers}
+          onClick={() => {
+            /* The click a browser fires at the end of a drag is not a tap. */
+            if (launcher.consumeDragClick()) return
+            setOpen(true)
+          }}
+          title="Open chat — drag to move"
           aria-label={
-            mentions > 0
-              ? `Open communications (${mentions} mention${mentions === 1 ? '' : 's'}, ${unread} unread)`
-              : unread > 0
-                ? `Open communications (${unread} unread)`
+            badge.mentions > 0
+              ? `Open communications (${badge.mentions} mention${badge.mentions === 1 ? '' : 's'}, ${badge.unread} unread)`
+              : badge.unread > 0
+                ? `Open communications (${badge.unread} unread)`
                 : 'Open communications'
           }
         >
@@ -173,10 +196,10 @@ export function CommsDock({
             small bubble would be unreadable, and the louder state is the one
             worth the pixels.
           */}
-          {unread > 0 ? (
-            <span className="af-cm-launchdot" data-kind={mentions > 0 ? 'mention' : 'unread'}>
-              {mentions > 0 ? '@' : ''}
-              {unread}
+          {badge.unread > 0 ? (
+            <span className="af-cm-launchdot" data-kind={badge.mentions > 0 ? 'mention' : 'unread'}>
+              {badge.mentions > 0 ? '@' : ''}
+              {badge.unread}
             </span>
           ) : null}
         </button>

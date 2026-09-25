@@ -19,6 +19,7 @@ import {
 } from "@/lib/chimmy-chat/assistant-mode"
 import { confirmTokenSpend } from "@/lib/tokens/client-confirm"
 import { prepareImageForChimmyUpload } from "@/lib/chimmy-chat/prepareImageForChimmyUpload"
+import { publishChimmyActionCards, readActionCards } from "@/lib/chimmy-chat/actionCards"
 
 type SendChimmyMessageInput = {
   message: string
@@ -234,6 +235,7 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
         : undefined,
     ctaLabel: typeof meta.ctaLabel === "string" ? meta.ctaLabel : undefined,
     ctaHref: typeof meta.ctaHref === "string" ? meta.ctaHref : undefined,
+    ...(readActionCards(meta).length > 0 ? { actionCards: readActionCards(meta) } : {}),
   }
 }
 
@@ -527,6 +529,16 @@ export async function sendChimmyMessage(
       error: error || CHIMMY_GENERIC_ERROR_MESSAGE,
       meta,
     }
+  }
+
+  /*
+   * Confirm cards reach the page through the in-page store, so a surface can show them without the
+   * chat shell knowing about them (lib/chimmy-chat/actionCards.ts). Publishing shows a card; only the
+   * user's tap on it does anything.
+   */
+  const actionCards = readActionCards(data?.meta)
+  if (typeof window !== "undefined" && actionCards.length > 0) {
+    publishChimmyActionCards(actionCards)
   }
 
   return {

@@ -24,7 +24,7 @@ export type EntitlementsState = {
   hasCommissioner: boolean
   hasPro: boolean
   hasWarRoom: boolean
-  /** AF Supreme subscription (top tier; inherits the full Pro + Commissioner + Legacy stack). */
+  /** AF Supreme subscription (inherits AF Pro + AF Commissioner; does NOT include AF Legacy). */
   hasSupreme: boolean
   hasAnyPaid: boolean
   /**

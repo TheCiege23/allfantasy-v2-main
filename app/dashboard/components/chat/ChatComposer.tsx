@@ -1,7 +1,7 @@
 'use client'
 
 import { Send } from 'lucide-react'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AttachmentPreview, type PendingGif, type PollDraft, type UploadedAttachment } from './AttachmentPreview'
 import { EmojiPicker } from './EmojiPicker'
@@ -61,6 +61,39 @@ type ChatComposerProps = {
   autocompleteLeagues?: { id: string; name: string }[]
   /** Narrows the player catalog when the surface knows which sport it is about. */
   sport?: string | null
+  /**
+   * The conversation this composer belongs to. Photos dropped anywhere on it are
+   * added to the message, exactly as if picked with the 📷 button. While a file is
+   * dragged over it, it carries `data-af-drop="active"` for the drop hint.
+   */
+  dropZoneRef?: React.RefObject<HTMLElement | null>
+  /**
+   * Called with `true` as the writer types and `false` once the box is empty or
+   * the message has gone. The caller throttles the network signal — see
+   * `useTypingSignal` — so this can fire on every keystroke.
+   */
+  onTypingChange?: (typing: boolean) => void
+  /**
+   * People to offer after `@`, matched here on the client. A DM or huddle has no
+   * league, so the league member search has nothing to ask — without this, `@`
+   * offered only the static entries and never a single person in the thread.
+   */
+  mentionMembers?: Array<{ username: string; displayName?: string | null; avatarUrl?: string | null }>
+}
+
+/*
+ * The upload route's own limits (`app/api/chat/upload/route.ts`), checked here
+ * first so a wrong file is refused with a reason BEFORE a 25 MB round trip.
+ */
+const IMAGE_MIME = /^image\/(png|jpeg|gif|webp)$/
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024
+/** Photos per message. A drop of a whole camera roll should not become 40 uploads. */
+const MAX_IMAGES_PER_MESSAGE = 4
+
+export function imageRejection(file: { type: string; size: number }): string | null {
+  if (!IMAGE_MIME.test(file.type)) return 'Photos must be JPG, PNG, GIF or WebP.'
+  if (file.size > MAX_IMAGE_BYTES) return 'That photo is over 25 MB — try a smaller one.'
+  return null
 }
 
 type Picker = 'gif' | 'emoji' | 'poll' | null
@@ -81,8 +114,13 @@ export function ChatComposer({
   currentUserId,
   autocompleteLeagues,
   sport,
+  dropZoneRef,
+  onTypingChange,
+  mentionMembers,
 }: ChatComposerProps) {
   const [text, setText] = useState('')
+  /** Photos on their way up. Shown as chips so a slow upload never looks like nothing happened. */
+  const [uploading, setUploading] = useState(0)
   const appliedPrefillKey = useRef<string | null>(null)
   const [activePicker, setActivePicker] = useState<Picker>(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -94,7 +132,7 @@ export function ChatComposer({
   const [globalModalOpen, setGlobalModalOpen] = useState(false)
   const [cursorPos, setCursorPos] = useState(0)
 
-  const { suggestions: mentionSuggestions, trigger: mentionTrigger } = useMentionAutocomplete({
+  const { suggestions: hookSuggestions, trigger: mentionTrigger } = useMentionAutocomplete({
     text,
     cursorPos,
     leagueId,
@@ -103,6 +141,39 @@ export function ChatComposer({
     leagues: autocompleteLeagues,
     sport,
   })
+
+  /*
+   * The thread's own members, after the static entries (@chimmy, @all). Matched on
+   * username or display name, never duplicating a person the league search
+   * already returned.
+   */
+  const mentionSuggestions = useMemo((): MentionSuggestion[] => {
+    if (!mentionMembers?.length) return hookSuggestions
+    const before = text.slice(0, cursorPos)
+    const at = before.match(/@(\w*)$/)
+    if (!at) return hookSuggestions
+    const q = at[1]!.toLowerCase()
+    const taken = new Set(hookSuggestions.map((s) => s.value.trim().toLowerCase()))
+    const people: MentionSuggestion[] = []
+    for (const m of mentionMembers) {
+      const username = m.username?.trim()
+      if (!username || !/^\w+$/.test(username)) continue
+      const display = m.displayName?.trim() || ''
+      if (q && !username.toLowerCase().startsWith(q) && !display.toLowerCase().includes(q)) continue
+      const value = `@${username} `
+      if (taken.has(value.trim().toLowerCase())) continue
+      taken.add(value.trim().toLowerCase())
+      people.push({
+        type: '@username',
+        value,
+        label: `@${username}`,
+        description: display || undefined,
+        avatarUrl: m.avatarUrl ?? undefined,
+      })
+      if (people.length >= 8) break
+    }
+    return [...hookSuggestions, ...people]
+  }, [hookSuggestions, mentionMembers, text, cursorPos])
 
   const showBbChimmySuggest = Boolean(bbSuggest?.options?.length)
   const showMentionSuggest = mentionSuggestions.length > 0 && !showBbChimmySuggest
@@ -241,14 +312,110 @@ export function ChatComposer({
     [leagueId, threadId]
   )
 
+  /*
+   * ONE path for every way a photo arrives — the 📷 button, a drop onto the
+   * conversation, a paste. Three entry points with three sets of checks is how one
+   * of them ends up accepting a 90 MB HEIC the server will refuse after uploading it.
+   * Each photo lands in the preview row with its own ✕, so nothing is sent until
+   * the writer presses send.
+   */
+  const attachmentCount = useRef(0)
+  attachmentCount.current = attachments.length
+  const addImages = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return
+      const room = Math.max(0, MAX_IMAGES_PER_MESSAGE - attachmentCount.current - uploading)
+      if (room === 0) {
+        toast.error(`Up to ${MAX_IMAGES_PER_MESSAGE} photos per message.`)
+        return
+      }
+      const accepted: File[] = []
+      for (const f of files) {
+        const why = imageRejection(f)
+        if (why) {
+          toast.error(why)
+          continue
+        }
+        accepted.push(f)
+      }
+      if (accepted.length > room) {
+        toast.error(`Up to ${MAX_IMAGES_PER_MESSAGE} photos per message — added the first ${room}.`)
+      }
+      const batch = accepted.slice(0, room)
+      if (batch.length === 0) return
+      setUploading((n) => n + batch.length)
+      await Promise.all(
+        batch.map(async (file) => {
+          try {
+            const r = await uploadFile(file, 'image')
+            if (r) setAttachments((a) => [...a, { type: 'image', url: r.url, mimeType: r.mimeType, name: file.name }])
+          } catch {
+            toast.error('Photo upload failed. Check your connection and try again.')
+          } finally {
+            setUploading((n) => Math.max(0, n - 1))
+          }
+        }),
+      )
+    },
+    [uploadFile, uploading],
+  )
+
   const onImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!file) return
-    const r = await uploadFile(file, 'image')
-    if (!r) return
-    setAttachments((a) => [...a, { type: 'image', url: r.url, mimeType: r.mimeType, name: file.name }])
+    await addImages(files)
   }
+
+  /*
+   * Drag-and-drop onto the whole conversation, not just the text box — the drop
+   * target people aim at is the chat they are looking at. Only drags that carry
+   * FILES light it up; dragging selected text around must not.
+   */
+  const addImagesRef = useRef(addImages)
+  addImagesRef.current = addImages
+  useEffect(() => {
+    const zone = dropZoneRef?.current
+    if (!zone) return
+    let depth = 0
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
+    const clear = () => {
+      depth = 0
+      zone.removeAttribute('data-af-drop')
+    }
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      depth += 1
+      zone.setAttribute('data-af-drop', 'active')
+    }
+    const onOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    }
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) zone.removeAttribute('data-af-drop')
+    }
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      clear()
+      void addImagesRef.current(Array.from(e.dataTransfer?.files ?? []))
+    }
+    zone.addEventListener('dragenter', onEnter)
+    zone.addEventListener('dragover', onOver)
+    zone.addEventListener('dragleave', onLeave)
+    zone.addEventListener('drop', onDrop)
+    return () => {
+      zone.removeEventListener('dragenter', onEnter)
+      zone.removeEventListener('dragover', onOver)
+      zone.removeEventListener('dragleave', onLeave)
+      zone.removeEventListener('drop', onDrop)
+      clear()
+    }
+  }, [dropZoneRef])
 
   const onVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -288,11 +455,14 @@ export function ChatComposer({
     ])
   }
 
+  /*
+   * Not while a photo is still uploading: the writer meant the words and the
+   * picture together, and sending now would post the text alone and strand the
+   * photo in the preview row.
+   */
   const canSend =
-    text.trim().length > 0 ||
-    Boolean(pendingGif) ||
-    attachments.length > 0 ||
-    Boolean(pollDraft)
+    uploading === 0 &&
+    (text.trim().length > 0 || Boolean(pendingGif) || attachments.length > 0 || Boolean(pollDraft))
 
   const handleSend = useCallback(async () => {
     if (!canSend || sending) return
@@ -307,6 +477,7 @@ export function ChatComposer({
     setAttachments([])
     setPollDraft(null)
     setActivePicker(null)
+    onTypingChange?.(false)
     queueMicrotask(() => {
       const el = textareaRef.current
       if (el) {
@@ -356,10 +527,10 @@ export function ChatComposer({
     } finally {
       setSending(false)
     }
-  }, [attachments, autoResize, canSend, onSend, pendingGif, pollDraft, sending, text])
+  }, [attachments, autoResize, canSend, onSend, onTypingChange, pendingGif, pollDraft, sending, text])
 
   const toolBtn = (active: boolean) =>
-    `px-1.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+    `af-chat-tool px-1.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
       active ? 'text-cyan-400 bg-cyan-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.06]'
     }`
 
@@ -378,10 +549,15 @@ export function ChatComposer({
         onRemovePoll={() => setPollDraft(null)}
         onEditPoll={() => setActivePicker('poll')}
       />
+      {uploading > 0 ? (
+        <p className="af-chat-uploading mb-1 px-1 text-[11px] text-white/60" role="status" aria-live="polite">
+          Uploading {uploading === 1 ? 'photo' : `${uploading} photos`}…
+        </p>
+      ) : null}
 
       <div className="relative w-full">
         {activePicker === 'gif' ? (
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-1">
+          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">
             <GifPicker
               onSelect={(g) => {
                 setPendingGif({
@@ -398,12 +574,12 @@ export function ChatComposer({
           </div>
         ) : null}
         {activePicker === 'emoji' ? (
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-1">
+          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">
             <EmojiPicker onSelect={(c) => insertChar(c)} onClose={() => setActivePicker(null)} />
           </div>
         ) : null}
         {activePicker === 'poll' ? (
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-1">
+          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">
             <PollComposer
               initial={pollDraft}
               onCreatePoll={(p) => {
@@ -465,16 +641,22 @@ export function ChatComposer({
             onChange={(e) => {
               setText(e.target.value)
               setCursorPos(e.target.selectionStart ?? 0)
+              onTypingChange?.(e.target.value.trim().length > 0)
             }}
             onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
-            onPaste={async e => {
-              const file = Array.from(e.clipboardData.files).find(f => /^image\/(png|jpeg|gif|webp)$/.test(f.type))
-              if (!file) return
+            onBlur={() => {
+              /* Walking away from a half-typed line is not "still typing". */
+              if (!text.trim()) onTypingChange?.(false)
+            }}
+            onPaste={(e) => {
+              /*
+               * A pasted screenshot goes through the same checks and the same preview
+               * row as the 📷 button. Pasted TEXT is left entirely to the browser.
+               */
+              const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
+              if (files.length === 0) return
               e.preventDefault()
-              try {
-                const uploaded = await uploadFile(file, 'image')
-                if (uploaded) setAttachments(a => [...a, { type: 'image', url: uploaded.url, mimeType: uploaded.mimeType, name: file.name }])
-              } catch { toast.error('Screenshot upload failed. Please try again.') }
+              void addImages(files)
             }}
             onClick={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
             onSelect={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
@@ -515,6 +697,8 @@ export function ChatComposer({
                   type="button"
                   className={toolBtn(activePicker === 'gif')}
                   onClick={() => setActivePicker((p) => (p === 'gif' ? null : 'gif'))}
+                  aria-label="GIF"
+                  aria-pressed={activePicker === 'gif'}
                 >
                   GIF
                 </button>
@@ -547,6 +731,7 @@ export function ChatComposer({
                   className={toolBtn(false)}
                   onClick={() => imageInputRef.current?.click()}
                   aria-label="Photo"
+                  title="Add photos — or drop / paste them into the chat"
                 >
                   📷
                 </button>
@@ -554,6 +739,7 @@ export function ChatComposer({
                   ref={imageInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
                   className="hidden"
                   onChange={onImageChange}
                 />
@@ -579,7 +765,7 @@ export function ChatComposer({
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!canSend || sending}
-                  className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-cyan-500/10 hover:text-cyan-400 disabled:opacity-40"
+                  className="af-chat-send rounded-lg p-1.5 text-white/40 transition-colors hover:bg-cyan-500/10 hover:text-cyan-400 disabled:opacity-40"
                   aria-label="Send league message"
                   data-testid="league-chat-send"
                 >
@@ -589,7 +775,7 @@ export function ChatComposer({
                   <button
                     type="button"
                     onClick={onAskChimmy}
-                    className="rounded-md bg-violet-500/20 px-2 py-1.5 text-[11px] font-bold text-violet-300 transition-colors hover:bg-violet-500/30"
+                    className="af-chat-ask-chimmy rounded-md bg-violet-500/20 px-2 py-1.5 text-[11px] font-bold text-violet-300 transition-colors hover:bg-violet-500/30"
                   >
                     Ask Chimmy
                   </button>
