@@ -28,6 +28,8 @@ import { PLAN_FAMILY_INCLUDES, PLAN_FAMILY_SHORT_TAGLINE } from "@/lib/monetizat
 import { StripePaymentHint } from "@/components/monetization/StripePaymentHint";
 import CouponInput from "@/components/promotions/CouponInput";
 import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
+import { useLaunchOffer } from "@/components/launch/LaunchOfferContext";
+import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
 
 export type PlanFamily =
   | "af_pro"
@@ -161,6 +163,14 @@ export default function MonetizationPurchaseSurface({
 
   const geo = useGeoRestriction();
   const blockPaidCommerce = geo.isPaidBlocked && !geo.loading;
+
+  /*
+   * Countdown + founding-member offer, from app/upgrade/layout.tsx (null on /pro, /all-access and
+   * anywhere else without that layout). A founding member is NOT nudged toward the sponsor code:
+   * Stripe takes one discount per checkout, so typing a code replaces the founding discount.
+   */
+  const launchOffer = useLaunchOffer();
+  const foundingMember = launchOffer?.founding?.audience === "member";
 
   const searchParams = useSearchParams();
   const highlightParam = searchParams?.get("highlight");
@@ -376,7 +386,8 @@ export default function MonetizationPurchaseSurface({
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
-                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> One subscription for the full Pro + Commissioner + AF Legacy stack — best value for serious players.</span>
+                    {/* ⚠ NOT "Pro + Commissioner + AF Legacy": SUPREME_INCLUDED_PLAN_IDS is [pro, commissioner]. */}
+                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> AF Pro and AF Commissioner in one subscription, for less than buying both. AF Legacy is sold separately.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
@@ -504,6 +515,8 @@ export default function MonetizationPurchaseSurface({
           <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
+        <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />
+
         <section className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="monetization-plan-explanations">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/80">What each plan includes</h2>
           <p className="mt-1 text-[11px] text-white/50">
@@ -564,7 +577,7 @@ export default function MonetizationPurchaseSurface({
               setAppliedCouponPct(0)
             }}
           />
-          {!appliedCouponCode && (
+          {!appliedCouponCode && !foundingMember && (
             <p className="mt-2 text-[11px] text-white/35">
               Try <span className="font-black text-amber-300/60">WassupFred</span> for 20% off your first subscription or token pack
             </p>
@@ -679,7 +692,7 @@ export default function MonetizationPurchaseSurface({
                                 ? `Continue — ${appliedCouponPct}% off applied`
                                 : "Continue with Stripe — Monthly"}
                           </button>
-                          {!appliedCouponCode && (
+                          {!appliedCouponCode && !foundingMember && (
                             <p className="mt-1.5 text-center text-[10px] text-white/30">
                               Use <span className="font-bold text-amber-300/60">WassupFred</span> for 20% off first purchase
                             </p>

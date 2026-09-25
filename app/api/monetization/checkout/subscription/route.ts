@@ -11,6 +11,7 @@ import {
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
+import { isFoundingMemberUser } from "@/lib/monetization/foundingMemberServer"
 import {
   duplicatePlanReason,
   findLiveStripePlanFamiliesForUser,
@@ -118,6 +119,13 @@ export async function POST(req: Request) {
     }
 
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
+    /*
+     * Founding-member pricing (lib/monetization/foundingMember.ts): an account created before
+     * the paywall start gets STRIPE_FOUNDING_COUPON_ID on its subscription. Not looked up when a
+     * sponsor code was validated — that code is what the buyer was shown and it wins — and
+     * `isFoundingMemberUser` reads nothing at all while the env var is unset.
+     */
+    const foundingMember = resolvedCouponCode ? false : await isFoundingMemberUser(session.user.id)
     // Canonical checkout: charge is derived from the catalog price id
     // (STRIPE_PRICE_AF_*), guaranteeing charged == displayed catalog price.
     const checkout = await buildStripeCheckoutSessionForSku({
@@ -128,6 +136,7 @@ export async function POST(req: Request) {
       returnPath,
       couponCode: resolvedCouponCode,
       couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
+      foundingMember,
     })
     if (!checkout || checkout.purchaseType !== "subscription") {
       return NextResponse.json(
@@ -160,6 +169,7 @@ export async function POST(req: Request) {
       sku: item.sku,
       purchaseType: "subscription",
       metaEvent,
+      foundingDiscountApplied: checkout.foundingDiscountApplied,
       ...(resolvedCouponCode
         ? {
             couponApplied: true,

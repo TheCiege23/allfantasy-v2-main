@@ -10,6 +10,8 @@ import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/pla
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
+import { useLaunchOffer } from '@/components/launch/LaunchOfferContext'
+import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --text2 …)
 // that every rule in af-pricing.css reads. AfCoreShell imports it for screens inside
 // the shell; this one renders standalone at /pricing, so without this line the whole
@@ -179,6 +181,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   const postPurchase = usePostPurchaseSync({
     successMessage: 'Purchase complete. We refreshed your access.',
   })
+  // Countdown + founding-member offer, from app/pricing/layout.tsx. Null outside that layout.
+  const launchOffer = useLaunchOffer()
 
   /*
    * app/pricing/page.tsx is a server component, so the view event has to live
@@ -314,6 +318,13 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         </p>
       ) : null}
       {error ? <p className="af-pr-error">{error}</p> : null}
+
+      {/*
+        Directly above the plans: how long everything stays free, and — for a founding member or
+        a visitor who can still become one — that the founding discount is applied at checkout.
+        Renders nothing after launch for anyone without a founding offer.
+      */}
+      <LaunchOfferStrip offer={launchOffer} surface="pricing" />
 
       <div className="af-pr-grid">
         {/* ── Free ─────────────────────────────────────────────── */}

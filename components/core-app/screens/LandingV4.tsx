@@ -7,6 +7,8 @@ import {
 } from '@/lib/i18n/landing-copy'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
 import { getLandingConnectPlatforms } from '@/components/core-app/screens/landingConnectPlatforms'
+import { LaunchBanner } from '@/components/launch/LaunchBanner'
+import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
 // standalone at `/`, so without this line every `var(--surface)` and `var(--line)`
@@ -141,7 +143,16 @@ function Shield() {
 export function LandingV4({
   lang = DEFAULT_LANDING_LANG,
   signedIn = false,
-}: { lang?: LandingLang; signedIn?: boolean } = {}) {
+  launch = null,
+}: {
+  lang?: LandingLang
+  signedIn?: boolean
+  /**
+   * The pre-launch banner's data — app/page.tsx passes it only while the paywall has not started.
+   * Null (the default) renders no banner, so this component carries no clock of its own.
+   */
+  launch?: { startsAt: string; founding: FoundingOfferView | null } | null
+} = {}) {
   /*
    * ⚠ THE PRICES ARE READ FROM THE CATALOG HERE, NOT TYPED INTO THE COPY.
    *
@@ -261,6 +272,15 @@ export function LandingV4({
           </details>
         </div>
       </nav>
+
+      {/*
+        ── Launch banner ──────────────────────────────────────────────
+        Above the hero because it is time-limited and the hero is not: "free until Oct 15" is the
+        one thing on this page that stops being true, so it goes where nobody scrolls past it.
+      */}
+      {launch ? (
+        <LaunchBanner startsAt={launch.startsAt} lang={lang} signedIn={signedIn} founding={launch.founding} />
+      ) : null}
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <header className="af-lp-hero">

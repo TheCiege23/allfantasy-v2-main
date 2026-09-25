@@ -179,6 +179,9 @@ import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
+import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
+import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
+import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 import CommissionerOverview from '@/components/core-app/screens/CommissionerOverview'
 import { getCommissionerOverview } from '@/lib/core-app/commissionerOverview'
 import Standings from '@/components/core-app/screens/Standings'
@@ -1199,6 +1202,18 @@ export default async function AfCorePage({
       }
     : null
 
+  /*
+   * The launch countdown on the home (components/launch) — "Everything's free until Oct 15".
+   * Same rule as the depth locks' "Free until" chip (`preLaunchFree` in coreDepthAccess): only
+   * before the paywall, only for a viewer WITHOUT a plan — plan holders never see it. A failed plan
+   * read (`access` null) shows nothing rather than risk counting down at a paying customer. No read
+   * of its own: the plan answer is the one the chip above already awaited.
+   */
+  const homeLaunchOffer: LaunchOfferView | null = homeLaunchOfferFor({
+    hasPlan: access ? access.hasSubscription : null,
+    now,
+  })
+
   const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
 
   /*
@@ -1383,6 +1398,7 @@ export default async function AfCorePage({
         modelAdminAllowed,
         syncAge,
         plan,
+        homeLaunchOffer,
         commissionerCount,
         now,
         errorResetKey,
@@ -1676,6 +1692,8 @@ type CoreScreenContext = {
   modelAdminAllowed: boolean
   syncAge: { label: string; stale: boolean }
   plan: { name: string; tokensLeft: number | null } | null
+  /** The home's launch countdown — non-null only before launch for a viewer without a plan. */
+  homeLaunchOffer: LaunchOfferView | null
   commissionerCount: number
   now: Date
   /** The URL key the error boundaries reset on — computed once, beside the screen's own. */
@@ -1734,6 +1752,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     modelAdminAllowed,
     syncAge,
     plan,
+    homeLaunchOffer,
     commissionerCount,
     now,
     errorResetKey,
@@ -4463,7 +4482,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               }),
             })}
             prefetch={{ unreadNotifications, gameDayActive: coreActivity.gameDayActive }}
-            lead={<ConnectLeagueCard userId={userId} leagueCount={playedLeagues.length} />}
+            lead={
+              <>
+                {/* Pre-launch, no plan: "Everything's free until Oct 15" + countdown. Null otherwise. */}
+                {homeLaunchOffer ? <LaunchOfferStrip offer={homeLaunchOffer} surface="core" /> : null}
+                <ConnectLeagueCard userId={userId} leagueCount={playedLeagues.length} />
+              </>
+            }
           />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
