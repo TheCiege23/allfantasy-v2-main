@@ -6,7 +6,8 @@ const read = (...parts: string[]) => readFileSync(path.join(process.cwd(), ...pa
 
 describe('Core to Chimmy surface wiring', () => {
   it('sends the validated tab context from the drawer', () => {
-    const drawer = read('components', 'core-app', 'comms', 'CommsDrawer.tsx')
+    // The drawer's Chimmy tab is ChimmyPanel.tsx (shared with /chimmy/chat).
+    const drawer = read('components', 'core-app', 'comms', 'ChimmyPanel.tsx')
     expect(drawer).toContain("form.append('coreSurface', pageSurface)")
   })
 

@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 
+/* The Chimmy tab's scope note lives in ChimmyPanel.tsx, shared by the drawer and /chimmy/chat. */
 const DRAWER = fs.readFileSync(
-  path.join(process.cwd(), 'components', 'core-app', 'comms', 'CommsDrawer.tsx'),
+  path.join(process.cwd(), 'components', 'core-app', 'comms', 'ChimmyPanel.tsx'),
   'utf8',
 )
 const TOOLS = fs.readFileSync(

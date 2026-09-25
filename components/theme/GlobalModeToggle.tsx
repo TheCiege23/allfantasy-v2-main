@@ -31,6 +31,12 @@ export function GlobalModeToggle() {
    *  own theme controls in DraftTopBar; the global toggle is redundant here. */
   if (pathname?.startsWith("/draft/") || pathname?.startsWith("/draft-room/")) return null
 
+  /** /chimmy/chat is the chat drawer's Chimmy tab at full screen, and like the drawer it is always
+   *  dark (af-comms.css scopes its own tokens), so a light/dark switch there changes nothing on
+   *  screen. It also floated over the conversation just above the composer on a phone, and over the
+   *  old page's shortcut popup (hands-on test, 2026-09-25). Same call as /core above. */
+  if (pathname === "/chimmy/chat" || pathname.startsWith("/chimmy/chat/")) return null
+
   /** Canonical `/create-league`; legacy `/leagues/create` and `/create-league/v2` redirect but may flash on client. */
   const createLeagueRoute =
     pathname.startsWith('/create-league') || pathname === '/leagues/create'

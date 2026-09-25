@@ -8,8 +8,14 @@ import {
   getLeagueChatMessages,
 } from '@/lib/league-chat/LeagueChatMessageService'
 import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
-import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
-import { getAccessibleBbChannels, type BigBrotherChannelKey } from '@/lib/big-brother/BigBrotherChatChannels'
+import type { BigBrotherChannelKey } from '@/lib/big-brother/BigBrotherChatChannels'
+import {
+  bbChannelOfMessage,
+  getBbChatAccess,
+  isBbChannelKey,
+  resolveBbWriteChannel,
+} from '@/lib/big-brother/bbChatChannelAccess'
+import { sanitizeClientMessageMetadata } from '@/lib/chat-core/clientMessageInput'
 import { processBigBrotherLeagueChatInput } from '@/lib/big-brother/chimmyCommandHandler'
 import { processIdpLeagueChatInput } from '@/lib/idp/idpChimmyLeagueChat'
 import { processDevyLeagueChatInput } from '@/lib/devy/devyChimmyLeagueChat'
@@ -35,14 +41,6 @@ function gifUrlFromMetadata(meta: Record<string, unknown> | undefined): string |
   if (!meta) return null
   const g = meta.gifUrl ?? meta.previewUrl ?? meta.imageUrl
   return typeof g === 'string' ? g : null
-}
-
-function readBbChannelKeyFromMetadata(metadata: Record<string, unknown> | undefined): BigBrotherChannelKey | null {
-  const raw = metadata?.bbChannel
-  if (raw === 'main' || raw === 'hoh_room' || raw === 'have_nots' || raw === 'jury' || raw === 'nominees') {
-    return raw
-  }
-  return null
 }
 
 /*
@@ -130,22 +128,13 @@ export async function GET(req: NextRequest) {
     void markLeagueChatRead(userId, leagueId)
   }
 
-  const bigBrotherLeague = await isBigBrotherLeague(leagueId)
+  /* The room rule lives in lib/big-brother/bbChatChannelAccess.ts — shared with every other reader. */
+  const bbAccess = await getBbChatAccess(leagueId, userId)
   let selectedBbChannel: BigBrotherChannelKey | null = null
-  if (bigBrotherLeague) {
+  if (bbAccess) {
     const requested = req.nextUrl.searchParams?.get('channel')?.trim()
-    selectedBbChannel =
-      requested === 'main' ||
-      requested === 'hoh_room' ||
-      requested === 'have_nots' ||
-      requested === 'jury' ||
-      requested === 'nominees'
-        ? requested
-        : 'main'
-
-    const access = await getAccessibleBbChannels(leagueId, userId)
-    const readable = new Set(access.filter((c) => c.canRead).map((c) => c.key))
-    if (!readable.has(selectedBbChannel)) {
+    selectedBbChannel = isBbChannelKey(requested) ? requested : 'main'
+    if (!bbAccess.readable.has(selectedBbChannel)) {
       return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
     }
   }
@@ -186,17 +175,9 @@ export async function GET(req: NextRequest) {
    */
   const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
 
-  const filteredMessages =
-    bigBrotherLeague && selectedBbChannel
-      ? withoutPins.filter((message) => {
-          const metadata =
-            message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata)
-              ? (message.metadata as Record<string, unknown>)
-              : undefined
-          const channel = readBbChannelKeyFromMetadata(metadata) ?? 'main'
-          return channel === selectedBbChannel
-        })
-      : withoutPins
+  const filteredMessages = selectedBbChannel
+    ? withoutPins.filter((message) => bbChannelOfMessage(message) === selectedBbChannel)
+    : withoutPins
 
   /*
    * Presence beacon. Folded into the poll the drawer already makes rather than
@@ -277,22 +258,34 @@ export async function POST(req: NextRequest) {
   const leagueId = toStringValue(body?.leagueId).trim()
   const message = toStringValue(body?.message).trim()
   const metadataRaw = body?.metadata
-  const metadata =
+  const rawMetadata =
     metadataRaw && typeof metadataRaw === 'object' && !Array.isArray(metadataRaw)
       ? (metadataRaw as Record<string, unknown>)
       : undefined
+  /*
+   * 🛑 NEVER STORE THE CLIENT'S METADATA AS SENT. Only the keys a composer legitimately writes
+   * survive (lib/chat-core/clientMessageInput.ts); `discordAuthorName`, reactions, votes, trade
+   * cards and the rest are server-owned, and the read path trusts them.
+   */
+  const metadata = sanitizeClientMessageMetadata(rawMetadata)
 
   if (!leagueId) {
     return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   }
 
-  const metaStr = metadata ? JSON.stringify(metadata) : ''
+  const metaStr = rawMetadata ? JSON.stringify(rawMetadata) : ''
   if (metaStr.length > 120_000) {
     return NextResponse.json({ error: 'Metadata too large' }, { status: 400 })
   }
 
+  /*
+   * `bbChannel` is not rich content, but the dashboard panel sends it on every Big Brother message and
+   * this test has always counted it — which is what keeps that panel's plain text out of the Chimmy
+   * command handlers below. Counting it still preserves that; changing it is a product decision.
+   */
   const hasRich =
-    Boolean(metadata && Object.keys(metadata).length > 0) ||
+    Boolean(metadata) ||
+    Boolean(rawMetadata && Object.prototype.hasOwnProperty.call(rawMetadata, 'bbChannel')) ||
     Boolean(toStringValue(body?.gifId)) ||
     Boolean(body?.poll) ||
     (Array.isArray(body?.attachments) && body.attachments.length > 0)
@@ -309,24 +302,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const bigBrotherLeague = await isBigBrotherLeague(leagueId)
-  let selectedBbChannel: BigBrotherChannelKey | null = null
-  if (bigBrotherLeague) {
-    selectedBbChannel = readBbChannelKeyFromMetadata(metadata) ?? 'main'
-    const access = await getAccessibleBbChannels(leagueId, userId)
-    const writeable = new Set(access.filter((c) => c.canWrite).map((c) => c.key))
-    if (!writeable.has(selectedBbChannel)) {
-      return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
-    }
+  const bbWrite = await resolveBbWriteChannel(leagueId, userId, rawMetadata)
+  if (!bbWrite.ok) {
+    return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
   }
+  /* Non-null exactly when this is a Big Brother league: the room the sender may post in. */
+  const selectedBbChannel: BigBrotherChannelKey | null = bbWrite.channel
+  const bigBrotherLeague = selectedBbChannel !== null
 
-  const persistedMetadata: Record<string, unknown> | undefined =
-    metadata && Object.keys(metadata).length > 0 ? { ...metadata } : undefined
-
-  const finalMetadata =
-    bigBrotherLeague && selectedBbChannel
-      ? { ...(persistedMetadata ?? {}), bbChannel: selectedBbChannel }
-      : persistedMetadata
+  const finalMetadata = selectedBbChannel ? { ...(metadata ?? {}), bbChannel: selectedBbChannel } : metadata
 
   let bbProcessed: Awaited<ReturnType<typeof processBigBrotherLeagueChatInput>> | null = null
   if (!hasRich && message.trim() && bigBrotherLeague) {

@@ -231,8 +231,9 @@ describe('what an answer was built from', () => {
  * are READ off the envelope and handed to the block.
  */
 describe('the drawer reads the evidence off the envelope', () => {
+  // The Chimmy tab (and /chimmy/chat) is ChimmyPanel.tsx; the drawer renders it.
   const DRAWER = fs.readFileSync(
-    path.join(process.cwd(), 'components', 'core-app', 'comms', 'CommsDrawer.tsx'),
+    path.join(process.cwd(), 'components', 'core-app', 'comms', 'ChimmyPanel.tsx'),
     'utf8',
   )
 
