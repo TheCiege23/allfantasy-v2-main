@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getStripeClient } from "@/lib/stripe-client"
 import { getBaseUrl } from "@/lib/get-base-url"
+import { enforcePaidAccountLock } from "@/lib/geo/enforcePaidAccountLock"
 import {
   assertNoLeagueSettlementIntent,
   isMonetizationComplianceError,
@@ -15,6 +16,10 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // A card-locked account never reaches Stripe (lib/subscription/paidStateRefusal).
+    const accountLock = await enforcePaidAccountLock(session.user.id)
+    if (accountLock) return accountLock
 
     const body = await req.json()
     const { leagueId, paymentType } = body

@@ -9,6 +9,7 @@ import { getToken } from "next-auth/jwt"
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
+import { CARD_PAID_LOCK_MESSAGE, CARD_PAID_LOCK_REDIRECT } from "@/lib/geo/cardLockCopy"
 import { isTorExit, resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
 import { resolveAnonymizerByIp } from "@/lib/geo/anonymizerCache"
@@ -442,6 +443,11 @@ async function pageVpnRedirect(
  * Still reachable while locked: everything isExemptPath allows (legal pages, the
  * block pages, /api/auth so sign-out works, crons, webhooks), machine APIs, and
  * the billing portal — cancelling must never depend on the lock being lifted.
+ *
+ * The CARD lock (`card_paid_block`) is narrower: a purchase whose card billing
+ * address was in a restricted state was refunded, and the account is kept off
+ * the paid surfaces only (isPaidRoute) — the same surfaces a paid-block state's
+ * IP is kept off, from anywhere. Free features stay open.
  */
 const ACCOUNT_LOCK_EXEMPT_API_PREFIXES = ["/api/subscription/billing-portal"]
 
@@ -451,36 +457,64 @@ function hasSessionCookie(request: NextRequest): boolean {
     .some((c) => c.name.includes("next-auth.session-token") || c.name.includes("authjs.session-token"))
 }
 
-/** True when the signed-in account carries the lock and is not the owner. Decodes the session only when a session cookie exists. */
-async function isAccountGeoLocked(request: NextRequest): Promise<boolean> {
-  if (!hasSessionCookie(request)) return false
+type AccountLock = "full_block" | "card_paid_block" | null
+
+/** The signed-in account's lock, or null for none / the owner. Decodes the session only when a session cookie exists. */
+async function accountGeoLockOf(request: NextRequest): Promise<AccountLock> {
+  if (!hasSessionCookie(request)) return null
   const authSecret = resolveAuthSecret()
-  if (!authSecret) return false
+  if (!authSecret) return null
   const token = await getToken({ req: request, secret: authSecret })
-  if (token?.geoLock !== "full_block") return false
-  return !isMiddlewareAdmin(typeof token.sub === "string" ? token.sub : null)
+  const lock = token?.geoLock
+  if (lock !== "full_block" && lock !== "card_paid_block") return null
+  return isMiddlewareAdmin(typeof token?.sub === "string" ? token.sub : null) ? null : lock
 }
 
 const ACCOUNT_LOCKED_MESSAGE =
-  "This account can't be used because it has been used in Washington, where AllFantasy.ai isn't available. If that's wrong, email support@allfantasy.ai."
+  "This account can't be used because it has been used in Washington, or paid with a card billed there, and AllFantasy.ai isn't available in Washington. If that's wrong, email support@allfantasy.ai."
 
 async function apiAccountLockRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
   if (isFullBlockApiExempt(pathname)) return null
   if (ACCOUNT_LOCK_EXEMPT_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return null
-  if (!(await isAccountGeoLocked(request))) return null
-  return new NextResponse(
-    JSON.stringify({ error: "GEO_BLOCKED", reason: "account", message: ACCOUNT_LOCKED_MESSAGE, redirectTo: "/geo-blocked?reason=account" }),
-    { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
-  )
+  const lock = await accountGeoLockOf(request)
+  if (lock === "full_block") {
+    return new NextResponse(
+      JSON.stringify({ error: "GEO_BLOCKED", reason: "account", message: ACCOUNT_LOCKED_MESSAGE, redirectTo: "/geo-blocked?reason=account" }),
+      { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
+    )
+  }
+  if (lock === "card_paid_block" && isPaidRoute(pathname)) {
+    return new NextResponse(
+      JSON.stringify({
+        error: "PAID_GEO_BLOCKED",
+        reason: "billing_address",
+        message: CARD_PAID_LOCK_MESSAGE,
+        allowFree: true,
+        redirectTo: CARD_PAID_LOCK_REDIRECT,
+      }),
+      { status: 451, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
+    )
+  }
+  return null
 }
 
-async function pageAccountLockRedirect(request: NextRequest): Promise<NextResponse | null> {
-  if (!(await isAccountGeoLocked(request))) return null
-  const url = request.nextUrl.clone()
-  url.pathname = "/geo-blocked"
-  url.search = ""
-  url.searchParams.set("reason", "account")
-  return NextResponse.redirect(url)
+async function pageAccountLockRedirect(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  const lock = await accountGeoLockOf(request)
+  if (lock === "full_block") {
+    const url = request.nextUrl.clone()
+    url.pathname = "/geo-blocked"
+    url.search = ""
+    url.searchParams.set("reason", "account")
+    return NextResponse.redirect(url)
+  }
+  if (lock === "card_paid_block" && isPaidRoute(pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/paid-restricted"
+    url.search = ""
+    url.searchParams.set("reason", "billing")
+    return NextResponse.redirect(url)
+  }
+  return null
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -972,7 +1006,7 @@ async function routeMiddleware(request: NextRequest) {
   // Outside the `country === "US"` guard on purpose: a VPN exit abroad is the
   // cheapest way around every state rule. Public pages load; nothing else does.
   // Before the VPN check, so a locked account on a VPN is told the real reason.
-  const lockRedirect = await pageAccountLockRedirect(request)
+  const lockRedirect = await pageAccountLockRedirect(request, pathname)
   if (lockRedirect) return lockRedirect
 
   const vpnRedirect = await pageVpnRedirect(request, pathname, tokenUserId)

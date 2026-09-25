@@ -6,6 +6,7 @@ const userSubscriptionFindFirstMock = vi.hoisted(() => vi.fn())
 const tokenLedgerFindFirstMock = vi.hoisted(() => vi.fn())
 const entitlementResolveMock = vi.hoisted(() => vi.fn())
 const tokenBalanceResolveMock = vi.hoisted(() => vi.fn())
+const appUserFindUniqueMock = vi.hoisted(() => vi.fn())
 
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
@@ -22,6 +23,9 @@ vi.mock('@/lib/prisma', () => ({
     },
     tokenLedger: {
       findFirst: tokenLedgerFindFirstMock,
+    },
+    appUser: {
+      findUnique: appUserFindUniqueMock,
     },
   },
 }))
@@ -61,6 +65,7 @@ describe('GET /api/monetization/post-purchase-sync', () => {
     })
     userSubscriptionFindFirstMock.mockResolvedValue(null)
     tokenLedgerFindFirstMock.mockResolvedValue(null)
+    appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: null })
   })
 
   it('returns no_session sync status without session id', async () => {
@@ -113,5 +118,48 @@ describe('GET /api/monetization/post-purchase-sync', () => {
       plans: ['pro'],
       status: 'active',
     })
+  })
+
+  // The paid-state card check refunded the purchase (lib/subscription/paidStateRefusal):
+  // without this the buyer waits on "still finalizing" for a purchase that is never coming.
+  it('returns refused for an unlanded purchase on a card-locked account', async () => {
+    appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: 'card_paid_block' })
+    const { GET } = await import('@/app/api/monetization/post-purchase-sync/route')
+    const res = await GET(
+      createMockNextRequest('http://localhost/api/monetization/post-purchase-sync?session_id=cs_test_nv')
+    )
+    const body = await res.json()
+    expect(body.syncStatus).toBe('refused')
+    expect(body.syncMessage).toContain('refunded in full')
+  })
+
+  it('returns refused for a Washington card, which sets the FULL lock', async () => {
+    appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: 'full_block' })
+    const { GET } = await import('@/app/api/monetization/post-purchase-sync/route')
+    const res = await GET(
+      createMockNextRequest('http://localhost/api/monetization/post-purchase-sync?session_id=cs_test_wa')
+    )
+    expect((await res.json()).syncStatus).toBe('refused')
+  })
+
+  it('stays pending on an unlocked account, and on the signup flag the owner chose not to use', async () => {
+    for (const level of [null, 'paid_block']) {
+      appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: level })
+      const { GET } = await import('@/app/api/monetization/post-purchase-sync/route')
+      const res = await GET(
+        createMockNextRequest('http://localhost/api/monetization/post-purchase-sync?session_id=cs_test_ok')
+      )
+      expect((await res.json()).syncStatus).toBe('pending')
+    }
+  })
+
+  it('never reports a purchase that DID land as refused', async () => {
+    appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: 'card_paid_block' })
+    tokenLedgerFindFirstMock.mockResolvedValue({ id: 'led-1' })
+    const { GET } = await import('@/app/api/monetization/post-purchase-sync/route')
+    const res = await GET(
+      createMockNextRequest('http://localhost/api/monetization/post-purchase-sync?session_id=cs_test_landed')
+    )
+    expect((await res.json()).syncStatus).toBe('synced')
   })
 })

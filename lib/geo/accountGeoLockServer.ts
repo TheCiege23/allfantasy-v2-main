@@ -12,11 +12,15 @@ import { headers as requestHeaders } from "next/headers"
 import { prisma } from "@/lib/prisma"
 
 import {
+  ACCOUNT_CARD_PAID_BLOCK,
   ACCOUNT_FULL_BLOCK,
+  accountGeoLockFromLevel,
+  forgetAccountGeoLock,
   observeAndReadAccountLock,
   type AccountGeoLock,
   type AccountLockStore,
 } from "./accountGeoLock"
+import { isFullyBlocked } from "./restrictedStates"
 
 export const prismaAccountLockStore: AccountLockStore = {
   async read(userId) {
@@ -26,7 +30,7 @@ export const prismaAccountLockStore: AccountLockStore = {
         select: { stateRestrictionLevel: true },
       })
       // No row is an authoritative "no lock"; a failed read is `undefined`.
-      return row?.stateRestrictionLevel === ACCOUNT_FULL_BLOCK ? ACCOUNT_FULL_BLOCK : null
+      return accountGeoLockFromLevel(row?.stateRestrictionLevel)
     } catch {
       return undefined
     }
@@ -57,4 +61,45 @@ function currentRequestHeaders(): Headers | null {
 /** Observe this request for the account and return its lock (`undefined` = could not read). */
 export async function refreshAccountGeoLock(userId: string): Promise<AccountGeoLock | undefined> {
   return observeAndReadAccountLock(userId, currentRequestHeaders(), prismaAccountLockStore)
+}
+
+/**
+ * The account's lock read straight from the database, skipping the per-process
+ * cache — for a checkout, where a stale "unlocked" would mint a Stripe session
+ * the webhook then has to refund. `undefined` = the read failed.
+ */
+export async function readAccountGeoLockFresh(userId: string): Promise<AccountGeoLock | undefined> {
+  return prismaAccountLockStore.read(userId)
+}
+
+/**
+ * Lock the account because a purchase's card billing address was in a
+ * restricted state. Leaves `detectedStateCode` alone either way: that column
+ * records where the account was SEEN, and a card is not a sighting.
+ *
+ * A WASHINGTON card is the full lock (owner's decision, 2026-09-25): Washington
+ * bans even free play, and a Washington billing address is as strong a sign of
+ * where the buyer lives as a Washington sighting. Any other restricted state is
+ * the card lock — paid surfaces only — and never downgrades a full lock.
+ *
+ * ⚠ The filter spells out the NULL case. `{ not: "full_block" }` alone is SQL
+ * `<> 'full_block'`, which is NULL — not true — for an account with no level at
+ * all, so it would silently skip exactly the accounts this exists to lock.
+ */
+export async function lockAccountForCardBillingState(userId: string, stateCode: string): Promise<void> {
+  if (isFullyBlocked(stateCode)) {
+    await prisma.appUser.updateMany({
+      where: { id: userId },
+      data: { stateRestrictionLevel: ACCOUNT_FULL_BLOCK, isStateRestricted: true },
+    })
+  } else {
+    await prisma.appUser.updateMany({
+      where: {
+        id: userId,
+        OR: [{ stateRestrictionLevel: null }, { stateRestrictionLevel: { not: ACCOUNT_FULL_BLOCK } }],
+      },
+      data: { stateRestrictionLevel: ACCOUNT_CARD_PAID_BLOCK, isStateRestricted: true },
+    })
+  }
+  forgetAccountGeoLock(userId)
 }

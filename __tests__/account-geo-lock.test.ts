@@ -25,7 +25,9 @@ vi.mock("@/lib/geo/geoIpFetch", () => ({ fetchIpApi: vi.fn(), fetchProxycheck: v
 import { getToken } from "next-auth/jwt"
 import { middleware } from "@/middleware"
 import {
+  ACCOUNT_CARD_PAID_BLOCK,
   ACCOUNT_FULL_BLOCK,
+  accountGeoLockFromLevel,
   __resetAccountGeoLockCache,
   observeAndReadAccountLock,
   type AccountGeoLock,
@@ -295,5 +297,79 @@ describe("the bracket checkout joins the paid gate", () => {
       }),
     )
     expect(res.status).not.toBe(451)
+  })
+})
+
+/*
+ * The CARD lock (2026-09-25): a purchase with a restricted state's card billing
+ * address was refunded, and the account is kept off PAID surfaces only — from
+ * anywhere. Free features stay open, which is the whole difference from the
+ * Washington lock above.
+ */
+describe("the card lock keeps an account off paid surfaces only", () => {
+  const SESSION_COOKIE = "__Secure-next-auth.session-token=abc"
+
+  function req(path: string, { method = "GET", region = "OR" } = {}) {
+    return new NextRequest(new URL(`https://www.allfantasy.ai${path}`), {
+      method,
+      headers: { "cf-ipcountry": "US", "cf-region-code": region, "cf-connecting-ip": HOME_IP, cookie: SESSION_COOKIE },
+    })
+  }
+
+  function cardLockedToken(sub = USER) {
+    mockedGetToken.mockResolvedValue({ sub, username: "someone", geoLock: ACCOUNT_CARD_PAID_BLOCK } as never)
+  }
+
+  it("answers a paid API from Oregon with 451, reason billing_address", async () => {
+    cardLockedToken()
+    const res = await middleware(req("/api/monetization/checkout/subscription", { method: "POST" }))
+    expect(res.status).toBe(451)
+    expect(await res.json()).toMatchObject({
+      error: "PAID_GEO_BLOCKED",
+      reason: "billing_address",
+      redirectTo: "/paid-restricted?reason=billing",
+    })
+  })
+
+  it("sends a paid page to /paid-restricted?reason=billing", async () => {
+    cardLockedToken()
+    const loc = new URL((await middleware(req("/league/abc/dispersal-draft"))).headers.get("location")!)
+    expect(loc.pathname).toBe("/paid-restricted")
+    expect(loc.searchParams.get("reason")).toBe("billing")
+  })
+
+  it("leaves free pages and free APIs open", async () => {
+    cardLockedToken()
+    expect((await middleware(req("/core"))).headers.get("location")).toBeNull()
+    expect((await middleware(req("/"))).headers.get("location")).toBeNull()
+    const api = await middleware(req("/api/leagues/abc/matchups", { method: "POST" }))
+    expect(api.status).not.toBe(451)
+    expect(api.status).not.toBe(403)
+  })
+
+  it("still lets the account reach the billing portal, to cancel anything it already has", async () => {
+    cardLockedToken()
+    expect((await middleware(req("/api/subscription/billing-portal", { method: "POST" }))).status).not.toBe(451)
+  })
+
+  it("honours the owner bypass", async () => {
+    cardLockedToken(OWNER_ID)
+    expect((await middleware(req("/api/monetization/checkout/subscription", { method: "POST" }))).status).not.toBe(451)
+  })
+})
+
+describe("stored levels", () => {
+  it("reads the signup route's `paid_block` as NO lock — the owner chose the card over that signal", () => {
+    expect(accountGeoLockFromLevel("paid_block")).toBeNull()
+    expect(accountGeoLockFromLevel(null)).toBeNull()
+    expect(accountGeoLockFromLevel("card_paid_block")).toBe(ACCOUNT_CARD_PAID_BLOCK)
+    expect(accountGeoLockFromLevel("full_block")).toBe(ACCOUNT_FULL_BLOCK)
+  })
+
+  it("escalates a card-locked account to the full lock when it is seen in Washington", async () => {
+    const lock = vi.fn(async () => {})
+    const store: AccountLockStore = { read: async () => ACCOUNT_CARD_PAID_BLOCK, lock }
+    await expect(observeAndReadAccountLock(USER, cfHeaders("WA"), store)).resolves.toBe(ACCOUNT_FULL_BLOCK)
+    expect(lock).toHaveBeenCalledWith(USER, "WA")
   })
 })

@@ -19,6 +19,8 @@ import {
   upsertSubscriptionPlanForCatalogItem,
 } from "@/lib/subscription/webhookHandlers"
 import { isFullRefund, reverseSubscriptionForPayment } from "@/lib/subscription/paymentReversal"
+import { refuseCheckoutForRestrictedBillingState } from "@/lib/subscription/paidStateRefusal"
+import { lockAccountForCardBillingState } from "@/lib/geo/accountGeoLockServer"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
@@ -299,6 +301,21 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
       })
       return purchaseType
     }
+
+    /*
+     * 🛑 THE PAID-STATE CARD CHECK, BEFORE ANYTHING IS GRANTED. A card whose
+     * billing address is in a restricted state gets no plan, no tokens, no Meta
+     * Purchase and no coupon redemption — the payment is refunded, the
+     * subscription cancelled and the account locked out of paid checkout
+     * (lib/subscription/paidStateRefusal). After the unpaid return above on
+     * purpose: a delayed payment is checked when it actually settles, which comes
+     * back through this function.
+     */
+    const refusal = await refuseCheckoutForRestrictedBillingState(session, checkoutContext?.userId ?? null, {
+      stripe: getStripeClient(),
+      lockAccount: lockAccountForCardBillingState,
+    })
+    if (refusal) return `refused_paid_state:${refusal.stateCode}`
 
     if (purchaseType === "subscription") {
       await persistSubscriptionEntitlementFromCheckout(session, checkoutContext)
