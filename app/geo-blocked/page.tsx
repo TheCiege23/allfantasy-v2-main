@@ -5,11 +5,16 @@ export const dynamic = "force-dynamic"
 export default async function GeoBlockedPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ state?: string; vpn?: string }> | { state?: string; vpn?: string }
+  searchParams?:
+    | Promise<{ state?: string; vpn?: string; reason?: string }>
+    | { state?: string; vpn?: string; reason?: string }
 }) {
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const state = typeof sp.state === "string" ? sp.state.toUpperCase() : "WA"
   const showVpn = sp.vpn === "1"
+  // Set by middleware.ts for an account-level lock (lib/geo/accountGeoLock): the
+  // visitor may be anywhere, so the page must say the lock follows the ACCOUNT.
+  const accountLocked = sp.reason === "account"
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
@@ -38,6 +43,20 @@ export default async function GeoBlockedPage({
             paid-restriction page for reference).
           </p>
         </div>
+
+        {accountLocked ? (
+          <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-left text-sm text-red-100">
+            <p className="font-semibold">This account is locked</p>
+            <p className="mt-2 text-red-100/90">
+              Your account has been used from Washington, so it stays locked wherever you sign in from. If you don&apos;t live in
+              Washington (for example, you were only visiting), email{" "}
+              <a href="mailto:support@allfantasy.ai" className="underline">
+                support@allfantasy.ai
+              </a>{" "}
+              from your account&apos;s email address and we&apos;ll review it.
+            </p>
+          </div>
+        ) : null}
 
         {showVpn ? (
           <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-left text-sm text-amber-100">

@@ -208,6 +208,10 @@ const PAID_GEO_PREFIXES = [
   "/api/subscription/upgrade",
   "/api/monetization/checkout",
   "/api/user/autocoach",
+  // Bracket purchases (first_bracket_fee, unlimited_unlock). Found 2026-09-24 as
+  // the one Stripe checkout no geo gate covered: neither listed here nor calling
+  // enforcePaidSubscriptionGeo. Webhooks for it are exempt separately.
+  "/api/bracket/stripe/checkout",
 ]
 
 /** Paid / premium surfaces — align with product geo policy (dispersal, import, rankings, league draft room). */
@@ -426,6 +430,58 @@ async function pageVpnRedirect(
   url.searchParams.set("from", `${pathname}${request.nextUrl.search}`)
   return NextResponse.redirect(url)
 }
+
+// ─── The account lock ────────────────────────────────────────────────────────
+/*
+ * An account seen in Washington on a normal connection stays locked from
+ * anywhere, until support unlocks it (lib/geo/accountGeoLock). This is the one
+ * gate an undetected residential proxy cannot beat: it reads where the ACCOUNT
+ * has been, not where this request appears to be. The jwt callback stamps
+ * `geoLock` onto the session token from the database; this only reads it.
+ *
+ * Still reachable while locked: everything isExemptPath allows (legal pages, the
+ * block pages, /api/auth so sign-out works, crons, webhooks), machine APIs, and
+ * the billing portal — cancelling must never depend on the lock being lifted.
+ */
+const ACCOUNT_LOCK_EXEMPT_API_PREFIXES = ["/api/subscription/billing-portal"]
+
+function hasSessionCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some((c) => c.name.includes("next-auth.session-token") || c.name.includes("authjs.session-token"))
+}
+
+/** True when the signed-in account carries the lock and is not the owner. Decodes the session only when a session cookie exists. */
+async function isAccountGeoLocked(request: NextRequest): Promise<boolean> {
+  if (!hasSessionCookie(request)) return false
+  const authSecret = resolveAuthSecret()
+  if (!authSecret) return false
+  const token = await getToken({ req: request, secret: authSecret })
+  if (token?.geoLock !== "full_block") return false
+  return !isMiddlewareAdmin(typeof token.sub === "string" ? token.sub : null)
+}
+
+const ACCOUNT_LOCKED_MESSAGE =
+  "This account can't be used because it has been used in Washington, where AllFantasy.ai isn't available. If that's wrong, email support@allfantasy.ai."
+
+async function apiAccountLockRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (isFullBlockApiExempt(pathname)) return null
+  if (ACCOUNT_LOCK_EXEMPT_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return null
+  if (!(await isAccountGeoLocked(request))) return null
+  return new NextResponse(
+    JSON.stringify({ error: "GEO_BLOCKED", reason: "account", message: ACCOUNT_LOCKED_MESSAGE, redirectTo: "/geo-blocked?reason=account" }),
+    { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
+  )
+}
+
+async function pageAccountLockRedirect(request: NextRequest): Promise<NextResponse | null> {
+  if (!(await isAccountGeoLocked(request))) return null
+  const url = request.nextUrl.clone()
+  url.pathname = "/geo-blocked"
+  url.search = ""
+  url.searchParams.set("reason", "account")
+  return NextResponse.redirect(url)
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -454,6 +510,9 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
   const vpnRefusal = await apiVpnRefusal(request, pathname)
   if (vpnRefusal) return vpnRefusal
   if (isExemptPath(pathname)) return null
+  // Wherever this request appears to be: the lock follows the account.
+  const lockRefusal = await apiAccountLockRefusal(request, pathname)
+  if (lockRefusal) return lockRefusal
 
   const { country, region } = await resolveRequestGeo(request)
   if (country !== "US" || !region) return null
@@ -912,6 +971,10 @@ async function routeMiddleware(request: NextRequest) {
 
   // Outside the `country === "US"` guard on purpose: a VPN exit abroad is the
   // cheapest way around every state rule. Public pages load; nothing else does.
+  // Before the VPN check, so a locked account on a VPN is told the real reason.
+  const lockRedirect = await pageAccountLockRedirect(request)
+  if (lockRedirect) return lockRedirect
+
   const vpnRedirect = await pageVpnRedirect(request, pathname, tokenUserId)
   if (vpnRedirect) return vpnRedirect
 
