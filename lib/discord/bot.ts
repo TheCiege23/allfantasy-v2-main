@@ -27,6 +27,50 @@ export function isBotConfigured(): boolean {
   return Boolean(process.env.DISCORD_BOT_TOKEN?.trim())
 }
 
+/**
+ * A Discord REST failure with its HTTP status kept, so a route can tell "the bot is
+ * not allowed to do that here" (403) from "Discord is down" (5xx) without parsing a
+ * message. The message never carries the bot token — only the path's status and a
+ * short slice of Discord's own error body.
+ */
+export class DiscordApiError extends Error {
+  readonly status: number
+  constructor(label: string, status: number, detail = '') {
+    super(`${label}: ${status}${detail ? ` ${detail.slice(0, 200)}` : ''}`)
+    this.name = 'DiscordApiError'
+    this.status = status
+  }
+}
+
+/**
+ * The longest we will wait on a rate limit before giving up on a message. A relay
+ * runs inside somebody's chat send, so a long Discord cooldown is not worth holding
+ * that request open for — the message is safe in AllFantasy either way.
+ */
+export const MAX_RETRY_WAIT_MS = 3_000
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * One request, retried ONCE when Discord says "slow down" (429) or has a server
+ * error (5xx). Never more than once and never longer than MAX_RETRY_WAIT_MS, so the
+ * worst case is bounded. Anything else — 400, 403, 404 — is returned as-is: retrying
+ * a refusal only repeats it.
+ */
+async function sendOnceWithRetry(url: string, init: RequestInit): Promise<Response> {
+  const first = await fetch(url, init)
+  if (first.status !== 429 && first.status < 500) return first
+  let waitMs = 1_000
+  if (first.status === 429) {
+    const body = (await first.clone().json().catch(() => null)) as { retry_after?: unknown } | null
+    const seconds = Number(body?.retry_after ?? first.headers.get('retry-after'))
+    if (Number.isFinite(seconds) && seconds >= 0) waitMs = Math.ceil(seconds * 1000)
+  }
+  if (waitMs > MAX_RETRY_WAIT_MS) return first
+  await sleep(waitMs)
+  return fetch(url, init)
+}
+
 let cachedBotUserId: string | null = null
 
 /** Bot's own user id (for loop prevention when polling messages). */
@@ -53,8 +97,8 @@ type DiscordChannel = {
 export async function ensureCategory(guildId: string): Promise<string> {
   const res = await fetch(`${DISCORD_BASE}/guilds/${guildId}/channels`, { headers: botHeaders() })
   if (!res.ok) {
-    const t = await res.text()
-    throw new Error(`ensureCategory: ${res.status} ${t.slice(0, 200)}`)
+    const t = await res.text().catch(() => '')
+    throw new DiscordApiError('ensureCategory', res.status, t)
   }
   const channels = (await res.json()) as DiscordChannel[]
   const existing = channels.find((c) => c.type === 4 && c.name === 'AllFantasy Leagues')
@@ -69,8 +113,8 @@ export async function ensureCategory(guildId: string): Promise<string> {
     }),
   })
   if (!create.ok) {
-    const t = await create.text()
-    throw new Error(`create category: ${create.status} ${t.slice(0, 200)}`)
+    const t = await create.text().catch(() => '')
+    throw new DiscordApiError('create category', create.status, t)
   }
   const cat = (await create.json()) as { id: string }
   return cat.id
@@ -84,9 +128,22 @@ function slugifyLeagueName(name: string): string {
     .slice(0, 99) || 'league-chat'
 }
 
+export type PermissionOverwrite = { id: string; type: number; allow: string; deny: string }
+
+/**
+ * Creates the league's text channel under an "AllFantasy Leagues" category.
+ *
+ * With `permissionOverwrites` (from `privateChannelOverwrites`) the channel is
+ * members-only FROM THE FIRST MOMENT it exists. That matters: creating it open and
+ * locking it afterwards would leave a window where the whole server can read it, and
+ * editing overwrites after creation needs MANAGE_ROLES, which the bot does not ask for.
+ * Creating with overwrites needs only MANAGE_CHANNELS plus the bits being granted,
+ * all of which the install link requests.
+ */
 export async function createLeagueChannel(
   guildId: string,
-  leagueName: string
+  leagueName: string,
+  opts: { permissionOverwrites?: PermissionOverwrite[] } = {}
 ): Promise<{ channelId: string; channelName: string }> {
   const parentId = await ensureCategory(guildId)
   const name = slugifyLeagueName(leagueName)
@@ -97,15 +154,84 @@ export async function createLeagueChannel(
       type: 0,
       name,
       parent_id: parentId,
-      topic: 'League chat synced from AllFantasy.ai 🏈',
+      topic: 'Linked to AllFantasy.ai — your league, your space 🏈',
+      ...(opts.permissionOverwrites ? { permission_overwrites: opts.permissionOverwrites } : {}),
     }),
   })
   if (!res.ok) {
-    const t = await res.text()
-    throw new Error(`createLeagueChannel: ${res.status} ${t.slice(0, 200)}`)
+    const t = await res.text().catch(() => '')
+    throw new DiscordApiError('createLeagueChannel', res.status, t)
   }
   const ch = (await res.json()) as { id: string; name?: string }
   return { channelId: ch.id, channelName: ch.name ?? name }
+}
+
+export type DiscordChannelInfo = {
+  id: string
+  name: string | null
+  guildId: string | null
+  overwrites: PermissionOverwrite[]
+}
+
+/**
+ * One channel as Discord sees it now. Null means Discord says it is GONE (404). Any
+ * other failure throws — including 403, which means the bot can no longer see it (hidden
+ * from the bot, or the bot was removed) rather than that it was deleted. A caller must
+ * never mistake either "Discord is down" or "we are locked out" for "make a new one".
+ */
+export async function getChannel(channelId: string): Promise<DiscordChannelInfo | null> {
+  const res = await fetch(`${DISCORD_BASE}/channels/${channelId}`, { headers: botHeaders(), cache: 'no-store' })
+  if (res.status === 404) return null
+  if (!res.ok) throw new DiscordApiError('getChannel', res.status)
+  const ch = (await res.json()) as {
+    id: string
+    name?: string | null
+    guild_id?: string | null
+    permission_overwrites?: PermissionOverwrite[]
+  }
+  return {
+    id: ch.id,
+    name: ch.name ?? null,
+    guildId: ch.guild_id ?? null,
+    overwrites: Array.isArray(ch.permission_overwrites) ? ch.permission_overwrites : [],
+  }
+}
+
+const VIEW_CHANNEL_BIT = 1n << 10n
+
+/**
+ * Members-only or open to the whole server, read from the channel's own overwrites:
+ * the @everyone overwrite (whose id is the guild id) denying View Channel is what
+ * makes a channel private in Discord. Read live, so a commissioner who changes it in
+ * Discord sees the truth here rather than what we set on day one.
+ */
+export function channelVisibility(info: DiscordChannelInfo, guildId: string): 'private' | 'server' {
+  const everyone = info.overwrites.find((o) => o.id === guildId && Number(o.type) === 0)
+  if (!everyone) return 'server'
+  try {
+    return (BigInt(everyone.deny) & VIEW_CHANNEL_BIT) === VIEW_CHANNEL_BIT ? 'private' : 'server'
+  } catch {
+    return 'server'
+  }
+}
+
+/**
+ * Is this Discord user in this server right now? true / false, or null when Discord
+ * could not answer — which a caller must treat as "unknown", never as "no".
+ * Fetching ONE member needs no privileged intent (listing all members would).
+ */
+export async function isGuildMember(guildId: string, discordUserId: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${DISCORD_BASE}/guilds/${guildId}/members/${discordUserId}`, {
+      headers: botHeaders(),
+      cache: 'no-store',
+    })
+    if (res.ok) return true
+    if (res.status === 404) return false
+    return null
+  } catch {
+    return null
+  }
 }
 
 /** Server owners and administrators retain access under Discord's permission model. */
@@ -130,14 +256,14 @@ export async function postMessage(
   else if (embeds?.length) payload.content = '\u200b'
   else payload.content = ''
   payload.embeds = embeds?.length ? embeds : []
-  const res = await fetch(`${DISCORD_BASE}/channels/${channelId}/messages`, {
+  const res = await sendOnceWithRetry(`${DISCORD_BASE}/channels/${channelId}/messages`, {
     method: 'POST',
     headers: botHeaders(),
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
-    const t = await res.text()
-    throw new Error(`postMessage: ${res.status} ${t.slice(0, 200)}`)
+    const t = await res.text().catch(() => '')
+    throw new DiscordApiError('postMessage', res.status, t)
   }
   const data = (await res.json()) as { id: string }
   return data.id
@@ -195,8 +321,8 @@ export async function createWebhook(
     body: JSON.stringify({ name }),
   })
   if (!res.ok) {
-    const t = await res.text()
-    throw new Error(`createWebhook: ${res.status} ${t.slice(0, 200)}`)
+    const t = await res.text().catch(() => '')
+    throw new DiscordApiError('createWebhook', res.status, t)
   }
   const w = (await res.json()) as { id: string; token: string }
   return { id: w.id, token: w.token }
