@@ -376,8 +376,13 @@ describe('decision-os-activity-ingest ok + platform warnings', () => {
     fetchMflMock.mockResolvedValueOnce({ teams: [], transactions: [], transactionsFetched: false })
     const body = await (await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))).json()
     expect(body.platform).toMatchObject({ unfetched: 1, failed: 0 })
-    const outcome = syncRuns.find((r) => r.ctx.jobName !== undefined)!.outcome as { errors: string[] }
-    const line = outcome.errors.find((e) => /served no activity feed/.test(e))
+    const outcome = syncRuns.find((r) => r.ctx.jobName !== undefined)!.outcome as {
+      errors: string[]
+      warnings: string[]
+    }
+    const line = outcome.warnings.find((e) => /served no activity feed/.test(e))
     expect(line).toBe('1 external-provider leagues (ESPN/MFL) served no activity feed')
+    // ⚠ A warning, not an error: any `errors` entry marks the whole SyncJobRun `failed`.
+    expect(outcome.errors.some((e) => /served no activity feed/.test(e))).toBe(false)
   })
 })
