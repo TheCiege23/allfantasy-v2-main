@@ -173,7 +173,17 @@ type Line = {
    */
   stock?: 'up' | 'down' | 'flat' | null
   stockDelta?: number | null
+  /**
+   * After an analysis: `marketValue` moved by this league's scoring and your roster need — the
+   * number the grade is taken on (Guap, 2026-09-24). Absent before analysis, when every row is the
+   * plain market value; null when the line is unpriced.
+   */
+  leagueValue?: number | null
+  /** What moved `marketValue` to `leagueValue`, each with its reason. */
+  adjustments?: ValueAdjustment[]
 }
+
+type ValueAdjustment = { kind: 'scoring' | 'need'; factor: number; reason: string }
 
 /**
  * One line of the analysis echo.
@@ -182,7 +192,11 @@ type Line = {
  * pricer returns 0 with this flag when it finds nothing at all; the builder took the 0 as a price,
  * so a team defense read "0" after Analyze — and was not counted as unpriced.
  */
-type EngineLine = Line & { unpriced?: boolean; sport?: string | null }
+type EngineLine = Line & {
+  unpriced?: boolean
+  sport?: string | null
+  valueAdjustments?: ValueAdjustment[]
+}
 
 type AnalyzeResult = {
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
@@ -193,6 +207,14 @@ type AnalyzeResult = {
   dataGaps?: string[]
   giveTotal?: number
   getTotal?: number
+  /** What the grade is priced in; see `lib/trade-value-console/types.ts`. */
+  valueBasis?: {
+    graded: 'league' | 'market'
+    label: string
+    scoringAdjusted: boolean
+    needAdjusted: boolean
+    needGap: string | null
+  }
   players?: { give: EngineLine[]; get: EngineLine[] }
   byeNotes?: string[]
   needNotes?: string[]
@@ -224,10 +246,18 @@ function money(v: number | null | undefined): string {
   return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
 }
 
+/**
+ * The value a row is counted at: the league value once an analysis has priced it, the market value
+ * before. One rule for every total on the page, so the totals always add up to the grade beside them.
+ */
+function valueOf(l: Line): number | null | undefined {
+  return l.leagueValue !== undefined ? l.leagueValue : l.marketValue
+}
+
 /** Sum that ignores unpriced lines rather than treating them as zero. */
 function totalOf(lines: Line[]): string {
   const priced = lines
-    .map((l) => l.marketValue)
+    .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   if (priced.length === 0) return '—'
   return priced.reduce((a, b) => a + b, 0).toLocaleString()
@@ -236,9 +266,32 @@ function totalOf(lines: Line[]): string {
 /** The same sum as a number, null when nothing on the side is priced. */
 function pricedTotal(lines: Line[]): number | null {
   const priced = lines
-    .map((l) => l.marketValue)
+    .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   return priced.length === 0 ? null : priced.reduce((a, b) => a + b, 0)
+}
+
+/** "+18%" / "−4%" for a factor. */
+function pctOf(factor: number): string {
+  const pct = Math.round((factor - 1) * 100)
+  return `${pct > 0 ? '+' : '−'}${Math.abs(pct)}%`
+}
+
+/**
+ * How far this league moved a row off its market price, beside the price it moved to. Nothing
+ * when it did not move. The reasons are listed in text under the verdict — this is only the marker,
+ * so no fact on the page depends on a hover a phone cannot do.
+ */
+function LeagueMove({ line }: { line: Line }) {
+  const league = line.leagueValue
+  const market = line.marketValue
+  if (league == null || market == null || market === 0 || league === market) return null
+  return (
+    <span className="af-tc-league-move" data-dir={league > market ? 'up' : 'down'}>
+      {pctOf(league / market)}
+      <small>mkt {money(market)}</small>
+    </span>
+  )
 }
 
 function unpricedCount(lines: Line[]): number {
@@ -539,8 +592,19 @@ export function TradeCenter(props: {
   }, [result])
 
   const toLines = useCallback(
-    (assets: PickedAsset[]): Line[] =>
-      assets.map((a) => {
+    (assets: PickedAsset[], engineLines?: EngineLine[] | null): Line[] => {
+      /*
+       * The league value the grade used, when the analysis sent one. Absent on an older response
+       * (and in fixtures written before it existed), which leaves the row on its market value.
+       */
+      const leagueOf = (engine: EngineLine | undefined): Pick<Line, 'leagueValue' | 'adjustments'> =>
+        engine && engine.leagueValue !== undefined
+          ? { leagueValue: engine.unpriced ? null : (engine.leagueValue ?? null), adjustments: engine.valueAdjustments ?? [] }
+          : {}
+      /* Index among the assets the analysis was sent — its lines come back in that order. */
+      let valuedIndex = 0
+      return assets.map((a) => {
+        const engineAt = valuedByVerdict(a) ? engineLines?.[valuedIndex++] : undefined
         if (a.kind === 'player') {
           const engine = pricedBy.get(a.name.toLowerCase())
           /*
@@ -570,6 +634,7 @@ export function TradeCenter(props: {
             imageUrl: a.imageUrl ?? null,
             stock: a.stock ?? null,
             stockDelta: a.stockDelta ?? null,
+            ...leagueOf(engine),
           }
         }
         if (a.kind === 'faab') {
@@ -593,6 +658,7 @@ export function TradeCenter(props: {
             team: null,
             marketValue,
             unpricedWhy: marketValue == null ? pricedOnAnalysisReason().label : null,
+            ...leagueOf(engine),
           }
         }
         /*
@@ -630,18 +696,32 @@ export function TradeCenter(props: {
                 })
               : null),
         }
+        /*
+         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The builder prices a pick on its
+         * own round curve and the analysis on the historical pick curve, and they are not the same
+         * number — so a row showing one while the verdict summed the other could never add up. The
+         * engine names picks differently from the builder, so the line is matched by its place in the
+         * deal (the analysis returns lines in the order it was sent), and only if it IS a pick line.
+         */
+        if (engineAt && engineAt.pricedSource === 'pick' && engineAt.leagueValue !== undefined) {
+          const graded = engineAt.unpriced ? null : (engineAt.leagueValue ?? null)
+          pick.marketValue = engineAt.unpriced ? null : (engineAt.marketValue ?? null)
+          pick.leagueValue = graded
+          pick.adjustments = []
+        }
         const why = pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null
         return {
           ...pick,
           // Said on the row because the verdict below it silently has one asset fewer.
           unpricedWhy: why && !valuedByVerdict(a) ? `${why} — left out of the verdict` : why,
         }
-      }),
+      })
+    },
     [pricedBy, props.league?.teamCount],
   )
 
-  const give = toLines(giveAssets)
-  const get = toLines(getAssets)
+  const give = toLines(giveAssets, result?.players?.give)
+  const get = toLines(getAssets, result?.players?.get)
 
   /*
    * 🛑 LOADED AS SOON AS THE LEAGUE IS KNOWN, NOT ONLY ONCE SOMEONE STARTS BUILDING.
@@ -1055,6 +1135,9 @@ export function TradeCenter(props: {
     const pct = Math.round((Math.abs(diff) / Math.max(g, k)) * 100)
     return { give: g, get: k, givePct, diff, pct }
   })()
+
+  /* The rows this league moved off their market price — listed under the verdict with each reason. */
+  const movedLines = [...give, ...get].filter((l) => (l.adjustments ?? []).length > 0 && l.leagueValue != null)
 
   const legend = assetTypesFor(props.leagueType, props.leagueVariant)
 
@@ -1577,9 +1660,10 @@ export function TradeCenter(props: {
                   <StockMark stock={l.stock} delta={l.stockDelta} />
                   <span
                     className="af-tc-row-value"
-                    data-unpriced={l.marketValue == null ? 'true' : undefined}
+                    data-unpriced={valueOf(l) == null ? 'true' : undefined}
                   >
-                    {money(l.marketValue)}
+                    {money(valueOf(l))}
+                    <LeagueMove line={l} />
                   </span>
                   <button
                     type="button"
@@ -1765,13 +1849,14 @@ export function TradeCenter(props: {
                     <span className="af-tc-spacer" />
                     <span
                       className="af-num"
-                      data-unpriced={l.marketValue == null ? 'true' : undefined}
+                      data-unpriced={valueOf(l) == null ? 'true' : undefined}
                       title={l.marketValue == null && l.unpricedWhy ? l.unpricedWhy : undefined}
                       aria-label={
                         l.marketValue == null && l.unpricedWhy ? `No value: ${l.unpricedWhy}` : undefined
                       }
                     >
-                      {money(l.marketValue)}
+                      {money(valueOf(l))}
+                      <LeagueMove line={l} />
                     </span>
                     {/*
                       Said in text, not only in `title`: a tooltip needs a hover, and a phone has none.
@@ -1859,6 +1944,18 @@ export function TradeCenter(props: {
             </span>
           </div>
 
+          {/*
+            What the grade is priced in, always, so a letter never appears without its rules.
+            "League value" is the market price on this league's chart, moved by its scoring and your
+            roster; the moves are listed below with their reasons.
+          */}
+          {result.valueBasis ? (
+            <p className="af-tc-basis">
+              <b>{result.valueBasis.graded === 'league' ? 'Graded on league value' : 'Graded on market value'}</b>
+              <span>{result.valueBasis.label}</span>
+            </p>
+          ) : null}
+
           <div className="af-tc-verdict-row">
             {yourGrade || theirGrade ? (
               <div className="af-tc-grade-row">
@@ -1926,6 +2023,32 @@ export function TradeCenter(props: {
               We could not price enough of this deal to stand behind a verdict. An even-looking
               score here means we have no signal, not that the trade is fair.
             </p>
+          ) : null}
+
+          {movedLines.length > 0 || result.valueBasis?.needGap ? (
+            <div className="af-tc-moves">
+              <div className="af-label">Why the values moved</div>
+              {movedLines.length > 0 ? (
+                <ul>
+                  {movedLines.map((l) => (
+                    <li key={l.name}>
+                      <span className="af-tc-moves-name">{l.name}</span>
+                      <span className="af-num">
+                        {money(l.marketValue)} &rarr; {money(l.leagueValue)}
+                      </span>
+                      {(l.adjustments ?? []).map((a) => (
+                        <span key={`${a.kind}-${a.reason}`} className="af-tc-moves-why" data-dir={a.factor > 1 ? 'up' : 'down'}>
+                          <b>{pctOf(a.factor)}</b> {a.reason}
+                        </span>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {result.valueBasis?.needGap ? (
+                <p className="af-tc-row-sub">Roster need was not priced: we could not see {result.valueBasis.needGap}.</p>
+              ) : null}
+            </div>
           ) : null}
 
           {(result.dataGaps ?? []).length > 0 ? (

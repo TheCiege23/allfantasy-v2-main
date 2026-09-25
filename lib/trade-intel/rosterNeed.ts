@@ -232,9 +232,19 @@ export function counterpartyPriceDelta(args: {
   need: RosterNeed | null
   /** Availability at this position in this league. Omitted = assume replaceable. */
   scarcity?: Scarcity
+  /**
+   * Whose roster the need describes, for the sentence only — the factor is identical. 'they' (the
+   * default, and every original caller) reads "they cannot fill…"; 'you' reads "you cannot fill…",
+   * for the viewer's own roster in the league-graded verdict.
+   */
+  subject?: 'they' | 'you'
 }): { factor: number; basis: string } | null {
   const { position, need } = args
   if (!need || !position) return null
+  const you = args.subject === 'you'
+  const they = you ? 'you' : 'they'
+  const their = you ? 'your' : 'their'
+  const them = you ? 'you' : 'them'
 
   const pos = position.toUpperCase().trim()
   const row = need.byPosition.find((p) => p.position === pos)
@@ -275,17 +285,17 @@ export function counterpartyPriceDelta(args: {
           : sc > 0.5
             ? ` and only ${args.scarcity!.freeAgents} ${pos}${args.scarcity!.freeAgents === 1 ? ' is' : ' are'} unrostered`
             : ` — though ${args.scarcity!.freeAgents} are on waivers, so this is a claim away`
-    return { factor, basis: `they cannot fill ${slots}${where}` }
+    return { factor, basis: `${they} cannot fill ${slots}${where}` }
   }
 
   if (row && row.surplus > 0) {
     return {
       factor: 1 - SURPLUS_DISCOUNT,
-      basis: `they already start ${row.required} ${pos} and carry ${row.surplus} more, so another is worth slightly less to them`,
+      basis: `${they} already start ${row.required} ${pos} and carry ${row.surplus} more, so another is worth slightly less to ${them}`,
     }
   }
 
-  return { factor: 1, basis: `their ${pos} slots are exactly filled` }
+  return { factor: 1, basis: `${their} ${pos} slots are exactly filled` }
 }
 
 /* ── Bye-week collision ────────────────────────────────────────────────────

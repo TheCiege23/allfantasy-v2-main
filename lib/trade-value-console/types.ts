@@ -3,6 +3,7 @@ import type { SupportedSport } from '@/lib/sport-scope'
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import type { LeagueValueAdjustment } from '@/lib/trade-value/leagueTradeValue'
 
 export type TradeSportFilter = 'ALL' | SupportedSport
 
@@ -129,6 +130,13 @@ export type TradeConsolePlayerLine = {
   unpriced?: boolean
   /** Why, when `unpriced`; see `lib/trade-value/unpricedReason.ts`. */
   unpricedReason?: UnpricedReason | null
+  /**
+   * `marketValue` after THIS league's scoring and the viewer's roster need — the number the verdict
+   * is graded on (Guap, 2026-09-24). Null when the line is unpriced. See `lib/trade-value/leagueTradeValue.ts`.
+   */
+  leagueValue?: number | null
+  /** Each factor that moved `marketValue` to `leagueValue`, with its reason. Empty when nothing did. */
+  valueAdjustments?: LeagueValueAdjustment[]
   /** From `resolveNormalizedPlayerSportsProfiles` + league scoring stack. */
   effectiveProjection?: number | null
   projectionNotes?: string[]
@@ -219,6 +227,20 @@ export type TradeConsoleAnalyzeResult = {
   getTotal: number
   giveMarket: number
   getMarket: number
+  /**
+   * What `giveTotal`/`getTotal` and the grade are priced in. Always present on a success, so a grade
+   * never appears without the rules behind it.
+   */
+  valueBasis: {
+    /** 'league' when league rules or roster need moved any value; 'market' when grading on the chart alone. */
+    graded: 'league' | 'market'
+    /** The chart, in words: "Dynasty · Superflex · 12 teams · Half PPR · TE premium +0.5". */
+    label: string
+    scoringAdjusted: boolean
+    needAdjusted: boolean
+    /** Why roster need could not be priced, when it could not. Null when it ran or was not attempted. */
+    needGap: string | null
+  }
   degraded: boolean
   dataGaps: string[]
   dataSources: string[]

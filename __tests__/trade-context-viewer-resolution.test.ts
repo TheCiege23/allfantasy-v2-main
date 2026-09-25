@@ -15,37 +15,48 @@ import { resolve } from 'node:path'
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
 
 const NOTES = read('lib/trade-intel/tradeContextNotes.ts')
+/*
+ * 2026-09-24: the resolution moved VERBATIM into `viewerLeagueRoster.ts`, shared with the league-graded
+ * trade verdict so the notes and the grade cannot resolve different rosters. The assertions below read
+ * the rule where it now lives, and a new one pins that the notes still delegate to it.
+ */
+const VIEWER = read('lib/trade-intel/viewerLeagueRoster.ts')
 const ROUTE = read('app/api/trade-value/analyze/route.ts')
 
 describe('the viewer is resolved the way the rest of the league surfaces resolve them', () => {
   it('falls back to the linked Sleeper account when no team was claimed', () => {
-    expect(NOTES).toContain('sleeperUserId: true')
-    expect(NOTES).toContain('where: { leagueId, platformUserId: linked }')
+    expect(VIEWER).toContain('sleeperUserId: true')
+    expect(VIEWER).toContain('where: { leagueId, platformUserId: linked }')
   })
 
   it('tries the claim FIRST, because it is a statement about this league', () => {
     // A linked platform id is an inference from an id space shared across every
     // league; a claim is explicit about this one.
-    const claim = NOTES.indexOf('claimedByUserId: userId')
-    const linked = NOTES.indexOf("select: { sleeperUserId: true }")
+    const claim = VIEWER.indexOf('claimedByUserId: userId')
+    const linked = VIEWER.indexOf("select: { sleeperUserId: true }")
     expect(claim).toBeGreaterThan(-1)
     expect(linked).toBeGreaterThan(-1)
     expect(claim).toBeLessThan(linked)
   })
 
   it('⚠ says what a missing claim actually costs, in the comment the next reader meets', () => {
-    expect(NOTES).toContain('A CLAIMED TEAM IS NOT GUARANTEED')
+    expect(VIEWER).toContain('A CLAIMED TEAM IS NOT GUARANTEED')
   })
 })
 
 describe('⚠ a ledger that could not run is not a ledger that found nothing', () => {
+  it('the notes delegate to the shared resolver and pass its reason through as the context gap', () => {
+    expect(NOTES).toContain('await resolveViewerLeagueRoster(leagueId, userId)')
+    expect(NOTES).toContain('if (!viewer.ok) return { ...EMPTY, contextGap: viewer.gap }')
+  })
+
   it('carries a reason back when the viewer could not be identified', () => {
-    expect(NOTES).toContain('claim your team, or link the account you play on')
+    expect(VIEWER).toContain('claim your team, or link the account you play on')
   })
 
   it('distinguishes an unsynced roster from an unidentified manager', () => {
     // Different problems: one is an action for them, the other is one for us.
-    expect(NOTES).toContain('has not been synced yet')
+    expect(VIEWER).toContain('has not been synced yet')
   })
 
   it('surfaces it under what we could not see, rather than as a silent blank', () => {

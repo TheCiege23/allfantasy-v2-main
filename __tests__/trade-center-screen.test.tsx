@@ -170,7 +170,9 @@ describe('the builder holds the deal, not the engine echo', () => {
      * that echo would make an unpriced player vanish from the deal he is part of.
      */
     expect(SRC).toContain('a line the manager added must not disappear because')
-    expect(SRC).toContain('const give = toLines(giveAssets)')
+    // Rows are still built FROM the builder's assets; since 2026-09-24 the engine's lines ride
+    // along only to supply the league value the grade used, never to decide which rows exist.
+    expect(SRC).toContain('const give = toLines(giveAssets, result?.players?.give)')
   })
 
   it('sends the real deal to the analyzer', () => {
