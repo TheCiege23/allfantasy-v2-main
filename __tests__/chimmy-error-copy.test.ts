@@ -8,9 +8,13 @@ import path from 'node:path'
  * account asking an ordinary question saw the literal string
  * "VERIFICATION_REQUIRED Nothing was charged.": an internal constant, in red,
  * with no hint that verifying an email would fix it.
+ *
+ * The Chimmy tab's send path moved out of CommsDrawer.tsx into ChimmyPanel.tsx (the drawer and the
+ * full-page /chimmy/chat both render it), so this reads the file the code lives in now. Left on the
+ * drawer file, the `not.toContain` checks below would pass forever against code that is not there.
  */
 const SRC = fs.readFileSync(
-  path.join(process.cwd(), 'components', 'core-app', 'comms', 'CommsDrawer.tsx'),
+  path.join(process.cwd(), 'components', 'core-app', 'comms', 'ChimmyPanel.tsx'),
   'utf8',
 )
 

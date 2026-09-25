@@ -111,8 +111,9 @@ describe('the trade scenario source reads in words', () => {
 })
 
 describe('the drawer reads the scenario off the envelope', () => {
+  // The Chimmy tab (and /chimmy/chat) is ChimmyPanel.tsx; the drawer renders it.
   const DRAWER = fs.readFileSync(
-    path.join(process.cwd(), 'components', 'core-app', 'comms', 'CommsDrawer.tsx'),
+    path.join(process.cwd(), 'components', 'core-app', 'comms', 'ChimmyPanel.tsx'),
     'utf8',
   )
 
