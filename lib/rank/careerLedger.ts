@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 
 /**
  * The career ledger — one row per manager per league-season, from every source
@@ -16,9 +17,22 @@ import { prisma } from '@/lib/prisma'
  * printed "296 seasons × 10" in an XP breakdown. Reading the rows themselves
  * removes the question of what a denormalised column means.
  *
- * ⚠ SOURCE PRECEDENCE AND THE DEDUP KEY ARE `calculateAndSaveRank`'s, UNCHANGED.
- * Imported `League.import_*` rows win, then legacy Sleeper rows, then native
- * `franchise_seasons`. The key is `platform:platformLeagueId:season`.
+ * FOUR SOURCES, merged first-wins on `platform:platformLeagueId:season` per user:
+ *   1. `import`  — `League.import_*` on leagues the user OWNS (a frozen import-time snapshot)
+ *   2. `legacy`  — Sleeper history tables (`legacyLeague` / owner `legacyRoster`)
+ *   3. `team`    — a `LeagueTeam` the user has CLAIMED, on any non-native league
+ *   4. `native`  — finalized AllFantasy `franchise_seasons`
+ * One exception to first-wins: when an `import` row and a `team` row share a key and
+ * the team has played MORE games, the team's W/L/T/PF replace the frozen snapshot
+ * (see `refreshImportFromTeams`).
+ *
+ * ⚠ WHY THE `team` SOURCE EXISTS. The first three only ever saw leagues a user owns a
+ * `League` row for, and populated `import_*` columns. A member who joins a league
+ * someone else imported (`claimExistingLeagueForMember`) owns no `League` row at all —
+ * only `LeagueTeam.claimedByUserId` — and Sleeper unified-commit, MFL and Fleaflicker
+ * imports never write `import_*` (225 of 225 Sleeper imports on the test DB). Both got
+ * zero ledger rows and were never ranked. The claimed team is the one record every
+ * import path writes, and the sync crons keep its W/L/PF current.
  *
  * ⚠ ONLY THE OWNER'S OWN ROSTER IS STORED PER LEGACY LEAGUE. Measured
  * 2026-09-16: 1,139 of 1,165 legacy leagues carry exactly one roster, the
@@ -27,7 +41,7 @@ import { prisma } from '@/lib/prisma'
  * the rankings engine normalises with what one roster can honestly say.
  */
 
-export type LedgerSource = 'import' | 'legacy' | 'native'
+export type LedgerSource = 'import' | 'legacy' | 'team' | 'native'
 export type LedgerLeagueType = 'redraft' | 'keeper' | 'dynasty' | 'unknown'
 export type LedgerSpecialty = 'standard' | 'bestball' | 'guillotine' | 'draft_only' | 'other'
 export type LedgerScoring = 'ppr' | 'half' | 'standard' | 'other' | 'unknown'
@@ -43,7 +57,7 @@ export type CareerLedgerRow = {
   sport: string
   season: number
   leagueName: string | null
-  /** `League.id` for imported and native rows; `LegacyLeague.id` for legacy rows. */
+  /** `League.id` for imported, team and native rows; `LegacyLeague.id` for legacy rows. */
   refId: string
   /** Falls back to 12 when unknown — the fallback the XP formula has always used. */
   leagueSize: number
@@ -167,9 +181,9 @@ export function legacyMadePlayoffs(
 /**
  * Merge per-source rows, first source wins on a shared key.
  *
- * Callers pass sources in precedence order — imported, legacy, native — which
- * is `calculateAndSaveRank`'s order. Keys are compared per user, so two managers
- * in the same Sleeper league keep one row each.
+ * Callers pass sources in precedence order — imported, legacy, team, native.
+ * Keys are compared per user, so two managers in the same Sleeper league keep one
+ * row each.
  */
 export function mergeLedgerSources(...sources: CareerLedgerRow[][]): CareerLedgerRow[] {
   const seen = new Set<string>()
@@ -185,6 +199,43 @@ export function mergeLedgerSources(...sources: CareerLedgerRow[][]): CareerLedge
   return out
 }
 
+/**
+ * The one exception to first-wins: an `import` row takes a claimed team's record
+ * when that team has played MORE games under the same key.
+ *
+ * ⚠ `League.import_*` IS WRITTEN ONCE, AT IMPORT, AND NEVER AGAIN, while the sync
+ * crons keep `LeagueTeam` W/L/PF current. Letting the snapshot win outright would
+ * freeze an owner's season at whatever week they imported in. More games is the
+ * test because a record only ever grows within a season — fewer games means the
+ * team row is the stale one (or unsynced), and then the snapshot keeps its place.
+ * Only the record moves; a berth or title either source recorded is kept.
+ */
+export function refreshImportFromTeams(imported: CareerLedgerRow[], team: CareerLedgerRow[]): CareerLedgerRow[] {
+  if (team.length === 0) return imported
+  const byKey = new Map<string, CareerLedgerRow>()
+  for (const t of team) {
+    const k = `${t.userId}|${t.key}`
+    if (!byKey.has(k)) byKey.set(k, t)
+  }
+  return imported.map((row) => {
+    const t = byKey.get(`${row.userId}|${row.key}`)
+    if (!t || t.gamesPlayed <= row.gamesPlayed) return row
+    const updated = [row.updatedAt, t.updatedAt].filter(Boolean).sort().pop() ?? null
+    return {
+      ...row,
+      wins: t.wins,
+      losses: t.losses,
+      ties: t.ties,
+      pointsFor: t.pointsFor,
+      gamesPlayed: t.gamesPlayed,
+      madePlayoffs: row.madePlayoffs || t.madePlayoffs,
+      wonChampionship: row.wonChampionship || t.wonChampionship,
+      completed: row.completed || t.completed,
+      updatedAt: updated,
+    }
+  })
+}
+
 function iso(d: Date | null | undefined): string | null {
   return d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : null
 }
@@ -198,15 +249,130 @@ function newer(a: Date | null | undefined, b: Date | null | undefined): Date | n
 /** Platform tags used for native AllFantasy leagues (see computeUserRole in get-dashboard-league-list). */
 export const NATIVE_PLATFORMS = ['allfantasy', 'af', 'manual', 'native']
 
+/**
+ * League-seasons from teams the managers have CLAIMED (`LeagueTeam.claimedByUserId`).
+ *
+ * ⚠ NATIVE LEAGUES ARE EXCLUDED: a native season counts only once finalised into
+ * `franchise_seasons`, and a live native team would otherwise score a season that
+ * has not been decided. ⚠ ARCHIVED TEAMS ARE EXCLUDED through `CURRENT_TEAMS`
+ * (`lifecycleState`, never `archivedAt` — see that module for why).
+ *
+ * Degrades like the native read: any failure logs and returns [] — including a
+ * failed champion lookup, because rows without their titles would look whole.
+ */
+async function loadClaimedTeamRows(ids: string[]): Promise<CareerLedgerRow[]> {
+  try {
+    const teams = await prisma.leagueTeam.findMany({
+      where: {
+        claimedByUserId: { in: ids },
+        ...CURRENT_TEAMS,
+        league: { platform: { notIn: NATIVE_PLATFORMS } },
+      },
+      select: {
+        id: true,
+        claimedByUserId: true,
+        wins: true,
+        losses: true,
+        ties: true,
+        pointsFor: true,
+        currentRank: true,
+        lastUpdatedAt: true,
+        league: {
+          select: {
+            id: true,
+            name: true,
+            platform: true,
+            platformLeagueId: true,
+            sport: true,
+            season: true,
+            leagueSize: true,
+            playoffTeams: true,
+            isDynasty: true,
+            leagueType: true,
+            leagueVariant: true,
+            scoring: true,
+            status: true,
+            updatedAt: true,
+            lastSyncedAt: true,
+          },
+        },
+      },
+    })
+    // The where clause is case-sensitive; a mixed-case native tag must not slip through.
+    const live = teams.filter(
+      (t) => t.claimedByUserId && t.league && !NATIVE_PLATFORMS.includes(String(t.league.platform ?? '').toLowerCase()),
+    )
+    if (live.length === 0) return []
+
+    const leagueIds = [...new Set(live.map((t) => t.league.id))]
+    const seasons = await prisma.leagueSeason.findMany({
+      where: { leagueId: { in: leagueIds }, championTeamId: { not: null } },
+      select: { leagueId: true, season: true, championTeamId: true },
+    })
+    const championOf = new Map<string, string>()
+    for (const s of seasons) if (s.championTeamId) championOf.set(`${s.leagueId}:${s.season}`, s.championTeamId)
+
+    return live.map((t) => {
+      const l = t.league
+      const wins = t.wins ?? 0
+      const losses = t.losses ?? 0
+      const ties = t.ties ?? 0
+      const games = wins + losses + ties
+      const champion = championOf.get(`${l.id}:${l.season}`)
+      const won = champion === t.id
+      const completed = champion != null || String(l.status ?? '').toLowerCase() === 'complete'
+      /*
+       * ⚠ `currentRank` IS A LIVE STANDING, NOT A RESULT. Mid-season it is the seed
+       * the team holds this week, so it only counts as a berth once the season is
+       * decided — the same "seeding is not a result" rule `berthCredited` records.
+       */
+      const inCut =
+        completed && t.currentRank != null && l.playoffTeams != null && t.currentRank <= l.playoffTeams
+      return {
+        userId: t.claimedByUserId as string,
+        key: `${l.platform ?? 'unknown'}:${l.platformLeagueId ?? ''}:${l.season}`,
+        source: 'team' as const,
+        platform: String(l.platform ?? 'unknown').toLowerCase(),
+        sport: normalizeSport(l.sport),
+        season: l.season,
+        leagueName: l.name ?? null,
+        refId: l.id,
+        leagueSize: l.leagueSize ?? 12,
+        leagueSizeKnown: l.leagueSize != null,
+        playoffTeams: l.playoffTeams ?? null,
+        leagueType: normalizeLeagueType(l.leagueType, l.isDynasty),
+        specialty: specialtyFromLeague(l.leagueType, l.leagueVariant),
+        scoring: normalizeScoring(l.scoring),
+        superflex: null,
+        tePremium: null,
+        wins,
+        losses,
+        ties,
+        pointsFor: games > 0 && (t.pointsFor ?? 0) > 0 ? (t.pointsFor as number) : null,
+        gamesPlayed: games,
+        madePlayoffs: berthCredited(inCut, won, games),
+        wonChampionship: won,
+        completed,
+        updatedAt: iso(newer(t.lastUpdatedAt, newer(l.updatedAt, l.lastSyncedAt))),
+      }
+    })
+  } catch (err: unknown) {
+    console.error('[loadCareerLedger] claimed-team read failed', err)
+    return []
+  }
+}
+
 /* ─────────────────────────────── the loader ─────────────────────────────── */
 
 /**
  * Every recorded league-season for the given managers.
  *
  * Failure semantics mirror `calculateAndSaveRank`: the imported and legacy
- * queries throw, the account link and the native read degrade to "nothing from
- * this source" — so a rank is never written from a half-read ledger that looks
- * whole, and a missing native table does not take the rest down with it.
+ * queries throw, the account link, the claimed-team read and the native read
+ * degrade to "nothing from this source" — so a rank is never written from a
+ * half-read ledger that looks whole, and a missing native table does not take the
+ * rest down with it. (A degraded team read can still under-count a joiner; it
+ * cannot invent seasons.)
  */
 export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerRow[]> {
   const ids = [...new Set(userIds.filter(Boolean))]
@@ -438,5 +604,7 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
     ]
   })
 
-  return mergeLedgerSources(imported, legacy, native)
+  const team = await loadClaimedTeamRows(ids)
+
+  return mergeLedgerSources(refreshImportFromTeams(imported, team), legacy, team, native)
 }
