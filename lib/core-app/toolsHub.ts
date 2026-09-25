@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
+import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
 
 /**
  * 25a — the Tools hub, grouped by job rather than alphabetically.
@@ -73,7 +74,13 @@ export type ToolsHubData = {
   openDecision: { title: string; body: string } | null
 }
 
+/**
+ * The token price a card shows — only for an action a screen can actually sell
+ * (lib/tokens/tokenPurchasable.ts). The Waiver Assistant card showed the price of a waiver
+ * rule nothing charges, on a link (/core/waivers) that charges no tokens at all.
+ */
 function costOf(code: string): number | null {
+  if (!isTokenPurchasableRule(code)) return null
   return getTokenSpendRuleMatrixEntry(code)?.tokenCost ?? null
 }
 
