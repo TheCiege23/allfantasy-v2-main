@@ -445,6 +445,12 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   'For "who should I start", "set my lineup" or "is my lineup right", call optimize_my_lineup: it prices the whole roster for this week under the league\'s own scoring and flags starters on a bye, injured or missing. For "A or B?" between two named players call compare_start_options. get_my_roster is roster FACTS only — it carries NO projections — so never quote projected points from it.',
   'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
   'For "find me a trade", "who should I trade with", "who has a running back I can get" or "what can I get for X", call find_trade_ideas — with position or trade_away when they named one. It searches every roster in the league; present its ideas with its names and numbers, lead with the first, and offer to grade one with evaluate_trade.',
+  /*
+   * 🛑 CHIMMY TOLD A KBFL MANAGER THE LEAGUE'S TRADE HISTORY "ISN'T ITEMIZED" (2026-09-20/21) WHILE
+   * 27 TRADES WITH RESOLVABLE PLAYERS WERE ON FILE. The only trade read it had printed eight trades
+   * with no manager names; get_league_trade_history lists every one with both sides.
+   */
+  'For trades that already happened — "what trades happened this year", "what did X give up", "who has traded with me", "when was X traded" — call get_league_trade_history (with manager, player or season when the user named one) and list the deals it returns: date, both managers, and every player and pick each way. Never say the history is not itemized when that tool returned trades.',
   'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
   /*
    * ── LEAGUE CHAT, WAIVERS AND CONFIRM-CARD ACTIONS (2026-09-25) ─────────────────────────────────
@@ -1217,6 +1223,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
  *
  * `evidence` is accepted here but is not written today — see the note at the `display` write.
  */
+/**
+ * Save one exchange: the question, THEN the answer.
+ *
+ * ⚠ THESE WERE TWO PARALLEL WRITES, BOTH STAMPED `NOW()`. The GET above orders by `createdAt`, so
+ * two rows written in the same instant can come back answer-first, and both writes raced to create
+ * the same `chat_conversations` row (one lost with a unique-constraint error on every new thread —
+ * seen in the dev log 2026-09-25). In sequence, the question is always older than its answer.
+ * Never throws: a failed save must never cost the user the answer they are waiting on.
+ */
+async function saveExchangeInOrder(
+  question: Parameters<typeof appendChatHistory>[0],
+  answer: Parameters<typeof appendChatHistory>[0],
+): Promise<void> {
+  await appendChatHistory(question).catch(() => null)
+  await appendChatHistory(answer).catch(() => null)
+}
+
 function readStoredDisplay(meta: unknown): Record<string, unknown> {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {}
   const display = (meta as Record<string, unknown>).display
@@ -3058,6 +3081,57 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       if (userId && toolContext.startCalls.length > 0) {
         await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText }).catch(() => null)
       }
+      const loopGrounding = boundLeague
+        ? {
+            grounded: true as const,
+            leagueId: boundLeague.id,
+            leagueName: boundLeague.name,
+            platform: boundLeague.platform,
+            season: boundLeague.season,
+            lastSyncedAt: boundLeague.lastSyncedAt?.toISOString() ?? null,
+          }
+        : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const }
+      /*
+       * 🛑 THE DEFAULT ANSWER PATH NEVER SAVED THE CONVERSATION. The only `appendChatHistory` in this
+       * route sits at the end of the PECR path, and this loop — which answers first, and has answered
+       * most questions since Claude became the main model (2026-09-23) — returns before it. So those
+       * exchanges were missing from the transcript a new tab or another device restores, AND from the
+       * RECENT CHAT block `chimmy-memory-context` feeds back into the prompt: Chimmy forgot what it
+       * had just told the user the moment the tab closed. Same rows, same `display` shape as the PECR
+       * write, so a restored turn keeps its "could not read your league" badge.
+       *
+       * Awaited like the writes above, and caught: a failed save never costs the user the answer.
+       */
+      if (userId) {
+        /* Question first, then answer — never in parallel; see `saveExchangeInOrder`. */
+        const persistLoopTurns = () =>
+          saveExchangeInOrder(
+            {
+              conversationId,
+              role: 'user',
+              content: message || '[image-only request]',
+              userId,
+              leagueId: loopGrounding.leagueId ?? leagueId ?? null,
+            },
+            {
+              conversationId,
+              role: 'assistant',
+              content: loopText,
+              userId,
+              leagueId: loopGrounding.leagueId ?? leagueId ?? null,
+              meta: {
+                source: 'chimmy_tool_loop',
+                toolsUsed: loop.toolsUsed,
+                display: {
+                  grounding: loopGrounding,
+                  cost: spendLedger && tokenPreview ? tokenPreview.tokenCost : null,
+                  mode: loopModeRequested ? selectedAssistantMode : null,
+                },
+              },
+            },
+          )
+        await persistLoopTurns().catch(() => null)
+      }
       return NextResponse.json({
         response: loopText,
         result: loopText,
@@ -3082,16 +3156,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
               : { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
           /* The model that actually answered — the one thing a quality complaint needs first. */
           ...(loop.model ? { model: loop.model } : {}),
-          leagueGrounding: boundLeague
-            ? {
-                grounded: true as const,
-                leagueId: boundLeague.id,
-                leagueName: boundLeague.name,
-                platform: boundLeague.platform,
-                season: boundLeague.season,
-                lastSyncedAt: boundLeague.lastSyncedAt?.toISOString() ?? null,
-              }
-            : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
+          leagueGrounding: loopGrounding,
           /* Which lookups the model chose, so the answer's sourcing is visible. */
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
@@ -4238,14 +4303,13 @@ ${describedTradeCtx}`
         recordDecision(sessionId, userId, assistantResponse.slice(0, 200), 0.8).catch(() => {})
       }
       const persistTasks: Promise<unknown>[] = [
-        appendChatHistory({
+        saveExchangeInOrder({
           conversationId,
           role: 'user',
           content: message || '[image-only request]',
           userId,
           leagueId: leagueId ?? null,
-        }),
-        appendChatHistory({
+        }, {
           conversationId,
           role: 'assistant',
           content: assistantResponse,
