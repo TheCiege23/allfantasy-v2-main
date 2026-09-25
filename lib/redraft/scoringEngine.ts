@@ -19,6 +19,7 @@ import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
+import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -230,7 +231,8 @@ export async function calculateScoreFromSportConfig(
       ? (sc.categoryPoints as Record<string, number>)
       : {}
   if (Object.keys(overrides).length === 0) {
-    overrides = bridgeLegacyNflScoringConfig(league)
+    // The sport's own panel store (NHL / NBA / NCAAB / soccer), else the existing NFL fallback.
+    overrides = bridgeSportUiScoringStore(cfg.sport, league.settings) ?? bridgeLegacyNflScoringConfig(league)
   }
   categories = applyScoringPresetToRecPoints(categories, preset, overrides)
 
