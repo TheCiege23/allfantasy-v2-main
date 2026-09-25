@@ -22,7 +22,7 @@ export function CardFreshness({ stamps }: { stamps: CardFreshnessStamp[] | null 
   if (!stamps || stamps.length === 0) return null
   const anyStale = stamps.some((s) => s.stale)
   return (
-    <p className="af-fresh" data-stale={anyStale ? 'true' : 'false'}>
+    <p className="af-cardfresh" data-stale={anyStale ? 'true' : 'false'}>
       {stamps.map((stamp, index) => {
         const label =
           stamp.asOf == null
@@ -31,7 +31,7 @@ export function CardFreshness({ stamps }: { stamps: CardFreshnessStamp[] | null 
               ? stamp.label
               : relativeAge(Date.parse(stamp.asOf), nowMs)
         return (
-          <span key={stamp.source} className="af-fresh-item">
+          <span key={stamp.source} className="af-cardfresh-item">
             {index > 0 ? <span aria-hidden="true"> · </span> : null}
             {stamp.stale ? <span aria-hidden="true">⚠ </span> : null}
             {stamp.source}{' '}

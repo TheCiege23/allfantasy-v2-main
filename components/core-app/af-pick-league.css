@@ -163,9 +163,13 @@
 
 .af-pl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  /* `min(210px, 100%)` + `minmax(0, …)`: a long league name is nowrap, and a
+     bare track grew to fit it — the War Room picker ran 43px past a 390px
+     phone (2026-09-25). The name ellipsises instead. */
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
   gap: 8px;
 }
+.af-pl-grid > * { min-width: 0; }
 
 .af-core .af-pl-league {
   display: flex;
@@ -190,6 +194,7 @@
 
 .af-pl-league-name {
   flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: 700;
   overflow: hidden;

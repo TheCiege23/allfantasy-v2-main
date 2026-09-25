@@ -6,6 +6,7 @@ import { remainingFor } from '@/lib/cron/runBudget'
 import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { coercePlayerAge, birthDateFromVendorValue } from '@/lib/sports-data/playerAge'
+import { toImageUrl } from '@/lib/media/imageUrl'
 
 /**
  * Teams and player profiles from Rolling Insights REST, for every supported sport.
@@ -273,7 +274,8 @@ export async function syncRollingInsightsPlayersToDb(opts: {
       result.byLeague[label]!.fetched += 1
 
       const teamObj = asRecord(p.team)
-      const imageUrl = str(p.img ?? p.image ?? p.headshot ?? p.photo)
+      // RI sends the literal `contact_support` for a missing headshot — see lib/media/imageUrl.ts.
+      const imageUrl = toImageUrl(p.img ?? p.image ?? p.headshot ?? p.photo)
       if (imageUrl) result.withImage += 1
 
       const data = {

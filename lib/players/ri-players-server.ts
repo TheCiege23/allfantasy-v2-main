@@ -5,6 +5,7 @@
  */
 
 import { unstable_cache } from 'next/cache'
+import { toImageUrl } from '@/lib/media/imageUrl'
 
 // ── Legacy map shape (caching, enrichment) ──────────────────────────────────
 export type RiPlayerValue = {
@@ -211,7 +212,7 @@ function mapGraphQLPlayer(raw: Record<string, unknown>): RIPlayer {
 
   const imgStr = String(raw.img ?? '')
   const isUUID = /^[0-9a-f-]{36}\./i.test(imgStr)
-  const headshot_url = imgStr && !isUUID ? imgStr : ''
+  const headshot_url = imgStr && !isUUID ? (toImageUrl(imgStr) ?? '') : ''
 
   return {
     ri_id: String(raw.id ?? ''),

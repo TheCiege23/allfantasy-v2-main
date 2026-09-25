@@ -1440,7 +1440,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       } catch {
         // Storage may be unavailable; retain the desktop expanded default.
       }
-      setRailChoice(stored === '0' ? 'closed' : 'open')
+      /*
+       * No saved preference: expanded on a wide desktop, collapsed up to 1280px —
+       * on a tablet (721–1080) an expanded rail pushes the nav column out entirely,
+       * and on a 1081–1280 laptop it leaves the page ~560px —
+       * see the tablet block at the end of af-core-shell.css. Not written back to
+       * storage, so a tablet default never becomes the reader's desktop choice.
+       */
+      const tablet = window.matchMedia('(max-width: 1280px)').matches
+      setRailChoice(stored === '0' ? 'closed' : stored === '1' ? 'open' : tablet ? 'closed' : 'open')
     }
     update()
     desktop.addEventListener('change', update)
