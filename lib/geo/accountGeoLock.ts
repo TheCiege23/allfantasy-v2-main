@@ -24,7 +24,8 @@
  * surfaces only, from anywhere, until support unlocks it. It is DELIBERATELY a
  * different value from the signup route's `paid_block`, which records where a
  * signup's IP appeared to be — the owner chose the card over that signal.
- * A card-locked account later seen in Washington escalates to the full lock.
+ * A card-locked account later seen in Washington escalates to the full lock, and
+ * a WASHINGTON card goes straight to it (owner, 2026-09-25).
  *
  * STORAGE, WITHOUT A MIGRATION. It reuses the three AppUser columns the signup
  * route already writes and nothing ever read: `stateRestrictionLevel` =

@@ -48,8 +48,9 @@ export default async function GeoBlockedPage({
           <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-left text-sm text-red-100">
             <p className="font-semibold">This account is locked</p>
             <p className="mt-2 text-red-100/90">
-              Your account has been used from Washington, so it stays locked wherever you sign in from. If you don&apos;t live in
-              Washington (for example, you were only visiting), email{" "}
+              Your account has been used from Washington, or paid with a card billed to a Washington address, so it stays
+              locked wherever you sign in from. Any such payment was refunded in full. If you don&apos;t live in Washington
+              (for example, you were only visiting), email{" "}
               <a href="mailto:support@allfantasy.ai" className="underline">
                 support@allfantasy.ai
               </a>{" "}

@@ -20,6 +20,7 @@ import {
   type AccountGeoLock,
   type AccountLockStore,
 } from "./accountGeoLock"
+import { isFullyBlocked } from "./restrictedStates"
 
 export const prismaAccountLockStore: AccountLockStore = {
   async read(userId) {
@@ -72,21 +73,33 @@ export async function readAccountGeoLockFresh(userId: string): Promise<AccountGe
 }
 
 /**
- * Lock the account out of paid features because a purchase's card billing
- * address was in a restricted state. Never downgrades a full lock, and leaves
- * `detectedStateCode` alone: that column records where the account was SEEN.
+ * Lock the account because a purchase's card billing address was in a
+ * restricted state. Leaves `detectedStateCode` alone either way: that column
+ * records where the account was SEEN, and a card is not a sighting.
+ *
+ * A WASHINGTON card is the full lock (owner's decision, 2026-09-25): Washington
+ * bans even free play, and a Washington billing address is as strong a sign of
+ * where the buyer lives as a Washington sighting. Any other restricted state is
+ * the card lock — paid surfaces only — and never downgrades a full lock.
  *
  * ⚠ The filter spells out the NULL case. `{ not: "full_block" }` alone is SQL
  * `<> 'full_block'`, which is NULL — not true — for an account with no level at
  * all, so it would silently skip exactly the accounts this exists to lock.
  */
-export async function lockAccountForCardBillingState(userId: string): Promise<void> {
-  await prisma.appUser.updateMany({
-    where: {
-      id: userId,
-      OR: [{ stateRestrictionLevel: null }, { stateRestrictionLevel: { not: ACCOUNT_FULL_BLOCK } }],
-    },
-    data: { stateRestrictionLevel: ACCOUNT_CARD_PAID_BLOCK, isStateRestricted: true },
-  })
+export async function lockAccountForCardBillingState(userId: string, stateCode: string): Promise<void> {
+  if (isFullyBlocked(stateCode)) {
+    await prisma.appUser.updateMany({
+      where: { id: userId },
+      data: { stateRestrictionLevel: ACCOUNT_FULL_BLOCK, isStateRestricted: true },
+    })
+  } else {
+    await prisma.appUser.updateMany({
+      where: {
+        id: userId,
+        OR: [{ stateRestrictionLevel: null }, { stateRestrictionLevel: { not: ACCOUNT_FULL_BLOCK } }],
+      },
+      data: { stateRestrictionLevel: ACCOUNT_CARD_PAID_BLOCK, isStateRestricted: true },
+    })
+  }
   forgetAccountGeoLock(userId)
 }

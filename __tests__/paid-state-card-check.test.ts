@@ -187,7 +187,8 @@ describe("refuseCheckoutForRestrictedBillingState", () => {
 
     expect(out).toMatchObject({ stateCode: "NV", source: "postal_code", canceledSubscriptionId: "sub_1", refundedPaymentIntentId: "pi_invoice" })
     expect(calls).toEqual(["lock", "retrieve:sub_1", "cancel:sub_1", "refund:pi_invoice"])
-    expect(lockAccount).toHaveBeenCalledWith("user_1")
+    // The state goes to the lock: a Washington card is the full lock, the rest the card lock.
+    expect(lockAccount).toHaveBeenCalledWith("user_1", "NV")
     expect(stripe.invoicePayments.list).toHaveBeenCalledWith({ invoice: "in_1", limit: 10 })
     // The refund is keyed on the session, so a retried event cannot refund twice.
     expect(stripe.refunds.create.mock.calls[0][1]).toEqual({ idempotencyKey: "af-paid-state-refund-cs_test_1" })

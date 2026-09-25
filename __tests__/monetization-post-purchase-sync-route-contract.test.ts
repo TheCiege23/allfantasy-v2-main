@@ -133,6 +133,15 @@ describe('GET /api/monetization/post-purchase-sync', () => {
     expect(body.syncMessage).toContain('refunded in full')
   })
 
+  it('returns refused for a Washington card, which sets the FULL lock', async () => {
+    appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: 'full_block' })
+    const { GET } = await import('@/app/api/monetization/post-purchase-sync/route')
+    const res = await GET(
+      createMockNextRequest('http://localhost/api/monetization/post-purchase-sync?session_id=cs_test_wa')
+    )
+    expect((await res.json()).syncStatus).toBe('refused')
+  })
+
   it('stays pending on an unlocked account, and on the signup flag the owner chose not to use', async () => {
     for (const level of [null, 'paid_block']) {
       appUserFindUniqueMock.mockResolvedValue({ stateRestrictionLevel: level })

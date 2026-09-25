@@ -7,14 +7,16 @@
  * Washington, which is stricter still) are gated by the card's billing address.
  * The IP gates already refuse checkout from those states; this catches the buyer
  * whose IP says somewhere else — an uncatalogued residential proxy — because the
- * address their bank holds is not something the proxy can rewrite.
+ * address their bank holds is not something the proxy can rewrite. A Washington
+ * card locks the WHOLE account (owner, 2026-09-25), as a Washington sighting does.
  *
  * ⚠ AFTER THE CHARGE, NOT BEFORE, AND THAT IS A KNOWN COST. Hosted Checkout has
  * no hook between "card entered" and "card charged". Refusing BEFORE the charge
  * needs either a Stripe Radar custom rule (Radar Plus, account-wide — and the
  * account is shared with other businesses) or a rebuilt checkout; both are the
- * owner's call. Until then a refused buyer sees a charge and a full refund, and
- * the lock makes that happen at most once per account.
+ * owner's call — and on 2026-09-25 the owner chose to keep refund-after. A
+ * refused buyer sees a charge and a full refund, and the lock makes that happen
+ * at most once per account.
  *
  * ⚠ LOCK FIRST, THEN STOP BILLING, THEN REFUND. Every step is idempotent and a
  * failure THROWS, so the webhook marks the event errored and Stripe retries the
@@ -35,8 +37,11 @@ export interface PaidStateRefusal extends RestrictedBillingState {
 
 export interface PaidStateRefusalDeps {
   stripe: Stripe
-  /** Lock the account out of paid features (lib/geo/accountGeoLockServer). */
-  lockAccount(userId: string): Promise<void>
+  /**
+   * Lock the account (lib/geo/accountGeoLockServer): paid surfaces only, or the
+   * whole account when `stateCode` is Washington.
+   */
+  lockAccount(userId: string, stateCode: string): Promise<void>
 }
 
 function idOf(ref: unknown): string | null {
@@ -125,7 +130,7 @@ export async function refuseCheckoutForRestrictedBillingState(
   if (!verdict) return null
 
   // 1. The account cannot start another checkout.
-  if (userId) await deps.lockAccount(userId)
+  if (userId) await deps.lockAccount(userId, verdict.stateCode)
 
   // 2. Nothing is billed again.
   const canceledSubscriptionId = idOf(session.subscription)

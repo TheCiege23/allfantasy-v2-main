@@ -11,7 +11,7 @@ import {
   type MonetizationSku,
 } from "@/lib/monetization/catalog"
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
-import { ACCOUNT_CARD_PAID_BLOCK } from "@/lib/geo/accountGeoLock"
+import { ACCOUNT_CARD_PAID_BLOCK, ACCOUNT_FULL_BLOCK } from "@/lib/geo/accountGeoLock"
 import { readAccountGeoLockFresh } from "@/lib/geo/accountGeoLockServer"
 import { CARD_PAID_LOCK_MESSAGE } from "@/lib/geo/cardLockCopy"
 
@@ -80,8 +80,10 @@ export async function GET(req: Request) {
         ? "synced"
         : "pending"
     // Only a purchase that has not landed can have been refused; a failed read stays "pending".
-    if (syncStatus === "pending" && (await readAccountGeoLockFresh(userId)) === ACCOUNT_CARD_PAID_BLOCK) {
-      syncStatus = "refused"
+    // A Washington card sets the FULL lock rather than the card lock, so both mean refused here.
+    if (syncStatus === "pending") {
+      const lock = await readAccountGeoLockFresh(userId)
+      if (lock === ACCOUNT_CARD_PAID_BLOCK || lock === ACCOUNT_FULL_BLOCK) syncStatus = "refused"
     }
 
     const syncMessage =

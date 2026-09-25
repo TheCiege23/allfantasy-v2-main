@@ -471,7 +471,7 @@ async function accountGeoLockOf(request: NextRequest): Promise<AccountLock> {
 }
 
 const ACCOUNT_LOCKED_MESSAGE =
-  "This account can't be used because it has been used in Washington, where AllFantasy.ai isn't available. If that's wrong, email support@allfantasy.ai."
+  "This account can't be used because it has been used in Washington, or paid with a card billed there, and AllFantasy.ai isn't available in Washington. If that's wrong, email support@allfantasy.ai."
 
 async function apiAccountLockRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
   if (isFullBlockApiExempt(pathname)) return null
