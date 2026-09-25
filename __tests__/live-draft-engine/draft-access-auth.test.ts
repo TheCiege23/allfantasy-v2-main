@@ -53,6 +53,16 @@ function allowRoster() {
 function allowTeamByPlatformUserId() {
   db._mocks.leagueTeamFindFirst.mockResolvedValue({ id: 'team-1' })
 }
+/**
+ * The league_teams MEMBERSHIP tier's queries only. `isCommissioner` now also reads league_teams
+ * for a non-owner (a claimed team the source platform marked commissioner), so a raw call count
+ * on `leagueTeam.findFirst` no longer says which tier ran.
+ */
+function membershipTeamCalls() {
+  return db._mocks.leagueTeamFindFirst.mock.calls.filter(
+    (call: any[]) => Array.isArray(call[0]?.where?.OR),
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -92,7 +102,7 @@ describe('canAccessLeagueDraft', () => {
     denyCommissioner()
     allowRoster()
     expect(await canAccessLeagueDraft(LEAGUE, USER)).toBe(true)
-    expect(db._mocks.leagueTeamFindFirst).not.toHaveBeenCalled()
+    expect(membershipTeamCalls()).toHaveLength(0)
   })
 
   it('passes (leagueId, platformUserId) to roster query', async () => {
@@ -158,7 +168,7 @@ describe('canAccessLeagueDraft', () => {
     expect(await canAccessLeagueDraft(LEAGUE, USER)).toBe(false)
     expect(db._mocks.leagueFindFirst).toHaveBeenCalledTimes(1)
     expect(db._mocks.rosterFindFirst).toHaveBeenCalledTimes(1)
-    expect(db._mocks.leagueTeamFindFirst).toHaveBeenCalledTimes(1)
+    expect(membershipTeamCalls()).toHaveLength(1)
   })
 
   // --- /drafts route parity: same access as session API ---
