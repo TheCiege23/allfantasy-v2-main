@@ -177,9 +177,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * `lib/scoring-runtime/dailySportStatNormalization.ts`.
    *
    * ⚠ This opening the door is NOT the same as declaring the sport
-   * season-capable. `SEASON_CAPABLE_SPORTS` stays NFL-only until the provider
-   * stat keys are verified against a captured payload (GAPS.md G-01) — it is
-   * the claim that a season can run to completion, and it is not earned yet.
+   * season-capable. That claim is `SEASON_CAPABLE_SPORTS` in lib/sport-scope.ts,
+   * which carries its own per-sport evidence (NHL, NCAAB, and NBA ahead of its
+   * 2026-10-20 opener); the provider keys were verified by GAPS.md G-01.
    *
    * Running this for a daily sport is safe in the meantime: if the alias tables
    * are wrong, every player falls through to `missingStatPlayerIds` and the

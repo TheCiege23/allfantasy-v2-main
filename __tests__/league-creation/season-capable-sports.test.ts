@@ -19,8 +19,11 @@
  * `FT`/`AOT`/`AP` to `final`; the 2026 opener is recorded (2026-09-29); and the
  * finalizer can close a date-windowed week (`DATE_WINDOWED_SPORTS`).
  *
- * ⚠ NBA IS STILL ABSENT THOUGH ITS OPENER IS RECORDED (2026-10-20). Its season has
- * not started, so none of the above has been checked against a real NBA slate.
+ * ⚠ NBA JOINED 2026-09-25, AHEAD OF ITS 2026-10-20 OPENER, ON CODE AND FIXTURES. Its
+ * season has not started, so nothing was checked against a real NBA slate — see the
+ * NBA entry in lib/sport-scope.ts for what was checked instead, and why waiting for
+ * the opener would have stranded week 1 (the finalizer sweeps only three weeks back).
+ * Before this, every NBA league could be created and drafted and then sat on week 1.
  *
  * ⚠ THE PER-SPORT `lib/{nba,mlb,nhl,ncaab,ncaaf}-scoring` MODULES LOOK LIKE THEY
  * CLOSE THIS AND DO NOT. Their own headers say "Read/write NBA scoring
@@ -39,15 +42,16 @@ import {
 
 describe('canRunSeasonForSport', () => {
   it('is the set whose stat path AND finalizer were both measured', () => {
-    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NCAAB'])
+    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'NCAAB'])
     expect(canRunSeasonForSport('NFL')).toBe(true)
     expect(canRunSeasonForSport('NHL')).toBe(true)
+    expect(canRunSeasonForSport('NBA')).toBe(true)
   })
 
   it('refuses every sport that cannot yet run one', () => {
-    // NBA is here deliberately: its opener is recorded and the mechanism is
-    // sport-agnostic, but nothing has been checked against a real NBA slate.
-    for (const sport of ['NBA', 'MLB', 'NCAAF', 'SOCCER']) {
+    // MLB's game logs are ingested, but it has no weekly normalizer, no recorded opener
+    // and no finalizer window; NCAAF and SOCCER have no stat path to a weekly score here.
+    for (const sport of ['MLB', 'NCAAF', 'SOCCER']) {
       expect(canRunSeasonForSport(sport), `${sport} must not claim season capability`).toBe(false)
     }
   })
@@ -56,6 +60,7 @@ describe('canRunSeasonForSport', () => {
     // League rows carry 'NFL'; some callers hand through lowercase sport keys.
     expect(canRunSeasonForSport('nfl')).toBe(true)
     expect(canRunSeasonForSport('nhl')).toBe(true)
+    expect(canRunSeasonForSport('nba')).toBe(true)
     expect(canRunSeasonForSport(null)).toBe(false)
     expect(canRunSeasonForSport(undefined)).toBe(false)
     expect(canRunSeasonForSport('')).toBe(false)

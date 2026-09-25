@@ -19,12 +19,18 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
  * `season_start_unknown` rather than anchoring on January 1 — a guessed anchor does not fail
  * loudly, it assigns every game to the wrong week and seals confidently wrong scores.
  *
- * ⚠ NBA IS ABSENT ON PURPOSE AND IS ONE LINE AWAY. The mechanism below is sport-agnostic and
- * NBA's opener is already recorded (2026-10-20), but its season has not started, so no NBA
- * slate or stat row has been checked against this path. Adding it is a measurement, not an
- * edit — the same standard `SEASON_CAPABLE_SPORTS` sets.
+ * ⚠ NBA JOINED 2026-09-25, BEFORE ITS OPENER, BECAUSE WAITING IS NOT SAFE. Without it every NBA
+ * week refused `sport_not_week_keyed`, so no NBA league could ever leave week 1. It is added ahead
+ * of 2026-10-20 because the sweep only looks back `WEEK_FINALIZE_LOOKBACK_WEEKS`: added after
+ * calendar week 4, week 1 is outside every sweep, never seals, and the roller never moves off it.
+ * NBA runs exactly NHL's path: TheSportsDB rows in `SportsGame` (a ranked feed; `split` season
+ * style, so the whole 2026-27 season files under 2026), `FT`/`AOT` read as final, and a Tuesday
+ * opener in `dailySportSeasonStarts.ts`. What it has NOT had is a real NBA slate, because the
+ * season has not started. A WHOLESALE failure refuses by name (`no_games_on_slate`,
+ * `stat_coverage_below_floor`) rather than sealing zeros; a partial one below the 20% the
+ * coverage floor tolerates would not, which is why the first NBA weeks deserve a read.
  */
-export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NCAAB']
+export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NBA', 'NCAAB']
 
 /**
  * Date-windowed sports whose slate comes from the Rolling Insights season schedule
