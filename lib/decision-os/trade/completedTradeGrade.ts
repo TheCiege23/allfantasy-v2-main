@@ -11,8 +11,13 @@ import type { GradeInputs } from './tradeGradeInputs'
  *
  * Graded from side one's point of view, on TODAY's league values, and WITHOUT roster need: the trade
  * has happened and both rosters already hold its result, so "does this fill a hole" has no honest
- * answer. A pick whose draft has already been held no longer exists as a pick; it withholds the
- * letter rather than being priced as though it were still to come.
+ * answer.
+ *
+ * 🛑 A USED PICK IS GRADED AS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). Once its draft
+ * is held a pick no longer exists as a pick: pricing it as one priced a 2026 pick off a February
+ * board months after the rookies were taken, and an older used pick withheld the letter outright.
+ * The pick became a player, and that player's value today is what the pick is worth. Only a pick the
+ * draft results cannot resolve, and whose season has passed, still withholds.
  */
 
 /*
@@ -40,7 +45,10 @@ export function completedTradeInputs(trade: GradedTrade, currentSeason: number):
     const out: GradeInputs = { assets: players.map((p) => ({ kind: 'player' as const, name: p.name })), unpriceable: [] }
     for (const pick of picks) {
       const year = Number(pick.season)
-      if (Number.isFinite(year) && year >= currentSeason && pick.round > 0) out.assets.push({ kind: 'pick', year, round: pick.round })
+      // Used: the draft resolved it to a player. Checked FIRST — a current-season pick is used too.
+      const drafted = pick.resolved?.name?.trim()
+      if (drafted) out.assets.push({ kind: 'player', name: drafted })
+      else if (Number.isFinite(year) && year >= currentSeason && pick.round > 0) out.assets.push({ kind: 'pick', year, round: pick.round })
       else out.unpriceable.push(pick.label)
     }
     return out

@@ -10,7 +10,8 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { gradeTrade, mirrorLetter, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
-import { gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeInputs, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { withOneGrade, type TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
@@ -138,5 +139,47 @@ describe('gradeArchivedTrade — a row graded from its own side', () => {
     })
     expect(g).toMatchObject({ graded: false, reason: expect.stringMatching(/^2024 2nd, a player with no name on file cannot be priced/) })
     expect(calls).toHaveLength(0)
+  })
+})
+
+/*
+ * 🛑 A USED PICK IS GRADED AS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). A used 2026
+ * pick used to be priced as a pick off a February board months after the rookies were taken, and an
+ * older one withheld the letter outright.
+ */
+describe('completedTradeInputs — used picks become the drafted player', () => {
+  const pick = (season: string, round: number, drafted: string | null, rerouted = false) => ({
+    season, round, originalRosterId: 3, label: `${season} round ${round}`,
+    resolved: drafted ? { playerId: 'p', name: drafted, position: 'RB', creditedBySeason: {}, departed: null } : null,
+    pending: drafted == null, rerouted,
+  })
+  const trade = (picksIn: ReturnType<typeof pick>[], picksOut: ReturnType<typeof pick>[] = []): GradedTrade =>
+    ({
+      id: 'L:T', season: '2026', week: 3, createdIso: '', multiTeam: false, tie: false, hasPendingPicks: false,
+      sides: [
+        { rosterId: 1, playersIn: [{ name: 'Alpha Back' }], playersOut: [{ name: 'Beta Wide' }], picksIn, picksOut },
+        { rosterId: 2, playersIn: [], playersOut: [], picksIn: [], picksOut: [] },
+      ],
+    }) as unknown as GradedTrade
+
+  it('a current-season pick that has been drafted is priced as the rookie, not as a pick', () => {
+    const inputs = completedTradeInputs(trade([pick('2026', 1, 'Rookie Runner')]), 2026)!
+    expect(inputs.get).toEqual({ assets: [{ kind: 'player', name: 'Alpha Back' }, { kind: 'player', name: 'Rookie Runner' }], unpriceable: [] })
+  })
+
+  it('an older used pick is graded as its player instead of withholding the letter', () => {
+    const inputs = completedTradeInputs(trade([], [pick('2024', 2, 'Old Rookie')]), 2026)!
+    expect(inputs.give).toEqual({ assets: [{ kind: 'player', name: 'Beta Wide' }, { kind: 'player', name: 'Old Rookie' }], unpriceable: [] })
+  })
+
+  it('a pick that moved again before the draft is still what it became', () => {
+    const inputs = completedTradeInputs(trade([pick('2025', 1, 'Moved Rookie', true)]), 2026)!
+    expect(inputs.get.assets).toContainEqual({ kind: 'player', name: 'Moved Rookie' })
+  })
+
+  it('a future pick stays a pick; an old pick the draft cannot resolve still withholds, named', () => {
+    const inputs = completedTradeInputs(trade([pick('2027', 1, null), pick('2023', 3, null)]), 2026)!
+    expect(inputs.get.assets).toContainEqual({ kind: 'pick', year: 2027, round: 1 })
+    expect(inputs.get.unpriceable).toEqual(['2023 round 3'])
   })
 })
