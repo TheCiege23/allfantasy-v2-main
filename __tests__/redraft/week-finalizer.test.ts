@@ -676,3 +676,24 @@ describe('finalizeCompletedWeeksForSeason — backfilling a past week', () => {
     expect(syncWeekStats).not.toHaveBeenCalled()
   })
 })
+
+describe('rosterIds — sealing a week only some teams play', () => {
+  it('narrows the roster read, and so the coverage floor, to the named rosters', async () => {
+    const { prisma, calls } = makePrisma()
+    const res = await finalizeRedraftWeek(
+      { seasonId: 'season-1', week: 2, rosterIds: ['roster-1', 'roster-2'] },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc },
+    )
+    expect(res.finalized).toBe(true)
+    expect(argsFor(calls, 'redraftRoster.findMany')?.where).toEqual({
+      seasonId: 'season-1',
+      id: { in: ['roster-1', 'roster-2'] },
+    })
+  })
+
+  it('omitted, every roster in the season is sealed exactly as before', async () => {
+    const { prisma, calls } = makePrisma()
+    await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+    expect(argsFor(calls, 'redraftRoster.findMany')?.where).toEqual({ seasonId: 'season-1' })
+  })
+})
