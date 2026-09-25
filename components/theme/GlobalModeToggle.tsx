@@ -18,6 +18,12 @@ export function GlobalModeToggle() {
    *  because every other /core screen still relies on this control. */
   if (pathname === "/core/dashboard-v2" || pathname.startsWith("/core/dashboard-v2/")) return null
 
+  /** 2026-09-25 (owner): on /core this fixed pill floated over page content and over the open chat
+   *  drawer. /core now carries the same switch as a chip in its top bar (AfCoreShell), and
+   *  Settings › Preferences has it for phones where the top bar is folded away — so the floating
+   *  copy is not needed anywhere under /core. */
+  if (pathname === "/core" || pathname.startsWith("/core/")) return null
+
   /** Bug-stab: draft room mounts WarRoomPopup at fixed bottom-4 right-4 z-[60].
    *  This toggle sits at fixed bottom-4 right-4 z-40 — same coordinates, lower
    *  z-index — so the AF/light-dark button visually overlaps the War Room
