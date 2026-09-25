@@ -279,7 +279,7 @@ export async function resolveAssets(
     let displayName = raw.name?.trim() ?? ''
 
     if (raw.playerId?.trim()) {
-      row = (await getPlayer(raw.playerId.trim())) as SportsPlayerRecord | null
+      row = (await getPlayer(raw.playerId.trim(), { sport: args.effectiveSport })) as SportsPlayerRecord | null
       if (row) displayName = row.name
     }
 
@@ -327,7 +327,7 @@ export async function resolveAssets(
       row = (found[0] ?? null) as SportsPlayerRecord | null
     }
     if (!row && raw.playerId) {
-      row = (await getPlayer(raw.playerId.trim())) as SportsPlayerRecord | null
+      row = (await getPlayer(raw.playerId.trim(), { sport: args.effectiveSport })) as SportsPlayerRecord | null
     }
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')
