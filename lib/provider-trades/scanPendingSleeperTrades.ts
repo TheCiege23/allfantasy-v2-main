@@ -191,35 +191,29 @@ export function buildTradeAssetsForRoster(args: {
 
   for (const pick of tx.draft_picks ?? []) {
     const label = `${pick.season} ${pick.round}${ordinal(pick.round)}`
-    // `roster_id` on a Sleeper draft pick is the roster RECEIVING it;
-    // `previous_owner_id` is the roster giving it up.
-    if (pick.roster_id === userRosterId) {
-      assetsReceived.push({
-        playerId: null,
-        playerName: `${label} round pick`,
-        position: 'PICK',
-        team: '—',
-        isPick: true,
-        pickRound: label,
-        pickYear: Number(pick.season),
-        pickRoundNumber: pick.round,
-        pickOriginalRosterExternalId: String((pick as { owner_id?: number }).owner_id ?? ''),
-      })
-    } else if (
-      (pick as { previous_owner_id?: number }).previous_owner_id === userRosterId
-    ) {
-      assetsGiven.push({
-        playerId: null,
-        playerName: `${label} round pick`,
-        position: 'PICK',
-        team: '—',
-        isPick: true,
-        pickRound: label,
-        pickYear: Number(pick.season),
-        pickRoundNumber: pick.round,
-        pickOriginalRosterExternalId: String((pick as { owner_id?: number }).owner_id ?? ''),
-      })
+    /*
+     * 🛑 ON A SLEEPER DRAFT PICK, `roster_id` IS THE ORIGINAL OWNER — NOT THE RECEIVER
+     * (2026-09-25). `owner_id` is the roster RECEIVING it and `previous_owner_id` the roster giving
+     * it up; `SleeperTradedPicksMapper.ts` documents the same shape. This loop read `roster_id` as
+     * the receiver, so a pick you received from its original owner matched neither branch ("You
+     * receive: Nothing"), and a pick someone else originally owned was credited to the wrong side
+     * of the grade. `roster_id` only coincides with the receiver when a pick comes HOME.
+     */
+    const receiver = Number((pick as { owner_id?: number }).owner_id)
+    const sender = Number((pick as { previous_owner_id?: number }).previous_owner_id)
+    const asset: PendingTradeAsset = {
+      playerId: null,
+      playerName: `${label} round pick`,
+      position: 'PICK',
+      team: '—',
+      isPick: true,
+      pickRound: label,
+      pickYear: Number(pick.season),
+      pickRoundNumber: pick.round,
+      pickOriginalRosterExternalId: pick.roster_id == null ? '' : String(pick.roster_id),
     }
+    if (receiver === userRosterId) assetsReceived.push(asset)
+    else if (sender === userRosterId) assetsGiven.push({ ...asset })
   }
 
   /*
