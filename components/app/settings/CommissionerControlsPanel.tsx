@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Shield, Megaphone, UserPlus, RotateCcw, Settings2, Loader2, Pause, Play, Undo2, Bot, CheckCircle2, XCircle, Crown } from 'lucide-react'
+import { Shield, Megaphone, UserPlus, RotateCcw, Settings2, Pause, Play, Undo2, Bot, CheckCircle2, XCircle, Crown } from 'lucide-react'
 import CommissionerBroadcastForm from '@/components/chat/CommissionerBroadcastForm'
 import { LeagueRecruitmentTools } from '@/components/app/recruitment'
 import { CommissionerMonetizationOverview } from '@/components/app/commissioner/CommissionerMonetizationOverview'
@@ -47,8 +47,6 @@ type OrphanAdoptionRequestRow = {
 }
 
 export default function CommissionerControlsPanel({ leagueId }: { leagueId?: string }) {
-  const [threadId, setThreadId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [draftSession, setDraftSession] = useState<DraftSessionState>(null)
   const [managers, setManagers] = useState<ManagerRow[]>([])
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -61,24 +59,13 @@ export default function CommissionerControlsPanel({ leagueId }: { leagueId?: str
   const { hasAccess } = useEntitlement()
 
   const loadData = useCallback(async () => {
-    if (!leagueId) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
+    if (!leagueId) return
     try {
-      const [settingsRes, managersRes, draftSessionRes, orphanRequestsRes] = await Promise.all([
-        fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' }),
+      const [managersRes, draftSessionRes, orphanRequestsRes] = await Promise.all([
         fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/managers`, { cache: 'no-store' }),
         fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/session`, { cache: 'no-store' }),
         fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/orphan-adoptions?status=pending`, { cache: 'no-store' }),
       ])
-      const settingsData = await settingsRes.json().catch(() => null)
-      if (settingsData?.settings?.leagueChatThreadId) {
-        setThreadId(settingsData.settings.leagueChatThreadId)
-      } else {
-        setThreadId(null)
-      }
       if (managersRes.ok) {
         const managersData = await managersRes.json().catch(() => ({}))
         const nextManagers = Array.isArray(managersData?.managers)
@@ -104,12 +91,9 @@ export default function CommissionerControlsPanel({ leagueId }: { leagueId?: str
         setOrphanAdoptionRequests([])
       }
     } catch {
-      setThreadId(null)
       setManagers([])
       setDraftSession(null)
       setOrphanAdoptionRequests([])
-    } finally {
-      setLoading(false)
     }
   }, [leagueId])
 
@@ -651,17 +635,7 @@ export default function CommissionerControlsPanel({ leagueId }: { leagueId?: str
         <h4 className="text-xs font-semibold text-white/80 mb-2 flex items-center gap-1.5">
           <Megaphone className="h-3.5 w-3.5" /> Broadcast message
         </h4>
-        {loading ? (
-          <p className="text-xs text-white/50 flex items-center gap-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking chat link...
-          </p>
-        ) : threadId ? (
-          <CommissionerBroadcastForm threadId={threadId} leagueId={leagueId} className="mt-1" />
-        ) : (
-          <p className="text-xs text-white/50">
-            Link league chat in Settings (or Chat tab) to send @everyone announcements from here.
-          </p>
-        )}
+        <CommissionerBroadcastForm leagueId={leagueId} className="mt-1" />
       </div>
 
       <div className="text-[11px] text-white/45">

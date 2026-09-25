@@ -562,6 +562,8 @@ export function LeagueChatInPanel({
                 message.isPrivate === true && message.visibleToUserId === userId
               const isGlobalBroadcast = message.messageSubtype === 'global_broadcast'
               const isAtAllSubtype = message.messageSubtype === 'at_all'
+              // Server-owned type (clients cannot set it): commissioner announcements and the Survivor FAQ.
+              const isCommissionerAnnouncement = message.messageType === 'broadcast'
               const isSystemLine =
                 !isChimmyBubble &&
                 !isVoteProgress &&
@@ -682,6 +684,9 @@ export function LeagueChatInPanel({
                                 : 'border border-cyan-500/25 bg-cyan-500/15'
                         }`}
                       >
+                        {isCommissionerAnnouncement ? (
+                          <p className="mb-1 text-[10px] font-semibold text-amber-200/90">📣 Commissioner</p>
+                        ) : null}
                         {isGlobalBroadcast ? (
                           <p className="mb-1 text-[10px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
                         ) : null}
@@ -740,6 +745,9 @@ export function LeagueChatInPanel({
                               : 'bg-white/[0.07]'
                       }`}
                     >
+                      {isCommissionerAnnouncement ? (
+                        <p className="mb-1 text-[10px] font-semibold text-amber-200/90">📣 Commissioner</p>
+                      ) : null}
                       {isGlobalBroadcast ? (
                         <p className="mb-1 text-[10px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
                       ) : null}

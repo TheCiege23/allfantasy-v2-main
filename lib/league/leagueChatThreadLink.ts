@@ -45,6 +45,18 @@ export function leagueChatThreadLinkRefusal(leagueId: string, value: unknown): s
   return isLeagueOwnChatThread(leagueId, value) ? null : LEAGUE_CHAT_LINK_REFUSAL
 }
 
+/**
+ * THE READ ACCESSOR — the stored link, only when it passes the check; otherwise null. Every reader
+ * goes through this (or through `getLeagueChatThreadId` in
+ * lib/commissioner-settings/CommissionerAnnouncementService.ts, which reads the row and calls it),
+ * so a link that fails the rule is never used to post, pin or moderate, whatever wrote it.
+ */
+export function leagueChatThreadIdFromSettings(leagueId: string, settings: unknown): string | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
+  const value = (settings as Record<string, unknown>)[LEAGUE_CHAT_THREAD_KEY]
+  return isLeagueOwnChatThread(leagueId, value) ? (value as string) : null
+}
+
 /** The same check for an object that is merged into `League.settings` key by key. */
 export function leagueChatThreadLinkRefusalInPatch(leagueId: string, patch: unknown): string | null {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return null

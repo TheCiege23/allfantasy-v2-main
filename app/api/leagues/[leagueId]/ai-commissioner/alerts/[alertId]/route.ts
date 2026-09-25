@@ -9,15 +9,11 @@ import {
   updateAICommissionerAlertStatus,
 } from '@/lib/ai-commissioner'
 import { createSystemMessage } from '@/lib/platform/chat-service'
+import { leagueChatThreadIdFromSettings } from '@/lib/league/leagueChatThreadLink'
 
 export const dynamic = 'force-dynamic'
 
 type AlertMutationAction = 'approve' | 'dismiss' | 'snooze' | 'resolve' | 'reopen' | 'send_notice'
-
-function parseSettings(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
 
 export async function PATCH(
   req: Request,
@@ -55,9 +51,8 @@ export async function PATCH(
       }),
     ])
     if (!alert) return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
-    const settings = parseSettings(league?.settings)
-    const threadId =
-      typeof settings.leagueChatThreadId === 'string' ? settings.leagueChatThreadId : null
+    // Only a link that passes the one rule (lib/league/leagueChatThreadLink.ts); a DM or huddle is no link.
+    const threadId = leagueChatThreadIdFromSettings(leagueId, league?.settings)
     if (!threadId) {
       return NextResponse.json(
         { error: 'League chat thread is not linked (leagueChatThreadId missing).' },

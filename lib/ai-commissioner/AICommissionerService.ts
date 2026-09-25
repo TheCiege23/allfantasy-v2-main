@@ -7,6 +7,7 @@ import type {
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { createSystemMessage } from '@/lib/platform/chat-service'
+import { leagueChatThreadIdFromSettings } from '@/lib/league/leagueChatThreadLink'
 import { openaiChatText } from '@/lib/openai-client'
 import { buildAiCacheKey, readAiResultCache, writeAiResultCache } from '@/lib/ai-result-cache'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
@@ -310,13 +311,8 @@ export async function runAICommissionerCycle(input: {
     touchedAlerts += 1
   }
 
-  const settings = (() => {
-    const value = league.settings
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-    return value as Record<string, unknown>
-  })()
-  const threadId =
-    typeof settings.leagueChatThreadId === 'string' ? settings.leagueChatThreadId : null
+  // Only a link that passes the one rule (lib/league/leagueChatThreadLink.ts); a DM or huddle is no link.
+  const threadId = leagueChatThreadIdFromSettings(input.leagueId, league.settings)
   const mode = normalizeNotificationMode(config.commissionerNotificationMode)
   await fanOutCommissionerNotices({
     leagueId: input.leagueId,

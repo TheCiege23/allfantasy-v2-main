@@ -1,25 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { getLeagueChatThreadId } from '@/lib/commissioner-settings/CommissionerAnnouncementService'
 import {
   createSystemMessage,
   createPlatformThreadTypedMessage,
   setMessageHiddenByMod,
 } from '@/lib/platform/chat-service'
 
-async function getLeagueChatThreadId(leagueId: string): Promise<string | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { settings: true },
-  })
-  const settings = (league?.settings as Record<string, unknown>) || {}
-  const id = settings.leagueChatThreadId
-  return typeof id === 'string' ? id : null
-}
-
-/** Commissioner chat: broadcast, pin, remove_message. League chat thread must be set in league settings (leagueChatThreadId). */
+/**
+ * Commissioner chat: broadcast, pin, remove_message, into the league's linked chat thread.
+ * The link is read through the validated accessor (lib/league/leagueChatThreadLink.ts): a stored
+ * link to a DM or huddle is treated as no link, so this route can never post into, or hide
+ * messages in, a conversation the league does not own.
+ */
 export async function POST(
   req: NextRequest,
   { params }: { params: { leagueId: string } }
@@ -45,7 +40,7 @@ export async function POST(
       return NextResponse.json({
         status: 'not_linked',
         action: 'broadcast',
-        message: 'Link a league chat thread in league settings (leagueChatThreadId) to send broadcasts.',
+        message: 'No league chat thread is linked here. Announcements go through /api/commissioner/broadcast, which posts into league chat.',
       }, { status: 400 })
     }
     const sent = await createSystemMessage(threadId, 'broadcast', `@everyone ${String(message).trim()}`)
@@ -65,7 +60,7 @@ export async function POST(
       return NextResponse.json({
         status: 'not_linked',
         action: 'pin',
-        message: 'Link a league chat thread in league settings to use pin.',
+        message: 'No league chat thread is linked here, so there is nothing to pin in.',
       }, { status: 400 })
     }
     const sent = await createPlatformThreadTypedMessage(userId, threadId, 'pin', { messageId })
@@ -83,7 +78,7 @@ export async function POST(
     if (!threadId) {
       return NextResponse.json({
         status: 'not_linked',
-        message: 'Link a league chat thread in league settings to moderate messages.',
+        message: 'No league chat thread is linked here, so there is nothing to moderate.',
       }, { status: 400 })
     }
     const ok = await setMessageHiddenByMod(threadId, messageId, true)

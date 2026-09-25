@@ -7,7 +7,7 @@
  *     (lib/league/leagueChatThreadLink.ts): the league's own `league:<id>` room. A platform thread
  *     records no league, so a link naming one — a DM or huddle the commissioner happens to be in —
  *     is ignored, which also covers rows saved before the writers were checked.
- * The client's `leagueIds` (CommissionerBroadcastForm sends them) are never trusted.
+ * A client's `leagueIds` (CommissionerBroadcastForm used to send them) are never trusted.
  *
  * The REAL route runs. The League table is an in-memory fake whose `findMany` evaluates the JSON-path
  * filter the route sends, so the thread → league derivation is exercised, not assumed.

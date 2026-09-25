@@ -778,7 +778,11 @@ export function LeagueConversation({
           onDelete={deleteMessage}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
-          tagFor={(m) => (isDraftRoomSource(sourceById.get(m.id)) ? 'Draft room' : null)}
+          tagFor={(m) =>
+            // 'broadcast' is server-owned (sanitizeClientMessageType turns it into 'text'): only a
+            // commissioner announcement or the Survivor FAQ carries it. Same label the draft room uses.
+            m.messageType === 'broadcast' ? 'Commissioner' : isDraftRoomSource(sourceById.get(m.id)) ? 'Draft room' : null
+          }
           hasRichFor={(m) =>
             hasRichContent(m.metadata, m.messageType, m.body) || readDraftPoll(m.metadata, m.messageType, viewer) != null
           }

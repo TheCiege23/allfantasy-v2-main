@@ -13,9 +13,10 @@ import { prisma } from '@/lib/prisma'
  *
  * A broadcast now needs the sender to be the head commissioner or a co-commissioner
  * (`getLeagueRole`, the same two roles lib/commissioner/broadcastAccess.ts sends as) of a league the
- * thread BELONGS to. That league is derived here, server-side, and never from the body: the only
- * caller (components/chat/CommissionerBroadcastForm.tsx) also sends `leagueIds`, and a client can
- * put any league it runs there. The trusted links are:
+ * thread BELONGS to. That league is derived here, server-side, and never from the body: a client
+ * can put any league it runs in `leagueIds`. (Its one UI caller, CommissionerBroadcastForm, now posts
+ * through `POST /api/commissioner/broadcast` instead — this route could never deliver into a
+ * league's own chat, which is not a platform thread.) The trusted links are:
  *
  *   - `league:<id>` virtual rooms — the id IS the league;
  *   - a thread named by `League.settings.leagueChatThreadId`, the link every commissioner surface
