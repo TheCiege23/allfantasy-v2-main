@@ -12,11 +12,12 @@ import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeek
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
-import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
+import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -156,8 +157,9 @@ async function runLegacyAutomationBridge() {
  */
 async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
-    where: engineSeasonScope(),
-    select: { id: true, leagueId: true, sport: true },
+    // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
+    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
+    select: { id: true, leagueId: true, sport: true, status: true },
     orderBy: { id: 'asc' },
   })
   const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
@@ -172,11 +174,52 @@ async function runRedraftReconciliation() {
   let guillotineChops = 0
   let guillotineFailed = 0
   const guillotineOutcomes: Record<string, number> = {}
+  let playoffMatchupsScored = 0
+  let playoffFailed = 0
+  const playoffOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
     if (!resolved.ok || resolved.phase === 'preseason') {
       skippedUnresolvedWeek += 1
+      continue
+    }
+
+    /*
+     * A season in its playoffs is scored by the bracket, not by the regular-season pipeline.
+     *
+     * ⚠ THE REGULAR-SEASON STEPS ARE SKIPPED, NOT MERELY HARMLESS. There are no `RedraftMatchup`
+     * rows in a playoff week, so recalculation and the sweep would do nothing — but
+     * `updateStandings` rewrites every roster's `playoffSeed` from the regular-season table,
+     * which is the seeding the bracket was generated from and must not drift under it.
+     *
+     * The stat sync still runs first: the playoff teams' players need this week's rows, and
+     * nothing else fetched them once the season left the running statuses.
+     */
+    if (season.status === REDRAFT_SEASON_STATUS.PLAYOFFS) {
+      try {
+        await syncPlayerWeeklyScoresForRedraftSeason({
+          seasonId: season.id,
+          week: resolved.fantasyWeek,
+          actorId: 'system:score-sync',
+        })
+      } catch {
+        // A provider gap this tick; the scorer seals only on rows that exist, so it simply waits.
+      }
+      try {
+        const playoff = await scoreActivePlayoffRound(
+          { seasonId: season.id, calendarWeek: resolved.fantasyWeek },
+          {
+            syncWeekStats: async ({ seasonId, week }) => {
+              await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
+            },
+          },
+        )
+        playoffOutcomes[playoff.outcome] = (playoffOutcomes[playoff.outcome] ?? 0) + 1
+        playoffMatchupsScored += playoff.matchupsScored
+      } catch {
+        playoffFailed += 1
+      }
       continue
     }
     try {
@@ -287,6 +330,9 @@ async function runRedraftReconciliation() {
     guillotineChops,
     guillotineFailed,
     guillotineOutcomes,
+    playoffMatchupsScored,
+    playoffFailed,
+    playoffOutcomes,
   }
 }
 
@@ -387,7 +433,8 @@ export async function GET(request: Request) {
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
-        r.redraft.guillotineFailed > 0
+        r.redraft.guillotineFailed > 0 ||
+        r.redraft.playoffFailed > 0
           ? 'partial'
           : 'success',
       metadata: {

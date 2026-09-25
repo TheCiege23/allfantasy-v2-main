@@ -172,6 +172,15 @@ export type FinalizeRedraftWeekParams = {
   coverageFloor?: number
   /** Measure and report without writing. */
   dryRun?: boolean
+  /**
+   * Seal only these rosters' players, and measure coverage over them alone.
+   *
+   * ⚠ FOR A WEEK THAT ONLY SOME TEAMS PLAY. A playoff week is scored for the teams still alive,
+   * and an eliminated team's abandoned lineup — injured starters nobody benched — would otherwise
+   * count toward the coverage floor and hold the bracket open. Omitted, every roster in the season
+   * is sealed, exactly as before.
+   */
+  rosterIds?: string[]
 }
 
 function emptyResult(
@@ -394,7 +403,7 @@ export async function finalizeRedraftWeek(
   }
 
   const rosters = await prisma.redraftRoster.findMany({
-    where: { seasonId: season.id },
+    where: { seasonId: season.id, ...(params.rosterIds ? { id: { in: params.rosterIds } } : {}) },
     select: { id: true },
   })
   const rosterIds = rosters.map((r) => r.id)
@@ -558,6 +567,87 @@ export type FinalizeCompletedWeeksParams = {
 }
 
 /**
+ * Seal one week, the way the sweep does it: refresh a ready date-windowed week's stats once before
+ * sealing, and retry once after a backfill when coverage is the only thing short.
+ *
+ * Extracted from `finalizeCompletedWeeksForSeason` so the playoff scorer seals its weeks by the
+ * same rules. A playoff week has no `RedraftMatchup` rows, so the sweep — which finds its weeks
+ * from open matchups — never reached one, and a second copy of this logic would drift.
+ */
+export async function finalizeWeekWithRefresh(
+  params: FinalizeRedraftWeekParams,
+  deps: WeekFinalizerDeps = {},
+): Promise<WeekFinalizeResult> {
+  const attempt = (dryRun = params.dryRun) => finalizeRedraftWeek({ ...params, dryRun }, deps)
+
+  /*
+   * 🛑 A DAILY-SPORT WEEK WAS SEALED WITHOUT ITS LAST DAY. Its stats arrive only from the daily
+   * ingest (07:00 UTC, "yesterday and the day before"), and score-sync refreshes only the week the
+   * calendar calls current. A Monday puck at or after 00:00 UTC moves the calendar on, so the
+   * Tuesday ingest that brings Monday's box scores never reached that week — and coverage was
+   * already above the floor from Tuesday–Sunday, so it sealed with Monday's players at zero.
+   * Every week from November, when an 8pm ET puck is past midnight UTC.
+   *
+   * So a date-windowed week that is READY to seal is refreshed once, first. The seal waits out a
+   * grace period after its last game, which is past that morning's ingest. A dry run answers
+   * "ready?" with the same checks a real attempt makes; on a refusal it IS the answer, so a week
+   * that is not ready costs no extra reads. NFL is untouched: its last game is scored live.
+   */
+  let result: WeekFinalizeResult
+  if (deps.syncWeekStats && !params.dryRun) {
+    const probe = await attempt(true)
+    const readyToSeal = probe.refusal === null && !probe.alreadyFinal
+    if (readyToSeal && DATE_WINDOWED_SPORTS.includes(probe.sport)) {
+      try {
+        await deps.syncWeekStats({ seasonId: params.seasonId, week: params.week })
+      } catch {
+        // A failed refresh seals on the stats already held, as it did before this pass existed.
+      }
+    }
+    result = readyToSeal ? await attempt() : probe
+  } else {
+    result = await attempt()
+  }
+
+  /*
+   * 🛑 ONE RETRY, AND ONLY FOR THE ONE REFUSAL A BACKFILL CAN ANSWER.
+   *
+   * `stat_coverage_below_floor` on a PAST week is the signature of stats nobody has
+   * fetched, not of a week that should stay open — score-sync only ever reconciles the
+   * current week, so an older one keeps whatever coverage it had when it was current.
+   * Measured in production 2026-09-24 on the one native league that has played: week 2
+   * sat at 86/90 (95.6%) while week 1 sat at 62/90 (69%), and because the roller advances
+   * from `currentWeek`, that week 1 held the whole season on week 1.
+   *
+   * ⚠ FETCHING FIRST AND ASKING AFTERWARDS WOULD BE THE EXPENSIVE VERSION. The other
+   * refusals — unfinished slate, inside the grace period, no starters — are not about
+   * missing rows, and a week that seals on the first attempt costs nothing extra. A week
+   * that can never reach the floor costs one backfill per tick until it falls out of the
+   * lookback window, which is what bounds this.
+   */
+  if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
+    try {
+      const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week: params.week })
+      result = await attempt()
+      /*
+       * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
+       * payload, so the retry's coverage is the same number for a completely different
+       * reason — and `stat_coverage_below_floor` sends the next reader to the roster. Only
+       * relabel when the week is still refusing for coverage: a week that sealed anyway, or
+       * one blocked on its slate, is not a quota story.
+       */
+      if (backfill?.rateLimited && result.refusal === 'stat_coverage_below_floor') {
+        result = { ...result, refusal: 'provider_rate_limited' }
+      }
+    } catch {
+      // A provider gap leaves the original refusal standing rather than inventing coverage.
+    }
+  }
+
+  return result
+}
+
+/**
  * Sweep the weeks that should already be closed.
  *
  * ⚠ IT LOOKS BACKWARD ON PURPOSE. Score-sync only ever reconciles the week the schedule
@@ -589,82 +679,17 @@ export async function finalizeCompletedWeeksForSeason(
   let finalized = 0
 
   for (const week of weeks) {
-    const attempt = (dryRun = params.dryRun) =>
-      finalizeRedraftWeek(
-        {
-          seasonId: params.seasonId,
-          week,
-          seasonType: params.seasonType,
-          graceMs: params.graceMs,
-          coverageFloor: params.coverageFloor,
-          dryRun,
-        },
-        deps,
-      )
-
-    /*
-     * 🛑 A DAILY-SPORT WEEK WAS SEALED WITHOUT ITS LAST DAY. Its stats arrive only from the daily
-     * ingest (07:00 UTC, "yesterday and the day before"), and score-sync refreshes only the week the
-     * calendar calls current. A Monday puck at or after 00:00 UTC moves the calendar on, so the
-     * Tuesday ingest that brings Monday's box scores never reached that week — and coverage was
-     * already above the floor from Tuesday–Sunday, so it sealed with Monday's players at zero.
-     * Every week from November, when an 8pm ET puck is past midnight UTC.
-     *
-     * So a date-windowed week that is READY to seal is refreshed once, first. The seal waits out a
-     * grace period after its last game, which is past that morning's ingest. A dry run answers
-     * "ready?" with the same checks a real attempt makes; on a refusal it IS the answer, so a week
-     * that is not ready costs no extra reads. NFL is untouched: its last game is scored live.
-     */
-    let result: WeekFinalizeResult
-    if (deps.syncWeekStats && !params.dryRun) {
-      const probe = await attempt(true)
-      const readyToSeal = probe.refusal === null && !probe.alreadyFinal
-      if (readyToSeal && DATE_WINDOWED_SPORTS.includes(probe.sport)) {
-        try {
-          await deps.syncWeekStats({ seasonId: params.seasonId, week })
-        } catch {
-          // A failed refresh seals on the stats already held, as it did before this pass existed.
-        }
-      }
-      result = readyToSeal ? await attempt() : probe
-    } else {
-      result = await attempt()
-    }
-
-    /*
-     * 🛑 ONE RETRY, AND ONLY FOR THE ONE REFUSAL A BACKFILL CAN ANSWER.
-     *
-     * `stat_coverage_below_floor` on a PAST week is the signature of stats nobody has
-     * fetched, not of a week that should stay open — score-sync only ever reconciles the
-     * current week, so an older one keeps whatever coverage it had when it was current.
-     * Measured in production 2026-09-24 on the one native league that has played: week 2
-     * sat at 86/90 (95.6%) while week 1 sat at 62/90 (69%), and because the roller advances
-     * from `currentWeek`, that week 1 held the whole season on week 1.
-     *
-     * ⚠ FETCHING FIRST AND ASKING AFTERWARDS WOULD BE THE EXPENSIVE VERSION. The other
-     * refusals — unfinished slate, inside the grace period, no starters — are not about
-     * missing rows, and a week that seals on the first attempt costs nothing extra. A week
-     * that can never reach the floor costs one backfill per tick until it falls out of the
-     * lookback window, which is what bounds this.
-     */
-    if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
-      try {
-        const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week })
-        result = await attempt()
-        /*
-         * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
-         * payload, so the retry's coverage is the same number for a completely different
-         * reason — and `stat_coverage_below_floor` sends the next reader to the roster. Only
-         * relabel when the week is still refusing for coverage: a week that sealed anyway, or
-         * one blocked on its slate, is not a quota story.
-         */
-        if (backfill?.rateLimited && result.refusal === 'stat_coverage_below_floor') {
-          result = { ...result, refusal: 'provider_rate_limited' }
-        }
-      } catch {
-        // A provider gap leaves the original refusal standing rather than inventing coverage.
-      }
-    }
+    const result = await finalizeWeekWithRefresh(
+      {
+        seasonId: params.seasonId,
+        week,
+        seasonType: params.seasonType,
+        graceMs: params.graceMs,
+        coverageFloor: params.coverageFloor,
+        dryRun: params.dryRun,
+      },
+      deps,
+    )
 
     results.push(result)
     if (result.finalized) finalized += 1

@@ -37,6 +37,7 @@ import {
   resolveRookieDraftRounds,
 } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { logAction } from '@/server/services/auditService'
+import { CHAMPIONSHIP_ROUND_WHERE } from '@/lib/playoff-runtime/playoffRoundWeeks'
 
 export type NextDraftKind = 'rookie' | 'standard'
 
@@ -135,7 +136,9 @@ export function placeKeeperRounds<T extends { rosterId: string; roundCost: numbe
 async function championAndRunnerUp(seasonId: string): Promise<{ championId: string | null; runnerUpId: string | null }> {
   const finalRound = await prisma.redraftPlayoffRound
     .findFirst({
-      where: { seasonId },
+      // The title bracket only: consolation rounds share this table at `100 + n`, so without the
+      // filter the "final round" was the consolation final and the rookie order ignored the champion.
+      where: { seasonId, roundNumber: CHAMPIONSHIP_ROUND_WHERE },
       orderBy: { roundNumber: 'desc' },
       select: {
         matchups: {

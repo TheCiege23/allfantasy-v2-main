@@ -14,6 +14,7 @@ import {
   type NflRedraftPlayoffTeamInput,
 } from './canonicalNflRedraftPlayoffRuntime'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
+import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
 
 export type NflRedraftPlayoffRuntimeResolved =
   | {
@@ -432,7 +433,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           id,
           seasonId: state.seasonId,
           bracketId: bracket.id,
-          roundNumber: round.bracketType === 'consolation' ? 100 + round.roundNumber : round.roundNumber,
+          roundNumber: round.bracketType === 'consolation' ? CONSOLATION_ROUND_OFFSET + round.roundNumber : round.roundNumber,
           roundName: round.roundName,
           status: round.status,
         },

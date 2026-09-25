@@ -18,6 +18,7 @@ import {
   toScheduleSportKey,
 } from './sportWeekSignal'
 import { resolveDailySportSeasonStart } from './dailySportSeasonStarts'
+import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import type {
   LeagueSeasonWeekResolution,
   ScheduleRow,
@@ -150,6 +151,7 @@ export async function resolveSeasonWeekForRedraftSeason(
   const season = await db.redraftSeason.findUnique({
     where: { id: seasonId },
     select: {
+      leagueId: true,
       sport: true,
       season: true,
       totalWeeks: true,
@@ -158,7 +160,7 @@ export async function resolveSeasonWeekForRedraftSeason(
   })
   if (!season) return { ok: false, reason: 'SEASON_NOT_FOUND' }
 
-  const lastPlayoffWeek = await resolveLastPlayoffWeek(db, seasonId, season.playoffStartWeek)
+  const lastPlayoffWeek = await resolveLastPlayoffWeek(db, seasonId, season.playoffStartWeek, season.leagueId)
 
   const sportWeek = await resolveSportWeek(season.sport, season.season, deps)
   return mapSportWeekToLeagueWeek(sportWeek, {
@@ -174,12 +176,12 @@ export async function resolveSeasonWeekForRedraftSeason(
  * The league's final playoff week, read from the bracket rather than assumed.
  *
  * ⚠ `RedraftPlayoffRound` HAS NO `week` COLUMN — it stores a 1-based
- * `roundNumber`, and the week is derived. The mapping is
- * `week = playoffStartWeek + roundNumber - 1`, which is the same arithmetic the
- * shipped commissioner control already uses to decide which week to advance
- * (`StandingsView.tsx:122`: `playoffStartWeek + activeRoundIndex`, 0-based
- * there). Deriving it a second, different way here is exactly the "two
- * implementations of one rule" bug, so it matches that one deliberately.
+ * `roundNumber`, and the week is derived by `playoffRoundWeeks`, the one rule the
+ * bracket scorer also uses. It was inline here as `playoffStartWeek + roundNumber - 1`,
+ * which ignored `League.playoffWeeksPerRound` and — ordering by `roundNumber desc`
+ * over a table that stores consolation rounds at `100 + n` — returned a "last playoff
+ * week" about a hundred weeks late for any league with a consolation bracket, so its
+ * season could never read as complete.
  *
  * Returns null when no bracket has been generated — the normal case before the
  * regular season ends, and why `mapSportWeekToLeagueWeek` will not emit
@@ -189,12 +191,21 @@ async function resolveLastPlayoffWeek(
   db: PrismaClient,
   seasonId: string,
   playoffStartWeek: number,
+  leagueId: string,
 ): Promise<number | null> {
   const round = await db.redraftPlayoffRound.findFirst({
-    where: { seasonId },
+    where: { seasonId, roundNumber: CHAMPIONSHIP_ROUND_WHERE },
     orderBy: { roundNumber: 'desc' },
     select: { roundNumber: true },
   })
   if (round == null) return null
-  return playoffStartWeek + Math.max(1, round.roundNumber) - 1
+  const league = await db.league.findUnique({
+    where: { id: leagueId },
+    select: { playoffWeeksPerRound: true },
+  })
+  return lastWeekOfPlayoffRound({
+    playoffStartWeek,
+    roundNumber: round.roundNumber,
+    weeksPerRound: league?.playoffWeeksPerRound,
+  })
 }
