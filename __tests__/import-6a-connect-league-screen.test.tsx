@@ -90,7 +90,7 @@ describe('6a rule 1 — the field follows the platform, and is never generic', (
      */
     [/ESPN/, /ESPN league ID/i, /^123456\b/],
     [/MFL/, /MFL league ID/i, /paste the league URL/i],
-    [/Fantrax/, /Fantrax league ID/i, /fantrax\.com|v2kzedypmm8jp61b/i],
+    [/Fantrax/, /Fantrax league ID/i, /fantrax\.com|abcd1234efgh5678/i],
     [/Fleaflicker/, /Fleaflicker league ID/i, /206154/],
   ]
 
@@ -135,8 +135,9 @@ describe('6a rule 1 — the field follows the platform, and is never generic', (
     render(<ImportV4 />)
     fireEvent.click(pill(/Yahoo/))
     if (!yahooLive) {
-      /* Off: the pill must still be visible and must refuse the click. */
-      expect(pill(/Yahoo/)).toBeDisabled()
+      /* Off: the pill stays visible; selecting it explains the pause and offers no field. */
+      expect(await screen.findByText(/Yahoo import is paused while Yahoo reviews our API access/)).toBeTruthy()
+      expect(document.querySelector('.af-im-field-row input')).toBeNull()
       return
     }
     expect(await screen.findByText(/Yahoo account/i)).toBeTruthy()
@@ -214,14 +215,18 @@ describe('6a rule 6 — no platform password is ever asked for', () => {
    * for any platform … ESPN's private-league case is one-click via extension, not
    * a login form." So the assertion is on what the screen ASKS FOR.
    */
-  const PASSWORD_PROMPT = /(your\s+)?(ESPN|Sleeper|Yahoo|MFL|Fantrax|Fleaflicker|platform|account)\s+password/i
+  const PASSWORD_PROMPT = /\b(your\s+)?(ESPN|Sleeper|Yahoo|MFL|Fantrax|Fleaflicker|platform|account)\s+password\b/i
 
   it.each([[/^S\s*Sleeper/], [/ESPN/], [/Yahoo/], [/MFL/], [/Fleaflicker/], [/Fantrax/]])(
     'never asks for an account password on %s',
     async (pillName) => {
       render(<ImportV4 />)
       fireEvent.click(pill(pillName))
-      await waitFor(() => expect(document.querySelector('.af-im-field')).toBeTruthy())
+      /* A paused provider (Yahoo today) is selectable only to explain itself, so it has no
+         field at all — which satisfies "asks for no password" trivially, and is waited for. */
+      await waitFor(() =>
+        expect(document.querySelector('.af-im-field, .af-im-blocked--selected')).toBeTruthy(),
+      )
 
       /* Every field's own label and placeholder — the only things that ask. */
       const asks = [...document.querySelectorAll<HTMLInputElement>('.af-im-field input, .af-espn-field input')]
@@ -242,7 +247,7 @@ describe('6a rule 6 — no platform password is ever asked for', () => {
     render(<ImportV4 />)
     fireEvent.click(pill(/Fantrax/))
     await waitFor(() => expect(screen.queryByText(/Fantrax league ID/i)).toBeTruthy())
-    expect(screen.getByText(/Never your Fantrax password or Secret ID/i)).toBeTruthy()
+    expect(screen.getByText(/This box never needs your Fantrax password or Secret ID/i)).toBeTruthy()
   })
 
   it('ESPN asks for cookies and promises never to ask for the password', async () => {
@@ -312,7 +317,7 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
     }))
   })
 
-  it('renders it, refuses the click, tags it and explains the block', async () => {
+  it('renders it, tags it, and a click only explains — it never opens a field', async () => {
     const { ImportV4: Scoped } = await import('@/components/core-app/screens/ImportV4')
     render(<Scoped />)
 
@@ -322,16 +327,17 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
 
     /* Visible — never hidden. */
     expect(blocked).toBeTruthy()
-    /* Not clickable. */
-    expect(blocked).toBeDisabled()
     expect(blocked.getAttribute('data-available')).toBe('false')
     /* Tagged on the pill itself. */
     expect(within(blocked).getByText(/Coming soon/i)).toBeTruthy()
+    /* Its reason is NOT printed while another tab is selected. */
+    expect(screen.queryByText(/Fleaflicker selected\?/i)).toBeNull()
 
-    /* And the fallback strip carries the reason, rather than leaving a dead pill
-       with no explanation beside it. */
+    /* Selecting it explains the block — and still offers nothing to type into. */
     fireEvent.click(blocked)
-    expect(blocked.getAttribute('data-active')).not.toBe('true')
+    expect(blocked.getAttribute('data-active')).toBe('true')
+    expect(screen.getByText(/Fleaflicker selected\?/i)).toBeTruthy()
+    expect(document.querySelector('.af-im-field-row input')).toBeNull()
   })
 
   it('shows the fallback strip when the blocked provider is the selected one', async () => {
@@ -342,5 +348,29 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
     expect(screen.getByText(/isn't available yet — coming soon\./i)).toBeTruthy()
     /* No field to type into for a provider that cannot be used. */
     expect(document.querySelector('.af-im-field-row input')).toBeNull()
+  })
+})
+
+/*
+ * 🛑 THE YAHOO NOTICE PRINTED UNDER THE ROW ON EVERY TAB, with copy that had stopped being true
+ * ("Yahoo sign-in is not working yet…"). It now shows only while Yahoo is the selected tile, and
+ * says what is actually happening.
+ */
+describe('the Yahoo pause notice', () => {
+  const YAHOO_PAUSED = /Yahoo import is paused while Yahoo reviews our API access/
+
+  it('is absent on the Sleeper tab', () => {
+    render(<ImportV4 defaultProvider="sleeper" />)
+    expect(screen.queryByText(YAHOO_PAUSED)).toBeNull()
+    expect(screen.queryByText(/Yahoo sign-in is not working yet/)).toBeNull()
+  })
+
+  it('appears, with accurate copy, once Yahoo is the selected tile', async () => {
+    const yahooLive = IMPORT_PROVIDER_UI_OPTIONS.some((o) => o.provider === 'yahoo' && o.available)
+    if (yahooLive) return
+    render(<ImportV4 defaultProvider="sleeper" />)
+    fireEvent.click(pill(/Yahoo/))
+    expect(await screen.findByText(YAHOO_PAUSED)).toBeTruthy()
+    expect(screen.getAllByText(YAHOO_PAUSED)).toHaveLength(1)
   })
 })

@@ -72,8 +72,11 @@ describe('⚠ every hop stays optional, so existing callers are untouched', () =
   it('the bootstrap parameter is optional', () => {
     // app/api/import-espn, app/api/mfl/import and LeagueImportToExistingService
     // all call these without the hint and must behave exactly as before.
-    expect(BOOTSTRAP).toContain('importer?: { userId: string; sourceManagerId?: string | null } | null,')
-    expect(WRAPPER).toContain('importer?: { userId: string; sourceManagerId?: string | null } | null,')
+    expect(BOOTSTRAP).toMatch(/importer\?: \{\s*userId: string\s*sourceManagerId\?: string \| null/)
+    expect(BOOTSTRAP).toMatch(/sourceTeamId\?: string \| null\s*\} \| null,/)
+    expect(WRAPPER).toContain(
+      'importer?: { userId: string; sourceManagerId?: string | null; sourceTeamId?: string | null } | null,',
+    )
   })
 
   it('the options field is optional', () => {

@@ -105,4 +105,78 @@ describe('LeagueCreationImportSubmissionService', () => {
     )
     expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
   })
+
+  /*
+   * 🛑 AN EMPTY-BODY 500 USED TO REACH THE SCREEN AS A JAVASCRIPT PARSE ERROR:
+   * "Failed to execute 'json' on 'Response': Unexpected end of JSON input". These use REAL
+   * `Response` objects, because the bug lives in how a real body is read.
+   */
+  describe('a response that is not JSON', () => {
+    const HUMAN = 'Import failed on our side — nothing was changed. Try again in a minute.'
+
+    it('commit: an empty 500 becomes a human sentence, not a parse error', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })))
+      const { submitImportCreation } = await import(
+        '@/lib/league-import/LeagueCreationImportSubmissionService'
+      )
+      const res = await submitImportCreation('fleaflicker', '349505', 'u1')
+      expect(res.ok).toBe(false)
+      expect(res.status).toBe(500)
+      expect(res.error).toBe(HUMAN)
+      expect(res.error).not.toMatch(/JSON|Unexpected/)
+    })
+
+    it('preview: an HTML error page becomes a human sentence', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(new Response('<html>502 Bad Gateway</html>', { status: 502 })),
+      )
+      const { fetchImportPreview } = await import(
+        '@/lib/league-import/LeagueCreationImportSubmissionService'
+      )
+      const res = await fetchImportPreview('fleaflicker', '349505')
+      expect(res.ok).toBe(false)
+      expect(res.error).toBe(HUMAN)
+    })
+
+    it('discover: an empty 200 is not reported as success', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })))
+      const { discoverProviderLeagues } = await import(
+        '@/lib/league-import/LeagueCreationImportSubmissionService'
+      )
+      const res = await discoverProviderLeagues('sleeper', 'someone')
+      expect(res.ok).toBe(false)
+      expect(res.error).toBe(HUMAN)
+    })
+
+    it('a JSON error body still wins — the server’s own sentence is shown', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ error: 'League not found', code: 'LEAGUE_NOT_FOUND' }), {
+            status: 404,
+          }),
+        ),
+      )
+      const { submitImportCreation } = await import(
+        '@/lib/league-import/LeagueCreationImportSubmissionService'
+      )
+      const res = await submitImportCreation('fleaflicker', '349505', 'u1')
+      expect(res.error).toBe('League not found')
+      expect(res.code).toBe('LEAGUE_NOT_FOUND')
+    })
+  })
+
+  it('sends the chosen team as claimSourceTeamId when one is given', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ leagueId: 'l1', name: 'x', sport: 'NFL' }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const { submitImportCreation } = await import(
+      '@/lib/league-import/LeagueCreationImportSubmissionService'
+    )
+    await submitImportCreation('fleaflicker', '349505', '', { accepted: true }, { claimSourceTeamId: '1002' })
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    expect(body.claimSourceTeamId).toBe('1002')
+  })
 })

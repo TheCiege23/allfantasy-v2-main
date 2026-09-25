@@ -12,6 +12,7 @@
 import { prisma } from '@/lib/prisma'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
 import type { ImportProvider } from './types'
+import { getImportProviderLabel } from './provider-ui-config'
 import { fetchEspnLeagueForImport, EspnImportLeagueNotFoundError } from './espn/EspnLeagueFetchService'
 import {
   fetchYahooLeagueForImport,
@@ -92,10 +93,18 @@ export interface CommissionerGateResult {
   leagueReadable?: boolean
 }
 
-export const PROVIDER_LABELS: Partial<Record<ImportProvider, string>> = {
-  mfl: 'MFL',
-  espn: 'ESPN',
-  yahoo: 'Yahoo',
+/**
+ * The provider's name as a person reads it, in every gate message.
+ *
+ * 🛑 THIS WAS A THREE-ENTRY MAP (mfl, espn, yahoo) WITH `?? provider` AS THE FALLBACK, so the
+ * three providers it forgot rendered as their internal ids: "fantrax cannot verify commissioner
+ * status automatically". The label set already exists in `provider-ui-config` (client-safe, one
+ * source for the whole import screen); the one override kept is MFL's short form, which reads
+ * better mid-sentence than "MyFantasyLeague (MFL)".
+ */
+export function gateProviderLabel(provider: ImportProvider): string {
+  if (provider === 'mfl') return 'MFL'
+  return getImportProviderLabel(provider)
 }
 
 export interface AttestationInput {
@@ -142,7 +151,13 @@ async function checkSleeper(appUserId: string, sourceLeagueId: string): Promise<
   if (!sleeperUserId) {
     return {
       ok: false,
-      reason: 'Link your Sleeper account to import from Sleeper — commissioner check requires it.',
+      /*
+       * In the user's terms: WHERE the link happens and what to do when it cannot. Typing the
+       * username into the Sleeper box and pressing "Find my leagues" is what links it (discover
+       * stamps the handle); the only case that cannot is a handle held by another login.
+       */
+      reason:
+        'Link your Sleeper account first: pick Sleeper above, type your Sleeper username and press "Find my leagues". If that Sleeper account is already linked to a different AllFantasy login, sign in with that login instead.',
     }
   }
   try {
@@ -330,7 +345,7 @@ async function checkMfl(appUserId: string, sourceLeagueId: string): Promise<Comm
   if (!auth?.apiKey) {
     return {
       ok: false,
-      reason: 'Save your MFL API key in League Sync before importing from MyFantasyLeague.',
+      reason: 'Save your MFL API key under Settings → Connected Accounts before importing from MyFantasyLeague.',
     }
   }
   const { leagueId, season } = parseMflSourceInput(sourceLeagueId)
@@ -532,7 +547,7 @@ export async function assertImportCommissioner(args: {
       ...base,
       ok: false,
       requiresAttestation: true,
-      reason: `${PROVIDER_LABELS[args.provider] ?? args.provider} cannot verify commissioner status automatically — confirm you are the league commissioner to continue.`,
+      reason: `${gateProviderLabel(args.provider)} cannot verify commissioner status automatically — confirm you are the league commissioner to continue.`,
     }
   }
 
@@ -646,7 +661,7 @@ async function resolveImportGate(args: {
   }
   return {
     ok: false,
-    reason: `${args.provider} imports are not yet supported.`,
+    reason: `${gateProviderLabel(args.provider)} imports are not yet supported.`,
   }
 }
 

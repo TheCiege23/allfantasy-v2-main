@@ -453,6 +453,14 @@ export async function POST(req: NextRequest) {
    * left alone (unique constraint) — discovery still works, the gate then
    * refuses with its own message.
    */
+  /*
+   * 🛑 THE STAMP'S UNIQUE-VIOLATION WAS SWALLOWED, AND IT IS THE ONE FAILURE THE USER MUST HEAR
+   * ABOUT. When this Sleeper handle is already linked to a DIFFERENT AllFantasy login, discovery
+   * lists the leagues, the stamp fails on `sleeperUserId`'s unique key, and the very next step —
+   * preview — refuses with "Link your Sleeper account". Linking is impossible from this login, so
+   * that advice is a loop. Reported to the screen instead, which says what actually fixes it.
+   */
+  let handleLinkedElsewhere = false
   try {
     const profile = await prisma.userProfile.upsert({
       where: { userId: auth.userId },
@@ -469,11 +477,13 @@ export async function POST(req: NextRequest) {
         },
       })
     }
-  } catch {
+  } catch (error) {
     /* unique-violation (handle owned by another account), a partial prisma in
        tests, or a transient DB failure — discovery itself must not break on
        the stamp. try/catch, not .catch(): a mocked client without the
-       userProfile delegate throws SYNCHRONOUSLY, before any promise exists. */
+       userProfile delegate throws SYNCHRONOUSLY, before any promise exists.
+       Only the unique-violation on the Sleeper id is reported; the others stay silent. */
+    handleLinkedElsewhere = isSleeperIdUniqueViolation(error)
   }
 
   try {
@@ -490,6 +500,8 @@ export async function POST(req: NextRequest) {
           sleeperUser.user.username ||
           accountIdentifier,
       },
+      /* Present only when true, so every existing consumer of this shape reads it unchanged. */
+      ...(handleLinkedElsewhere ? { handleLinkedElsewhere: true } : {}),
       leagues: await markPreviouslyDeleted(
         auth.userId,
         'sleeper',
@@ -519,4 +531,18 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+/**
+ * Prisma's unique-constraint failure (P2002) on the profile's Sleeper id — the handle is linked to a
+ * different AllFantasy login. `meta.target` is a field list on most connectors and an index name on
+ * some, so both shapes are read.
+ */
+function isSleeperIdUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: unknown; meta?: { target?: unknown } }
+  if (e.code !== 'P2002') return false
+  const target = e.meta?.target
+  const text = Array.isArray(target) ? target.join(',') : typeof target === 'string' ? target : ''
+  return /sleeper_?user_?id/i.test(text)
 }

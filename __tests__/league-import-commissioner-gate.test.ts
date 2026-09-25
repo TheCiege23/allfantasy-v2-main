@@ -767,3 +767,45 @@ describe('providerRequiresCommissionerAttestation (client-safe shared classifica
     )
   })
 })
+
+/*
+ * 🛑 THE GATE'S LABEL MAP HELD THREE PROVIDERS, so the other three rendered as their internal ids —
+ * "fantrax cannot verify commissioner status automatically" — on the screen, lowercase.
+ */
+describe('assertImportCommissioner — provider names in messages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it.each([
+    ['fantrax', 'Fantrax'],
+    ['fleaflicker', 'Fleaflicker'],
+  ] as const)('names %s as "%s" in the attestation prompt', async (provider, label) => {
+    getDecryptedAuthMock.mockResolvedValue(null)
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'u1',
+      provider,
+      sourceLeagueId: 'league-1',
+      requireCommissioner: true,
+    })
+    expect(result.requiresAttestation).toBe(true)
+    expect(result.reason).toMatch(new RegExp(`^${label} cannot verify`))
+    expect(result.reason).not.toMatch(new RegExp(`\b${provider}\b`))
+  })
+
+  it('tells an unlinked Sleeper importer where to link it, and what to do if it is linked elsewhere', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    ;(prisma.userProfile.findFirst as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'u1',
+      provider: 'sleeper',
+      sourceLeagueId: '1204903552921649152',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('Find my leagues')
+    expect(result.reason).toMatch(/different AllFantasy login/)
+    expect(result.reason).not.toMatch(/commissioner check requires it/)
+  })
+})

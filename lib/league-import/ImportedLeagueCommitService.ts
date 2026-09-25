@@ -68,6 +68,17 @@ export interface PersistImportedLeagueOptions {
    * run the gate (the legacy per-provider routes) behave exactly as before.
    */
   importerSourceManagerId?: string | null
+  /**
+   * The team the importer SAID is theirs (`source_team_id`), for a provider that cannot tell us.
+   * Already validated by the caller against this league's own rosters.
+   *
+   * 🛑 NOT A SECOND SPELLING OF `importerSourceManagerId`, AND IT MUST NEVER BECOME ONE. That field
+   * is provider-proven and also drives `claimExistingLeagueForMember`, which attaches the caller to
+   * ANOTHER account's league. This one is a person's own say-so, so it reaches exactly one place:
+   * the bootstrap's claim on the league row THIS request writes — and even there it never takes a
+   * team somebody already holds.
+   */
+  importerSourceTeamId?: string | null
 }
 
 export interface PersistImportedLeagueResult {
@@ -918,6 +929,7 @@ export async function persistImportedLeagueFromNormalization(
       await bootstrapLeagueFromImport(league.id, normalized, {
         userId,
         sourceManagerId: options.importerSourceManagerId ?? null,
+        sourceTeamId: options.importerSourceTeamId ?? null,
       })
     },
   )
