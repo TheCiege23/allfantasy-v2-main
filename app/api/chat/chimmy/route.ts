@@ -7,6 +7,12 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseHomeSignals, renderHomeSignalsPrompt } from '@/lib/core-app/homeSignals'
 import { CORE_SURFACE_KEYS, renderCoreSurfacePrompt } from '@/lib/core-app/coreSurface'
+import {
+  newQuestionTelemetry,
+  questionEntry,
+  recordChimmyQuestion,
+  type ChimmyQuestionTelemetry,
+} from '@/lib/chimmy-context/telemetry/chatQuestion'
 import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
@@ -1197,13 +1203,28 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
   return out
 }
 
+/**
+ * Every question is timed and recorded here, once — who, where from, which league, which tools, and
+ * how it ended (lib/chimmy-context/telemetry/chatQuestion.ts). A wrapper rather than a line at each
+ * of the handler's thirty-odd returns, so a return added later cannot escape the count. The handler
+ * fills in what only it knows as it learns it.
+ */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const question = newQuestionTelemetry()
+  const started = Date.now()
+  const res = await handleChimmyPost(req, question)
+  void recordChimmyQuestion(question, res, Date.now() - started)
+  return res
+}
+
+async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTelemetry): Promise<NextResponse> {
   const startMs = Date.now()
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string; email?: string | null }
   } | null
   const userId = session?.user?.id ?? null
   const userEmail = session?.user?.email ?? null
+  question.userId = userId
 
   /*
    * Whether the caller's plan includes Chimmy, and how much of today's allowance is left
@@ -1340,6 +1361,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  question.entry = questionEntry({ source, coreSurface })
   const requestedConnectedLeagueIds = (() => {
     if (!rawConnectedLeagueIds) return null
     try {
@@ -1424,6 +1446,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? await loadLeagueGroundingForUser(userId, leagueId)
       : ({ ok: false, reason: 'not_found' } as const)
   const leagueSnapshot = leagueGrounding.ok ? leagueGrounding.snapshot : null
+  question.leagueId = leagueSnapshot?.id ?? null
 
   /*
    * Connected-roster grounding is intentionally enabled for league-specific
@@ -2947,6 +2970,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       context: toolContext,
       enabled: true,
     }).catch(() => null)
+    question.tools = loop?.toolsUsed ?? []
+    // A league the model bound by name is the league the question was about.
+    question.leagueId = toolContext.leagueId ?? question.leagueId
 
     if (loop?.text) {
       /*

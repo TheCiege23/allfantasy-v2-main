@@ -1,18 +1,10 @@
 import 'server-only'
 
-import type { Prisma } from '@prisma/client'
-
 import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { buildLineupOptimization, type LineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
-import { getBaseUrl } from '@/lib/get-base-url'
-import { resolveNotificationPreferences } from '@/lib/notification-settings/NotificationPreferenceResolver'
-import type { NotificationPreferences } from '@/lib/notification-settings/types'
-import { dispatchNotification, type DispatchNotificationParams } from '@/lib/notifications/NotificationDispatcher'
+import { keepBestPerRealLeague } from '@/lib/core-app/realLeague'
 import { isCategoryAllowedForLeague } from '@/lib/notifications/leagueOverrides'
-import { prisma } from '@/lib/prisma'
-import { getSettingsProfile } from '@/lib/user-settings'
-import { loadChimmyAlertPreferences } from './ChimmyAlertPreferencesService'
 import {
   countFixes,
   findLineupIssues,
@@ -27,20 +19,23 @@ import {
   type LeagueLineupCheck,
   type ScheduledGame,
 } from './lineupCheck'
-import type { ChimmyAlertUserPreferences } from './types'
+import {
+  categoryOn,
+  CLAIM_TTL_MS,
+  loadRegularSeasonGames,
+  PROACTIVE_CATEGORY,
+  proactiveDeliveryDeps,
+  rotation,
+  type ProactiveAudienceLeague,
+  type ProactiveDeliveryDeps,
+  type ProactiveUserSettings,
+} from './proactiveDelivery'
 
 /**
  * Runs Chimmy's lineup check (see `lineupCheck.ts` for what it looks for and why). Called by the
  * alert sweep every 15 minutes; outside the window before the week's main slate it reads two small
- * rows and returns.
- *
- * ── 🛑 ONCE PER USER PER WEEK, AND THE CLAIM IS NOT THE IN-APP ROW ─────────────────────────────
- * The injured-starter sweep dedupes on the bell entry's `sourceKey`. That entry is only written
- * when in-app is on for the category, so a user who keeps email and turns the bell off would be
- * emailed every run. Here the claim is a `SportsDataCache` row CREATED by primary key before
- * anything is sent: a second run, or the second worker replica, fails the create and sends
- * nothing. At most once — a send that fails after the claim is not retried, which beats a manager
- * receiving the same lineup check twelve times on a Sunday morning.
+ * rows and returns. The audience, settings, weekly claim and dispatch are shared with the waiver
+ * check — see `proactiveDelivery.ts`, which also explains why the claim is not the in-app row.
  *
  * ── WHOSE SETTINGS DECIDE ──────────────────────────────────────────────────────────────────────
  * The `lineup_reminders` notification category (on/off, per league), and Chimmy's own alert
@@ -48,10 +43,14 @@ import type { ChimmyAlertUserPreferences } from './types'
  * so someone who opted out costs nothing. Channel, quiet hours and contact availability are the
  * dispatcher's, exactly as for every other notification.
  *
+ * ⚠ ONE LINE PER REAL LEAGUE. A Sleeper league imported by two of its members is two AF rows, and
+ * a manager can hold a claimed team in both — so the same league's fixes would be listed twice and
+ * counted twice. Collapsed on the output with the waivers board's own rule (`realLeague.ts`).
+ *
  * ⚠ A TIME BUDGET, NOT A LIMIT ON LEAGUES. One manager here has sixty-one leagues. The run stops
  * starting new USERS at `budgetMs` (one already started is finished); anyone not reached is
- * unclaimed and gets picked up 15 minutes later. The starting point rotates each run so a budget that always binds cannot starve the same
- * people every time.
+ * unclaimed and gets picked up 15 minutes later. The starting point rotates each run so a budget
+ * that always binds cannot starve the same people every time.
  */
 
 export type LineupCheckUserOutcome =
@@ -65,31 +64,13 @@ export type LineupCheckUserOutcome =
   | 'no_leagues'
   | 'error'
 
-export type LineupCheckAudienceLeague = {
-  id: string
-  name: string | null
-  leagueVariant: string | null
-  bestBallMode: boolean | null
-}
+export type LineupCheckAudienceLeague = ProactiveAudienceLeague
+export type LineupCheckUserSettings = ProactiveUserSettings
 
-export type LineupCheckUserSettings = {
-  notifications: NotificationPreferences
-  chimmy: ChimmyAlertUserPreferences | null
-}
-
-export interface LineupCheckDeps {
-  now: () => Date
+export interface LineupCheckDeps extends ProactiveDeliveryDeps {
   latestWeek: () => Promise<{ season: string; week: number } | null>
   loadGames: (season: number, week: number) => Promise<ScheduledGame[]>
-  loadAudience: (season: number, onlyUserId: string | null) => Promise<Map<string, LineupCheckAudienceLeague[]>>
-  loadSettings: (userId: string) => Promise<LineupCheckUserSettings | null>
   optimize: (leagueId: string, userId: string) => Promise<LineupOptimization>
-  /** Read-only: has this week's check already gone to this user? */
-  alreadySent: (key: string) => Promise<boolean>
-  /** Atomically claim this week's check for this user. False when someone already has. */
-  claim: (key: string, expiresAt: Date) => Promise<boolean>
-  dispatch: (params: DispatchNotificationParams) => Promise<void>
-  baseUrl: () => string
 }
 
 export type LineupCheckRun =
@@ -114,84 +95,14 @@ export type LineupCheckRun =
       errors: Array<{ userId: string; error: string }>
     }
 
-const CATEGORY = 'lineup_reminders' as const
-const QUARTER_HOUR_MS = 15 * 60 * 1000
-/** Long enough to outlive the week; the key carries the week, so it cannot block the next one. */
-const CLAIM_TTL_MS = 8 * 24 * 60 * 60 * 1000
+const CATEGORY = PROACTIVE_CATEGORY
 const DEFAULT_BUDGET_MS = 90_000
 
-function prismaCode(e: unknown): string | null {
-  return e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : null
-}
-
 const defaultDeps: LineupCheckDeps = {
-  now: () => new Date(),
+  ...proactiveDeliveryDeps,
   latestWeek: latestProjectionWeek,
-  loadGames: async (season, week) => {
-    /*
-     * 🛑 `seasonType: 'regular'` IS LOAD-BEARING. Measured 2026-09-24: the `espn_live` and
-     * `thesportsdb` sources file preseason games under week 2, 3 and 4 with NO seasonType, so an
-     * unfiltered week-4 read returns August kickoffs — and every player on those teams reads as
-     * locked since August.
-     */
-    const rows = await prisma.sportsGame.findMany({
-      where: { sport: 'NFL', season, week, seasonType: 'regular', startTime: { not: null } },
-      select: { homeTeam: true, awayTeam: true, startTime: true },
-    })
-    return rows.flatMap((r) => (r.startTime ? [{ homeTeam: r.homeTeam, awayTeam: r.awayTeam, startTime: r.startTime }] : []))
-  },
-  loadAudience: async (season, onlyUserId) => {
-    const rows = await prisma.leagueTeam.findMany({
-      where: {
-        claimedByUserId: onlyUserId ? onlyUserId : { not: null },
-        league: { season, sport: 'NFL' },
-      },
-      select: {
-        claimedByUserId: true,
-        league: { select: { id: true, name: true, leagueVariant: true, bestBallMode: true } },
-      },
-    })
-    const out = new Map<string, LineupCheckAudienceLeague[]>()
-    for (const r of rows) {
-      if (!r.claimedByUserId) continue
-      const list = out.get(r.claimedByUserId) ?? []
-      if (!list.some((l) => l.id === r.league.id)) list.push(r.league)
-      out.set(r.claimedByUserId, list)
-    }
-    return out
-  },
-  loadSettings: async (userId) => {
-    const profile = await getSettingsProfile(userId)
-    if (!profile) return null
-    const chimmy = await loadChimmyAlertPreferences(userId).catch(() => null)
-    return {
-      notifications: resolveNotificationPreferences(profile.notificationPreferences as NotificationPreferences | null),
-      chimmy,
-    }
-  },
+  loadGames: loadRegularSeasonGames,
   optimize: (leagueId, userId) => buildLineupOptimization({ leagueId, userId }),
-  alreadySent: async (key) =>
-    (await prisma.sportsDataCache.findUnique({ where: { cacheKey: key }, select: { cacheKey: true } })) != null,
-  claim: async (key, expiresAt) => {
-    try {
-      await prisma.sportsDataCache.create({
-        data: { cacheKey: key, expiresAt, data: { claimedAt: new Date().toISOString() } as Prisma.InputJsonValue },
-      })
-      return true
-    } catch (e) {
-      if (prismaCode(e) === 'P2002') return false
-      throw e
-    }
-  },
-  dispatch: dispatchNotification,
-  baseUrl: getBaseUrl,
-}
-
-/** Sorted, then rotated by a stride that moves the starting point each quarter hour. */
-function rotation<T>(items: T[], now: Date): T[] {
-  if (items.length < 2) return items
-  const start = (Math.floor(now.getTime() / QUARTER_HOUR_MS) * 7919) % items.length
-  return [...items.slice(start), ...items.slice(0, start)]
 }
 
 export async function runLineupCheck(
@@ -248,7 +159,7 @@ export async function runLineupCheck(
         continue
       }
       const n = settings.notifications
-      if (n.globalEnabled === false || !n.categories?.[CATEGORY]?.enabled) {
+      if (!categoryOn(settings)) {
         tally('category_off')
         continue
       }
@@ -267,7 +178,7 @@ export async function runLineupCheck(
         continue
       }
 
-      const found: LeagueLineupCheck[] = []
+      const checked: Array<{ check: LeagueLineupCheck; league: LineupCheckAudienceLeague }> = []
       // A user once started is finished: a check that skipped some leagues would claim the week
       // and then never mention them. The overshoot is bounded by one user's leagues.
       for (const league of leagues) {
@@ -277,9 +188,22 @@ export async function runLineupCheck(
         if (!result || result.status !== 'ready' || result.week.week !== week.week || result.week.season !== week.season) continue
         const issues = findLineupIssues(result, isLocked)
         if (issues.length > 0) {
-          found.push({ leagueId: league.id, leagueName: league.name ?? 'Your league', week: week.week, issues })
+          checked.push({ check: { leagueId: league.id, leagueName: league.name ?? 'Your league', week: week.week, issues }, league })
         }
       }
+      // One line per real league (see the header): the copy with more to fix wins, ties by id.
+      const found = keepBestPerRealLeague(
+        checked,
+        (c) => ({
+          platform: c.league.platform ?? null,
+          platformLeagueId: c.league.platformLeagueId ?? null,
+          season: c.league.season ?? null,
+          leagueId: c.league.id,
+        }),
+        (a, b) =>
+          a.check.issues.length > b.check.issues.length ||
+          (a.check.issues.length === b.check.issues.length && a.check.leagueId < b.check.leagueId),
+      ).map((c) => c.check)
 
       const message = renderLineupCheck(found, { baseUrl: deps.baseUrl() })
       if (!message) {

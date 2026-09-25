@@ -206,6 +206,16 @@ describe('what it says', () => {
     expect(u.searchParams.get('leagueId')).toBe('L-1')
   })
 
+  it('tags every link with where it was opened from — the bell/phone apart from the email', () => {
+    const m = renderLineupCheck([league('Ice Kings', [swap])], { baseUrl: 'https://allfantasy.ai' })!
+    expect(new URL(m.actionHref, 'https://x.test').searchParams.get('from')).toBe('lineup_check')
+    const emailLinks = [...m.email.html.matchAll(/href="([^"]+)"/g)]
+      .map((x) => x[1]!.replace(/&amp;/g, '&'))
+      .filter((h) => h.includes('/chimmy/chat'))
+    expect(emailLinks.length).toBeGreaterThan(0)
+    for (const h of emailLinks) expect(new URL(h).searchParams.get('from')).toBe('lineup_check_email')
+  })
+
   it('escapes league and player names in the email', () => {
     const m = renderLineupCheck([league('<img src=x onerror=alert(1)>', [bye])], { baseUrl: 'https://allfantasy.ai' })!
     expect(m.email.html).not.toContain('<img src=x')

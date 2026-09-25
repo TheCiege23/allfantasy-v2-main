@@ -92,6 +92,8 @@ export type ChimmyMessageMeta = {
   confidencePct?: number
   providerStatus?: ChimmyProviderStatus
   recommendedTool?: string
+  /** The tools the answer used, in order (tool-loop answers only) — what a thumbs up or down is about. */
+  toolsUsed?: string[]
   /** Central routing + tool launches from Chimmy orchestration brain */
   orchestration?: ChimmyOrchestrationMeta | null
   dataSources?: string[]

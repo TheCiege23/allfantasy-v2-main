@@ -103,8 +103,10 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
-  // Chimmy's once-a-week check before the main slate (lib/chimmy-alerts/lineupCheck.ts).
-  lineup_reminders: "Chimmy's lineup check before kickoff",
+  // Chimmy's two weekly messages: the waiver check on Tuesday (lib/chimmy-alerts/waiverCheck.ts) and
+  // the lineup check before the main slate (lib/chimmy-alerts/lineupCheck.ts). One toggle for both —
+  // each can also be muted on its own from the Chimmy alert controls (Waivers / Lineup classes).
+  lineup_reminders: "Chimmy's weekly lineup & waiver checks",
   matchup_results: "Matchup results",
   waiver_processing: "Waiver processing",
   trade_proposals: "Trade proposals",
