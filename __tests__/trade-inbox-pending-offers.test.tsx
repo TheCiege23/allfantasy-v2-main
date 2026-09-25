@@ -83,7 +83,8 @@ describe('⚠ FAAB was being dropped on the floor', () => {
     // A consumer that rebuilds the pick as an asset must not have to parse
     // "2027 1st" back out of prose.
     const out = buildTradeAssetsForRoster({
-      tx: { adds: {}, drops: {}, draft_picks: [{ season: '2027', round: 2, roster_id: 1 }] } as never,
+      // Sleeper: `owner_id` receives the pick, `roster_id` is its ORIGINAL owner (2026-09-25).
+      tx: { adds: {}, drops: {}, draft_picks: [{ season: '2027', round: 2, roster_id: 3, owner_id: 1, previous_owner_id: 3 }] } as never,
       userRosterId: 1,
       players,
     })
