@@ -915,7 +915,7 @@ export async function getPlayerDetail(
       name: row.name,
       position: row.position,
       team: row.team,
-      imageUrl: row.imageUrl,
+      imageUrl: asHeadshotUrl(row.imageUrl),
       number: row.number,
       // YOUR rosters only — a league where another manager has him is not one
       // you roster him in, and the header line says "on N of your leagues".

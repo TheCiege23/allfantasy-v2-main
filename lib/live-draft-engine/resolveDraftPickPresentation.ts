@@ -3,6 +3,7 @@
  * omits them. Used by submitPick so all pick sources share one path.
  */
 
+import { toImageUrl } from '@/lib/media/imageUrl'
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { looksLikeSleeperExternalId } from '@/lib/draft-sports-models/player-asset-resolver'
@@ -68,7 +69,7 @@ export async function resolveDraftPickPresentation(
     team: string | null
     position: string | null
   }) => {
-    dbImage = trimOrNull(sp.imageUrl)
+    dbImage = toImageUrl(sp.imageUrl)
     resolvedExternal = trimOrNull(sp.sleeperId) ?? (looksLikeSleeperExternalId(sp.externalId) ? sp.externalId : null)
   }
 

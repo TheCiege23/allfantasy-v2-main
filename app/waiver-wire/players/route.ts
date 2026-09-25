@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -135,7 +136,7 @@ export async function GET(
           projectedPoints: 0,
           rostered: 0,
           trending: "neutral" as const,
-          imageUrl: playerImages[p.id] || p.imageUrl || GENERIC_HEADSHOT,
+          imageUrl: playerImages[p.id] || toImageUrl(p.imageUrl) || GENERIC_HEADSHOT,
         }
       })
       .sort((a: any, b: any) => {

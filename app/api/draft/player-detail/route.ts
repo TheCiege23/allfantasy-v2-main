@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -147,7 +148,7 @@ export async function GET(req: NextRequest) {
       weight: seed?.weight ?? null,
       age: seed?.age ?? null,
       college: seed?.college ?? null,
-      headshotUrl: record?.headshotUrl ?? seed?.imageUrl ?? null,
+      headshotUrl: record?.headshotUrl ?? toImageUrl(seed?.imageUrl),
       injuryStatus: record?.injuryStatus ?? seed?.status ?? null,
       injuryNotes: record?.injuryNotes ?? null,
       adp: record?.adp ?? null,
