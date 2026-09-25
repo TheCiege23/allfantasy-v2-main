@@ -84,6 +84,11 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
               <li>Usage data (pages visited, features used)</li>
               <li>IP address and approximate location</li>
               <li>Cookies and similar technologies</li>
+              <li>
+                Session recordings: how you move through our pages (clicks, scrolling and what is on
+                screen), with everything you type masked. Our analytics provider, PostHog, records them
+                so we can find bugs and improve the Service.
+              </li>
             </ul>
           </LegalBox>
         </LegalGrid>
