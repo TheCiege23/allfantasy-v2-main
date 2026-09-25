@@ -26,6 +26,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     draftSession: h.draftSession,
     appUser: { findUnique: async () => ({ displayName: 'Casey', username: 'casey' }) },
+    // The GET now applies the viewer's blocks (fail-closed lookup); nobody here has blocked anyone.
+    platformBlockedUser: { findMany: async () => [] },
   },
 }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({

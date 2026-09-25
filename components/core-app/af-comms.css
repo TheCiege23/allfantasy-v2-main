@@ -2501,12 +2501,18 @@
 
 /* ── Desktop hover bar: three quick reactions, reply, more ── */
 
+/*
+ * V3 (live test 2026-09-25): the bar floated over the bubble (`top: -12px; left: 44px`) and covered
+ * the first line of the message and the reactions of the one above it — every row, measured. It now
+ * sits IN the row, beside the bubble on the side away from the speaker, in a lane the row always
+ * keeps. Showing it moves nothing, and it cannot cover a message. A narrow drawer keeps only "More"
+ * (which holds the reactions and Reply) so the lane costs a bubble 44px there, not 172.
+ */
 .af-cm-hoverbar { display: none; }
 @media (hover: hover) and (pointer: fine) {
   .af-cm-hoverbar {
-    position: absolute;
-    top: -12px;
-    left: 44px; /* just past the avatar, over the top edge of their bubble */
+    flex: none;
+    align-self: center;
     z-index: 2;
     display: flex;
     gap: 2px;
@@ -2518,19 +2524,29 @@
     opacity: 0;
     pointer-events: none;
   }
-  .af-cm-row[data-mine='true'] .af-cm-hoverbar { left: auto; right: 8px; }
+  .af-cm-row[data-mine='true'] .af-cm-hoverbar { order: -1; }
   .af-cm-row:hover .af-cm-hoverbar,
   .af-cm-row:focus-within .af-cm-hoverbar { opacity: 1; pointer-events: auto; }
 }
 .af-cm-hoverbtn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text2); font-size: 15px; cursor: pointer; }
 .af-cm-hoverbtn:hover { background: var(--chip); color: var(--text); }
+@container af-cm (max-width: 559px) {
+  .af-cm-hoverbar > .af-cm-hoverbtn:not(:last-child) { display: none; }
+}
 
 /* ── Jump to latest, and the one-line toast ── */
 
+/*
+ * V3 (live test 2026-09-25): the pill was `position: absolute` over the bottom of the list, so it sat
+ * on whatever message was there — measured on 81 of 138 scroll positions on a phone. It is now in
+ * the flow between the list and the composer: the list gives up the pill's height while it shows, so
+ * it floats above the box with room and never covers a message.
+ */
 .af-cm-jump {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
+  position: relative;
+  flex: none;
+  align-self: flex-end;
+  margin: 6px 14px 12px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
@@ -2996,3 +3012,148 @@
     height: var(--af-comms-vh, 100dvh);
   }
 }
+
+/*
+ * ── Links inside a message (league chat, DMs, huddles) ──────────────────────────────
+ * Top level, appended at the end on purpose: never inside an existing @media. A long URL wraps
+ * rather than pushing the bubble wider than the drawer; on your own accent bubble the link takes
+ * the bubble's ink so it stays readable.
+ */
+.af-cm-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.af-cm-row[data-mine='true'] .af-cm-link { color: inherit; }
+
+/*
+ * ── DM and huddle list rows (2026-09-25) ─────────────────────────────────────────────
+ * Avatar(s), name and time on the first line, a one-line preview and the unread count on the
+ * second. The whole row is the button and never shorter than 44px. Top level and appended at the
+ * end on purpose — never inside an existing @media, which silently moves every rule after the
+ * insertion point into the narrower query (see CLAUDE.md).
+ */
+.af-cm-dmrow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 6px;
+}
+.af-cm-dmrow-avs {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+}
+.af-cm-dmrow-av {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+.af-cm-dmrow-av img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-cm-dmrow-initials { font-size: 13px; font-weight: 800; color: var(--text2); }
+/*
+ * A huddle stacks up to three smaller faces in the same 44px square — two on a diagonal, three in
+ * a triangle — each ringed in the panel colour so the overlap reads as a stack, not a smudge.
+ */
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-av,
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 0 0 2px var(--surface2, #14191e);
+}
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-av:nth-child(1) { top: 0; left: 0; }
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-av:nth-child(2) { right: 0; bottom: 0; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av { width: 24px; height: 24px; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(1) { top: 0; left: 10px; z-index: 1; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(2) { bottom: 0; left: 0; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(3) { right: 0; bottom: 0; }
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-initials { font-size: 10px; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-initials { font-size: 9px; letter-spacing: -0.02em; }
+
+.af-cm-dmrow-main { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 3px; }
+.af-cm-dmrow-top,
+.af-cm-dmrow-bottom { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-cm-dmrow .af-cm-threadrow-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.af-cm-dmrow-time { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.af-cm-dmrow-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.af-cm-dmrow .af-cm-threadrow-unread { margin-left: auto; }
+
+/* Unread: the name and the line under it go bold and bright, and the time takes the accent. */
+.af-cm-dmrow[data-unread='true'] .af-cm-threadrow-title { font-weight: 800; }
+.af-cm-dmrow[data-unread='true'] .af-cm-dmrow-preview { font-weight: 700; color: var(--text); }
+.af-cm-dmrow[data-unread='true'] .af-cm-dmrow-time { font-weight: 700; color: var(--accent); }
+
+.af-cm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.af-cm-threadrow-unread { position: relative; }
+
+/* ── Report / Block confirm steps and the huddle sheets ──────────────────────────────── */
+.af-cm-sheet-safety { display: flex; flex-direction: column; gap: 8px; padding: 10px 6px 4px; border-bottom: 1px solid var(--line); }
+.af-cm-sheet-safety-t { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.af-cm-sheet-safety-b { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text2); }
+.af-cm-sheet-safety-l { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.af-cm-sheet-select,
+.af-cm-sheet-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.af-cm-sheet-safety-err { margin: 0; font-size: 13px; line-height: 1.4; color: #fb7185; }
+.af-cm-sheet-btn[data-primary='true'] { color: var(--accent); font-weight: 700; }
+.af-cm-sheet-actions .af-cm-sheet-safety .af-cm-sheet-btn { border-bottom: 0; }
+
+.af-cm-members { display: flex; flex-direction: column; margin: 6px 0 0; padding: 0; list-style: none; }
+.af-cm-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.af-cm-member .af-cm-dmrow-av { width: 36px; height: 36px; }
+.af-cm-member-name { flex: 1; min-width: 0; overflow: hidden; font-size: 14px; color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
+.af-cm-member-you { color: var(--muted); }
+.af-cm-member-handle { flex: none; max-width: 40%; overflow: hidden; font-size: 12px; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }

@@ -3,14 +3,18 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isAllowedGifUrl } from "@/lib/rich-message/GIFIntegrationResolver"
+import { sanitizeClientImageUrl } from "@/lib/chat-core/clientMessageInput"
 
+/*
+ * 🛑 NEVER SELECT `email` HERE. This include is returned to every member of the pool, and it carried
+ * each author's and reactor's email address (found 2026-09-25). Names are display name, then username.
+ */
 const messageInclude = {
   user: {
     select: {
       id: true,
       displayName: true,
       username: true,
-      email: true,
       avatarUrl: true,
       profile: { select: { avatarPreset: true } },
     },
@@ -20,7 +24,7 @@ const messageInclude = {
       id: true,
       message: true,
       type: true,
-      user: { select: { id: true, displayName: true, username: true, email: true } },
+      user: { select: { id: true, displayName: true, username: true } },
     },
   },
   reactions: {
@@ -28,7 +32,7 @@ const messageInclude = {
       id: true,
       emoji: true,
       userId: true,
-      user: { select: { id: true, displayName: true, username: true, email: true } },
+      user: { select: { id: true, displayName: true, username: true } },
     },
   },
 }
@@ -128,13 +132,25 @@ export async function POST(
 
   if (type === "image") {
     if (!imageUrl) return NextResponse.json({ error: "Image URL required" }, { status: 400 })
+    /*
+     * Only a photo in OUR storage for THIS pool: `/api/bracket/chat-upload` returns
+     * `/api/chat/upload?path=chat/bracket/<leagueId>/image/…`, and that is the shape kept (the same
+     * rule the shared-thread route applies — lib/chat-core/clientMessageInput.ts). This stored any URL
+     * at all, which every member's browser then loaded. The uploader's old public
+     * `…/bracket-chat/<userId>/…` URLs are not accepted for new posts; rows that already have one are
+     * not touched.
+     */
+    const ownImageUrl = sanitizeClientImageUrl(imageUrl, { kind: "bracket", id: params.leagueId })
+    if (!ownImageUrl) {
+      return NextResponse.json({ error: "That photo isn't from this pool's uploads." }, { status: 400 })
+    }
     const msg = await (prisma as any).bracketLeagueMessage.create({
       data: {
         leagueId: params.leagueId,
         userId,
         message: message || "",
         type: "image",
-        imageUrl,
+        imageUrl: ownImageUrl,
         replyToId: replyToId || null,
       },
       include: messageInclude,

@@ -22,7 +22,13 @@ vi.mock('@/lib/chat-core/chatPresence', () => ({
   markViewingChat: h.markViewingChat,
   readChatPresence: h.readChatPresence,
 }))
-vi.mock('@/lib/prisma', () => ({ prisma: { appUser: { findUnique: h.findUnique } } }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    appUser: { findUnique: h.findUnique },
+    // The GET now applies the viewer's blocks (fail-closed lookup); nobody here has blocked anyone.
+    platformBlockedUser: { findMany: async () => [] },
+  },
+}))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({
   getLeagueChatMessages: h.getLeagueChatMessages,
   createLeagueChatMessage: vi.fn(),

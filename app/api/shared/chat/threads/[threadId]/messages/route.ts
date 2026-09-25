@@ -29,6 +29,7 @@ import { filterMessagesByBlocked } from '@/lib/moderation'
 import { filterBbReadableMessages, resolveBbWriteChannel } from '@/lib/big-brother/bbChatChannelAccess'
 import {
   buildClientPollBody,
+  sanitizeClientImageUrl,
   sanitizeClientMessageMetadata,
   sanitizeClientMessageType,
 } from '@/lib/chat-core/clientMessageInput'
@@ -204,7 +205,20 @@ export async function GET(
     return NextResponse.json({ error: 'Not a member' }, { status: 403 })
   }
 
-  const messages = await getPlatformThreadMessages(user.appUserId, threadId, limit)
+  /*
+   * E2 (2026-09-25): a failed read is a 503, never `200 { messages: [] }` — the client drew that as
+   * "No messages yet." over a conversation that has history. Empty threads still answer `[]`.
+   */
+  let messages: Awaited<ReturnType<typeof getPlatformThreadMessages>>
+  try {
+    messages = await getPlatformThreadMessages(user.appUserId, threadId, limit, { throwOnError: true })
+  } catch {
+    console.warn('[shared/chat/messages] message read failed')
+    return NextResponse.json(
+      { error: 'Messages are temporarily unavailable. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
   const visible = applyBlockedVisibility(messages, blockSet)
   return NextResponse.json({
     status: 'ok',
@@ -245,8 +259,13 @@ export async function POST(
     typeof body?.parentMessageId === 'string' && body.parentMessageId.trim().length > 0
       ? body.parentMessageId.trim()
       : null
-  const imageUrl =
-    typeof body?.imageUrl === 'string' && body.imageUrl.trim().length > 0 ? body.imageUrl.trim() : null
+  /*
+   * Every viewer's browser loads `imageUrl` as an image, so only our own private upload URL for THIS
+   * chat (or a GIF from a named GIF service) is stored — never a host the sender picked. Resolved per
+   * branch below, because the chat it must belong to is only known once the branch is.
+   * See sanitizeClientImageUrl.
+   */
+  const rawImageUrl: unknown = body?.imageUrl
 
   if (!message) {
     return NextResponse.json({ error: 'Message body required' }, { status: 400 })
@@ -263,6 +282,7 @@ export async function POST(
       where: { leagueId_userId: { leagueId, userId: user.appUserId } },
     })
     if (member) {
+      const imageUrl = sanitizeClientImageUrl(rawImageUrl, { kind: 'bracket', id: leagueId })
       const created = await (prisma as any).bracketLeagueMessage.create({
         data: {
           leagueId,
@@ -292,6 +312,7 @@ export async function POST(
       if (!bbWrite.ok) {
         return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
       }
+      const imageUrl = sanitizeClientImageUrl(rawImageUrl, { kind: 'league', id: leagueId })
       const leagueMetadata: Record<string, unknown> | undefined = bbWrite.channel
         ? { ...(metadata ?? {}), bbChannel: bbWrite.channel }
         : metadata

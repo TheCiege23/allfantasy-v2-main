@@ -32,6 +32,8 @@ import { markLeagueChatRead } from '@/lib/chat-core/leagueChatRead'
 import { queueLeagueChatNotifications } from '@/lib/chat-notifications/chatMessageNotifier'
 import { readLeagueDraftLink } from '@/lib/league-chat/readLeagueDraftLink'
 import { DRAFT_ROOM_ONLY_TYPES, resolveIncludeDraft } from '@/lib/league-chat/draftChatLink'
+import { getBlockedUserIdsForRead } from '@/lib/moderation/BlockUserService'
+import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolver'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -120,6 +122,25 @@ export async function GET(req: NextRequest) {
   }
 
   /*
+   * 🛑 BLOCKS WERE NOT APPLIED HERE AT ALL (found 2026-09-25). The shared-thread view of this same
+   * league (`/api/shared/chat/threads/league:<id>/messages`) hides the messages of people the viewer
+   * has blocked; this route — the one the comms drawer reads — showed them. Same fail-closed lookup
+   * as that route: one retry, then a 503 rather than an unfiltered transcript. The viewer's own
+   * messages always stay (nobody can block themselves, and this does not depend on that).
+   */
+  let blockSet: Set<string>
+  try {
+    blockSet = new Set(await getBlockedUserIdsForRead(userId))
+  } catch {
+    console.warn('[league/chat] block list unavailable; refusing to serve an unfiltered read')
+    return NextResponse.json(
+      { error: 'Messages are temporarily unavailable. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
+  blockSet.delete(userId)
+
+  /*
    * `markRead=1` means the person is looking at this chat right now, so the chat bubble stops
    * counting its messages (lib/chat-core/leagueChatRead.ts). Opt-in per request on purpose: a
    * background poll of the same route must never mark anything read.
@@ -175,9 +196,10 @@ export async function GET(req: NextRequest) {
    */
   const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
 
-  const filteredMessages = selectedBbChannel
+  const inRoom = selectedBbChannel
     ? withoutPins.filter((message) => bbChannelOfMessage(message) === selectedBbChannel)
     : withoutPins
+  const filteredMessages = filterMessagesByBlocked(inRoom, blockSet)
 
   /*
    * Presence beacon. Folded into the poll the drawer already makes rather than

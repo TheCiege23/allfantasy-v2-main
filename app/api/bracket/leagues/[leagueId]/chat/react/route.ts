@@ -40,7 +40,8 @@ export async function POST(
 
   const reaction = await (prisma as any).bracketMessageReaction.create({
     data: { messageId, userId, emoji },
-    include: { user: { select: { id: true, displayName: true, email: true } } },
+    // No email: the reaction is returned to the pool chat.
+    include: { user: { select: { id: true, displayName: true, username: true } } },
   })
 
   return NextResponse.json({ reaction })

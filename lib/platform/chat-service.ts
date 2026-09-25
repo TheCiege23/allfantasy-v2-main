@@ -13,12 +13,47 @@ function toIso(value: Date | string | null | undefined): string {
   return new Date(value).toISOString()
 }
 
-function toMessagePreview(messageType: string | null | undefined, body: string | null | undefined): string | null {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+/**
+ * What a text-typed row really carries. The drawer sends a GIF as `messageType: "text"` with a
+ * `metadata.gif` and a "🎬 GIF" body, and a photo as `metadata.attachments` with "📎 Media" — so the
+ * type alone would preview a photo as the literal words "📎 Media".
+ */
+function mediaKindOf(messageType: string | null | undefined, metadata: unknown): "photo" | "gif" | "video" | null {
   const normalizedType = String(messageType || "text").toLowerCase()
-  if (normalizedType === "image") return "Image"
-  if (normalizedType === "gif") return "GIF"
-  if (normalizedType === "video") return "Video"
+  if (normalizedType === "image") return "photo"
+  if (normalizedType === "gif") return "gif"
+  if (normalizedType === "video") return "video"
+  const meta = asRecord(metadata)
+  if (!meta) return null
+  if (asRecord(meta.gif) || typeof meta.gifUrl === "string" || typeof meta.giphyId === "string") return "gif"
+  const attachments = Array.isArray(meta.attachments) ? meta.attachments : []
+  const first = asRecord(attachments[0])
+  if (first) {
+    const t = String(first.type ?? first.mimeType ?? "").toLowerCase()
+    if (t.startsWith("video")) return "video"
+    return "photo"
+  }
+  return null
+}
+
+function toMessagePreview(
+  messageType: string | null | undefined,
+  body: string | null | undefined,
+  metadata?: unknown,
+): string | null {
+  const normalizedType = String(messageType || "text").toLowerCase()
+  const meta = asRecord(metadata)
+  // A deleted message keeps its body in the row; the list must not show what the thread hides.
+  if (meta?.deletedAt) return "Message deleted"
   if (normalizedType === "meme") return "Meme"
+  const media = mediaKindOf(messageType, metadata)
+  if (media === "photo") return "Photo"
+  if (media === "gif") return "GIF"
+  if (media === "video") return "Video"
   if (normalizedType === "poll") return "Poll"
   if (normalizedType === "pin") return "Pinned a message"
   if (normalizedType === "broadcast") return "Commissioner announcement"
@@ -47,6 +82,74 @@ function resolveSystemSenderName(messageType: string | null | undefined, metadat
   return "System"
 }
 
+/**
+ * 🛑 THE ROWS A VIEWER MAY READ, AS ONE PRISMA FILTER — shared by the thread list's preview and its
+ * unread count so neither can say more than the thread itself does:
+ *   - a private row (`isPrivate`, e.g. a Chimmy reply) only for the person it is `visibleToUserId`;
+ *     the same clause `getPlatformThreadMessages` reads with;
+ *   - nothing sent by somebody the viewer has blocked (`PlatformBlockedUser`, the list the messages
+ *     route filters by). A system row has no sender and always passes.
+ * Written as a relation filter rather than a pre-fetched id list, so it rides the list query and a
+ * failed block-list read cannot quietly fall back to "blocked nobody".
+ */
+function viewerVisibleMessageWhere(appUserId: string) {
+  return {
+    AND: [
+      { OR: [{ isPrivate: false }, { isPrivate: true, visibleToUserId: appUserId }] },
+      {
+        OR: [
+          { senderUserId: null },
+          { sender: { platformBlockedBy: { none: { blockerUserId: appUserId } } } },
+        ],
+      },
+    ],
+  }
+}
+
+/** How many of the newest visible rows the list reads, so a moderator-hidden one can be skipped. */
+const PREVIEW_LOOKBACK = 3
+/** Avatars a row can draw — a DM's other person, or up to three stacked for a huddle. */
+const ROW_AVATAR_LIMIT = 3
+
+/**
+ * One include for both list reads (the drawer's list and a single thread), so the two cannot drift.
+ * `email` is deliberately absent from every select; see the note at the top of this file.
+ */
+function threadListInclude(appUserId: string) {
+  return {
+    _count: { select: { members: true } },
+    members: {
+      select: {
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    },
+    messages: {
+      where: viewerVisibleMessageWhere(appUserId),
+      orderBy: { createdAt: "desc" as const },
+      take: PREVIEW_LOOKBACK,
+      select: {
+        createdAt: true,
+        messageType: true,
+        body: true,
+        metadata: true,
+        senderUserId: true,
+      },
+    },
+  }
+}
+
+function memberDisplayName(user: { displayName?: string | null; username?: string | null } | null | undefined): string {
+  return user?.displayName || user?.username || "Manager"
+}
+
 async function resolveUnreadCountForMember(
   appUserId: string,
   threadId: string,
@@ -61,6 +164,8 @@ async function resolveUnreadCountForMember(
         threadId,
         ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
         NOT: { senderUserId: appUserId },
+        // A bold row for a message you cannot open is a notification about nothing.
+        ...viewerVisibleMessageWhere(appUserId),
       },
     })
     return Math.max(0, Number(count || 0))
@@ -70,7 +175,23 @@ async function resolveUnreadCountForMember(
 }
 
 async function normalizeThread(row: any, memberRow: any, appUserId: string): Promise<PlatformChatThread> {
-  const latestMessage = Array.isArray(row?.messages) ? row.messages[0] : null
+  const visibleRows: any[] = Array.isArray(row?.messages) ? row.messages : []
+  const latestMessage = visibleRows[0] ?? null
+  /*
+   * The preview is the newest row the thread itself would draw: the query already dropped private
+   * rows for someone else and blocked senders; a moderator-hidden row is dropped here, exactly as
+   * `getPlatformThreadMessages` drops it.
+   */
+  const previewMessage = visibleRows.find((m: any) => !asRecord(m?.metadata)?.hiddenByMod) ?? null
+  const otherMembers = (Array.isArray(row?.members) ? row.members : [])
+    .filter((m: any) => m?.user?.id && m.userId !== appUserId)
+    .slice(0, ROW_AVATAR_LIMIT)
+    // Picked field by field, never spread: a spread would carry whatever the row holds.
+    .map((m: any) => ({
+      id: String(m.user.id),
+      name: memberDisplayName(m.user),
+      avatarUrl: typeof m.user.avatarUrl === "string" ? m.user.avatarUrl : null,
+    }))
   const latestMetadata =
     latestMessage?.metadata && typeof latestMessage.metadata === "object"
       ? (latestMessage.metadata as Record<string, unknown>)
@@ -110,8 +231,14 @@ async function normalizeThread(row: any, memberRow: any, appUserId: string): Pro
       createdByUserId: row.createdByUserId || null,
       isMuted: Boolean(memberRow?.isMuted),
       lastReadAt: memberRow?.lastReadAt ? toIso(memberRow.lastReadAt) : null,
-      lastMessagePreview: toMessagePreview(latestMessage?.messageType, latestMessage?.body),
-      lastMessageType: latestMessage?.messageType || null,
+      lastMessagePreview: previewMessage
+        ? toMessagePreview(previewMessage.messageType, previewMessage.body, previewMessage.metadata)
+        : null,
+      lastMessageType: previewMessage?.messageType || null,
+      lastMessageMine: Boolean(previewMessage?.senderUserId) && previewMessage?.senderUserId === appUserId,
+      lastMessageCreatedAt: previewMessage?.createdAt ? toIso(previewMessage.createdAt) : null,
+      /** Up to three other members: `{ id, name, avatarUrl }`, for the row's avatar(s). */
+      members: otherMembers,
       otherUserId: otherDmMember?.user?.id || null,
       otherUsername: otherDmMember?.user?.username || null,
       otherDisplayName: otherDmMember?.user?.displayName || null,
@@ -139,31 +266,7 @@ async function getUnifiedThreads(appUserId: string): Promise<PlatformChatThread[
       where: { userId: appUserId, isBlocked: false },
       include: {
         thread: {
-          include: {
-            _count: { select: { members: true } },
-            members: {
-              select: {
-                userId: true,
-                user: {
-                  select: {
-                    id: true,
-                    username: true,
-                    displayName: true,
-                  },
-                },
-              },
-            },
-            messages: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: {
-                createdAt: true,
-                messageType: true,
-                body: true,
-                metadata: true,
-              },
-            },
-          },
+          include: threadListInclude(appUserId),
         },
       },
       orderBy: { thread: { lastMessageAt: 'desc' } },
@@ -261,31 +364,7 @@ export async function getPlatformThreadById(appUserId: string, threadId: string)
       where: { userId: appUserId, threadId, isBlocked: false },
       include: {
         thread: {
-          include: {
-            _count: { select: { members: true } },
-            members: {
-              select: {
-                userId: true,
-                user: {
-                  select: {
-                    id: true,
-                    username: true,
-                    displayName: true,
-                  },
-                },
-              },
-            },
-            messages: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: {
-                createdAt: true,
-                messageType: true,
-                body: true,
-                metadata: true,
-              },
-            },
-          },
+          include: threadListInclude(appUserId),
         },
       },
     })
@@ -367,6 +446,12 @@ export async function getPlatformThreadMessages(
   appUserId: string,
   threadId: string,
   limit = 50,
+  /**
+   * `throwOnError`: rethrow a failed read instead of answering `[]`. The DM / huddle message GET
+   * sets it, because `[]` rendered as "No messages yet." over a database error (E2, 2026-09-25).
+   * Callers that filter the result (the pin board) keep the old `[]`.
+   */
+  options: { throwOnError?: boolean } = {},
 ): Promise<PlatformChatMessage[]> {
   const take = Math.max(1, Math.min(limit, 100))
 
@@ -398,10 +483,18 @@ export async function getPlatformThreadMessages(
       take,
     })
 
-    await (prisma as any).platformChatThreadMember.updateMany({
-      where: { threadId, userId: appUserId },
-      data: { lastReadAt: new Date() },
-    })
+    /*
+     * Marking the thread read is a side effect of reading it, not part of the answer: a failed
+     * write here used to throw away every message just read and answer `[]`.
+     */
+    try {
+      await (prisma as any).platformChatThreadMember.updateMany({
+        where: { threadId, userId: appUserId },
+        data: { lastReadAt: new Date() },
+      })
+    } catch {
+      /* The messages were read; an unread badge that lags one poll is the lesser failure. */
+    }
 
     const visible = rows.filter((r: any) => !(r.metadata as Record<string, unknown>)?.hiddenByMod)
     return visible.reverse().map((msg: any) => {
@@ -438,7 +531,8 @@ export async function getPlatformThreadMessages(
         metadata: Object.keys(baseMeta).length ? baseMeta : undefined,
       }
     })
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error
     return []
   }
 }
@@ -1140,7 +1234,7 @@ export async function addThreadParticipants(
 export async function getThreadMembers(
   appUserId: string,
   threadId: string,
-): Promise<Array<{ id: string; username: string; displayName: string | null }>> {
+): Promise<Array<{ id: string; username: string; displayName: string | null; avatarUrl: string | null }>> {
   try {
     const myMember = await prisma.platformChatThreadMember.findFirst({
       where: { threadId, userId: appUserId, isBlocked: false },
@@ -1151,7 +1245,8 @@ export async function getThreadMembers(
     const rows = await prisma.platformChatThreadMember.findMany({
       where: { threadId, isBlocked: false },
       include: {
-        user: { select: { id: true, username: true, displayName: true } },
+        // avatarUrl for the huddle's members sheet. Never email.
+        user: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
       },
     })
     return rows
@@ -1160,6 +1255,7 @@ export async function getThreadMembers(
         id: m.user!.id,
         username: m.user!.username || m.user!.id,
         displayName: m.user!.displayName ?? null,
+        avatarUrl: m.user!.avatarUrl ?? null,
       }))
   } catch {
     return []

@@ -1,7 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, Search } from 'lucide-react'
+import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
+import type { ReportReason } from '@/lib/moderation/shared'
+import { ThreadListRow, type ThreadRowContext } from './ThreadListRow'
+import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
@@ -52,6 +55,18 @@ export type PlatformThread = {
    * endpoint and the semantics all existed.
    */
   isMuted?: boolean
+  /**
+   * The list row's preview, "You:" flag, time and the other people's avatars. Filtered on the
+   * server so a preview never shows a message the thread would not (see chat-service).
+   */
+  context?: ThreadRowContext | null
+}
+
+/** A thrown Error the sheets can show as it is: the server's words when it gave any. */
+async function failure(res: Response, prefix: string, fallback: string): Promise<Error> {
+  const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+  const said = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : null
+  return new Error(said ? `${prefix}: ${said.replace(/\.$/, '')}.` : fallback)
 }
 
 type PlatformMessage = {
@@ -118,14 +133,29 @@ export function ThreadPanel({
   const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
   const [receipts, setReceipts] = useState<Array<{ userId: string; displayName: string | null; username: string | null; lastReadAt: string | null }>>([])
   const [error, setError] = useState<string | null>(null)
+  /** E2: the last message read FAILED — shown in place of "No messages yet.", never under it. */
+  const [readFailed, setReadFailed] = useState(false)
   /* In-flight reaction toggles win over the poll, as in league chat — see CommsDrawer. */
   const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
   const [reactionBusy, setReactionBusy] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
+  /* The huddle header's sheets: who is in it, and add / rename / leave. */
+  const [huddleSheet, setHuddleSheet] = useState<null | 'members' | 'options'>(null)
+  const [members, setMembers] = useState<HuddleMember[] | null>(null)
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [membersError, setMembersError] = useState<string | null>(null)
+  /* "5m" has to become "6m" without a reload; a minute is the list's finest unit. */
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
   /** The whole open conversation — the drop target for photos. */
   const panelRef = useRef<HTMLDivElement | null>(null)
   const activeThreadId = useRef<string | null>(null)
+  /* Everyone blocked from this panel since it mounted — see `blockAuthor`. */
+  const blockedHere = useRef<Set<string>>(new Set())
   useEffect(() => () => { activeThreadId.current = null }, [])
 
   const label = kind === 'dm' ? 'DMs' : 'huddles'
@@ -139,6 +169,8 @@ export function ThreadPanel({
         error?: string
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load conversations.')
+      // Times are measured against the moment the list arrived, not when the panel mounted.
+      setNow(new Date())
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
       setThreads([])
@@ -164,7 +196,14 @@ export function ThreadPanel({
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load messages.')
       if (activeThreadId.current !== thread.id) return
-      setMessages(data.messages ?? [])
+      setReadFailed(false)
+      /*
+       * A poll already in flight when you blocked someone can land after the block with their
+       * messages still in it; the people blocked from this panel stay out regardless.
+       */
+      setMessages(
+        (data.messages ?? []).filter((m) => !m.senderUserId || !blockedHere.current.has(m.senderUserId)),
+      )
 
       /*
        * Both ride the poll the panel already makes rather than adding timers of
@@ -183,7 +222,11 @@ export function ThreadPanel({
       setHiddenBlocked(data.hiddenBlockedCount ?? 0)
     } catch (e) {
       if (activeThreadId.current !== thread.id) return
-      setMessages([])
+      /*
+       * ⚠ KEEP WHAT IS ALREADY ON SCREEN. A failed poll used to clear the conversation; the error
+       * says the read failed, and the messages already shown are still true.
+       */
+      setReadFailed(true)
       setError(e instanceof Error ? e.message : 'Could not load messages.')
     }
   }, [])
@@ -210,9 +253,13 @@ export function ThreadPanel({
       /* A reply target belongs to one thread; it must not follow you into another. */
       setReplyTo(null)
       setMessages([])
+      setReadFailed(false)
       setHiddenBlocked(0)
       setReactionOverride({})
       setSearching(false)
+      setHuddleSheet(null)
+      setMembers(null)
+      setMembersError(null)
       void loadMessages(thread)
     },
     [loadMessages],
@@ -497,6 +544,125 @@ export function ThreadPanel({
     }
   }, [invite, kind, busy, loadThreads, open])
 
+  /*
+   * ── Report and Block, from the message actions sheet ──────────────────────────────
+   * Both call routes that already existed (`/report/message`, `/block`). Each THROWS on a non-OK
+   * answer so the sheet stays open and shows why; only a real OK reaches "Thanks" or "blocked".
+   */
+  const reportMessage = useCallback(
+    async (m: ChatListMessage, reason: ReportReason) => {
+      if (!openThread) throw new Error('No conversation is open.')
+      const res = await fetch('/api/shared/chat/report/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: m.id, threadId: openThread.id, reason }),
+      })
+      if (!res.ok) throw await failure(res, 'Report not sent', 'Report not sent. Try again in a moment.')
+    },
+    [openThread],
+  )
+
+  const blockAuthor = useCallback(
+    async (m: ChatListMessage) => {
+      const blockedUserId = m.authorId
+      if (!blockedUserId) throw new Error('There is nobody to block on that message.')
+      const res = await fetch('/api/shared/chat/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId }),
+      })
+      if (!res.ok) throw await failure(res, 'Not blocked', 'Not blocked. Try again in a moment.')
+      /*
+       * Gone from the open thread NOW, not on the next poll. The server hides them from then on
+       * (the messages route filters blocked senders), so the reload agrees with this.
+       */
+      blockedHere.current.add(blockedUserId)
+      setMessages((prev) => prev.filter((x) => x.senderUserId !== blockedUserId))
+      setReplyTo((r) => (r && r.senderUserId === blockedUserId ? null : r))
+      if (openThread) void loadMessages(openThread)
+      // A DM with them drops out of the list; the list endpoint runs conversation safety.
+      void loadThreads()
+    },
+    [openThread, loadMessages, loadThreads],
+  )
+
+  /* ── Huddle: members, add people, rename, leave ─────────────────────────────────── */
+  const loadMembers = useCallback(async (threadId: string) => {
+    setMembersLoading(true)
+    setMembersError(null)
+    try {
+      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(threadId)}/members`)
+      if (!res.ok) throw await failure(res, 'Could not load members', 'Could not load members.')
+      const data = (await res.json().catch(() => ({}))) as { members?: HuddleMember[] }
+      if (activeThreadId.current !== threadId) return
+      setMembers(Array.isArray(data.members) ? data.members : [])
+    } catch (e) {
+      if (activeThreadId.current !== threadId) return
+      setMembersError(e instanceof Error ? e.message : 'Could not load members.')
+    } finally {
+      setMembersLoading(false)
+    }
+  }, [])
+
+  const showMembers = useCallback(() => {
+    if (!openThread) return
+    setHuddleSheet('members')
+    void loadMembers(openThread.id)
+  }, [openThread, loadMembers])
+
+  const addPeople = useCallback(
+    async (usernames: string[]) => {
+      if (!openThread) throw new Error('No huddle is open.')
+      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames }),
+      })
+      if (!res.ok) throw await failure(res, 'Nobody added', 'Nobody added. Check the usernames and try again.')
+      const data = (await res.json().catch(() => ({}))) as { members?: HuddleMember[] }
+      const next = Array.isArray(data.members) ? data.members : null
+      if (next) {
+        setMembers(next)
+        const count = next.length
+        setOpenThread((t) => (t && t.id === openThread.id ? { ...t, memberCount: count } : t))
+      }
+      setHuddleSheet('members')
+      if (!next) void loadMembers(openThread.id)
+    },
+    [openThread, loadMembers],
+  )
+
+  const renameHuddle = useCallback(
+    async (title: string) => {
+      if (!openThread) throw new Error('No huddle is open.')
+      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      if (!res.ok) throw await failure(res, 'Not renamed', 'Not renamed. Try again in a moment.')
+      const id = openThread.id
+      setOpenThread((t) => (t && t.id === id ? { ...t, title } : t))
+      setThreads((prev) => (prev ? prev.map((t) => (t.id === id ? { ...t, title } : t)) : prev))
+      setHuddleSheet(null)
+    },
+    [openThread],
+  )
+
+  const leaveHuddle = useCallback(async () => {
+    if (!openThread) throw new Error('No huddle is open.')
+    const id = openThread.id
+    const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(id)}/leave`, { method: 'POST' })
+    if (!res.ok) throw await failure(res, 'Still in the huddle', 'Still in the huddle. Try again in a moment.')
+    /* Back to the list, and the huddle is already off it — the reload only confirms that. */
+    activeThreadId.current = null
+    setHuddleSheet(null)
+    setOpenThread(null)
+    setReplyTo(null)
+    setThreads((prev) => (prev ? prev.filter((t) => t.id !== id) : prev))
+    void loadThreads()
+  }, [openThread, loadThreads])
+
   if (openThread) {
     return (
       <div className="af-cm-panel af-cm-convo" ref={panelRef}>
@@ -545,6 +711,31 @@ export function ThreadPanel({
             >
               <Search size={15} aria-hidden />
             </button>
+            {kind === 'group' ? (
+              <>
+                <button
+                  type="button"
+                  className="af-cm-mute"
+                  data-on={huddleSheet === 'members'}
+                  onClick={showMembers}
+                  aria-label="Huddle members"
+                  title="Huddle members"
+                >
+                  <Users size={15} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="af-cm-mute"
+                  data-on={huddleSheet === 'options'}
+                  aria-haspopup="dialog"
+                  onClick={() => setHuddleSheet('options')}
+                  aria-label="Huddle options"
+                  title="Add people, rename or leave"
+                >
+                  <MoreHorizontal size={15} aria-hidden />
+                </button>
+              </>
+            ) : null}
           </span>
           {onAskChimmy ? (
             <button
@@ -590,6 +781,8 @@ export function ThreadPanel({
           onReply={(m) => setReplyTo(messages.find((x) => x.id === m.id) ?? null)}
           onEdit={editMessage}
           onDelete={deleteMessage}
+          onReport={reportMessage}
+          onBlock={blockAuthor}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
           renderRich={(m) => (
@@ -627,10 +820,22 @@ export function ThreadPanel({
             />
           )}
           empty={
-            <div className="af-cm-empty">
-              <p className="af-cm-empty-t">No messages yet.</p>
-              <p className="af-cm-empty-b">Nobody outside this thread can read what you send here.</p>
-            </div>
+            readFailed ? (
+              <div className="af-cm-empty" role="alert">
+                <p className="af-cm-empty-t">Couldn&apos;t load this conversation.</p>
+                <p className="af-cm-empty-b">{error ?? 'Could not load messages.'}</p>
+                <div className="af-cm-retryrow">
+                  <button type="button" className="af-cm-retry" onClick={() => void loadMessages(openThread)}>
+                    Try again
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="af-cm-empty">
+                <p className="af-cm-empty-t">No messages yet.</p>
+                <p className="af-cm-empty-b">Nobody outside this thread can read what you send here.</p>
+              </div>
+            )
           }
           footer={
             <>
@@ -640,7 +845,7 @@ export function ThreadPanel({
                   {hiddenBlocked} message{hiddenBlocked === 1 ? '' : 's'} hidden from people you blocked.
                 </p>
               ) : null}
-              {error ? <p className="af-cm-error">{error}</p> : null}
+              {error && !(readFailed && messages.length === 0) ? <p className="af-cm-error">{error}</p> : null}
             </>
           }
         />
@@ -699,6 +904,27 @@ export function ThreadPanel({
           onTypingChange={signalTyping}
           mentionMembers={mentionMembers}
         />
+
+        {kind === 'group' && huddleSheet === 'members' ? (
+          <HuddleMembersSheet
+            title={openThread.title || 'this huddle'}
+            members={members}
+            viewerId={viewerId}
+            loading={membersLoading}
+            error={membersError}
+            onClose={() => setHuddleSheet(null)}
+          />
+        ) : null}
+        {kind === 'group' && huddleSheet === 'options' ? (
+          <HuddleOptionsSheet
+            title={openThread.title || 'This huddle'}
+            onClose={() => setHuddleSheet(null)}
+            onShowMembers={showMembers}
+            onAdd={addPeople}
+            onRename={renameHuddle}
+            onLeave={leaveHuddle}
+          />
+        ) : null}
       </div>
     )
   }
@@ -741,21 +967,7 @@ export function ThreadPanel({
             </p>
           </div>
         ) : (
-          threads.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className="af-cm-threadrow"
-              onClick={() => open(t)}
-            >
-              <span className="af-cm-threadrow-title">
-                {t.title || `${t.memberCount} people`}
-              </span>
-              {t.unreadCount > 0 ? (
-                <span className="af-cm-threadrow-unread">{t.unreadCount}</span>
-              ) : null}
-            </button>
-          ))
+          threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}
         {error ? <p className="af-cm-error">{error}</p> : null}
       </div>
