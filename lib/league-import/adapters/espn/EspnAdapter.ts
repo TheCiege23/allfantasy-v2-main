@@ -3,6 +3,7 @@ import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { EspnImportPayload } from './types'
 import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
 import { readEspnDivisions, STANDINGS_DIVISIONS_KEY } from '@/lib/league-import/standingsDivisions'
+import { commissionerTeamSet } from '../commissionerTeamSet'
 
 function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
   const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
@@ -61,11 +62,19 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         : null
     const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
 
+    /* ESPN's league-manager flag, resolved to teams by the fetch service. It was fetched and
+       read by the commissioner gate, then dropped here — so no imported ESPN team was ever
+       the commissioner's. */
+    const commissionerTeams = commissionerTeamSet(
+      raw.commissionerTeamIds,
+      raw.teams.map((team) => team.teamId),
+    )
     const rosters = raw.teams.map((team) => ({
       source_team_id: team.teamId,
       source_manager_id: team.managerId,
       owner_name: team.managerName,
       team_name: team.teamName,
+      is_commissioner: commissionerTeams.has(team.teamId),
       avatar_url: team.logoUrl,
       wins: team.wins,
       losses: team.losses,
