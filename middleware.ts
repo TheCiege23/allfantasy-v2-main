@@ -150,7 +150,6 @@ const GEO_EXEMPT_PREFIXES = [
   "/api/cron",
   "/api/webhooks",
   "/api/stripe/webhook",
-  "/api/bracket/stripe/webhook",
   "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",
@@ -209,10 +208,8 @@ const PAID_GEO_PREFIXES = [
   "/api/subscription/upgrade",
   "/api/monetization/checkout",
   "/api/user/autocoach",
-  // Bracket purchases (first_bracket_fee, unlimited_unlock). Found 2026-09-24 as
-  // the one Stripe checkout no geo gate covered: neither listed here nor calling
-  // enforcePaidSubscriptionGeo. Webhooks for it are exempt separately.
-  "/api/bracket/stripe/checkout",
+  // (/api/bracket/stripe/checkout was listed here until 2026-09-25, when the in-app
+  // bracket fees it sold were retired and the route deleted.)
 ]
 
 /** Paid / premium surfaces — align with product geo policy (dispersal, import, rankings, league draft room). */
