@@ -262,7 +262,17 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     })
     if (afLeagues.length === 0) return base
     const recipients = await resolveRecipients(afLeagues)
-    if (recipients.length === 0) return base
+
+    /*
+     * ⚠ THE DM HALF DOES NOT DEPEND ON WHO GETS EMAIL. `recipients` is filtered by email opt-outs
+     * and deliverability; the offer card in the two managers' DM is a chat message, not a mail, so
+     * a manager who unsubscribed from trade emails still sees the offer in the conversation. This
+     * used to return here when no one could be emailed — which would also have skipped the DM.
+     */
+    if (plan.completions.length > 0) {
+      await announceCompletionsInDms(sleeperLeagueId, plan.completions)
+    }
+    if (recipients.length === 0 && plan.offers.length === 0) return base
 
     /*
      * 🛑 THE RECIPIENT'S OWN COPY OF THE LEAGUE, NEVER `afLeagues[0]`.
@@ -288,7 +298,8 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
       if (sent.error) base.error = sent.error
     }
 
-    if (plan.completions.length === 0) return base
+    // Nobody to email about a completion: skip the forced grade refresh it would cost.
+    if (plan.completions.length === 0 || recipients.length === 0) return base
 
     // Fresh grades so the new trade is included and graded.
     const grades = await getTradeGrades(sleeperLeagueId, { force: true })
@@ -411,9 +422,19 @@ async function notifyOffers(args: {
     return { emailsSent: 0, error: 'rosters unavailable — offer recorded, alert skipped' }
   }
 
+  /*
+   * Every AF user attached to any copy of this league — not only the email recipients — because
+   * the DM half below needs both managers' accounts whether or not either takes trade emails.
+   */
+  const attachedUserIds = [
+    ...new Set([
+      ...recipients.map((r) => r.id),
+      ...afLeagues.flatMap((l) => [l.userId, ...l.teams.map((t) => t.claimedByUserId)]),
+    ].filter((v): v is string => typeof v === 'string' && v.length > 0)),
+  ]
   const profiles = await prisma.userProfile
     .findMany({
-      where: { userId: { in: recipients.map((r) => r.id) } },
+      where: { userId: { in: attachedUserIds } },
       select: { userId: true, sleeperUserId: true },
     })
     .catch(() => [] as Array<{ userId: string; sleeperUserId: string | null }>)
@@ -483,8 +504,124 @@ async function notifyOffers(args: {
         }).catch(() => [])
       }
     }
+
+    await postOfferToManagersDm({
+      sleeperLeagueId,
+      offer,
+      rosters,
+      players,
+      users,
+      afLeagues,
+      attachedUserIds,
+      sleeperIdOf,
+      rosterIdOf,
+      rowFor,
+      tradeUrl,
+    }).catch((e: unknown) => {
+      console.warn('[trade-notify] offer DM skipped', {
+        sleeperLeagueId,
+        name: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+      })
+    })
   }
   return { emailsSent }
+}
+
+/**
+ * The offer, posted into the DM between the two managers in it — ONLY when both are AllFantasy
+ * users attached to a copy of this league. A manager who is only on Sleeper has no DM to receive
+ * it, and we never open a conversation with someone who is not here (owner's rule, 2026-09-25).
+ *
+ * Once per offer, by the claim row in lib/chat-notifications/tradeOfferDm.ts; this sweep only
+ * sees each offer as new once anyway, so the claim is the second guard, not the first.
+ *
+ * ⚠ TWO ROSTERS ONLY, and each manager's link goes to their OWN copy of the league (`rowFor`),
+ * for the same reason the emails above do.
+ */
+async function postOfferToManagersDm(args: {
+  sleeperLeagueId: string
+  offer: FeedTrade
+  rosters: SleeperRoster[]
+  players: Record<string, SleeperPlayerRow>
+  users: SleeperUserRow[]
+  afLeagues: AfLeagueRow[]
+  attachedUserIds: string[]
+  sleeperIdOf: (userId: string) => string | null
+  rosterIdOf: (sleeperId: string) => number | null
+  rowFor: (userId: string) => AfLeagueRow
+  tradeUrl: (rowId: string, transactionId: string) => string
+}): Promise<void> {
+  const { offer } = args
+  if (!offer.creator || offer.rosterIds.length !== 2) return
+  const proposerRosterId = args.rosterIdOf(offer.creator)
+  if (proposerRosterId == null || !offer.rosterIds.includes(proposerRosterId)) return
+  const receiverRosterId = offer.rosterIds.find((id) => id !== proposerRosterId)
+  const receiverSleeperId = String(args.rosters.find((r) => Number(r.roster_id) === receiverRosterId)?.owner_id ?? '')
+  if (receiverRosterId == null || !receiverSleeperId) return
+
+  const afUserFor = (sleeperId: string): string | null =>
+    args.attachedUserIds.find((userId) => args.sleeperIdOf(userId) === sleeperId) ?? null
+  const proposerUserId = afUserFor(offer.creator)
+  const receiverUserId = afUserFor(receiverSleeperId)
+  if (!proposerUserId || !receiverUserId || proposerUserId === receiverUserId) return
+
+  const { postImportedOfferToDm, providerAssetLabel } = await import('@/lib/chat-notifications/tradeOfferSources')
+  const { safeDisplayName } = await import('@/lib/chat-notifications/displayName')
+  const nameOf = (sleeperId: string): string => {
+    const u = args.users.find((row) => row.user_id === sleeperId)
+    return safeDisplayName([u?.metadata?.team_name, u?.display_name], 'A league mate')
+  }
+  // From the proposer's side: what they give, and what they get (= what the other side gives).
+  const { assetsGiven, assetsReceived } = buildTradeAssetsForRoster({
+    tx: offer.tx,
+    userRosterId: proposerRosterId,
+    players: args.players,
+  })
+  const proposerRow = args.rowFor(proposerUserId)
+  const receiverRow = args.rowFor(receiverUserId)
+  await postImportedOfferToDm({
+    provider: 'sleeper',
+    providerLeagueId: args.sleeperLeagueId,
+    transactionId: offer.id,
+    leagueId: proposerRow.id,
+    leagueName: proposerRow.name ?? args.afLeagues[0].name ?? null,
+    proposer: {
+      userId: proposerUserId,
+      manager: nameOf(offer.creator),
+      gives: assetsGiven.map(providerAssetLabel),
+      href: args.tradeUrl(proposerRow.id, offer.id),
+    },
+    receiver: {
+      userId: receiverUserId,
+      manager: nameOf(receiverSleeperId),
+      gives: assetsReceived.map(providerAssetLabel),
+      href: args.tradeUrl(receiverRow.id, offer.id),
+    },
+    directionKnown: true,
+    createdAt: typeof offer.createdMs === 'number' && offer.createdMs > 0 ? new Date(offer.createdMs).toISOString() : null,
+  })
+}
+
+/**
+ * A completed trade whose offer we posted into a DM gets its "accepted" line there. Reads one
+ * claim row per completion and nothing else; a trade that never had a DM card is a no-op.
+ */
+async function announceCompletionsInDms(sleeperLeagueId: string, completions: string[]): Promise<void> {
+  try {
+    const [{ postTradeStatusToDm }, { importedTradeId }] = await Promise.all([
+      import('@/lib/chat-notifications/tradeOfferDm'),
+      import('@/lib/chat-notifications/tradeOfferSources'),
+    ])
+    for (const transactionId of completions) {
+      await postTradeStatusToDm({
+        source: 'sleeper',
+        tradeId: importedTradeId(sleeperLeagueId, transactionId),
+        status: 'accepted',
+      }).catch(() => null)
+    }
+  } catch {
+    /* A DM line is never worth failing the sweep over. */
+  }
 }
 
 /** Sweep every imported Sleeper league (bounded), one contained result each. */

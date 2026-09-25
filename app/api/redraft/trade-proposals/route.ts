@@ -19,8 +19,65 @@ import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { createTradeOsLoaders } from '@/lib/decision-os/trade-os'
 import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
+import { safeDisplayName } from '@/lib/chat-notifications/displayName'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * 🛑 THE RECEIVER OF A REDRAFT TRADE OFFER WAS NEVER TOLD. This route wrote the proposal, its value
+ * snapshot, a learning event and two market-ledger rows — and addressed nothing to the manager the
+ * offer was made to, so an offer sat unanswered until they happened to open the Trades tab. The
+ * native trade engine has sent `trade_proposed` since 2026-09 (tradeService.notifyOnTradeCreated);
+ * this is the same notice, in the same `trade_proposals` category, so the same settings govern it.
+ *
+ * It also posts the offer card into the two managers' DM (lib/chat-notifications/tradeOfferDm.ts).
+ *
+ * Fire-and-forget through dynamic imports: the proposal is committed before this runs, and a
+ * notification or DM failure must never fail or slow the proposal. Each half has its own catch.
+ */
+function afterRedraftProposalCreated(input: {
+  proposalId: string
+  leagueId: string
+  proposerUserId: string
+  receiverUserId: string | null | undefined
+  proposerName: string
+}): void {
+  const receiverUserId = input.receiverUserId
+  if (!receiverUserId || receiverUserId === input.proposerUserId) return
+  try {
+    void Promise.all([
+      import('@/lib/notifications/NotificationDispatcher'),
+      import('@/lib/chat-notifications/tradeOfferDm'),
+      import('@/lib/chat-notifications/tradeOfferSources'),
+    ])
+      .then(async ([{ dispatchNotification }, dm, sources]) => {
+        await dispatchNotification({
+          userIds: [receiverUserId],
+          category: 'trade_proposals',
+          productType: 'app',
+          type: 'trade_proposed',
+          title: 'New trade offer',
+          body: `${input.proposerName} sent you a trade offer. Open it to accept, counter, or decline.`,
+          actionHref: `/league/${encodeURIComponent(input.leagueId)}?view=trades`,
+          actionLabel: 'View Trade',
+          leagueId: input.leagueId,
+          severity: 'medium',
+          dedupePrefix: `redraft_trade:${input.proposalId}:proposed`,
+          meta: { leagueId: input.leagueId, tradeProposalId: input.proposalId, pushTag: `trade-offer-${input.proposalId}` },
+        }).catch(() => null)
+        await dm
+          .postTradeOfferToDm({
+            source: 'redraft',
+            tradeId: input.proposalId,
+            load: () => sources.loadRedraftTradeOffer(input.proposalId),
+          })
+          .catch(() => null)
+      })
+      .catch(() => undefined)
+  } catch {
+    /* never reaches the proposal response */
+  }
+}
 
 type TradeAssetInput = {
   fromRosterId?: string
@@ -269,6 +326,16 @@ export async function POST(req: NextRequest) {
         payload: { proposalId: created.id, assetCount: assets.length, vetoMode },
       }),
     )
+  }
+
+  if (created?.id) {
+    afterRedraftProposalCreated({
+      proposalId: created.id,
+      leagueId,
+      proposerUserId: userId,
+      receiverUserId: receiver.ownerId,
+      proposerName: safeDisplayName([proposer.teamName, proposer.ownerName], 'A league mate'),
+    })
   }
 
   const snapshotRow = created?.id

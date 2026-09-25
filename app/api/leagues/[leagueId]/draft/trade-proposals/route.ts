@@ -307,6 +307,35 @@ export async function POST(
     })
   }
 
+  /*
+   * The offer itself, in the DM between the two managers. The Chimmy review above goes to a private
+   * `ai` thread the DM tab hides, so until now the one place two managers already talk never showed
+   * the offer at all. Fire-and-forget: the proposal is saved, and the DM path must not fail it.
+   */
+  const proposalId = String(created.id)
+  try {
+    void Promise.all([
+      import('@/lib/chat-notifications/tradeOfferDm'),
+      import('@/lib/chat-notifications/tradeOfferSources'),
+    ])
+      .then(([dm, sources]) =>
+        dm.postTradeOfferToDm({
+          source: 'draft_pick',
+          tradeId: proposalId,
+          load: () =>
+            sources.loadDraftPickTradeOffer({
+              leagueId,
+              proposalId,
+              proposerUserId: userId,
+              receiverRosterId,
+            }),
+        }),
+      )
+      .catch(() => undefined)
+  } catch {
+    /* never reaches the proposal response */
+  }
+
   return NextResponse.json({
     ok: true,
     proposal: {

@@ -22,6 +22,8 @@ export type NotificationCategoryId =
   | "draft_intel_alerts"
   | "autocoach"
   | "followed_players"
+  | "direct_messages"
+  | "league_chat"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -100,6 +102,8 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "draft_intel_alerts",
   "autocoach",
   "followed_players",
+  "direct_messages",
+  "league_chat",
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
@@ -130,4 +134,21 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // them, including players on none of your rosters. Its own switch so a follow can stay in the
   // bell and off the phone, or be silenced without touching roster injury alerts.
   followed_players: "Players you follow — injuries & news",
+  // A DM or huddle message from someone (2026-09-25). Sent by the server when the message is saved
+  // (lib/chat-notifications/chatMessageNotifier.ts); at most one alert per conversation per 10 minutes
+  // while it is unread, and at most one email per conversation an hour.
+  direct_messages: "Direct messages & huddles",
+  // Every message in league chat. OPT-IN: off on every channel until the user turns it on — see
+  // OPT_IN_NOTIFICATION_CATEGORY_IDS below.
+  league_chat: "League chat messages",
 }
+
+/**
+ * Categories that start OFF on every channel. Everything else defaults on (in-app, push, email;
+ * SMS is always opt-in). League chat is the chattiest thing in the product — defaulting it on
+ * would buzz twelve phones for every "lol" — so a person has to ask for it.
+ *
+ * ⚠ BULK SWITCHES SKIP THESE. "All push on" means "the alerts I get, on my phone", not "and also
+ * subscribe me to every league chat message" — see NotificationsSettingsSection.
+ */
+export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat"]

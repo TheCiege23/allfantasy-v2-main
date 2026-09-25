@@ -113,6 +113,58 @@ async function notifyProposerOfDecision(input: {
   ).catch(() => {})
 }
 
+/**
+ * The offer, and every answer to it, in the DM between the two managers — so it sits in the
+ * conversation they already have instead of only in a Trades tab they have to go looking for.
+ * lib/chat-notifications/tradeOfferDm.ts owns the rules (two-team only, both on AllFantasy, no
+ * blocked pair, idempotent per offer and per status).
+ *
+ * Fire-and-forget through a dynamic import, like `fanout`: the trade is committed before this
+ * runs, and nothing in the DM path may fail, slow or roll back a trade action. Each step has its
+ * own catch so a failed status line cannot stop the offer card that follows it.
+ */
+type TradeDmModules = [
+  typeof import('@/lib/chat-notifications/tradeOfferDm'),
+  typeof import('@/lib/chat-notifications/tradeOfferSources'),
+]
+
+function syncTradeDm(label: string, run: (modules: TradeDmModules) => Promise<unknown>): void {
+  try {
+    void Promise.all([
+      import('@/lib/chat-notifications/tradeOfferDm'),
+      import('@/lib/chat-notifications/tradeOfferSources'),
+    ])
+      .then((modules) => run(modules))
+      .catch((e: unknown) => {
+        console.warn('[tradeService] trade DM step failed', {
+          label,
+          name: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+        })
+      })
+  } catch {
+    /* never let the DM path reach the trade action */
+  }
+}
+
+function announceTradeStatusInDm(input: {
+  tradeId: string
+  status: 'accepted' | 'rejected' | 'cancelled' | 'countered'
+  actorUserId?: string | null
+  actorName?: string | null
+  detail?: string | null
+}): void {
+  syncTradeDm(`status:${input.status}`, ([dm]) =>
+    dm.postTradeStatusToDm({
+      source: 'native',
+      tradeId: input.tradeId,
+      status: input.status,
+      actorUserId: input.actorUserId ?? null,
+      actorName: input.actorName ?? null,
+      detail: input.detail ?? null,
+    }),
+  )
+}
+
 type PlannedTradeNotice = {
   userId: string
   type: 'trade_proposed' | 'trade_countered'
@@ -541,6 +593,29 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     counteredProposerUserId: parent?.proposedByUserId ?? null,
   })
 
+  /*
+   * The offer card in the two managers' DM. A counter first closes the parent's card there
+   * ("countered — the new offer is below"), then posts the new one, in that order.
+   */
+  const counteredParentId = parent?.id ?? null
+  syncTradeDm('offer', async ([dm, sources]) => {
+    if (counteredParentId) {
+      await dm
+        .postTradeStatusToDm({
+          source: 'native',
+          tradeId: counteredParentId,
+          status: 'countered',
+          actorUserId: input.proposedByUserId,
+        })
+        .catch(() => null)
+    }
+    await dm.postTradeOfferToDm({
+      source: 'native',
+      tradeId: trade.id,
+      load: () => sources.loadNativeTradeOffer(trade.id),
+    })
+  })
+
   return { id: trade.id }
 }
 
@@ -625,6 +700,7 @@ export async function acceptAfLeagueTrade(input: {
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
     })
+    announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
     return { status: 'processed' }
   }
 
@@ -654,6 +730,12 @@ export async function acceptAfLeagueTrade(input: {
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
       body: 'It now goes to commissioner review before processing.',
+    })
+    announceTradeStatusInDm({
+      tradeId: trade.id,
+      status: 'accepted',
+      actorUserId: input.userId,
+      detail: 'It goes to commissioner review before it processes.',
     })
     return { status: 'awaiting_commissioner' }
   }
@@ -685,6 +767,12 @@ export async function acceptAfLeagueTrade(input: {
       title: 'Your trade offer was accepted',
       body: 'It now enters the league veto window before processing.',
     })
+    announceTradeStatusInDm({
+      tradeId: trade.id,
+      status: 'accepted',
+      actorUserId: input.userId,
+      detail: 'The league veto window is open before it processes.',
+    })
     return { status: 'awaiting_votes' }
   }
 
@@ -696,6 +784,7 @@ export async function acceptAfLeagueTrade(input: {
     type: 'trade_accepted',
     title: 'Your trade offer was accepted',
   })
+  announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
   return { status: 'processed' }
 }
 
@@ -897,6 +986,7 @@ export async function commissionerAfTradeDecision(input: {
       title: 'Your trade offer was rejected',
       body: 'The commissioner rejected this trade.',
     })
+    announceTradeStatusInDm({ tradeId: trade.id, status: 'rejected', actorName: 'The commissioner' })
     return
   }
 
@@ -951,6 +1041,12 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
     type: 'trade_rejected',
     title: 'Your trade offer was rejected',
   })
+  // A commissioner who is not a party is named by role, not by account.
+  announceTradeStatusInDm(
+    isRecv
+      ? { tradeId: trade.id, status: 'rejected', actorUserId: input.userId }
+      : { tradeId: trade.id, status: 'rejected', actorName: 'The commissioner' },
+  )
 }
 
 export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
@@ -996,6 +1092,11 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     actorUserId: input.userId,
   })
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'cancelled' })
+  announceTradeStatusInDm(
+    isProp
+      ? { tradeId: trade.id, status: 'cancelled', actorUserId: input.userId }
+      : { tradeId: trade.id, status: 'cancelled', actorName: 'The commissioner' },
+  )
 }
 
 export async function castAfTradeVetoVote(input: {

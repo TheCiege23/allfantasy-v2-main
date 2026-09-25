@@ -1,5 +1,6 @@
 export {
   getDefaultNotificationPreferences,
+  getDefaultCategoryPreferences,
   resolveNotificationPreferences,
   getNotificationPreferencesFingerprint,
 } from "./NotificationPreferenceResolver"
@@ -29,4 +30,5 @@ export type {
 export {
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
+  OPT_IN_NOTIFICATION_CATEGORY_IDS,
 } from "./types"

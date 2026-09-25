@@ -13,6 +13,8 @@ import {
   describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
+  OPT_IN_NOTIFICATION_CATEGORY_IDS,
+  getDefaultCategoryPreferences,
   type NotificationPreferences,
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
@@ -29,9 +31,21 @@ const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
  * Chimmy's lineup check (lib/chimmy-alerts/lineupCheck.ts, run from the alert
  * sweep before each week's main slate) sends under it, so its toggle is back.
  * Keep the set: the next category added before its sender goes here.
+ *
+ * `league_chat` (2026-09-25) is here for exactly that reason. Its sender exists and is wired into
+ * the shared thread route's league-room branch, but the comms drawer posts league chat through
+ * `/api/league/chat`, which does not call it yet — so a switch shown now would govern some league
+ * messages and not others. Unhide it in the same change that wires `queueLeagueChatNotifications`
+ * into that route.
  */
-const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set<NotificationCategoryId>([])
+const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set<NotificationCategoryId>(["league_chat"])
 const VISIBLE_CATEGORY_IDS = NOTIFICATION_CATEGORY_IDS.filter((id) => !HIDDEN_CATEGORY_IDS.has(id))
+/*
+ * The "all email" / "all push" switches cover the alerts a person already gets. An opt-in category
+ * (league chat) is not one of those: "all push on" must not quietly subscribe someone to every
+ * league chat message on their phone.
+ */
+const BULK_CATEGORY_IDS = VISIBLE_CATEGORY_IDS.filter((id) => !OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id))
 
 export function NotificationsSettingsSection({
   profile,
@@ -96,12 +110,10 @@ export function NotificationsSettingsSection({
       ...prev,
       categories: {
         ...prev.categories,
-        [categoryId]: { ...(prev.categories?.[categoryId] ?? { enabled: true, inApp: true, email: true, sms: false }), ...patch },
+        [categoryId]: { ...(prev.categories?.[categoryId] ?? getDefaultCategoryPreferences(categoryId)), ...patch },
       },
     }))
   }
-
-  const defaultCh = { enabled: true, inApp: true, email: true, sms: false } as const
 
   const setAllEmailChannels = (email: boolean) => {
     setDirty(true)
@@ -110,8 +122,8 @@ export function NotificationsSettingsSection({
     setTestResultTone(null)
     setPrefs((prev) => {
       const categories = { ...prev.categories }
-      for (const id of VISIBLE_CATEGORY_IDS) {
-        categories[id] = { ...(categories[id] ?? { ...defaultCh }), email }
+      for (const id of BULK_CATEGORY_IDS) {
+        categories[id] = { ...(categories[id] ?? getDefaultCategoryPreferences(id)), email }
       }
       return { ...prev, categories }
     })
@@ -128,15 +140,15 @@ export function NotificationsSettingsSection({
     setTestResultTone(null)
     setPrefs((prev) => {
       const categories = { ...prev.categories }
-      for (const id of VISIBLE_CATEGORY_IDS) {
-        categories[id] = { ...(categories[id] ?? { ...defaultCh }), push }
+      for (const id of BULK_CATEGORY_IDS) {
+        categories[id] = { ...(categories[id] ?? getDefaultCategoryPreferences(id)), push }
       }
       return { ...prev, categories }
     })
   }
 
-  const allEmailOn = VISIBLE_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
-  const allPushOn = VISIBLE_CATEGORY_IDS.every((id) => {
+  const allEmailOn = BULK_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
+  const allPushOn = BULK_CATEGORY_IDS.every((id) => {
     const c = prefs.categories?.[id]
     return (c?.push ?? c?.inApp) === true
   })
@@ -455,7 +467,7 @@ export function NotificationsSettingsSection({
             <li key={categoryId}>
               <NotificationCategoryRenderer
                 categoryId={categoryId}
-                prefs={prefs.categories?.[categoryId] ?? { enabled: true, inApp: true, email: true, sms: false }}
+                prefs={prefs.categories?.[categoryId] ?? getDefaultCategoryPreferences(categoryId)}
                 deliveryAvailability={deliveryAvailability}
                 expanded={expandedCategory === categoryId}
                 onToggleExpand={() => setExpandedCategory((c) => (c === categoryId ? null : categoryId))}
