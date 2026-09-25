@@ -76,13 +76,23 @@ describe('getChatBadge', () => {
     expect(b).toEqual({ total: 2 + 2 + 1, mentions: 1 + 1, dm: 2, league: 2, chimmy: 1 })
   })
 
-  it('league chat: never your own, never draft-only rows, never someone else’s private row, and a bounded window', async () => {
+  it('league chat: never your own (a Chimmy post is nobody’s own), never draft-only rows, never someone else’s private row, and a bounded window', async () => {
     await getChatBadge('u1', NOW)
     const w = h.leagueWhere!
     expect(w.leagueId).toEqual({ in: ['L1', 'L2'] })
-    expect(w.userId).toEqual({ not: 'u1' })
     expect(w.source).toBeNull()
-    expect(w.OR).toEqual([{ isPrivate: false }, { visibleToUserId: 'u1' }])
+    // Behaviour is measured against rows in chat-badge-chimmy-unread.test.ts; this pins the shape.
+    expect(w.AND).toEqual([
+      {
+        OR: [
+          { userId: { not: 'u1' } },
+          { metadata: { path: ['chimmy'], equals: true } },
+          { metadata: { path: ['chimmyPrivateReply'], equals: true } },
+          { metadata: { path: ['chimmyResponse'], equals: true } },
+        ],
+      },
+      { OR: [{ isPrivate: false }, { visibleToUserId: 'u1' }] },
+    ])
     expect((w.createdAt as { gt: Date }).gt.getTime()).toBe(NOW.getTime() - 3 * 24 * 3600_000)
   })
 

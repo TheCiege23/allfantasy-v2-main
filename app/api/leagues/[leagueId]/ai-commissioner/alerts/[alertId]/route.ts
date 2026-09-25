@@ -10,6 +10,7 @@ import {
 } from '@/lib/ai-commissioner'
 import { chimmyDayKey, postChimmyMoment, type ChimmyMomentSkipReason } from '@/lib/league-chat/chimmyMoments'
 import { commissionerNoticeText } from '@/lib/league-chat/chimmyCommissionerNotices'
+import { resolveCommissionerNoticeNames } from '@/lib/league-chat/commissionerNoticeNames'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,11 +66,18 @@ export async function PATCH(
     const alert = await prisma.aiCommissionerAlert.findFirst({ where: { alertId, leagueId } })
     if (!alert) return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     const now = new Date()
+    /*
+     * NAMES, NEVER IDS. The stored summary says "Manager 7 …" / "Trade 1123… …" — the commissioner's
+     * record, left exactly as it is. What the LEAGUE reads names the team instead
+     * (lib/league-chat/chimmyCommissionerNotices.ts).
+     */
+    const view = toAlertView(alert)
+    const names = await resolveCommissionerNoticeNames(leagueId, [view])
     const posted = await postChimmyMoment({
       leagueId,
       kind: 'commissioner_notice',
       dedupeKey: `alert:${alert.alertId}:${chimmyDayKey(now)}`,
-      text: commissionerNoticeText(alert),
+      text: commissionerNoticeText(view, names),
       card: { commissionerNotice: { alertType: alert.alertType, severity: alert.severity } },
       now,
     })
