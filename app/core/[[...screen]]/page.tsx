@@ -103,7 +103,8 @@ import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
 import { BusinessRetention } from '@/components/core-app/screens/BusinessRetention'
 import { DiscordBridge } from '@/components/core-app/screens/DiscordBridge'
-import { getDiscordBridge } from '@/lib/core-app/discordBridge'
+import { loadDiscordBridgeScreen } from '@/lib/core-app/discordBridgeScreen'
+import { DiscordBridgeNotice } from '@/components/core-app/screens/DiscordBridgeNotice'
 import { BracketChallenge } from '@/components/core-app/screens/BracketChallenge'
 import { getBracketChallenge } from '@/lib/core-app/bracketChallenge'
 import { resolveSport } from '@/lib/brackets/sportShell'
@@ -2164,15 +2165,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
-   * 32a. League-scoped and commissioner-only: getDiscordBridge returns null
-   * unless this user owns the league, so a member who guesses the URL gets the
-   * same "pick a league" panel as someone with none selected rather than a
-   * different, informative error.
+   * 32a. League-scoped and commissioner-only. The screen is scoped to `?league=` whenever that
+   * league is in this user's rail (the shell's gate already redirected away any id they cannot see),
+   * and it tells apart a failed read, a league they do not run, and no league at all — they all used
+   * to render "Pick a league you commission", which read as though `?league=` had been ignored
+   * (E2/E6, 2026-09-25). See lib/core-app/discordBridgeScreen.ts.
    */
-  const discordBridge =
+  const discordLeague =
     segment === 'discord' && selectedLeagueId
-      ? await getDiscordBridge(userId, selectedLeagueId).catch(() => null)
+      ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
       : null
+  const discordScreen =
+    segment === 'discord' ? await loadDiscordBridgeScreen(userId, discordLeague) : null
 
   /*
    * My team needs a league in context; without one the screen says which league
@@ -3619,20 +3623,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             </p>
           </div>
         )
-      ) : segment === 'discord' ? (
-        discordBridge ? (
-          <DiscordBridge data={discordBridge} />
+      ) : segment === 'discord' && discordScreen ? (
+        discordScreen.state === 'ready' ? (
+          <DiscordBridge data={discordScreen.data} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Discord bridge
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league you commission from the rail. The bridge is configured per league —
-              which channel a league posts to, and in which direction, only means something inside
-              one league.
-            </p>
-          </div>
+          <DiscordBridgeNotice screen={discordScreen} />
         )
       ) : leagueHome ? (
         <>

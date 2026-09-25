@@ -301,6 +301,8 @@ function DiscordPanel({
   const [status, setStatus] = useState<DiscordStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Bumped by Try again, so the same league is read again. */
+  const [attempt, setAttempt] = useState(0)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -314,20 +316,18 @@ function DiscordPanel({
     setError(null)
     fetch(`/api/discord/league?leagueId=${encodeURIComponent(scopeId)}`)
       .then((res) => {
-        if (!res.ok) throw new Error(`Discord status returned ${res.status}`)
+        if (!res.ok) throw new Error('discord status read failed')
         return res.json() as Promise<DiscordStatus>
       })
       .then((data) => {
         if (!cancelled) setStatus(data)
       })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(
-            e instanceof Error
-              ? `Could not load Discord status (${e.message}).`
-              : 'Could not load Discord status.',
-          )
-        }
+      .catch(() => {
+        /*
+         * E3 (2026-09-25): this used to read "Could not load Discord status (Discord status returned
+         * 500)." A status code is ours to log, not the customer's to read.
+         */
+        if (!cancelled) setError("Couldn't load this league's Discord. Try again.")
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -335,7 +335,7 @@ function DiscordPanel({
     return () => {
       cancelled = true
     }
-  }, [scopeId])
+  }, [scopeId, attempt])
 
   if (!scopeId) {
     return (
@@ -382,8 +382,12 @@ function DiscordPanel({
           <p className="af-cm-empty-t">Checking Discord…</p>
         ) : error ? (
           <>
-            <p className="af-cm-empty-t">Couldn&apos;t load Discord</p>
-            <p className="af-cm-empty-b">{error}</p>
+            <p className="af-cm-empty-t">{error}</p>
+            <div className="af-cm-retryrow">
+              <button type="button" className="af-cm-retry" onClick={() => setAttempt((n) => n + 1)}>
+                Try again
+              </button>
+            </div>
           </>
         ) : !status?.botConfigured ? (
           <>
