@@ -1,23 +1,17 @@
 "use client"
 
-import { Suspense, useMemo, useEffect, useRef } from "react"
+import { Suspense, useEffect, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { useEntitlement } from "@/hooks/useEntitlement"
 import { useTokenBalance } from "@/hooks/useTokenBalance"
 
-function getMode(searchParams: URLSearchParams | null): "donate" | "lab" {
-  if (!searchParams) return "donate"
-  return searchParams?.get("mode") === "lab" ? "lab" : "donate"
-}
-
 function DonateSuccessContent() {
   const searchParams = useSearchParams()
-  const mode = useMemo(() => getMode(searchParams), [searchParams])
   const { refetch: refetchEntitlement } = useEntitlement()
   const { refetch: refetchTokens } = useTokenBalance()
   const didRefetch = useRef(false)
 
-  // After Stripe redirect we land with ?mode=donate|lab; refetch entitlement + tokens so UI shows updated state
+  // After Stripe redirect we land with ?mode=donate; refetch entitlement + tokens so UI shows updated state
   useEffect(() => {
     if (didRefetch.current || !searchParams?.get("mode")) return
     didRefetch.current = true
@@ -30,20 +24,18 @@ function DonateSuccessContent() {
         <div className="rounded-3xl border border-white/10 bg-white/5 p-8">
           <div className="text-xs text-white/60">Payment complete</div>
           <h1 className="mt-3 text-2xl font-semibold">
-            {mode === "lab" ? "Bracket Lab Pass" : "Thank you for supporting AllFantasy"}
+            Thank you for supporting AllFantasy
           </h1>
           <p className="mt-2 text-white/70">
-            {mode === "lab"
-              ? "If your payment just completed, the Lab dashboard will reflect it — this page can't independently verify a specific charge, so check the Lab dashboard directly."
-              : "Your support helps fund performance, data costs, and new features. If your payment just completed, this page can't independently verify a specific charge — contact support if anything looks off."}
+            {"Your support helps fund performance, data costs, and new features. If your payment just completed, this page can't independently verify a specific charge — contact support if anything looks off."}
           </p>
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <a
-              href={mode === "lab" ? "/brackets" : "/dashboard"}
+              href="/dashboard"
               className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 font-semibold text-slate-950 hover:opacity-95"
             >
-              {mode === "lab" ? "Open Bracket Pools" : "Open AllFantasy"}
+              Open AllFantasy
             </a>
             <a
               href="/"
