@@ -24,8 +24,14 @@ import type { SurvivorCommandIntent } from '@/lib/survivor/types'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { isMergeTriggered } from '@/lib/survivor/SurvivorMergeEngine'
 import { prisma } from '@/lib/prisma'
-import { getBlockedUserIds } from '@/lib/moderation'
+import { getBlockedUserIdsForRead } from '@/lib/moderation'
 import { filterMessagesByBlocked } from '@/lib/moderation'
+import { filterBbReadableMessages, resolveBbWriteChannel } from '@/lib/big-brother/bbChatChannelAccess'
+import {
+  buildClientPollBody,
+  sanitizeClientMessageMetadata,
+  sanitizeClientMessageType,
+} from '@/lib/chat-core/clientMessageInput'
 import { publishDraftIntelState } from '@/lib/draft-intelligence'
 import { DETERMINISTIC_SOURCE, tryDeterministicAnswer } from '@/lib/ai/deterministic'
 import {
@@ -132,7 +138,22 @@ export async function GET(
   const source = normalizeLeagueChatSource(
     req.nextUrl.searchParams.has('source') ? req.nextUrl.searchParams?.get('source') : undefined
   )
-  const blockedIds = await getBlockedUserIds(user.appUserId)
+  /*
+   * 🛑 FAIL CLOSED. The old lookup answered `[]` on any error, and `[]` means "hide nobody", so a
+   * database blip showed the viewer every message from people they had blocked. If the list cannot
+   * be read (after one retry inside the helper), nothing is served: a chat that says "try again" is
+   * recoverable, and a message from someone you blocked cannot be unseen. No ids in the log line.
+   */
+  let blockedIds: string[]
+  try {
+    blockedIds = await getBlockedUserIdsForRead(user.appUserId)
+  } catch {
+    console.warn('[shared/chat/messages] block list unavailable; refusing to serve an unfiltered read')
+    return NextResponse.json(
+      { error: 'Messages are temporarily unavailable. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
   const blockSet = blockedIds.length > 0 ? new Set(blockedIds) : new Set<string>()
 
   if (isLeagueVirtualRoom(threadId)) {
@@ -165,12 +186,14 @@ export async function GET(
       if (!sourceAllowed) {
         return NextResponse.json({ error: 'Not allowed to access this tribe chat' }, { status: 403 })
       }
-      const messages = await getLeagueChatMessages(leagueId, {
+      const allRooms = await getLeagueChatMessages(leagueId, {
         limit,
         before: beforeDate ?? undefined,
         source,
         requestingUserId: user.appUserId,
       })
+      /* A Big Brother league's private rooms: only the ones this member may read (same rule as league chat). */
+      const messages = await filterBbReadableMessages(leagueId, user.appUserId, allRooms)
       const visible = applyBlockedVisibility(messages, blockSet)
       return NextResponse.json({
         status: 'ok',
@@ -201,27 +224,21 @@ export async function POST(
 
   const threadId = decodeURIComponent(params.threadId)
   const body = await req.json().catch(() => ({}))
-  const metadata =
+  const rawMetadata =
     body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
       ? (body.metadata as Record<string, unknown>)
       : undefined
+  /*
+   * 🛑 THE CLIENT'S METADATA AND TYPE WERE STORED AS SENT. Readers trust both — a
+   * `discordAuthorName` becomes the sender's displayed name, reactions and votes are taken at face
+   * value, `broadcast` renders as a commissioner announcement. Only what a composer legitimately
+   * sends survives (lib/chat-core/clientMessageInput.ts, which carries the census).
+   */
+  const metadata = sanitizeClientMessageMetadata(rawMetadata)
   const rawMessage = String(body?.body || body?.message || '').trim()
-  const messageType = String(body?.messageType || 'text')
-  const message =
-    messageType === 'poll' &&
-    metadata &&
-    typeof metadata.question === 'string' &&
-    Array.isArray(metadata.options)
-      ? JSON.stringify({
-          question: String(metadata.question),
-          options: (metadata.options as unknown[]).map((option) => String(option)).filter(Boolean),
-          votes:
-            metadata.votes && typeof metadata.votes === 'object'
-              ? (metadata.votes as Record<string, string[]>)
-              : {},
-          closed: Boolean(metadata.closed),
-        })
-      : rawMessage
+  const messageType = sanitizeClientMessageType(body?.messageType)
+  /* A poll body is rebuilt from its question and options: it may not arrive with votes already cast. */
+  const message = messageType === 'poll' ? buildClientPollBody(rawMetadata, rawMessage) : rawMessage
   const source = normalizeLeagueChatSource(body?.source)
   const isChimmyPrompt = /^@chimmy\b/i.test(message)
   const parentMessageId =
@@ -267,6 +284,17 @@ export async function POST(
       if (!sourceAllowed) {
         return NextResponse.json({ error: 'Not allowed to post in this tribe chat' }, { status: 403 })
       }
+      /*
+       * A Big Brother room is posted to only by those the live game lets in — the same rule
+       * `/api/league/chat` applies. This used to store the client's `bbChannel` unchecked.
+       */
+      const bbWrite = await resolveBbWriteChannel(leagueId, user.appUserId, rawMetadata)
+      if (!bbWrite.ok) {
+        return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
+      }
+      const leagueMetadata: Record<string, unknown> | undefined = bbWrite.channel
+        ? { ...(metadata ?? {}), bbChannel: bbWrite.channel }
+        : metadata
       const { createLeagueChatMessage } = await import('@/lib/league-chat/LeagueChatMessageService')
       // "@Chimmy vote Team Alpha" is an official Survivor command, and the command service's own help
       // text tells players to type it that way. Only text after @chimmy that starts with a command verb
@@ -292,10 +320,10 @@ export async function POST(
       if (isChimmyPrompt && !survivorChimmyCommand?.handled) {
         const chimmyBody = message.replace(/^@chimmy\b\s*/i, '').trim()
         const created = await createLeagueChatMessage(leagueId, user.appUserId, chimmyBody || 'help', {
-          type: messageType as 'text',
+          type: messageType,
           imageUrl,
           metadata: {
-            ...(metadata ?? {}),
+            ...(leagueMetadata ?? {}),
             chimmyPrompt: true,
             originalCommand: message,
           },
@@ -352,12 +380,9 @@ export async function POST(
         commandResult.handled &&
         commandResult.ok &&
         (commandResult.intent === 'vote' || commandResult.intent === 'jury_vote')
-      const messageMetadata =
-        body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
-          ? (body.metadata as Record<string, unknown>)
-          : undefined
+      const messageMetadata = leagueMetadata
       const created = await createLeagueChatMessage(leagueId, user.appUserId, message, {
-        type: messageType as 'text',
+        type: messageType,
         imageUrl,
         metadata: messageMetadata,
         source,

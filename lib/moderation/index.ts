@@ -6,6 +6,9 @@ export {
   addBlock,
   removeBlock,
   getBlockedUserIds,
+  getBlockedUserIdsForRead,
+  hasBlockBetween,
+  BlockListUnavailableError,
   getBlockedUsersWithDetails,
   isUserBlockedBy,
 } from "./BlockUserService"

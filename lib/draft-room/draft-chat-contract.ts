@@ -7,6 +7,7 @@ import type { PlatformChatMessage } from '@/types/platform-shared'
 import type { LeaguePollPayload } from '@/lib/league-chat/LeaguePollService'
 import type { DraftChatPlayerContext } from '@/lib/draft-room/draft-chat-player-context'
 import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
+import { isSameSiteRelativePath } from '@/lib/rich-message/safeMedia'
 
 export type DraftChatMessageCategory =
   | 'USER_MESSAGE'
@@ -140,11 +141,14 @@ function httpsUrl(value: unknown): string | null {
   return t && /^https:\/\//i.test(t) ? t : null
 }
 
-/** An uploaded file: our own upload route's same-origin path, or https. Never `//host`. */
+/**
+ * An uploaded file: our own upload route's same-origin path, or https. Never `//host`, and never
+ * `/\host` either — a browser reads that as the same protocol-relative URL (see safeMedia.ts).
+ */
 function mediaUrl(value: unknown): string | null {
   const t = boundedString(value, 2048)
   if (!t) return null
-  if (t.startsWith('/') && !t.startsWith('//')) return t
+  if (t.startsWith('/')) return isSameSiteRelativePath(t) ? t : null
   return /^https:\/\//i.test(t) ? t : null
 }
 

@@ -73,7 +73,17 @@ vi.mock('@/lib/survivor/SurvivorMergeEngine', () => ({
 
 vi.mock('@/lib/moderation', () => ({
   getBlockedUserIds: vi.fn(async () => []),
+  getBlockedUserIdsForRead: vi.fn(async () => []),
   filterMessagesByBlocked: vi.fn((messages: unknown[]) => messages),
+}))
+
+/*
+ * The route applies the Big Brother room rule (lib/big-brother/bbChatChannelAccess.ts). This suite is
+ * not about Big Brother, so every league here is an ordinary one: nothing filtered, no room recorded.
+ */
+vi.mock('@/lib/big-brother/bbChatChannelAccess', () => ({
+  filterBbReadableMessages: vi.fn(async (_leagueId: string, _userId: string, messages: unknown[]) => messages),
+  resolveBbWriteChannel: vi.fn(async () => ({ ok: true, channel: null })),
 }))
 
 vi.mock('@/lib/draft-intelligence', () => ({

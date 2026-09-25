@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { consumeRateLimit } from '@/lib/rate-limit'
 import { getGifProviderName, gifProviderForUrl, isGifSearchConfigured, searchGifs } from '@/lib/rich-message/GIFIntegrationResolver'
 
 export const dynamic = 'force-dynamic'
@@ -32,8 +35,40 @@ function attribution(urls: string[]) {
   }
 }
 
+/*
+ * 🛑 THIS ROUTE WAS OPEN TO ANYONE, UNLIMITED (found 2026-09-25). A search spends the app's GIF
+ * provider quota (Klipy / GIPHY keys held server-side), so an anonymous loop could drain it for
+ * every member. Every caller is a signed-in chat composer (GifPicker, gifSearchClient), so it now
+ * needs a session, and SEARCHES — the requests that can reach the provider — are limited per user
+ * with the repo's shared limiter. Browsing the preloaded grid reads our own table and is not counted.
+ * The composer debounces typing by 300 ms, so 30 a minute is well above a person picking a GIF.
+ */
+const GIF_SEARCH_LIMIT_PER_MINUTE = 30
+const GIF_SEARCH_WINDOW_MS = 60_000
+
 export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) {
+    return NextResponse.json({ gifs: [], total: 0, error: 'Sign in to search GIFs' }, { status: 401 })
+  }
+
   const q = req.nextUrl.searchParams?.get('q')?.trim() ?? ''
+  if (q) {
+    const rl = consumeRateLimit({
+      scope: 'chat',
+      action: 'gif_search',
+      sleeperUsername: userId,
+      maxRequests: GIF_SEARCH_LIMIT_PER_MINUTE,
+      windowMs: GIF_SEARCH_WINDOW_MS,
+    })
+    if (!rl.success) {
+      return NextResponse.json(
+        { gifs: [], total: 0, error: 'Too many GIF searches. Please wait a minute.', retryAfterSec: rl.retryAfterSec },
+        { status: 429, headers: { 'Retry-After': String(Math.max(1, rl.retryAfterSec)) } },
+      )
+    }
+  }
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '24'), 48)
   const offset = Math.max(Number(req.nextUrl.searchParams?.get('offset') || '0'), 0)
   const categoryFilter = req.nextUrl.searchParams?.get('category')?.trim()

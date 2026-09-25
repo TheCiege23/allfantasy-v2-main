@@ -3,6 +3,9 @@ import { NextRequest } from 'next/server'
 
 const h = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>>, search: vi.fn(), configured: vi.fn(), name: vi.fn() }))
 
+// The route needs a signed-in user now (it spends the GIF provider's quota); every request here has one.
+vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'attribution-user' } })) }))
+vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     chatGif: { findMany: async () => h.rows, count: async () => h.rows.length },

@@ -4,6 +4,7 @@ import { searchPlatformThreadMessages } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
 import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
 import { getLeagueChatMessages } from "@/lib/league-chat/LeagueChatMessageService"
+import { filterBbReadableMessages } from "@/lib/big-brother/bbChatChannelAccess"
 import { bracketMessagesToPlatform } from "@/lib/chat-core/league-message-proxy"
 import { prisma } from "@/lib/prisma"
 
@@ -90,11 +91,16 @@ export async function GET(
       ? (searchParams?.get("source") || undefined)
       : undefined
 
-    const messages = await getLeagueChatMessages(leagueId, {
+    const allRooms = await getLeagueChatMessages(leagueId, {
       limit: 120,
       source,
       requestingUserId: user.appUserId,
     })
+    /*
+     * Search must not be the way into a Big Brother room you cannot open: only rooms this member
+     * may read are searched (the rule is lib/big-brother/bbChatChannelAccess.ts, as for league chat).
+     */
+    const messages = await filterBbReadableMessages(leagueId, user.appUserId, allRooms)
     const lower = query.toLowerCase()
     const filtered = messages.filter((message) => String(message.body || "").toLowerCase().includes(lower))
     return NextResponse.json({ status: "ok", query, messages: filtered.slice(-limit) })
