@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react'
 import { X, RefreshCw, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
+import type { PlanRefusal } from '@/lib/monetization/planRefusal'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 
 export type AIToolModalShellProps = {
   open: boolean
@@ -20,6 +22,11 @@ export type AIToolModalShellProps = {
   wide?: boolean
   loading?: boolean
   error?: string | null
+  /**
+   * A paywall answer from the server (lib/monetization/planRefusal.ts). Shown INSTEAD of `error`,
+   * with the button that fixes it — never the bare words "Premium feature".
+   */
+  refusal?: PlanRefusal | null
   empty?: boolean
   emptyMessage?: string
   onRefresh?: () => void
@@ -42,6 +49,7 @@ export function AIToolModalShell({
   wide = false,
   loading = false,
   error = null,
+  refusal = null,
   empty = false,
   emptyMessage = 'No data available yet.',
   onRefresh,
@@ -213,6 +221,8 @@ export function AIToolModalShell({
               </div>
               <p className="mt-4 text-[13px] text-[#5c6480]">Analyzing...</p>
             </div>
+          ) : refusal ? (
+            <PlanRefusalNotice refusal={refusal} variant="block" />
           ) : error ? (
             <div className="flex flex-col items-center py-12 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#f06060]/30 bg-[rgba(240,96,96,0.08)]">

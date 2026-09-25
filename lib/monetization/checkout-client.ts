@@ -14,7 +14,8 @@ export type MonetizationCheckoutRequest = {
 }
 
 export type MonetizationCheckoutResult =
-  | { ok: true; url: string; metaEvent?: MetaEventPayload }
+  /** `signIn`: `url` is the sign-in page, returning here — not Stripe. Callers navigate to it the same way. */
+  | { ok: true; url: string; metaEvent?: MetaEventPayload; signIn?: true }
   | { ok: false; error: string }
 
 const CHECKOUT_TIMEOUT_MS = 12_000
@@ -99,6 +100,15 @@ export async function resolveCheckoutUrl(
         error?: string
         message?: string
         metaEvent?: MetaEventPayload
+      }
+      /*
+       * Signed out (or the session lapsed): send them to sign in and back, rather than printing the
+       * route's bare "Unauthorized" under the plan they just chose. Every purchase surface already
+       * navigates to `url` on ok, so this needs nothing from any of them.
+       */
+      if (response.status === 401) {
+        const here = typeof window === "undefined" ? normalizedRequest.returnPath : `${window.location.pathname}${window.location.search}`
+        return { ok: true, url: `/login?callbackUrl=${encodeURIComponent(here || "/pricing")}`, signIn: true }
       }
       if (!response.ok || !data.url) {
         return {

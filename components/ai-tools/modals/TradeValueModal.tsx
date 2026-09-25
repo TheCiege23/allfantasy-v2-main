@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { buildLeagueFormatLabel } from '@/lib/leagues/leagueFormatLabel'
@@ -110,6 +112,7 @@ export function TradeValueModal({
   const [getRows, setGetRows] = useState<SideRow[]>([emptyPlayerRow()])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [searchGive, setSearchGive] = useState<SearchHit[]>([])
   const [searchGet, setSearchGet] = useState<SearchHit[]>([])
@@ -135,6 +138,7 @@ export function TradeValueModal({
     if (!open) {
       setResult(null)
       setError(null)
+      setRefusal(null)
       setLoading(false)
       prefillGiveConsumed.current = false
     }
@@ -387,6 +391,7 @@ export function TradeValueModal({
     }
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const body = {
         sportFilter,
@@ -409,6 +414,7 @@ export function TradeValueModal({
       })
       const j = await r.json()
       if (!r.ok) {
+        setRefusal(readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() }))
         setError((j as { error?: string }).error || 'Analysis failed')
         setResult(null)
         return
@@ -650,7 +656,9 @@ export function TradeValueModal({
       }
       chimmyContext={chimmyPayload ?? { source: 'trade_value_modal' }}
     >
-      {error ? (
+      {refusal ? (
+        <PlanRefusalNotice refusal={refusal} className="mb-3" />
+      ) : error ? (
         <div className="mb-3 rounded-[10px] border border-[#f06060]/25 bg-[rgba(240,96,96,0.08)] px-3 py-2 text-[12px] text-[#f08080]">
           {error}
         </div>
@@ -1405,6 +1413,12 @@ export function TradeValueModal({
               body: JSON.stringify({ payload: chimmyPayload }),
             })
             const j = await r.json().catch(() => null)
+            // A refusal used to do nothing at all here; show it with its way forward.
+            const refused = readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
+            if (refused) {
+              setRefusal(refused)
+              return
+            }
             if (j?.chimmy) {
               alert(JSON.stringify(j.chimmy, null, 2))
             }

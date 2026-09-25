@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, AlertTriangle, Clock, ShieldAlert, Sparkles, X } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type {
@@ -115,6 +116,7 @@ export function InjuryImpactModal({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [data, setData] = useState<InjuryImpactDashboardResult | null>(null)
   const [detail, setDetail] = useState<InjuryPlayerIntelRow | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<
@@ -163,6 +165,7 @@ export function InjuryImpactModal({
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const r = await fetch('/api/ai-tools/injury-impact/dashboard', {
         method: 'POST',
@@ -188,6 +191,7 @@ export function InjuryImpactModal({
       const json = (await r.json()) as InjuryImpactDashboardResult | { ok: false; error?: string }
       if (!r.ok || !json.ok) {
         setData(null)
+        setRefusal(readPlanRefusal(r.status, json, { returnTo: currentPathForReturn() }))
         setError((json as { error?: string }).error || 'Failed to load injury intelligence')
         return
       }
@@ -298,6 +302,7 @@ export function InjuryImpactModal({
         showApiPills={false}
         loading={loading}
         error={error}
+        refusal={refusal}
         onRefresh={load}
         refreshing={loading}
         headerBadge={headerBadge}

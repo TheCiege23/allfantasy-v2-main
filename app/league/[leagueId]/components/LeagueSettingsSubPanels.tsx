@@ -58,6 +58,8 @@ import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerS
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 /** Matches `LeagueShellLeague` without importing `LeagueShell` (avoid circular imports). */
 export type LeagueSettingsModalLeague = League & {
@@ -1348,12 +1350,14 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
   const [week, setWeek] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<{ title?: string; body?: string } | null>(null)
 
   const run = async () => {
     if (!ctx.isCommissioner) return
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const w = week.trim() ? parseInt(week, 10) : undefined
       const res = await fetch('/api/ai/commish-note', {
@@ -1366,7 +1370,15 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
         }),
       })
       const data = (await res.json()) as { title?: string; body?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? 'Generate failed')
+      if (!res.ok) {
+        const refused = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+        if (refused) {
+          setRefusal(refused)
+          setResult(null)
+          return
+        }
+        throw new Error(data.error ?? 'Generate failed')
+      }
       setResult({ title: data.title, body: data.body })
       if (data.body) setBody(data.body)
     } catch (e) {
@@ -1412,7 +1424,11 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
       >
         {loading ? 'Generating…' : '✨ Generate with Chimmy'}
       </button>
-      {error ? <p className="text-[12px] text-rose-300">{error}</p> : null}
+      {refusal ? (
+        <PlanRefusalNotice refusal={refusal} />
+      ) : error ? (
+        <p className="text-[12px] text-rose-300">{error}</p>
+      ) : null}
       {result?.title ? (
         <p className="text-[12px] font-semibold text-[#ffb8d1]">{result.title}</p>
       ) : null}

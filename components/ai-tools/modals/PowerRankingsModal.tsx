@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Crown, ExternalLink, Minus, Sparkles, TrendingDown, TrendingUp, X } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type {
@@ -107,6 +108,7 @@ export function PowerRankingsModal({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [data, setData] = useState<PowerRankingsDashboardResult | null>(null)
   const [detail, setDetail] = useState<EnrichedTeamRow | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<
@@ -193,6 +195,7 @@ export function PowerRankingsModal({
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const weekNum = week.trim() === '' ? null : Number.parseInt(week, 10)
       const r = await fetch('/api/ai-tools/power-rankings/dashboard', {
@@ -216,11 +219,13 @@ export function PowerRankingsModal({
       const json = (await r.json()) as PowerRankingsDashboardResult | { ok: false; error?: string }
       if (!r.ok) {
         setData(null)
+        setRefusal(readPlanRefusal(r.status, json, { returnTo: currentPathForReturn() }))
         setError((json as { error?: string }).error || 'Request failed')
         return
       }
       if (!json.ok) {
         setData(null)
+        setRefusal(readPlanRefusal(r.status, json, { returnTo: currentPathForReturn() }))
         setError((json as { error?: string }).error || 'Power rankings unavailable')
         return
       }
@@ -306,6 +311,7 @@ export function PowerRankingsModal({
         showApiPills={false}
         loading={loading}
         error={error}
+        refusal={refusal}
         onRefresh={load}
         refreshing={loading}
         headerBadge={headerBadge}
