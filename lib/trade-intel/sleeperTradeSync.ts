@@ -75,6 +75,8 @@ export type FeedTrade = {
   rosterIds: number[]
   creator: string | null
   createdMs: number | null
+  /** The week the transaction is filed under — the archive stores it (`LeagueTrade.week`). */
+  week?: number
   tx: Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks' | 'waiver_budget'>>
 }
 
@@ -100,7 +102,7 @@ export async function currentTradeIds(sleeperLeagueId: string, options?: { requi
   if (weeks.every((w) => w == null)) return null
   if (options?.requireComplete && weeks.some((w) => w == null)) return null
   const out: FeedTrade[] = []
-  for (const w of weeks) {
+  for (const [index, w] of weeks.entries()) {
     for (const t of w ?? []) {
       if (t.type !== 'trade') continue
       if (!NOTIFIABLE_STATUSES.has(t.status)) continue
@@ -108,6 +110,7 @@ export async function currentTradeIds(sleeperLeagueId: string, options?: { requi
         rosterIds: Array.isArray(t.roster_ids) ? t.roster_ids.map(Number).filter(Number.isFinite) : [],
         creator: typeof t.creator === 'string' && t.creator ? t.creator : null,
         createdMs: typeof t.created === 'number' ? t.created : null,
+        week: index + 1,
         tx: { adds: t.adds, drops: t.drops, draft_picks: t.draft_picks, waiver_budget: t.waiver_budget },
       })
     }

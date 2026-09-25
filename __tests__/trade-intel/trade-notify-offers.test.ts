@@ -26,9 +26,13 @@ const h = vi.hoisted(() => ({
   sendPush: vi.fn(),
   gradeEmail: vi.fn(),
   pushGate: vi.fn(),
+  archive: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
+// The archive write (its own suite: __tests__/import-os/archive-feed-trades.test.ts). Mocked so this
+// suite stays hermetic, and so the sweep's call can be asserted.
+vi.mock('@/lib/import-os/collector/archiveFeedTrades', () => ({ archiveCompletedFeedTrades: h.archive }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: {
@@ -238,6 +242,16 @@ describe('🛑 the completion of an offer we saw pending is announced, league-wi
       'c@example.org': ['https://af.test/core/trades?league=af-A&trade=T1', 'af-A'],
     })
     expect(h.sendPush).toHaveBeenCalledWith('uB', expect.objectContaining({ href: '/core/trades?league=af-B&trade=T1' }))
+    // 🛑 The sweep that noticed the completion writes it to the trade archive from the same feed —
+    // for leagues nobody has opened since, it is the first reader to see it.
+    expect(h.archive).toHaveBeenCalledTimes(1)
+    expect(h.archive).toHaveBeenCalledWith({ sleeperLeagueId: 'SL1', feed: [trade('complete')] })
+  })
+
+  it('an offer alone writes nothing to the archive — a trade that has not happened is not history', async () => {
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.archive).not.toHaveBeenCalled()
   })
 
   it('the AF rows are read in a fixed order, so the fallback row is stable', async () => {

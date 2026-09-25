@@ -6,6 +6,7 @@ import {
   type TradeGradesPayload,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { currentTradeIds } from '@/lib/trade-intel/sleeperTradeSync'
+import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
@@ -106,6 +107,15 @@ export async function getReconciledTradeGrades(
   ])
   const known = new Set(initial?.trades.map((t) => t.id.split(':').pop()) ?? [])
   const missingCompleted = feed?.some((t) => t.status === 'complete' && !known.has(t.id)) ?? false
+  /*
+   * 🛑 THE SAME MOMENT IS THE ARCHIVE'S GAP (2026-09-25). A completed trade the ledger lacks is one
+   * the archive (/core Trades' grade list, the board, Chimmy's history) lacks too — it waited for a
+   * sync lane, hours to a day. Written from this same feed now, in the background: idempotent, and
+   * never allowed to slow or fail the read that noticed it.
+   */
+  if (missingCompleted && feed) {
+    void archiveCompletedFeedTrades({ sleeperLeagueId: leagueId, feed }).catch(() => undefined)
+  }
   const grades = missingCompleted ? await getTradeGrades(leagueId, { force: true }) : initial
   const refreshedIds = new Set(grades?.trades.map((t) => t.id.split(':').pop()) ?? [])
   const incomplete =
