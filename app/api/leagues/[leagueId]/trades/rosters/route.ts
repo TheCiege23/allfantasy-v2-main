@@ -21,7 +21,8 @@ import {
   type UnpricedReason,
 } from '@/lib/trade-value/unpricedReason'
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
-import { inventoryPickId, roundOrdinal } from '@/lib/league-trade-engine/futurePickInventory'
+import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
+import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
 import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -336,7 +337,7 @@ export async function GET(
    * 🛑 AN IMPORTED LEAGUE'S PICKS WERE NEVER LISTED. They live in `future_draft_picks`, not in
    * `Roster.playerData`, and on staging 2026-09-17 no league yielded a single pick from the JSON.
    * The loader reads them only for the providers whose pick trades are synced (Sleeper, MFL) — so
-   * never for a native league, whose picks are the proposable `playerData` ones below.
+   * never for a native league, whose picks come from `loadNativeFuturePicks` below.
    */
   const settingsStatus = (() => {
     const s = league?.settings
@@ -358,6 +359,30 @@ export async function GET(
     })),
     rosters,
   }).catch(() => ({ picksByRosterId: new Map<string, RosterFuturePick[]>(), coverage: 'none' as const }))
+
+  /*
+   * 🛑 A NATIVE DYNASTY LEAGUE HAD NO PICK TO OFFER. Its `playerData.draftPicks` holds the players
+   * each team drafted, not pick objects, so `listProposablePicks` found nothing and a native team
+   * could never trade a future pick. These are every team's own picks in the next three rookie
+   * drafts, moved where a trade moved them — and unlike an import's, they ARE proposable: the trade
+   * engine settles them (`transferNativeFuturePick`) and the next rookie draft honours them.
+   */
+  const nativePicks = isNativeFuturePickLeague({
+    platform: league?.platform,
+    leagueType: league?.leagueType,
+    isDynasty: league?.isDynasty,
+  })
+    ? await loadNativeFuturePicks(leagueId).catch(() => null)
+    : null
+  const nativePicksByRoster = new Map<string, InventoryPick[]>()
+  for (const p of nativePicks?.picks ?? []) {
+    const list = nativePicksByRoster.get(p.ownerTeamId) ?? []
+    list.push(p)
+    nativePicksByRoster.set(p.ownerTeamId, list)
+  }
+  const teamNameByRosterId = new Map(
+    rosters.map((r) => [r.id, teamNameByPlatformId.get(String(r.platformUserId)) ?? null]),
+  )
 
   /*
    * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS ANYTHING.
@@ -482,6 +507,21 @@ export async function GET(
               fromTeam: p.fromTeamName,
             }),
           ),
+          ...(nativePicksByRoster.get(r.id) ?? []).map((p): TradeableRosterPick => {
+            const fromTeam =
+              p.originalTeamId === r.id ? null : teamNameByRosterId.get(p.originalTeamId) ?? 'another team'
+            return {
+              pickId: inventoryPickId(p),
+              season: p.season,
+              round: p.round,
+              label: `${p.season} ${roundOrdinal(p.round)}${fromTeam ? ` (${fromTeam})` : ''}`,
+              itemType: itemTypeFor(p.season),
+              value: pickValue(p.round),
+              unpricedReason: null,
+              proposable: true,
+              fromTeam,
+            }
+          }),
         ],
         teamExternalId: externalIdByPlatformId.get(r.platformUserId) ?? null,
         ownerName:
@@ -872,6 +912,6 @@ export async function GET(
      * size is unknown, so only picks that changed hands are listed) or `none`. The picker says so
      * rather than letting a short list read as a team with no picks.
      */
-    pickCoverage: importedPicks.coverage,
+    pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
   })
 }

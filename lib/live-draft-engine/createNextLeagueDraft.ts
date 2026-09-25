@@ -16,6 +16,9 @@
  * `finalizeDraftToRedraftSeason` picks up because it is the league's newest season. Without the
  * shell, year two's picks would land on year one's completed rosters.
  *
+ * A native dynasty league's future picks traded before this draft existed (`future_draft_picks`,
+ * written by `transferNativeFuturePick`) are placed on its board as `tradedPicks`, and consumed.
+ *
  * ⚠ A SECOND DRAFT NEEDS MIGRATION `20260924160000_draft_session_many_per_league`. Until it is
  * applied a database allows one draft per league ever, and the create fails with P2002; that is
  * reported as NEEDS_DATABASE_UPDATE rather than as a server error.
@@ -28,7 +31,11 @@ import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import type { KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import { ensureNextRedraftSeasonShell } from '@/lib/redraft/offseason/ensureNextRedraftSeasonShell'
 import { carryDynastyRostersForward, isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
-import { DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS } from '@/lib/dynasty-core/constants'
+import {
+  consumeNativeFuturePicksForDraft,
+  isNativeFuturePickLeague,
+  resolveRookieDraftRounds,
+} from '@/lib/league-trade-engine/nativeFuturePicks'
 import { logAction } from '@/server/services/auditService'
 
 export type NextDraftKind = 'rookie' | 'standard'
@@ -45,6 +52,8 @@ export type CreateNextDraftResult =
       orderSource: 'standings' | 'default'
       keepersPlaced: number
       playersCarried: number
+      /** Future picks traded before this draft existed, now on its board with their new owners. */
+      tradedPicksApplied: number
     }
   | {
       ok: false
@@ -152,6 +161,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
     select: {
       id: true,
       sport: true,
+      platform: true,
       leagueType: true,
       isDynasty: true,
       keeperCount: true,
@@ -220,7 +230,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         select: { rookieDraftRounds: true, rookieDraftType: true, rookiePickOrderMethod: true },
       })
       .catch(() => null)
-    rounds = Math.min(Math.max(1, dynasty?.rookieDraftRounds ?? DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS), 10)
+    rounds = resolveRookieDraftRounds(dynasty?.rookieDraftRounds)
     draftType = dynasty?.rookieDraftType === 'snake' ? 'snake' : 'linear'
     thirdRoundReversal = false
 
@@ -315,6 +325,23 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         },
         select: { id: true },
       })
+      // Only a native league's rows are in Roster.id space; an import's are provider team ids.
+      const tradedPicks = isNativeFuturePickLeague(league)
+        ? await consumeNativeFuturePicksForDraft(tx, {
+            leagueId,
+            season: incoming.season,
+            draftSessionId: session.id,
+            rounds,
+            slotOrder: slotOrder ?? [],
+            now,
+          })
+        : []
+      if (tradedPicks.length > 0) {
+        await tx.draftSession.update({
+          where: { id: session.id },
+          data: { tradedPicks: tradedPicks as unknown as Prisma.InputJsonValue },
+        })
+      }
       // An offseason league refuses every draft action; the new draft needs the league in
       // pre_draft for its settings to be edited, its order set and the draft started.
       if (fromState !== 'pre_draft') {
@@ -335,7 +362,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
           },
         })
       }
-      return session
+      return { ...session, tradedPicksApplied: tradedPicks.length }
     })
 
     await logAction({
@@ -358,6 +385,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       orderSource,
       keepersPlaced: keeperSelections.length,
       playersCarried,
+      tradedPicksApplied: created.tradedPicksApplied,
     }
   } catch (error) {
     if (!isUniqueViolation(error)) throw error

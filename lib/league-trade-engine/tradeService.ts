@@ -9,6 +9,7 @@ import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
+import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
   captureGenericRosterState,
   genericTradeActorRole,
@@ -327,6 +328,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  // A native dynasty league's future picks are checked against its inventory, not `playerData`.
+  const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
+  const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
   const v = validateTradeAssets({
     league,
     settings,
@@ -335,6 +339,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     participants,
     assets: input.assets,
     currentWeek: input.currentWeek ?? null,
+    nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
   })
   if (!v.ok) throw new Error(v.message)
 
@@ -777,6 +782,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       receiverRosterId: trade.receiverRosterId,
       participantRosterIds,
       assets,
+      tradeId: trade.id,
     })
 
     // IMMUTABLE EVIDENCE FOR THE GENERIC PATH. The native redraft route got this first; this side
