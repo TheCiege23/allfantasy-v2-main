@@ -18,6 +18,7 @@ import {
   updateSubscriptionFromStripeEvent,
   upsertSubscriptionPlanForCatalogItem,
 } from "@/lib/subscription/webhookHandlers"
+import { isFullRefund, reverseSubscriptionForPayment } from "@/lib/subscription/paymentReversal"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
@@ -496,6 +497,41 @@ export async function POST(req: NextRequest) {
               await grantMonthlyCreditsFromInvoice(invoice, userId)
             }
           }
+          break
+        }
+        /*
+         * A payment taken back ends the plan it paid for AND stops billing — owner's rule,
+         * 2026-09-24 (lib/subscription/paymentReversal.ts). A partial refund is a credit, not a
+         * reversal, and changes nothing. `purchaseType` records the outcome for the admin view.
+         */
+        case "charge.refunded": {
+          const charge = event.data.object as Stripe.Charge
+          if (!isFullRefund(charge)) {
+            purchaseType = "refund_partial"
+            break
+          }
+          const reversal = await reverseSubscriptionForPayment({
+            stripe,
+            reason: "refund",
+            paymentIntentId:
+              typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id ?? null,
+            customerId: typeof charge.customer === "string" ? charge.customer : charge.customer?.id ?? null,
+            sourceId: charge.id,
+          })
+          purchaseType = reversal.outcome === "revoked" ? "refund_revoked" : "refund_no_subscription"
+          break
+        }
+        case "charge.dispute.created": {
+          const dispute = event.data.object as Stripe.Dispute
+          const reversal = await reverseSubscriptionForPayment({
+            stripe,
+            reason: "dispute",
+            paymentIntentId:
+              typeof dispute.payment_intent === "string" ? dispute.payment_intent : dispute.payment_intent?.id ?? null,
+            customerId: null,
+            sourceId: dispute.id,
+          })
+          purchaseType = reversal.outcome === "revoked" ? "dispute_revoked" : "dispute_no_subscription"
           break
         }
         default:
