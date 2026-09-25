@@ -21,6 +21,7 @@ import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
  * Trades, across every league — the cross-league board at `/core/trades`.
@@ -290,6 +291,24 @@ export function byTradeUrgency(
     return (a.weeksLeft as number) - (b.weeksLeft as number)
   }
   return b.tradesOnFile - a.tradesOnFile
+}
+
+/**
+ * The value printed beside each asset on a board card: the one the grade was taken on, or none.
+ *
+ * Graded: the league value per asset, index-aligned with the grader's lines (players, then picks);
+ * a count mismatch keeps the book's display prices rather than shifting values onto the wrong asset.
+ * 🛑 Withheld: NO value on any asset (Guap, 2026-09-25) — a price beside a letter the grade refused
+ * answers, per asset, the question the letter declined to. PURE.
+ */
+export function valuesOnTheGrade(
+  assets: readonly TradeAsset[],
+  grade: TradeGradeView,
+  side: 'give' | 'get',
+): TradeAsset[] {
+  if (!grade.graded) return assets.map((a) => ({ ...a, value: null }))
+  const lines = grade.lines.filter((l) => l.side === side)
+  return lines.length === assets.length ? assets.map((a, i) => ({ ...a, value: lines[i]!.leagueValue })) : [...assets]
 }
 
 export async function getTradesBoard(
@@ -777,16 +796,15 @@ export async function getTradesBoard(
     const recvBase = [...recvIds.map((id) => toAsset(id, leagueBook, defenders)), ...recvPicks]
     /*
      * With a grade, every printed value is the value the grade was taken on — the league value per
-     * asset, in the same order the grader was handed them (players, then picks). Without one the
-     * book's display price stands, beside a withheld letter it cannot contradict.
+     * asset, in the same order the grader was handed them (players, then picks).
+     *
+     * 🛑 WITHOUT ONE, NO VALUE AT ALL (Guap's ruling, 2026-09-25). This used to print the book's
+     * display price beside a withheld letter — Omar Cooper read 15 on a card whose grade had refused
+     * to price him — so the card answered, per asset, the exact question its letter declined to. A
+     * withheld grade prints the em dash on every asset and lets `withheldReason` say why.
      */
-    const graded = (assets: TradeAsset[], side: 'give' | 'get'): TradeAsset[] => {
-      if (!g.graded) return assets
-      const lines = g.lines.filter((l) => l.side === side)
-      return lines.length === assets.length ? assets.map((a, i) => ({ ...a, value: lines[i]!.leagueValue })) : assets
-    }
-    const sentAssets = graded(sentBase, 'give')
-    const recvAssets = graded(recvBase, 'get')
+    const sentAssets = valuesOnTheGrade(sentBase, g, 'give')
+    const recvAssets = valuesOnTheGrade(recvBase, g, 'get')
 
     /*
      * "You" only when this league's claimed team IS the reader's -- exact, not a name match.
