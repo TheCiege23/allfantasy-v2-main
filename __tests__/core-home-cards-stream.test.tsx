@@ -305,6 +305,9 @@ describe('/core home cards stream independently', () => {
   it('puts every card behind its own boundary', { timeout: 180_000 }, async () => {
     const { cards } = await homeCards()
     expect([...cards.keys()]).toEqual([
+      // "Connect your league" (2026-09-25) — above everything, and renders nothing once a team is
+      // claimed; see components/core-app/home/ConnectLeagueCard.tsx.
+      'connect',
       // The decision queue leads the home (2026-09-16) — ahead of every band.
       'issues',
       'since-last-visit',

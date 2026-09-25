@@ -46,6 +46,7 @@ import {
   type PreviewCoverage,
 } from '@/lib/league-import/previewCoverageView'
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
+import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
 
 /**
  * Import & connect — the "landing, auth & import" handoff, wired to the real job.
@@ -206,6 +207,8 @@ type Phase =
       k: 'done'
       leagueId: string
       leagueName: string
+      /** The league's sport, when discovery reported one — carried into Chimmy's first question. */
+      sport?: string | null
       backfilled: boolean
       /*
        * 6d's "seasons of history" card. NULLABLE on purpose: readBackfillOutcome
@@ -1103,6 +1106,7 @@ export function ImportV4({
         k: 'done',
         leagueId,
         leagueName: data?.name || data?.league?.name || 'Your league',
+        sport: leagues.find((l) => l.sourceId === sourceId)?.sport ?? null,
         backfilled: Boolean(data?.historicalBackfill),
         seasonsImported: readBackfillOutcome(data?.historicalBackfill).seasonsImported,
         sourceId,
@@ -2682,6 +2686,11 @@ export function ImportV4({
             }
             sourceLink={doneSourceLink}
             note={doneChimmyNote}
+            chimmyAction={
+              phase.leagueId
+                ? { href: postImportChimmyHref(phase.leagueId, phase.sport), label: 'Have Chimmy check your lineup' }
+                : null
+            }
             onImportAnother={() => {
               setAccount('')
               reset()

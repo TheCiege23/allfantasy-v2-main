@@ -4,7 +4,7 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { preferenceMuteReason, type ChimmyAlertPreferenceMuteReason } from './ChimmyAlertSuppressionEngine'
-import { chimmyChatHref, type ProactiveFrom } from './proactiveLinks'
+import { chimmyChatHref, pushSetupEmailLine, type ProactiveFrom } from './proactiveLinks'
 import type { ChimmyAlertUserPreferences } from './types'
 
 /**
@@ -309,7 +309,7 @@ export function renderLineupCheck(
         ? 'I found one thing to fix before kickoff'
         : `I found ${fixes} things to fix before kickoff`,
     sub: "Your lineups against this week's projections, scored under each league's own rules. Players whose games have started are left alone.",
-    bodyHtml: blocks,
+    bodyHtml: blocks + pushSetupEmailLine(escapeHtml(base)),
     cta: { href: `${base}${lineupCheckHref(withIssues[0]!.leagueId, 'lineup_check_email')}`, label: 'Open Chimmy' },
     baseUrl: opts.baseUrl ?? null,
   })

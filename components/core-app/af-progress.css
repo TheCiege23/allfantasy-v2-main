@@ -369,6 +369,10 @@
   color: var(--faint);
 }
 
+/* Chimmy's first job in the league just connected — sits with Chimmy's note, above the push card. */
+.af-core .af-done-chimmy { display: flex; margin: 10px 0 4px; }
+.af-core .af-done-chimmy .af-btn { min-height: 44px; }
+
 @media (max-width: 560px) {
   .af-core .af-done-go,
   .af-core .af-done-alt {

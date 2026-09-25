@@ -3,7 +3,7 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { preferenceMuteReason, type ChimmyAlertPreferenceMuteReason } from './ChimmyAlertSuppressionEngine'
 import type { ScheduledGame } from './lineupCheck'
-import { chimmyChatHref, type ProactiveFrom } from './proactiveLinks'
+import { chimmyChatHref, pushSetupEmailLine, type ProactiveFrom } from './proactiveLinks'
 import type { ChimmyAlertUserPreferences } from './types'
 
 /**
@@ -220,7 +220,7 @@ export function renderWaiverCheck(
     title: picks.length === 1 ? 'One pickup worth a claim' : `${picks.length} pickups worth a claim`,
     sub:
       "The best player nobody rosters in each league, against your weakest bench player we can price — both scored under that league's rules for the week ahead. Rosters as of the last sync, and unrostered isn't always claimable: if he's gone, ask me for the next one.",
-    bodyHtml: blocks,
+    bodyHtml: blocks + pushSetupEmailLine(escapeHtml(base)),
     cta: { href: `${base}${waiverCheckHref(top, 'waiver_check_email')}`, label: 'Ask Chimmy' },
     baseUrl: opts.baseUrl ?? null,
   })

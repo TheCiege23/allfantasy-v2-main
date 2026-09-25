@@ -27,6 +27,7 @@ import { ChimmyRichText } from './ChimmyRichText'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
+import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import {
   ChimmyAnswerModeToggle,
   answeredMode,
@@ -1171,6 +1172,16 @@ function ChimmyPanel({
                   tools={t.tools ?? []}
                   onRated={(rating) => setTurns((all) => all.map((x) => (x.id === t.id ? { ...x, rating } : x)))}
                 />
+              ) : null}
+
+              {/*
+                Right after a useful answer is when "want this on your phone?" makes sense — the
+                only other asks live on settings screens (measured 2026-09-25: 0 of 110 users had
+                push on). Under the latest delivered answer only; it hides itself for anyone who
+                has already answered, and for two weeks after "Not now".
+              */}
+              {t.role === 'chimmy' && t.id === lastChimmyId && t.answerId && !busy ? (
+                <PushOptInPrompt className="af-cm-pushask" />
               ) : null}
 
               {/*

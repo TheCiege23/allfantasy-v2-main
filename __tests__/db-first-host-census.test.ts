@@ -174,7 +174,8 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * outside scripts/, that is a finding regardless of what this ledger says.
    */
   { name: 'platform-infra', why: 'Neon control plane — database branch lifecycle, not a data feed', test: /^console\.neon\.tech$/i },
-  { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|api\.klipy\.(com|ai))$/i },
+  // klipy.com and giphy.com are the attribution links under the picker — Klipy's terms ask for one.
+  { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|klipy\.com|api\.klipy\.(com|ai))$/i },
   { name: 'chat-integration', why: 'Discord OAuth, bot API and deep links — a chat platform, not a data feed', test: /^discord\.com$/i },
   { name: 'namespace', why: 'an XML/JSON-LD namespace, never fetched', test: /^(schema\.org|www\.w3\.org|www\.sitemaps\.org)$/i },
   { name: 'geo-ip', why: 'request-time geolocation, not sports data', test: /^(proxycheck\.io|ipapi\.co|ip-api\.com)$/i },

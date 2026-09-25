@@ -39,3 +39,14 @@ export function chimmyChatHref(args: { prompt: string; leagueId: string; from: P
   const q = new URLSearchParams({ prompt: args.prompt, leagueId: args.leagueId, sport: 'NFL', from: args.from })
   return `/chimmy/chat?${q.toString()}`
 }
+
+/**
+ * Where the weekly emails send someone to turn on phone alerts: the one screen with the full opt-in
+ * card, which handles iPhone's Home Screen step and a blocked permission properly.
+ */
+export const PUSH_SETUP_HREF = '/core/notifications'
+
+/** The line under both weekly emails. Escaping is the caller's — `base` is a trusted origin. */
+export function pushSetupEmailLine(base: string): string {
+  return `<div style="margin:18px 0 0 0;padding-top:12px;border-top:1px solid #27272a;color:#a1a1aa;font-size:13px">Want these on your phone before kickoff? <a href="${base}${PUSH_SETUP_HREF}" style="color:#ffffff;font-weight:700;text-decoration:underline">Turn on alerts</a></div>`
+}

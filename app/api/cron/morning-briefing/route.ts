@@ -6,7 +6,8 @@ import { sendTemplatedEmail } from '@/lib/resend-client'
 import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { getCommandCenter, type CommandCenterPayload } from '@/lib/dashboard-intel/commandCenterService'
-import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runActivationReminder, type ActivationReminderRun } from '@/lib/onboarding-retention/runActivationReminder'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -21,6 +22,47 @@ export const maxDuration = 300
  * MANUAL mode (signed-in GET) always works, so you can send yourself today's
  * briefing to test the format before enabling the fleet.
  */
+
+/*
+ * SECOND JOB, SAME DAILY FIRE: THE "CONNECT YOUR LEAGUE" REMINDER (2026-09-25).
+ * lib/onboarding-retention/runActivationReminder.ts — at most two emails, ever, to a verified user
+ * with no team. It rides this route because the cron registry is at its ceiling and both are daily
+ * emails. Same rollout rule as the briefing: nothing is sent until the deployment sets
+ * ACTIVATION_REMINDER_ENABLED=1. `?activationReminder=dry` (with the cron secret) reports who is due
+ * without sending, whatever the flag; `=off` skips it. Its own `cron-activation-reminder` heartbeat
+ * is written only on a real run.
+ */
+type ActivationReport = ActivationReminderRun | { ran: false; reason: 'disabled' | 'off' | 'error'; error?: string }
+
+async function activationReminderPhase(mode: string): Promise<ActivationReport> {
+  if (mode === 'off') return { ran: false, reason: 'off' }
+  const dryRun = mode === 'dry'
+  if (!dryRun && process.env.ACTIVATION_REMINDER_ENABLED !== '1') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const run = await runActivationReminder({ dryRun })
+    if (!dryRun) {
+      await recordSyncJobRun(
+        { jobName: 'cron-activation-reminder', trigger: 'cron' },
+        {
+          rowsRead: run.candidates,
+          rowsWritten: run.sent,
+          rowsSkipped: run.notReached,
+          errors: run.errors,
+          status: run.failed > 0 ? 'partial' : 'success',
+          metadata: { due: run.due, skipped: run.skipped },
+        },
+        Date.now() - started,
+      )
+    }
+    return run
+  } catch (err) {
+    // Never allowed to fail the briefing it rides on.
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error('[cron/morning-briefing] activation reminder failed:', message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
 
 const SEEN_PREFIX = 'briefing-sent:v1:'
 const SEEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -192,9 +234,23 @@ export async function GET(req: NextRequest) {
             { status: 'success' as const, metadata: { disabled: true, reason: 'MORNING_BRIEFING_ENABLED is not 1' } },
     )
 
+    // `req.url`, not `req.nextUrl`: this handler is also called with a plain Request.
+    const activationReminder = await activationReminderPhase(
+      (new URL(req.url).searchParams.get('activationReminder') ?? '').trim().toLowerCase(),
+    )
+
     // Response bodies are unchanged from before the wrap moved — callers see exactly what they did.
+    // The reminder's report is added only once it does something: while it is disabled (the default)
+    // the body is byte-for-byte what it was.
+    const reminderReport =
+      'reason' in activationReminder && activationReminder.reason === 'disabled' ? {} : { activationReminder }
     if (!outcome.enabled) {
-      return NextResponse.json({ mode: 'cron' as const, enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
+      return NextResponse.json({
+        mode: 'cron' as const,
+        enabled: false,
+        note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.',
+        ...reminderReport,
+      })
     }
     return NextResponse.json({
       mode: 'cron' as const,
@@ -202,6 +258,7 @@ export async function GET(req: NextRequest) {
       candidates: outcome.candidates,
       sent: outcome.sent,
       failed: outcome.failed,
+      ...reminderReport,
     })
   }
 
