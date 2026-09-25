@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { generatePickInventory, processPickTrade } from '@/lib/devy/pickInventoryEngine'
+import { generatePickInventory } from '@/lib/devy/pickInventoryEngine'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,39 +48,22 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ inventory: { ...inventory, years: filtered } })
 }
 
-export async function PATCH(req: NextRequest) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const body = (await req.json()) as {
-    leagueId?: string
-    pickId?: string
-    action?: string
-    toRosterId?: string
-    fromRosterId?: string
-  }
-  const leagueId = body.leagueId?.trim()
-  const pickId = body.pickId?.trim()
-  const action = body.action?.trim()
-  if (!leagueId || !pickId || action !== 'trade') {
-    return NextResponse.json({ error: 'leagueId, pickId, action=trade required' }, { status: 400 })
-  }
-  const fromRosterId = body.fromRosterId?.trim()
-  const toRosterId = body.toRosterId?.trim()
-  if (!fromRosterId || !toRosterId) {
-    return NextResponse.json({ error: 'fromRosterId and toRosterId required' }, { status: 400 })
-  }
-
-  const gate = await assertLeagueMember(leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
-
-  try {
-    const pick = await processPickTrade(leagueId, fromRosterId, toRosterId, pickId)
-    return NextResponse.json({ ok: true, pick })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Trade failed'
-    return NextResponse.json({ error: msg }, { status: 400 })
-  }
+/**
+ * 🛑 THIS ROUTE NO LONGER MOVES PICKS (2026-09-25).
+ *
+ * PATCH used to take `fromRosterId` and `toRosterId` from the request body, check only that the caller
+ * was a MEMBER of the league, and call `processPickTrade` — which checks only that `fromRosterId` is
+ * the pick's current owner, a fact any member can read from the GET above. Any member could move any
+ * team's tradeable devy pick to any roster, including their own; and even a pick's owner could hand it
+ * to a team that never agreed, which is a transfer, not a trade.
+ *
+ * Nothing in the app called it (every client request to /api/devy/picks is a GET), so the write path
+ * is removed rather than patched. A pick changes hands through the trade engine
+ * (`lib/league-trade-engine`), where both teams consent and the league's trade rules apply.
+ */
+export async function PATCH(): Promise<NextResponse> {
+  return NextResponse.json(
+    { error: 'Picks are not moved here. Propose a trade instead — a pick changes hands when both teams accept.' },
+    { status: 405, headers: { Allow: 'GET' } },
+  )
 }
-
