@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
+import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 
 export const dynamic = 'force-dynamic'
 
@@ -137,6 +138,9 @@ export async function POST(req: NextRequest) {
     leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposalId,
     eventType: 'commissioner_vetoed', actorUserId: userId,
   })
+
+  // The ruling, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
+  queueTradeStatusInDm({ source: 'redraft', tradeId: proposalId, status: 'vetoed', detail: 'The commissioner made the call.' })
 
   return NextResponse.json({
     proposalId: vetoed.id,

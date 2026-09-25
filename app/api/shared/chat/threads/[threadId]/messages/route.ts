@@ -28,6 +28,10 @@ import { getBlockedUserIds } from '@/lib/moderation'
 import { filterMessagesByBlocked } from '@/lib/moderation'
 import { publishDraftIntelState } from '@/lib/draft-intelligence'
 import { DETERMINISTIC_SOURCE, tryDeterministicAnswer } from '@/lib/ai/deterministic'
+import {
+  queueDirectMessageNotifications,
+  queueLeagueChatNotifications,
+} from '@/lib/chat-notifications/chatMessageNotifier'
 
 const bracketMessageInclude = {
   user: {
@@ -363,6 +367,22 @@ export async function POST(
           ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: 'survivor_private_ballot' }
           : {}),
       })
+      /*
+       * League chat alerts are OPT-IN (`league_chat`, off on every channel by default), so for
+       * almost everyone this finds nobody. A private ballot and a tribe room are never announced
+       * league-wide; the notifier skips any room but the main one.
+       */
+      if (created?.id && !isRecordedBallot && !source) {
+        queueLeagueChatNotifications({
+          leagueId,
+          messageId: String(created.id),
+          senderUserId: user.appUserId,
+          messageType,
+          body: message,
+          metadata: messageMetadata ?? null,
+          source,
+        })
+      }
       return NextResponse.json({
         status: 'ok',
         message: created,
@@ -457,6 +477,26 @@ export async function POST(
 
   if (!created) {
     return NextResponse.json({ error: 'Unable to send message' }, { status: 400 })
+  }
+
+  /*
+   * "You got a message" — bell, push, email, and a text once Twilio is live. Sent HERE, by the
+   * server, once the row is saved: the browser-side mention call is the pattern this avoids, since
+   * a closed tab sends nothing. Fire-and-forget by contract — `queueDirectMessageNotifications`
+   * never throws and is never awaited, so a failing notification cannot fail or slow this send.
+   * A private @chimmy exchange is visible to its asker only, so nobody else is told about it.
+   */
+  const threadType = myMembership.thread.threadType
+  if (!wantsPrivateChimmy && (threadType === 'dm' || threadType === 'group')) {
+    queueDirectMessageNotifications({
+      threadId,
+      messageId: created.id,
+      senderUserId: user.appUserId,
+      messageType: created.messageType ?? messageType,
+      body: created.body ?? message,
+      metadata: metadata ?? null,
+      createdAt: created.createdAt,
+    })
   }
 
   let aiReply: PlatformChatMessage | null = null

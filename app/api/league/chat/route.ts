@@ -22,6 +22,8 @@ import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { resolveLeagueMentionIds } from '@/lib/chat-core/resolveMentionTargets'
+import { markLeagueChatRead } from '@/lib/chat-core/leagueChatRead'
+import { queueLeagueChatNotifications } from '@/lib/chat-notifications/chatMessageNotifier'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -108,6 +110,15 @@ export async function GET(req: NextRequest) {
   const allowed = await canAccessLeague(leagueId, userId)
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  /*
+   * `markRead=1` means the person is looking at this chat right now, so the chat bubble stops
+   * counting its messages (lib/chat-core/leagueChatRead.ts). Opt-in per request on purpose: a
+   * background poll of the same route must never mark anything read.
+   */
+  if (req.nextUrl.searchParams?.get('markRead') === '1') {
+    void markLeagueChatRead(userId, leagueId)
   }
 
   const bigBrotherLeague = await isBigBrotherLeague(leagueId)
@@ -483,12 +494,28 @@ export async function POST(req: NextRequest) {
     gifUrl: gifUrlFromMetadata(metadata),
   }).catch(() => {})
 
+  /*
+   * "New message in your league chat" — bell/push/email/text for members who turned the League chat
+   * messages category on (it is OFF by default on every channel). Fire-and-forget, after the save.
+   * A Big Brother side room is narrower than the league, so only its main room is announced.
+   */
+  queueLeagueChatNotifications({
+    leagueId,
+    messageId: created.id,
+    senderUserId: userId,
+    messageType: created.messageType ?? 'text',
+    body: message,
+    metadata: finalMetadata ?? null,
+    source: bigBrotherLeague && selectedBbChannel && selectedBbChannel !== 'main' ? `big_brother:${selectedBbChannel}` : 'league',
+  })
+
   if (mentionInfo.hasAll) {
     const sender = await prisma.appUser.findUnique({
       where: { id: userId },
-      select: { displayName: true, username: true, email: true },
+      select: { displayName: true, username: true },
     })
-    const senderName = sender?.displayName || sender?.username || sender?.email || 'Someone'
+    // Never the sender's email: this text goes into every member's bell, push and inbox.
+    const senderName = sender?.displayName || sender?.username || 'Someone'
     void getLeagueMemberUserIds(leagueId).then((ids) => {
       const targets = ids.filter((id) => id !== userId)
       if (targets.length === 0) return

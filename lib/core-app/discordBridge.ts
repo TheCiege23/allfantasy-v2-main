@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
-import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/constants'
+import { leagueTemplateUrl } from '@/lib/discord/template'
+import { DISCORD_INBOUND_SCHEDULED } from '@/lib/discord/inboundStatus'
 
 /**
  * 32a — the Discord bridge, read from real state.
@@ -34,6 +35,13 @@ import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/consta
  * relay surface-aware first, then remove the gate and `surfacesPending`
  * together. Until then the other three report `mapped: false, available: false`
  * and the screen says why.
+ *
+ * ⚠ LEAGUE CHAT DEFAULTS TO OFF TOO, SINCE 2026-09-25. Discord is sold as "your
+ * league, your space": the server belongs to the league, and AllFantasy chat only
+ * goes there when the commissioner switches copying on. `/api/discord/channels/create`
+ * writes new rows with all three flags false; `defaultDirection` below says the same.
+ * Two-way (Discord → AllFantasy) is a further opt-in, and is not offered at all until
+ * `DISCORD_INBOUND_SCHEDULED` is true — see lib/discord/inboundStatus.ts.
  */
 
 export type BridgeDirection = 'both' | 'post-only' | 'off'
@@ -55,7 +63,11 @@ export const BRIDGE_SURFACES: BridgeSurface[] = [
     label: 'League chat',
     description: 'Everyday league talk. The surface the bridge relays today.',
     commissionerOnly: false,
-    defaultDirection: 'both',
+    /*
+     * ⚠ OFF. League chat leaves AllFantasy only when the commissioner says so, and
+     * reading Discord back in is a separate opt-in on top of that.
+     */
+    defaultDirection: 'off',
   },
   {
     id: 'trades_waivers',
@@ -143,26 +155,62 @@ export type DiscordBridgeData = {
   guildId: string | null
   mappings: BridgeMapping[]
   members: BridgeMember[]
-  /** The bot-install URL, with exactly the permissions the bridge needs. */
+  /**
+   * Starts the real "add AllFantasy to your server" OAuth round trip — our own
+   * `/api/discord/bot-install?leagueId=…`, which sets state, our redirect, and
+   * remembers the league so Discord sends the commissioner back to THIS screen.
+   *
+   * 🛑 IT USED TO BE A BARE discord.com AUTHORIZE URL with no redirect and no state,
+   * so the server someone added the bot to was never saved and the next step could
+   * never work. Null only when there is no league to return to.
+   */
   installUrl: string | null
   /**
    * True while the outbound relay is not surface-aware. The screen prints this as a
    * plain sentence rather than hiding three dead controls.
    */
   surfacesPending: boolean
+
+  /*
+   * ⚠ THE FIELDS BELOW ARE OPTIONAL FOR ONE REASON: `app/dev/handoff-preview/fixtures.ts`
+   * builds a `DiscordBridgeData` literal and predates them. `getDiscordBridge` always
+   * sets all four; the screen falls back to the safe reading when one is missing
+   * (not ready, no template, two-way unavailable). Make them required once that
+   * fixture carries them.
+   */
+  /** Their Discord username, when connected — shown so they know which account. */
+  discordUsername?: string | null
+  /**
+   * True when AllFantasy has been added to `guildId` BY THIS COMMISSIONER and the
+   * server was verified theirs to manage (a DiscordGuildLink row they own). Only then
+   * can the league channel be made there.
+   */
+  serverReady?: boolean
+  /** `https://discord.new/<code>` from DISCORD_LEAGUE_TEMPLATE_CODE, or null when unset. */
+  templateUrl?: string | null
+  /** False until Discord → AllFantasy runs on a schedule; the screen must not offer it. */
+  inboundAvailable?: boolean
 }
 
-/** The three scopes the connect flow asks for, and the ones it never does. */
+/**
+ * What the AllFantasy bot does in a league's server, and what it never does.
+ *
+ * ⚠ HONEST, NOT REASSURING. This list used to promise "the bot cannot see the rest of
+ * the server". That was false: the install grants View Channels server-wide, so the
+ * bot can see any channel it is not shut out of. What is TRUE is what AllFantasy does
+ * with that — it reads one channel, and only when two-way is on — and the screen says
+ * how to shut the bot out of any channel for good.
+ */
 export const BRIDGE_SCOPES_REQUESTED = [
-  'Create channels and webhooks in the server you choose',
-  'Read messages in the channels you map — and only those',
-  'Send messages in the channels you map — and only those',
+  'Make your league channel and a join link for it',
+  'Post in your league channel — only when you turn copying on',
+  'Read your league channel — only if you turn on two-way',
 ]
 
 export const BRIDGE_SCOPES_REFUSED = [
-  'Your DMs. Never requested, never bridged.',
-  'Server member management. We do not kick, ban or assign roles.',
-  'Any channel you did not map. The bot cannot see the rest of the server.',
+  'Read your other channels. We never do, and you can hide any channel from the bot in Discord.',
+  'Read DMs. Never asked for, never copied.',
+  'Kick, ban, or change anyone’s roles.',
 ]
 
 export async function getDiscordBridge(
@@ -179,11 +227,11 @@ export async function getDiscordBridge(
   const [profile, link, teams] = await Promise.all([
     prisma.userProfile.findUnique({
       where: { userId },
-      select: { discordUserId: true, discordGuildId: true },
+      select: { discordUserId: true, discordUsername: true, discordGuildId: true },
     }),
     prisma.discordLeagueChannel.findFirst({
-      where: { leagueId },
-      include: { guild: { select: { guildName: true } } },
+      where: { leagueId, surface: 'league_chat' },
+      include: { guild: { select: { guildName: true, linkedByUserId: true } } },
     }),
     prisma.leagueTeam.findMany({
       where: { leagueId },
@@ -256,20 +304,36 @@ export async function getDiscordBridge(
     }
   })
 
+  /*
+   * Which server this league is set up against. An existing channel wins; otherwise
+   * the server this commissioner most recently added AllFantasy to (bot-callback
+   * writes `discordGuildId` only after verifying they manage it).
+   */
   const guildId = link?.guildId ?? profile?.discordGuildId ?? null
+  const guildLink = link?.guild
+    ? link.guild
+    : guildId
+      ? await prisma.discordGuildLink.findUnique({
+          where: { guildId },
+          select: { guildName: true, linkedByUserId: true },
+        })
+      : null
+  const serverReady = Boolean(guildLink && guildLink.linkedByUserId === userId)
 
   return {
     leagueId: league.id,
     leagueName: league.name ?? 'League',
     botConfigured: isBotConfigured(),
     connected: Boolean(profile?.discordUserId),
-    guildName: link?.guild?.guildName ?? null,
+    discordUsername: profile?.discordUsername ?? null,
+    guildName: guildLink?.guildName ?? null,
     guildId,
+    serverReady,
+    inboundAvailable: DISCORD_INBOUND_SCHEDULED,
     mappings,
     members,
-    installUrl: DISCORD_CLIENT_ID
-      ? `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&permissions=${DISCORD_BOT_PERMISSIONS}&scope=bot%20applications.commands`
-      : null,
+    installUrl: `/api/discord/bot-install?leagueId=${encodeURIComponent(league.id)}`,
+    templateUrl: leagueTemplateUrl(),
     surfacesPending: true,
   }
 }

@@ -118,7 +118,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * gstatic host never appears as a literal in this codebase for the census to find.
    */
   { name: 'cdn-media', why: 'Google Fonts stylesheet consumed as a <link> href, not a data read', test: /^fonts\.googleapis\.com$/i },
-  { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|www\.youtube\.com|fancred\.app)$/i },
+  { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
    * /leagues/<id>/settings and "Open in Sleeper" buttons. It sat in the

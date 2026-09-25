@@ -46,7 +46,7 @@ import {
   readHomeRivals,
   type PortfolioSummaryMeta,
 } from '@/lib/core-app/homePortfolioSummary'
-import { getChatUnread } from '@/lib/chat-core/unreadCounts'
+import { getChatBadge } from '@/lib/chat-core/chatBadge'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import {
@@ -1027,9 +1027,9 @@ export default async function AfCorePage({
      * The launcher badge, on EVERY /core screen rather than only home — the dock
      * is mounted in the shell, so a count that only existed on the dashboard would
      * blink out the moment somebody navigated. Degrades to zeroes on failure
-     * rather than failing the page.
+     * rather than failing the page. DMs, league chat and Chimmy's weekly checks (chatBadge.ts).
      */
-    getChatUnread(userId),
+    getChatBadge(userId),
     /*
      * This week's head-to-head per league, for the expanded league rail.
      *

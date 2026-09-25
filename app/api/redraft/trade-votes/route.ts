@@ -24,6 +24,7 @@ import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
+import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 
 export const dynamic = 'force-dynamic'
 
@@ -330,6 +331,19 @@ async function finalizeAcceptedTrade(
     eventType: 'trade_processed', actorUserId: decidedByUserId,
   })
 
+  // The result, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
+  // A receiver's own accept names them; a commissioner approval or a passed league vote says who decided.
+  queueTradeStatusInDm(
+    executedByRole === 'user'
+      ? { source: 'redraft', tradeId: proposal.id, status: 'accepted', actorUserId: decidedByUserId, detail: 'Rosters are updated.' }
+      : {
+          source: 'redraft',
+          tradeId: proposal.id,
+          status: 'processed',
+          detail: executedByRole === 'commissioner' ? 'The commissioner approved it.' : 'The league vote approved it.',
+        },
+  )
+
   return NextResponse.json({ proposal: updated, resolved: true })
 }
 
@@ -510,6 +524,7 @@ export async function POST(req: NextRequest) {
         }),
       )
     }
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'expired' })
     return NextResponse.json({ proposal: expired, resolved: true })
   }
 
@@ -549,6 +564,7 @@ export async function POST(req: NextRequest) {
         }),
       )
     }
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'cancelled', actorUserId: userId })
     return NextResponse.json({ proposal: cancelled, resolved: true })
   }
 
@@ -617,6 +633,16 @@ export async function POST(req: NextRequest) {
        * receiver has acted, the trade has NOT executed. Naming what it waits on lets the UI say
        * so instead of implying the deal is done.
        */
+      queueTradeStatusInDm({
+        source: 'redraft',
+        tradeId: proposal.id,
+        status: 'accepted',
+        actorUserId: userId,
+        detail:
+          proposal.vetoMode === 'league_vote'
+            ? 'It goes to a league vote before it processes.'
+            : 'It goes to commissioner review before it processes.',
+      })
       return NextResponse.json({
         proposal: awaitingReview,
         resolved: false,
@@ -640,6 +666,7 @@ export async function POST(req: NextRequest) {
       receiverUserId: receiverOwnerId,
       payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
     })
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'rejected', actorUserId: userId })
     return NextResponse.json({ proposal: updated, resolved: true })
   }
 
@@ -693,6 +720,7 @@ export async function POST(req: NextRequest) {
       receiverUserId: receiverOwnerId,
       payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
     })
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'vetoed', detail: 'The commissioner made the call.' })
     return NextResponse.json({ proposal: updated, resolved: true })
   }
 
@@ -774,6 +802,7 @@ export async function POST(req: NextRequest) {
         receiverUserId: receiverOwnerId,
         payload: { proposalId: proposal.id, source: 'redraft_trade_vote' },
       })
+      queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'vetoed', detail: `${vetoCount} of ${threshold} veto votes were in.` })
       return NextResponse.json({ proposal: updated, resolved: true, approveCount, vetoCount, threshold })
     }
 

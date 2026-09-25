@@ -3,7 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
-import { isBotConfigured, missingBotPermissions, createOrReuseChannelInvite } from '@/lib/discord/bot'
+import {
+  isBotConfigured,
+  missingBotPermissions,
+  createOrReuseChannelInvite,
+  getChannel,
+  channelVisibility,
+} from '@/lib/discord/bot'
+import { DISCORD_INBOUND_SCHEDULED } from '@/lib/discord/inboundStatus'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { BRIDGE_SURFACES } from '@/lib/core-app/discordBridge'
 
@@ -57,18 +64,31 @@ export async function GET(req: NextRequest) {
   })
 
   const link = await prisma.discordLeagueChannel.findFirst({
-    where: { leagueId },
+    where: { leagueId, surface: 'league_chat' },
     include: { guild: true },
   })
 
+  /*
+   * `?detail=1` — the commissioner's setup screen also wants to know whether the
+   * channel is members-only or open to the server, read live from Discord (the
+   * commissioner can change it there). Not fetched for the drawer's member view:
+   * one fewer Discord call on every drawer open, and members do not need it.
+   */
+  const wantDetail = req.nextUrl.searchParams?.get('detail') === '1' && membership.isCommissioner
+
   // Servers that installed the bot under the old permission integer still hold a
   // narrower grant. Only worth asking Discord once a channel is actually linked.
-  const [missingPermissions, inviteUrl] = link
+  const [missingPermissions, inviteUrl, visibility] = link
     ? await Promise.all([
         missingBotPermissions(link.guildId),
         createOrReuseChannelInvite(link.channelId),
+        wantDetail
+          ? getChannel(link.channelId)
+              .then((info) => (info ? channelVisibility(info, link.guildId) : 'gone'))
+              .catch(() => null)
+          : Promise.resolve(null),
       ])
-    : [[] as string[], null]
+    : [[] as string[], null, null]
 
   return NextResponse.json({
     botConfigured: isBotConfigured(),
@@ -76,6 +96,8 @@ export async function GET(req: NextRequest) {
     missingPermissions,
     /** Null when no channel is linked yet, or Discord couldn't be reached. */
     inviteUrl,
+    /** False until Discord → AllFantasy has a schedule; the UI must not offer it before. */
+    inboundAvailable: DISCORD_INBOUND_SCHEDULED,
     discordConnected: Boolean(profile?.discordUserId),
     discordGuildId: profile?.discordGuildId ?? null,
     leagueName: league?.name ?? 'League',
@@ -89,6 +111,8 @@ export async function GET(req: NextRequest) {
           syncOutbound: link.syncOutbound,
           syncInbound: link.syncInbound,
           channelUrl: channelLink(link.guildId, link.channelId),
+          /** 'private' | 'server' | 'gone' with ?detail=1; null when not asked or unknown. */
+          visibility,
         }
       : null,
   })

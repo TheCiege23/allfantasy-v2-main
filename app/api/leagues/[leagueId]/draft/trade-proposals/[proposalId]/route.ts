@@ -14,6 +14,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,8 @@ export async function POST(
       previousGive,
       previousReceive,
     })
+    // The answer, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
+    queueTradeStatusInDm({ source: 'draft_pick', tradeId: proposalId, status: 'accepted', actorUserId: userId, detail: 'The picks have moved.' })
     const updated = await buildSessionSnapshot(leagueId)
     return NextResponse.json({ ok: true, action: 'accepted', session: updated })
   }
@@ -106,6 +109,7 @@ export async function POST(
       where: { id: proposalId },
       data: { status: 'rejected', respondedAt: new Date(), responsePayload: { reason }, updatedAt: new Date() },
     })
+    queueTradeStatusInDm({ source: 'draft_pick', tradeId: proposalId, status: 'rejected', actorUserId: userId })
     return NextResponse.json({ ok: true, action: 'rejected' })
   }
 
@@ -160,6 +164,7 @@ export async function DELETE(
     },
   })
 
+  queueTradeStatusInDm({ source: 'draft_pick', tradeId: proposalId, status: 'cancelled', actorUserId: userId })
   return NextResponse.json({ ok: true, action: 'cancelled' })
 }
 

@@ -12,8 +12,45 @@ export type OutboundSyncInput = {
 }
 
 /**
- * Sync a league chat line to Discord when a row exists in `DiscordLeagueChannel`.
- * No-op if bot token missing or no mapping / sync disabled.
+ * Only the league's MAIN chat is ever copied to Discord. `source` null (or the
+ * literal 'league') is main league chat; anything else is a narrower room that
+ * happens to live in the same table — 'draft' for draft-only chat, and Survivor
+ * tribe chats, whose whole point is that the rest of the league cannot read them.
+ */
+function isMainLeagueChat(source: string | null): boolean {
+  return source === null || source === '' || source === 'league'
+}
+
+/**
+ * Rooms that live INSIDE main league chat rows, marked only in metadata. Big Brother
+ * stores its HOH room, have-nots, jury and nominees rooms as ordinary league chat
+ * with `metadata.bbChannel` — so a `source` check alone would copy the HOH room's
+ * private conversation into the league's Discord. Anything but the main room stays.
+ */
+function isPrivateRoomMetadata(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
+  const m = metadata as Record<string, unknown>
+  if (m.private === true || m.isPrivate === true) return true
+  if (typeof m.bbChannel === 'string' && m.bbChannel !== 'main') return true
+  return false
+}
+
+/**
+ * Copy one league chat line into the league's Discord channel, when the
+ * commissioner has turned copying on.
+ *
+ * 🛑 THE MESSAGE ROW DECIDES WHETHER IT MAY LEAVE, NOT THE CALLER. Every caller
+ * passes a message id, and the row is read before anything is posted: it must
+ * exist, belong to this league, be public (`isPrivate` false, no
+ * `visibleToUserId` — that is a Chimmy thread or a secret ballot), be main league
+ * chat and not a private room inside it (Big Brother's HOH room and friends), and
+ * not have come FROM Discord (a loop). A caller that forgets any of that
+ * cannot leak a private line, because the check lives here and not in each caller.
+ *
+ * Returns `{ synced: false }` for every "not configured / not allowed" case and
+ * throws only when Discord itself refused the post — after one bounded retry
+ * (see `postMessage`). Callers treat Discord as best-effort: the message is
+ * already safe in AllFantasy.
  */
 export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<{ synced: boolean; discordMessageId?: string }> {
   if (!isBotConfigured()) {
@@ -23,6 +60,7 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
   const row = await prisma.discordLeagueChannel.findFirst({
     where: {
       leagueId: input.leagueId,
+      surface: 'league_chat',
       syncEnabled: true,
       syncOutbound: true,
     },
@@ -37,9 +75,24 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
 
   const msg = await prisma.leagueChatMessage.findUnique({
     where: { id: input.messageId },
-    select: { sourceDiscord: true },
+    select: {
+      leagueId: true,
+      sourceDiscord: true,
+      isPrivate: true,
+      visibleToUserId: true,
+      source: true,
+      metadata: true,
+    },
   })
-  if (msg?.sourceDiscord) {
+  if (
+    !msg ||
+    msg.leagueId !== input.leagueId ||
+    msg.sourceDiscord ||
+    msg.isPrivate ||
+    msg.visibleToUserId ||
+    !isMainLeagueChat(msg.source) ||
+    isPrivateRoomMetadata(msg.metadata)
+  ) {
     return { synced: false }
   }
 

@@ -852,6 +852,25 @@ export async function GET(req: NextRequest) {
         platformLeagueId: league.platformLeagueId,
         userId,
       }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
+
+      /*
+       * The one place a Yahoo offer is read, so it is also where it reaches the two managers' DM —
+       * once per offer (a claim row, lib/chat-notifications/tradeOfferDm.ts), only when the other
+       * team's manager is on AllFantasy, and never on this response's clock: fire-and-forget.
+       */
+      if (scan.scanned && scan.trades.length > 0) {
+        const platformLeagueId = league.platformLeagueId
+        try {
+          void import('@/lib/chat-notifications/tradeOfferSources')
+            .then(({ postYahooOffersToDms }) =>
+              postYahooOffersToDms({ leagueId, platformLeagueId, viewerUserId: userId, trades: scan.trades }),
+            )
+            .catch(() => undefined)
+        } catch {
+          /* never reaches the panel */
+        }
+      }
+
       const [evaluations, grades] = await Promise.all([
         evaluatePendingProviderTrades({
           leagueId,
