@@ -219,10 +219,15 @@ export async function scoreActivePlayoffRound(
       })
       withRound.matchupsScored += 1
     } else {
+      // ⚠ STATUS IS LEFT ALONE WHILE LIVE. The column is CHECK-constrained to scheduled /
+      // in_progress / final / bye / cancelled, so the runtime's 'active' is refused (23514) — the
+      // first real-database season run died here. Writing in_progress instead would move the failure,
+      // not remove it: the runtime reads in_progress back as 'active', and the round advance writes
+      // every matchup's status back inside one transaction, so the whole advance would refuse.
+      // Only 'final' is written, and only when the round is final.
       await db.redraftPlayoffMatchup.update({
         where: { id: matchup.id },
         data: {
-          status: 'active',
           metadata: {
             ...metadata,
             live: { homeScore: home.points, awayScore: away.points, weeks: playedWeeks, updatedAt: scoredAt },
