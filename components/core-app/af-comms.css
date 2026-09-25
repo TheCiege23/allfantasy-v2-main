@@ -2996,3 +2996,18 @@
     height: var(--af-comms-vh, 100dvh);
   }
 }
+
+/*
+ * ── Links inside a message (league chat, DMs, huddles) ──────────────────────────────
+ * Top level, appended at the end on purpose: never inside an existing @media. A long URL wraps
+ * rather than pushing the bubble wider than the drawer; on your own accent bubble the link takes
+ * the bubble's ink so it stays readable.
+ */
+.af-cm-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.af-cm-row[data-mine='true'] .af-cm-link { color: inherit; }

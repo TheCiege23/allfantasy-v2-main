@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -22,6 +21,7 @@ import {
 import { EmojiPicker } from '@/app/dashboard/components/chat/EmojiPicker'
 import { useOverlayContainment } from '../useOverlayContainment'
 import { QuotedMessage } from './QuotedMessage'
+import { renderMessageText } from './messageText'
 import { MessageReactions } from './MessageReactions'
 import { hasRichContent } from './RichMessage'
 import {
@@ -130,21 +130,6 @@ function MessageAvatar({ name, url }: { name: string; url: string | null | undef
         <span className="af-cm-avatar-initials">{initialsFor(name)}</span>
       )}
     </span>
-  )
-}
-
-/** "@sam" tokens get a quiet highlight; the text itself is untouched. */
-function withMentions(text: string): ReactNode {
-  const parts = text.split(/(@[A-Za-z0-9_]+)/g)
-  if (parts.length === 1) return text
-  return parts.map((part, i) =>
-    /^@[A-Za-z0-9_]+$/.test(part) ? (
-      <span key={i} className="af-cm-mention">
-        {part}
-      </span>
-    ) : (
-      <Fragment key={i}>{part}</Fragment>
-    ),
   )
 }
 
@@ -528,7 +513,11 @@ export function ChatMessageList({
                     </form>
                   ) : (
                     <>
-                      {shown ? <p className="af-cm-bubble-text">{withMentions(censorProfanity(shown))}</p> : null}
+                      {/*
+                        Links and "@sam" highlights as React nodes (messageText.tsx) — the one place
+                        a bubble's words are drawn, for league chat, DMs and huddles alike.
+                      */}
+                      {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
                       {rich ? renderRich(m) : null}
                     </>
                   )}
