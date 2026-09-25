@@ -11,17 +11,21 @@ describe('trade visibility contract', () => {
     expect(route).not.toMatch(/getTradeGrades\(league\.platformLeagueId\)/)
   })
 
-  it('bypasses client caches and reloads pending plus completed after decisions', () => {
+  it('bypasses client caches and reloads the panel after decisions', () => {
     const tab = read('app/league/[leagueId]/tabs/TradesTab.tsx')
-    expect(tab.match(/cache: 'no-store'/g)?.length).toBeGreaterThanOrEqual(2)
-    expect(tab.match(/Promise\.all\(\[load\(\), loadLedger\(\)\]\)/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(tab.match(/cache: 'no-store'/g)?.length).toBeGreaterThanOrEqual(1)
     /*
-     * Focus / visibility / interval refresh moved into `useVisibleRefresh` (2026-09-25), which the
-     * hook's own suite tests by behaviour. Pinned here: the tab re-reads BOTH — offers on the
-     * timer, the ledger only on return — and the hook still listens for both events.
+     * 🛑 ONE READ SINCE 2026-09-25. The tab also read `/api/league/trade-grades` (the realized-points
+     * ledger), which listed an imported league's completed trades a second time beside the panel's
+     * one-grade copies. Completed provider trades arrive on the panel read; the ledger is not read.
+     */
+    expect(tab).not.toMatch(/fetch\(`\/api\/league\/trade-grades/)
+    expect(tab.match(/^\s*await load\(\)$/gm)?.length).toBeGreaterThanOrEqual(2)
+    /*
+     * Focus / visibility / interval refresh lives in `useVisibleRefresh`, which the hook's own suite
+     * tests by behaviour. Pinned here: the tab re-reads the panel, and the hook listens for both events.
      */
     expect(tab).toContain('useVisibleRefresh(() => load({ background: true }))')
-    expect(tab).toContain('useVisibleRefresh(() => loadLedger({ background: true }), { intervalMs: null })')
     const hook = read('hooks/useVisibleRefresh.ts')
     expect(hook).toContain("window.addEventListener('focus', onFocus)")
     expect(hook).toContain("document.addEventListener('visibilitychange', onVisibility)")

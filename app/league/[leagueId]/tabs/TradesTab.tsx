@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
@@ -15,8 +15,6 @@ import { mirrorLetter, type TradeGradeView } from '@/lib/decision-os/trade/trade
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
-import type { GradedTrade, TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeService'
-import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
@@ -39,16 +37,21 @@ import {
  *   1. Needs your action — offers waiting on the viewer, provider offers that
  *      can only be answered on the provider, and reviews waiting on the
  *      commissioner.
- *   2. Your trades — active, then completed with the REALIZED grade.
- *   3. League trade log — every trade this league has made, both sides,
- *      both grades, filterable, with an "only mine" toggle.
+ *   2. Your trades — active, then (native leagues) completed.
+ *   3. League trade log — native leagues only. An imported league's completed trades are in the
+ *      /core Trade Center instead; see "🛑 RETIRED FOR IMPORTED LEAGUES" below.
  *   4. Trade block — what managers have flagged available.
  *
- * Two reads, both existing routes, fetched in parallel and rendered
- * independently: `/api/league/trades-panel` (pending + native offers + block)
- * and `/api/league/trade-grades` (the completed ledger, graded on realized
- * points; the first build of a league walks every season, so the rest of the
- * tab never waits on it).
+ * One read: `/api/league/trades-panel` (pending + completed offers + native history + block).
+ *
+ * 🛑 RETIRED FOR IMPORTED LEAGUES (Guap, 2026-09-25: "retire it, link to /core"). This tab also read
+ * `/api/league/trade-grades` — the completed ledger graded on REALIZED POINTS — and merged it into the
+ * log beside the panel's own completed provider trades, which carry the one grade. The same trade
+ * therefore appeared twice (once "COMPLETED", once falling through to "Pending"), and the ledger's
+ * copy printed "COMPLETED · EVEN" beside a board that graded it F. That read is gone. An imported
+ * league's full history, on the one grade, lives in the Trade Center; this tab links there.
+ * ⚠ A NATIVE league keeps its log here: its trades are never written to `transactionFact`, so the
+ * Trade Center's history cannot show them.
  *
  * ⚠ A LETTER OR A REASON, NEVER A LETTER AS A FALLBACK. A pending trade has
  * produced nothing, an imported league's ledger cannot be scored, and a trade
@@ -125,18 +128,6 @@ export type BuilderOffer = {
     coveragePct: number
   } | null
 }
-
-type GradesResponse =
-  | { supported: false; platform: string }
-  | { supported: true; viewerSleeperUserId: string | null; grades: TradeGradesPayload | null; error?: string }
-  | { supported: true; graded: false; viewerSleeperUserId: string | null; ledger: ImportedTradeLedgerPayload }
-
-type LedgerState =
-  | { kind: 'loading' }
-  | { kind: 'failed' }
-  | { kind: 'unsupported'; platform: string }
-  | { kind: 'ungraded'; ledger: ImportedTradeLedgerPayload }
-  | { kind: 'graded'; grades: TradeGradesPayload; viewerId: string | null }
 
 /** One side of a row in the league log. */
 type LogSide = {
@@ -330,77 +321,6 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
     b: { name: 'Receiving team', you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
     extraSides: 0,
     status: statusOf(t),
-    mine: false,
-    direction: null,
-  }
-}
-
-function sideSends(side: GradedTrade['sides'][number]): string {
-  const out = [...side.playersOut.map((p) => p.name), ...side.picksOut.map((p) => p.label)]
-  return out.length > 0 ? out.join(', ') : '—'
-}
-
-/** A completed, graded trade from the Sleeper ledger, as a log row. */
-function rowFromGraded(g: GradedTrade, viewerId: string | null): LogRow {
-  const [s0, s1] = g.sides
-  const side = (s: GradedTrade['sides'][number] | undefined): LogSide => {
-    if (!s) return { name: '—', you: false, sends: '—', initialGrade: null, initialLabel: 'First', grade: null, gradeWhy: 'no side' }
-    const you = Boolean(viewerId && s.ownerId === viewerId)
-    return {
-      name: s.teamName?.trim() || s.managerName,
-      you,
-      sends: sideSends(s),
-      /* Provisional while a pick is unresolved — say so instead of scoring it. */
-      initialGrade: g.hasPendingPicks ? null : s.initialGrade,
-      initialLabel: 'First',
-      grade: g.hasPendingPicks ? null : s.currentGrade,
-      gradeWhy: g.hasPendingPicks
-        ? 'Picks are unresolved, so the result grade is withheld.'
-        : `Realized result: net ${s.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held. Roster need and playoff probability are not part of this result letter.`,
-    }
-  }
-  const a = side(s0)
-  const b = side(s1)
-  const created = Date.parse(g.createdIso) || 0
-  return {
-    id: g.id,
-    kind: 'completed',
-    season: g.season,
-    when: `Wk ${g.week} · ${g.season}`,
-    sortKey: created,
-    a,
-    b,
-    extraSides: Math.max(0, g.sides.length - 2),
-    status: { label: g.tie ? 'Completed · even' : 'Completed', tone: 'good' },
-    mine: a.you || b.you || g.sides.some((s) => Boolean(viewerId && s.ownerId === viewerId)),
-    direction: a.you || b.you ? 'done' : null,
-  }
-}
-
-/** A completed trade from an imported (non-Sleeper) ledger — never graded. */
-function rowFromImported(t: ImportedTradeLedgerPayload['trades'][number]): LogRow {
-  const [s0, s1] = t.sides
-  const side = (s: typeof s0 | undefined, other: typeof s0 | undefined): LogSide => ({
-    name: s?.managerName ?? '—',
-    you: false,
-    /* The import records what each side RECEIVED; what it sent is the other side's haul. */
-    sends: other ? joinNames(other.received.map((p) => ({ name: p.name ?? 'Unnamed player' }))) : '—',
-    initialGrade: null,
-    initialLabel: 'Then',
-    grade: null,
-    gradeWhy: 'not graded on this platform',
-  })
-  const created = t.dateIso ? Date.parse(t.dateIso) || 0 : 0
-  return {
-    id: t.id,
-    kind: 'completed',
-    season: t.season ? String(t.season) : tradeSeasonFromIso(t.dateIso ?? ''),
-    when: t.season ? `${t.season}${t.dateIso ? ` · ${whenLabel(t.dateIso)}` : ''}` : t.dateIso ? whenLabel(t.dateIso) : '—',
-    sortKey: created,
-    a: side(s0, s1),
-    b: side(s1, s0),
-    extraSides: Math.max(0, t.sides.length - 2),
-    status: { label: 'Completed', tone: 'good' },
     mine: false,
     direction: null,
   }
@@ -1050,7 +970,6 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [pendingOffers, setPendingOffers] = useState<BuilderOffer[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [ledger, setLedger] = useState<LedgerState>({ kind: 'loading' })
   const [watch, setWatch] = useState<Set<string>>(() => readWatchSet(league.id))
   const [proposeOpen, setProposeOpen] = useState(false)
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
@@ -1082,53 +1001,6 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     },
     [watch, persistWatch],
   )
-
-  /*
-   * The completed ledger, independently of the panel. A payload that does not
-   * carry `supported` is not a ledger at all (a proxy error page, a mock) and
-   * must not be read as "no trades".
-   *
-   * `background`: a refresh the manager did not ask for keeps what is on screen — no "loading"
-   * flash, and a failed read does not replace a good ledger with an error.
-   */
-  const loadLedger = useCallback(async (opts?: { background?: boolean }) => {
-    const background = opts?.background === true
-    if (!background) setLedger({ kind: 'loading' })
-    try {
-      const res = await fetch(`/api/league/trade-grades?leagueId=${encodeURIComponent(league.id)}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      })
-      const data = (await res.json().catch(() => null)) as GradesResponse | null
-      if (!data || typeof data !== 'object' || !('supported' in data)) {
-        if (!background) setLedger({ kind: 'failed' })
-        return
-      }
-      if (data.supported === false) {
-        setLedger({ kind: 'unsupported', platform: data.platform })
-        return
-      }
-      if ('graded' in data && data.graded === false) {
-        setLedger({ kind: 'ungraded', ledger: data.ledger })
-        return
-      }
-      if ('grades' in data && data.grades) {
-        setLedger({ kind: 'graded', grades: data.grades, viewerId: data.viewerSleeperUserId })
-        return
-      }
-      if (!background) setLedger({ kind: 'failed' })
-    } catch {
-      if (!background) setLedger({ kind: 'failed' })
-    }
-  }, [league.id])
-
-  /*
-   * The pending offers the last panel read showed. When one DISAPPEARS on a background refresh it
-   * was accepted, declined or withdrawn — and an accepted one belongs in the completed ledger, so
-   * the ledger is re-read then rather than on the timer (each ledger read checks every week of the
-   * season with the provider; polling it would multiply that by every open tab).
-   */
-  const shownOfferIds = useRef<Set<string> | null>(null)
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
     const background = opts?.background === true
@@ -1168,12 +1040,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
       setPendingScan(data?.pending && typeof data.pending === 'object' ? data.pending : null)
       setLeagueTypeInfo(data?.leagueType && typeof data.leagueType === 'object' ? data.leagueType : null)
-      const offers = Array.isArray(data?.pendingOffers) ? data.pendingOffers : []
-      setPendingOffers(offers)
-      const nowShown = new Set(offers.map((o) => `${o.provider}:${o.transactionId}`))
-      const before = shownOfferIds.current
-      shownOfferIds.current = nowShown
-      if (background && before && [...before].some((id) => !nowShown.has(id))) void loadLedger({ background: true })
+      setPendingOffers(Array.isArray(data?.pendingOffers) ? data.pendingOffers : [])
     } catch {
       if (background) return
       setErr('Could not load trades.')
@@ -1190,12 +1057,11 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     } finally {
       if (!background) setLoading(false)
     }
-  }, [league.id, loadLedger])
+  }, [league.id])
 
   useEffect(() => {
     void load()
-    void loadLedger()
-  }, [load, loadLedger])
+  }, [load])
 
   /*
    * A trade email or push often arrives while the app is already open in the
@@ -1205,11 +1071,10 @@ export function TradesTab({ league, teams }: TradesTabProps) {
    * or the document becomes visible again.
    *
    * And while the tab stays OPEN, the offers re-read once a minute (2026-09-25): an offer sent
-   * while the manager is looking at this tab used to wait for them to leave and come back. The
-   * ledger is not on the timer — see `shownOfferIds`.
+   * while the manager is looking at this tab used to wait for them to leave and come back. An
+   * accepted offer moves to the panel's own completed list on the same read.
    */
   useVisibleRefresh(() => load({ background: true }))
-  useVisibleRefresh(() => loadLedger({ background: true }), { intervalMs: null })
 
   const isZombie = String(league.leagueVariant ?? '').toLowerCase() === 'zombie'
   const nflRedraftTradesShell = isNflRedraftCoreDashboardFromUserLeague(league)
@@ -1229,14 +1094,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           setActionErr(`We could not ${path} this trade. Nothing was changed. Try again.`)
           return
         }
-        await Promise.all([load(), loadLedger()])
+        await load()
       } catch {
         setActionErr(`Failed to ${path} trade.`)
       } finally {
         setActionBusyId(null)
       }
     },
-    [league.id, load, loadLedger],
+    [league.id, load],
   )
 
   const runCommissionerDecision = useCallback(
@@ -1254,14 +1119,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           setActionErr('We could not save that commissioner decision. Nothing was changed. Try again.')
           return
         }
-        await Promise.all([load(), loadLedger()])
+        await load()
       } catch {
         setActionErr('Failed to record commissioner decision.')
       } finally {
         setActionBusyId(null)
       }
     },
-    [league.id, load, loadLedger],
+    [league.id, load],
   )
 
   /* ── Derived views ─────────────────────────────────────────────────── */
@@ -1294,14 +1159,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   }, [offerById])
 
 
-  const completedRows = useMemo<LogRow[]>(() => {
-    const imported = ledger.kind === 'graded'
-      ? ledger.grades.trades.map((g) => rowFromGraded(g, ledger.viewerId))
-      : ledger.kind === 'ungraded'
-        ? ledger.ledger.trades.map(rowFromImported)
-        : []
-    return [...imported, ...historyTrades.map(rowFromNativeHistory)]
-  }, [ledger, historyTrades])
+  /*
+   * An imported league's completed trades are the Trade Center's to show (see the header note), so
+   * this tab lists none for it — the history card links there instead.
+   */
+  const importedLeague = tradeShadowNotice != null
+  const completedRows = useMemo<LogRow[]>(
+    () => (importedLeague ? [] : historyTrades.map(rowFromNativeHistory)),
+    [importedLeague, historyTrades],
+  )
 
   const pendingRows = useMemo<LogRow[]>(() => activeTrades.map(rowFromActive), [activeTrades])
 
@@ -1339,7 +1205,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const deadlineChip =
     deadlineWeek == null ? null : deadlineWeek >= 99 ? 'Trades open all season' : `Deadline · week ${deadlineWeek}`
 
-  const nothingAtAll = !loading && !err && activeTrades.length === 0 && completedRows.length === 0 && ledger.kind !== 'loading'
+  const nothingAtAll = !loading && !err && activeTrades.length === 0 && completedRows.length === 0
 
   const proposeAffordance = (
     <button
@@ -1417,7 +1283,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         ) : null}
         <span className="flex-1" />
         <span className="font-mono text-[11px] font-bold text-[#8B9DB8]">
-          {completedRows.length > 0 || ledger.kind === 'graded' || ledger.kind === 'ungraded'
+          {completedRows.length > 0
             ? `${completedCount} completed · ${activeTrades.length} pending${closedCount > 0 ? ` · ${closedCount} closed` : ''}`
             : `${activeTrades.length} pending`}
         </span>
@@ -1453,10 +1319,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Empty ─────────────────────────────────────────────────────── */}
       {nothingAtAll ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] px-6 py-12 text-center">
-          <p className="text-[16px] font-extrabold text-white">No trades in this league yet</p>
+          <p className="text-[16px] font-extrabold text-white">
+            {importedLeague ? 'No open trades right now' : 'No trades in this league yet'}
+          </p>
           <p className="max-w-md text-[12.5px] leading-relaxed text-[#8B9DB8]">
-            Nothing has been proposed or completed this season. Start a deal in the builder, or let the
-            finder pick a partner whose roster shape fits yours.
+            {importedLeague
+              ? 'Nothing is waiting on anyone. Completed trades are in the Trade Center. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.'
+              : 'Nothing has been proposed or completed this season. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.'}
           </p>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
             {proposeAffordance}
@@ -1597,7 +1466,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="flex flex-wrap items-center gap-3">
             <span className={`${EYEBROW} text-[10px] text-white/40`}>Your trades</span>
             <div className="flex gap-0.5 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
-              {(['active', 'completed'] as const).map((k) => (
+              {(importedLeague ? (['active'] as const) : (['active', 'completed'] as const)).map((k) => (
                 <button
                   key={k}
                   type="button"
@@ -1617,7 +1486,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 : 'Realized grades — scored on what each side has produced since'}
             </span>
           </div>
-          {yourTab === 'active' ? (
+          {yourTab === 'active' || importedLeague ? (
             yourActiveTrades.length === 0 ? (
               <p className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-6 text-center text-[12px] text-white/40">
                 Nothing active with your name on it.
@@ -1648,15 +1517,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             {yourCompleted.length === 0 ? (
               <p className="px-4 py-6 text-center text-[12px] text-white/40">
-                {ledger.kind === 'loading'
-                  ? 'Reading completed trades…'
-                  : ledger.kind === 'ungraded'
-                    ? `Completed trades on ${league.platform ?? 'this platform'} do not say which side was yours.`
-                    : ledger.kind === 'unsupported'
-                      ? 'Completed trades are not read for this platform yet.'
-                      : ledger.kind === 'failed'
-                        ? 'Completed trades could not be read just now.'
-                        : 'You have not completed a trade in this league.'}
+                You have not completed a trade in this league.
               </p>
             ) : (
               yourCompletedGroups.map(({ season, items }) => (
@@ -1711,8 +1572,30 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         </section>
       ) : null}
 
-      {/* ── League trade log ─────────────────────────────────────────── */}
-      {!loading && !err && !nothingAtAll ? (
+      {/* ── Completed trades live in the Trade Center (imported leagues) ─ */}
+      {!loading && !err && importedLeague ? (
+        <section
+          className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-3.5"
+          data-testid="league-trade-history-link"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className={`${EYEBROW} text-[10px] text-white/40`}>Completed trades</span>
+            <p className="max-w-[62ch] text-[12px] leading-relaxed text-[#8B9DB8]">
+              Every completed trade in this league, graded on this league&rsquo;s values &mdash; the same
+              grade as your trade emails.
+            </p>
+          </div>
+          <Link
+            href={tradeCenterHref}
+            className="rounded-lg border border-white/15 px-3.5 py-2 text-[12px] font-bold text-white/85 hover:border-white/30"
+          >
+            Open trade history
+          </Link>
+        </section>
+      ) : null}
+
+      {/* ── League trade log (native leagues) ────────────────────────── */}
+      {!loading && !err && !nothingAtAll && !importedLeague ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
             <span className={`${EYEBROW} text-[10px] text-white/40`}>League trade log</span>
@@ -1775,17 +1658,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               </label>
             ) : null}
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">
-              {ledger.kind === 'loading'
-                ? 'Reading completed trades — the first read of a league can take a minute'
-                : ledger.kind === 'unsupported'
-                  ? `Completed trades are not read for ${ledger.platform} yet — pending only`
-                  : ledger.kind === 'failed'
-                    ? 'Completed trades could not be read just now — pending only'
-                    : ledger.kind === 'ungraded'
-                      ? `${logRows.length} shown · ${league.platform ?? 'this platform'} trades are listed, not graded`
-                      : `${logRows.length} shown · grades are realized where every asset could be scored`}
-            </span>
+            <span className="text-[10px] text-white/35">{logRows.length} shown</span>
           </div>
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-white/[0.06] px-4 py-2 md:grid">
