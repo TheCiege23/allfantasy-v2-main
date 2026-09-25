@@ -7,6 +7,8 @@ import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
 import type { WaiversData } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 
 /**
  * Screen 7 — Waivers.
@@ -22,6 +24,9 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
 
 export type WaiversProps = {
   data: WaiversData
+  /** Competitive Edge — loaded by the page only when the viewer's plan includes it. */
+  edge?: WaiverEdgeState | null
+  edgeAccess?: CoreDepthAccess | null
 }
 
 function Tile({
@@ -54,7 +59,7 @@ function Tile({
   )
 }
 
-export function Waivers({ data }: WaiversProps) {
+export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
   return (
     <div className="af-wv">
       {/* ── Pricing context ─────────────────────────────────────────── */}
@@ -207,6 +212,15 @@ export function Waivers({ data }: WaiversProps) {
         does not weaken the honesty rule the withheld panel was protecting.
       */}
       <WaiverIntel leagueId={data.league.id} />
+
+      {/*
+        ── Competitive Edge ─────────────────────────────────────────────
+
+        After the bid pricing, because it answers the next question: who can outbid you. Every
+        other manager's FAAB left and what they have actually won this season — counts, never a
+        label (lib/competitive-edge/waiverEdge.ts).
+      */}
+      <WaiverCompetitiveEdge access={edgeAccess} edge={edge} />
 
       {/*
         ── Chimmy's recommendations ─────────────────────────────────────
