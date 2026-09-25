@@ -8,6 +8,7 @@ import SupportModal from '@/components/core-app/support/SupportModal'
 import { useDraggableLauncher } from './useDraggableLauncher'
 import { useChatBadge } from './useChatBadge'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
+import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 
@@ -19,6 +20,8 @@ import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
  * "never a page you navigate to and lose your place" — a per-screen mount would
  * unmount it on navigation, which is the failure it exists to avoid. Same reason
  * the read-only chip and the geo notice live in the shell.
+ * 🛑 THE SHELL ITSELF IS STILL REPLACED on a /core screen change — the page's loading
+ * boundary sits above it — so where the user was is restored from commsUiMemory.ts.
  *
  * ⚠ DOCKED IS CHOSEN BY THE PAGE, NOT BY THE VIEWPORT ALONE. 23b docks beside a
  * roster or matchup — screens where you are reading one league and asking about
@@ -81,6 +84,23 @@ export function CommsDock({
   mentions = 0,
 }: CommsDockProps) {
   const { data: session } = useSession()
+  /*
+   * 🛑 THE DRAWER IS KEYED ON WHO IS SIGNED IN, AND next-auth BRIEFLY SAYS "NOBODY". Its client
+   * re-checks the session every time the tab becomes visible again (switching windows, taking a
+   * screenshot), and ANY failure of that request (a blip, a 5xx, a slow response) resolves to
+   * `null` until the next check. Keyed on the live value, the drawer went `me` → `anonymous` → `me`
+   * and was rebuilt twice: the tab jumped back to Chimmy, the league scope cleared and a half-typed
+   * message vanished (owner report 2026-09-25: "the whole page resets when I try to type
+   * sometimes"; reproduced in Chromium by blipping the session).
+   *
+   * So the drawer keeps the last person it saw. It changes only when a DIFFERENT person signs in,
+   * which is the one case the key exists for: one account's chat must never survive into another's.
+   * A real sign-out leaves the page, so holding the last id through a blip costs nothing.
+   */
+  const lastUserId = useRef<string | undefined>(undefined)
+  const liveUserId = session?.user?.id
+  if (liveUserId) lastUserId.current = liveUserId
+  const userId = liveUserId ?? lastUserId.current
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
   const [prefill, setPrefill] = useState<string | null>(null)
@@ -149,6 +169,22 @@ export function CommsDock({
   const close = useCallback(() => setOpen(false), [])
 
   /*
+   * An open chat stays open across a /core navigation: the page's loading boundary replaces this
+   * whole component on every screen change (see commsUiMemory.ts), so the open state is restored
+   * after mount — in an effect, never in the first render, so the server's closed render hydrates.
+   */
+  const restoredOpenFor = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!userId || restoredOpenFor.current === userId) return
+    restoredOpenFor.current = userId
+    if (readCommsUi(userId)?.open) setOpen(true)
+  }, [userId])
+  useEffect(() => {
+    if (!userId || restoredOpenFor.current !== userId) return
+    writeCommsUi(userId, { open })
+  }, [userId, open])
+
+  /*
    * The bubble can be dragged anywhere along either edge and remembers where, per
    * device class — see useDraggableLauncher. It is still UNMOUNTED while the
    * drawer is open, which is what guarantees it never sits on top of the
@@ -206,8 +242,9 @@ export function CommsDock({
       ) : null}
 
       <CommsDrawer
-        key={session?.user?.id ?? 'anonymous'}
-        userId={session?.user?.id}
+        key={userId ?? 'anonymous'}
+        userId={userId}
+        rememberPlace
         mode={mode}
         open={open}
         onClose={close}

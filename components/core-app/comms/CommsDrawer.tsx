@@ -6,6 +6,7 @@ import { Eye, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'l
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
+import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { ChimmyPanel, PUBLIC_ANSWER_NOTICE, type CommsLeague } from './ChimmyPanel'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -109,6 +110,12 @@ export type CommsDrawerProps = {
    * left did nothing; `seq` changes every time. `leagueId` rescopes the drawer.
    */
   openRequest?: { seq: number; tab: CommsTab | null; leagueId: string | null } | null
+  /**
+   * Put the drawer back on the tab and league this user last had (see commsUiMemory.ts). Only the
+   * chat bubble asks for this: a drawer opened on a specific tab must open on THAT tab, not on
+   * wherever the user happened to be last.
+   */
+  rememberPlace?: boolean
 }
 
 /* PUBLIC_ANSWER_NOTICE lives in ./ChimmyPanel beside the answers that carry it; LeaguePanel below uses it too. */
@@ -483,6 +490,7 @@ export function CommsDrawer({
   initialTab = 'chimmy',
   initialDraft = null,
   openRequest = null,
+  rememberPlace = false,
   userId,
 }: CommsDrawerProps) {
   const [tab, setTab] = useState<CommsTab>(initialTab)
@@ -501,8 +509,11 @@ export function CommsDrawer({
    * bubble and opening it again threw a hand-picked league away and put the
    * page's scope (often "All leagues") back (user report, 2026-09-16). It now
    * follows only an actual change of the page's league, compared against the
-   * last one it followed — the drawer stays mounted across navigations, so a
-   * change made while it is closed is still picked up.
+   * last one it followed.
+   *
+   * ⚠ IT DOES NOT STAY MOUNTED ACROSS A /core NAVIGATION, as this comment used to say:
+   * the page's loading boundary replaces it on every screen change. Where the user was
+   * is restored from commsUiMemory.ts below instead.
    */
   const followedPageLeague = useRef(pageLeagueId)
   useEffect(() => {
@@ -521,6 +532,34 @@ export function CommsDrawer({
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab])
+
+  /*
+   * Back where you were after a /core navigation — see commsUiMemory.ts for why the drawer does not
+   * survive one on its own. Declared AFTER the `initialTab` effect so, on mount, the remembered tab
+   * wins over the default. A remembered league comes back only on the same page league: moving to
+   * another league's page is the page changing, and the drawer follows the page (above).
+   */
+  const restoredFor = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!rememberPlace || !userId || restoredFor.current === userId) return
+    restoredFor.current = userId
+    const saved = readCommsUi(userId)
+    if (!saved) return
+    if (saved.tab && TABS.some((t) => t.id === saved.tab)) setTab(saved.tab)
+    if (
+      saved.pageLeagueId === pageLeagueId &&
+      saved.scopeId !== undefined &&
+      (saved.scopeId === null || leagues.some((l) => l.id === saved.scopeId))
+    ) {
+      setScopeId(saved.scopeId)
+    }
+    // Once per signed-in user, on mount — later changes are the user's own and are written below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+  useEffect(() => {
+    if (!rememberPlace || !userId || restoredFor.current !== userId) return
+    writeCommsUi(userId, { tab, scopeId, pageLeagueId })
+  }, [rememberPlace, userId, tab, scopeId, pageLeagueId])
 
   const openRequestSeq = openRequest?.seq ?? 0
   useEffect(() => {
