@@ -95,9 +95,12 @@ describe('bootstrap seeds the scoring the manager chose', () => {
   it('NCAAF half PPR scores 0.5, not the full-PPR scorer default', async () => {
     expect(await createAndScoreTwoReceptions('NCAAF', 'ncaaf_half_ppr')).toBe(1)
     expect((row.current.settings.sportConfig as { scoringPreset: string }).scoringPreset).toBe('HALF_PPR')
+    // The NCAAF panel store is seeded with the pick too, not full PPR — so the settings page shows it.
+    expect((row.current.settings.ncaaf_scoring_config as { rules: { reception: number } }).rules.reception).toBe(0.5)
   })
 
   it('NCAAF standard scores 0', async () => {
     expect(await createAndScoreTwoReceptions('NCAAF', 'ncaaf_standard')).toBe(0)
+    expect((row.current.settings.ncaaf_scoring_config as { rules: { reception: number } }).rules.reception).toBe(0)
   })
 })

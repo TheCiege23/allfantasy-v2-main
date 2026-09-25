@@ -161,7 +161,7 @@ export async function runLeagueBootstrap(
   if (leagueSport === 'NCAAF') {
     try {
       const { applyDefaultNcaafScoringOnCreate } = await import('@/lib/ncaaf-scoring')
-      await applyDefaultNcaafScoringOnCreate(leagueId)
+      await applyDefaultNcaafScoringOnCreate(leagueId, receptionPoints)
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAB') {
