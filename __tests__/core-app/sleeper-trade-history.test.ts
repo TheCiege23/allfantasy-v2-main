@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GradedTrade, TradeGradesPayload, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
-const mocks = vi.hoisted(() => ({ grades: vi.fn(), feed: vi.fn(), expectation: vi.fn() }))
+const mocks = vi.hoisted(() => ({ grades: vi.fn(), feed: vi.fn(), expectation: vi.fn(), archive: vi.fn() }))
 vi.mock('@/lib/trade-intel/sleeperTradeGradeService', () => ({ getTradeGrades: mocks.grades }))
 vi.mock('@/lib/trade-intel/sleeperTradeSync', () => ({ currentTradeIds: mocks.feed }))
+vi.mock('@/lib/import-os/collector/archiveFeedTrades', () => ({ archiveCompletedFeedTrades: mocks.archive }))
 vi.mock('@/lib/trade-intel/tradeExpectationLoader', () => ({ loadTradeExpectation: mocks.expectation }))
 import { getReconciledTradeGrades, getSleeperTradeHistory, toTradeRecord } from '@/lib/core-app/sleeperTradeHistory'
 
@@ -17,7 +18,31 @@ const trade = (): GradedTrade => ({ id: 'league:tx', season: '2026', week: 2, cr
 const payload = (trades: GradedTrade[]): TradeGradesPayload => ({ version: 2, fetchedAt: '2026-09-19T00:00:00Z', staleAsOf: null, sleeperLeagueId: 'league', seasonsScanned: ['2026'], currentSeasonPartial: true, gradeScale: { description: '', thresholds: [], tieBand: 0 }, contextNotes: [], trades, missing: [] })
 
 describe('Sleeper trades shown in the app', () => {
-  beforeEach(() => { vi.resetAllMocks(); mocks.expectation.mockResolvedValue(null); mocks.feed.mockResolvedValue([{ id: 'tx', status: 'complete' }]) })
+  beforeEach(() => { vi.resetAllMocks(); mocks.expectation.mockResolvedValue(null); mocks.archive.mockResolvedValue({ written: 0, trades: 0 }); mocks.feed.mockResolvedValue([{ id: 'tx', status: 'complete' }]) })
+  /*
+   * 🛑 THE ARCHIVE WAITED HOURS FOR A SYNC LANE (2026-09-25). The moment this read notices a completed
+   * trade the ledger lacks is the moment the archive lacks it too, so it is written from this feed.
+   */
+  it('writes the archive from the same feed when it finds a completed trade the ledger lacked', async () => {
+    mocks.grades.mockResolvedValueOnce(payload([])).mockResolvedValueOnce(payload([trade()]))
+    await getReconciledTradeGrades('league')
+    expect(mocks.archive).toHaveBeenCalledTimes(1)
+    expect(mocks.archive).toHaveBeenCalledWith({ sleeperLeagueId: 'league', feed: [{ id: 'tx', status: 'complete' }] })
+  })
+  it('writes nothing when the ledger already has every completed trade, or only a request is new', async () => {
+    mocks.grades.mockResolvedValue(payload([trade()]))
+    await getReconciledTradeGrades('league')
+    mocks.feed.mockResolvedValue([{ id: 'tx', status: 'complete' }, { id: 'request', status: 'pending' }])
+    await getReconciledTradeGrades('league')
+    expect(mocks.archive).not.toHaveBeenCalled()
+  })
+  it('a failed archive write never costs the read that noticed the trade', async () => {
+    mocks.archive.mockRejectedValue(new Error('db down'))
+    mocks.grades.mockResolvedValueOnce(payload([])).mockResolvedValueOnce(payload([trade()]))
+    const result = await getReconciledTradeGrades('league')
+    expect(result.refreshed).toBe(true)
+    expect(result.grades?.trades).toHaveLength(1)
+  })
   it('takes counts, picks and viewer direction from the same trade as the email', () => {
     const result = toTradeRecord(trade(), 'owner-2', null)
     expect(result).toMatchObject({ playersIn: 0, playersOut: 1, picks: 1, yourSide: 'in' })

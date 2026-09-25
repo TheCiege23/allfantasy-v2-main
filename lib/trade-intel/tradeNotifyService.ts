@@ -11,6 +11,7 @@ import { buildPendingTradeOfferEmail, buildTradeGradeEmail } from '@/lib/trade-i
 import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
 import { canAccessForUser } from '@/lib/access/canAccessForUser'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
+import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
 import {
   currentTradeIds,
   fetchLeagueRosters,
@@ -246,6 +247,14 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
 
     // Mark seen regardless — a grading or send hiccup must not cause duplicate emails later.
     await writeSeen(sleeperLeagueId, plan.seen, plan.pending)
+
+    /*
+     * A completion this sweep noticed goes into the trade archive now, from the feed already in
+     * hand — for leagues nobody has opened since, this sweep is the first reader to see it
+     * (`archiveFeedTrades.ts`). Awaited, not backgrounded: a cron has no response to protect, and
+     * a background write could outlive the run's budget. It never throws.
+     */
+    if (plan.completions.length > 0) await archiveCompletedFeedTrades({ sleeperLeagueId, feed })
 
     // Recipients: AF users attached to any AF league row for this Sleeper league.
     const afLeagues: AfLeagueRow[] = await prisma.league.findMany({
