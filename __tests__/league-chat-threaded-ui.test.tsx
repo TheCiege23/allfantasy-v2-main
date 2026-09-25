@@ -78,7 +78,8 @@ describe("LeagueChatPanel threaded chat UI", () => {
 
     expect(screen.getByRole("button", { name: /League Chat/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Messages/i })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /AI Chat/i })).toBeInTheDocument()
+    /* Brand rule: the assistant is "Chimmy", never bare "AI" (was "AI Chat"). */
+    expect(screen.getByRole("button", { name: /Chimmy/i })).toBeInTheDocument()
   })
 
   it("allows switching tabs", () => {

@@ -28,6 +28,7 @@ import { prisma } from '@/lib/prisma'
 import { sanitizeDraftChatPlayerContext } from '@/lib/draft-room/draft-chat-player-context'
 import {
   buildDraftChatWireMessage,
+  sanitizeDraftChatRichMeta,
   sanitizeDraftChatStructuredSendMeta,
 } from '@/lib/draft-room/draft-chat-contract'
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
@@ -35,10 +36,11 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 
 export const dynamic = 'force-dynamic'
 
-function toDraftMessage(m: PlatformChatMessage, syncActive: boolean, leagueId: string) {
+function toDraftMessage(m: PlatformChatMessage, syncActive: boolean, leagueId: string, viewerUserId: string) {
   return buildDraftChatWireMessage(m, {
     syncActive,
     leagueId,
+    viewerUserId,
     sanitizePlayerContext: sanitizeDraftChatPlayerContext,
     parsePollPayload: (input: { body?: string | null; metadata?: Record<string, unknown> | null }) =>
       normalizedParsePoll(input),
@@ -173,18 +175,47 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     })
     if (!created) return NextResponse.json({ error: 'Failed to send' }, { status: 500 })
     return NextResponse.json({
-      message: toDraftMessage(created, syncOn, leagueId),
+      message: toDraftMessage(created, syncOn, leagueId, userId),
       syncActive: syncOn,
     })
   }
 
-  const text = String(body?.text ?? body?.message ?? body?.body ?? '').trim()
+  /*
+   * GIFs, photos and composer polls, in the metadata shape league chat stores — so a row
+   * posted here renders the same in the league's chat, and the other way round.
+   */
+  const richMeta = sanitizeDraftChatRichMeta(body?.metadata)
+  const hasRich = Object.keys(richMeta).length > 0
+  /* A reply, on the same column league chat uses for one. */
+  const parentMessageId =
+    typeof body?.parentMessageId === 'string' && body.parentMessageId.trim() && body.parentMessageId.trim().length <= 64
+      ? body.parentMessageId.trim()
+      : null
+
+  const typedText = String(body?.text ?? body?.message ?? body?.body ?? '').trim()
+  /*
+   * A GIF or a photo with no words still needs a text-shaped body (a push, a thread preview);
+   * these are the same fallback labels league chat writes, which every chat view hides once
+   * the real thing renders.
+   */
+  const pollQuestion =
+    hasRich && richMeta.poll && typeof (richMeta.poll as { question?: unknown }).question === 'string'
+      ? String((richMeta.poll as { question: string }).question)
+      : null
+  const text =
+    typedText ||
+    (hasRich && (richMeta.gif || richMeta.gifUrl) ? '🎬 GIF' : '') ||
+    (pollQuestion ? `📊 ${pollQuestion}` : '') ||
+    (hasRich && richMeta.attachments ? '📎 Media' : '')
   if (!text) return NextResponse.json({ error: 'Message required' }, { status: 400 })
   if (text.length > 1000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
   const imageUrl =
     typeof body?.imageUrl === 'string' && body.imageUrl.trim() ? body.imageUrl.trim() : null
 
-  const mediaPayload = parseChatMediaPayload(text)
+  /* The `[GIF] <url>` text form is the old composer's; a message with real rich metadata is plain text. */
+  const mediaPayload = hasRich
+    ? { body: text, type: 'text', imageUrl: null, mediaUrl: null }
+    : parseChatMediaPayload(text)
   const mentions = parseMentions(text)
   const structuredExtra = sanitizeDraftChatStructuredSendMeta(body?.structuredMeta ?? body?.mediaMeta)
   const metadata: Record<string, unknown> = {}
@@ -196,6 +227,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       : undefined
   if (playerContext) metadata.playerContext = playerContext
   Object.assign(metadata, structuredExtra)
+  Object.assign(metadata, richMeta)
 
   const created = await createLeagueChatMessage(leagueId, userId, mediaPayload.body, {
     type: imageUrl ? 'image' : mediaPayload.type,
@@ -203,10 +235,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     /** User messages: league-visible when sync is on; draft-only channel when sync is off. */
     source: syncOn ? null : 'draft',
+    parentMessageId,
   })
   if (!created) return NextResponse.json({ error: 'Failed to send' }, { status: 500 })
   return NextResponse.json({
-    message: toDraftMessage(created, syncOn, leagueId),
+    message: toDraftMessage(created, syncOn, leagueId, userId),
     syncActive: syncOn,
   })
 }

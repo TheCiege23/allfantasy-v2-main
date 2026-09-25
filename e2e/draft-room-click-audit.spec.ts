@@ -1611,13 +1611,19 @@ test.describe('@draft-room click audit', () => {
       expect(tradeRespondActions).toContain('counter')
     }
 
+    /*
+     * The draft chat composer is the shared chat composer now: GIF opens GIF search (through
+     * /api/chat/gifs), the emoji button opens the full picker, photos go through the 📷
+     * button / drop / paste. The old "+" menu (image / video / link / @everyone by URL
+     * prompt) is gone, and with it draft-chat-attach-menu, -media-link and -mention-everyone.
+     */
     const chatMediaGif = desktop.locator('[data-testid="draft-chat-media-gif"]:visible').first()
     if (await chatMediaGif.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await chatMediaGif.click()
-      await desktop.locator('[data-testid="draft-chat-media-image"]:visible').first().click()
-      await desktop.locator('[data-testid="draft-chat-media-video"]:visible').first().click()
-      await desktop.locator('[data-testid="draft-chat-media-link"]:visible').first().click()
-      await desktop.locator('[data-testid="draft-chat-mention-everyone"]:visible').first().click()
+      await chatMediaGif.click()
+      await desktop.locator('[data-testid="draft-chat-composer-emoji-toggle"]:visible').first().click()
+      await desktop.locator('[data-testid="draft-chat-composer-emoji-toggle"]:visible').first().click()
+      await expect(desktop.locator('[data-testid="draft-chat-media-image"]:visible').first()).toBeVisible()
       await desktop.locator('[data-testid="draft-chat-ai-handoff"]:visible').first().click()
       await expect(desktop.locator('[data-testid="draft-chat-sync-badge"]:visible').first()).toBeVisible()
     }
@@ -1962,10 +1968,8 @@ test.describe('@draft-room click audit', () => {
     await mobileTabClick('draft-mobile-tab-chat')
     await expect(mobile.getByTestId('draft-chat-panel')).toBeVisible()
     await expect(mobile.getByTestId('draft-chat-media-gif')).toBeVisible()
-    // draft-chat-media-link lives inside the attach dropdown; open it first
-    await mobile.getByTestId('draft-chat-attach-menu').click()
-    await expect(mobile.getByTestId('draft-chat-media-link')).toBeVisible()
-    await page.keyboard.press('Escape')
+    // Photos are a composer button now (and drop / paste); the old "+" menu is gone.
+    await expect(mobile.getByTestId('draft-chat-media-image')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-board')
     await expect(page.getByTestId('draft-mobile-current-pick')).toBeVisible()
     await page.getByTestId('draft-mobile-quick-search').click()

@@ -24,6 +24,8 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { resolveLeagueMentionIds } from '@/lib/chat-core/resolveMentionTargets'
 import { markLeagueChatRead } from '@/lib/chat-core/leagueChatRead'
 import { queueLeagueChatNotifications } from '@/lib/chat-notifications/chatMessageNotifier'
+import { readLeagueDraftLink } from '@/lib/league-chat/readLeagueDraftLink'
+import { DRAFT_ROOM_ONLY_TYPES, resolveIncludeDraft } from '@/lib/league-chat/draftChatLink'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -70,6 +72,8 @@ function toClientMessage(message: {
   createdAt: string
   messageType?: string | null
   metadata?: Record<string, unknown> | null
+  /** `'draft'` when the row was posted in the draft room; null for league chat. */
+  channelSource?: string | null
 }) {
   const authorName = message.senderName ?? 'Manager'
   const authorAvatarUrl = message.senderAvatarUrl ?? null
@@ -89,6 +93,11 @@ function toClientMessage(message: {
     created: createdMs,
     messageType: message.messageType ?? 'text',
     metadata: message.metadata ?? null,
+    /*
+     * Where the row was posted. League chat labels a draft-room message as one, instead of
+     * leaving the reader to wonder why somebody is talking about ADP in the middle of week 3.
+     */
+    source: message.channelSource ?? null,
   }
 }
 
@@ -143,15 +152,28 @@ export async function GET(req: NextRequest) {
 
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '50'), 100)
   /*
+   * Is a draft running, and where is its room? League chat shows a way in while it is.
+   * Never throws — see readLeagueDraftLink.
+   */
+  const draftLink = await readLeagueDraftLink(leagueId)
+  /*
    * A VIEW preference, not a stored setting. The draft room already mirrors its
    * messages here; this decides whether the reader sees them, and it is a query
    * parameter precisely so it needs no per-league storage and no migration.
+   *
+   * `includeDraft=1` / `=0` is the reader's explicit choice. With none, the draft room is
+   * folded in while a draft is live — the one time the two chats are about the same thing.
+   * Pick announcements stay in the draft room either way (DRAFT_ROOM_ONLY_TYPES).
    */
-  const includeDraftRoom = req.nextUrl.searchParams?.get('includeDraft') === '1'
+  const includeDraftRoom = resolveIncludeDraft(
+    req.nextUrl.searchParams?.get('includeDraft'),
+    Boolean(draftLink?.live),
+  )
   const messages = await getLeagueChatMessages(leagueId, {
     limit,
     requestingUserId: userId,
     includeDraftRoom,
+    ...(includeDraftRoom ? { excludeMessageTypes: [...DRAFT_ROOM_ONLY_TYPES] } : {}),
   })
   /*
    * ⚠ A PIN IS STORED AS A CHAT ROW WHOSE BODY IS JSON. `/pin` writes a
@@ -215,6 +237,10 @@ export async function GET(req: NextRequest) {
      */
     viewerUserId: userId,
     presence,
+    /** Whether draft-room messages are in this transcript, so the toggle can say so. */
+    includeDraft: includeDraftRoom,
+    /** The league's current draft, or null when it has none. */
+    draft: draftLink,
     messages: filteredMessages.map((message) =>
       toClientMessage({
         id: message.id,
@@ -225,6 +251,7 @@ export async function GET(req: NextRequest) {
         body: message.body,
         createdAt: message.createdAt,
         messageType: message.messageType ?? 'text',
+        channelSource: message.channelSource ?? null,
         /*
          * Anonymous polls are redacted HERE, on the way out. The ids stay in
          * the database because refusing a second vote means knowing who has

@@ -1,7 +1,8 @@
 'use client'
 
 import { Send } from 'lucide-react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { AttachmentPreview, type PendingGif, type PollDraft, type UploadedAttachment } from './AttachmentPreview'
 import { EmojiPicker } from './EmojiPicker'
@@ -79,7 +80,66 @@ type ChatComposerProps = {
    * offered only the static entries and never a single person in the thread.
    */
   mentionMembers?: Array<{ username: string; displayName?: string | null; avatarUrl?: string | null }>
+  /**
+   * Test ids for the box and its tools. The draft room's end-to-end specs drive its chat by
+   * `draft-chat-input` / `draft-chat-send` / `draft-chat-media-gif`; the draft room now uses this
+   * composer, so it names them here. Defaults keep `league-chat-textarea` / `league-chat-send`.
+   */
+  testIds?: {
+    input?: string
+    send?: string
+    gif?: string
+    emoji?: string
+    poll?: string
+    photo?: string
+    video?: string
+  }
+  /**
+   * Where the GIF / emoji / poll pickers open. `inline` (the default) opens them straight above
+   * the box, inside the conversation — right for the drawer and the league page, which are tall.
+   * `auto` measures first: when the conversation above the box is too short to hold a picker (the
+   * draft room's dock is ~240px on a laptop) the picker floats above the box over the page
+   * instead, so it is never cut off by the panel it was opened from.
+   */
+  pickerPlacement?: 'inline' | 'auto'
 }
+
+/** Room a picker needs above the box before it is allowed to open inline. */
+export const INLINE_PICKER_MIN_ROOM = 300
+
+export type FloatingPickerBox = {
+  left: number
+  width: number
+  maxHeight: number
+  /** Distance from the viewport's bottom edge — set when the picker opens ABOVE the box. */
+  bottom?: number
+  /** Distance from the viewport's top edge — set when the picker opens BELOW the box. */
+  top?: number
+}
+
+/**
+ * Where a floating picker goes: above the box (or below it, when the box sits so high on the
+ * screen that there is more room underneath), at least as wide as a picker can be used at, kept
+ * inside the viewport, and no taller than the space it opens into. `null` means there is room to
+ * open inline. Pure so the geometry is testable without a layout engine.
+ */
+export function floatingPickerBox(
+  box: { top: number; left: number; width: number; height: number },
+  roomAbove: number,
+  viewport: { width: number; height: number },
+): FloatingPickerBox | null {
+  if (roomAbove >= INLINE_PICKER_MIN_ROOM) return null
+  const width = Math.max(0, Math.min(Math.max(box.width, 320), viewport.width - 16))
+  const left = Math.min(Math.max(8, box.left), Math.max(8, viewport.width - width - 8))
+  const spaceAbove = box.top - 14
+  const spaceBelow = viewport.height - (box.top + box.height) - 14
+  if (spaceAbove >= 200 || spaceAbove >= spaceBelow) {
+    return { left, width, bottom: Math.max(8, viewport.height - box.top + 6), maxHeight: Math.max(120, Math.min(430, spaceAbove)) }
+  }
+  return { left, width, top: box.top + box.height + 6, maxHeight: Math.max(120, Math.min(430, spaceBelow)) }
+}
+
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 /*
  * The upload route's own limits (`app/api/chat/upload/route.ts`), checked here
@@ -117,12 +177,18 @@ export function ChatComposer({
   dropZoneRef,
   onTypingChange,
   mentionMembers,
+  testIds,
+  pickerPlacement = 'inline',
 }: ChatComposerProps) {
   const [text, setText] = useState('')
   /** Photos on their way up. Shown as chips so a slow upload never looks like nothing happened. */
   const [uploading, setUploading] = useState(0)
   const appliedPrefillKey = useRef<string | null>(null)
   const [activePicker, setActivePicker] = useState<Picker>(null)
+  const pickerAnchorRef = useRef<HTMLDivElement | null>(null)
+  const floatingRef = useRef<HTMLDivElement | null>(null)
+  /** `auto` placement only: null until measured, then 'inline' or where to float. */
+  const [floatBox, setFloatBox] = useState<FloatingPickerBox | 'inline' | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([])
   const [pendingGif, setPendingGif] = useState<PendingGif | null>(null)
@@ -529,6 +595,101 @@ export function ChatComposer({
     }
   }, [attachments, autoResize, canSend, onSend, onTypingChange, pendingGif, pollDraft, sending, text])
 
+  /*
+   * `auto` placement: measure BEFORE paint (a layout effect), so the picker never flashes
+   * inline and then jumps. Re-measured on resize and on any scroll, because a floating picker
+   * is positioned against the viewport and the box can move under it.
+   */
+  useIsoLayoutEffect(() => {
+    if (pickerPlacement !== 'auto' || !activePicker) {
+      setFloatBox(null)
+      return
+    }
+    const place = () => {
+      const anchor = pickerAnchorRef.current
+      if (!anchor) return
+      const r = anchor.getBoundingClientRect()
+      const convo = anchor.closest('.af-cm')
+      const roomAbove = convo ? r.top - convo.getBoundingClientRect().top : r.top
+      const next =
+        floatingPickerBox(
+          { top: r.top, left: r.left, width: r.width, height: r.height },
+          roomAbove,
+          {
+            width: window.innerWidth || document.documentElement.clientWidth,
+            height: window.innerHeight || document.documentElement.clientHeight,
+          },
+        ) ?? 'inline'
+      setFloatBox((prev) =>
+        prev === next ||
+        (prev && next !== 'inline' && prev !== 'inline' && JSON.stringify(prev) === JSON.stringify(next))
+          ? prev
+          : next,
+      )
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [activePicker, pickerPlacement])
+
+  const floating = pickerPlacement === 'auto' && floatBox !== null && floatBox !== 'inline' ? floatBox : null
+
+  /* A picker floating over the page closes on a click outside it or Escape, like any popover. */
+  useEffect(() => {
+    if (!floating) return
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node | null
+      if (!t) return
+      if (floatingRef.current?.contains(t) || pickerAnchorRef.current?.contains(t)) return
+      setActivePicker(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActivePicker(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [floating])
+
+  const pickerBody =
+    activePicker === 'gif' ? (
+      <GifPicker
+        onSelect={(g) => {
+          setPendingGif({
+            id: g.id,
+            giphyId: g.giphyId,
+            url: g.url,
+            previewUrl: g.previewUrl,
+            title: g.title,
+          })
+          setActivePicker(null)
+        }}
+        onClose={() => setActivePicker(null)}
+      />
+    ) : activePicker === 'emoji' ? (
+      <EmojiPicker onSelect={(c) => insertChar(c)} onClose={() => setActivePicker(null)} />
+    ) : activePicker === 'poll' ? (
+      <PollComposer
+        initial={pollDraft}
+        onCreatePoll={(p) => {
+          setPollDraft(p)
+          setActivePicker(null)
+        }}
+        onCancel={() => setActivePicker(null)}
+      />
+    ) : null
+
+  const showInlinePicker = pickerBody != null && (pickerPlacement === 'inline' || floatBox === 'inline')
+
   const toolBtn = (active: boolean) =>
     `af-chat-tool px-1.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
       active ? 'text-cyan-400 bg-cyan-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.06]'
@@ -555,41 +716,30 @@ export function ChatComposer({
         </p>
       ) : null}
 
-      <div className="relative w-full">
-        {activePicker === 'gif' ? (
-          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">
-            <GifPicker
-              onSelect={(g) => {
-                setPendingGif({
-                  id: g.id,
-                  giphyId: g.giphyId,
-                  url: g.url,
-                  previewUrl: g.previewUrl,
-                  title: g.title,
-                })
-                setActivePicker(null)
-              }}
-              onClose={() => setActivePicker(null)}
-            />
-          </div>
+      <div className="relative w-full" ref={pickerAnchorRef}>
+        {showInlinePicker ? (
+          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">{pickerBody}</div>
         ) : null}
-        {activePicker === 'emoji' ? (
-          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">
-            <EmojiPicker onSelect={(c) => insertChar(c)} onClose={() => setActivePicker(null)} />
-          </div>
-        ) : null}
-        {activePicker === 'poll' ? (
-          <div className="af-chat-picker absolute bottom-full left-0 right-0 z-50 mb-1">
-            <PollComposer
-              initial={pollDraft}
-              onCreatePoll={(p) => {
-                setPollDraft(p)
-                setActivePicker(null)
-              }}
-              onCancel={() => setActivePicker(null)}
-            />
-          </div>
-        ) : null}
+        {pickerBody != null && floating && typeof document !== 'undefined'
+          ? createPortal(
+              <div
+                ref={floatingRef}
+                className="af-cm af-cm-floatpicker"
+                data-testid="chat-composer-floating-picker"
+                data-side={floating.top != null ? 'below' : 'above'}
+                style={{
+                  left: floating.left,
+                  width: floating.width,
+                  ...(floating.top != null ? { top: floating.top } : { bottom: floating.bottom }),
+                }}
+              >
+                <div className="af-chat-picker" style={{ maxHeight: floating.maxHeight }}>
+                  {pickerBody}
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
 
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03]">
           {bbSuggest?.options.length ? (
@@ -669,7 +819,8 @@ export function ChatComposer({
             placeholder={placeholder}
             rows={1}
             className="w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13px] leading-[1.4] text-white outline-none placeholder:text-white/30 min-h-[36px] max-h-[120px] overflow-y-auto"
-            data-testid="league-chat-textarea"
+            data-testid={testIds?.input ?? 'league-chat-textarea'}
+            aria-label={chatType === 'draft' ? 'Chat message' : undefined}
           />
 
           {isRecording ? (
@@ -699,6 +850,7 @@ export function ChatComposer({
                   onClick={() => setActivePicker((p) => (p === 'gif' ? null : 'gif'))}
                   aria-label="GIF"
                   aria-pressed={activePicker === 'gif'}
+                  data-testid={testIds?.gif}
                 >
                   GIF
                 </button>
@@ -707,6 +859,8 @@ export function ChatComposer({
                   className={toolBtn(activePicker === 'emoji')}
                   onClick={() => setActivePicker((p) => (p === 'emoji' ? null : 'emoji'))}
                   aria-label="Emoji"
+                  aria-pressed={activePicker === 'emoji'}
+                  data-testid={testIds?.emoji}
                 >
                   😀
                 </button>
@@ -715,6 +869,7 @@ export function ChatComposer({
                   className={toolBtn(activePicker === 'poll')}
                   onClick={() => setActivePicker((p) => (p === 'poll' ? null : 'poll'))}
                   aria-label="Poll"
+                  data-testid={testIds?.poll}
                 >
                   📊
                 </button>
@@ -731,6 +886,7 @@ export function ChatComposer({
                   className={toolBtn(false)}
                   onClick={() => imageInputRef.current?.click()}
                   aria-label="Photo"
+                  data-testid={testIds?.photo}
                   title="Add photos — or drop / paste them into the chat"
                 >
                   📷
@@ -748,6 +904,7 @@ export function ChatComposer({
                   className={toolBtn(false)}
                   onClick={() => videoInputRef.current?.click()}
                   aria-label="Video"
+                  data-testid={testIds?.video}
                 >
                   🎥
                 </button>
@@ -766,8 +923,8 @@ export function ChatComposer({
                   onClick={() => void handleSend()}
                   disabled={!canSend || sending}
                   className="af-chat-send rounded-lg p-1.5 text-white/40 transition-colors hover:bg-cyan-500/10 hover:text-cyan-400 disabled:opacity-40"
-                  aria-label="Send league message"
-                  data-testid="league-chat-send"
+                  aria-label={chatType === 'draft' ? 'Send message' : 'Send league message'}
+                  data-testid={testIds?.send ?? 'league-chat-send'}
                 >
                   <Send size={14} strokeWidth={2} />
                 </button>

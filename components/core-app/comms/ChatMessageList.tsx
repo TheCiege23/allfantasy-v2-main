@@ -97,6 +97,22 @@ export type ChatMessageListProps = {
   footer?: ReactNode
   /** A message to scroll to and flash — a search hit, a pinned item. Bump `nonce` to repeat. */
   focusRequest?: { id: string; nonce: number } | null
+  /**
+   * A row that is not somebody talking — a draft pick, a note from the draft copilot that only
+   * you can see. Return the card to draw it across the conversation, with no bubble and no
+   * actions (there is nothing to reply to or react to); return null for an ordinary message.
+   */
+  renderSystem?: (m: ChatListMessage) => ReactNode | null
+  /** A short label over the bubble, e.g. "Draft room" on a message posted from the draft. */
+  tagFor?: (m: ChatListMessage) => string | null
+  /**
+   * Whether `renderRich` draws anything for this message. Defaults to `hasRichContent`; a
+   * surface that renders shapes RichMessage does not know (the draft room's older polls)
+   * says so here, or its renderer is never asked.
+   */
+  hasRichFor?: (m: ChatListMessage) => boolean
+  /** A test id on the scrolling element itself (the draft room's specs find it by one). */
+  scrollTestId?: string
 }
 
 const LONG_PRESS_MS = 450
@@ -187,6 +203,10 @@ export function ChatMessageList({
   empty,
   footer,
   focusRequest = null,
+  renderSystem,
+  tagFor,
+  hasRichFor,
+  scrollTestId,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -206,6 +226,11 @@ export function ChatMessageList({
   }, [messages])
 
   const items = useMemo(() => layoutMessages(messages, viewerId), [messages, viewerId])
+
+  const richOf = useCallback(
+    (m: ChatListMessage) => (hasRichFor ? hasRichFor(m) : hasRichContent(m.metadata, m.messageType, m.body)),
+    [hasRichFor],
+  )
 
   /* ── Scrolling: follow the conversation only when the reader is already at the end ── */
   const wasNearBottom = useRef(true)
@@ -293,7 +318,7 @@ export function ChatMessageList({
   if (messages.length === 0) {
     return (
       <div className="af-cm-chatwrap">
-        <div className="af-cm-thread af-cm-chat" ref={scrollRef} role="log" aria-label={label}>
+        <div className="af-cm-thread af-cm-chat" ref={scrollRef} role="log" aria-label={label} data-testid={scrollTestId}>
           {empty}
           {footer}
         </div>
@@ -306,6 +331,7 @@ export function ChatMessageList({
       <div
         className="af-cm-thread af-cm-chat"
         ref={scrollRef}
+        data-testid={scrollTestId}
         role="log"
         aria-label={label}
         aria-live="polite"
@@ -321,9 +347,25 @@ export function ChatMessageList({
             )
           }
           const m = item.message
+          const system = renderSystem ? renderSystem(m) : null
+          if (system != null) {
+            return (
+              <div
+                key={m.id}
+                id={`af-cm-msg-${m.id}`}
+                data-message-id={m.id}
+                className="af-cm-row af-cm-row-system"
+                data-system="true"
+                data-flash={flashId === m.id || undefined}
+              >
+                {system}
+              </div>
+            )
+          }
           const mine = item.mine
           const deleted = isDeletedMessage(m.metadata)
-          const rich = !deleted && hasRichContent(m.metadata, m.messageType, m.body)
+          const rich = !deleted && richOf(m)
+          const tag = tagFor ? tagFor(m) : null
           const shown = deleted
             ? null
             : visibleBody({ body: m.body, metadata: m.metadata, messageType: m.messageType, hasRich: rich })
@@ -356,6 +398,7 @@ export function ChatMessageList({
 
               <div className="af-cm-col">
                 {!mine && item.startsRun ? <span className="af-cm-msg-author">{m.authorName}</span> : null}
+                {tag ? <span className="af-cm-msg-tag">{tag}</span> : null}
 
                 {m.parentMessageId && !deleted ? (
                   <QuotedMessage
@@ -597,7 +640,7 @@ export function ChatMessageList({
           }}
           onCopy={async () => {
             const mine = Boolean(viewerId) && menuMessage.authorId === viewerId
-            const rich = hasRichContent(menuMessage.metadata, menuMessage.messageType, menuMessage.body)
+            const rich = richOf(menuMessage)
             const text = copyableText(menuMessage, mine, rich)
             setMenuFor(null)
             if (!text) {

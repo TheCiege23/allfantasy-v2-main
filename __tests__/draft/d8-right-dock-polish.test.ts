@@ -186,12 +186,17 @@ describe('DraftChatPanel — no regression (Commit 23)', () => {
     expect(chatSrc).toMatch(/data-testid="draft-chat-panel"/)
   })
 
+  /*
+   * The draft room's box is the shared ChatComposer now, which takes its test ids as a prop, so
+   * the ids are passed rather than written as `data-testid="…"` here. That they reach the DOM on
+   * a real textarea and button is asserted by rendering, in draft-chat-panel-conversation.test.tsx.
+   */
   it('chat send button data-testid is preserved', () => {
-    expect(chatSrc).toMatch(/data-testid="draft-chat-send"/)
+    expect(chatSrc).toMatch(/send: 'draft-chat-send'/)
   })
 
   it('chat message input data-testid is preserved', () => {
-    expect(chatSrc).toMatch(/data-testid="draft-chat-input"/)
+    expect(chatSrc).toMatch(/input: 'draft-chat-input'/)
   })
 })
 

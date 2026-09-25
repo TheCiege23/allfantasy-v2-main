@@ -6,6 +6,7 @@
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import type { LeaguePollPayload } from '@/lib/league-chat/LeaguePollService'
 import type { DraftChatPlayerContext } from '@/lib/draft-room/draft-chat-player-context'
+import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
 
 export type DraftChatMessageCategory =
   | 'USER_MESSAGE'
@@ -87,6 +88,18 @@ export type DraftChatWireMessage = {
   senderAvatarUrl?: string | null
   leagueId?: string | null
   aiMetadata?: DraftChatAiMetadataWire | null
+  /** Set when this message answers another one (the same column league chat uses). */
+  parentMessageId?: string | null
+  /**
+   * The row's metadata — GIF (either key layout), photos, polls, reactions, edit/delete stamps —
+   * exactly as league chat receives it, anonymous poll votes redacted for the viewer.
+   *
+   * ⚠ THIS WAS DROPPED, AND IT IS WHY A GIF SENT FROM LEAGUE CHAT SHOWED IN THE DRAFT ROOM AS
+   * THE WORDS "🎬 GIF". The composer stores the GIF in `metadata.gif` / `metadata.gifUrl` and the
+   * photos in `metadata.attachments`; this wire only ever carried `metadata.mediaUrl`, which only
+   * the draft room's own `[GIF] <url>` text path wrote.
+   */
+  metadata?: Record<string, unknown> | null
   /**
    * Client-only overlay (optional): row counts as unread for collapsed-chat badge when draft chat
    * merges local read state — not persisted on the wire/API contract.
@@ -108,6 +121,115 @@ export function sanitizeDraftChatStructuredSendMeta(raw: unknown): Record<string
     const t = o.thumbnailUrl.trim()
     if (t.startsWith('http') && t.length <= 2048) out.thumbnailUrl = t
   }
+  return out
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function boundedString(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null
+  const t = value.trim()
+  return t && t.length <= max ? t : null
+}
+
+/** https only — a GIF is the one thing anybody can aim at an arbitrary URL by pasting it. */
+function httpsUrl(value: unknown): string | null {
+  const t = boundedString(value, 2048)
+  return t && /^https:\/\//i.test(t) ? t : null
+}
+
+/** An uploaded file: our own upload route's same-origin path, or https. Never `//host`. */
+function mediaUrl(value: unknown): string | null {
+  const t = boundedString(value, 2048)
+  if (!t) return null
+  if (t.startsWith('/') && !t.startsWith('//')) return t
+  return /^https:\/\//i.test(t) ? t : null
+}
+
+const MAX_DRAFT_CHAT_ATTACHMENTS = 4
+const MAX_DRAFT_CHAT_POLL_OPTIONS = 10
+
+/**
+ * The rich half of a draft-room message — GIF, photos, a poll — in the SAME metadata shape
+ * league chat stores (`/api/league/chat`, written by the shared composer), so one row renders
+ * identically in both rooms and votes through the same `/vote` route.
+ *
+ * ⚠ EVERY FIELD IS REBUILT, NOTHING IS COPIED THROUGH. The body is client JSON that lands in
+ * every league member's chat; a poll arrives with its votes emptied (a client does not get to
+ * post a poll with a result already on it), and unknown keys are dropped.
+ */
+export function sanitizeDraftChatRichMeta(raw: unknown): Record<string, unknown> {
+  if (!isPlainRecord(raw)) return {}
+  const out: Record<string, unknown> = {}
+
+  if (isPlainRecord(raw.gif)) {
+    const url = httpsUrl(raw.gif.url)
+    const preview = httpsUrl(raw.gif.previewUrl)
+    if (url || preview) {
+      out.gif = {
+        url: url ?? preview,
+        previewUrl: preview ?? url,
+        title: boundedString(raw.gif.title, 140) ?? 'GIF',
+      }
+    }
+  }
+  const gifUrl = httpsUrl(raw.gifUrl)
+  if (gifUrl) out.gifUrl = gifUrl
+  const previewUrl = httpsUrl(raw.previewUrl)
+  if (previewUrl) out.previewUrl = previewUrl
+  const gifTitle = boundedString(raw.gifTitle, 140)
+  if (gifTitle && (out.gif || out.gifUrl)) out.gifTitle = gifTitle
+  const gifId = boundedString(raw.gifId, 128)
+  if (gifId) out.gifId = gifId
+  const giphyId = boundedString(raw.giphyId, 128)
+  if (giphyId) out.giphyId = giphyId
+
+  if (Array.isArray(raw.attachments)) {
+    const attachments: Array<Record<string, unknown>> = []
+    for (const entry of raw.attachments) {
+      if (attachments.length >= MAX_DRAFT_CHAT_ATTACHMENTS) break
+      if (!isPlainRecord(entry)) continue
+      const type = entry.type === 'image' || entry.type === 'video' || entry.type === 'voice' ? entry.type : null
+      const url = mediaUrl(entry.url)
+      if (!type || !url) continue
+      const a: Record<string, unknown> = { type, url }
+      const mime = boundedString(entry.mimeType, 80)
+      if (mime) a.mimeType = mime
+      if (typeof entry.duration === 'number' && Number.isFinite(entry.duration) && entry.duration >= 0) {
+        a.duration = Math.min(entry.duration, 600)
+      }
+      attachments.push(a)
+    }
+    if (attachments.length > 0) out.attachments = attachments
+  }
+
+  if (isPlainRecord(raw.poll)) {
+    const question = boundedString(raw.poll.question, 300)
+    const options: Array<{ id: string; text: string; votes: string[] }> = []
+    if (Array.isArray(raw.poll.options)) {
+      raw.poll.options.forEach((entry, i) => {
+        if (options.length >= MAX_DRAFT_CHAT_POLL_OPTIONS) return
+        const text = isPlainRecord(entry) ? boundedString(entry.text, 200) : boundedString(entry, 200)
+        if (!text) return
+        const id = (isPlainRecord(entry) ? boundedString(entry.id, 64) : null) ?? `opt-${i}`
+        options.push({ id, text, votes: [] })
+      })
+    }
+    if (question && options.length >= 2) {
+      const closeAtRaw = boundedString(raw.poll.closeAt, 64)
+      const closeAt = closeAtRaw && !Number.isNaN(Date.parse(closeAtRaw)) ? new Date(closeAtRaw).toISOString() : null
+      out.poll = {
+        question,
+        options,
+        ...(closeAt ? { closeAt } : {}),
+        allowMultiple: raw.poll.allowMultiple === true,
+        anonymous: raw.poll.anonymous === true,
+      }
+    }
+  }
+
   return out
 }
 
@@ -214,6 +336,8 @@ export function buildDraftChatWireMessage(
     leagueId?: string | null
     sanitizePlayerContext: (raw: unknown) => DraftChatPlayerContext | null
     parsePollPayload: (input: { body?: string | null; metadata?: Record<string, unknown> | null }) => LeaguePollPayload | null
+    /** Who is reading — anonymous poll votes other than theirs are redacted on the way out. */
+    viewerUserId?: string | null
   },
 ): DraftChatWireMessage {
   const metadata = m.metadata ?? null
@@ -335,5 +459,9 @@ export function buildDraftChatWireMessage(
     senderAvatarUrl: m.senderAvatarUrl ?? null,
     leagueId: opts.leagueId ?? null,
     ...(aiMetadata ? { aiMetadata } : {}),
+    parentMessageId: m.parentMessageId ?? null,
+    metadata: metaRecord
+      ? ((redactAnonymousPollVotes(metaRecord, opts.viewerUserId ?? null) ?? null) as Record<string, unknown> | null)
+      : null,
   }
 }
