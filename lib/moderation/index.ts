@@ -8,6 +8,7 @@ export {
   getBlockedUserIds,
   getBlockedUserIdsForRead,
   hasBlockBetween,
+  getBlockedEitherWayUserIds,
   BlockListUnavailableError,
   getBlockedUsersWithDetails,
   isUserBlockedBy,

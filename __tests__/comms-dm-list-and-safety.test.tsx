@@ -276,7 +276,7 @@ describe('huddle header: members, add people, rename, leave', () => {
     await waitFor(() => expect(calls((u, i) => u === '/api/shared/chat/threads/h1/leave' && i?.method === 'POST')).toHaveLength(1))
     await waitFor(() => expect(screen.queryByText('claiming the kicker')).toBeNull())
     expect(screen.queryByRole('button', { name: /Waiver wire/ })).toBeNull()
-    expect(screen.getByPlaceholderText('Usernames, comma separated')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Add names or @usernames')).toBeTruthy()
   })
 
   it('🛑 a failed leave keeps you in the huddle and says why', async () => {
