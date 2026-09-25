@@ -4,7 +4,7 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPickValueSnapshots } from '@/lib/player-values/latestPickValueSnapshots'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
-import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy } from './realLeague'
+import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy, realLeagueKey } from './realLeague'
 import {
   LATEST_TRADE_ORDER,
   pickAssets,
@@ -120,6 +120,12 @@ export type TradeWindowRow = {
   latest: BoardTrade | null
   href: string
   reasoning: string
+  /**
+   * The real league behind this row (`realLeagueKey`), so a caller holding the reader's reachable
+   * rows can point the card at THEIR copy — see `pointBoardAtReachableLeagues`. Optional because a
+   * board cached before 2026-09-25 does not carry it; such a row keeps its own id.
+   */
+  realKey?: string
 }
 
 export type PendingTrade = {
@@ -133,6 +139,8 @@ export type PendingTrade = {
   expiresAt: string | null
   youProposed: boolean
   items: Array<{ itemType: string; reference: string | null; faabAmount: number | null }>
+  /** As on `TradeWindowRow`. */
+  realKey?: string
 }
 
 export type TradesBoardData = {
@@ -873,6 +881,7 @@ export async function getTradesBoard(
       latest,
       href: `/core/trades?league=${encodeURIComponent(l.id)}`,
       reasoning: bits.join(' '),
+      realKey: realLeagueKey({ platform: l.platform, platformLeagueId: l.platformLeagueId, season: l.season, leagueId: l.id }),
     })
   }
 
@@ -890,6 +899,9 @@ export async function getTradesBoard(
     return {
       id: p.id,
       leagueId: p.leagueId,
+      realKey: l
+        ? realLeagueKey({ platform: l.platform, platformLeagueId: l.platformLeagueId, season: l.season, leagueId: l.id })
+        : undefined,
       leagueName: l ? leagueDisplayName(l.name) : 'League',
       platform: String(l?.platform ?? 'native').toLowerCase(),
       logoUrl: l
@@ -912,5 +924,47 @@ export async function getTradesBoard(
     considered: mine.length,
     deadlineUnknown,
     currentWeek,
+  }
+}
+
+/**
+ * Point every card at the READER'S OWN copy of its league.
+ *
+ * 🛑 THE BOARD LINKED ANOTHER IMPORTER'S ROW (field test, 2026-09-25). One Sleeper league is one
+ * `leagues` row per importer, and this board picks the copy the reader CLAIMED a team on — which,
+ * when their own copy carries no claim, is someone else's. /core gates `?league=` on the reader's
+ * league list (`getDashboardLeagueListForUser` → `toPlayedLeagues`), so "Open trades" on KBFL,
+ * Bla bla bla and Guillotine League 26 ($30) bounced the reader straight back to this board.
+ *
+ * So the caller hands over the rows /core will actually accept, and each card takes the one that is
+ * the same real league (`realLeagueKey` — the repo's one identity rule, platform + id + season). A
+ * card with no reachable twin, or no key (a board cached before this), keeps its own id: nothing is
+ * pointed at a row the reader was not already being sent to. PURE.
+ */
+export function pointBoardAtReachableLeagues(
+  board: TradesBoardData,
+  reachable: ReadonlyArray<{
+    id: string
+    platform?: string | null
+    platformLeagueId?: string | null
+    season?: number | string | null
+  }>,
+): TradesBoardData {
+  const byKey = new Map<string, string>()
+  for (const l of reachable) {
+    const key = realLeagueKey({ platform: l.platform, platformLeagueId: l.platformLeagueId, season: l.season, leagueId: l.id })
+    if (!byKey.has(key)) byKey.set(key, l.id)
+  }
+  const idFor = (current: string, key: string | undefined) => (key ? byKey.get(key) : undefined) ?? current
+  return {
+    ...board,
+    windows: board.windows.map((w) => {
+      const id = idFor(w.leagueId, w.realKey)
+      return id === w.leagueId ? w : { ...w, leagueId: id, href: `/core/trades?league=${encodeURIComponent(id)}` }
+    }),
+    pending: board.pending.map((p) => {
+      const id = idFor(p.leagueId, p.realKey)
+      return id === p.leagueId ? p : { ...p, leagueId: id }
+    }),
   }
 }
