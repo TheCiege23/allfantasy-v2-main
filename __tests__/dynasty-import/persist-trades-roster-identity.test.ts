@@ -159,3 +159,20 @@ describe('persistTradesForSeason — provider-native roster identity', () => {
     expect(upsertTrade).toHaveBeenCalledTimes(1)
   })
 })
+
+/*
+ * ⚠ `platform` WAS HARD-CODED TO 'sleeper' ON CREATE, so the first non-Sleeper trade to reach this
+ * writer would have been labelled a Sleeper trade. The parameter defaults to 'sleeper' so every
+ * existing caller (backfill-orchestrator, archiveFeedTrades) writes exactly what it wrote before.
+ */
+describe('persistTradesForSeason — platform label', () => {
+  it("defaults to 'sleeper' when the caller names no platform", async () => {
+    await persistTradesForSeason('L1', 2026, [trade('1', '2')], new Map([['1', 'ownerA']]))
+    expect(sideFor('ownerA').platform).toBe('sleeper')
+  })
+
+  it('writes the platform the caller names', async () => {
+    await persistTradesForSeason('L1', 2026, [trade('1', '2')], new Map([['1', 'ownerA']]), 'espn')
+    expect(sideFor('ownerA').platform).toBe('espn')
+  })
+})

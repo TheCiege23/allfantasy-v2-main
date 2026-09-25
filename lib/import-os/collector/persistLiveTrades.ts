@@ -31,6 +31,7 @@
  */
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
+import { isCompletedTrade } from '@/lib/league-import/transactionFinality'
 import type { NormalizedImportResult, NormalizedTransaction } from '@/lib/league-import/types'
 
 /**
@@ -112,10 +113,15 @@ export interface PersistLiveTradesResult {
 }
 
 /**
- * ⚠ ONLY `complete` TRADES. Sleeper reports proposed and vetoed trades through the same endpoint,
+ * ⚠ ONLY EXECUTED TRADES. Sleeper reports proposed and vetoed trades through the same endpoint,
  * and writing those would put trades that never happened into a table the trade grader reads.
  * The historical importer filters on `type === 'trade'` alone because it fetches finalized seasons
  * where nothing else survives; a LIVE feed sees the in-flight ones too.
+ *
+ * 🛑 "EXECUTED" IS A PER-PROVIDER WORD. This filter was Sleeper's `complete` alone, so every ESPN,
+ * Yahoo, MFL and Fleaflicker trade was dropped here and never reached `LeagueTrade`. Finality now
+ * comes from `isCompletedTrade`, the same predicate the Decision OS activity emitter uses — and it
+ * deliberately answers false for Fantrax, whose trades are inferred from roster snapshots.
  */
 export async function persistLiveTrades(input: {
   platformLeagueId: string
@@ -123,9 +129,10 @@ export async function persistLiveTrades(input: {
   normalized: NormalizedImportResult
 }): Promise<PersistLiveTradesResult> {
   const { platformLeagueId, season, normalized } = input
+  const provider = normalized.source?.source_provider ?? 'sleeper'
 
   const trades = (normalized.transactions ?? []).filter(
-    (t) => t.type === 'trade' && String(t.status).toLowerCase() === 'complete',
+    (t) => t.type === 'trade' && isCompletedTrade(provider, t.status),
   )
   if (trades.length === 0) {
     return { tradesSeen: 0, rowsWritten: 0, skippedNoOwner: 0 }
@@ -157,6 +164,8 @@ export async function persistLiveTrades(input: {
     season,
     facts,
     rosterIdToOwner,
+    // ⚠ The writer used to hard-code 'sleeper' here; a Yahoo trade must not be labelled Sleeper.
+    provider,
   )
 
   return { tradesSeen: trades.length, rowsWritten, skippedNoOwner }
