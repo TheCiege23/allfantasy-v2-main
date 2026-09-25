@@ -21,6 +21,12 @@ const calls = vi.hoisted(() => ({ order: [] as number[], inFlight: 0, maxInFligh
 const getLeagueTransactions = vi.hoisted(() => vi.fn())
 // Hoisted so a test can make the ROSTERS read fail — the path that misclassified an outage.
 const getLeagueRosters = vi.hoisted(() => vi.fn())
+/*
+ * ⚠ MOCKED EXPLICITLY, because this is a PARTIAL mock: without an entry here the spread below
+ * hands the scan the REAL `getSleeperState`, and a unit test makes a live request to Sleeper.
+ * Null is "no clock", which keeps every week on the long window — the pre-2026-09-25 behaviour.
+ */
+const getSleeperState = vi.hoisted(() => vi.fn(async (): Promise<unknown> => null))
 
 vi.mock('server-only', () => ({}))
 /*
@@ -35,10 +41,15 @@ vi.mock('@/lib/api-cache/SleeperCacheLayer', async (importOriginal) => ({
   getLeagueRosters,
   getLeagueUsers: vi.fn(async () => [{ user_id: 'them', display_name: 'Them' }]),
   getLeagueTransactions,
+  getSleeperState,
 }))
 
 import { SleeperHttpError } from '@/lib/api-cache/SleeperCacheLayer'
-import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import {
+  RECENT_WEEK_MAX_AGE_MS,
+  recentWeeksFromState,
+  scanPendingSleeperTrades,
+} from '@/lib/provider-trades/scanPendingSleeperTrades'
 
 function trade(id: string, week: number) {
   return {
@@ -64,6 +75,50 @@ beforeEach(() => {
   getLeagueTransactions.mockReset()
   getLeagueRosters.mockReset()
   getLeagueRosters.mockResolvedValue([{ roster_id: 1, owner_id: 'me', players: [] }])
+  getSleeperState.mockReset()
+  getSleeperState.mockResolvedValue(null)
+})
+
+describe('🛑 the current weeks are read fresh — a new offer lands in the week it is sent', () => {
+  it('recentWeeksFromState: the current leg and its neighbours, clamped to the season', () => {
+    expect([...recentWeeksFromState({ leg: 5 })].sort((a, b) => a - b)).toEqual([4, 5, 6])
+    expect([...recentWeeksFromState({ week: 1 })].sort((a, b) => a - b)).toEqual([1, 2])
+    expect([...recentWeeksFromState({ leg: 18 })].sort((a, b) => a - b)).toEqual([17, 18])
+    // Offseason (leg 0) still watches week 1 — the first week anything can be filed under.
+    expect([...recentWeeksFromState({ leg: 0 })].sort((a, b) => a - b)).toEqual([1, 2])
+    expect(recentWeeksFromState(null).size).toBe(0)
+    expect(recentWeeksFromState({}).size).toBe(0)
+  })
+
+  it('🛑 asks for the short max age on the current weeks ONLY, and still reads all eighteen', async () => {
+    getSleeperState.mockResolvedValue({ leg: 5 })
+    getLeagueTransactions.mockImplementation(async () => [])
+    await scanPendingSleeperTrades({ ...args, sport: 'NFL' })
+    expect(getLeagueTransactions).toHaveBeenCalledTimes(18)
+    const fresh = getLeagueTransactions.mock.calls
+      .filter((c) => (c[2] as { maxAgeMs?: number } | undefined)?.maxAgeMs === RECENT_WEEK_MAX_AGE_MS)
+      .map((c) => c[1])
+      .sort((a, b) => a - b)
+    expect(fresh).toEqual([4, 5, 6])
+    // Every other week is read exactly as before — two arguments, the long window.
+    for (const c of getLeagueTransactions.mock.calls) {
+      if (![4, 5, 6].includes(c[1] as number)) expect(c).toHaveLength(2)
+    }
+    expect(getSleeperState).toHaveBeenCalledWith('NFL')
+  })
+
+  it('a clock that throws costs freshness, never the scan', async () => {
+    getSleeperState.mockRejectedValue(new Error('state down'))
+    getLeagueTransactions.mockImplementation(async () => [])
+    const out = await scanPendingSleeperTrades(args)
+    expect(out.scanned).toBe(true)
+    expect(getLeagueTransactions).toHaveBeenCalledTimes(18)
+    for (const c of getLeagueTransactions.mock.calls) expect(c).toHaveLength(2)
+  })
+
+  it('the max age is under the trade screens’ 60 s refresh, so a refresh can see something new', () => {
+    expect(RECENT_WEEK_MAX_AGE_MS).toBeLessThan(60_000)
+  })
 })
 
 /** Each week resolves after a tick, so serial vs concurrent is observable. */

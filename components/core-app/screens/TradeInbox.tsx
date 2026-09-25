@@ -1,6 +1,7 @@
 'use client'
 
 import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
+import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 
 import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
@@ -345,19 +346,24 @@ export function TradeInbox(props: {
 
   const { leagueId, onLoad, onCounter, reloadToken = 0 } = props
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { background?: boolean }) => {
     if (!leagueId) return
-    setState('loading')
+    const background = opts?.background === true
+    // A background refresh must not flash the inbox back to "loading" under the manager's eyes.
+    if (!background) setState('loading')
     try {
       /*
        * ⚠ SHARED WITH TradeLeagueStrip, which also reads this league's panel on the same
        * load. Two components, one request — see tradesPanelFetch for the measurement.
        * A non-zero reloadToken means a write just landed, so that sharing is skipped:
-       * the cached response is older than the change we are refetching to see.
+       * the cached response is older than the change we are refetching to see. A background
+       * refresh skips it too: it exists to see what changed since the last read.
        */
-      const r = await fetchTradesPanel(leagueId, reloadToken > 0 ? { force: true } : undefined)
+      const r = await fetchTradesPanel(leagueId, reloadToken > 0 || background ? { force: true } : undefined)
       const j = r.data as PanelResponse
       if (!r.ok) {
+        // ⚠ A failed BACKGROUND read keeps what is on screen: one blip must not empty the inbox.
+        if (background) return
         setData(null)
         setState('failed')
         return
@@ -365,6 +371,7 @@ export function TradeInbox(props: {
       setData(j)
       setState('idle')
     } catch {
+      if (background) return
       setData(null)
       setState('failed')
     }
@@ -374,6 +381,13 @@ export function TradeInbox(props: {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * A Sleeper offer sent while this inbox is open now appears on its own — on return to the page
+   * and once a minute while it is in view. See useVisibleRefresh; the server reads the current
+   * weeks at most 45 s old (scanPendingSleeperTrades), so a refresh can actually see it.
+   */
+  useVisibleRefresh(() => load({ background: true }), { enabled: Boolean(leagueId) })
 
   const { onNeedsYouCount } = props
   useEffect(() => {

@@ -15,8 +15,16 @@ describe('trade visibility contract', () => {
     const tab = read('app/league/[leagueId]/tabs/TradesTab.tsx')
     expect(tab.match(/cache: 'no-store'/g)?.length).toBeGreaterThanOrEqual(2)
     expect(tab.match(/Promise\.all\(\[load\(\), loadLedger\(\)\]\)/g)?.length).toBeGreaterThanOrEqual(2)
-    expect(tab).toContain("window.addEventListener('focus', refresh)")
-    expect(tab).toContain("document.addEventListener('visibilitychange', onVisibility)")
+    /*
+     * Focus / visibility / interval refresh moved into `useVisibleRefresh` (2026-09-25), which the
+     * hook's own suite tests by behaviour. Pinned here: the tab re-reads BOTH — offers on the
+     * timer, the ledger only on return — and the hook still listens for both events.
+     */
+    expect(tab).toContain('useVisibleRefresh(() => load({ background: true }))')
+    expect(tab).toContain('useVisibleRefresh(() => loadLedger({ background: true }), { intervalMs: null })')
+    const hook = read('hooks/useVisibleRefresh.ts')
+    expect(hook).toContain("window.addEventListener('focus', onFocus)")
+    expect(hook).toContain("document.addEventListener('visibilitychange', onVisibility)")
   })
 
   it('reconciles the core latest-trades feed and requests league-specific reasons', () => {

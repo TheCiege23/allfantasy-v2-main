@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { PlayerImage } from '@/app/components/PlayerImage'
@@ -1077,9 +1078,59 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     [watch, persistWatch],
   )
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setErr(null)
+  /*
+   * The completed ledger, independently of the panel. A payload that does not
+   * carry `supported` is not a ledger at all (a proxy error page, a mock) and
+   * must not be read as "no trades".
+   *
+   * `background`: a refresh the manager did not ask for keeps what is on screen — no "loading"
+   * flash, and a failed read does not replace a good ledger with an error.
+   */
+  const loadLedger = useCallback(async (opts?: { background?: boolean }) => {
+    const background = opts?.background === true
+    if (!background) setLedger({ kind: 'loading' })
+    try {
+      const res = await fetch(`/api/league/trade-grades?leagueId=${encodeURIComponent(league.id)}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+      const data = (await res.json().catch(() => null)) as GradesResponse | null
+      if (!data || typeof data !== 'object' || !('supported' in data)) {
+        if (!background) setLedger({ kind: 'failed' })
+        return
+      }
+      if (data.supported === false) {
+        setLedger({ kind: 'unsupported', platform: data.platform })
+        return
+      }
+      if ('graded' in data && data.graded === false) {
+        setLedger({ kind: 'ungraded', ledger: data.ledger })
+        return
+      }
+      if ('grades' in data && data.grades) {
+        setLedger({ kind: 'graded', grades: data.grades, viewerId: data.viewerSleeperUserId })
+        return
+      }
+      if (!background) setLedger({ kind: 'failed' })
+    } catch {
+      if (!background) setLedger({ kind: 'failed' })
+    }
+  }, [league.id])
+
+  /*
+   * The pending offers the last panel read showed. When one DISAPPEARS on a background refresh it
+   * was accepted, declined or withdrawn — and an accepted one belongs in the completed ledger, so
+   * the ledger is re-read then rather than on the timer (each ledger read checks every week of the
+   * season with the provider; polling it would multiply that by every open tab).
+   */
+  const shownOfferIds = useRef<Set<string> | null>(null)
+
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    const background = opts?.background === true
+    if (!background) {
+      setLoading(true)
+      setErr(null)
+    }
     try {
       const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}`, {
         credentials: 'include',
@@ -1087,6 +1138,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       })
       const data = (await res.json().catch(() => null)) as PanelResponse | null
       if (!res.ok) {
+        // ⚠ A failed BACKGROUND read keeps the screen: one blip must not empty every list.
+        if (background) return
         setErr('Could not load trades.')
         setTradeBlock([])
         setTradeBlockNote(null)
@@ -1109,8 +1162,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
       setPendingScan(data?.pending && typeof data.pending === 'object' ? data.pending : null)
-      setPendingOffers(Array.isArray(data?.pendingOffers) ? data.pendingOffers : [])
+      const offers = Array.isArray(data?.pendingOffers) ? data.pendingOffers : []
+      setPendingOffers(offers)
+      const nowShown = new Set(offers.map((o) => `${o.provider}:${o.transactionId}`))
+      const before = shownOfferIds.current
+      shownOfferIds.current = nowShown
+      if (background && before && [...before].some((id) => !nowShown.has(id))) void loadLedger({ background: true })
     } catch {
+      if (background) return
       setErr('Could not load trades.')
       setTradeBlock([])
       setTradeBlockNote(null)
@@ -1123,44 +1182,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setPendingScan(null)
       setPendingOffers([])
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
-  }, [league.id])
-
-  /*
-   * The completed ledger, independently of the panel. A payload that does not
-   * carry `supported` is not a ledger at all (a proxy error page, a mock) and
-   * must not be read as "no trades".
-   */
-  const loadLedger = useCallback(async () => {
-    setLedger({ kind: 'loading' })
-    try {
-      const res = await fetch(`/api/league/trade-grades?leagueId=${encodeURIComponent(league.id)}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      })
-      const data = (await res.json().catch(() => null)) as GradesResponse | null
-      if (!data || typeof data !== 'object' || !('supported' in data)) {
-        setLedger({ kind: 'failed' })
-        return
-      }
-      if (data.supported === false) {
-        setLedger({ kind: 'unsupported', platform: data.platform })
-        return
-      }
-      if ('graded' in data && data.graded === false) {
-        setLedger({ kind: 'ungraded', ledger: data.ledger })
-        return
-      }
-      if ('grades' in data && data.grades) {
-        setLedger({ kind: 'graded', grades: data.grades, viewerId: data.viewerSleeperUserId })
-        return
-      }
-      setLedger({ kind: 'failed' })
-    } catch {
-      setLedger({ kind: 'failed' })
-    }
-  }, [league.id])
+  }, [league.id, loadLedger])
 
   useEffect(() => {
     void load()
@@ -1173,19 +1197,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
    * so the original load would remain on screen indefinitely. Reconcile both
    * pending requests and completed approvals whenever the window regains focus
    * or the document becomes visible again.
+   *
+   * And while the tab stays OPEN, the offers re-read once a minute (2026-09-25): an offer sent
+   * while the manager is looking at this tab used to wait for them to leave and come back. The
+   * ledger is not on the timer — see `shownOfferIds`.
    */
-  useEffect(() => {
-    const refresh = () => void Promise.all([load(), loadLedger()])
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') refresh()
-    }
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [load, loadLedger])
+  useVisibleRefresh(() => load({ background: true }))
+  useVisibleRefresh(() => loadLedger({ background: true }), { intervalMs: null })
 
   const isZombie = String(league.leagueVariant ?? '').toLowerCase() === 'zombie'
   const nflRedraftTradesShell = isNflRedraftCoreDashboardFromUserLeague(league)

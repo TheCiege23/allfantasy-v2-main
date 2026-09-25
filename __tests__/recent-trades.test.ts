@@ -321,6 +321,34 @@ describe('getRecentTrades', () => {
     expect(scanPendingSleeperTrades).toHaveBeenCalledWith(expect.objectContaining({ weeks: [1, 2, 3] }))
   })
 
+  it('🛑 shows a trade ONCE when the graded cache and the live window both have it', async () => {
+    /*
+     * The cache ids a trade `<seasonLeagueId>:<transactionId>`; the live read ids it
+     * `<transactionId>`. Matched on the raw id they never met, and the band showed the same
+     * trade twice — once graded, once "still being prepared".
+     */
+    const cached = payload() as { cacheKey: string; data: { trades: Array<{ id: string }> } }
+    cached.data.trades[0].id = '99887766:fresh-1'
+    cacheFindMany.mockResolvedValue([cached])
+    scanPendingSleeperTrades.mockResolvedValue({
+      trades: [],
+      completedTrades: [{
+        transactionId: 'fresh-1', proposedBy: 'Trade Partner', proposedByViewer: false,
+        proposedAt: NOW.toISOString(),
+        assetsGiven: [{ playerId: '1', playerName: 'Sent Player', position: 'WR', team: 'NYJ' }],
+        assetsReceived: [{ playerId: '2', playerName: 'New Player', position: 'RB', team: 'BUF' }],
+        readOnly: true, provider: 'sleeper', lifecycleStatus: 'complete',
+        viewerRosterExternalId: '1', counterpartyRosterExternalId: '2',
+      }],
+      scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
+    })
+    const out = await getRecentTrades(
+      [{ ...LEAGUES[0], platform: 'sleeper' }], NOW, 3,
+      { ownerSleeperId: 'owner-1', currentWeek: 2 },
+    )
+    expect(out.map((t) => t.id)).toEqual(['99887766:fresh-1'])
+  })
+
   /*
    * The Trades urgency badge. The scan already sees offers waiting on you; the
    * callback hands them over so nothing reads the provider twice.

@@ -44,20 +44,28 @@ const TTL = {
   drafts: 10 * 60 * 1000, // 10 minutes
   transactions: 5 * 60 * 1000, // 5 minutes
   user_lookup: 60 * 60 * 1000, // 1 hour
+  state: 10 * 60 * 1000, // 10 minutes — the week turns over once a week
 }
 
 /**
  * Fetch from cache first, then external API if stale.
  * Deduplicates concurrent requests for the same key.
+ *
+ * `maxAgeMs` lets ONE READER demand fresher data than the key's TTL without changing what anyone
+ * else accepts — the trade inbox reading the current week's transactions, where a five-minute-old
+ * list is five minutes of an offer nobody can see. Writes still use `ttlMs`.
  */
 async function cachedFetch<T>(
   cacheKey: string,
   ttlMs: number,
   fetchFn: () => Promise<T>,
+  opts?: { maxAgeMs?: number },
 ): Promise<T> {
+  const maxAgeMs = Math.min(ttlMs, opts?.maxAgeMs ?? ttlMs)
+
   // 1. Check memory cache
   const memEntry = memoryCache.get(cacheKey)
-  if (memEntry && Date.now() - memEntry.fetchedAt < memEntry.ttlMs) {
+  if (memEntry && Date.now() - memEntry.fetchedAt < Math.min(memEntry.ttlMs, maxAgeMs)) {
     return memEntry.data as T
   }
 
@@ -67,9 +75,16 @@ async function cachedFetch<T>(
     select: { data: true, expiresAt: true },
   }).catch(() => null)
 
-  if (dbEntry?.expiresAt && Date.now() < dbEntry.expiresAt.getTime()) {
+  /*
+   * ⚠ A ROW RECORDS WHEN IT EXPIRES, NOT WHEN IT WAS FETCHED. Every writer of a key family uses the
+   * same TTL (this module is the only writer), so the fetch happened `ttlMs` before expiry — which is
+   * what a `maxAgeMs` read has to measure. And the memory copy keeps THAT time, not "now": stamping a
+   * five-minute-old row as fetched now would let a fresh reader accept it for another full window.
+   */
+  const dbFetchedAt = dbEntry?.expiresAt ? dbEntry.expiresAt.getTime() - ttlMs : null
+  if (dbEntry?.expiresAt && dbFetchedAt != null && Date.now() < dbEntry.expiresAt.getTime() && Date.now() - dbFetchedAt < maxAgeMs) {
     const data = dbEntry.data as T
-    setMemoryCache(cacheKey, data, ttlMs)
+    setMemoryCache(cacheKey, data, ttlMs, dbFetchedAt)
     return data
   }
 
@@ -112,7 +127,7 @@ async function cachedFetch<T>(
 }
 
 /** Exported only as a test seam for the eviction order; callers go through cachedFetch. */
-export function setMemoryCache(key: string, data: unknown, ttlMs: number): void {
+export function setMemoryCache(key: string, data: unknown, ttlMs: number, fetchedAt: number = Date.now()): void {
   if (memoryCache.size > MAX_MEMORY_ENTRIES) {
     // Evict the entries CLOSEST TO EXPIRY, not the ones fetched longest ago. Ordering by fetch
     // time always evicted `players:all` first — a 24h entry is by construction the oldest — so
@@ -123,7 +138,7 @@ export function setMemoryCache(key: string, data: unknown, ttlMs: number): void 
       .slice(0, 50)
     for (const [k] of soonest) memoryCache.delete(k)
   }
-  memoryCache.set(key, { data, fetchedAt: Date.now(), ttlMs })
+  memoryCache.set(key, { data, fetchedAt, ttlMs })
 }
 
 /** Test seam: which keys the in-memory layer currently holds. */
@@ -148,9 +163,18 @@ export class SleeperHttpError extends Error {
 }
 
 async function sleeperGet<T>(path: string): Promise<T> {
+  /*
+   * 🛑 `no-store`, BECAUSE THIS LAYER IS THE CACHE (2026-09-25). This fetch carried
+   * `next: { revalidate: 60 }`, which in Next 14 is stale-WHILE-revalidate: past 60 s the data cache
+   * hands back the OLD response and refreshes behind it. So when this layer's own TTL ran out and it
+   * came here for fresh data, it was often given the snapshot from before — a pending trade offer
+   * stayed invisible for a whole extra layer window, with nothing anywhere saying the read was old.
+   * Two caches stacked is one cache whose age nobody can state. Memory + `sportsDataCache` above are
+   * the cache; a call that reaches this line wants the provider.
+   */
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { 'Accept': 'application/json' },
-    next: { revalidate: 60 },
+    cache: 'no-store',
   })
   if (!res.ok) throw new SleeperHttpError(res.status, path)
   return res.json() as Promise<T>
@@ -227,11 +251,34 @@ export async function getDraftPicks(draftId: string): Promise<Array<Record<strin
 
 /**
  * Get league transactions (cached 5min).
+ *
+ * `maxAgeMs` asks for fresher data than that for THIS read only — the current week, where a new
+ * trade offer lands. Every other reader keeps the five-minute window.
  */
-export async function getLeagueTransactions(leagueId: string, week: number): Promise<Array<Record<string, unknown>>> {
-  return cachedFetch(`transactions:${leagueId}:${week}`, TTL.transactions, () =>
-    sleeperGet<Array<Record<string, unknown>>>(`/league/${leagueId}/transactions/${week}`),
+export async function getLeagueTransactions(
+  leagueId: string,
+  week: number,
+  opts?: { maxAgeMs?: number },
+): Promise<Array<Record<string, unknown>>> {
+  return cachedFetch(
+    `transactions:${leagueId}:${week}`,
+    TTL.transactions,
+    () => sleeperGet<Array<Record<string, unknown>>>(`/league/${leagueId}/transactions/${week}`),
+    opts,
   )
+}
+
+/** Sleeper's season clock for one sport: which week (`leg`) new transactions are filed under. */
+export type SleeperSportState = { week?: number; leg?: number; season?: string; season_type?: string }
+
+/**
+ * Sleeper's `/state/<sport>` (cached 10min), or null for a sport Sleeper keeps no clock for.
+ * Only NFL and NBA have one; asking for anything else would be a request that cannot answer.
+ */
+export async function getSleeperState(sport: string | null | undefined): Promise<SleeperSportState | null> {
+  const slug = String(sport ?? 'NFL').trim().toLowerCase()
+  if (slug !== 'nfl' && slug !== 'nba') return null
+  return cachedFetch(`state:${slug}`, TTL.state, () => sleeperGet<SleeperSportState>(`/state/${slug}`))
 }
 
 /**

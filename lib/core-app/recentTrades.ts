@@ -615,13 +615,21 @@ export async function getRecentTrades(
         // Recording a badge must never cost the trades this loader exists to return.
       }
     }
-    const seen = new Set(out.map((trade) => `${trade.platformLeagueId}:${trade.id}`))
+    /*
+     * 🛑 KEYED ON THE TRANSACTION, NOT ON EACH SOURCE'S OWN ID (2026-09-25). A trade from the
+     * graded cache is id'd `<seasonLeagueId>:<transactionId>`; the same trade read live is id'd
+     * `<transactionId>`. Keying on the raw id, the two never matched, so a just-accepted trade
+     * showed TWICE in the band — once graded, once "still being prepared" — for as long as both
+     * sources had it. `leagueHome.ts` already matches on the transaction id; this now does too.
+     */
+    const txOf = (id: string) => id.slice(id.lastIndexOf(':') + 1)
+    const seen = new Set(out.map((trade) => `${trade.platformLeagueId}:${txOf(trade.id)}`))
     for (let i = 0; i < liveLeagues.length; i += 1) {
       for (const trade of scans[i]?.completedTrades ?? []) {
         const converted = liveCompletedTrade(liveLeagues[i], trade)
         if (!converted) continue
         if (new Date(converted.acceptedAt).getTime() < cutoff) continue
-        const key = `${converted.platformLeagueId}:${converted.id}`
+        const key = `${converted.platformLeagueId}:${txOf(converted.id)}`
         if (seen.has(key)) continue
         seen.add(key)
         out.push(converted)

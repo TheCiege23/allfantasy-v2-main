@@ -7,6 +7,8 @@ import {
   getLeagueRosters,
   getLeagueTransactions,
   getLeagueUsers,
+  getSleeperState,
+  type SleeperSportState,
 } from '@/lib/api-cache/SleeperCacheLayer'
 
 /**
@@ -101,6 +103,47 @@ export function isPendingTradeStatus(status: string | undefined | null): boolean
   if (!status) return false
   const s = String(status).toLowerCase()
   return s === 'pending' || s === 'proposed' || s === 'waiting' || s === 'requested'
+}
+
+/**
+ * How old the CURRENT weeks' transaction lists may be when a scan reads them.
+ *
+ * 🛑 A NEW TRADE OFFER IS FILED UNDER THE WEEK IT IS SENT IN, and every week shared one five-minute
+ * cache window — so an offer sent a minute after the last read stayed invisible on every trade
+ * screen for up to five more (longer, before the layer stopped stacking Next's stale-while-revalidate
+ * cache on top). Past weeks keep the long window: they change only when an old offer is answered.
+ * Sized under the trade screens' 60 s refresh, so each refresh can actually see something new.
+ */
+export const RECENT_WEEK_MAX_AGE_MS = 45_000
+
+/**
+ * The weeks a new transaction can be filed under right now — Sleeper's current `leg` and its
+ * neighbours (a week can turn over between two reads). PURE; exported for tests.
+ *
+ * ⚠ A GUESS HERE ONLY COSTS FRESHNESS, NEVER DATA: every week is still read, a week outside this set
+ * just keeps the five-minute window. An empty set is the answer when the clock is unknown.
+ */
+export function recentWeeksFromState(state: SleeperSportState | null, maxWeek = 18): Set<number> {
+  const leg = Number(state?.leg ?? state?.week)
+  if (!Number.isFinite(leg)) return new Set()
+  const current = Math.min(maxWeek, Math.max(1, Math.trunc(leg)))
+  return new Set([current - 1, current, current + 1].filter((w) => w >= 1 && w <= maxWeek))
+}
+
+async function recentTransactionWeeks(sport: string | null | undefined): Promise<Set<number>> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    // Bounded: the clock only sharpens freshness, so a slow answer must never hold up the scan.
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), 2_500)
+    })
+    return recentWeeksFromState(await Promise.race([getSleeperState(sport), timeout]))
+  } catch {
+    // No clock is not a failed scan — every week is still read, just on the long window.
+    return new Set()
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 function ordinal(round: number): string {
@@ -365,12 +408,15 @@ export async function scanPendingSleeperTrades(args: {
      */
     const WEEK_FETCH_CONCURRENCY = 6
     const fetched = new Array<SleeperTransaction[] | null>(weeks.length)
+    const recent = await recentTransactionWeeks(args.sport)
     for (let start = 0; start < weeks.length; start += WEEK_FETCH_CONCURRENCY) {
       const slice = weeks.slice(start, start + WEEK_FETCH_CONCURRENCY)
       await Promise.all(
         slice.map(async (week, offset) => {
           try {
-            const raw = await getLeagueTransactions(platformLeagueId, week)
+            const raw = recent.has(week)
+              ? await getLeagueTransactions(platformLeagueId, week, { maxAgeMs: RECENT_WEEK_MAX_AGE_MS })
+              : await getLeagueTransactions(platformLeagueId, week)
             fetched[start + offset] = Array.isArray(raw) ? (raw as unknown as SleeperTransaction[]) : []
           } catch {
             /*

@@ -339,7 +339,8 @@ describe('⚠ loading an offer into the builder analyses THAT offer', () => {
      * make one request. Correct on load; wrong straight after a write, because the
      * cached response is exactly the state the write just changed.
      */
-    expect(INBOX).toContain('reloadToken > 0 ? { force: true } : undefined')
+    // A background refresh (useVisibleRefresh) forces too: it exists to see what changed.
+    expect(INBOX).toContain('reloadToken > 0 || background ? { force: true } : undefined')
   })
 })
 
