@@ -6,14 +6,14 @@ import { currentSleeperRoster } from './currentSleeperRoster'
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { isRuledOut } from './injuryStatus'
-import { latestProjectionWeek, lookupProjections, summariseLineup } from './playerProjections'
+import { latestProjectionWeek, lookupProjections, sumLeagueScoredStarters, summariseLineup } from './playerProjections'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { describeScoringDifferences, hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
-import { getNextMatchup, type NextMatchup } from './nextMatchup'
+import { getNextMatchup, type MatchupLineupPricer, type NextMatchup } from './nextMatchup'
 import { getRosterGrade, type RosterGrade } from './rosterGrade'
 import { getByeWeeks } from './byeWeeks'
 import { getGameWeather, type GameWeather } from './gameWeather'
@@ -831,6 +831,43 @@ async function resolvePlayers(
   return out
 }
 
+/**
+ * Mark every player whose club is off this week as on bye, at 0 — and hand back the bye table so
+ * the caller can show the weeks ahead.
+ *
+ * Shared by your roster and by the opponent's starters priced for the matchup card, so a bye
+ * starter is the same 0 on both sides of it and in the header above it.
+ */
+async function zeroByeWeekPlayers(
+  players: Map<string, LineupPlayer>,
+  sport: string,
+  sportsWeek: SportsWeek | null,
+): Promise<Awaited<ReturnType<typeof getByeWeeks>> | null> {
+  if (!sportsWeek) return null
+  const byes = await getByeWeeks({
+    sport,
+    season: sportsWeek.season,
+    playerTeams: new Map([...players.values()].map((p) => [p.sleeperId, p.team])),
+    fromWeek: sportsWeek.week,
+  }).catch(() => null)
+
+  if (byes) {
+    for (const id of byes.byWeek.get(sportsWeek.week) ?? []) {
+      const p = players.get(id)
+      if (!p) continue
+      p.onBye = true
+      /*
+       * A player on bye scores nothing, and unlike "no projection on file" that
+       * is a fact — the same rule as a ruled-out player. Leaving a stale number
+       * beside a bye badge would be the screen arguing with itself.
+       */
+      p.projectedPoints = 0
+      p.afProjectedPoints = 0
+    }
+  }
+  return byes
+}
+
 export async function getMyTeamData(
   leagueId: string,
   userId: string,
@@ -1170,46 +1207,6 @@ export async function getMyTeamData(
    * can't price this guy" — separate, because the fixes are different.
    */
   const projectedIds = starterIds.filter((id) => id !== '0')
-  const lineup = summariseLineup(
-    projectedIds,
-    new Map(
-      projectedIds
-        .map((id) => [id, resolved.get(id)] as const)
-        .filter(([, p]) => p != null && p.projectedPoints != null)
-        .map(([id, p]) => [
-          id,
-          {
-            playerId: id,
-            projectedPoints: p!.projectedPoints as number,
-            name: p!.name,
-            position: p!.position,
-            team: p!.team,
-            // summariseLineup only totals points; the component line is not its
-            // business, and passing the roster's copy would imply it was.
-            componentStats: null,
-          },
-        ])
-    )
-  )
-
-  /*
-   * The league-scored total, summed over the same starters.
-   *
-   * ⚠ COUNTED SEPARATELY FROM THE GENERIC TOTAL, NOT ASSUMED TO MATCH IT. A
-   * player can carry a vendor projection and still fail to produce a
-   * league-scored one — that is exactly what happens when a league's scoring
-   * keys do not match the projected stat line. Reusing the generic coverage
-   * count would report a total built from six starters as though it came from
-   * eight.
-   */
-  let afTotal = 0
-  let afProjected = 0
-  for (const id of projectedIds) {
-    const v = resolved.get(id)?.afProjectedPoints
-    if (v == null) continue
-    afTotal += v
-    afProjected += 1
-  }
 
   const scoringNotes = describeScoringDifferences(scoringSettings)
 
@@ -1285,29 +1282,7 @@ export async function getMyTeamData(
     }
   }
 
-  const byes = sportsWeek
-    ? await getByeWeeks({
-        sport,
-        season: sportsWeek.season,
-        playerTeams: new Map([...resolved.values()].map((p) => [p.sleeperId, p.team])),
-        fromWeek: sportsWeek.week,
-      }).catch(() => null)
-    : null
-
-  if (byes && sportsWeek) {
-    for (const id of byes.byWeek.get(sportsWeek.week) ?? []) {
-      const p = resolved.get(id)
-      if (!p) continue
-      p.onBye = true
-      /*
-       * A player on bye scores nothing, and unlike "no projection on file" that
-       * is a fact — the same rule as a ruled-out player. Leaving a stale number
-       * beside a bye badge would be the screen arguing with itself.
-       */
-      p.projectedPoints = 0
-      p.afProjectedPoints = 0
-    }
-  }
+  const byes = await zeroByeWeekPlayers(resolved, sport, sportsWeek)
 
   const upcomingByes = byes
     ? [...byes.byWeek.entries()]
@@ -1320,6 +1295,49 @@ export async function getMyTeamData(
         }))
         .filter((b) => b.names.length > 0)
     : []
+
+  /*
+   * ⚠ BOTH TOTALS ARE SUMMED AFTER THE BYE PASS ABOVE, NOT BEFORE IT. They were summed first, so
+   * in a bye week the rows read 0.0 beside a bye badge while the header total still carried the
+   * player's full projection — the screen arguing with itself in exactly the way the bye pass
+   * exists to prevent.
+   */
+  const lineup = summariseLineup(
+    projectedIds,
+    new Map(
+      projectedIds
+        .map((id) => [id, resolved.get(id)] as const)
+        .filter(([, p]) => p != null && p.projectedPoints != null)
+        .map(([id, p]) => [
+          id,
+          {
+            playerId: id,
+            projectedPoints: p!.projectedPoints as number,
+            name: p!.name,
+            position: p!.position,
+            team: p!.team,
+            // summariseLineup only totals points; the component line is not its
+            // business, and passing the roster's copy would imply it was.
+            componentStats: null,
+          },
+        ])
+    )
+  )
+
+  /*
+   * The league-scored total, summed over the same starters.
+   *
+   * ⚠ COUNTED SEPARATELY FROM THE GENERIC TOTAL, NOT ASSUMED TO MATCH IT. A
+   * player can carry a vendor projection and still fail to produce a
+   * league-scored one — that is exactly what happens when a league's scoring
+   * keys do not match the projected stat line. Reusing the generic coverage
+   * count would report a total built from six starters as though it came from
+   * eight.
+   */
+  const { projected: afTotal, projectedFrom: afProjected } = sumLeagueScoredStarters(
+    projectedIds,
+    (id) => resolved.get(id)?.afProjectedPoints,
+  )
 
   const grade = await getRosterGrade({
     leagueId,
@@ -1337,6 +1355,31 @@ export async function getMyTeamData(
     projectionWeek,
   }).catch(() => null)
 
+  /*
+   * 🛑 THE MATCHUP CARD PRICES LINEUPS THE WAY THIS SCREEN DOES, OR IT DISAGREES WITH THE HEADER.
+   *
+   * It used to re-read the STORED roster and re-price it through a path that knows nothing of OUT
+   * or bye, so on the KBFL league (2026-09-25, week 3) "Projected · your league" read 148.3 and
+   * the card read 175.7 for the same team. Reproduced read-only on the test database against that
+   * league's own roster: the header summed Sleeper's live lineup with two ruled-out starters at
+   * 0 (138.74); the card summed a lineup synced on 09-02 — two different receivers — with both
+   * OUT players at full value (164.48).
+   *
+   * So your side is the header's lineup and the header's per-player numbers, and the opponent's
+   * starters go through the same resolver, OUT rule and bye pass before the same sum. One
+   * computation, so the two numbers cannot drift apart again.
+   */
+  const priceLineups: MatchupLineupPricer = async (lineups) => {
+    const missing = [...new Set([...lineups.values()].flat())].filter((id) => !resolved.has(id))
+    const extra =
+      missing.length > 0
+        ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''))
+        : new Map<string, LineupPlayer>()
+    if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
+    const pointsOf = (id: string) => (resolved.get(id) ?? extra.get(id))?.afProjectedPoints
+    return new Map([...lineups].map(([rosterId, ids]) => [rosterId, sumLeagueScoredStarters(ids, pointsOf)]))
+  }
+
   const matchup = leagueWeek
     ? await getNextMatchup({
         leagueId,
@@ -1348,6 +1391,9 @@ export async function getMyTeamData(
         week: leagueWeek.week,
         scoringSettings,
         projectionWeek,
+        // The lineup the header and the roster rows show — Sleeper's live one where we have it.
+        myStarters: projectedIds,
+        priceLineups,
       }).catch(() => null)
     : null
 
@@ -1386,7 +1432,8 @@ export async function getMyTeamData(
               ...lineup,
               season: projectionWeek.season,
               week: projectionWeek.week,
-              afTotal: afProjected > 0 ? Math.round(afTotal * 100) / 100 : null,
+              // Already rounded, and null when no starter could be priced.
+              afTotal,
               afProjected,
               // Comparable only when both totals were built from the same
               // players. IDP suppression is what breaks that.

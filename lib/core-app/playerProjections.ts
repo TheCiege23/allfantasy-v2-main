@@ -364,6 +364,37 @@ export function leagueScoredLineupTotal(
   return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }
 }
 
+/**
+ * One lineup's league-scored total, summed from players the screen has ALREADY priced.
+ *
+ * 🛑 THE ONE SUM BEHIND BOTH OF MY TEAM'S "YOUR PROJECTED SCORE" NUMBERS. The header tile
+ * ("Projected · your league") and your side of the projected-matchup card used to be two
+ * computations over two lineups: the header summed the rows the roster shows — the live Sleeper
+ * lineup, a ruled-out starter at 0 — while the matchup card re-read the STORED roster from the
+ * last sync and re-priced it with `leagueScoredLineupTotal`, which has no notion of OUT or bye.
+ * On the KBFL league (2026-09-25, week 3) that put 148.3 in the header and 175.7 in the card for
+ * the same team and week. Both surfaces now sum the same per-player numbers through this.
+ *
+ * `pointsOf` returns a starter's league-scored points (0 when he is OUT or on bye), or
+ * null/undefined when he could not be priced under this league's rules — he then counts against
+ * `projectedFrom` instead of silently adding nothing. Sleeper's "0" empty slot is not a player.
+ */
+export function sumLeagueScoredStarters(
+  starterIds: readonly string[],
+  pointsOf: (id: string) => number | null | undefined,
+): { projected: number | null; projectedFrom: number } {
+  let total = 0
+  let from = 0
+  for (const id of starterIds) {
+    if (!id || id === '0') continue
+    const v = pointsOf(id)
+    if (v == null || !Number.isFinite(v)) continue
+    total += v
+    from += 1
+  }
+  return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }
+}
+
 /** Why no starter anywhere could be priced although this league has rules. */
 export const NOTHING_LEAGUE_SCORED_REASON =
   "no starter could be priced under this league's scoring — the projection feed does not carry these players, or this league's rules do not cover their stat lines"
