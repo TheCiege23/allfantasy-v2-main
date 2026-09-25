@@ -96,6 +96,16 @@ export async function getNextMatchup(args: {
    */
   myStarters?: readonly string[] | null
   /**
+   * The platform's live lineup for every roster the caller could read, and the week it is for.
+   * Used for any side of this pairing it covers — above all the OPPONENT's — and ONLY when its
+   * week is this matchup's week; a roster it does not cover falls back to the stored row.
+   * `myStarters` still wins for your own side.
+   *
+   * 🛑 WITHOUT THIS THE OPPONENT WAS ALWAYS THE STORED ROW, so your live lineup was measured
+   * against theirs as of the last sync — a starter they had since benched still counted for them.
+   */
+  liveStarters?: { week: number; byRosterId: Readonly<Record<string, readonly string[]>> } | null
+  /**
    * How to price the lineups. Omitted, the feed is read here and summed with
    * `leagueScoredLineupTotal`. My Team passes its own pricer so a ruled-out or bye starter is the
    * 0 its roster row shows, not his full projection — see `sumLeagueScoredStarters`.
@@ -185,14 +195,18 @@ export async function getNextMatchup(args: {
     team.externalId === myRosterId ? args.userId : null,
   ])
 
+  // A live lineup for another week describes a different game; it is not this one's.
+  const live = args.liveStarters?.week === week ? args.liveStarters.byRosterId : null
+
   // One projection lookup for both lineups.
   const allStarters = new Map<string, string[]>()
   for (const id of rosterIds) {
+    const liveIds = live && Object.hasOwn(live, id) ? live[id] : null
     const roster = rosterByTeam.get(String(id))
     const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     allStarters.set(
       id,
-      asIds(pd.starters).filter((s) => s !== EMPTY_SLOT),
+      (liveIds ? [...liveIds] : asIds(pd.starters)).filter((s) => Boolean(s) && s !== EMPTY_SLOT),
     )
   }
   if (args.myStarters) {

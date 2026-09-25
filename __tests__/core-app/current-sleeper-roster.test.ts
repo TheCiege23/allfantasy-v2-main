@@ -74,3 +74,52 @@ it('records verification only after weekly starters succeed, using the host week
   expect(result?.verification).toMatchObject({ source: 'Sleeper', week: 2, slots: ['FLEX'] })
   expect(Date.parse(result!.verification.checkedAt)).toBeGreaterThanOrEqual(before)
 })
+
+describe('every roster’s weekly lineup (the opponent’s side of the matchup card)', () => {
+  beforeEach(() => { get.mockReset() })
+
+  it('returns each roster’s live starters from the same weekly read, by roster id, with no extra request', async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith('/rosters')) return [
+        { roster_id: 3, owner_id: 'owner', players: ['hill'], starters: ['hill'] },
+        { roster_id: 7, owner_id: 'them', players: ['old', 'new'], starters: ['old'] },
+      ]
+      if (path.endsWith('/matchups/2')) return [
+        { roster_id: 3, matchup_id: 1, starters: ['hill'] },
+        { roster_id: 7, matchup_id: 1, starters: ['new', null] },
+      ]
+      return { status: 'in_season', settings: { leg: 2 } }
+    })
+    const result = await currentSleeperRoster('league', { platformUserId: 'owner' })
+    // Theirs is the weekly lineup, not the roster list's stale `old`; the hole keeps its slot.
+    expect(result?.weekStarters).toEqual({ '3': ['hill'], '7': ['new', '0'] })
+    expect(get).toHaveBeenCalledTimes(3)
+  })
+
+  it('leaves out a roster that fails the checks yours must pass, rather than guessing its lineup', async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith('/rosters')) return [
+        { roster_id: 3, owner_id: 'owner', players: ['hill'], starters: ['hill'] },
+        { roster_id: 7, owner_id: 'them', players: ['ir'], starters: [], reserve: ['ir'] },
+        { roster_id: 8, owner_id: 'dup', players: ['x'], starters: [] },
+        { roster_id: 9, owner_id: 'none', players: ['y'], starters: [] },
+      ]
+      if (path.endsWith('/matchups/2')) return [
+        { roster_id: 3, starters: ['hill'] },
+        { roster_id: 7, starters: ['ir'] }, // a reserve player in a starting slot
+        { roster_id: 8, starters: ['x'] },
+        { roster_id: 8, starters: ['x'] }, // two rows for one roster
+        { roster_id: 9 }, // no starters at all
+      ]
+      return { status: 'in_season', settings: { leg: 2 } }
+    })
+    expect((await currentSleeperRoster('league', { platformUserId: 'owner' }))?.weekStarters).toEqual({ '3': ['hill'] })
+  })
+
+  it('is null outside the season, when there is no weekly lineup to read', async () => {
+    mockRosters([{ roster_id: 3, owner_id: 'owner', players: ['hill'], starters: ['hill'] }])
+    const result = await currentSleeperRoster('league', { platformUserId: 'owner' })
+    expect(result?.starters).toEqual(['hill'])
+    expect(result?.weekStarters).toBeNull()
+  })
+})
