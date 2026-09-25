@@ -30,6 +30,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     userProfile: { findUnique: h.profile, upsert: h.profileUpsert },
     league: { findFirst: h.leagueFindFirst },
+    // The league check is `canManageDiscordBridge` → `getLeagueRole`, which looks for a
+    // co-commissioner's claimed team (and a roster) when the caller is not the owner.
+    leagueTeam: { findFirst: async () => null },
+    roster: { findFirst: async () => null },
   },
 }))
 
@@ -48,7 +52,8 @@ beforeEach(() => {
   vi.resetAllMocks()
   h.session.mockResolvedValue({ user: { id: 'me' } })
   h.profile.mockResolvedValue({ discordUserId: '1085033561016516730', discordConnectedAt: new Date() })
-  h.leagueFindFirst.mockResolvedValue({ id: 'league_1' })
+  // The caller owns league_1 — head commissioner. Co-commissioners are covered in discord-join-routes.
+  h.leagueFindFirst.mockResolvedValue({ id: 'league_1', userId: 'me' })
   h.verify.mockResolvedValue({ discordUserId: '1085033561016516730', guildName: 'Iron Horse' })
   h.link.mockResolvedValue(true)
   h.profileUpsert.mockResolvedValue({})
@@ -58,7 +63,7 @@ describe('bot-install remembers the league it was started from', () => {
   it('stores a league the caller commissions in a short-lived HttpOnly cookie', async () => {
     const res = await install(installReq('?leagueId=league_1'))
     expect(location(res).host).toBe('discord.com')
-    expect(h.leagueFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'league_1', userId: 'me' } }))
+    expect(h.leagueFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'league_1' } }))
     expect(h.set).toHaveBeenCalledWith('discord_bot_league', 'league_1', expect.objectContaining({ httpOnly: true, maxAge: 600 }))
   })
 

@@ -16,6 +16,8 @@ import {
 } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { planPrivateChannelAccess, type PrivateAccessPlan } from '@/lib/discord/leagueChannelAccess'
+import { canManageDiscordBridge } from '@/lib/discord/bridgeAccess'
+import { adoptLeagueDiscordInvite } from '@/lib/discord/leagueInvite'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +27,20 @@ const SURFACE = 'league_chat'
 
 function fail(error: string, status: number, extra: Record<string, unknown> = {}) {
   return NextResponse.json({ error, ...extra }, { status })
+}
+
+/**
+ * Store the invite Discord just gave us on the league (a pasted one wins) and answer with the link
+ * members will see. Best effort: failing to keep it never costs the commissioner their channel —
+ * they can still paste one — so on a failed write the fresh invite is shown as before.
+ */
+async function keepInvite(leagueId: string, channelId: string, minted: string | null): Promise<string | null> {
+  try {
+    return await adoptLeagueDiscordInvite(leagueId, minted, channelId)
+  } catch {
+    console.warn('[discord/channels/create] could not store the league invite')
+    return minted
+  }
 }
 
 /**
@@ -53,6 +69,14 @@ function fail(error: string, status: number, extra: Record<string, unknown> = {}
  *
  * Tokens: the webhook token is stored server-side exactly as before and is never in
  * a response. Discord's error text is never echoed to the client either.
+ *
+ * WHO: the head commissioner or a co-commissioner (`canManageDiscordBridge`), in a server THEY
+ * added AllFantasy to (`guildLink.linkedByUserId`). The two checks answer different questions —
+ * "do you run this league" and "do you run this Discord server" — and both must pass.
+ *
+ * ⚠ THE INVITE IS KEPT. Discord hands back a join link when the channel is made; it is stored on
+ * the league (unless the commissioner already pasted one) so every member gets a Join button from
+ * Postgres, and nothing on a member's page ever asks Discord for one.
  */
 export async function POST(req: Request) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -78,9 +102,9 @@ export async function POST(req: Request) {
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { userId: true, name: true },
+    select: { name: true },
   })
-  if (!league || league.userId !== userId) return fail('Forbidden', 403)
+  if (!league || !(await canManageDiscordBridge(leagueId, userId))) return fail('Forbidden', 403)
 
   const guildLink = await prisma.discordGuildLink.findUnique({ where: { guildId } })
   if (!guildLink || guildLink.linkedByUserId !== userId) {
@@ -107,7 +131,11 @@ export async function POST(req: Request) {
         channelName: live.name ?? existing.channelName,
         channelUrl: channelLink(guildId, existing.channelId),
         visibility: channelVisibility(live, guildId),
-        inviteUrl: await createOrReuseChannelInvite(existing.channelId).catch(() => null),
+        inviteUrl: await keepInvite(
+          leagueId,
+          existing.channelId,
+          await createOrReuseChannelInvite(existing.channelId).catch(() => null),
+        ),
       })
     }
     // Deleted in Discord — fall through and make a fresh one.
@@ -170,7 +198,11 @@ export async function POST(req: Request) {
       'League chat from AllFantasy only shows up here if your commissioner switches copying on.',
   ).catch(() => null)
 
-  const inviteUrl = await createOrReuseChannelInvite(created.channelId).catch(() => null)
+  const inviteUrl = await keepInvite(
+    leagueId,
+    created.channelId,
+    await createOrReuseChannelInvite(created.channelId).catch(() => null),
+  )
 
   return NextResponse.json({
     alreadyExisted: false,

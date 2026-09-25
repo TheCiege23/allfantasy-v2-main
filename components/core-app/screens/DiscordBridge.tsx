@@ -11,6 +11,11 @@ import {
   type BridgeDirection,
   type DiscordBridgeData,
 } from '@/lib/core-app/discordBridge'
+import {
+  DISCORD_INVITE_MAX_LENGTH,
+  INVALID_DISCORD_INVITE_MESSAGE,
+  normalizeDiscordInviteUrl,
+} from '@/lib/discord/inviteLink'
 
 /**
  * 32a — the league's own Discord, set up in five plain steps.
@@ -35,6 +40,11 @@ import {
  * ⚠ EDITS AND DELETES DO NOT COPY, AND DMs NEVER DO. Both are said on the screen,
  * the second as a privacy line rather than a missing feature.
  *
+ * ⚠ STEP 5's LINK IS THE ONE MEMBERS GET. The invite shown here is the league's stored one
+ * (`data.inviteUrl`), the same value every member's "Join the league Discord" button reads. A
+ * commissioner can paste their own — it needs no bot and no channel — and making the channel keeps
+ * the one Discord hands back. Reached by the head commissioner AND co-commissioners.
+ *
  * Customer copy: plain words, "Chimmy" never bare "AI", no jargon.
  */
 
@@ -48,7 +58,6 @@ type ChannelState = {
   channelName: string | null
   channelUrl: string
   visibility: Visibility | 'gone' | null
-  inviteUrl: string | null
 }
 
 type AccessReport = {
@@ -170,9 +179,11 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
 
   const [channel, setChannel] = useState<ChannelState | null>(
     mapping?.mapped && mapping.channelUrl
-      ? { channelName: mapping.channelName, channelUrl: mapping.channelUrl, visibility: null, inviteUrl: null }
+      ? { channelName: mapping.channelName, channelUrl: mapping.channelUrl, visibility: null }
       : null,
   )
+  /** The league's stored invite — what every member's Join button opens. */
+  const [invite, setInvite] = useState<string | null>(data.inviteUrl ?? null)
   const [direction, setDirection] = useState<BridgeDirection>(mapping?.mapped ? mapping.direction : 'off')
   const [missingPermissions, setMissingPermissions] = useState<string[] | null>(null)
   const [visibilityChoice, setVisibilityChoice] = useState<Visibility>('server')
@@ -216,9 +227,9 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
           channelName: body.channel.channelName,
           channelUrl: body.channel.channelUrl,
           visibility: body.channel.visibility ?? null,
-          inviteUrl: body.inviteUrl ?? null,
         })
       }
+      if (body.inviteUrl !== undefined) setInvite(body.inviteUrl)
     } catch {
       /* Detail is a nicety; the steps still work without it. */
     }
@@ -258,8 +269,9 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
         channelName: body.channelName ?? null,
         channelUrl: body.channelUrl,
         visibility: body.visibility ?? null,
-        inviteUrl: body.inviteUrl ?? null,
       })
+      // The route keeps this invite on the league (a pasted one wins), so it is what members see.
+      if (body.inviteUrl) setInvite(body.inviteUrl)
       setAccess(body.access ?? null)
       if (!body.alreadyExisted) setDirection('off')
     } catch {
@@ -300,9 +312,9 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
     const s2 = serverReady ? 'done' : data.connected ? 'current' : 'todo'
     const s3 = serverReady ? 'done' : data.connected ? 'current' : 'todo'
     const s4 = channel ? 'done' : serverReady ? 'current' : 'todo'
-    const s5 = channel ? 'current' : 'todo'
+    const s5 = invite ? 'done' : channel ? 'current' : 'todo'
     return [s1, s2, s3, s4, s5] as const
-  }, [data.connected, serverReady, channel])
+  }, [data.connected, serverReady, channel, invite])
 
   const serverLabel = data.guildName ? `“${data.guildName}”` : 'your server'
 
@@ -535,28 +547,31 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
               </Step>
 
               <Step n={5} state={steps[4]} title="Invite your league">
-                {channel?.inviteUrl ? (
+                {invite ? (
                   <>
-                    <p className="af-dc-step-text">Send this link to your league. It never expires.</p>
-                    <div className="af-dc-invite">
-                      <code className="af-dc-invite-url">{channel.inviteUrl}</code>
-                      <CopyButton text={channel.inviteUrl} />
-                    </div>
-                    <p className="af-dc-hint">
-                      Members also get a “Join our Discord” button in league chat.
-                      {channel.visibility === 'private'
-                        ? ' Anyone who joins after today won’t see the members-only channel until you add them in Discord: right-click the channel → Edit Channel → Permissions → Add members.'
-                        : null}
+                    <p className="af-dc-step-text">
+                      Everyone in {data.leagueName} now gets a “Join the league Discord” button — on their
+                      Discord screen and in the Discord tab of their chat. Share it anywhere else too.
                     </p>
+                    <div className="af-dc-invite">
+                      <code className="af-dc-invite-url">{invite}</code>
+                      <CopyButton text={invite} />
+                    </div>
+                    {channel?.visibility === 'private' ? (
+                      <p className="af-dc-hint">
+                        Anyone who joins after today won’t see the members-only channel until you add them in
+                        Discord: right-click the channel → Edit Channel → Permissions → Add members.
+                      </p>
+                    ) : null}
                   </>
-                ) : channel ? (
-                  <p className="af-dc-step-text">
-                    Members get a “Join our Discord” button in league chat. If it doesn’t show up, open
-                    the channel in Discord and use <strong>Invite People</strong>.
-                  </p>
                 ) : (
-                  <p className="af-dc-step-text">Once the channel exists, you’ll get a link to share here.</p>
+                  <p className="af-dc-step-text">
+                    {channel
+                      ? 'Paste your server’s invite link and every member gets a “Join the league Discord” button.'
+                      : 'Already run a server for your league? Paste its invite link and every member gets a “Join the league Discord” button — no bot needed. Or finish the steps above and you’ll get a link here.'}
+                  </p>
                 )}
+                <InviteLinkForm leagueId={data.leagueId} current={invite} onSaved={setInvite} />
               </Step>
             </ol>
           </section>
@@ -745,6 +760,103 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
         </aside>
       </div>
     </div>
+  )
+}
+
+/**
+ * Paste (or replace, or remove) the league's invite link. Checked here with the same function the
+ * route uses, so an obvious mistake is caught without a round trip; the route checks again and is
+ * the authority. What the route refuses is shown in its own words.
+ */
+function InviteLinkForm({
+  leagueId,
+  current,
+  onSaved,
+}: {
+  leagueId: string
+  current: string | null
+  onSaved: (invite: string | null) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function send(inviteUrl: string | null) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/discord/league', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, inviteUrl }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { error?: string; inviteUrl?: string | null }
+      if (!res.ok) {
+        setError(body.error ?? 'Not saved — try again.')
+        return
+      }
+      onSaved(body.inviteUrl ?? null)
+      setDraft('')
+    } catch {
+      setError('Couldn’t reach AllFantasy. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      className="af-dc-invite-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const invite = normalizeDiscordInviteUrl(draft)
+        if (!invite) {
+          setError(INVALID_DISCORD_INVITE_MESSAGE)
+          return
+        }
+        void send(invite)
+      }}
+    >
+      <label className="af-dc-invite-label" htmlFor="dc-invite-input">
+        {current ? 'Use a different invite link' : 'Your server’s invite link'}
+      </label>
+      <div className="af-dc-invite-row">
+        <input
+          id="dc-invite-input"
+          className="af-dc-input"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={DISCORD_INVITE_MAX_LENGTH}
+          placeholder="https://discord.gg/your-league"
+          value={draft}
+          aria-invalid={error ? true : undefined}
+          aria-describedby="dc-invite-help"
+          onChange={(event) => {
+            setDraft(event.target.value)
+            if (error) setError(null)
+          }}
+        />
+        <button type="submit" className="af-btn af-dc-btn" disabled={busy || !draft.trim()}>
+          {busy ? 'Saving…' : 'Save link'}
+        </button>
+      </div>
+      <p id="dc-invite-help" className="af-dc-hint">
+        In Discord: tap your server’s name → <strong>Invite People</strong> → <strong>Edit invite link</strong> → set
+        it to never expire → <strong>Copy</strong>.
+      </p>
+      {error ? (
+        <p className="af-dc-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {current ? (
+        <button type="button" className="af-dc-textbtn" disabled={busy} onClick={() => void send(null)}>
+          Remove the link
+        </button>
+      ) : null}
+    </form>
   )
 }
 

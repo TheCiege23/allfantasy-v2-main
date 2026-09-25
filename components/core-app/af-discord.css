@@ -503,3 +503,109 @@
   .af-dc-step-n { width: 24px; height: 24px; font-size: 11.5px; }
   .af-dc-card { padding: 14px; }
 }
+
+/*
+ * ── League Discord invite (2026-09-25) ────────────────────────────────────────
+ * A member's "Join the league Discord" on /core/discord, and the commissioner's
+ * paste-an-invite field in step 5. Its own top-level block, appended last, so no
+ * rule above it moves into or out of a media query.
+ */
+.af-dc-join {
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--dc-blurple);
+  border-radius: 0 13px 13px 0;
+  background: var(--surface);
+}
+
+.af-dc-join-lede {
+  margin: 0 0 12px;
+  max-width: 60ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-core .af-btn.af-dc-btn.af-dc-join-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding-left: 18px;
+  padding-right: 18px;
+  font-size: 14px;
+}
+
+.af-dc-invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.af-dc-invite-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-dc-invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-dc-input {
+  flex: 1 1 160px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--surface2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 16px;
+  color: var(--text);
+}
+
+.af-dc-input::placeholder { color: var(--faint); }
+
+.af-dc-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.af-dc-input[aria-invalid='true'] { border-color: var(--bad); }
+
+.af-dc-invite-form .af-dc-hint,
+.af-dc-invite-form .af-dc-error { margin-top: 0; }
+
+.af-dc-textbtn {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.af-dc-textbtn:hover { color: var(--bad); }
+
+.af-dc-textbtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 16px on a phone keeps iOS from zooming into the field; tighter where there is room. */
+@media (min-width: 621px) {
+  .af-dc-input { font-size: 12.5px; }
+}

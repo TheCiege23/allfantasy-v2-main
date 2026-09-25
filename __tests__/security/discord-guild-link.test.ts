@@ -22,6 +22,10 @@ vi.mock('@/lib/discord/guild-access', () => ({ verifyGuildManager: h.verify, lin
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findFirst: async () => ({ userId: h.leagueOwner }) },
+    // `canManageDiscordBridge` → `getLeagueRole` looks for a co-commissioner's claimed team (and a
+    // roster) when the caller is not the owner; nobody in this file has either.
+    leagueTeam: { findFirst: async () => null },
+    roster: { findFirst: async () => null },
     discordGuildLink: { upsert: h.upsert },
   },
 }))

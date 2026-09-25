@@ -3320,3 +3320,14 @@
 }
 .af-cm-pick-opt[data-picked='true'] .af-cm-pick-check { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 .af-cm-pick-note { margin: 0; padding: 12px 14px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/*
+ * Discord tab (2026-09-25): the Join / Open channel / Manage links sit under a CENTRED title, and
+ * `.af-cm-empty` loses its side padding above (`padding: 22px 0`), so the row started flush against
+ * the drawer's edge. Centred and inset here; scoped to the empty state so IntegrityFlagCard's own
+ * `.af-cm-actions` row is untouched. Three classes, to outrank `.af-core .af-cm-actions`.
+ */
+.af-cm .af-cm-empty .af-cm-actions {
+  justify-content: center;
+  padding-inline: 16px;
+}
