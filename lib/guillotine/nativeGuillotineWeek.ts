@@ -182,13 +182,17 @@ export async function runNativeGuillotineWeek(
     })
     await savePeriodScores({ leagueId: season.leagueId, weekOrPeriod: week, season: season.season, scores: periodScores })
 
+    // The chop is announced in league chat, authored by the league owner (there is no system user);
+    // a league with no owner goes unannounced rather than unchopped.
+    const owner = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { userId: true } })
     const result = await runElimination({
       leagueId: season.leagueId,
       weekOrPeriod: week,
       season: season.season,
       periodEndedAt,
       periodScores,
-      skipChat: true,
+      skipChat: !owner?.userId,
+      systemUserId: owner?.userId ?? undefined,
     })
     const choppedRedraft = result?.eliminationFlagged?.marked ?? []
     if (!result || result.choppedRosterIds.length === 0) {

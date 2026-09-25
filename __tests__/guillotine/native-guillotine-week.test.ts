@@ -15,6 +15,7 @@ const db = vi.hoisted(() => ({
   guillotinePeriodScore: { findMany: vi.fn() },
   guillotineSeason: { updateMany: vi.fn() },
   roster: { findMany: vi.fn() },
+  league: { findUnique: vi.fn() },
 }))
 const m = vi.hoisted(() => ({
   isGuillotineLeague: vi.fn(),
@@ -69,6 +70,7 @@ const POINTS: Record<string, number> = { 'rr-a': 110, 'rr-b': 72.5, 'rr-c': 95 }
 
 function arrange(overrides: { lastChopWeek?: number | null; active?: typeof SEASON_ROSTERS; rosters?: typeof LEAGUE_ROSTERS } = {}) {
   m.isGuillotineLeague.mockResolvedValue(true)
+  db.league.findUnique.mockResolvedValue({ userId: 'owner-1' })
   m.getGuillotineConfig.mockResolvedValue({
     eliminationStartWeek: 1,
     eliminationEndWeek: 17,
@@ -130,7 +132,8 @@ describe('runNativeGuillotineWeek', () => {
       { rosterId: 'R-c', periodPoints: 95, seasonPointsCumul: 95 },
     ])
     const call = m.runElimination.mock.calls[0]![0]
-    expect(call).toMatchObject({ leagueId: 'L1', weekOrPeriod: 3, season: 2026, skipChat: true })
+    // Announced in league chat, authored by the league owner.
+    expect(call).toMatchObject({ leagueId: 'L1', weekOrPeriod: 3, season: 2026, skipChat: false, systemUserId: 'owner-1' })
     expect(call.periodEndedAt.toISOString()).toBe(LAST_KICKOFF)
     expect(call.periodScores).toEqual(scores.scores)
     // The chopped team's players go to waivers.
@@ -141,6 +144,14 @@ describe('runNativeGuillotineWeek', () => {
     // The week pointer follows the calendar (the hourly roll skips guillotine).
     expect(db.redraftSeason.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { currentWeek: 4 } })
     expect(m.release).toHaveBeenCalled()
+  })
+
+  it('a league with no owner is chopped but not announced (a chat post needs a real author)', async () => {
+    arrange()
+    db.league.findUnique.mockResolvedValue({ userId: null })
+    const r = await run()
+    expect(r).toMatchObject({ outcome: 'chopped' })
+    expect(m.runElimination.mock.calls[0]![0]).toMatchObject({ skipChat: true, systemUserId: undefined })
   })
 
   it('does nothing for a league that is not guillotine', async () => {

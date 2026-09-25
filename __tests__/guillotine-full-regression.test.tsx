@@ -230,6 +230,37 @@ describe('Guillotine full regression matrix', () => {
     expect(JSON.stringify(postChopToLeagueChatMock.mock.calls[0][0])).not.toContain('@test.com')
   })
 
+  it('🛑 a chat post that fails does not fail the chop (the week is already chopped)', async () => {
+    getGuillotineConfigMock.mockResolvedValue({
+      eliminationStartWeek: 1,
+      eliminationEndWeek: 18,
+      teamsPerChop: 1,
+      tiebreakerOrder: ['bench_points'],
+      rosterReleaseTiming: 'next_waiver_run',
+    })
+    evaluateWeekMock.mockResolvedValue({
+      pastCutoff: true,
+      scores: [
+        { rosterId: 'r-low', periodPoints: 77 },
+        { rosterId: 'r-mid', periodPoints: 100 },
+      ],
+    })
+    getDraftSlotByRosterMock.mockResolvedValue(new Map([['r-low', 2], ['r-mid', 1]]))
+    resolveTiebreakMock.mockReturnValue({ choppedRosterIds: ['r-low'], stepUsed: 'bench_points', reason: 'lowest score' })
+    prismaMock.roster.findMany.mockResolvedValue([{ id: 'r-low', platformUserId: 'u1' }])
+    prismaMock.appUser.findMany.mockResolvedValue([{ id: 'u1', displayName: 'Lowest Team', email: 'u1@test.com' }])
+    resolveRedraftRosterIdMock.mockResolvedValue('rr-low')
+    resolveRedraftRosterIdsMock.mockResolvedValue(new Map([['r-low', 'rr-low']]))
+    prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'rr-low', teamName: 'Lowest Team', ownerName: 'u1', ownerId: 'u1' }])
+    postChopToLeagueChatMock.mockRejectedValueOnce(new Error('chat down'))
+
+    const out = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, systemUserId: 'owner' })
+
+    expect(out?.choppedRosterIds).toEqual(['r-low'])
+    expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
+    expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
+  })
+
   it('chops a league whose roster links are unreconciled, and issues no empty query', async () => {
     /*
      * The degraded path, which is every league until the backfill runs. Nothing resolves, so
