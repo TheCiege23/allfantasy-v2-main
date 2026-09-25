@@ -2849,3 +2849,39 @@
 @media (min-width: 768px) {
   .af-cm .af-dc-composer[data-fab-corner='true'] { padding-right: 68px; }
 }
+
+/*
+ * The DM / Huddle privacy note, folded to one line inside an open conversation (ThreadPanel). The
+ * summary is the whole tap target; the note itself reads exactly as the full version on the list.
+ */
+.af-cm-privacy-mini {
+  flex: none;
+  margin: 8px 15px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-cm-privacy-mini > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+}
+.af-cm-privacy-mini > summary::-webkit-details-marker {
+  display: none;
+}
+.af-cm-privacy-mini > p {
+  margin: 4px 0 2px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface2);
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  .af-cm-privacy-mini > summary {
+    min-height: 44px;
+  }
+}

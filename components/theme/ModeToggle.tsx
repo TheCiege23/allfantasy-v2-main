@@ -2,13 +2,15 @@
 
 import React, { useCallback, useEffect, useState } from "react"
 import { useOptionalSession } from "@/components/auth/useOptionalSession"
-import { useThemeMode } from "./ThemeProvider"
+import { useOptionalThemeMode } from "./ThemeProvider"
 import { getNextTheme } from "@/lib/theme"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 
 export function ModeToggle(props: { className?: string }) {
   const { data: session } = useOptionalSession()
-  const { mode, cycleMode } = useThemeMode()
+  // Optional, like the session and language hooks beside it: rendered in a /core top bar without a
+  // ThemeProvider (tests, isolated renders) it shows the document's mode instead of throwing.
+  const { mode, cycleMode } = useOptionalThemeMode()
   const { t, tInterpolate } = useOptionalLanguage()
   const [appliedMode, setAppliedMode] = useState<string | null>(null)
 

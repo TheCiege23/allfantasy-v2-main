@@ -1537,6 +1537,23 @@ function DiscordPanel({
             Discord belongs to one league at a time. Pick which one.
           </p>
         </div>
+        {/*
+          This used to stop at the picker and leave the rest of the panel blank, so someone who has
+          never used Discord got no idea what the tab is for.
+        */}
+        <div className="af-cm-empty af-cm-empty--grow">
+          <p className="af-cm-empty-t">Give your league its own Discord</p>
+          <p className="af-cm-empty-b">
+            A private server for your league&apos;s trash talk, voice chats and draft nights, run by your
+            commissioner. AllFantasy doesn&apos;t read it. Pick a league above to find its server, or set
+            one up if you run the league.
+          </p>
+          {leagues.length === 0 ? (
+            <Link href="/import" className="af-cm-linkbtn">
+              Add a league first →
+            </Link>
+          ) : null}
+        </div>
       </div>
     )
   }

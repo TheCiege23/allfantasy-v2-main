@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { useRouter } from 'next/navigation'
@@ -1200,6 +1201,14 @@ function HelpDot({ title, body }: { title: string; body: string }) {
   )
 }
 
+/**
+ * The top bar's sync chip. `describeAge` says "never synced" when nothing has synced, so prefixing
+ * "synced" to it read "synced never synced".
+ */
+export function syncChipText(ageLabel: string): string {
+  return /^never\b/i.test(ageLabel.trim()) ? 'Never synced' : `synced ${ageLabel}`
+}
+
 export function AfCoreShell(incoming: AfCoreShellProps) {
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
@@ -1996,10 +2005,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
+            {/*
+              `describeAge` says "never synced" for an account with no sync at all; prefixing
+              "synced" to that read "⚠ synced never synced".
+            */}
             <span className="af-sync af-num" data-stale={syncAge.stale} title="Last sync">
               {syncAge.stale ? '⚠ ' : ''}
-              synced {syncAge.label}
+              {syncChipText(syncAge.label)}
             </span>
+
+            {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
+            <ModeToggle className="af-mode-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already

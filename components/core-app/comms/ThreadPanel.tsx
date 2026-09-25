@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Search } from 'lucide-react'
+import { Lock, Search } from 'lucide-react'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
@@ -500,7 +500,18 @@ export function ThreadPanel({
   if (openThread) {
     return (
       <div className="af-cm-panel af-cm-convo" ref={panelRef}>
-        <div className="af-cm-privacy">{privacy}</div>
+        {/*
+          Folded to one line inside a conversation: the full note sat above every message and cost
+          the thread two lines of height on a phone. The list view still shows it in full, and the
+          words are one tap away here.
+        */}
+        <details className="af-cm-privacy-mini">
+          <summary>
+            <Lock size={11} aria-hidden />
+            Private conversation
+          </summary>
+          <p>{privacy}</p>
+        </details>
 
         <div className="af-cm-threadhead">
           <button type="button" className="af-cm-back" onClick={() => {
