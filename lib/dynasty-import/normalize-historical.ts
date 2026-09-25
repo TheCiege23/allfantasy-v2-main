@@ -106,9 +106,17 @@ export async function persistTradesForSeason(
    * writes ESPN/Yahoo/MFL/Fleaflicker trades through here too. Defaults to "sleeper" so the
    * Sleeper-only callers (backfill-orchestrator, archiveFeedTrades) write exactly what they did.
    */
-  platform: string = "sleeper"
+  platform: string = "sleeper",
+  /**
+   * `LeagueTrade.sport`, stored lowercase like every existing row. ⚠ This was hard-coded to "nfl"
+   * on create, so an imported NBA/MLB/NHL league's trades were all labelled NFL. Defaults to "nfl"
+   * on create for rows it creates. Omitted, an UPDATE leaves the stored sport alone — so a Sleeper
+   * backfill (which passes nothing) cannot revert a sport the live sync already wrote correctly.
+   */
+  sport?: string
 ): Promise<number> {
   if (trades.length === 0) return 0;
+  const sportColumn = sport?.trim().toLowerCase() || undefined;
   const ownerIdsNeeded = new Set<string>();
   for (const t of trades) {
     for (const rid of t.rosterIds) {
@@ -167,6 +175,7 @@ export async function persistTradesForSeason(
           picksReceived: picksReceived as any,
           partnerRosterId: toPartnerRosterColumn(partnerRosterId),
           tradeDate: t.created ? new Date(t.created) : null,
+          ...(sportColumn ? { sport: sportColumn } : {}),
         },
         create: {
           historyId,
@@ -181,7 +190,7 @@ export async function persistTradesForSeason(
           partnerName: null,
           tradeDate: t.created ? new Date(t.created) : null,
           platform,
-          sport: "nfl",
+          sport: sportColumn ?? "nfl",
         },
       });
       inserted++;

@@ -258,3 +258,22 @@ describe('persistLiveTrades — per-provider trade finality', () => {
     expect(persistTradesForSeasonMock).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * ⚠ The writer hard-coded `sport: 'nfl'`, so an imported NBA/MLB/NHL league's trades were labelled
+ * NFL. The live sync now hands over the league's own sport; with none it hands over nothing, which
+ * leaves a stored row's sport alone rather than stamping a guess.
+ */
+describe('persistLiveTrades — sport label', () => {
+  it("passes the league's sport to the writer", async () => {
+    const n = normalized([tx({})], undefined, 'espn')
+    ;(n.league as { sport?: string }).sport = 'NBA'
+    await persistLiveTrades({ platformLeagueId: 'L1', season: 2026, normalized: n })
+    expect(persistTradesForSeasonMock.mock.calls[0][5]).toBe('NBA')
+  })
+
+  it('passes nothing when the league carries no sport', async () => {
+    await persistLiveTrades({ platformLeagueId: 'L1', season: 2026, normalized: normalized([tx({})], undefined, 'espn') })
+    expect(persistTradesForSeasonMock.mock.calls[0][5]).toBeUndefined()
+  })
+})
