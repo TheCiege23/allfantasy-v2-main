@@ -1,5 +1,10 @@
 /**
- * GIFIntegrationResolver — Klipy primary, Giphy/Tenor fallback.
+ * GIFIntegrationResolver — Klipy primary, GIPHY fallback.
+ *
+ * Tenor is gone: Google shut its public API down on 2026-06-30. It was removed from the chain on
+ * 2026-09-25 because NEXT_PUBLIC_TENOR_API_KEY was still set in production, so every search that
+ * Klipy could not answer paid a request to a dead service before reaching GIPHY. Old messages whose
+ * GIFs live on Tenor's CDN still render and are still credited (gifProviderForUrl).
  * Graceful fallback when API keys are not set.
  */
 
@@ -29,10 +34,6 @@ function getKlipyKey(): string {
   if (typeof process === "undefined") return ""
   return firstNonEmptyEnv(process.env.VITE_KLIPY_API_KEY, process.env.KLIPY_API_KEY)
 }
-function getTenorKey(): string {
-  if (typeof process === "undefined") return ""
-  return firstNonEmptyEnv(process.env.TENOR_API_KEY, process.env.NEXT_PUBLIC_TENOR_API_KEY)
-}
 /*
  * GIPHY_SDK_KEY is accepted here alongside GIPHY_API_KEY. The developer
  * dashboard issues a separate key for SDK-type apps, and it was already sitting
@@ -58,22 +59,13 @@ function getGiphyKey(): string {
 }
 
 export function isGifSearchConfigured(): boolean {
-  return Boolean(getKlipyKey() || getTenorKey() || getGiphyKey())
+  return Boolean(getKlipyKey() || getGiphyKey())
 }
 
-export function getGifProviderName(): "klipy" | "tenor" | "giphy" | null {
+export function getGifProviderName(): "klipy" | "giphy" | null {
   if (getKlipyKey()) return "klipy"
-  if (getTenorKey()) return "tenor"
   if (getGiphyKey()) return "giphy"
   return null
-}
-
-/** Base URL for Tenor search. Use through server-side proxy routes only. */
-export function getTenorSearchUrl(query: string, limit = 12): string {
-  const key = getTenorKey()
-  if (!key) return ""
-  const params = new URLSearchParams({ q: query, key, limit: String(limit), media_filter: "gif", contentfilter: "medium" })
-  return `https://tenor.googleapis.com/v2/search?${params.toString()}`
 }
 
 /** Base URL for Giphy search. Use through server-side proxy routes only. */
@@ -102,6 +94,20 @@ export function gifProviderForUrl(url: string | null | undefined): "klipy" | "te
   if (on("giphy.com")) return "giphy"
   if (on("tenor.com") || host === "tenor.googleapis.com") return "tenor"
   return null
+}
+
+/**
+ * A GIF link we will store and render: https, from a GIF service we can name and credit. Strict host
+ * match — a substring test would pass `klipy.com.evil.test` or any host containing "media".
+ */
+export function isAllowedGifUrl(url: string | null | undefined): boolean {
+  if (typeof url !== "string") return false
+  try {
+    if (new URL(url).protocol !== "https:") return false
+  } catch {
+    return false
+  }
+  return gifProviderForUrl(url) != null
 }
 
 /** Validate that a string looks like a GIF/image URL for paste-URL flow. */
@@ -187,26 +193,6 @@ function normalizeKlipyResults(payload: unknown): GifSearchResult[] {
   return normalized
 }
 
-function normalizeTenorResults(payload: unknown): GifSearchResult[] {
-  const list = Array.isArray((payload as { results?: unknown[] })?.results)
-    ? ((payload as { results: unknown[] }).results)
-    : []
-  const normalized: GifSearchResult[] = []
-  for (const entry of list) {
-    const obj = entry as Record<string, unknown>
-    const id = typeof obj.id === "string" ? obj.id : ""
-    const mediaFormats = (obj.media_formats || {}) as Record<string, Record<string, unknown>>
-    const gif = mediaFormats.gif
-    const tiny = mediaFormats.tinygif
-    const url = typeof gif?.url === "string" ? gif.url : ""
-    const previewUrl = typeof tiny?.url === "string" ? tiny.url : url
-    if (!id || !url) continue
-    const title = typeof obj.title === "string" ? obj.title : ""
-    normalized.push({ id, url, previewUrl, title, provider: "tenor" })
-  }
-  return normalized
-}
-
 function normalizeGiphyResults(payload: unknown): GifSearchResult[] {
   const list = Array.isArray((payload as { data?: unknown[] })?.data)
     ? ((payload as { data: unknown[] }).data)
@@ -233,7 +219,6 @@ export async function searchGifs(query: string, limit = 12): Promise<GifSearchRe
   const boundedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(48, Math.floor(limit))) : 12
   const providers = [
     { url: getKlipyKey() ? `https://api.klipy.com/api/v1/${getKlipyKey()}/gifs/search?q=${encodeURIComponent(trimmed)}&per_page=${boundedLimit}&rating=g` : '', normalize: normalizeKlipyResults },
-    { url: getTenorSearchUrl(trimmed, boundedLimit), normalize: normalizeTenorResults },
     { url: getGiphySearchUrl(trimmed, boundedLimit), normalize: normalizeGiphyResults },
   ]
   for (const provider of providers) {
