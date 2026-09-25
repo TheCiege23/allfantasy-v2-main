@@ -83,6 +83,15 @@ describe('Sleeper trades shown in the app', () => {
     expect(result.refreshed).toBe(false)
     expect(mocks.grades).toHaveBeenCalledTimes(1)
   })
+  /*
+   * 🛑 THE VIEWER'S OWN ROW (2026-09-25). One Sleeper league is one AF row per importer, each with its
+   * own settings and confirmed league type; grading without naming the row read an arbitrary one.
+   */
+  it('grades each trade on the viewer’s own copy of the league', async () => {
+    mocks.grades.mockResolvedValue(payload([trade()]))
+    await getSleeperTradeHistory('league', 'owner-1', { afLeagueId: 'row-mine' })
+    expect(mocks.expectation).toHaveBeenCalledWith('league', expect.objectContaining({ id: 'league:tx' }), { afLeagueId: 'row-mine' })
+  })
   it('uses the notified trade cache without requiring imported transaction facts', async () => {
     mocks.grades.mockResolvedValue(payload([trade()]))
     const result = await getSleeperTradeHistory('league', null)

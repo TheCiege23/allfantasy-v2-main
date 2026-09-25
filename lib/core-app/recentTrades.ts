@@ -677,7 +677,7 @@ export async function getRecentTrades(
     }
 
     if (live?.enrichLeagueContext && hasNoSignal(src)) {
-      const expectation = await loadTradeExpectation(t.platformLeagueId, src).catch(() => null)
+      const expectation = await loadTradeExpectation(t.platformLeagueId, src, { afLeagueId: t.leagueId }).catch(() => null)
       for (const side of t.sides) {
         const exp = expectation?.sides.find((s) => s.rosterId === side.rosterId)
         side.grade = exp?.projected?.letter ?? null

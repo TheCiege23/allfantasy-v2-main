@@ -6,11 +6,13 @@ import { sendPushToUser } from '@/lib/push-notifications'
 import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { sendTemplatedEmail } from '@/lib/resend-client'
 import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
-import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { getTradeGrades, type GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { buildPendingTradeOfferEmail, buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
-import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
-import { canAccessForUser } from '@/lib/access/canAccessForUser'
-import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
+import { completedTradeGraderFor, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
 import {
   currentTradeIds,
@@ -173,9 +175,9 @@ async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]>
   const users = await prisma.appUser
     .findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } })
     .catch(() => [] as { id: string; email: string | null }[])
-  // Keep the id alongside the address: manager psychology is premium, and the
-  // entitlement is per recipient, so the email can no longer be built once and
-  // blasted to a list.
+  // Keep the id alongside the address: each recipient is graded on their own copy
+  // of the league and sees their own side, so the email can never be built once
+  // and blasted to a list.
   /*
    * ⚠ PREFERENCES AND DELIVERABILITY ARE CHECKED HERE, BEFORE ANY SEND.
    * This loop used to email every attached user unconditionally: the
@@ -208,6 +210,66 @@ async function resolveRecipients(afLeagues: AfLeagueRow[]): Promise<Recipient[]>
 }
 
 const uniqueIds = (rows: FeedTrade[]): string[] => [...new Set(rows.map((r) => r.id))]
+
+/**
+ * Which Sleeper account each AF user is in this league — the claimed team's platform id on their own
+ * row, else the Sleeper id on their profile. The same rule the league's Trades panel uses, so "your
+ * side" in an email is the side the screen calls yours.
+ */
+async function sleeperIdResolver(
+  afLeagues: AfLeagueRow[],
+  recipients: Recipient[],
+  rowFor: (userId: string) => AfLeagueRow,
+): Promise<{ attachedUserIds: string[]; sleeperIdOf: (userId: string) => string | null }> {
+  const attachedUserIds = [
+    ...new Set([
+      ...recipients.map((r) => r.id),
+      ...afLeagues.flatMap((l) => [l.userId, ...l.teams.map((t) => t.claimedByUserId)]),
+    ].filter((v): v is string => typeof v === 'string' && v.length > 0)),
+  ]
+  const profiles = await prisma.userProfile
+    .findMany({
+      where: { userId: { in: attachedUserIds } },
+      select: { userId: true, sleeperUserId: true },
+    })
+    .catch(() => [] as Array<{ userId: string; sleeperUserId: string | null }>)
+  const profileSleeperId = new Map(profiles.map((p) => [p.userId, p.sleeperUserId?.trim() || null]))
+  const sleeperIdOf = (userId: string): string | null => {
+    const claimed = rowFor(userId).teams.find((t) => t.claimedByUserId === userId)?.platformUserId?.trim()
+    return claimed || profileSleeperId.get(userId) || null
+  }
+  return { attachedUserIds, sleeperIdOf }
+}
+
+/**
+ * One completed-trade grade per (league row, trade) in a sweep — several recipients can share a row.
+ * The grader is read first so a withheld grade still carries the league type it would have used.
+ */
+function completedGradeCache(): (
+  rowId: string,
+  trade: GradedTrade,
+) => Promise<{ grade: TradeGradeView | null; leagueType: LeagueTypeBasis | null }> {
+  const season = new Date().getUTCFullYear()
+  const memo = new Map<string, Promise<{ grade: TradeGradeView | null; leagueType: LeagueTypeBasis | null }>>()
+  return (rowId, trade) => {
+    const key = `${rowId}|${trade.id}`
+    let hit = memo.get(key)
+    if (!hit) {
+      hit = (async () => {
+        const grader: LeagueTradeGrader | null = await completedTradeGraderFor(rowId).catch(() => null)
+        const grade = await oneGradeForCompletedTrade(rowId, trade, season, { graderFor: async () => grader }).catch(() => null)
+        return { grade, leagueType: grade?.leagueType ?? grader?.leagueType ?? null }
+      })()
+      memo.set(key, hit)
+    }
+    return hit
+  }
+}
+
+/** Where a manager confirms their league type — the anchor the app's league-type note links to. */
+function confirmUrlFor(rowId: string): string {
+  return `${getBaseUrl()}/core?league=${encodeURIComponent(rowId)}#league-type`
+}
 
 /** Sleeper's transaction id, from a graded-ledger id shaped `<leagueId>:<transactionId>`. */
 function transactionIdOf(tradeId: string): string {
@@ -317,38 +379,30 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     const newTrades = grades.trades.filter((t) => plan.completions.includes(transactionIdOf(t.id)))
     if (newTrades.length === 0) return { ...base, error: 'new trade not present in graded ledger yet' }
 
+    const { sleeperIdOf } = await sleeperIdResolver(afLeagues, recipients, rowFor)
+    const gradeFor = completedGradeCache()
+
     for (const trade of newTrades) {
-      // League shape, scoring settings, last season's real production and roster
-      // needs. Optional by design: if any of it is unavailable the email falls
-      // back to what realized points alone can prove.
-      const expectation = await loadTradeExpectation(sleeperLeagueId, trade).catch(() => null)
-
-      // How these two have traded before. Context only — it never touches the
-      // grade — and premium, since it characterises other managers.
-      const psychology = await loadTradePsychology({
-        leagueId: afLeagues[0].id,
-        sides: trade.sides.map((s) => ({ rosterId: s.rosterId, managerName: s.managerName })),
-      }).catch(() => null)
-
       for (const recipient of recipients) {
         const row = rowFor(recipient.id)
         const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
         const href = tradeUrl(row.id, transactionIdOf(trade.id))
-        const entitled = psychology
-          ? await canAccessForUser('manager_psychology', {
-              userId: recipient.id,
-              email: recipient.email,
-            })
-              .then((d) => d.allowed)
-              .catch(() => false)
-          : false
+        /*
+         * 🛑 THE RECIPIENT'S OWN ROW, GRADED BY THE APP'S OWN FUNCTION (2026-09-25). This used to grade
+         * once per trade on `findFirst({ platformLeagueId })` — whichever importer's copy came back —
+         * so the inbox said B (+24%) where the reader's screen said A (+25%): two rows, two sets of
+         * settings, one band edge. Now each row is graded by `oneGradeForCompletedTrade`, which is
+         * what /core Trades and the home band call for this trade, once per row.
+         */
+        const { grade, leagueType } = await gradeFor(row.id, trade)
         const { subject, html } = buildTradeGradeEmail({
           leagueName,
           trade,
           ledgerUrl: `${getBaseUrl()}${href}`,
-          status: 'complete',
-          expectation,
-          psychology: entitled ? psychology : null,
+          grade,
+          leagueType,
+          viewerOwnerId: sleeperIdOf(recipient.id),
+          confirmUrl: confirmUrlFor(row.id),
           /*
            * 22a's footer. `leagueId` powers the PER-LEAGUE mute — at 61 leagues,
            * a global unsubscribe is not a real choice, because it makes silencing
@@ -435,23 +489,7 @@ async function notifyOffers(args: {
    * Every AF user attached to any copy of this league — not only the email recipients — because
    * the DM half below needs both managers' accounts whether or not either takes trade emails.
    */
-  const attachedUserIds = [
-    ...new Set([
-      ...recipients.map((r) => r.id),
-      ...afLeagues.flatMap((l) => [l.userId, ...l.teams.map((t) => t.claimedByUserId)]),
-    ].filter((v): v is string => typeof v === 'string' && v.length > 0)),
-  ]
-  const profiles = await prisma.userProfile
-    .findMany({
-      where: { userId: { in: attachedUserIds } },
-      select: { userId: true, sleeperUserId: true },
-    })
-    .catch(() => [] as Array<{ userId: string; sleeperUserId: string | null }>)
-  const profileSleeperId = new Map(profiles.map((p) => [p.userId, p.sleeperUserId?.trim() || null]))
-  const sleeperIdOf = (userId: string): string | null => {
-    const claimed = rowFor(userId).teams.find((t) => t.claimedByUserId === userId)?.platformUserId?.trim()
-    return claimed || profileSleeperId.get(userId) || null
-  }
+  const { attachedUserIds, sleeperIdOf } = await sleeperIdResolver(afLeagues, recipients, rowFor)
   const rosterIdOf = (sleeperId: string): number | null => {
     const roster = rosters.find((r) => String(r.owner_id ?? '') === sleeperId)
     return roster && Number.isFinite(Number(roster.roster_id)) ? Number(roster.roster_id) : null
@@ -481,6 +519,17 @@ async function notifyOffers(args: {
       const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
       const href = tradeUrl(row.id, offer.id)
       const { assetsGiven, assetsReceived } = buildTradeAssetsForRoster({ tx: offer.tx, userRosterId: rosterId, players })
+      /*
+       * THE grade the /core Trades inbox shows for this offer: the recipient's own row, their side,
+       * their roster need (`viewerSide: true`) — `lib/core-app/trades.ts` runs exactly this pair. A
+       * grade that cannot be computed withholds its letter; the alert still goes.
+       */
+      const grader = await createLeagueTradeGrader({ leagueId: row.id, userId: recipient.id }).catch(() => null)
+      const grade = await gradeDeal(grader, {
+        give: gradeInputsFromPending(assetsGiven),
+        get: gradeInputsFromPending(assetsReceived),
+        viewerSide: true,
+      }).catch(() => null)
       const { subject, html } = buildPendingTradeOfferEmail({
         leagueName,
         proposerName: proposerNameOf(offer.creator),
@@ -488,6 +537,9 @@ async function notifyOffers(args: {
         youGive: assetsGiven,
         reviewUrl: `${getBaseUrl()}${href}`,
         sleeperUrl,
+        grade,
+        leagueType: grade?.leagueType ?? grader?.leagueType ?? null,
+        confirmUrl: confirmUrlFor(row.id),
         baseUrl: getBaseUrl(),
         leagueId: row.id,
         unsubscribeUrl: unsubscribeUrlFor(recipient.email),

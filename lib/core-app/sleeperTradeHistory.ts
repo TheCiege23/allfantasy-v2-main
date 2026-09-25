@@ -130,7 +130,12 @@ export async function getReconciledTradeGrades(
   }
 }
 
-export async function getSleeperTradeHistory(leagueId: string, viewerOwnerId: string | null) {
+export async function getSleeperTradeHistory(
+  leagueId: string,
+  viewerOwnerId: string | null,
+  /** The viewer's own AF row for this league — the copy every grade here is priced on. */
+  opts: { afLeagueId?: string | null } = {},
+) {
   const reconciled = await getReconciledTradeGrades(leagueId)
   const grades = reconciled.grades
   if (!grades) return null
@@ -145,7 +150,7 @@ export async function getSleeperTradeHistory(leagueId: string, viewerOwnerId: st
   for (let i = 0; i < trades.length; i += 4) {
     history.push(...await Promise.all(trades.slice(i, i + 4).map(async (trade) => {
       const expectation = hasNoSignal(trade)
-        ? await loadTradeExpectation(leagueId, trade).catch(() => null)
+        ? await loadTradeExpectation(leagueId, trade, { afLeagueId: opts.afLeagueId ?? null }).catch(() => null)
         : null
       return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId)
     })))

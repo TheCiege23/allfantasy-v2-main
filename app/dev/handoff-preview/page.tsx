@@ -18,7 +18,7 @@ import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import { buildDraftStartingEmail, buildDraftRecapEmail } from '@/lib/draft-notifications/draftEmails'
 import { selectPushNotifications } from '@/lib/core-app/notificationsCenter'
 import { getBracketChallenge } from '@/lib/core-app/bracketChallenge'
-import { PREVIEW_EXPECTATION, PREVIEW_ISSUES, PREVIEW_TRADE, previewNow } from './fixtures'
+import { PREVIEW_GRADE, PREVIEW_ISSUES, PREVIEW_TRADE, previewNow } from './fixtures'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,8 +40,9 @@ export default async function HandoffPreviewPage() {
   const tradeEmail = buildTradeGradeEmail({
     leagueName: 'Preview Dynasty',
     trade: PREVIEW_TRADE,
-    ledgerUrl: `${base}/league/preview-league-0001?view=legacy`,
-    expectation: PREVIEW_EXPECTATION,
+    ledgerUrl: `${base}/core/trades?league=preview-league-0001&trade=preview`,
+    grade: PREVIEW_GRADE,
+    confirmUrl: `${base}/core?league=preview-league-0001#league-type`,
     baseUrl: base,
     leagueId: 'preview-league-0001',
     unsubscribeUrl: `${base}/api/email/unsubscribe?token=preview`,
