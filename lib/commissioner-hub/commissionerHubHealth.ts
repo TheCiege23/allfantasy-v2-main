@@ -10,6 +10,7 @@ import { attachSavedAnalysis, leaguesWithSavedAnalysis } from '@/lib/decision-os
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 // From the module rather than the behavioral barrel: the barrel re-exports the whole
 // subsystem and this file needs exactly one provider from it.
 import { realDataProvider } from '@/lib/decision-os/behavioral/api/real-data-provider'
@@ -763,6 +764,108 @@ function buildDashboardFallbackLeague(league: UserLeague): LeagueHealthRow {
 }
 
 /**
+ * Imported-league trade and waiver activity for the last seven days, per AF league.
+ *
+ * 🛑 WITHOUT THIS EVERY IMPORTED LEAGUE READS AS DEAD. The counts above come from the native
+ * redraft tables, which only AF-hosted leagues write — so a Sleeper, ESPN, Yahoo, MFL or
+ * Fleaflicker league showed 0 trades and 0 waivers however busy it was, and the engagement
+ * recommendations told its commissioner to "consider a trade deadline extension". Imported
+ * activity lives in `decision_os_imported_activity`, filled for every provider by the rotating
+ * `decision-os-activity-ingest` cron (so a league imported minutes ago still reads 0 until it runs).
+ *
+ * ⚠ THREE WAYS A ROW NAMES ITS LEAGUE, and all three are live — see `activityWhere` in
+ * lib/league-history/leagueWarehouseReads.ts, which this mirrors:
+ *   - `afLeagueId` — the intended key;
+ *   - `providerLeagueId` holding OUR id — older rows swapped the two columns;
+ *   - `provider` + `providerLeagueId` — `externalSourceKey` is globally unique, so a provider league
+ *     imported by two users attaches its activity to only ONE of their AF leagues. Without this arm
+ *     the other importer's hub reads 0 for a league that is trading every day.
+ * The swap means one provider event can exist as two rows (old id space and new), so events are
+ * counted once per league by provider event id, not by row.
+ *
+ * ⚠ "Waiver activity" here is `waiver` + `roster_move`. Yahoo's feed does not say whether an add
+ * went through waivers or free agency, so every Yahoo add is a `roster_move` (see
+ * platformActivityEmitter.ts); counting `waiver` alone would read every Yahoo league as idle.
+ * Pending trades and claims stay native-only on purpose: imported rows are completed events, and
+ * the Process Waivers / Reverse Trade actions they enable act on native tables.
+ *
+ * Never throws: a failed read returns empty maps, and the hub falls back to the native counts.
+ */
+// Exported for its tests.
+export async function loadImportedActivityByLeague(
+  leagueIds: readonly string[],
+  since: Date,
+): Promise<{ trades: CountMap; waivers: CountMap }> {
+  const trades: CountMap = new Map()
+  const waivers: CountMap = new Map()
+  if (leagueIds.length === 0) return { trades, waivers }
+
+  try {
+    const identities = await (prisma as any).league.findMany({
+      where: { id: { in: [...leagueIds] } },
+      select: { id: true, platform: true, platformLeagueId: true },
+    })
+    const byProviderLeague = new Map<string, string[]>()
+    const identityArms: Array<{ provider: string; providerLeagueId: string }> = []
+    for (const row of Array.isArray(identities) ? identities : []) {
+      const provider = typeof row?.platform === 'string' ? row.platform : ''
+      const providerLeagueId = typeof row?.platformLeagueId === 'string' ? row.platformLeagueId : ''
+      if (!provider || !providerLeagueId || isNativePlatform(provider)) continue
+      const key = `${provider}\u0000${providerLeagueId}`
+      const ids = byProviderLeague.get(key) ?? []
+      if (ids.length === 0) identityArms.push({ provider, providerLeagueId })
+      ids.push(row.id)
+      byProviderLeague.set(key, ids)
+    }
+
+    const rows = await (prisma as any).decisionOsImportedActivity.findMany({
+      where: {
+        occurredAt: { gte: since },
+        activityType: { in: ['trade', 'waiver', 'roster_move'] },
+        OR: [
+          { afLeagueId: { in: [...leagueIds] } },
+          { providerLeagueId: { in: [...leagueIds] } },
+          ...identityArms,
+        ],
+      },
+      select: {
+        id: true,
+        provider: true,
+        providerLeagueId: true,
+        afLeagueId: true,
+        activityType: true,
+        providerEventId: true,
+      },
+    })
+
+    const wanted = new Set(leagueIds)
+    const seen = new Set<string>()
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const targets = new Set<string>()
+      if (typeof row.afLeagueId === 'string' && wanted.has(row.afLeagueId)) targets.add(row.afLeagueId)
+      if (typeof row.providerLeagueId === 'string' && wanted.has(row.providerLeagueId)) targets.add(row.providerLeagueId)
+      for (const id of byProviderLeague.get(`${row.provider}\u0000${row.providerLeagueId}`) ?? []) targets.add(id)
+
+      const event = row.providerEventId ? `${row.provider}|${row.activityType}|${row.providerEventId}` : `row|${row.id}`
+      const counter = row.activityType === 'trade' ? trades : waivers
+      for (const leagueId of targets) {
+        const dedupeKey = `${leagueId}|${event}`
+        if (seen.has(dedupeKey)) continue
+        seen.add(dedupeKey)
+        counter.set(leagueId, (counter.get(leagueId) ?? 0) + 1)
+      }
+    }
+  } catch (error) {
+    console.warn('[commissionerHubHealth] imported activity read failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return { trades: new Map(), waivers: new Map() }
+  }
+
+  return { trades, waivers }
+}
+
+/**
  * Participation, for the leagues that can actually answer (6.1 step A).
  *
  * ⚠ OFF BY DEFAULT AND BOUNDED, FOR A REASON THIS FILE ALREADY RECORDS. `getLeagueIntelligence`
@@ -936,7 +1039,11 @@ export async function getCommissionerHubHealthForUser(
 
     // Gated and bounded — see loadParticipationByLeague. Empty map when the gate is off, so
     // this costs nothing and every snapshot keeps `participation: null`.
-    const participationByLeague = await loadParticipationByLeague(leagueIds)
+    // Independent reads, so neither waits on the other. Both degrade to empty rather than throw.
+    const [participationByLeague, importedActivity] = await Promise.all([
+      loadParticipationByLeague(leagueIds),
+      loadImportedActivityByLeague(leagueIds, sevenDaysAgo),
+    ])
 
     const snapshots = leagueIds.map((leagueId) => {
       const dbLeague = dbById.get(leagueId)
@@ -950,9 +1057,10 @@ export async function getCommissionerHubHealthForUser(
         counts: {
           tradeActivity:
             countMapValue(tradeActivity, leagueId) +
-            countMapValue(legacyTradeActivity, leagueId),
+            countMapValue(legacyTradeActivity, leagueId) +
+            countMapValue(importedActivity.trades, leagueId),
           pendingTrades: countMapValue(pendingTrades, leagueId),
-          waiverActivity: countMapValue(waiverActivity, leagueId),
+          waiverActivity: countMapValue(waiverActivity, leagueId) + countMapValue(importedActivity.waivers, leagueId),
           pendingWaiverClaims: countMapValue(pendingWaiverClaims, leagueId),
           chatMessagesLast7Days: countMapValue(chatMessagesLast7Days, leagueId),
           commissionerActions: countMapValue(commissionerActions, leagueId),
