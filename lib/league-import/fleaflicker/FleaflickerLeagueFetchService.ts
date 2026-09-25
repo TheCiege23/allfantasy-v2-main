@@ -99,46 +99,72 @@ async function fetchJson<T>(url: string): Promise<T> {
  * Public JSON API — no user OAuth required.
  */
 export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise<FleaflickerImportPayload> {
-  const { sport, leagueId, season } = parseFleaflickerSourceId(sourceId)
+  const { sport, leagueId, season: requestedSeason } = parseFleaflickerSourceId(sourceId)
 
-  const standingsUrl = `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
-  const rostersUrl = `${API_BASE}/FetchLeagueRosters?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
   /*
-   * Same request plus `external_id_type=SPORTRADAR`, which adds `proPlayer.externalIds` —
-   * a Sportradar UUID per player that joins `Player.provider_ids.sportradar` by exact id
-   * (693/761 = 91.1% measured in production; G-11 in contracts/fleaflicker).
+   * The three SEASON-BOUND reads. Rules and transactions take no season (rules 400 on one — see
+   * `common_query_params.season` in contracts/fleaflicker/ENDPOINTS.yaml), so they are fetched once
+   * below and never re-run.
    */
-  const rostersWithIdsUrl = `${rostersUrl}&external_id_type=SPORTRADAR`
+  const fetchSeasonBound = (season: number) => {
+    const standingsUrl = `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
+    const rostersUrl = `${API_BASE}/FetchLeagueRosters?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
+    /*
+     * Same request plus `external_id_type=SPORTRADAR`, which adds `proPlayer.externalIds` —
+     * a Sportradar UUID per player that joins `Player.provider_ids.sportradar` by exact id
+     * (693/761 = 91.1% measured in production; G-11 in contracts/fleaflicker).
+     */
+    const rostersWithIdsUrl = `${rostersUrl}&external_id_type=SPORTRADAR`
+
+    return Promise.all([
+      fetchJson<FleaflickerStandingsResponse>(standingsUrl),
+      /*
+       * 🛑 THE SPORTRADAR IDS ARE AN ENRICHMENT OF THE ROSTERS, SO THEY MUST NEVER COST THE
+       * ROSTERS. If the parameter is ever rejected, fall back to the plain request before
+       * falling back to no rosters at all. Without the middle step, a vendor change to one
+       * optional parameter would import every league with zero players — and an empty
+       * roster list looks like a league that has not drafted, not like a failure.
+       */
+      fetchJson<FleaflickerRostersResponse>(rostersWithIdsUrl)
+        .catch(() => fetchJson<FleaflickerRostersResponse>(rostersUrl))
+        .catch(() => ({ rosters: [] })),
+      /*
+       * ⚠ THE DRAFT BOARD FAILS SOFT TO `null`, AND `null` IS NOT THE SAME AS THE `{}`
+       * THE ENDPOINT ITSELF RETURNS. `null` here means the call did not succeed; `{}`
+       * means it succeeded and there is no board for this season. Collapsing them would
+       * turn "we could not ask" into "this league never drafted", which is the more
+       * confident and more wrong of the two.
+       */
+      fetchFleaflickerDraftBoard(sport, leagueId, season).catch(() => null),
+    ])
+  }
 
   /*
    * ⚠ RULES FAIL SOFT, LIKE ROSTERS AND UNLIKE STANDINGS. Standings carry the
    * league identity this import is built on; rosters and rules are enrichments.
    * An import that can name the league and its teams must not die because the
    * scoring endpoint had a bad minute.
+   *
+   * The season probe runs in the same batch so a league whose season checks out pays no extra
+   * round trip in latency — only the clamped case re-runs the season-bound reads.
    */
-  const [standings, rosters, rules, draftBoard, transactions] = await Promise.all([
-    fetchJson<FleaflickerStandingsResponse>(standingsUrl),
-    /*
-     * 🛑 THE SPORTRADAR IDS ARE AN ENRICHMENT OF THE ROSTERS, SO THEY MUST NEVER COST THE
-     * ROSTERS. If the parameter is ever rejected, fall back to the plain request before
-     * falling back to no rosters at all. Without the middle step, a vendor change to one
-     * optional parameter would import every league with zero players — and an empty
-     * roster list looks like a league that has not drafted, not like a failure.
-     */
-    fetchJson<FleaflickerRostersResponse>(rostersWithIdsUrl)
-      .catch(() => fetchJson<FleaflickerRostersResponse>(rostersUrl))
-      .catch(() => ({ rosters: [] })),
+  const [servedSeason, firstRead, rules, transactions] = await Promise.all([
+    resolveFleaflickerServedSeason(sport, leagueId, requestedSeason),
+    fetchSeasonBound(requestedSeason),
     fetchFleaflickerRules(sport, leagueId).catch(() => null),
-    /*
-     * ⚠ THE DRAFT BOARD FAILS SOFT TO `null`, AND `null` IS NOT THE SAME AS THE `{}`
-     * THE ENDPOINT ITSELF RETURNS. `null` here means the call did not succeed; `{}`
-     * means it succeeded and there is no board for this season. Collapsing them would
-     * turn "we could not ask" into "this league never drafted", which is the more
-     * confident and more wrong of the two.
-     */
-    fetchFleaflickerDraftBoard(sport, leagueId, season).catch(() => null),
     fetchFleaflickerTransactions(sport, leagueId).catch(() => null),
   ])
+
+  /*
+   * 🛑 A SEASON PAST THE LEAGUE'S LAST IS SILENTLY CLAMPED, AND THE STANDINGS ECHO THE REQUEST.
+   * This returned `season: standings.season ?? season`, and `standings.season` reads back whatever
+   * was asked — so league 206154 (last season 2021) imported 2021's 13-game standings labelled
+   * 2026. When the scoreboard says the body is another season, re-read the season-bound endpoints
+   * FOR that season (so all three describe the same one) and label the payload with it.
+   */
+  const season = servedSeason
+  const [standings, rosters, draftBoard] =
+    season === requestedSeason ? firstRead : await fetchSeasonBound(season)
 
   if (!standings?.league?.id) {
     throw new FleaflickerImportLeagueNotFoundError('Fleaflicker response missing league object.')
@@ -146,12 +172,43 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
 
   return {
     sport,
-    season: standings.season ?? season,
+    season,
     standings,
     rosters,
     rules,
     draftBoard,
     transactions,
+  }
+}
+
+/**
+ * The season Fleaflicker will actually serve for `requestedSeason` — the requested one unless the
+ * scoreboard proves otherwise.
+ *
+ * Relies on `fetchFleaflickerScoreboard`'s own `schedulePeriod.low.season` assertion (see
+ * `FleaflickerSeasonMismatchError` below) and on two committed fixtures:
+ *   - `scoreboard.NFL.2021.week1.json` (league 206154) carries `schedulePeriod.low.season: 2021`;
+ *     the ENDPOINTS.yaml `season` note records 2024/2025/2026/2099 returning that same body.
+ *   - `scoreboard.NFL.json` (league 356670, PRE-DRAFT) carries `schedulePeriod.low` WITHOUT a
+ *     `season` key, so a pre-draft league's mismatch has `returnedSeason === null`.
+ *
+ * ⚠ ONLY A NON-NULL MISMATCH MOVES THE SEASON. A null one is the pre-draft shape above, and every
+ * other failure (network, 5xx, 404) keeps the requested season — the import must not start
+ * depending on the scoreboard being up; standings remains the call that decides whether it fails.
+ */
+async function resolveFleaflickerServedSeason(
+  sport: FleaflickerSport,
+  leagueId: number,
+  requestedSeason: number,
+): Promise<number> {
+  try {
+    await fetchFleaflickerScoreboard(sport, leagueId, requestedSeason)
+    return requestedSeason
+  } catch (error) {
+    if (error instanceof FleaflickerSeasonMismatchError && error.returnedSeason != null) {
+      return error.returnedSeason
+    }
+    return requestedSeason
   }
 }
 
