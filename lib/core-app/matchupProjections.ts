@@ -2,6 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { isRuledOut } from './injuryStatus'
+import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import {
   computeLeagueProjectedPoints,
   extractScoringSettings,
@@ -148,12 +150,39 @@ export async function loadSideProjections(args: {
   })
   const byPlayer = new Map(projections.map((p) => [p.playerId, p]))
 
+  /*
+   * 🛑 A STARTER RULED OUT IS A 0, NOT HIS PROJECTION. This file read no injury data at all, so
+   * the board, the projected final and the win probability all counted an OUT starter at full
+   * value — while My Team, pricing the same player, showed 0.0. Same read, same `isRuledOut`
+   * rule, so the two screens cannot disagree about who is playing. Only under real rules: with
+   * none, nothing here is priced, and a 0 is no exception to that.
+   */
+  const canScore = hasScoringRules(scoring)
+  const ruledOut = new Set<string>()
+  if (canScore && lookupIds.length > 0) {
+    try {
+      const nameRows = await prisma.sportsPlayer.findMany({
+        where: { sleeperId: { in: lookupIds } },
+        select: { sleeperId: true, name: true },
+      })
+      const statuses = await readInjuryStatusById(String(league?.sport ?? 'NFL'), namesBySleeperId(nameRows))
+      for (const [sleeperId, status] of statuses) if (isRuledOut(status)) ruledOut.add(sleeperId)
+    } catch {
+      // Unknown status is "available" — the same direction `isRuledOut` takes on a missing one.
+    }
+  }
+
   const build = (ids: string[]): SideProjection => {
     const starters: MatchupPlayer[] = []
     const lineup: SideProjection['lineup'] = []
     let unprojected = 0
     let projectedRemaining = 0
     for (const id of ids) {
+      if (isResolvableId(id) && ruledOut.has(sleeperIdByRosterId.get(id) ?? id)) {
+        starters.push({ playerId: id, projectedPoints: 0, actualPoints: 0, isFinal: false })
+        lineup.push({ playerId: id, projected: 0 })
+        continue
+      }
       const proj = isResolvableId(id)
         ? byPlayer.get(sleeperIdByRosterId.get(id) ?? id)
         : undefined
