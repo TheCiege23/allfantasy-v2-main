@@ -33,13 +33,18 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import type { PlatformChatMessage } from '@/types/platform-shared'
 
+/*
+ * 🛑 NO EMAIL HERE (2026-09-25). The sender's name fell back to their email address when they had no
+ * display name, and every member of the league — and, through the Discord relay, everyone in the
+ * league's Discord — saw it. The address is no longer even selected, so no later fallback can put it
+ * back on the wire. Display name, then username, then a neutral label.
+ */
 const includeUser = {
   user: {
     select: {
       id: true,
       username: true,
       displayName: true,
-      email: true,
       avatarUrl: true,
       profile: { select: { avatarPreset: true } },
     },
@@ -159,7 +164,7 @@ export async function getLeagueChatMessages(
       parentMessageId: (m as { parentMessageId?: string | null }).parentMessageId ?? null,
       channelSource: src,
       senderUserId: m.user?.id ?? null,
-      senderName: discordAuthorName || m.user?.displayName || m.user?.email || 'User',
+      senderName: discordAuthorName || m.user?.displayName || m.user?.username || 'Manager',
       senderUsername: m.user?.username ?? null,
       senderAvatarUrl: discordAuthorAvatarUrl ?? m.user?.avatarUrl ?? null,
       senderAvatarPreset: m.user?.profile?.avatarPreset ?? null,
@@ -248,7 +253,6 @@ export async function createLeagueChatMessage(
       id: string
       username: string | null
       displayName: string | null
-      email: string | null
       avatarUrl: string | null
       profile?: { avatarPreset?: string | null } | null
     }
@@ -263,7 +267,7 @@ export async function createLeagueChatMessage(
     parentMessageId: created.parentMessageId ?? null,
     channelSource: created.source ?? null,
     senderUserId: withUser.user?.id ?? created.userId,
-    senderName: inboundName || withUser.user?.displayName || withUser.user?.email || 'User',
+    senderName: inboundName || withUser.user?.displayName || withUser.user?.username || 'Manager',
     senderUsername: withUser.user?.username ?? null,
     senderAvatarUrl: inboundAvatar ?? withUser.user?.avatarUrl ?? null,
     senderAvatarPreset: withUser.user?.profile?.avatarPreset ?? null,
