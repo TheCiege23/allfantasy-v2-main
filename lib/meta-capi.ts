@@ -29,10 +29,6 @@ function normEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
-function normPhone(phone: string): string {
-  return phone.replace(/[^\d]/g, "")
-}
-
 function getHeaderClientIp(request?: Request | null): string | undefined {
   if (!request) return undefined
   return (
@@ -113,7 +109,11 @@ export async function sendMetaCAPIEvent(params: CAPIEventParams): Promise<MetaCa
   const userData: Record<string, unknown> = {}
 
   if (params.email) userData.em = [sha256(normEmail(params.email))]
-  if (params.phone) userData.ph = [sha256(normPhone(params.phone))]
+  // ⚠ NO PHONE NUMBER GOES TO META, hashed or not, whatever the caller passes.
+  // /privacy#sms-communications and /terms#sms-terms promise that mobile numbers are
+  // never shared with third parties for marketing, and the A2P 10DLC campaign was
+  // registered on that text; a conversion event for ad optimisation is marketing.
+  // `params.phone` is accepted and ignored so no caller has to change.
   if (params.userId) userData.external_id = [sha256(params.userId)]
   const fbp = params.fbp ?? getCookieFromRequest(request, "_fbp")
   const fbc = params.fbc ?? getCookieFromRequest(request, "_fbc")
