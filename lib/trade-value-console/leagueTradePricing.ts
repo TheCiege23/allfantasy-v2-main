@@ -176,8 +176,70 @@ function parseChartPickName(name: string): { season: number; round: number; slot
   return null
 }
 
-/** The live chart's price for a pick, or null when the chart does not carry that season and round. */
+/**
+ * The live chart's price for a pick — the chart's own row, or, for a round PAST the last one the
+ * chart prices, a decay from that last round. Null when the chart carries nothing for the season.
+ *
+ * 🛑 ROUNDS 5+ WERE INVENTED, AND OUT OF ORDER (field test, 2026-09-25). FantasyCalc's chart stops
+ * at round 4, so a 5th-or-later fell through to the historical file or the generic curve — sources
+ * that disagree with the chart and with each other — and a 2027 8th priced 560 against a 5th at 515.
+ * A later round is worth less than an earlier one by construction, so it is priced FROM the chart's
+ * last round, shrinking each round by the ratio the chart itself shows between its last two rounds
+ * (clamped below 1, so the order can never invert). The ratio is read off the chart, not a constant
+ * calibrated somewhere else.
+ */
 export function livePickValue(
+  fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
+  year: number,
+  round: number,
+  tier: 'early' | 'mid' | 'late' | null,
+): number | null {
+  const exact = chartRoundValue(fcPlayers, year, round, tier)
+  if (exact != null) return exact
+  return extrapolatedLateRound(fcPlayers, year, round, tier)
+}
+
+/** The rounds the chart prices for one season, highest first. */
+function chartRounds(fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>, year: number): number[] {
+  const rounds = new Set<number>()
+  for (const r of fcPlayers) {
+    if (r.player?.position?.toUpperCase() !== 'PICK' || typeof r.value !== 'number') continue
+    const parsed = parseChartPickName(r.player.name ?? '')
+    if (parsed && parsed.season === year) rounds.add(parsed.round)
+  }
+  return [...rounds].sort((a, b) => b - a)
+}
+
+/*
+ * Bounds on the per-round shrink. The ceiling keeps every later round strictly below the one before
+ * it; the floor is also the shrink used when the chart prices only ONE round of a season, so there
+ * is no observed ratio to read.
+ */
+const LATE_ROUND_RATIO_FLOOR = 0.25
+const LATE_ROUND_RATIO_CEILING = 0.85
+
+function extrapolatedLateRound(
+  fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
+  year: number,
+  round: number,
+  tier: 'early' | 'mid' | 'late' | null,
+): number | null {
+  const rounds = chartRounds(fcPlayers, year)
+  const last = rounds[0]
+  // Only PAST the chart's last round: a gap below it is a chart hole, not a late round.
+  if (last == null || round <= last) return null
+  const lastValue = chartRoundValue(fcPlayers, year, last, tier)
+  if (lastValue == null || lastValue <= 0) return null
+  const prev = rounds[1]
+  const lastAvg = chartRoundValue(fcPlayers, year, last, null)
+  const prevAvg = prev != null ? chartRoundValue(fcPlayers, year, prev, null) : null
+  const observed = lastAvg != null && prevAvg != null && prevAvg > 0 ? (lastAvg / prevAvg) ** (1 / (last - prev!)) : null
+  const ratio = Math.min(LATE_ROUND_RATIO_CEILING, Math.max(LATE_ROUND_RATIO_FLOOR, observed ?? LATE_ROUND_RATIO_FLOOR))
+  return Math.max(1, Math.round(lastValue * ratio ** (round - last)))
+}
+
+/** The chart's own price for exactly this season and round, or null when it carries no such row. */
+function chartRoundValue(
   fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
   year: number,
   round: number,
