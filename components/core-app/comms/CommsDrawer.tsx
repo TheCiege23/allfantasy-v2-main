@@ -62,6 +62,8 @@ import { useOverlayContainment } from '../useOverlayContainment'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
 import '@/components/core-app/af-comms.css'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
+import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
+import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
 
 /**
  * 23a — the communications drawer. 23b — the same drawer, docked on desktop.
@@ -193,9 +195,9 @@ const DM_PRIVACY =
  * read private channels regardless of anything AllFantasy does.
  */
 const DISCORD_PRIVACY =
-  'Only your commissioner can manage the league bridge. Discord roles and channel permissions control ' +
-  'access; server owners and administrators can read private channels. Private AllFantasy DMs are never ' +
-  'mirrored. Edits and deletes do not sync.'
+  "Your league's Discord is your league's space. AllFantasy doesn't read it unless your commissioner turns " +
+  'on two-way, and private AllFantasy DMs are never copied there. Discord roles and channel permissions ' +
+  'decide who sees each channel; server owners and admins can read every channel.'
 
 /**
  * The only phrasing allowed when Chimmy suggests a roster change.
@@ -305,6 +307,11 @@ type ChatTurn = {
   tools?: string[] | null
   /** The thumbs the user gave this answer, kept so reopening the drawer shows it. */
   rating?: ChimmyFeedbackValue | null
+  /**
+   * "Start Kyren over Pollard" / "send Chase for Jefferson": the confirm cards from `meta.actionCards`.
+   * A card changes nothing until the user taps Confirm on it; see lib/chimmy/actions/confirmAction.ts.
+   */
+  actionCards?: ChimmyActionCardData[] | null
 }
 
 /** How many earlier turns follow the user into another scope. */
@@ -907,6 +914,7 @@ function ChimmyPanel({
             plan: answeredPlan,
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
+            actionCards: readActionCards(payload.meta),
           },
         ])
         if (answeredPlan) setPlanStatus(answeredPlan)
@@ -1113,6 +1121,10 @@ function ChimmyPanel({
               ) : null}
 
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
+
+              {t.role === 'chimmy' && t.actionCards?.length
+                ? t.actionCards.map((card) => <ChimmyActionCard key={card.actionId} card={card} />)
+                : null}
 
               {t.role === 'chimmy' && t.advice ? (
                 <ChimmyAdviceFollow
@@ -1438,8 +1450,13 @@ function LeaguePanel({
     if (!quiet) setLoading(true)
     setError(null)
     try {
+      /*
+       * `markRead=1` moves this league's read marker (the bubble's league count) — only while the page
+       * is actually visible, so a poll ticking in a background tab never marks unseen messages read.
+       */
+      const seen = typeof document !== 'undefined' && document.visibilityState === 'visible'
       const res = await fetch(
-        `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${includeDraft ? '&includeDraft=1' : ''}`,
+        `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${includeDraft ? '&includeDraft=1' : ''}${seen ? '&markRead=1' : ''}`,
       )
       if (!res.ok) throw new Error(`Chat returned ${res.status}`)
       /*
@@ -2219,15 +2236,12 @@ function DiscordPanel({
             <>
               <p className="af-cm-empty-t">No Discord channel yet for {scope?.name}</p>
               <p className="af-cm-empty-b">
-                Create a server in Discord (or use one you already have), invite the bot in, then link
-                a channel from the full Discord settings screen.
+                Discord setup walks you through it in five steps: make the league&apos;s server, add
+                AllFantasy, make the channel, and share the invite.
               </p>
-              <Link href="/core/discord" className="af-cm-linkbtn">
+              <Link href={`/core/discord?league=${encodeURIComponent(scopeId)}`} className="af-cm-linkbtn">
                 Set up Discord →
               </Link>
-              <a className="af-cm-linkbtn" href="https://discord.com/channels/@me" target="_blank" rel="noreferrer">
-                Open Discord to create a server ↗
-              </a>
             </>
           ) : (
             <>
@@ -2271,7 +2285,7 @@ function DiscordPanel({
                 Open channel ↗
               </a>
               {status.isCommissioner ? (
-                <Link href="/core/discord" className="af-cm-linkbtn">
+                <Link href={`/core/discord?league=${encodeURIComponent(scopeId)}`} className="af-cm-linkbtn">
                   Manage Discord
                 </Link>
               ) : null}
@@ -2347,6 +2361,19 @@ export function CommsDrawer({
     // Keyed on the sequence number alone: each request applies once, when it is made.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequestSeq])
+
+  /*
+   * Opening the Chimmy tab is reading Chimmy's weekly lineup and waiver checks, so they stop counting
+   * toward the bubble. Once per visit to the tab; the bubble re-reads its number when the drawer closes.
+   */
+  useEffect(() => {
+    if (!open || tab !== 'chimmy' || !userId) return
+    void fetch('/api/chat/unread', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'chimmy' }),
+    }).catch(() => {})
+  }, [open, tab, userId])
 
   /*
    * Full-screen overlay hygiene, from the one place that owns it: Escape, the

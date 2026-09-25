@@ -6,6 +6,7 @@ import { MessageSquare } from 'lucide-react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
 import { useDraggableLauncher } from './useDraggableLauncher'
+import { useChatBadge } from './useChatBadge'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -155,6 +156,8 @@ export function CommsDock({
    */
   const launchRef = useRef<HTMLButtonElement | null>(null)
   const launcher = useDraggableLauncher(launchRef, !open)
+  /* The server's count, kept current between page loads — see useChatBadge. */
+  const badge = useChatBadge(unread, mentions, open)
 
   return (
     <>
@@ -174,10 +177,10 @@ export function CommsDock({
           }}
           title="Open chat — drag to move"
           aria-label={
-            mentions > 0
-              ? `Open communications (${mentions} mention${mentions === 1 ? '' : 's'}, ${unread} unread)`
-              : unread > 0
-                ? `Open communications (${unread} unread)`
+            badge.mentions > 0
+              ? `Open communications (${badge.mentions} mention${badge.mentions === 1 ? '' : 's'}, ${badge.unread} unread)`
+              : badge.unread > 0
+                ? `Open communications (${badge.unread} unread)`
                 : 'Open communications'
           }
         >
@@ -193,10 +196,10 @@ export function CommsDock({
             small bubble would be unreadable, and the louder state is the one
             worth the pixels.
           */}
-          {unread > 0 ? (
-            <span className="af-cm-launchdot" data-kind={mentions > 0 ? 'mention' : 'unread'}>
-              {mentions > 0 ? '@' : ''}
-              {unread}
+          {badge.unread > 0 ? (
+            <span className="af-cm-launchdot" data-kind={badge.mentions > 0 ? 'mention' : 'unread'}>
+              {badge.mentions > 0 ? '@' : ''}
+              {badge.unread}
             </span>
           ) : null}
         </button>

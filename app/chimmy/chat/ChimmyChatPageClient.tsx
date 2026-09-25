@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import ChimmyChatShell from '@/components/chimmy/ChimmyChatShell'
 import ChimmyActionCardTray from '@/components/chimmy/ChimmyActionCardTray'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -20,6 +20,18 @@ export function ChimmyChatPageClient(props: {
 }) {
   const sport = useMemo(() => normalizeToSupportedSport(props.sport), [props.sport])
   const { openComparison } = usePlayerComparisonUI()
+
+  /*
+   * Opening Chimmy is reading its weekly lineup and waiver checks: they stop counting toward the chat
+   * bubble. A signed-out visitor gets a 401 and nothing changes.
+   */
+  useEffect(() => {
+    void fetch('/api/chat/unread', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'chimmy' }),
+    }).catch(() => {})
+  }, [])
 
   /*
    * 🛑 THE KEYBOARD DOES NOT SHRINK `100dvh`. The dynamic viewport units track

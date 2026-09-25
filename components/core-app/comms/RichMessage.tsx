@@ -20,6 +20,7 @@ import { gifCredit, readGif, readSafeGif } from '@/lib/rich-message/RichMessageR
 import { getSafeMessageMediaUrl } from '@/lib/rich-message/safeMedia'
 import { MessagePoll } from './MessagePoll'
 import { TradeCardView } from './TradeCardView'
+import { readTradeOffer, readTradeOfferStatus } from '@/lib/chat-notifications/tradeOfferCard'
 import { ImageViewer } from './ImageViewer'
 
 /*
@@ -156,8 +157,14 @@ export function RichMessage({
   const attachments = readSafeAttachments(metadata)
   const poll = readPoll(metadata)
   const trade = readTradeCard(metadata)
+  /*
+   * A trade offer posted into the two managers' DM, or the line under it when it is answered. Neither
+   * fits the completed-trade shape `readTradeCard` narrows to, so TradeCardView reads them from the raw
+   * metadata — without this check the DM showed the offer as plain text and never drew the card.
+   */
+  const tradeOffer = metadata ? readTradeOffer(metadata) != null || readTradeOfferStatus(metadata) != null : false
   const viewerPoll = onVote ? readViewerPoll(metadata, viewerUserId ?? null) : null
-  if (!gif && attachments.length === 0 && !poll && !trade) return null
+  if (!gif && attachments.length === 0 && !poll && !trade && !tradeOffer) return null
 
   return (
     <div className="af-cm-rich">
@@ -199,7 +206,7 @@ export function RichMessage({
         return null
       })}
 
-      {trade ? <TradeCardView card={trade} /> : null}
+      {trade || tradeOffer ? <TradeCardView card={trade} metadata={metadata ?? null} viewerUserId={viewerUserId ?? null} /> : null}
 
       {viewerPoll && onVote ? (
         <MessagePoll poll={viewerPoll} onVote={onVote} onClose={onClosePoll} />
