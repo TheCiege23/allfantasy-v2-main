@@ -16,7 +16,7 @@ import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import DraftHq from '@/components/core-app/screens/DraftHq'
 import { AFProPlanSpotlight } from '@/components/monetization/AFProPlanSpotlight'
 import { PLAN_FAMILY_INCLUDES } from '@/lib/monetization/planIncludes'
-import { describeTiebreakRule } from '@/lib/core-app/waivers'
+import { describeTiebreakRule } from '@/lib/core-app/waiverRuleLabels'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
 
 afterEach(() => {
