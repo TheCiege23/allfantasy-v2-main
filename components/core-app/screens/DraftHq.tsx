@@ -2,6 +2,8 @@
 
 import '@/components/core-app/af-draft-hq.css'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 
 /**
  * Screen 8 — Draft HQ.
@@ -17,6 +19,9 @@ import type { DraftHqData } from '@/lib/core-app/draftHq'
 
 export type DraftHqProps = {
   data: DraftHqData
+  /** Competitive Edge — loaded by the page only when the viewer's plan includes it. */
+  edge?: DraftEdgeState | null
+  edgeAccess?: CoreDepthAccess | null
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -30,7 +35,7 @@ const STATUS_TONE: Record<string, string> = {
   completed: 'done',
 }
 
-export function DraftHq({ data }: DraftHqProps) {
+export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) {
   return (
     <div className="af-dh">
       {/* ── Board settings ──────────────────────────────────────────── */}
@@ -208,6 +213,13 @@ export function DraftHq({ data }: DraftHqProps) {
           <Unavailable reason={data.grades.reason} />
         )}
       </section>
+
+      {/*
+        -- Competitive Edge: how the others draft -------------------------
+        After the grades, which say how each draft TURNED OUT; this says what each manager
+        actually TAKES, draft after draft (lib/competitive-edge/draftEdge.ts). Counts, never labels.
+      */}
+      <DraftCompetitiveEdge access={edgeAccess} edge={edge} />
 
       <section className="af-frame af-dh-section af-dh-boardfull">
         <header className="af-dh-section-head">
