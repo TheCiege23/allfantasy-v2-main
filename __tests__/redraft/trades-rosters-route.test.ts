@@ -940,7 +940,7 @@ describe('🛑 a native dynasty league lists picks it can actually trade', () =>
     getServerSession.mockResolvedValue({ user: { id: 'user-1' } })
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
     findUniqueLeague.mockResolvedValue({
-      season: 2026, sport: 'NFL', platform: 'manual', leagueType: 'dynasty', isDynasty: true, starters: null, settings: {},
+      season: 2026, sport: 'NFL', platform: 'manual', leagueType: 'dynasty', isDynasty: true, draftPickTrading: true, starters: null, settings: {},
     })
     findManyAppUser.mockResolvedValue([])
     findManyLeagueTeam.mockResolvedValue([team('t1', 'R-1', 'user-1', 'Alpha'), team('t2', 'R-2', 'user-2', 'Bravo')])
@@ -980,6 +980,15 @@ describe('🛑 a native dynasty league lists picks it can actually trade', () =>
       expect(p.proposable).toBe(true)
     }
     expect(body.pickCoverage).toBe('complete')
+  })
+
+  it('🛑 lists none when the league has pick trading switched off — the validator would refuse them', async () => {
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'manual', leagueType: 'dynasty', isDynasty: true, draftPickTrading: false, starters: null, settings: {},
+    })
+    const { picksOf } = await load()
+    expect(picksOf('R-1')).toEqual([])
+    expect(findFirstRedraftSeason).not.toHaveBeenCalled()
   })
 
   it('[control] an imported league never reads the native inventory', async () => {

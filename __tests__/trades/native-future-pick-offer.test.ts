@@ -105,6 +105,17 @@ describe('offering a native future pick', () => {
     expect(h.validate.mock.calls[0]![0].nativeFuturePickOwners).toBe(owners)
   })
 
+  it('the stored item carries the pick’s season and round, read from its id', async () => {
+    await propose('rookie_pick', 'fdp:2027:1:ra')
+    const item = h.txCreate.mock.calls[0]![0].data.items.create[0]
+    expect(item.metadata).toMatchObject({ pickSeason: 2027, pickRound: 1, originalRosterId: 'ra' })
+  })
+
+  it('a player item’s metadata is left as sent', async () => {
+    await propose('player', 'p1')
+    expect(h.txCreate.mock.calls[0]![0].data.items.create[0].metadata).toEqual({})
+  })
+
   it('a trade with no native pick never reads it', async () => {
     await propose('player', 'p1')
     expect(h.loadNative).not.toHaveBeenCalled()

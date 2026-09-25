@@ -392,14 +392,26 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         multiTeam: participantRosterIds.length > 2,
       } as Prisma.InputJsonValue,
       items: {
-        create: input.assets.map((a) => ({
-          itemType: a.itemType,
-          itemReference: a.itemReference ?? null,
-          fromRosterId: a.fromRosterId,
-          toRosterId: a.toRosterId,
-          faabAmount: a.faabAmount ?? null,
-          metadata: (a.metadata ?? {}) as Prisma.InputJsonValue,
-        })),
+        create: input.assets.map((a) => {
+          // A native future pick's item carries its own season and round, read from its id, so
+          // every reader of the item (grades, history, notices) can price it without the id format.
+          const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))
+          return {
+            itemType: a.itemType,
+            itemReference: a.itemReference ?? null,
+            fromRosterId: a.fromRosterId,
+            toRosterId: a.toRosterId,
+            faabAmount: a.faabAmount ?? null,
+            metadata: (nativePick
+              ? {
+                  ...(a.metadata ?? {}),
+                  pickSeason: nativePick.season,
+                  pickRound: nativePick.round,
+                  originalRosterId: nativePick.originalRosterId,
+                }
+              : (a.metadata ?? {})) as Prisma.InputJsonValue,
+          }
+        }),
       },
     } satisfies Prisma.AfLeagueTradeUncheckedCreateInput
 

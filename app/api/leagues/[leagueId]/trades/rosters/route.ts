@@ -23,6 +23,7 @@ import {
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
 import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
 import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -238,6 +239,8 @@ export async function GET(
         waiverBudget: true,
         playoffTeams: true,
         playoffStartWeek: true,
+        // Native future picks are offered only where the validator would accept them.
+        draftPickTrading: true,
       },
     })
     .catch(() => null)
@@ -367,13 +370,13 @@ export async function GET(
    * drafts, moved where a trade moved them — and unlike an import's, they ARE proposable: the trade
    * engine settles them (`transferNativeFuturePick`) and the next rookie draft honours them.
    */
-  const nativePicks = isNativeFuturePickLeague({
-    platform: league?.platform,
-    leagueType: league?.leagueType,
-    isDynasty: league?.isDynasty,
-  })
-    ? await loadNativeFuturePicks(leagueId).catch(() => null)
-    : null
+  const nativePicks =
+    league &&
+    isNativeFuturePickLeague({ platform: league.platform, leagueType: league.leagueType, isDynasty: league.isDynasty }) &&
+    // A pick the validator would refuse (`PICK_TRADING_BLOCKED`) is not one to offer.
+    isDraftPickTradingAllowed(league)
+      ? await loadNativeFuturePicks(leagueId).catch(() => null)
+      : null
   const nativePicksByRoster = new Map<string, InventoryPick[]>()
   for (const p of nativePicks?.picks ?? []) {
     const list = nativePicksByRoster.get(p.ownerTeamId) ?? []
