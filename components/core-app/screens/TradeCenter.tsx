@@ -31,6 +31,7 @@ import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePan
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
+import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
 import { TradeAssetSheet, usePhoneViewport } from '@/components/core-app/screens/TradeAssetSheet'
@@ -215,6 +216,8 @@ type AnalyzeResult = {
     needAdjusted: boolean
     needGap: string | null
   }
+  /** THE grade — the same object every other trade surface shows for this deal. */
+  grade?: TradeGradeView
   players?: { give: EngineLine[]; get: EngineLine[] }
   byeNotes?: string[]
   needNotes?: string[]
@@ -903,6 +906,12 @@ export function TradeCenter(props: {
 
   const noSignal = useMemo(() => {
     if (!result) return false
+    /*
+     * With the server's grade, "no signal" means exactly "the grade is withheld" — the same rule
+     * every other surface follows. A data gap that does not touch the price (an opponent roster we
+     * could not read) no longer hides a letter the offer card beside it is showing.
+     */
+    if (result.grade) return !result.grade.graded
     const allUnpriced = [...give, ...get].every((l) => l.marketValue == null)
     return Boolean(result.degraded) || (give.length + get.length > 0 && allUnpriced)
   }, [result, give, get])
@@ -992,14 +1001,25 @@ export function TradeCenter(props: {
    * `percentDiff` is signed from the viewer's side, so the opponent's grade is
    * the mirror of it.
    */
-  const yourGrade = projectedLetterFor({
-    percentDiff: result?.percentDiff ?? null,
-    hasSignal: Boolean(result) && !noSignal,
-  })
-  const theirGrade = projectedLetterFor({
-    percentDiff: result?.percentDiff != null ? -result.percentDiff : null,
-    hasSignal: Boolean(result) && !noSignal,
-  })
+  /*
+   * 🛑 THE LETTERS COME FROM THE SERVER'S GRADE (2026-09-24), the one object the league page, the
+   * inbox, /core Trades and Chimmy show for the same deal. Computing them here from `percentDiff`
+   * was the same arithmetic, but a second copy is how a surface drifts; the fallback stays only for
+   * a response that predates the field.
+   */
+  const serverGrade = result?.grade ?? null
+  const yourGrade = serverGrade
+    ? serverGrade.graded ? serverGrade.letter : null
+    : projectedLetterFor({
+        percentDiff: result?.percentDiff ?? null,
+        hasSignal: Boolean(result) && !noSignal,
+      })
+  const theirGrade = serverGrade
+    ? serverGrade.graded ? serverGrade.partnerLetter : null
+    : projectedLetterFor({
+        percentDiff: result?.percentDiff != null ? -result.percentDiff : null,
+        hasSignal: Boolean(result) && !noSignal,
+      })
 
   /*
    * ── Draft persistence ──────────────────────────────────────────
@@ -2019,10 +2039,17 @@ export function TradeCenter(props: {
             the callout that keeps those apart.
           */}
           {noSignal ? (
-            <p className="af-tc-nosignal">
-              We could not price enough of this deal to stand behind a verdict. An even-looking
-              score here means we have no signal, not that the trade is fair.
-            </p>
+            serverGrade && !serverGrade.graded ? (
+              <p className="af-tc-nosignal">
+                Not graded: {serverGrade.reason} An even-looking score here means we have no signal,
+                not that the trade is fair.
+              </p>
+            ) : (
+              <p className="af-tc-nosignal">
+                We could not price enough of this deal to stand behind a verdict. An even-looking
+                score here means we have no signal, not that the trade is fair.
+              </p>
+            )
           ) : null}
 
           {movedLines.length > 0 || result.valueBasis?.needGap ? (

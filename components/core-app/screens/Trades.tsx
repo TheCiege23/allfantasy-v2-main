@@ -77,20 +77,24 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         {side('You get', offer.get)}
       </div>
       <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded}>
+        {/* THE grade — the same letter this deal gets in the Trade Center and on the league page. */}
         {offer.evaluation.graded ? (
           <>
             <span className="af-tr-offer-grade af-num">{offer.evaluation.letter}</span>
             <span className="af-tr-offer-eval-copy">
-              <strong>{offer.evaluation.sharePct}% of traded value to you</strong>
+              <strong>
+                {offer.evaluation.label} · you get {offer.evaluation.getValue.toLocaleString()} for{' '}
+                {offer.evaluation.giveValue.toLocaleString()}
+              </strong>
               <span>{offer.evaluation.recommendation}</span>
-              <small>{offer.evaluation.basis}</small>
+              <small>Graded on league value · {offer.evaluation.basis}</small>
             </span>
           </>
         ) : (
           <span className="af-tr-offer-eval-copy">
             <strong>Grade withheld</strong>
             <span>{offer.evaluation.reason}</span>
-            <small>{offer.evaluation.basis}</small>
+            {offer.evaluation.basis ? <small>{offer.evaluation.basis}</small> : null}
           </span>
         )}
       </div>

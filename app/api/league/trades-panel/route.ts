@@ -32,6 +32,9 @@ import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSumma
 import type { League } from '@prisma/client'
 import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
+import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/trade-value/leagueTradeGrader'
+import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/trade-value/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +48,49 @@ async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, Non
   if (!store) return new Map()
   const rows = await store.findMany({ where: { tradeId: { in: tradeIds } } }).catch(() => [])
   return new Map(rows.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
+}
+
+/**
+ * ONE grader per request, loaded only if something open needs grading. It reads the league's chart
+ * once and grades every open offer on it — see `lib/trade-value/leagueTradeGrader.ts`.
+ */
+type GraderSource = () => Promise<LeagueTradeGrader | null>
+function lazyGrader(leagueId: string, userId: string): GraderSource {
+  let pending: Promise<LeagueTradeGrader | null> | null = null
+  return () => (pending ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+}
+
+/**
+ * The grade fields an OPEN row carries. The letter, the values under it and the recommendation all
+ * come from the one grade, so the "Then → Now" tiles, the advice line and the card letters cannot
+ * disagree about the same offer. `decisionCoveragePct` and `rosterImpact` stay with the canonical
+ * evaluation, which still runs for the lineup effect and the Decision OS record.
+ */
+function openGradeFields(grade: TradeGradeView, side: 'viewer' | 'proposer') {
+  return {
+    leagueGrade: grade,
+    leagueGradeSide: side,
+    decisionAction: grade.graded ? grade.action : undefined,
+    decisionRecommendation: grade.graded ? grade.recommendation : `Not graded: ${grade.reason}`,
+    currentGrade: grade.graded ? grade.letter : null,
+    currentValueGiven: grade.graded ? grade.giveValue : null,
+    currentValueReceived: grade.graded ? grade.getValue : null,
+  } satisfies Partial<LeagueTradeHistoryItem>
+}
+
+/** Grade each pending provider offer from the viewer's side (their `assetsGiven` is what they send). */
+async function gradeProviderOffers(trades: PendingProviderTrade[], grader: GraderSource): Promise<Map<string, TradeGradeView>> {
+  const out = new Map<string, TradeGradeView>()
+  if (trades.length === 0) return out
+  const g = await grader()
+  await Promise.all(trades.map(async (t) => {
+    out.set(t.transactionId, await gradeDeal(g, {
+      give: gradeInputsFromPending(t.assetsGiven),
+      get: gradeInputsFromPending(t.assetsReceived),
+      viewerSide: true,
+    }))
+  }))
+  return out
 }
 
 function assetLabel(item: { itemType: string; itemReference: string | null; metadata: unknown }, sport = 'NFL'): {
@@ -75,7 +121,12 @@ function assetLabel(item: { itemType: string; itemReference: string | null; meta
  * renders. Direction/role flags let the tab show accept/reject/cancel/commissioner controls
  * without a second round-trip.
  */
-async function buildNativeActiveTrades(leagueId: string, userId: string, sport = 'NFL'): Promise<LeagueTradeHistoryItem[]> {
+async function buildNativeActiveTrades(
+  leagueId: string,
+  userId: string,
+  sport = 'NFL',
+  grader: GraderSource = lazyGrader(leagueId, userId),
+): Promise<LeagueTradeHistoryItem[]> {
   // Resolve the viewer's roster. Native AF leagues store the AF user id in
   // `platformUserId`; imported Sleeper leagues store the SLEEPER user id there,
   // so also try the viewer's linked sleeperUserId — otherwise the viewer-role
@@ -147,6 +198,27 @@ async function buildNativeActiveTrades(leagueId: string, userId: string, sport =
 
   const isCommissioner = await isElevatedCommissioner(leagueId, userId)
   const world = await resolveCanonicalWorld(leagueId).catch(() => null)
+
+  /*
+   * Names for the grade. A Trade Center proposal carries a Sleeper id and no metadata per player, and
+   * the one grader prices players by name — so the ids are resolved here, once for the whole panel.
+   * One row per id: `SportsPlayer` holds several for many players (see viewerNeedFactors).
+   */
+  const unnamedIds = [...new Set(active.flatMap((t) => t.items)
+    .filter((i) => !String(i.itemType ?? 'player').toLowerCase().includes('pick') && !String(i.itemType ?? '').toLowerCase().includes('faab'))
+    .filter((i) => {
+      const m = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? i.metadata as Record<string, unknown> : {}
+      return !(typeof m.playerName === 'string' && m.playerName.trim()) && !(typeof m.name === 'string' && m.name.trim())
+    })
+    .map((i) => i.itemReference)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0))]
+  const sportsPlayerStore = (prisma as typeof prisma & { sportsPlayer?: typeof prisma.sportsPlayer }).sportsPlayer
+  const nameRows = unnamedIds.length > 0 && sportsPlayerStore && typeof sportsPlayerStore.findMany === 'function'
+    ? await sportsPlayerStore.findMany({ where: { sleeperId: { in: unnamedIds } }, select: { sleeperId: true, name: true } }).catch(() => [])
+    : []
+  const nameBySleeperId = new Map<string, string>()
+  for (const r of nameRows) if (r.sleeperId && r.name && !nameBySleeperId.has(r.sleeperId)) nameBySleeperId.set(r.sleeperId, r.name)
+  const nameForId = (id: string) => nameBySleeperId.get(id) ?? null
 
   return Promise.all(active
     .filter((t) => {
@@ -236,6 +308,20 @@ async function buildNativeActiveTrades(leagueId: string, userId: string, sport =
         currentSeason: world.league.season ?? undefined,
         includeRosterImpact: wantImpact,
       }, { resolveWorld: async () => world }).catch(() => null) : null
+      /*
+       * THE grade, from the viewer's side when they are in the deal, otherwise from the proposer's —
+       * the same side `sent`/`received` are rendered from. Two-team deals only: one gap cannot give
+       * three teams a letter each, and the receipt path already withholds for the same reason.
+       */
+      const partyView = myRosterId != null && participantIds.includes(myRosterId)
+      const openGrade: TradeGradeView = participantIds.length === 2
+        ? await gradeDeal(await grader(), {
+            give: gradeInputsFromNativeItems(t.items.filter((i) => i.fromRosterId === viewRosterId), nameForId),
+            get: gradeInputsFromNativeItems(t.items.filter((i) => i.toRosterId === viewRosterId), nameForId),
+            viewerSide: partyView,
+          })
+        : { graded: false, reason: 'Only two-team trades are graded — one value gap cannot give three teams a letter each.', basis: null }
+      const graded = openGradeFields(openGrade, partyView ? 'viewer' : 'proposer')
       return {
         id: t.id,
         direction,
@@ -255,12 +341,21 @@ async function buildNativeActiveTrades(leagueId: string, userId: string, sport =
         viewerIsReceiver,
         viewerIsProposer,
         viewerIsParticipant: myRosterId != null && participantIds.includes(myRosterId),
-        decisionAction: (frozenDecision?.action ?? decision?.action) as LeagueTradeHistoryItem['decisionAction'],
-        decisionRecommendation: frozenDecision?.recommendation || decision?.recommendation || null,
+        decisionAction: graded.decisionAction,
+        decisionRecommendation: graded.decisionRecommendation,
         decisionCoveragePct: frozenDecision?.coveragePct ?? decision?.coveragePct ?? null,
-        proposalGrade: frozenDecision?.grade ?? decision?.grade ?? null,
-        proposalValueGiven: frozenDecision?.valueGiven ?? decision?.valueGiven ?? null,
-        proposalValueReceived: frozenDecision?.valueReceived ?? decision?.valueReceived ?? null,
+        /*
+         * "Then" is the proposal-time RECEIPT when one was written — frozen evidence, left as it was
+         * recorded. Without one there is no proposal-time grade, and "Then" is the grade now.
+         */
+        proposalGrade: frozenDecision?.grade ?? graded.currentGrade,
+        proposalValueGiven: frozenDecision?.valueGiven ?? graded.currentValueGiven,
+        proposalValueReceived: frozenDecision?.valueReceived ?? graded.currentValueReceived,
+        currentGrade: graded.currentGrade,
+        currentValueGiven: graded.currentValueGiven,
+        currentValueReceived: graded.currentValueReceived,
+        leagueGrade: graded.leagueGrade,
+        leagueGradeSide: graded.leagueGradeSide,
         proposalCapturedAt: receipt?.capturedAt ?? decision?.evaluatedAt ?? null,
         decisionReceipt: receipt,
         // Asked for and the evaluation itself failed is still "asked for, not produced" — `null`.
@@ -561,6 +656,8 @@ function providerAsset(asset: PendingTradeAsset, idx: number, accent: 'blue' | '
 function mapProviderTrades(
   pending: PendingProviderTrade[],
   evaluations: Map<string, ProviderPendingEvaluation> = new Map(),
+  /** THE grade per open offer. Absent for completed trades, which keep their own letters for now. */
+  grades: Map<string, TradeGradeView> = new Map(),
 ): LeagueTradeHistoryItem[] {
   return pending.map((trade) => ({
     id: `${trade.provider}:${trade.transactionId}`,
@@ -586,6 +683,22 @@ function mapProviderTrades(
     proposalValueReceived: evaluations.get(trade.transactionId)?.valueReceived ?? null,
     proposalCapturedAt: evaluations.get(trade.transactionId)?.evaluatedAt ?? null,
     rosterImpact: evaluations.get(trade.transactionId)?.rosterImpact,
+    /*
+     * An open offer has no proposal-time record, so "Then" and "Now" are both the grade now — and
+     * both are THE grade, replacing the canonical fairness letter, which was one letter for both
+     * teams (the partner of a lopsided deal saw the same C as the winner).
+     */
+    ...(() => {
+      const g = grades.get(trade.transactionId)
+      if (!g) return {}
+      const f = openGradeFields(g, 'viewer')
+      return {
+        ...f,
+        proposalGrade: f.currentGrade,
+        proposalValueGiven: f.currentValueGiven,
+        proposalValueReceived: f.currentValueReceived,
+      }
+    })(),
     // Intentionally omitted: viewerIsReceiver / viewerIsProposer /
     // viewerIsCommissioner. Leaving them unset suppresses action controls the
     // provider API cannot honor.
@@ -608,6 +721,7 @@ function mapProviderTrades(
 function builderOffers(
   pending: PendingProviderTrade[],
   evaluations: Map<string, ProviderPendingEvaluation> = new Map(),
+  grades: Map<string, TradeGradeView> = new Map(),
 ) {
   const asset = (a: PendingTradeAsset) => ({
     playerId: a.playerId,
@@ -629,6 +743,8 @@ function builderOffers(
     give: t.assetsGiven.map(asset),
     get: t.assetsReceived.map(asset),
     evaluation: evaluations.get(t.transactionId) ?? null,
+    /** THE grade for this offer, from the viewer's side — what the inbox shows beside it. */
+    leagueGrade: grades.get(t.transactionId) ?? null,
   }))
 }
 
@@ -689,8 +805,9 @@ export async function GET(req: NextRequest) {
     league.platform === 'sleeper' && league.platformLeagueId ? league.platformLeagueId : null
 
   if (!sleeperLeagueId) {
+    const grader = lazyGrader(leagueId, userId)
     const [activeTrades, historyTrades] = await Promise.all([
-      buildNativeActiveTrades(leagueId, userId, league.sport),
+      buildNativeActiveTrades(leagueId, userId, league.sport, grader),
       buildNativeTradeHistory(league, userId),
     ])
     const platform = String(league.platform ?? 'manual').toLowerCase()
@@ -713,17 +830,20 @@ export async function GET(req: NextRequest) {
         platformLeagueId: league.platformLeagueId,
         userId,
       }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
-      const evaluations = await evaluatePendingProviderTrades({
-        leagueId,
-        trades: scan.trades,
-        includeRosterImpact: true,
-      }).catch(() => new Map())
+      const [evaluations, grades] = await Promise.all([
+        evaluatePendingProviderTrades({
+          leagueId,
+          trades: scan.trades,
+          includeRosterImpact: true,
+        }).catch(() => new Map()),
+        gradeProviderOffers(scan.trades, grader).catch(() => new Map<string, TradeGradeView>()),
+      ])
 
       return NextResponse.json({
         draft,
         tradeBlock: [] as LeagueTradeBlockPanelItem[],
         tradeBlockNote: tradeBlockSupport('yahoo').note,
-        activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades, evaluations)],
+        activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades, evaluations, grades)],
         historyTrades,
         activeCount: activeTrades.length + scan.trades.length,
         source: 'yahoo' as const,
@@ -741,7 +861,7 @@ export async function GET(req: NextRequest) {
           )}`,
           weeksUnanswered: 0,
         },
-        pendingOffers: builderOffers(scan.trades, evaluations),
+        pendingOffers: builderOffers(scan.trades, evaluations, grades),
       })
     }
 
@@ -829,8 +949,9 @@ export async function GET(req: NextRequest) {
     return profile?.sleeperUserId?.trim() || null
   })()
 
+  const grader = lazyGrader(leagueId, userId)
   const [nativeTrades, nativeHistory, pendingScan] = await Promise.all([
-    buildNativeActiveTrades(leagueId, userId, league.sport).catch((err) => {
+    buildNativeActiveTrades(leagueId, userId, league.sport, grader).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),
@@ -867,15 +988,18 @@ export async function GET(req: NextRequest) {
    * ⚠ LINEUP EFFECT ON THE PENDING CALL ONLY. A completed trade's roster already holds the result,
    * so there is no honest "before" to compute — see `includeRosterImpact` on the evaluator wrapper.
    */
-  const providerEvaluations = await evaluatePendingProviderTrades({
-    leagueId,
-    trades: providerPending,
-    includeRosterImpact: true,
-  }).catch(() => new Map())
+  const [providerEvaluations, providerGrades] = await Promise.all([
+    evaluatePendingProviderTrades({
+      leagueId,
+      trades: providerPending,
+      includeRosterImpact: true,
+    }).catch(() => new Map()),
+    gradeProviderOffers(providerPending, grader).catch(() => new Map<string, TradeGradeView>()),
+  ])
   const completedEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerCompleted }).catch(() => new Map())
 
   // Native first (the viewer can act on those); provider proposals follow.
-  const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending, providerEvaluations)]
+  const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending, providerEvaluations, providerGrades)]
 
   /*
    * SETTLED PROVIDER OFFERS — the feed the "Declined & expired" filter never had.
@@ -997,7 +1121,7 @@ export async function GET(req: NextRequest) {
       weeksRequested: pendingScan.weeksRequested,
       weeksAnswered: pendingScan.weeksAnswered,
     },
-    pendingOffers: builderOffers(providerPending, providerEvaluations),
+    pendingOffers: builderOffers(providerPending, providerEvaluations, providerGrades),
   })
 }
 

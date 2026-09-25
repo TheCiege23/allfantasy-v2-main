@@ -19,6 +19,8 @@
  * This module only combines them, caps the product, and totals the deal.
  */
 
+import { signedGapPct } from './tradeGrade'
+
 export type LeagueValueAdjustmentKind = 'scoring' | 'need'
 
 export type LeagueValueAdjustment = {
@@ -82,8 +84,8 @@ export function leagueTradeTotals(
     lines.reduce((s, l) => s + (l[key] ?? 0), 0)
   const giveLeague = sum(give, 'leagueValue')
   const getLeague = sum(get, 'leagueValue')
-  const percentDiff =
-    giveLeague > 0 ? Math.round(((getLeague - giveLeague) / Math.max(giveLeague, getLeague, 1)) * 100) : 0
+  // The same rounding as the grade itself (`signedGapPct`), so the figure shown and the letter agree.
+  const percentDiff = giveLeague > 0 ? signedGapPct(giveLeague, getLeague) : 0
   return {
     giveBase: sum(give, 'base'),
     getBase: sum(get, 'base'),

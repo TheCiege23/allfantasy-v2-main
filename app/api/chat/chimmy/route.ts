@@ -3667,6 +3667,8 @@ ${newsCtx}`
                   message: planInput.message,
                   leagueId: leagueSnapshot?.id ?? null,
                   sport,
+                  // The one grader reads the league as this user; with no user there is no letter.
+                  userId: leagueSnapshot ? userId ?? null : null,
                 })
             if (describedTradeCtx) {
               legacyEnrichmentContext = legacyEnrichmentContext

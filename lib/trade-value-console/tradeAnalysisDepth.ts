@@ -63,6 +63,8 @@ export const TRADE_VERDICT_FIELDS = [
    * adjustment `lib/trade-value/leagueTradeValue.ts` exists to prevent.
    */
   'valueBasis',
+  /* The letter itself, and the same free verdict on every surface — see `lib/trade-value/tradeGrade.ts`. */
+  'grade',
   'degraded',
   'dataGaps',
   'dataSources',

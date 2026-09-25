@@ -1,13 +1,14 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { gradeTrade } from '@/lib/trade-value/grader'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/trade-value/leagueTradeGrader'
+import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
+import type { GradeInputs } from '@/lib/trade-value/tradeGradeInputs'
 import { explainPlayerValue, type ScoringContext, type ValueBasis } from '@/lib/trade-value/valueEngine'
 import { newestProjectionSeason } from '@/lib/af-projections/readAfProjections'
 import { AF_SNAPSHOT_SCORING_FORMAT } from '@/lib/af-projections/types'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { MAX_NAME_CANDIDATES, extractPlayerNameCandidates, splitSides } from './tradeSentence'
-import type { AssetValueSnapshot, SideTotals } from '@/lib/trade-value/types'
 import {
   scoringContextFromWorld,
   scoringFormatFromPresetId,
@@ -165,45 +166,6 @@ type PricedPlayer = {
   basis: ValueBasis
 }
 
-function toAsset(p: PricedPlayer, from: string, to: string): AssetValueSnapshot {
-  return {
-    kind: 'player',
-    fromRosterId: from,
-    toRosterId: to,
-    playerId: null,
-    playerName: p.playerName,
-    position: p.position,
-    team: p.team,
-    sources: {
-      /*
-       * ⚠ `projectionValue` IS NOW FILLED WHEN THERE GENUINELY IS ONE, and the old comment here
-       * said it must stay null. That was right for its time and is wrong now. The reasoning was:
-       * `computeConfidence` reads this field to decide how much to trust the grade, and an
-       * ADP-DERIVED number is not a projection, so filling it would inflate confidence on every
-       * described trade.
-       *
-       * Both halves still hold. What changed is that a real rest-of-season projection is now
-       * reachable by name, so this carries the projection when one exists and null when it does
-       * not — which is what makes the confidence score mean something instead of being uniformly
-       * pessimistic.
-       */
-      projectionValue: p.rosProjection,
-      projectionScoringFormat: p.rosProjection != null ? AF_PROJECTION_FORMAT : null,
-      rankingValue: null,
-      adpValue: p.adp,
-      fantasyCalcValue: p.marketValue,
-      /*
-       * IDP value is computed from a league's own scoring and starting slots, and is keyed on
-       * `sleeperId` — the crosswalk a described trade cannot rely on. Still null, still the
-       * truthful answer, and the block below now says so out loud for defenders rather than
-       * letting an ADP number stand in silently.
-       */
-      idpValue: null,
-    },
-    internalValue: p.value,
-  }
-}
-
 /** Positions this path cannot price honestly: IDP values need a league AND a sleeperId. */
 const IDP_POSITIONS = new Set(['LB', 'DL', 'DE', 'DT', 'DB', 'CB', 'S', 'SS', 'FS', 'ILB', 'OLB'])
 
@@ -219,10 +181,19 @@ const BASIS_PHRASE: Record<ValueBasis, string> = {
  * Grade a trade described in the message. Returns null when the message is not
  * about a trade at all, so the prompt gains no empty section.
  */
+type DescribedGrade = (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeGradeView>
+
+const defaultDescribedGrade: DescribedGrade = async ({ leagueId, userId, give, get }) =>
+  gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), { give, get, viewerSide: false })
+
 export async function buildDescribedTradeContext(args: {
   message: string
   leagueId: string | null
   sport: string
+  /** The signed-in user — the one grader needs it. Without one there is no letter. */
+  userId?: string | null
+  /** Injected in tests; defaults to the one grader. */
+  gradeDeal?: DescribedGrade
 }): Promise<string | null> {
   const { message, leagueId, sport } = args
   if (!message?.trim()) return null
@@ -447,48 +418,50 @@ export async function buildDescribedTradeContext(args: {
     return lines.join('\n')
   }
 
-  const sideA: SideTotals = {
-    rosterId: 'described-a',
-    total: left.reduce((n, p) => n + p.value, 0),
-    assets: left.map((p) => toAsset(p, 'described-a', 'described-b')),
-  }
-  const sideB: SideTotals = {
-    rosterId: 'described-b',
-    total: right.reduce((n, p) => n + p.value, 0),
-    assets: right.map((p) => toAsset(p, 'described-b', 'described-a')),
-  }
+  /*
+   * 🛑 THE ONE GRADE, OR NO LETTER (2026-09-24). This used to grade the deal itself — its own
+   * ADP/projection prices into the canonical fairness grader, ONE letter for both sides — so the same
+   * trade typed into Chimmy and built in the Trade Center got different letters. Now:
+   *   - in a league, the letter is the one every trade surface shows (`leagueTradeGrader`), taken on
+   *     this league's values, from side 1's point of view (it sends the left of "X for Y");
+   *   - with no league there is no letter, which is the Trade Center's rule too: a grade is taken on
+   *     a league's own values and rules. The values above still stand as context.
+   * Roster need is not priced here: a prose trade does not say whose roster either side is.
+   */
+  const sideNames = (ps: PricedPlayer[]) => ps.map((p) => p.playerName).join(', ')
+  const oneGrade =
+    args.leagueId && args.userId
+      ? await (args.gradeDeal ?? defaultDescribedGrade)({
+          leagueId: args.leagueId,
+          userId: args.userId,
+          give: { assets: left.map((p) => ({ kind: 'player' as const, name: p.playerName })), unpriceable: [] },
+          get: { assets: right.map((p) => ({ kind: 'player' as const, name: p.playerName })), unpriceable: [] },
+        }).catch((): TradeGradeView => ({ graded: false, reason: 'the trade could not be graded just now.', basis: null }))
+      : null
 
-  const { grade } = gradeTrade(sideA, sideB)
-
-  lines.push(
-    `Side 1 (${left.map((p) => p.playerName).join(', ')}): ${sideA.total}. Side 2 (${right
-      .map((p) => p.playerName)
-      .join(', ')}): ${sideB.total}.`,
-  )
-
-  if (grade.insufficientData || grade.grade == null) {
-    // The grader's own honesty pass — a letter here would mean nothing priced.
+  if (!oneGrade) {
     lines.push(
-      'NOT GRADED: nothing on either side resolved to a usable value. Say the trade cannot be priced rather than assigning a grade.',
+      `Side 1 (${sideNames(left)}). Side 2 (${sideNames(right)}).`,
+      `NOT GRADED: ${args.leagueId ? 'no signed-in manager to read this league as' : 'no league is in context'}. AllFantasy grades a trade on a league’s own values and rules and gives the same grade on every screen, so there is no letter without one. Give the values above as context, and offer to grade it in one of the user’s leagues. Do NOT assign a letter yourself.`,
+    )
+  } else if (!oneGrade.graded) {
+    lines.push(
+      `Side 1 (${sideNames(left)}). Side 2 (${sideNames(right)}).`,
+      `NOT GRADED: ${oneGrade.reason} Do NOT assign a letter yourself.`,
     )
   } else {
+    const valueOf = (side: 'give' | 'get') =>
+      oneGrade.lines
+        .filter((l) => l.side === side)
+        .map((l) => `${l.name} ${l.leagueValue == null ? 'unpriced' : l.leagueValue.toLocaleString()}`)
+        .join(', ')
     lines.push(
-      `Grade ${grade.grade}, fairness ${grade.fairnessScore}/100, confidence ${grade.confidenceScore}/100, value gap ${Math.abs(grade.valueDifference)}.`,
+      `GRADE — the one AllFantasy grade, the same the Trade Center gives this trade, taken on this league's values (${oneGrade.basis}):`,
+      `- Side 1 (${sideNames(left)}) gets ${oneGrade.letter} — ${oneGrade.label} for side 1. Side 2 (${sideNames(right)}) gets ${oneGrade.partnerLetter}.`,
+      `- League value: side 1 sends ${oneGrade.giveValue.toLocaleString()} (${valueOf('give')}); side 2 sends ${oneGrade.getValue.toLocaleString()} (${valueOf('get')}).`,
+      ...oneGrade.moves.map((m) => `- ${m.name}: ${m.base.toLocaleString()} market → ${m.leagueValue.toLocaleString()} here, because ${m.reasons.join('; ')}.`),
+      '- The per-player values listed earlier are context on a different basis. Quote these league values and this letter as the verdict.',
     )
-    if (grade.confidenceScore < 60) {
-      /*
-       * ⚠ THIS USED TO ASSERT THE CAUSE — "because these are priced off draft position with no
-       * projections behind them" — which was true when ADP was the only basis available and is
-       * now a guess. With projections wired in, a low score can also mean a thin or one-sided
-       * deal. So it reports the bases actually used and lets the reason follow from them, rather
-       * than naming a cause it did not measure.
-       */
-      const used = [...new Set(priced.map((p) => BASIS_PHRASE[p.basis]))].join(' and ')
-      lines.push(
-        `⚠ CONFIDENCE IS LOW (${grade.confidenceScore}/100). These players were priced from ${used}. Lead with that caveat rather than the letter.`,
-      )
-    }
-    for (const b of grade.bullets ?? []) lines.push(`  ${b}`)
   }
 
   if (unresolved.length > 0) {

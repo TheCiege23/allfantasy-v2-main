@@ -27,6 +27,29 @@ import {
   buildDescribedTradeContext,
   extractPlayerNameCandidates,
 } from '@/lib/chimmy-trade/describedTradeEvaluator'
+import { gradeTrade } from '@/lib/trade-value/tradeGrade'
+
+/* THE grade for 4000 out, 6000 in, by the real scale — an A for side 1, an F for side 2. */
+const oneGrade = vi.fn(async () =>
+  gradeTrade({
+    giveValue: 4000,
+    getValue: 6000,
+    giveMarket: 4000,
+    getMarket: 6000,
+    unpriced: 0,
+    giveCount: 1,
+    getCount: 1,
+    basis: 'Redraft · 1QB · 12 teams · Standard',
+    scoringApplied: false,
+    needApplied: false,
+    needGap: null,
+    lines: [
+      { side: 'give', name: 'Jamarr Chase', marketValue: 4000, leagueValue: 4000 },
+      { side: 'get', name: 'Jahmyr Gibbs', marketValue: 6000, leagueValue: 6000 },
+    ],
+    moves: [],
+  }),
+)
 
 function adp(playerName: string, adpValue: number, position = 'WR', format = 'redraft', scoring = 'standard') {
   return { playerName, position, team: 'JAX', adp: adpValue, format, scoring }
@@ -66,19 +89,48 @@ describe('buildDescribedTradeContext', () => {
     ).toBeNull()
   })
 
-  it('grades a two-sided trade off ADP', async () => {
+  /*
+   * 🛑 THE LETTER IS THE ONE GRADE (2026-09-24). This path used to grade the deal itself off ADP
+   * into the canonical fairness grader — one letter for both sides — so the same trade typed into
+   * Chimmy and built in the Trade Center read differently. It now takes the one grader's letter.
+   */
+  it('grades a two-sided trade with the one grade, from side 1', async () => {
     mocks.adpFindMany.mockResolvedValue([adp('Jamarr Chase', 2), adp('Jahmyr Gibbs', 6, 'RB')])
+    oneGrade.mockClear()
 
     const out = await buildDescribedTradeContext({
       message: 'Is Jamarr Chase for Jahmyr Gibbs fair?',
       leagueId: 'lg1',
       sport: 'nfl',
+      userId: 'u1',
+      gradeDeal: oneGrade,
     })
 
     expect(out).toContain('DESCRIBED TRADE')
-    expect(out).toContain('Jamarr Chase')
-    expect(out).toContain('Jahmyr Gibbs')
-    expect(out).toMatch(/Grade [A-F]/)
+    expect(out).toContain('the same the Trade Center gives this trade')
+    expect(out).toContain('Side 1 (Jamarr Chase) gets A — Major win (you) for side 1. Side 2 (Jahmyr Gibbs) gets F.')
+    expect(out).toContain('League value: side 1 sends 4,000 (Jamarr Chase 4,000); side 2 sends 6,000 (Jahmyr Gibbs 6,000).')
+    expect(oneGrade).toHaveBeenCalledWith({
+      leagueId: 'lg1',
+      userId: 'u1',
+      give: { assets: [{ kind: 'player', name: 'Jamarr Chase' }], unpriceable: [] },
+      get: { assets: [{ kind: 'player', name: 'Jahmyr Gibbs' }], unpriceable: [] },
+    })
+    // The canonical grader's own line is gone — no second letter on a second basis.
+    expect(out).not.toMatch(/fairness \d+\/100/)
+  })
+
+  it('a withheld grade is passed through as NOT GRADED, never as a letter', async () => {
+    mocks.adpFindMany.mockResolvedValue([adp('Jamarr Chase', 2), adp('Jahmyr Gibbs', 6, 'RB')])
+    const out = await buildDescribedTradeContext({
+      message: 'Is Jamarr Chase for Jahmyr Gibbs fair?',
+      leagueId: 'lg1',
+      sport: 'nfl',
+      userId: 'u1',
+      gradeDeal: async () => ({ graded: false, reason: 'Jahmyr Gibbs has no value on this league’s chart.', basis: null }),
+    })
+    expect(out).toContain('NOT GRADED: Jahmyr Gibbs has no value on this league’s chart. Do NOT assign a letter yourself.')
+    expect(out).not.toMatch(/gets [A-F]\b/)
   })
 
   /*
@@ -156,19 +208,22 @@ describe('buildDescribedTradeContext', () => {
   })
 
   /*
-   * ADP is not a projection, so confidence stays low by construction and the
-   * caveat has to outrank the letter.
+   * Retired 2026-09-24: "warns that confidence is low because nothing is projection-backed". That
+   * caveat qualified the canonical grader's letter, which this path no longer produces — the letter
+   * is the one grade, on league value. What replaces it: with no league there is no letter at all.
    */
-  it('warns that confidence is low because nothing is projection-backed', async () => {
+  it('gives no letter with no league — a grade is taken on a league’s own values', async () => {
     mocks.adpFindMany.mockResolvedValue([adp('Jamarr Chase', 2), adp('Jahmyr Gibbs', 6, 'RB')])
 
     const out = await buildDescribedTradeContext({
       message: 'Jamarr Chase for Jahmyr Gibbs',
-      leagueId: 'lg1',
+      leagueId: null,
       sport: 'nfl',
+      gradeDeal: oneGrade,
     })
 
-    expect(out).toMatch(/CONFIDENCE IS LOW/i)
+    expect(out).toContain('NOT GRADED: no league is in context.')
+    expect(out).not.toMatch(/gets [A-F]\b|Grade [A-F]/)
   })
 
   it('prefers one pricing slice rather than mixing bases across the two sides', async () => {
@@ -312,7 +367,8 @@ describe('7.4 — projections and market, with the basis reported', () => {
       message: 'Jamarr Chase for Jahmyr Gibbs?', leagueId: 'lg1', sport: 'nfl',
     })
     expect(out).toContain('draft position only')
-    expect(out).toMatch(/Grade [A-F]/)
+    // No user to read the league as, so the values stand and no letter is invented.
+    expect(out).toContain('NOT GRADED: no signed-in manager to read this league as.')
   })
 
   /*

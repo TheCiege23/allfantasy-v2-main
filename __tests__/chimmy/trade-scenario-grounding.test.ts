@@ -7,6 +7,7 @@ import {
 } from '@/lib/chimmy/tradeScenarioGrounding'
 import type { CanonicalTradeEvaluation } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
+import { gradeTrade, type TradeGradeView } from '@/lib/trade-value/tradeGrade'
 
 /**
  * Chimmy item 8: a described trade, resolved against the league's real rosters and evaluated by
@@ -70,17 +71,36 @@ function evaluation(over: Partial<CanonicalTradeEvaluation> = {}): CanonicalTrad
   }
 }
 
+/* THE grade for 8450 out, 7900 in — built by the real scale, so the letter is the one every surface shows. */
+const ONE_GRADE: TradeGradeView = gradeTrade({
+  giveValue: 8450,
+  getValue: 7900,
+  giveMarket: 8450,
+  getMarket: 7900,
+  unpriced: 0,
+  giveCount: 1,
+  getCount: 1,
+  basis: 'Dynasty · 1QB · 12 teams · PPR',
+  scoringApplied: false,
+  needApplied: false,
+  needGap: null,
+  lines: [],
+  moves: [],
+})
+
 let deps: TradeScenarioDeps
 const resolveWorld = vi.fn()
 const loadPlayerNames = vi.fn()
 const evaluate = vi.fn()
+const grade = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
   resolveWorld.mockResolvedValue(WORLD)
   loadPlayerNames.mockResolvedValue(NAMES)
   evaluate.mockResolvedValue(evaluation())
-  deps = { resolveWorld, loadPlayerNames, evaluate }
+  grade.mockResolvedValue(ONE_GRADE)
+  deps = { resolveWorld, loadPlayerNames, evaluate, grade }
 })
 
 const run = (message: string, userId = 'viewer-1') =>
@@ -128,7 +148,7 @@ describe('a described trade is resolved against real rosters', () => {
   it('carries value and lineup, and never a playoff number', async () => {
     const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
     if (s?.status !== 'ready') throw new Error('not ready')
-    expect(s.value).toMatchObject({ given: 8450, received: 7900, delta: -550, grade: 'C+' })
+    expect(s.value).toMatchObject({ given: 8450, received: 7900, delta: -550, grade: 'C', label: 'Even' })
     expect(s.lineup).toEqual({ before: 118.4, after: 116.9, delta: -1.5, unit: 'league_points_week' })
     expect(s.lineupWeek).toBe(3)
     expect(s.playoffOdds.available).toBe(false)
@@ -253,12 +273,51 @@ describe('what is not a described trade', () => {
   )
 })
 
+/*
+ * 🛑 THE LETTER IS THE ONE GRADE, NOT THE CANONICAL EVALUATOR'S. The evaluator's `grade` is one
+ * fairness letter for BOTH teams ('C+' here); the one grade is the viewer's, on league value, and is
+ * the letter the Trade Center and the offer cards show for the same deal.
+ */
+describe('the grade is the one every surface shows', () => {
+  it("takes the one grader's letter and ignores the evaluator's", async () => {
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    if (s?.status !== 'ready') throw new Error('not ready')
+    expect(s.value.grade).toBe('C')
+    expect(evaluation().grade).toBe('C+') // positive control: the evaluator really did say something else
+    expect(grade).toHaveBeenCalledWith({
+      leagueId: 'league-1',
+      userId: 'viewer-1',
+      give: { assets: [{ kind: 'player', name: 'Bijan Robinson' }], unpriceable: [] },
+      get: { assets: [{ kind: 'player', name: 'Puka Nacua' }], unpriceable: [] },
+    })
+  })
+
+  it('a withheld grade is said to be withheld, and the model is told not to grade it', async () => {
+    grade.mockResolvedValue({ graded: false, reason: 'Puka Nacua has no value on this league’s chart.', basis: null })
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    if (s?.status !== 'ready') throw new Error('not ready')
+    expect(s.value).toMatchObject({ grade: null, given: null, withheld: 'Puka Nacua has no value on this league’s chart.' })
+    expect(renderTradeScenarioBlock(s)).toContain(
+      '- Grade: NOT GRADED — Puka Nacua has no value on this league’s chart. Do not grade it yourself.',
+    )
+  })
+
+  it('a grader that throws is a withheld grade, not a lost scenario', async () => {
+    grade.mockRejectedValue(new Error('db down'))
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    expect(s?.status).toBe('ready')
+    if (s?.status === 'ready') expect(s.value.grade).toBeNull()
+  })
+})
+
 describe('the prompt block', () => {
   it('states the numbers and forbids estimating playoff odds', async () => {
     const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
     const block = renderTradeScenarioBlock(s!)
     expect(block).toContain('You give: Bijan Robinson (RB). You get: Puka Nacua (WR) from Rival.')
-    expect(block).toContain('you send 8450, you receive 7900 (-550); grade C+.')
+    expect(block).toContain(
+      'League value (Dynasty · 1QB · 12 teams · PPR): you send 8450, you receive 7900 (-550); grade C — Even. This is the same grade the Trade Center gives this trade.',
+    )
     expect(block).toContain(
       "Starting lineup, week 3 projections scored under this league's own rules: 118.4 before, 116.9 after (-1.5). This is one week, not the rest of the season",
     )
@@ -301,6 +360,11 @@ describe('draft picks in a dynasty league', () => {
     ])
     expect(s.give.map((p) => p.name)).toEqual(['Bijan Robinson', '2027 1st-round pick'])
     expect(s.picks).toBe(1)
+    // The one grade prices the pick too, by season and round.
+    expect(grade.mock.calls[0]![0].give.assets).toEqual([
+      { kind: 'player', name: 'Bijan Robinson' },
+      { kind: 'pick', year: 2027, round: 1 },
+    ])
   })
 
   it("adds a pick you receive as the partner's own pick, and orients by the players", async () => {

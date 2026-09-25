@@ -27,7 +27,9 @@ import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { evaluatePendingOffer, type PendingOfferEvaluation } from './pendingOfferEvaluation'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/trade-value/leagueTradeGrader'
+import { gradeInputsFromPending } from '@/lib/trade-value/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/trade-value/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 
@@ -546,8 +548,12 @@ export type PendingOffer = {
   give: PendingOfferLine[]
   /** Arriving on the viewer's roster. */
   get: PendingOfferLine[]
-  /** Precomputed before render from this league's value book. */
-  evaluation: PendingOfferEvaluation
+  /**
+   * THE grade for this offer, from the viewer's side — the same letter the Trade Center, the league
+   * page and Chimmy show for the same deal (`lib/trade-value/tradeGrade.ts`). It replaced a
+   * share-of-traded-value letter (65/55/45/35) that graded a 1.5x deal B while the builder said A.
+   */
+  evaluation: TradeGradeView
 }
 
 export type TradeDeadline = {
@@ -614,8 +620,6 @@ function offerLine(a: PendingTradeAsset): PendingOfferLine {
 async function resolvePendingOffers(
   league: { id: string; platform: string | null; platformLeagueId: string | null; sport: string | null },
   userId: string,
-  book: ValueBook,
-  teamCount: number,
   /** The loader's league context, so the claimed team is not read a second time. */
   lc: LeagueContext,
 ): Promise<{ inbox: SectionState<PendingOffer[]>; sent: SectionState<PendingOffer[]> }> {
@@ -666,21 +670,22 @@ async function resolvePendingOffers(
     return { inbox: { available: false, reason }, sent: { available: false, reason } }
   }
 
-  const playerIds = [...new Set(scan.trades.flatMap((trade) => [...trade.assetsGiven, ...trade.assetsReceived])
-    .flatMap((asset) => asset.playerId ? [asset.playerId] : []))]
-  // Newest row per id only (`value` is non-null, so first-per-id was already newest-per-id).
-  const valueRows = playerIds.length > 0
-    ? await loadLatestPlayerValueSnapshots({
-        sleeperIds: playerIds,
-        source: book.source,
-        format: book.format,
-        qbFormat: book.qbFormat,
-      }).catch(() => [])
-    : []
-  const playerValues = new Map<string, number>()
-  for (const row of valueRows) {
-    if (!playerValues.has(row.sleeperId)) playerValues.set(row.sleeperId, row.value)
-  }
+  /*
+   * One grader for every offer on the screen: the league's chart is read once, and each offer is
+   * priced and graded on it by the same code the Trade Center runs. Loaded only when there is an
+   * offer to grade.
+   */
+  const grader = scan.trades.length > 0
+    ? await createLeagueTradeGrader({ leagueId: league.id, userId }).catch(() => null)
+    : null
+  const grades = new Map<string, TradeGradeView>()
+  await Promise.all(scan.trades.map(async (t) => {
+    grades.set(t.transactionId, await gradeDeal(grader, {
+      give: gradeInputsFromPending(t.assetsGiven),
+      get: gradeInputsFromPending(t.assetsReceived),
+      viewerSide: true,
+    }))
+  }))
 
   const map = (t: (typeof scan.trades)[number]): PendingOffer => ({
     id: t.transactionId,
@@ -690,13 +695,7 @@ async function resolvePendingOffers(
        the manager sent is not rendered back to front. */
     give: t.assetsGiven.map(offerLine),
     get: t.assetsReceived.map(offerLine),
-    evaluation: evaluatePendingOffer({
-      received: t.assetsReceived,
-      sent: t.assetsGiven,
-      playerValues,
-      book,
-      teamCount,
-    }),
+    evaluation: grades.get(t.transactionId) ?? { graded: false, reason: 'This offer could not be graded.', basis: null },
   })
 
   return {
@@ -761,7 +760,7 @@ export async function getTradesData(
      * written to a table, and should not be. A pending offer is answered on the
      * platform, and a cached copy would go stale the moment it was accepted.
      */
-    ...(await resolvePendingOffers(league, userId, book, teamCount, lc)),
+    ...(await resolvePendingOffers(league, userId, lc)),
     grades,
     deadline: resolveDeadline(league.settings),
   }
