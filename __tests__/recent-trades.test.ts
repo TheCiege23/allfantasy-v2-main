@@ -34,7 +34,18 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/provider-trades/scanPendingSleeperTrades', () => ({ scanPendingSleeperTrades }))
 
+const { oneGradeForCompletedTrade } = vi.hoisted(() => ({ oneGradeForCompletedTrade: vi.fn() }))
+vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({ oneGradeForCompletedTrade }))
+
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
+import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
+
+/* THE grade for side one sending `give` and receiving `get`, by the real scale. */
+const grade = (give: number, get: number) =>
+  gradeTrade({
+    giveValue: give, getValue: get, giveMarket: give, getMarket: get, unpriced: 0, giveCount: 1, getCount: 1,
+    basis: 'Redraft · 1QB · 12 teams · PPR', scoringApplied: false, needApplied: false, needGap: null, lines: [], moves: [],
+  })
 
 const NOW = new Date('2026-08-24T20:00:00Z')
 const LEAGUES = [{ id: 'af-1', name: 'Bla bla bla', platformLeagueId: '99887766' }]
@@ -72,6 +83,9 @@ function payload(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  oneGradeForCompletedTrade.mockReset()
+  // Default: no grade on file — a verdict appears only where a test supplies one.
+  oneGradeForCompletedTrade.mockResolvedValue({ graded: false, reason: 'not priced in this test', basis: null })
   cacheFindMany.mockReset()
   valueFindMany.mockReset()
   nativeFindMany.mockReset()
@@ -117,24 +131,29 @@ describe('getRecentTrades', () => {
     expect(JSON.stringify(out)).not.toMatch(/initialGrade|currentGrade/)
   })
 
-  describe('the prospective verdict', () => {
-    it('prices a future pick properly instead of at zero, and reaches a verdict', async () => {
-      // Waller priced near a 4th-rounder's discounted value => a fair-ish deal
-      // that the retrospective grader would have scored as a shutout, because
-      // the 2027 draft has not happened.
-      valueFindMany.mockResolvedValue([
-        { sleeperId: '4988', name: 'Darren Waller', value: 272 },
-      ])
+  /*
+   * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-25). It came from `buildLegacyCanonicalGrade` over
+   * prices read from `PlayerValueSnapshot` with no format filter, so the band's sentence could
+   * disagree with the letter beside it. These pin the same promises on the one grade.
+   */
+  describe('the verdict, read off THE grade', () => {
+    it('reaches a verdict from the grade, naming the side it favours', async () => {
+      oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1150))
       const out = await getRecentTrades(LEAGUES, NOW)
-      expect(out[0].verdict).not.toBeNull()
-      expect(typeof out[0].verdict?.verdict).toBe('string')
-      expect(out[0].verdict?.confidence).toBeGreaterThanOrEqual(0)
+      // +13% for side one — a B: "slightly", and in side one's favour.
+      expect(out[0].verdict).toEqual({ verdict: 'Slightly favors A', fairness: null, confidence: 0, favoursRosterId: 1 })
     })
 
-    it('publishes NOTHING when a traded player has no price on file', async () => {
-      // A partially priced trade systematically favours whoever received the
-      // asset we could not price. Absent is the honest answer.
-      valueFindMany.mockResolvedValue([])
+    it('an even grade is a fair deal that favours nobody', async () => {
+      oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1050))
+      const out = await getRecentTrades(LEAGUES, NOW)
+      expect(out[0].verdict).toMatchObject({ verdict: 'Fair', favoursRosterId: null })
+    })
+
+    it('publishes NOTHING when the grade is withheld', async () => {
+      // A partially priced trade systematically favours whoever received the asset we could not
+      // price. Absent is the honest answer.
+      oneGradeForCompletedTrade.mockResolvedValue({ graded: false, reason: 'Darren Waller has no value on this league’s chart.', basis: null })
       const out = await getRecentTrades(LEAGUES, NOW)
       expect(out[0].verdict).toBeNull()
     })
@@ -156,28 +175,20 @@ describe('getRecentTrades', () => {
           ],
         }),
       ])
-      valueFindMany.mockResolvedValue([
-        { sleeperId: '1', name: 'A', value: 1000 },
-        { sleeperId: '2', name: 'B', value: 1000 },
-        { sleeperId: '3', name: 'C', value: 1000 },
-      ])
+      oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1500))
       const out = await getRecentTrades(LEAGUES, NOW)
       expect(out[0].sides).toHaveLength(3)
       expect(out[0].verdict).toBeNull()
     })
 
-    it('prices only the trades that will actually render', async () => {
-      valueFindMany.mockResolvedValue([])
+    it('grades only the trades that will actually render', async () => {
+      oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1000))
       await getRecentTrades(LEAGUES, NOW, 1)
-      // One read, scoped to the visible trade's players.
-      expect(valueFindMany).toHaveBeenCalledTimes(1)
-      expect(valueFindMany.mock.calls[0][0].where.sleeperId.in).toEqual(['4988'])
+      expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(1)
     })
 
-    it('survives a price read failure by withholding the verdict, not the trade', async () => {
-      valueFindMany.mockImplementationOnce(async () => {
-        throw new Error('db down')
-      })
+    it('survives a grading failure by withholding the verdict, not the trade', async () => {
+      oneGradeForCompletedTrade.mockRejectedValue(new Error('db down'))
       const out = await getRecentTrades(LEAGUES, NOW)
       expect(out).toHaveLength(1)
       expect(out[0].verdict).toBeNull()

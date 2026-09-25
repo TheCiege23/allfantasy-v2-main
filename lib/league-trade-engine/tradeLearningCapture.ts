@@ -22,7 +22,9 @@ import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/tr
 import { getCalibratedWeights, calibrateAcceptProbability } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } from '@/lib/trade-engine/trade-event-logger'
 import type { Asset } from '@/lib/trade-engine/types'
-import { projectedLetterFor } from '@/lib/trade-intel/gradeScale'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
 
 /**
  * Conservative flat fallback for any asset whose real value can't be
@@ -99,7 +101,7 @@ export function resolveLeagueScoringContext(league: TradeScoringLeague): {
 }
 
 export interface CurrentTradeMarketSnapshot {
-  grade: ReturnType<typeof projectedLetterFor>
+  grade: GradeLetter | null
   valueGiven: number | null
   valueReceived: number | null
   pricedAt: string
@@ -161,72 +163,92 @@ function toAsset(resolved: ResolvedAssetValue, id: string): Asset {
 }
 
 /**
- * Reprice native trades against one current league market book. The original
- * proposal snapshot stays immutable; this produces the separate "Now" view.
- * A consumed historical pick is deliberately left unresolved until the
- * outcome ledger can map that pick to the player who was selected.
+ * Reprice native trades on TODAY's league values — the separate "Now" view beside the immutable
+ * proposal-time receipt.
+ *
+ * 🛑 THE LETTER IS THE ONE GRADE (2026-09-25). This used to fetch its own FantasyCalc book, price
+ * players by Sleeper id with a flat 200 fallback, and grade the gap against what was GIVEN — a rule
+ * of its own, beside the Trade Center's. It now asks the one grader
+ * (`lib/decision-os/trade/leagueTradeGrader.ts`), from the proposer's side, so a trade's "Now" letter
+ * is the letter the same deal would get in the Trade Center today.
+ *
+ * ⚠ NO ROSTER NEED. The trade has happened; both rosters already hold its result, so "does this fill
+ * a hole" has no honest answer any more. Chart and scoring only.
+ *
+ * ⚠ A CONSUMED HISTORICAL PICK STAYS UNRESOLVED until the outcome ledger can map the pick to the
+ * player selected with it — pricing it as an unspent pick would grade a pick that no longer exists.
  */
-export async function priceTradesAtCurrentMarket(input: {
-  leagueId: string
-  league: TradeScoringLeague
-  trades: Array<{
-    id: string
-    proposerRosterId: string
-    items: CaptureTradeItem[]
-  }>
-}): Promise<Map<string, CurrentTradeMarketSnapshot>> {
+export async function priceTradesAtCurrentMarket(
+  input: {
+    leagueId: string
+    league: TradeScoringLeague
+    trades: Array<{
+      id: string
+      proposerRosterId: string
+      items: CaptureTradeItem[]
+    }>
+  },
+  deps: {
+    createGrader?: (args: { leagueId: string }) => Promise<LeagueTradeGrader | null>
+    loadNames?: typeof loadNativePlayerNames
+  } = {},
+): Promise<Map<string, CurrentTradeMarketSnapshot>> {
   const snapshots = new Map<string, CurrentTradeMarketSnapshot>()
   if (input.trades.length === 0) return snapshots
 
   try {
-    const { isSuperFlex, isDynasty, ppr } = resolveLeagueScoringContext(input.league)
-    const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
-    const fcPlayers = await getFantasyCalcValuesDbFirst({
-      isDynasty,
-      numQbs: isSuperFlex ? 2 : 1,
-      numTeams: rosterCount > 0 ? rosterCount : 12,
-      ppr,
-    })
+    const allItems = input.trades.flatMap((t) => t.items.map((i) => ({ ...i, itemReference: i.itemReference ?? null })))
+    const [grader, nameForId] = await Promise.all([
+      (deps.createGrader ?? ((a) => createLeagueTradeGrader(a)))({ leagueId: input.leagueId }).catch(() => null),
+      (deps.loadNames ?? loadNativePlayerNames)(allItems),
+    ])
     const currentYear = new Date().getUTCFullYear()
     const pricedAt = new Date().toISOString()
 
     for (const trade of input.trades) {
-      const given = trade.items
-        .filter((item) => item.fromRosterId === trade.proposerRosterId)
-        .map((item) => resolveItemValue(item, fcPlayers, isDynasty))
-      const received = trade.items
-        .filter((item) => item.toRosterId === trade.proposerRosterId)
-        .map((item) => resolveItemValue(item, fcPlayers, isDynasty))
       const consumedPickLabels: string[] = []
       for (const item of trade.items) {
         if (!['rookie_pick', 'devy_pick', 'future_pick'].includes(item.itemType)) continue
         const meta = item.metadata && typeof item.metadata === 'object'
           ? item.metadata as Record<string, unknown>
           : {}
-        const season = Number(meta.season)
+        const season = Number(meta.pickSeason ?? meta.season)
         if (Number.isFinite(season) && season < currentYear) consumedPickLabels.push(`${season} draft pick`)
       }
+      if (consumedPickLabels.length > 0) {
+        snapshots.set(trade.id, {
+          grade: null,
+          valueGiven: null,
+          valueReceived: null,
+          pricedAt,
+          fullyPriced: false,
+          unresolvedAssets: [...new Set(consumedPickLabels)],
+        })
+        continue
+      }
 
-      const unresolvedAssets = [
-        ...given.filter((asset) => !asset.resolved).map((asset) => asset.name),
-        ...received.filter((asset) => !asset.resolved).map((asset) => asset.name),
-        ...consumedPickLabels,
-      ]
-      const fullyPriced = given.length + received.length > 0 && unresolvedAssets.length === 0
-      const valueGiven = fullyPriced ? given.reduce((sum, asset) => sum + asset.value, 0) : null
-      const valueReceived = fullyPriced ? received.reduce((sum, asset) => sum + asset.value, 0) : null
-      const percentDiff = valueGiven != null && valueGiven > 0 && valueReceived != null
-        ? ((valueReceived - valueGiven) / valueGiven) * 100
-        : null
-
-      snapshots.set(trade.id, {
-        grade: projectedLetterFor({ percentDiff, hasSignal: fullyPriced }),
-        valueGiven,
-        valueReceived,
-        pricedAt,
-        fullyPriced,
-        unresolvedAssets: [...new Set(unresolvedAssets)],
-      })
+      const items = trade.items.map((i) => ({ ...i, itemReference: i.itemReference ?? null, metadata: i.metadata ?? null }))
+      const give = gradeInputsFromNativeItems(items.filter((i) => i.fromRosterId === trade.proposerRosterId), nameForId)
+      const get = gradeInputsFromNativeItems(items.filter((i) => i.toRosterId === trade.proposerRosterId), nameForId)
+      const grade = await gradeDeal(grader, { give, get, viewerSide: false })
+      snapshots.set(trade.id, grade.graded
+        ? {
+            grade: grade.letter,
+            valueGiven: grade.giveValue,
+            valueReceived: grade.getValue,
+            pricedAt,
+            fullyPriced: true,
+            unresolvedAssets: [],
+          }
+        : {
+            grade: null,
+            valueGiven: null,
+            valueReceived: null,
+            pricedAt,
+            fullyPriced: false,
+            // Named assets when we know which ones; otherwise the "Now" tile simply reads "—".
+            unresolvedAssets: [...new Set([...give.unpriceable, ...get.unpriceable])],
+          })
     }
   } catch (err) {
     console.error('[TradeLearningCapture] Failed to price current trade history (non-blocking):', err)
@@ -248,6 +270,11 @@ export async function captureLiveTradeOffer(input: {
   receiverRosterId: string
   items: CaptureTradeItem[]
   league: League
+  /**
+   * The proposal's ONE grade (the receipt's proposer letter) — the only letter this event records,
+   * so it cannot carry a different grade from the receipt beside it. Null records no letter.
+   */
+  oneGradeLetter?: string | null
 }): Promise<string | null> {
   try {
     const { isSuperFlex, isTEP, isDynasty, ppr, scoringType } = resolveLeagueScoringContext(input.league)
@@ -268,11 +295,6 @@ export async function captureLiveTradeOffer(input: {
     const receiveResolved = receiveItems.map((item) => resolveItemValue(item, fcPlayers, isDynasty))
     const give: Asset[] = giveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-give-${idx}`))
     const receive: Asset[] = receiveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-recv-${idx}`))
-    const giveTotal = giveResolved.reduce((sum, item) => sum + item.value, 0)
-    const receiveTotal = receiveResolved.reduce((sum, item) => sum + item.value, 0)
-    const fullyPriced = [...giveResolved, ...receiveResolved].every((item) => item.resolved)
-    const percentDiff = giveTotal > 0 ? ((receiveTotal - giveTotal) / giveTotal) * 100 : null
-    const proposalGrade = projectedLetterFor({ percentDiff, hasSignal: fullyPriced })
 
     const calWeights = await getCalibratedWeights(undefined, { isSuperFlex, scoringType: undefined })
     const drivers: TradeDriverData = computeTradeDrivers(
@@ -310,7 +332,8 @@ export async function captureLiveTradeOffer(input: {
       rawAcceptProb: isotonicApplied ? drivers.acceptProbability : undefined,
       isotonicApplied,
       verdict: drivers.verdict,
-      grade: proposalGrade,
+      // THE grade (the receipt's proposer letter) — never a letter of this module's own.
+      grade: input.oneGradeLetter ?? null,
       confidenceScore: drivers.confidenceScore,
       driverSet: drivers.acceptDrivers?.map((d) => ({
         id: d.id,

@@ -48,7 +48,7 @@ type NativeItemLike = {
   itemType: string | null | undefined
   itemReference: string | null
   faabAmount?: number | null
-  metadata: unknown
+  metadata?: unknown
 }
 
 function record(value: unknown): Record<string, unknown> {

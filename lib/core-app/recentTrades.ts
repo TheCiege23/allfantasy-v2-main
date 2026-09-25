@@ -7,10 +7,8 @@ import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
-import {
-  buildLegacyCanonicalGrade,
-  type LegacyTradeAssetInput,
-} from '@/lib/decision-os/trade/legacyCanonicalGrade'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
@@ -419,81 +417,28 @@ function assetsOf(side: GradedTrade['sides'][number]): RecentTradeAsset[] {
 }
 
 /**
- * Prospective verdict for a two-sided trade, or null.
+ * The verdict sentence for a two-sided trade, read off THE grade, or null.
  *
- * ⚠ IT PUBLISHES NOTHING WHEN ANYTHING IS UNPRICED. The engine reports
- * `insufficientData` itself, and a partially-priced trade systematically
- * favours whoever received the asset we could not price — the exact bias the
- * sweep's own withholding rule exists to avoid. Absent is the honest answer.
+ * 🛑 IT WAS A SECOND GRADE (until 2026-09-25): `buildLegacyCanonicalGrade` over prices read from
+ * `PlayerValueSnapshot` with no format or QB filter — the newest FantasyCalc row per player, dynasty
+ * or redraft, 1QB or superflex, whichever was written last — so the band's sentence could disagree
+ * with the letter printed on the same card. Now the sentence and the letters come from one grade:
+ * `oneGradeForCompletedTrade`, on this league's own chart, today.
  *
- * ⚠ TWO SIDES ONLY. A three-team deal is not two columns and the engine models
- * A-versus-B; grading it as if two of the three traded would be a fiction.
+ * ⚠ NULL WHEN THERE IS NO GRADE — a withheld grade (an unpriced player, a used pick, a three-team
+ * deal) publishes no verdict, never a neutral one standing in for missing data.
  */
-function gradeOf(
-  trade: GradedTrade,
-  valueByName: Map<string, number>,
-  currentSeason: number,
-): RecentTradeVerdict | null {
+function gradeOf(trade: GradedTrade, grade: TradeGradeView | null): RecentTradeVerdict | null {
   const sides = trade.sides ?? []
-  if (sides.length !== 2 || trade.multiTeam) return null
-
+  if (sides.length !== 2 || trade.multiTeam || !grade || !grade.graded) return null
   const [a, b] = sides
-  const toInputs = (side: GradedTrade['sides'][number]): LegacyTradeAssetInput[] => [
-    ...side.playersIn.map((p) => ({
-      type: 'player' as const,
-      player: { name: p.name, pos: p.position, team: null },
-    })),
-    ...side.picksIn.map((p) => ({
-      type: 'pick' as const,
-      pick: { year: Number(p.season) || null, round: p.round ?? null },
-    })),
-  ]
-
-  const assetsA = toInputs(a)
-  const assetsB = toInputs(b)
-  if (assetsA.length === 0 || assetsB.length === 0) return null
-
-  /*
-   * ⚠ EVERY TRADED PLAYER MUST HAVE A PRICE, AND THE ENGINE WILL NOT TELL US.
-   * Its `insufficientData` flag did not fire on a trade where the only player
-   * was unpriced: an absent price behaves as ZERO inside the value sum, so the
-   * side that received that player reads as robbed and the verdict came back
-   * "Strongly favors B" with total confidence. A test caught it before this
-   * shipped.
-   *
-   * That is the exact bias the sweep's own withholding rule exists to avoid —
-   * a partially priced trade always favours whoever received the asset we
-   * could not price. So the gate lives here, ahead of the engine: if one
-   * player on either side has no price, there is no verdict. Picks need no
-   * check; they are priced from the round table, not the market.
-   */
-  const everyPlayerPriced = [...a.playersIn, ...b.playersIn].every((p) =>
-    valueByName.has(p.name.trim().toLowerCase()),
-  )
-  if (!everyPlayerPriced) return null
-
-  const graded = buildLegacyCanonicalGrade({
-    assetsA,
-    assetsB,
-    marketValueFor: (name: string) => valueByName.get(name.trim().toLowerCase()) ?? null,
-    currentSeason,
-  })
-  if (graded.insufficientData || !graded.verdict) return null
-
-  /*
-   * The engine speaks in "A"/"B"; the card speaks in rosters. Translate here so
-   * no surface has to know which side the engine called A.
-   */
-  const favours = graded.verdict.includes('favors A')
-    ? a.rosterId
-    : graded.verdict.includes('favors B')
-      ? b.rosterId
-      : null
-
+  const strong = grade.letter === 'A' || grade.letter === 'F'
+  const favours = grade.letter === 'C' ? null : grade.percentDiff > 0 ? a.rosterId : b.rosterId
   return {
-    verdict: graded.verdict,
-    fairness: graded.fairnessScore,
-    confidence: graded.confidenceScore,
+    verdict: favours == null ? 'Fair' : `${strong ? 'Strongly' : 'Slightly'} favors ${favours === a.rosterId ? 'A' : 'B'}`,
+    // The one grade carries no separate fairness or confidence number; the card states neither.
+    fairness: null,
+    confidence: 0,
     favoursRosterId: favours,
   }
 }
@@ -702,23 +647,6 @@ export async function getRecentTrades(
     }
   }
 
-  const valueByName = new Map<string, number>()
-  if (playerIds.size > 0) {
-    const priceRows = await prisma.playerValueSnapshot
-      .findMany({
-        where: { sleeperId: { in: [...playerIds] }, source: 'FANTASYCALC' },
-        orderBy: { capturedAt: 'desc' },
-        select: { sleeperId: true, name: true, value: true },
-      })
-      .catch(() => [] as { sleeperId: string; name: string; value: number }[])
-    const seen = new Set<string>()
-    for (const r of priceRows) {
-      if (seen.has(r.sleeperId)) continue
-      seen.add(r.sleeperId)
-      valueByName.set(r.name.trim().toLowerCase(), r.value)
-    }
-  }
-
   const currentSeason = now.getUTCFullYear()
   let mediaByPlayerId = new Map<string, ResolvedPlayerMedia>()
   if (playerIds.size > 0) {
@@ -729,7 +657,7 @@ export async function getRecentTrades(
   for (const t of visible) {
     const src = graded.get(`${t.platformLeagueId}:${t.id}`)
     if (!src) continue
-    t.verdict = gradeOf(src, valueByName, currentSeason)
+    t.verdict = gradeOf(src, await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null))
     for (const side of t.sides) {
       for (const asset of side.received) {
         if (!asset.playerId) continue

@@ -1,33 +1,18 @@
 import 'server-only'
 import { getSleeperTradeHistory } from './sleeperTradeHistory'
-import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
-import { loadLatestPickValueSnapshots } from '@/lib/player-values/latestPickValueSnapshots'
-import { defenderPricerFrom, type DefenderPricer } from './tradeDefenders'
-import { currentSeasonOf } from './todayStrip'
-import { readCanonicalDefenderBoard } from '@/lib/values/canonicalDefenderBoardCache'
-import { hasIdpScoring } from './scoringNotes'
-import { extractScoringSettings } from '@/lib/projections/leagueScoring'
-import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { leagueDisplayName, type SectionState } from './leagueHome'
-import { gradeTrade } from '@/lib/projections/tradeGrading'
-import {
-  LATEST_TRADE_ORDER,
-  gradeableSide,
-  pickAssets,
-  pickPricerFrom,
-  withheldTradeReason,
-  type UnpricedAsset,
-  type TradeAsset,
-} from './tradePicks'
-import { buildTradeBreakdown, type BreakdownAsset } from './tradeBreakdown'
+import { LATEST_TRADE_ORDER, pickAssets } from './tradePicks'
 import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
+import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
@@ -187,17 +172,10 @@ export type GradedTrade = {
  * mechanically favours whichever manager received him.
  */
 async function resolveGrades(
+  /** The AllFantasy league id — the one grader reads this league's chart and scoring through it. */
+  leagueId: string,
   platformLeagueId: string | null,
-  book: ValueBook,
   viewerPlatformUserId: string | null,
-  /*
-   * This league's raw settings, for the IDP gate only.
-   *
-   * ⚠ PASSED RATHER THAN RE-QUERIED. `resolveLeagueIdpScoring` is the named authority and
-   * costs a `league` read; the caller already holds these settings to build `book`, and
-   * `hasIdpScoring` reaches the same verdict from them.
-   */
-  leagueSettings: unknown,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -276,8 +254,6 @@ async function resolveGrades(
    * says. The ingest writes `overallRank ?? null`, so the case is possible; staging held zero such
    * rows on 2026-09-16 (0 of 15,375), so it changes no grade that exists today.
    */
-  /* Free: the settings are already loaded for the value book. See `resolveLeagueIdpScoring`. */
-  const idpScoring = hasIdpScoring(extractScoringSettings(leagueSettings) ?? {})
 
   /*
    * Names and positions, for the breakdown only.
@@ -298,104 +274,37 @@ async function resolveGrades(
           .catch(() => [] as Array<{ sleeperId: string; name: string; position: string | null }>)
       : Promise.resolve([] as Array<{ sleeperId: string; name: string; position: string | null }>)
 
-  const snaps = await loadLatestPlayerValueSnapshots({
-    sleeperIds: ids,
-    /*
-     * 🛑 THE BOOK IS THIS LEAGUE'S, NOT A HARDCODED DYNASTY/SUPERFLEX PAIR.
-     * These three literals used to be pinned here and copied verbatim into the
-     * player card and the cross-league trades board, so that the three could
-     * not disagree. They agreed and were jointly wrong: a redraft league was
-     * graded off the dynasty book, which prices a 22-year-old rookie above a
-     * 30-year-old who will outscore him this season. `valueBook.ts` carries the
-     * one derivation and the licence reasoning for `source`.
-     */
-    source: book.source,
-    format: book.format,
-    qbFormat: book.qbFormat,
-  })
   const playerById = new Map((await playersPromise).map((p) => [p.sleeperId, p] as const))
 
-  const rankById = new Map<string, number>()
-  for (const s of snaps) {
-    if (!rankById.has(s.sleeperId) && s.overallRank != null) rankById.set(s.sleeperId, s.overallRank)
-  }
-
   /*
-   * 🛑 PICK PRICES FOR THIS BOOK — A SEPARATE READ, BECAUSE THERE IS NO ID TO ASK FOR.
-   * A trade stores a pick as `{ season, round }` and FantasyCalc keys it by a synthetic token
-   * (`FP_2027_early_0`), so the NAME is the whole join and `loadLatestPlayerValueSnapshots`,
-   * which takes the ids it returns, structurally cannot serve it.
+   * 🛑 THE LETTER IS THE ONE GRADE (2026-09-25). This list used to grade in RANK space — each
+   * player's FantasyCalc overall rank pushed through a curve, picks from a separate pick book,
+   * defenders from the IDP board, letters on share-of-value bands (65/55/45/35) — a rule of its own
+   * beside the Trade Center's. A deal read one letter here and another on every other screen.
    *
-   * ⚠ FAILURE HERE LEAVES PICKS UNPRICED, WHICH WITHHOLDS LETTERS RATHER THAN INVENTING THEM.
-   * That is the same outcome this screen had before picks were stored at all, so a read error
-   * costs grades and never correctness.
+   * Now each trade is graded by the one grader (`lib/decision-os/trade/completedTradeGrade.ts`) on
+   * this league's own chart and scoring, TODAY, from the row's point of view, without roster need
+   * (the trade has happened). The honesty rule survives unchanged: any asset that cannot be priced
+   * — an unnamed player, a pick whose draft has been held — withholds the letter; it is never zero.
    */
-  const pickRows = await loadLatestPickValueSnapshots({
-    source: book.source,
-    format: book.format,
-    qbFormat: book.qbFormat,
-  }).catch(() => [])
-  /*
-   * Dated by the board being quoted, with no clock fallback — see `tradesBoard.ts` for the
-   * cacheability contract that forbids one there, and for why an undated market should make
-   * no claim about age rather than borrow the reader's wall clock.
-   */
-  const newestCapture = snaps.reduce<Date | null>(
-    (acc, s) => (acc == null || s.capturedAt > acc ? s.capturedAt : acc),
-    null,
-  )
-  const marketSeason = newestCapture ? currentSeasonOf(newestCapture) : null
+  const grader = await completedTradeGraderFor(leagueId)
+  const currentSeason = new Date().getUTCFullYear()
+  const nameOf = (id: string) => playerById.get(id)?.name?.trim() || null
+  // Warm the per-player analytics cache the pricer reads, in ONE query, before sixty deals hit it.
+  await getPlayerAnalyticsBatch([...playerById.values()].map((p) => p.name)).catch(() => null)
 
-  const pickPrice = pickPricerFrom(pickRows)
-
-  /*
-   * Defenders, from the board that already prices them — and ONLY where this league starts
-   * them. FantasyCalc publishes no defenders at any tier, so before this every IDP trade in
-   * the league withheld its letter. Replacement level is a function of starting requirements,
-   * so a league that starts none must keep seeing them unpriced rather than be handed a
-   * number describing a slot it does not have.
-   */
-  const defenders: DefenderPricer = idpScoring
-    ? defenderPricerFrom(
-        await readCanonicalDefenderBoard({ prisma, isDynasty: book.format === 'DYNASTY' }).catch(() => null),
-      )
-    : () => null
-
-  /*
-   * What this league's book could not price, by kind.
-   *
-   * ⚠ `rankById` IS THE PREDICATE, because grading counts an asset as covered only when it
-   * carries a RANK. `overallRank` is nullable, so a stored value is not the same claim.
-   */
-  const unpricedOf = (
-    recv: readonly string[],
-    gave: readonly string[],
-    picksIn: readonly { pickSeason?: string; pickRound?: number; name: string }[],
-    picksOut: readonly { pickSeason?: string; pickRound?: number; name: string }[],
-  ): UnpricedAsset[] => {
-    const out: UnpricedAsset[] = []
-    for (const id of [...recv, ...gave]) {
-      /* Same predicate the grade uses — see `rankOf`. Diverging here is how the reason
-         names an asset the grader just counted. */
-      if (rankById.get(id) == null && defenders(id) == null) out.push({ kind: 'player' })
-    }
-    for (const p of [...picksIn, ...picksOut]) {
-      const priced = p.pickSeason && p.pickRound != null ? pickPrice(p.pickSeason, p.pickRound) : null
-      if (!priced) out.push({ kind: 'pick', name: p.name })
-    }
-    return out
-  }
-
-  const graded: GradedTrade[] = distinctTrades.map((t) => {
+  const graded: GradedTrade[] = await Promise.all(distinctTrades.map(async (t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
-    const picksIn = pickAssets(t.picksReceived, pickPrice)
-    const picksOut = pickAssets(t.picksGiven, pickPrice)
-    const rankOf = (id: string) => rankById.get(id) ?? defenders(id)?.rank ?? null
-    const g = gradeTrade(
-      { label: 'received', assets: gradeableSide(recv, rankOf, picksIn, pickPrice) },
-      { label: 'gave', assets: gradeableSide(gave, rankOf, picksOut, pickPrice) },
-    )
+    const picksIn = pickAssets(t.picksReceived)
+    const picksOut = pickAssets(t.picksGiven)
+    const g = await gradeArchivedTrade(grader, {
+      received: recv.map(nameOf),
+      gave: gave.map(nameOf),
+      picksIn: picksIn.map((p) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null, label: p.name })),
+      picksOut: picksOut.map((p) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null, label: p.name })),
+      currentSeason,
+    })
 
     /*
      * 🛑 ONLY THE VIEWER'S OWN ROW, because only there do we hold a name for both sides.
@@ -406,68 +315,24 @@ async function resolveGrades(
      */
     const mine = viewerPlatformUserId != null && t.history.sleeperUsername === viewerPlatformUserId
 
-    /*
-     * ⚠ THE RANKS ARE THE GRADER'S OWN, VIA `rankOf` — the same function `gradeableSide`
-     * was just handed, not a second predicate over the same maps. `buildTradeBreakdown`
-     * takes a rank rather than a value precisely so the display price cannot be passed here
-     * by mistake; see its header.
-     */
-    const breakdownAssets = (
-      playerIds: readonly string[],
-      picks: readonly TradeAsset[],
-    ): BreakdownAsset[] => [
-      ...playerIds.flatMap((id) => {
-        const rank = rankOf(id)
-        if (rank == null) return []
-        const p = playerById.get(id)
-        return [{
-          name: p?.name ?? `Player ${id}`,
-          kind: 'player' as const,
-          position: p?.position ?? null,
-          rank,
-        }]
-      }),
-      ...picks.flatMap((p) => {
-        const rank = p.pickSeason && p.pickRound != null ? pickPrice(p.pickSeason, p.pickRound)?.rank ?? null : null
-        return rank == null ? [] : [{ name: p.name, kind: 'pick' as const, position: null, rank }]
-      }),
-    ]
-
-    const breakdown =
-      g.graded && mine
-        ? buildTradeBreakdown({
-            received: breakdownAssets(recv, picksIn),
-            gave: breakdownAssets(gave, picksOut),
-            letter: g.letter,
-            sharePct: g.sharePct,
-            receiverLabel: 'You',
-            partnerLabel: t.partnerName?.trim() || 'the other side',
-          })
-        : []
-
     return {
       transactionId: t.transactionId,
       season: t.season ?? null,
       week: t.week ?? null,
       letter: g.graded ? g.letter : null,
-      sharePct: g.graded ? g.sharePct : null,
-      /*
-       * ⚠ KINDS, NOT NAMES, AND NOT A COUNT. This path never loads player names — it
-       * produces counts for a summary list — so it cannot say "DeMarvion Overshown" the way
-       * the cross-league board can. It can still say whether the gap is a PLAYER or a PICK,
-       * which is the part the old count-matching guess got wrong.
-       */
-      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedOf(recv, gave, picksIn, picksOut), {
-              tradeSeason: t.season ?? null,
-              currentSeason: marketSeason,
-            }),
+      // The received side's share of the league value that changed hands — the same totals as the letter.
+      sharePct: g.graded ? Math.round((g.getValue / Math.max(1, g.getValue + g.giveValue)) * 1000) / 10 : null,
+      withheldReason: g.graded ? null : g.reason,
       playersIn: recv.length,
       playersOut: gave.length,
       picksIn: picksIn.length,
       picksOut: picksOut.length,
-      breakdown,
+      breakdown:
+        g.graded && mine
+          ? oneGradeBreakdown({ grade: g, receiverLabel: 'You', partnerLabel: t.partnerName?.trim() || 'the other side' })
+          : [],
     }
-  })
+  }))
 
   return { available: true, data: graded }
 }
@@ -720,12 +585,10 @@ export async function getTradesData(
     prisma.leagueTeam.count({ where: { leagueId } }),
     lc.claimedTeam(),
   ])
-  const book = valueBookFor(league.settings, league.leagueType)
   const grades = await resolveGrades(
+    league.id,
     league.platformLeagueId ?? null,
-    book,
     myTeam?.platformUserId?.trim() || null,
-    league.settings,
   )
 
   const base = {

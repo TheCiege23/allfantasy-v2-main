@@ -6,7 +6,8 @@ import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getSeasonStatsBoard, scoreStatLine } from '@/lib/sports-data/sleeperMarketService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
-import { buildTradeExpectation, type TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
+import { buildTradeExpectation, withOneGrade, type TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { fetchLeagueRosters } from '@/lib/trade-intel/sleeperTradeSync'
 import { getDynastyProcessValues } from '@/lib/trade-intel/dynastyProcessSync'
 import { buildAfPickValues, buildAfValues, type PickEntries, type SourceEntries } from '@/lib/trade-intel/afValue'
@@ -37,6 +38,7 @@ export async function loadTradeExpectation(
     prisma.league.findFirst({
       where: { platformLeagueId: sleeperLeagueId },
       select: {
+        id: true,
         leagueType: true,
         leagueVariant: true,
         isDynasty: true,
@@ -198,7 +200,7 @@ export async function loadTradeExpectation(
     if (Object.keys(rosteredByPosition).length === 0) rosteredByPosition = null
   }
 
-  return buildTradeExpectation({
+  const expectation = buildTradeExpectation({
     trade,
     context,
     marketValues,
@@ -218,4 +220,11 @@ export async function loadTradeExpectation(
       marketValues?.pickByRound[`${season}:${round}`] ??
       null,
   })
+
+  // The letter is THE grade (see `withOneGrade`); only a two-sided, market-only read is regraded.
+  if (expectation.evaluation.scope !== 'market-only') return expectation
+  const oneGrade = leagueRow?.id && trade.sides.length === 2
+    ? await oneGradeForCompletedTrade(leagueRow.id, trade, Number(context.season)).catch(() => null)
+    : null
+  return withOneGrade(expectation, oneGrade)
 }

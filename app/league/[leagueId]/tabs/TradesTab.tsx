@@ -8,10 +8,10 @@ import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
-import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { mirrorLetter, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
-import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { GradedTrade, TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
@@ -403,9 +403,16 @@ function rowFromImported(t: ImportedTradeLedgerPayload['trades'][number]): LogRo
 
 /** A completed or closed AllFantasy-native negotiation. */
 function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
-  const completed = t.status === 'processed' || t.status === 'reversed'
-  const viewerIsA = Boolean(t.viewerIsProposer)
-  const viewerIsB = Boolean(t.viewerIsReceiver)
+  /*
+   * A completed PROVIDER trade (Sleeper/Yahoo) is listed from the viewer's side — `sent` is what the
+   * viewer sent — and carries no proposer/receiver names. Side A is therefore the viewer. It used to
+   * be labelled with the partner's name above the viewer's own assets, which put a letter under the
+   * wrong manager once these rows were graded.
+   */
+  const providerRow = String(t.status ?? '').startsWith('completed_on_')
+  const completed = t.status === 'processed' || t.status === 'reversed' || providerRow
+  const viewerIsA = providerRow || Boolean(t.viewerIsProposer)
+  const viewerIsB = !providerRow && Boolean(t.viewerIsReceiver)
   const viewerIsParticipant = Boolean(t.viewerIsParticipant || viewerIsA || viewerIsB)
   const noGradeWhy = t.decisionReceipt?.reason
     ?? t.proposalGradeReason
@@ -413,33 +420,21 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   const proposalGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.proposalGrade))
     ? t.proposalGrade as GradeLetter
     : null
-  const reversePercent =
-    typeof t.proposalValueGiven === 'number' &&
-    typeof t.proposalValueReceived === 'number' &&
-    t.proposalValueReceived > 0
-      ? ((t.proposalValueGiven - t.proposalValueReceived) / t.proposalValueReceived) * 100
-      : null
   const frozenProposer = t.decisionReceipt?.participantDecisions[0] ?? null
   const frozenReceiver = t.decisionReceipt?.participantDecisions[1] ?? null
+  /*
+   * THE OTHER SIDE'S LETTER IS THE MIRROR (lib/decision-os/trade/tradeGrade.ts). It was recomputed
+   * here as (given − received) / received — a rule of its own, not the inverse of the first side's —
+   * so the two letters on one row could fail to mirror. A frozen receipt letter is evidence and is
+   * shown as recorded.
+   */
   const receiverProposalGrade = frozenReceiver?.grade && ['A', 'B', 'C', 'D', 'F'].includes(frozenReceiver.grade)
     ? frozenReceiver.grade as GradeLetter
-    : projectedLetterFor({
-    percentDiff: reversePercent,
-    hasSignal: proposalGrade != null,
-      })
+    : mirrorLetter(proposalGrade)
   const currentGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.currentGrade))
     ? t.currentGrade as GradeLetter
     : null
-  const reverseCurrentPercent =
-    typeof t.currentValueGiven === 'number' &&
-    typeof t.currentValueReceived === 'number' &&
-    t.currentValueReceived > 0
-      ? ((t.currentValueGiven - t.currentValueReceived) / t.currentValueReceived) * 100
-      : null
-  const receiverCurrentGrade = projectedLetterFor({
-    percentDiff: reverseCurrentPercent,
-    hasSignal: currentGrade != null,
-  })
+  const receiverCurrentGrade = mirrorLetter(currentGrade)
   const unresolved = (t.currentUnresolvedAssets ?? []).slice(0, 2).join(', ')
   const currentWhy = currentGrade
     ? null
@@ -453,7 +448,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     when: whenLabel(t.executedAt ?? t.timestamp),
     sortKey: Date.parse(t.executedAt ?? t.timestamp) || 0,
     a: {
-      name: t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
+      name: providerRow ? 'You' : t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
       avatarUrl: t.proposerAvatarUrl ?? (viewerIsA ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsA,
       sends: joinNames(t.sent),
@@ -464,7 +459,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       gradeWhy: currentWhy,
     },
     b: {
-      name: t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
+      name: providerRow ? t.partnerName : t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
       avatarUrl: t.receiverAvatarUrl ?? (viewerIsB ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsB,
       sends: joinNames(t.received),

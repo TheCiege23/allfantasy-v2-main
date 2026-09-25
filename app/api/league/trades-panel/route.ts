@@ -32,7 +32,7 @@ import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSumma
 import type { League } from '@prisma/client'
 import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
-import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
@@ -78,8 +78,17 @@ function openGradeFields(grade: TradeGradeView, side: 'viewer' | 'proposer') {
   } satisfies Partial<LeagueTradeHistoryItem>
 }
 
-/** Grade each pending provider offer from the viewer's side (their `assetsGiven` is what they send). */
-async function gradeProviderOffers(trades: PendingProviderTrade[], grader: GraderSource): Promise<Map<string, TradeGradeView>> {
+/**
+ * Grade provider trades from the viewer's side (their `assetsGiven` is what they send).
+ *
+ * `completed: true` grades a trade that already happened: on today's league values and WITHOUT roster
+ * need — both rosters already hold the result, so "does this fill a hole" has no honest answer.
+ */
+async function gradeProviderOffers(
+  trades: PendingProviderTrade[],
+  grader: GraderSource,
+  opts: { completed?: boolean } = {},
+): Promise<Map<string, TradeGradeView>> {
   const out = new Map<string, TradeGradeView>()
   if (trades.length === 0) return out
   const g = await grader()
@@ -87,7 +96,7 @@ async function gradeProviderOffers(trades: PendingProviderTrade[], grader: Grade
     out.set(t.transactionId, await gradeDeal(g, {
       give: gradeInputsFromPending(t.assetsGiven),
       get: gradeInputsFromPending(t.assetsReceived),
-      viewerSide: true,
+      viewerSide: !opts.completed,
     }))
   }))
   return out
@@ -204,21 +213,7 @@ async function buildNativeActiveTrades(
    * the one grader prices players by name — so the ids are resolved here, once for the whole panel.
    * One row per id: `SportsPlayer` holds several for many players (see viewerNeedFactors).
    */
-  const unnamedIds = [...new Set(active.flatMap((t) => t.items)
-    .filter((i) => !String(i.itemType ?? 'player').toLowerCase().includes('pick') && !String(i.itemType ?? '').toLowerCase().includes('faab'))
-    .filter((i) => {
-      const m = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? i.metadata as Record<string, unknown> : {}
-      return !(typeof m.playerName === 'string' && m.playerName.trim()) && !(typeof m.name === 'string' && m.name.trim())
-    })
-    .map((i) => i.itemReference)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0))]
-  const sportsPlayerStore = (prisma as typeof prisma & { sportsPlayer?: typeof prisma.sportsPlayer }).sportsPlayer
-  const nameRows = unnamedIds.length > 0 && sportsPlayerStore && typeof sportsPlayerStore.findMany === 'function'
-    ? await sportsPlayerStore.findMany({ where: { sleeperId: { in: unnamedIds } }, select: { sleeperId: true, name: true } }).catch(() => [])
-    : []
-  const nameBySleeperId = new Map<string, string>()
-  for (const r of nameRows) if (r.sleeperId && r.name && !nameBySleeperId.has(r.sleeperId)) nameBySleeperId.set(r.sleeperId, r.name)
-  const nameForId = (id: string) => nameBySleeperId.get(id) ?? null
+  const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items))
 
   return Promise.all(active
     .filter((t) => {
@@ -692,6 +687,26 @@ function mapProviderTrades(
       const g = grades.get(trade.transactionId)
       if (!g) return {}
       const f = openGradeFields(g, 'viewer')
+      if (trade.lifecycleStatus === 'complete') {
+        /*
+         * A COMPLETED provider trade: THE grade on today's values is its "Now". It has no "Then" —
+         * nothing recorded a grade when it was proposed on the provider, and the canonical letter
+         * that used to sit here was computed today and labelled as the past. And it gets no
+         * accept/decline advice: the trade is done.
+         */
+        return {
+          leagueGrade: f.leagueGrade,
+          leagueGradeSide: f.leagueGradeSide,
+          decisionAction: undefined,
+          decisionRecommendation: null,
+          proposalGrade: null,
+          proposalValueGiven: null,
+          proposalValueReceived: null,
+          currentGrade: f.currentGrade,
+          currentValueGiven: f.currentValueGiven,
+          currentValueReceived: f.currentValueReceived,
+        }
+      }
       return {
         ...f,
         proposalGrade: f.currentGrade,
@@ -996,7 +1011,10 @@ export async function GET(req: NextRequest) {
     }).catch(() => new Map()),
     gradeProviderOffers(providerPending, grader).catch(() => new Map<string, TradeGradeView>()),
   ])
-  const completedEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerCompleted }).catch(() => new Map())
+  const [completedEvaluations, completedGrades] = await Promise.all([
+    evaluatePendingProviderTrades({ leagueId, trades: providerCompleted }).catch(() => new Map()),
+    gradeProviderOffers(providerCompleted, grader, { completed: true }).catch(() => new Map<string, TradeGradeView>()),
+  ])
 
   // Native first (the viewer can act on those); provider proposals follow.
   const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending, providerEvaluations, providerGrades)]
@@ -1094,7 +1112,7 @@ export async function GET(req: NextRequest) {
     tradeBlockReadable,
     activeTrades,
     historyTrades: [
-      ...mapProviderTrades(providerCompleted, completedEvaluations),
+      ...mapProviderTrades(providerCompleted, completedEvaluations, completedGrades),
       ...settledProviderOffers,
       ...nativeHistory,
     ],

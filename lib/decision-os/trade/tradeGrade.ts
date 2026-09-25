@@ -215,6 +215,28 @@ export function gradeTrade(args: {
   }
 }
 
+/**
+ * The other side's letter from one side's letter alone. EXACT, not an estimate: the bands are
+ * symmetric about zero and the gap is rounded symmetrically (`signedGapPct`), so A↔F, B↔D and C↔C
+ * is precisely what grading the swapped deal returns. Null stays null — no letter, no mirror.
+ */
+export function mirrorLetter(letter: GradeLetter | null | undefined): GradeLetter | null {
+  switch (letter) {
+    case 'A':
+      return 'F'
+    case 'B':
+      return 'D'
+    case 'C':
+      return 'C'
+    case 'D':
+      return 'B'
+    case 'F':
+      return 'A'
+    default:
+      return null
+  }
+}
+
 /** The same grade seen from the OTHER side of the deal: sides swapped, letters swapped. */
 export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
   if (!view.graded) return view

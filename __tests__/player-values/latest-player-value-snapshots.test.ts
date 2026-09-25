@@ -135,10 +135,10 @@ function isUnboundedHistoryRead(call: string): boolean {
 /**
  * Known, deliberate, and each one a decision rather than an oversight.
  */
+// `lib/core-app/recentTrades.ts` left this list on 2026-09-25: it grades through the one league grader
+// (`oneGradeForCompletedTrade`) and reads no snapshot at all, so the "no book filter" question it was
+// parked on no longer arises.
 const ALLOWED: Record<string, string> = {
-  // Filters no book at all — "newest across every format" is its own semantic question, not a
-  // mechanical swap. Left for a deliberate change.
-  'lib/core-app/recentTrades.ts': 'no book filter; semantics need a decision',
   // Same shape twice (counterparty values, incoming ranks): no format or QB-format filter, so
   // "newest" is newest across books. Found by THIS guard — a grep census had missed the file.
   'lib/trade-intel/tradeContextNotes.ts': 'no book filter; semantics need a decision',
@@ -179,13 +179,22 @@ describe('🛑 no reader fetches the whole snapshot history for a player list', 
       'lib/decision-os/world/port.ts',
       'lib/core-app/rosterGrade.ts',
       'lib/core-app/dash34.ts',
-      'lib/core-app/trades.ts',
+      // `lib/core-app/trades.ts` graded completed trades off snapshot RANKS until 2026-09-25; it now
+      // grades through the one league grader and reads no snapshot — asserted below.
       'lib/core-app/tradesBoard.ts',
       'lib/trade-intel/managerPremium.ts',
       'lib/trade-intel/trajectory.ts',
     ]) {
       const src = readFileSync(join(root, f), 'utf8')
       expect(src, f).toContain('loadLatestPlayerValueSnapshots(')
+      expect(findManyCalls(src), f).toEqual([])
+    }
+  })
+
+  it('the readers moved to the one league grade read no snapshot at all', () => {
+    for (const f of ['lib/core-app/trades.ts', 'lib/core-app/recentTrades.ts']) {
+      const src = readFileSync(join(root, f), 'utf8')
+      expect(src, f).not.toMatch(/playerValueSnapshot|loadLatestPlayerValueSnapshots/)
       expect(findManyCalls(src), f).toEqual([])
     }
   })

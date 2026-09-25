@@ -371,6 +371,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     participantRosterIds,
     assets: input.assets,
     season: league.season,
+    proposedByUserId: input.proposedByUserId,
   })
 
   const createData = {
@@ -496,6 +497,8 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     receiverRosterId: input.receiverRosterId,
     items: input.assets,
     league,
+    // The learning record carries the same letter as the receipt — the one grade, not a fourth rule.
+    oneGradeLetter: serverDecisionResult?.participants?.find((p) => p.rosterId === input.proposerRosterId)?.grade ?? null,
   })
 
   if (input.parentTradeId && parent) {
