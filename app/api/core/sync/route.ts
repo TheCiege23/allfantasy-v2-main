@@ -214,7 +214,17 @@ export async function POST(req: NextRequest) {
 
         const refresh = out.refresh
         if (refresh === null) {
-          results.push({ ...base, mode: 'full', status: 'synced' })
+          /*
+           * 🛑 THIS WAS `status: 'synced'`. A null refresh means the resync persisted no league id,
+           * so the durable collector never ran and nothing was refreshed — counting it as synced
+           * is the "Sync now said it worked and did nothing" failure this route exists to prevent.
+           */
+          results.push({
+            ...base,
+            mode: 'full',
+            status: 'failed',
+            error: 'No AllFantasy league was found to refresh, so nothing was synced.',
+          })
         } else if (refresh.kind === 'auth') {
           results.push({ ...base, mode: 'full', status: 'failed', error: refresh.error })
         } else if (refresh.status === 'locked') {
