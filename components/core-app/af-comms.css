@@ -3330,6 +3330,7 @@
 .af-cm .af-cm-empty .af-cm-actions {
   justify-content: center;
   padding-inline: 16px;
+}
 
 /* ── Chimmy in league chat: sparkle avatar, "✦ Chimmy" badge, the moment it was ──────────────
  * Drawn only for rows carrying the server-owned marker (lib/league-chat/chimmyIdentity.ts).
