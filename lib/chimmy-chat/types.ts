@@ -111,6 +111,12 @@ export type ChimmyMessageMeta = {
   variant?: "premium_gate" | "error"
   ctaLabel?: string
   ctaHref?: string
+  /**
+   * Confirm cards for a lineup change or trade offer Chimmy PREPARED — nothing has happened until
+   * the user taps Confirm (`components/chimmy/ChimmyActionCard.tsx`). Validated by
+   * `readActionCards`; see lib/chimmy-chat/actionCards.ts.
+   */
+  actionCards?: import("@/lib/chimmy/actions/types").ChimmyActionCard[]
 }
 
 export type ChimmyThreadMessage = {

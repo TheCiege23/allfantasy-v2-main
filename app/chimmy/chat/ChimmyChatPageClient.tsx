@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 import ChimmyChatShell from '@/components/chimmy/ChimmyChatShell'
+import ChimmyActionCardTray from '@/components/chimmy/ChimmyActionCardTray'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { usePlayerComparisonUI } from '@/components/player-comparison-ui'
 import { buildAiPlayerCompareToolUrl } from '@/lib/chimmy-actions/aiPlayerComparisonBridge'
@@ -51,6 +52,11 @@ export function ChimmyChatPageClient(props: {
           <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
           Back to Chimmy
         </Link>
+        {/*
+         * Lineup changes and trade offers Chimmy PREPARED. Nothing happens until the user taps
+         * Confirm on a card; the tray renders nothing when there are none.
+         */}
+        <ChimmyActionCardTray className="mb-3 max-h-[45%] shrink-0 overflow-y-auto" />
         <div className="flex min-h-0 flex-1 flex-col">
         <ChimmyChatShell
           initialPrompt={props.prompt ?? ''}

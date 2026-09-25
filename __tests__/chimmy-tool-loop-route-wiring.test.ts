@@ -305,7 +305,8 @@ describe('tool loop system prompt', () => {
     expect(ROUTE).toMatch(
       /styleLine: \[\s*\n\s*personalizationDirectives,\s*\n\s*renderTrackRecordPromptLine\(chimmyTrackRecordFor\(await readAdviceLearningSnapshot\(\), userId \?\? null\)\),/,
     )
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\] \}/)
+    /* `actionCards` (2026-09-25) collects the confirm cards the propose tools build; see below. */
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */

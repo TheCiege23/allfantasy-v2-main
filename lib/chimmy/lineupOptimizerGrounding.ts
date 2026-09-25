@@ -356,6 +356,17 @@ export async function buildLineupOptimizerContext(
 ): Promise<string> {
   try {
     const result = await buildLineupOptimization({ leagueId: args.leagueId, userId: args.userId }, deps)
+    /*
+     * OUTSIDE THE NFL (2026-09-25): this optimizer still refuses a league it cannot price under the
+     * league's own rules — `buildLineupOptimization` is unchanged. The tool then offers the sports
+     * that DO have AllFantasy's per-game projection a separately labelled baseline lineup
+     * (lineupOptimizerOtherSports.ts), whose block names that basis on every line that matters.
+     * Soccer and anything else without a projection base keep the refusal below.
+     */
+    if (result.status === 'unresolved' && result.reason === 'sport_not_supported') {
+      const { buildBaselineLineupContext } = await import('./lineupOptimizerOtherSports')
+      return await buildBaselineLineupContext({ leagueId: args.leagueId, userId: args.userId })
+    }
     if (args.onStartCall) {
       const call = singleSwapCall(result, args.leagueId)
       if (call) args.onStartCall(call)
