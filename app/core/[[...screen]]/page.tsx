@@ -76,7 +76,7 @@ import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 import Trades from '@/components/core-app/screens/Trades'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
-import { getTradesBoard } from '@/lib/core-app/tradesBoard'
+import { getTradesBoard, pointBoardAtReachableLeagues } from '@/lib/core-app/tradesBoard'
 import { readTradesBoardSummary } from '@/lib/core-app/tradesBoardSummary'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import { resolveCurrentWeek } from '@/lib/core-app/currentWeek'
@@ -2287,10 +2287,27 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       : null
 
-  const tradesBoard = wantsTradesBoard
+  const tradesBoardRead = wantsTradesBoard
     ? tradesBoardOnSummary
       ? (tradesBoardFresh?.data ?? null)
       : await getTradesBoard(userId, tradesBoardWeek).catch(() => null)
+    : null
+  /*
+   * 🛑 EVERY CARD LINKS TO A LEAGUE ROW THIS PAGE WILL ACCEPT (2026-09-25). The board picks the copy
+   * of a league the reader claimed a team on, which can be another importer's; `?league=` is gated
+   * on `playedLeagues` below, so that link bounced straight back here. Applied after BOTH reads, so
+   * the cached summary path is covered too.
+   */
+  const tradesBoard = tradesBoardRead
+    ? pointBoardAtReachableLeagues(
+        tradesBoardRead,
+        playedLeagues.map((l) => ({
+          id: l.id,
+          platform: l.platform,
+          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+          season: l.season ?? null,
+        })),
+      )
     : null
 
   /* Same split as my-team above: a failed read must not read as "no league". */
