@@ -29,7 +29,10 @@ vi.mock('@/lib/workers/providers/rollingInsightsRest', async (importOriginal) =>
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsTeam: { upsert: vi.fn().mockResolvedValue({}) },
-    sportsPlayer: { upsert: vi.fn().mockResolvedValue({}) },
+    sportsPlayer: {
+      upsert: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   },
 }))
 

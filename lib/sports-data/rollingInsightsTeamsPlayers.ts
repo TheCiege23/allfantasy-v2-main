@@ -202,6 +202,38 @@ export interface RiPlayerSyncResult {
   unsupported: boolean
   notModified: boolean
   errors: string[]
+  /** Stored `imageUrl` values that were not a URL (e.g. `contact_support`) and were cleared. */
+  placeholderImagesCleared: number
+}
+
+/**
+ * Clear stored RI headshots that are not a URL.
+ *
+ * 🛑 WHY THIS IS NEEDED ON TOP OF FILTERING THE INCOMING VALUE: the upsert below only writes
+ * `imageUrl` when the vendor sent a real one (`...(imageUrl ? { imageUrl } : {})`), so a row
+ * that already holds `contact_support` keeps it forever — the vendor never sends a picture for
+ * that player, so nothing ever overwrites it. Measured on production 2026-09-25: 9,555 NFL rows.
+ *
+ * Same rule as `toImageUrl` (lib/media/imageUrl.ts): absolute http(s), root- or
+ * protocol-relative paths and `data:image/` survive; everything else is cleared. Scoped to this
+ * source and sport, and it only ever writes `null` over a value no browser can load.
+ */
+export async function clearPlaceholderRiImageUrls(sport: string): Promise<number> {
+  const { count } = await prisma.sportsPlayer.updateMany({
+    where: {
+      sport,
+      source: SOURCE,
+      imageUrl: { not: null },
+      NOT: [
+        { imageUrl: { startsWith: 'http://', mode: 'insensitive' } },
+        { imageUrl: { startsWith: 'https://', mode: 'insensitive' } },
+        { imageUrl: { startsWith: '/' } },
+        { imageUrl: { startsWith: 'data:image/', mode: 'insensitive' } },
+      ],
+    },
+    data: { imageUrl: null },
+  })
+  return count
 }
 
 /**
@@ -231,12 +263,20 @@ export async function syncRollingInsightsPlayersToDb(opts: {
     unsupported: false,
     notModified: false,
     errors: [],
+    placeholderImagesCleared: 0,
   }
 
   if (!riSupports('player_info', sport)) {
     result.unsupported = true
     result.errors.push(`Rolling Insights documents no player-info feed for ${sport}`)
     return result
+  }
+
+  // One set-based statement, before the sweep: heals rows the upsert can never overwrite.
+  try {
+    result.placeholderImagesCleared = await clearPlaceholderRiImageUrls(sport)
+  } catch (e) {
+    result.errors.push(`clear placeholder images: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   const now = opts.now ?? new Date()
