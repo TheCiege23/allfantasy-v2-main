@@ -632,6 +632,8 @@ export async function getTradesData(
     const current = await getSleeperTradeHistory(
       league.platformLeagueId,
       myTeam?.platformUserId?.trim() || null,
+      // The viewer's own copy: another importer's row can carry other settings and another letter.
+      { afLeagueId: league.id },
     ).catch(() => null)
     return {
       ...base,

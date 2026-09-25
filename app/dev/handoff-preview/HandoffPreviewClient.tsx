@@ -239,7 +239,7 @@ export function HandoffPreviewClient({
       <Section
         id="trade-email"
         title="22a — trade email"
-        blurb="Rendered by buildTradeGradeEmail(), the same function the trade-notify cron sends through. GOT is always left and GAVE always right on both cards so the two sides compare directly; the verdict is three explicit lines, never prose; and the footer carries a per-league mute alongside the global unsubscribe, because at 61 leagues a global one is not a real choice."
+        blurb="Rendered by buildTradeGradeEmail(), the same function the trade-notify cron sends through. The letters are THE grade for the reader's own copy of the league, the one AllFantasy shows for the same trade, with the league value of every asset and the league type it was priced under; an unconfirmed type carries the confirm ask. The footer carries a per-league mute alongside the global unsubscribe, because at 61 leagues a global one is not a real choice."
       >
         <EmailFrame email={tradeEmail} height={1180} />
       </Section>
