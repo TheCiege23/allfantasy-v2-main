@@ -11,6 +11,7 @@ import {
   MessageCircle,
   MessagesSquare,
   Radio,
+  RotateCcw,
   Send,
   Sparkles,
   Users,
@@ -376,6 +377,37 @@ function describeChimmyError(code: unknown): string {
   return code
 }
 
+/**
+ * What went wrong, in words, and whether sending the same question again could fix it.
+ *
+ * 🛑 "Chimmy could not answer that." IN RED, AND NOTHING ELSE, WAS THE WHOLE FAILURE UI (live test
+ * 2026-09-25: a question left the drawer, 90 seconds later that line appeared, with the question
+ * printed in the transcript AND back in the box). It said nothing about why and offered no way on.
+ * A gate (verify, age, tokens) keeps its own sentence and gets no retry — asking again cannot pass
+ * it. A dropped connection, a timeout, a rate limit or a server fault can clear on its own, so those
+ * say which one it was and offer Try again.
+ *
+ * ⚠ NONE OF THESE SAYS WHETHER TOKENS WERE SPENT. The route can fail after the spend (see the note
+ * on the error line below), so "nothing was charged" is a promise a 500 cannot keep.
+ */
+export function describeChimmyFailure(status: number | null, code: unknown): { message: string; retryable: boolean } {
+  if (typeof code === 'string' && CHIMMY_ERROR_COPY[code]) return { message: CHIMMY_ERROR_COPY[code], retryable: false }
+  if (status === null) return { message: 'Could not reach Chimmy. Check your connection.', retryable: true }
+  if (status === 408 || status === 504 || status === 524) return { message: 'Chimmy took too long on that one.', retryable: true }
+  if (status === 429) return { message: 'Too many questions at once. Give it a few seconds.', retryable: true }
+  if (status >= 500) return { message: 'Chimmy hit a snag on our side.', retryable: true }
+  return { message: describeChimmyError(code), retryable: false }
+}
+
+/** A failed ask, carrying whether a retry is worth offering. */
+class ChimmyAskError extends Error {
+  readonly retryable: boolean
+  constructor(failure: { message: string; retryable: boolean }) {
+    super(failure.message)
+    this.retryable = failure.retryable
+  }
+}
+
 function playerInitials(name: string): string {
   return name
     .split(/\s+/)
@@ -630,6 +662,12 @@ function ChimmyPanel({
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /*
+   * The question behind a failure that a retry could fix. Tied to the message it was raised with, so
+   * any later error (a screenshot too large, a declined spend) hides Try again rather than offering to
+   * resend under a sentence about something else.
+   */
+  const [retryAsk, setRetryAsk] = useState<{ message: string; question: string } | null>(null)
   /* Out of tokens: a card with ways to keep going, not an error line. See lib/chimmy/outOfAnswers.ts. */
   const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
@@ -727,7 +765,12 @@ function ChimmyPanel({
           return form
         }
 
-        let res = await fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(false) })
+        /* Only the request itself failing means the connection — a bug further down is not a network error. */
+        const post = (confirmed: boolean) =>
+          fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(confirmed) }).catch(() => {
+            throw new ChimmyAskError(describeChimmyFailure(null, null))
+          })
+        let res = await post(false)
         /*
          * ⚠ READ THE WHOLE ENVELOPE. This used to destructure `response` and
          * `error` alone and drop the rest, so `meta.leagueGrounding` — the only
@@ -777,7 +820,7 @@ function ChimmyPanel({
             setError('No tokens were spent — your question was not sent.')
             return
           }
-          res = await fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(true) })
+          res = await post(true)
           payload = (await res.json().catch(() => ({}))) as typeof payload
         }
 
@@ -821,7 +864,7 @@ function ChimmyPanel({
             ])
             return
           }
-          throw new Error(describeChimmyError(payload.code ?? payload.error))
+          throw new ChimmyAskError(describeChimmyFailure(res.status, payload.code ?? payload.error))
         }
 
         /*
@@ -906,9 +949,23 @@ function ChimmyPanel({
           setPendingAdopt(grounding.leagueId)
         }
       } catch (e) {
-        /* A failed send hands the question back rather than losing what was typed. */
+        /*
+         * A failed send hands the question back rather than losing what was typed — and takes it out
+         * of the transcript, as the decline and out-of-tokens paths already do. Left in, it printed
+         * twice (bubble and box), Try again added a third copy, and the next question sent it to the
+         * model as an unanswered turn. Only when the thread still ends on THIS question: a scope
+         * switch mid-request means the last turn is someone else's.
+         */
         setDraft(question)
-        if (activeScope.current === scopeId) { setScreenshot(attached); setError(e instanceof Error ? e.message : 'Chimmy could not answer that.') }
+        if (activeScope.current === scopeId) {
+          const shown = question || `Screenshot: ${attached?.name ?? 'image'}`
+          setTurns((t) => (t.length && t[t.length - 1].role === 'you' && t[t.length - 1].text === shown ? t.slice(0, -1) : t))
+          setScreenshot(attached)
+          const failure =
+            e instanceof ChimmyAskError ? e : { message: 'Chimmy hit a snag on that one.', retryable: true }
+          setError(failure.message)
+          setRetryAsk(failure.retryable ? { message: failure.message, question } : null)
+        }
       } finally {
         setBusy(false)
       }
@@ -1212,6 +1269,23 @@ function ChimmyPanel({
           * genuinely do not know.
           */}
         {error ? <p className="af-cm-error">{error}</p> : null}
+        {error && retryAsk?.message === error ? (
+          <div className="af-cm-retryrow">
+            <span>Your question is back in the box.</span>
+            <button
+              type="button"
+              className="af-cm-retry"
+              disabled={busy}
+              onClick={() => {
+                setRetryAsk(null)
+                void send(retryAsk.question)
+              }}
+            >
+              <RotateCcw size={13} aria-hidden />
+              Try again
+            </button>
+          </div>
+        ) : null}
         {outOfAnswers ? (
           <div className="af-cm-outofanswers" role="status">
             <p className="af-cm-outofanswers-title">{outOfAnswers.title}</p>
@@ -1864,9 +1938,15 @@ export function CommsDrawer({
             userId={userId}
           />
         ) : tab === 'huddle' ? (
-          <ThreadPanel kind="group" privacy={HUDDLE_PRIVACY} />
+          /*
+           * 🛑 A KEY PER TAB, OR A HUDDLE OPENS UNDER "DMs". Both branches render ThreadPanel in the
+           * same slot, so without keys React keeps ONE instance and only swaps its props: open a
+           * huddle, tap DMs, and the huddle stayed open beneath the DM privacy note — group chat
+           * labelled "One person" (live test 2026-09-25, phone-19). Keyed, each tab starts clean.
+           */
+          <ThreadPanel key="huddle" kind="group" privacy={HUDDLE_PRIVACY} />
         ) : tab === 'dms' ? (
-          <ThreadPanel kind="dm" privacy={DM_PRIVACY} />
+          <ThreadPanel key="dms" kind="dm" privacy={DM_PRIVACY} />
         ) : (
           <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}
