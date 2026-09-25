@@ -57,6 +57,16 @@ function asIds(v: unknown): string[] {
 /** Sleeper writes an unfilled starting slot as "0". It is a hole, not a player. */
 const EMPTY_SLOT = '0'
 
+/**
+ * Prices each lineup (roster id → starter ids) under the league's own rules.
+ *
+ * Supplied by a caller that has already priced players for the rest of its screen, so the
+ * matchup card is a VIEW of those numbers rather than a second, disagreeing computation.
+ */
+export type MatchupLineupPricer = (
+  lineups: ReadonlyMap<string, readonly string[]>,
+) => Promise<ReadonlyMap<string, { projected: number | null; projectedFrom: number }>>
+
 export async function getNextMatchup(args: {
   /** Internal `League.id` — used for LeagueTeam and Roster lookups. */
   leagueId: string
@@ -76,6 +86,21 @@ export async function getNextMatchup(args: {
   week: number
   scoringSettings: Record<string, unknown> | null
   projectionWeek: { season: string; week: number } | null
+  /**
+   * YOUR starters as the rest of the screen shows them, when the caller holds a fresher lineup
+   * than the stored `Roster` row — My Team reads Sleeper's live weekly lineup. Omitted, your side
+   * is read from the stored roster like the opponent's.
+   *
+   * 🛑 WITHOUT THIS THE CARD PRICED A DIFFERENT LINEUP FROM THE HEADER ABOVE IT. The stored row
+   * is whatever the last sync wrote; a lineup set in Sleeper since then is invisible to it.
+   */
+  myStarters?: readonly string[] | null
+  /**
+   * How to price the lineups. Omitted, the feed is read here and summed with
+   * `leagueScoredLineupTotal`. My Team passes its own pricer so a ruled-out or bye starter is the
+   * 0 its roster row shows, not his full projection — see `sumLeagueScoredStarters`.
+   */
+  priceLineups?: MatchupLineupPricer | null
 }): Promise<NextMatchup | null> {
   const { leagueId, platformLeagueId, myExternalId, seasonYear, week } = args
   if (!platformLeagueId || !myExternalId) return null
@@ -170,10 +195,17 @@ export async function getNextMatchup(args: {
       asIds(pd.starters).filter((s) => s !== EMPTY_SLOT),
     )
   }
+  if (args.myStarters) {
+    allStarters.set(myRosterId, args.myStarters.filter((s) => Boolean(s) && s !== EMPTY_SLOT))
+  }
 
   const everyId = [...new Set([...allStarters.values()].flat())]
   // Without rules nothing can be priced this league's way, so the feed is not worth a read.
-  const projections = everyId.length && hasScoringRules(args.scoringSettings)
+  const canPrice = everyId.length > 0 && hasScoringRules(args.scoringSettings)
+  const priced = canPrice && args.priceLineups
+    ? await args.priceLineups(allStarters).catch(() => null)
+    : null
+  const projections = canPrice && !args.priceLineups
     ? await lookupProjections(everyId, args.projectionWeek, {
         scoringSettings: args.scoringSettings,
       }).catch(() => new Map())
@@ -189,7 +221,9 @@ export async function getNextMatchup(args: {
      * beside the total and the withheld edge sentence already say when one is short, and a
      * standard-PPR number summed in is wrong without saying so. See `leagueScoredLineupTotal`.
      */
-    const { projected, projectedFrom } = leagueScoredLineupTotal(starters, projections, args.scoringSettings)
+    const { projected, projectedFrom } = args.priceLineups
+      ? priced?.get(rosterId) ?? { projected: null, projectedFrom: 0 }
+      : leagueScoredLineupTotal(starters, projections, args.scoringSettings)
 
     return {
       rosterId,
