@@ -83,6 +83,7 @@ import FormatHub from '@/components/core-app/screens/FormatHub'
 import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
 import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
+import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
 import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
@@ -1745,14 +1746,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   /*
    * The /core depth paywall (lib/core-app/coreDepthAccess.ts) — one plan read per render, and only
-   * on the three screens that carry paid depth. Started here and awaited at the first loader that
+   * on the screens that carry paid depth (Waivers for its Competitive Edge). Started here and awaited at the first loader that
    * needs it, so it runs beside the reads in between rather than in front of them.
    *
    * ⚠ THE LOADERS BELOW SKIP WHAT A LOCKED VIEWER MAY NOT SEE. A lock card over data the page
    * already sent is a client-only gate; the screens' own locks only decide what is drawn.
    */
   const corePaywallRead =
-    activeKey === 'players' || activeKey === 'trades' || activeKey === 'commissioner'
+    activeKey === 'players' || activeKey === 'trades' || activeKey === 'commissioner' || activeKey === 'waivers'
       ? resolveCorePaywall(userId, { email: viewerEmail, now })
       : Promise.resolve(null)
 
@@ -2306,6 +2307,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'waivers' && selectedLeagueId
       ? await getWaiversData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
+  // Competitive Edge on Waivers — read only for a viewer whose plan includes it.
+  const waiverEdgeAccess = activeKey === 'waivers' ? (corePaywall?.competitive_edge ?? null) : null
+  const waiverEdge = await loadWaiverEdgeForScreen({ waivers, access: waiverEdgeAccess, userId })
 
   const draftHq =
     activeKey === 'draft-hq' && selectedLeagueId
@@ -3793,7 +3797,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'waivers' ? (
         waivers ? (
-          <Waivers data={waivers} />
+          <Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
         ) : !showAllLeagues && waiversBoard ? (
           <WaiversBoard
             data={waiversBoard}
