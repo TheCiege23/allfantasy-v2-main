@@ -2084,7 +2084,7 @@
   }
 }
 
-/* ── Route-loading skeleton (app/core/[[...screen]]/loading.tsx) ──────── */
+/* ── Route-loading skeleton (app/core/loading.tsx) ──────── */
 
 /*
  * ⚠ APPENDED AS ITS OWN TOP-LEVEL BLOCK AT END OF FILE, per the convention this
@@ -3039,4 +3039,34 @@ html[data-mode='light'] .af-core {
   .af-core.af-shell:not([data-rail-open='true']) .af-nav {
     display: flex;
   }
+}
+
+/* ── A /core click in flight (components/core-app/coreNavPending.tsx) ─────
+ *
+ * The link that was clicked takes the active look at once; the one being left
+ * gives it up. Each rule out-specifies the `[data-active='true']` rule it
+ * mirrors, so its place in this file does not matter. The rail's old tile is
+ * left lit on purpose: it is still the league on screen until the new one lands.
+ */
+.af-core .af-nav-item[data-nav-pending='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.af-shell[data-nav-pending='true'] .af-nav-item[data-active='true']:not([data-nav-pending='true']) {
+  background: transparent;
+  color: var(--text2);
+  border-color: transparent;
+}
+.af-core .af-tabbar-item[data-nav-pending='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-shell[data-nav-pending='true'] .af-tabbar-item[data-active='true']:not([data-nav-pending='true']) {
+  background: transparent;
+  color: var(--faint);
+}
+.af-shell .af-rail-tile[data-nav-pending='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
 }

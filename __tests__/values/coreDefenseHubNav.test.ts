@@ -21,7 +21,7 @@ import { resolve } from 'node:path'
  */
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
 const SHELL = read('components/core-app/AfCoreShell.tsx')
-const PAGE = read('app/core/[[...screen]]/page.tsx')
+const PAGE = read('app/core/(shell)/[[...screen]]/page.tsx')
 
 describe('/core Defense Hub rail entry', () => {
   it('declares the nav key and places it in the league section', () => {

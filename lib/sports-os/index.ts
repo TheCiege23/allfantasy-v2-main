@@ -7,7 +7,7 @@
  * The ten points and where each one lives:
  *
  *  1. Performance budgets ............ ./budgets.ts       + ./budgetTelemetry.ts
- *  2. Render the shell immediately ... app/core/[[...screen]]/page.tsx (`af.shell_ms`) — already built
+ *  2. Render the shell immediately ... app/core/(shell)/[[...screen]]/page.tsx (`af.shell_ms`) — already built
  *  3. Stream cards independently ..... same page + lib/observability/cardTelemetry.ts — already built
  *  4. Screen-ready summaries ......... ./summaries.ts
  *  5. Layered caching ................ ./layeredCache.ts

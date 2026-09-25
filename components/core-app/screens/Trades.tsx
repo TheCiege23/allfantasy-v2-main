@@ -252,7 +252,7 @@ export function Trades({ data }: TradesProps) {
       ⚠ BLOCK COMMENT, NOT `//`. Two `//` lines in exactly this position pass
       `tsc --noEmit` and are REJECTED by SWC ("Unexpected token. Expected jsx
       identifier"), so the typecheck was clean while the Next build failed and
-      took `app/core/[[...screen]]/page.tsx` down with it.
+      took `app/core/(shell)/[[...screen]]/page.tsx` down with it.
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-tr">

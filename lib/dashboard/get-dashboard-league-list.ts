@@ -62,7 +62,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
               /*
                * ⚠ FOUR BRANCHES, NOT THREE — THE FOURTH IS THE LARGEST POPULATION.
                * This list is the membership predicate for the whole /core shell: the rail
-               * is built from it, and `app/core/[[...screen]]/page.tsx` gates `?league=`
+               * is built from it, and `app/core/(shell)/[[...screen]]/page.tsx` gates `?league=`
                * on it ("a league query is also an authorization boundary"). So a league
                * missing here is a league the user cannot reach ANYWHERE in /core, by a
                * link or by hand.
@@ -434,7 +434,7 @@ export async function getDashboardLeagueListForUser(
               /*
                * ⚠ FOUR BRANCHES, NOT THREE — THE FOURTH IS THE LARGEST POPULATION.
                * This list is the membership predicate for the whole /core shell: the rail
-               * is built from it, and `app/core/[[...screen]]/page.tsx` gates `?league=`
+               * is built from it, and `app/core/(shell)/[[...screen]]/page.tsx` gates `?league=`
                * on it ("a league query is also an authorization boundary"). So a league
                * missing here is a league the user cannot reach ANYWHERE in /core, by a
                * link or by hand.

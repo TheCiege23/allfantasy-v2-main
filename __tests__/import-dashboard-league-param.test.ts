@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest"
  * The destination reads a differently-named param:
  *
  *   producer  components/unified-import-ui/LegacyImportResults.tsx  goDashboard()
- *   consumer  app/core/[[...screen]]/page.tsx                       sp.league
+ *   consumer  app/core/(shell)/[[...screen]]/page.tsx                       sp.league
  *
  * `/dashboard` is retired (app/dashboard/page.tsx redirects to /core, query
  * preserved), and `lib/dashboard/dashboard-league-selection.ts` — which is written
@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest"
  */
 
 const PRODUCER = "components/unified-import-ui/LegacyImportResults.tsx"
-const CONSUMER = "app/core/[[...screen]]/page.tsx"
+const CONSUMER = "app/core/(shell)/[[...screen]]/page.tsx"
 
 function read(rel: string): string {
   return fs.readFileSync(path.resolve(process.cwd(), rel), "utf8")

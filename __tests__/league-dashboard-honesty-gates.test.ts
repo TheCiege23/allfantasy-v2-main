@@ -146,7 +146,7 @@ describe('public standings — privacy gates', () => {
   })
 
   it('/core stays noindex', () => {
-    const core = read('app/core/[[...screen]]/page.tsx')
+    const core = read('app/core/(shell)/[[...screen]]/page.tsx')
     expect(core).toMatch(/robots:\s*\{\s*index:\s*false/)
   })
 })
@@ -334,7 +334,7 @@ describe('every nav item resolves to a real screen', () => {
    */
   it('has no nav key without a render branch', () => {
     const shell = code('components/core-app/AfCoreShell.tsx')
-    const route = code('app/core/[[...screen]]/page.tsx')
+    const route = code('app/core/(shell)/[[...screen]]/page.tsx')
     /*
      * code(), not read(): the comments here name paths like
      * `lib/core-app/career.ts`, and 'lib/core-app' contains the substring

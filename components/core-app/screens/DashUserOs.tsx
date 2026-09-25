@@ -10,7 +10,7 @@ import UserOsCard from '@/components/decision-os/UserOsCard'
  * /core that reads decision-os at all. Deterministic only: no AI pipeline, no
  * spend, no trigger.
  *
- * A separate component file, mounted from app/core/[[...screen]]/page.tsx
+ * A separate component file, mounted from app/core/(shell)/[[...screen]]/page.tsx
  * beside Dash3ATriage/Dash34Carryover, because Dashboard3A.tsx carries another
  * session's in-flight work and is not edited.
  *

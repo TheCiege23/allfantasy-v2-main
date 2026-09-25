@@ -13,7 +13,7 @@ const SRC = readFileSync(
   resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
   'utf8',
 )
-const PAGE = readFileSync(resolve(process.cwd(), 'app/core/[[...screen]]/page.tsx'), 'utf8')
+const PAGE = readFileSync(resolve(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
 
 const LEAGUE = { id: 'l1', name: 'Last League Left', format: 'Dynasty · PPR', teamCount: 12 }
 

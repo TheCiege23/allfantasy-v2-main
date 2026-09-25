@@ -233,7 +233,7 @@ describe('item 1 — a partial import says so', () => {
   })
 
   it('degrades to showing everything when the league cannot be read', () => {
-    const page = code('app/core/[[...screen]]/page.tsx')
+    const page = code('app/core/(shell)/[[...screen]]/page.tsx')
     expect(page).toContain('UNKNOWN_IMPORT_COVERAGE')
     expect(page).toMatch(/catch\(\(\) => UNKNOWN_IMPORT_COVERAGE\)/)
     expect(page).toMatch(/importCapabilities=\{importCoverageSummary\.capabilities\}/)

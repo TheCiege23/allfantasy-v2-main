@@ -2,8 +2,9 @@
  * The screen-area placeholder while a /core screen streams in behind a shell that has already
  * painted.
  *
- * `app/core/[[...screen]]/loading.tsx` draws the WHOLE shell as structure, because it shows
- * before the shell exists. This is its content column alone: by the time it renders, the real
+ * `app/core/loading.tsx` draws the WHOLE shell as structure, because it shows
+ * before the shell exists (a hard load). This is its content column alone — and also what
+ * `CoreScreenArea` shows the instant a tab is clicked (coreNavPending.tsx): by the time it renders, the real
  * rail, nav and league tabs are on screen, and redrawing them as placeholders would flash the
  * chrome the user can already see.
  *

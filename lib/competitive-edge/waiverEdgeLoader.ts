@@ -168,7 +168,7 @@ export async function loadWaiverEdge(input: {
  *
  * ⚠ THE SERVER WITHHOLDS, THE LOCK ONLY DRAWS. A locked viewer gets `null` here, so the page never
  * sends their rivals' budgets and claims to the browser; the screen's lock card is a picture of a
- * gate, not the gate (the same rule as every /core depth — see app/core/[[...screen]]/page.tsx).
+ * gate, not the gate (the same rule as every /core depth — see app/core/(shell)/[[...screen]]/page.tsx).
  */
 export async function loadWaiverEdgeForScreen(input: {
   waivers: Pick<WaiversData, 'league' | 'waiverType'> | null

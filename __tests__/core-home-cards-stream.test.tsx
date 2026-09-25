@@ -240,7 +240,7 @@ const pageArgs = (screen: string[], searchParams: Record<string, string>) => ({
 })
 
 async function screenBody(screen: string[], searchParams: Record<string, string>, key: string) {
-  const AfCorePage = (await import('@/app/core/[[...screen]]/page')).default
+  const AfCorePage = (await import('@/app/core/(shell)/[[...screen]]/page')).default
   const tree = await AfCorePage(pageArgs(screen, searchParams))
   const boundary = findAll(tree, (el) => el.type === Suspense && el.key === key)[0]
   expect(boundary, `the screen boundary ${key}`).toBeTruthy()

@@ -16,14 +16,22 @@ import '@/components/core-app/af-core-shell.css'
  * shell as soon as its chrome reads land and streams the screen in behind it, inside
  * its own boundary (`CoreScreenSkeleton`). This fallback covers the shell phase only.
  *
- * ⚠ IT ALSO MAKES `<Link>` PREFETCH WORTH ANYTHING ON THIS ROUTE. App Router
- * prefetches a dynamic route only as far as its nearest loading boundary — with
- * no boundary there is nothing to prefetch, so every nav link was a cold start.
+ * 🛑 IT LIVES HERE, ABOVE THE `(shell)` GROUP, SO THAT IT DOES NOT FIRE BETWEEN TABS.
+ * Until 2026-09-25 this file sat inside `[[...screen]]`. Next wraps a segment's
+ * children in its loading boundary INSIDE an element keyed on the child segment,
+ * and /core/waivers vs /core/trades differ in exactly that param — so every tab
+ * click mounted a fresh boundary and repainted the WHOLE app, rail and nav
+ * included, as this skeleton (read out of next/dist/client/components/
+ * layout-router.js, OuterLayoutRouter). Here the keyed child is `(shell)`, which
+ * never changes between tabs: the boundary stays mounted, Next navigates in a
+ * transition, and React keeps the current page up instead. What the manager sees
+ * during that wait is coreNavPending.tsx — the clicked tab lit, the screen area
+ * alone swapped for its skeleton.
  *
- * ⚠ AND IT FIRES BETWEEN SIBLING SCREENS, NOT ONLY ON FIRST LOAD. /core/waivers
- * and /core/trades are the same `[[...screen]]` segment under different params;
- * the param is part of the segment key, so React re-suspends and this fallback
- * shows on that navigation too. That is the exact trip the report was about.
+ * So this now shows on a HARD load of any /core screen, and when arriving from
+ * another part of /core that has no shell (connect-leagues) — not on a tab click.
+ * `/core/connect-leagues` sits under this boundary too; it is static and renders
+ * without suspending, so it never shows this skeleton in practice.
  *
  * This is a fallback, NOT a fix for the render cost. The two real causes are
  * the service running in `sfo` against a `us-east-1` database (~65ms per

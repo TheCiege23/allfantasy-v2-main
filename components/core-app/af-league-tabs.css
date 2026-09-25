@@ -376,3 +376,25 @@
     min-height: 44px;
   }
 }
+
+/* ── A tab click in flight (components/core-app/coreNavPending.tsx) ───────
+ *
+ * The clicked tab reads as the active one immediately, and the tab being left
+ * stops claiming it, for the second or two before the new screen's render
+ * lands. Out-specifies both the active and hover rules above, so file order
+ * does not decide it.
+ */
+.af-core .af-lt-tab[data-nav-pending='true'],
+.af-core .af-lt-tab[data-nav-pending='true']:hover,
+.af-core .af-lt-tab[data-nav-pending='true']:focus-visible {
+  font-weight: 800;
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.af-shell[data-nav-pending='true'] .af-lt-tab[data-active='true']:not([data-nav-pending='true']),
+.af-shell[data-nav-pending='true'] .af-lt-tab[data-active='true']:not([data-nav-pending='true']):hover {
+  font-weight: 700;
+  color: var(--faint);
+  background: transparent;
+}

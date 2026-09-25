@@ -130,7 +130,7 @@ describe('🛑 loadDraftEdgeForScreen — the server withholds', () => {
 })
 
 describe('🛑 the /core page wires it through the gate', () => {
-  const page = readFileSync(resolve(__dirname, '..', 'app/core/[[...screen]]/page.tsx'), 'utf8')
+  const page = readFileSync(resolve(__dirname, '..', 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
 
   it('resolves the paywall on Draft HQ, loads the edge only through the gate, and hands both to the screen', () => {
     const paywallRead = page.slice(page.indexOf('const corePaywallRead ='), page.indexOf('resolveCorePaywall(userId'))
