@@ -18,6 +18,7 @@ import {
 import {
   getDraftTypeOptions,
   getScoringPresetOptionsForSelection,
+  isSportAllowedForType,
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
 import {
@@ -47,7 +48,16 @@ type WizardProps = {
   onCancel: () => void
 }
 
-const SIMPLE_LEAGUE_TYPES: readonly LeagueTypeId[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
+/**
+ * The concepts the Create button offers.
+ *
+ * Guillotine returned 2026-09-25. The G30 simplification (July) cut the list to four when a native
+ * guillotine league could not play a season; it can now — score-sync chops the lowest team each
+ * sealed week (`nativeGuillotineWeek`), announces it in league chat and drops the roster — and the
+ * create API, team-count rules and scoring presets already handled it, so the only thing missing
+ * was the tile.
+ */
+const SIMPLE_LEAGUE_TYPES: readonly LeagueTypeId[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine']
 
 const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'summary', 'review']
 
@@ -76,7 +86,10 @@ function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateK
 }
 
 function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
-  const leagueType = getEffectiveLeagueType(state) ?? 'redraft'
+  // A concept the new sport does not support (guillotine is not offered for NCAAB or soccer)
+  // falls back to redraft, or the wizard would submit a pairing the server refuses.
+  const chosen = getEffectiveLeagueType(state) ?? 'redraft'
+  const leagueType = isSportAllowedForType(sport, chosen) ? chosen : 'redraft'
   const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
     leagueType,
     sport,
@@ -85,6 +98,7 @@ function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): P
 
   return {
     sport,
+    ...(leagueType !== chosen ? { leagueType } : {}),
     // The server refuses a soccer league without a pipeline, and the wizard had no control for
     // it, so soccer could never be submitted. The player pool is European whichever is chosen
     // (the pipeline is stored, not read by the pool), so default to it rather than offer a
@@ -348,7 +362,8 @@ export function LeagueBasicsStep({
   fieldErrors,
 }: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors'>) {
   const { t } = useLanguage()
-  const typeOptions = SIMPLE_LEAGUE_TYPES
+  // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
+  const typeOptions = SIMPLE_LEAGUE_TYPES.filter((leagueType) => isSportAllowedForType(state.sport, leagueType))
 
   return (
     <section className="space-y-5" data-testid="g30-basics-step">
@@ -420,6 +435,9 @@ export function LeagueBasicsStep({
         ))}
       </div>
 
+      {/* A guillotine week has no opponent — every team plays the chop line — so there is no
+          head-to-head game for a median game to double. */}
+      {getEffectiveLeagueType(state) === 'guillotine' ? null : (
       <label
         className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] px-4 py-3 text-sm"
         data-testid="g30-median-game"
@@ -437,6 +455,7 @@ export function LeagueBasicsStep({
           </span>
         </span>
       </label>
+      )}
     </section>
   )
 }

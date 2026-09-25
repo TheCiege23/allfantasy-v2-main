@@ -69,7 +69,9 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   const conceptSetup: Record<string, unknown> = {
     visibility: state.privacy,
     isPublic: state.privacy === 'public',
-    medianGame: state.medianGame === true,
+    // A guillotine week has no opponent, so there is no head-to-head game for a median game to
+    // double. The wizard hides the box for guillotine; this drops a choice made before switching.
+    medianGame: state.medianGame === true && lt !== 'guillotine',
     draftDate: state.draftDate,
     draftTime: state.draftTime,
     draftTimezone: state.timezone,
