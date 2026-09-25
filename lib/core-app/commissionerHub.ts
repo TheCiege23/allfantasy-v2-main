@@ -124,6 +124,52 @@ export type CommissionerAccessRow = {
   isYou: boolean
 }
 
+type AccessTeam = {
+  isCommissioner?: boolean | null
+  isCoCommissioner?: boolean | null
+  ownerName?: string | null
+  teamName?: string | null
+  claimedByUserId?: string | null
+}
+
+/**
+ * "Who can run this league", for the hub's access panel.
+ *
+ * 🛑 THE PANEL WAS EMPTY FOR EVERY MFL, FLEAFLICKER AND FANTRAX LEAGUE. It lists teams whose
+ * `LeagueTeam.isCommissioner`/`isCoCommissioner` flag is set, and only the Sleeper, ESPN and Yahoo
+ * adapters ever set one — those three providers publish commissioners, the others do not. So the
+ * commissioner looking at the panel was told nobody runs their league.
+ *
+ * When no team carries a flag, the viewer is listed with the role `getLeagueRole` already proved
+ * for them — the same answer that let them onto this screen. Display only: it grants nothing and
+ * reads no new predicate (see the note above on why this module does not add a fifth one). Where
+ * any flag exists the flags stay the whole answer, exactly as before.
+ */
+export function buildCommissionerAccessRows(
+  teams: readonly AccessTeam[],
+  userId: string,
+  viewerRole: LeagueRole,
+): CommissionerAccessRow[] {
+  const flagged: CommissionerAccessRow[] = teams
+    .filter((t) => t.isCommissioner || t.isCoCommissioner)
+    .map((t) => {
+      const handle = t.ownerName?.trim() || t.teamName?.trim() || 'Unknown manager'
+      return {
+        handle,
+        initials: initialsOf(handle),
+        role: t.isCommissioner ? ('commissioner' as const) : ('co_commissioner' as const),
+        isYou: t.claimedByUserId === userId,
+      }
+    })
+    .sort((a, b) => (a.role === b.role ? 0 : a.role === 'commissioner' ? -1 : 1))
+  if (flagged.length > 0) return flagged
+  if (viewerRole !== 'commissioner' && viewerRole !== 'co_commissioner') return []
+
+  const mine = teams.find((t) => t.claimedByUserId === userId)
+  const handle = mine?.ownerName?.trim() || mine?.teamName?.trim() || 'You'
+  return [{ handle, initials: initialsOf(handle), role: viewerRole, isYou: true }]
+}
+
 /**
  * Proof that the commissioner gate passed for one league and one viewer.
  *
@@ -903,18 +949,7 @@ export async function getCommissionerHub(input: {
     },
   ]
 
-  const access: CommissionerAccessRow[] = teams
-    .filter((t) => t.isCommissioner || t.isCoCommissioner)
-    .map((t) => {
-      const handle = t.ownerName?.trim() || t.teamName?.trim() || 'Unknown manager'
-      return {
-        handle,
-        initials: initialsOf(handle),
-        role: t.isCommissioner ? ('commissioner' as const) : ('co_commissioner' as const),
-        isYou: t.claimedByUserId === userId,
-      }
-    })
-    .sort((a, b) => (a.role === b.role ? 0 : a.role === 'commissioner' ? -1 : 1))
+  const access = buildCommissionerAccessRows(teams, userId, role)
 
   const recipeSettings = readRecipeSettings(settingsJson, platform)
   const viewerIsOwner = league.userId === userId
