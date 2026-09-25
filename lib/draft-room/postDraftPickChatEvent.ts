@@ -40,21 +40,39 @@ export type PostDraftPickChatEventInput = {
   commissionerOverride?: boolean
 }
 
+/**
+ * Who the pick card is posted as: the person who picked, else the seat's owner, else the league
+ * owner — the first of those that is a REAL user.
+ *
+ * 🛑 AN OPEN OR CPU SEAT IS OWNED BY `open-slot-<leagueId>-<n>`, NOT BY A USER. The chain used to
+ * stop at the first non-empty id, and a seat nobody has claimed has one, so every autopick for an
+ * unfilled seat was written with that id, refused by `league_chat_messages_userId_fkey`, and
+ * swallowed by the fire-and-forget caller. Measured 2026-09-25 on the test DB: a 10-team draft
+ * with one claimed seat logged the FK violation on 135 of 150 picks, and draft chat showed only
+ * the commissioner's own. The league owner is the fallback because they are always a user.
+ */
 async function resolveActorAppUserId(input: PostDraftPickChatEventInput): Promise<string | null> {
   const direct = typeof input.madeByUserId === 'string' && input.madeByUserId.trim() ? input.madeByUserId.trim() : null
-  if (direct) return direct
 
   const roster = await prisma.roster.findFirst({
     where: { id: input.rosterId, leagueId: input.leagueId },
     select: { platformUserId: true },
   })
-  if (roster?.platformUserId) return roster.platformUserId
-
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
     select: { userId: true },
   })
-  return league?.userId ?? null
+
+  const candidates = [direct, roster?.platformUserId, league?.userId].filter(
+    (id): id is string => typeof id === 'string' && id.trim().length > 0,
+  )
+  if (candidates.length === 0) return null
+  const users = await prisma.appUser.findMany({
+    where: { id: { in: [...new Set(candidates)] } },
+    select: { id: true },
+  })
+  const real = new Set(users.map((u) => u.id))
+  return candidates.find((id) => real.has(id)) ?? null
 }
 
 /**
