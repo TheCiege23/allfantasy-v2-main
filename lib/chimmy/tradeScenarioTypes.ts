@@ -71,6 +71,12 @@ export type ReadyTradeScenario = {
     grade: string | null
     coveragePct: number
     coverageStatus: 'complete' | 'partial' | 'blocked'
+    /** The one grade's label ("Slightly favors you") — absent on scenarios sent before 2026-09-24. */
+    label?: string | null
+    /** The chart the values are on, in words. */
+    basis?: string | null
+    /** Why there is no grade, when there is none. */
+    withheld?: string | null
   }
   lineup: TradeScenarioLineup | null
   /** The week `lineup` is for (`LEAGUE_WEEK_UNIT`); absent on scenarios sent before 2026-09-17. */

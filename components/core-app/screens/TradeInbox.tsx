@@ -5,6 +5,7 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
 import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -67,6 +68,8 @@ type Offer = {
   proposedAt: string | null
   give: OfferAsset[]
   get: OfferAsset[]
+  /** THE grade for this offer, from the viewer's side — the same letter the builder gives it. */
+  leagueGrade?: TradeGradeView | null
 }
 
 /**
@@ -517,6 +520,22 @@ export function TradeInbox(props: {
                 <span className="af-tc-row-sub">{whenLabel(o.proposedAt)}</span>
               ) : null}
             </header>
+
+            {o.leagueGrade ? (
+              o.leagueGrade.graded ? (
+                <p className="af-tc-offer-grade" data-letter={o.leagueGrade.letter}>
+                  <strong className="af-num">{o.leagueGrade.letter}</strong>
+                  <span>
+                    {o.leagueGrade.label} · you get {o.leagueGrade.getValue.toLocaleString()} for{' '}
+                    {o.leagueGrade.giveValue.toLocaleString()} in league value
+                  </span>
+                </p>
+              ) : (
+                <p className="af-tc-offer-grade" data-letter="none">
+                  <span>Not graded: {o.leagueGrade.reason}</span>
+                </p>
+              )
+            ) : null}
 
             <div className="af-tc-offer-sides">
               <div>

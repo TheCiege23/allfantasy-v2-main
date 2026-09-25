@@ -764,6 +764,25 @@
   font-weight: 800;
   color: var(--text);
 }
+/* THE grade on an incoming offer — same letter colours as the builder's verdict tiles. */
+.af-tc-offer-grade {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.af-tc-offer-grade strong {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+}
+.af-tc-offer-grade[data-letter='A'] strong { color: #34d399; }
+.af-tc-offer-grade[data-letter='B'] strong { color: #5eead4; }
+.af-tc-offer-grade[data-letter='C'] strong { color: #fbbf24; }
+.af-tc-offer-grade[data-letter='D'] strong { color: #fb923c; }
+.af-tc-offer-grade[data-letter='F'] strong { color: #fb5b78; }
 .af-tc-offer-sides {
   display: grid;
   grid-template-columns: 1fr 1fr;

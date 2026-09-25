@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
@@ -8,6 +8,7 @@ import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
@@ -104,6 +105,8 @@ export type BuilderOffer = {
   /** From the VIEWER's side in both directions: what leaves their roster. */
   give: BuilderOfferAsset[]
   get: BuilderOfferAsset[]
+  /** THE grade for this offer, from the viewer's side (see `lib/decision-os/trade/tradeGrade.ts`). */
+  leagueGrade?: TradeGradeView | null
   evaluation?: {
     action: 'accept' | 'counter' | 'decline' | 'review'
     recommendation: string
@@ -584,19 +587,6 @@ export function toAnalyzeAssets(
   return { assets: out, dropped }
 }
 
-function fromBuilderAssets(assets: BuilderOfferAsset[]): { assets: AnalyzeAsset[]; dropped: string[] } {
-  const out: AnalyzeAsset[] = []
-  const dropped: string[] = []
-  for (const a of assets) {
-    if (a.faabAmount != null) out.push({ kind: 'faab', amount: a.faabAmount })
-    else if (a.isPick) {
-      if (a.pickYear != null && a.pickRound != null) out.push({ kind: 'pick', year: a.pickYear, round: a.pickRound, label: a.name })
-      else dropped.push(a.name)
-    } else out.push({ kind: 'player', name: a.name })
-  }
-  return { assets: out, dropped }
-}
-
 export type PendingVerdict =
   | { kind: 'loading' }
   | { kind: 'failed' }
@@ -617,15 +607,44 @@ export type PendingVerdict =
       dropped: string[]
     }
 
-type AnalyzeResponse = {
-  labels?: { fairnessLabel?: string; confidenceLabel?: string }
-  fairnessScore?: number
-  percentDiff?: number
-  degraded?: boolean
-  giveTotal?: number | null
-  getTotal?: number | null
-  players?: { give: Array<{ name: string; marketValue?: number | null }>; get: Array<{ name: string; marketValue?: number | null }> }
-  error?: string
+/**
+ * THE grade for an open offer, as the card draws it.
+ *
+ * 🛑 THE CARD NO LONGER GRADES ANYTHING ITSELF (2026-09-24). It used to pick one of three sources —
+ * the canonical evaluation with `(recv−given)/recv`, a native decision with `(get−give)/get` and its
+ * non-mirror inverse, or a fresh `/api/trade-value/analyze` call per card (an LLM call each, capped
+ * at six) — so one offer could carry a different letter here than in the Trade Center or the
+ * inbox. The server now grades every open offer with the one grader and this only reshapes it.
+ *
+ * Per-asset values are matched by POSITION, not by name: the grader prices the sides in the order
+ * the row lists them, and a pricer's canonical spelling ("Kenneth Walker III") need not match the
+ * label on the card.
+ */
+export function pendingVerdictFromGrade(
+  grade: TradeGradeView | null | undefined,
+  giveNames: readonly string[],
+  getNames: readonly string[],
+): PendingVerdict | undefined {
+  if (!grade) return undefined
+  if (!grade.graded) return { kind: 'skipped', why: grade.reason }
+  const values: Record<string, number | null> = {}
+  const give = grade.lines.filter((l) => l.side === 'give')
+  const get = grade.lines.filter((l) => l.side === 'get')
+  giveNames.forEach((n, i) => { values[n.toLowerCase()] = give[i]?.leagueValue ?? null })
+  getNames.forEach((n, i) => { values[n.toLowerCase()] = get[i]?.leagueValue ?? null })
+  return {
+    kind: 'ok',
+    fairnessScore: null,
+    fairnessLabel: grade.label,
+    confidenceLabel: `Graded on league value · ${grade.basis}`,
+    degraded: false,
+    giveGrade: grade.letter,
+    getGrade: grade.partnerLetter,
+    giveTotal: grade.giveValue,
+    getTotal: grade.getValue,
+    values,
+    dropped: [],
+  }
 }
 
 /** One asset as the card draws it, whichever shape it arrived in. */
@@ -806,7 +825,6 @@ export function PendingTradeCard(props: {
         avatarUrl: side.avatarUrl,
         viewerSide: side.isViewer,
         rosterId: side.rosterId,
-        frozenGrade: side.grade,
         gradeReason: side.reason,
       }))
     : commissionerView
@@ -818,8 +836,12 @@ export function PendingTradeCard(props: {
 
   const ok = verdict?.kind === 'ok' ? verdict : null
   const values = ok ? ok.values : null
-  const gradeFor = (side: typeof you) => (ok ? (side.viewerSide ? ok.giveGrade : ok.getGrade) : null)
-  const totalFor = (side: typeof you) => (ok ? (side.viewerSide ? ok.giveTotal : ok.getTotal) : null)
+  /*
+   * `gradedSide` is the side the grade was taken from: the viewer's when they are in the deal, the
+   * proposer's (listed first) when a commissioner is looking at someone else's.
+   */
+  const gradeFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveGrade : ok.getGrade) : null)
+  const totalFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveTotal : ok.getTotal) : null)
 
   const headline = commissionerView
     ? `${t.proposerName ?? 'A manager'} has proposed a trade`
@@ -862,6 +884,7 @@ export function PendingTradeCard(props: {
           const frozen = rosterId
             ? t.decisionReceipt?.participantDecisions.find((participant) => participant.rosterId === rosterId) ?? null
             : t.decisionReceipt?.participantDecisions[index] ?? null
+          const gradedSide = t.leagueGradeSide === 'proposer' && rosterId ? index === 0 : side.viewerSide
           return (
           <ManagerBlock
             key={side.name}
@@ -869,8 +892,13 @@ export function PendingTradeCard(props: {
             isYou={side.isYou}
             assets={side.assets}
             values={values}
-            total={frozen?.valueGiven ?? totalFor(side)}
-            grade={(('frozenGrade' in side ? side.frozenGrade : null) as GradeLetter | null | undefined) ?? (frozen?.grade as GradeLetter | null | undefined) ?? gradeFor(side)}
+            total={totalFor(gradedSide)}
+            /*
+             * THE grade only. A proposal receipt's letter is frozen evidence from the moment the
+             * offer was made, on the receipt's own arithmetic; it is shown in the receipt below,
+             * labelled "at proposal", and never stands in for the grade on the card.
+             */
+            grade={gradeFor(gradedSide)}
             sport={props.sport}
             avatarUrl={side.avatarUrl}
             gradeReason={('gradeReason' in side ? side.gradeReason : null) ?? frozen?.reason ?? null}
@@ -906,7 +934,7 @@ export function PendingTradeCard(props: {
           <div className="mb-2 space-y-1.5">
             {t.decisionReceipt.participantDecisions.map((participant, index) => (
               <p key={participant.rosterId} className="text-[10.5px] leading-snug text-white/55">
-                <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade}` : ''}:</strong>{' '}{participant.reason}
+                <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade} at proposal` : ''}:</strong>{' '}{participant.reason}
               </p>
             ))}
           </div>
@@ -1019,9 +1047,6 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [providerUrl, setProviderUrl] = useState<string | null>(null)
   const [pendingScan, setPendingScan] = useState<PanelResponse['pending'] | null>(null)
   const [pendingOffers, setPendingOffers] = useState<BuilderOffer[]>([])
-  const [verdicts, setVerdicts] = useState<Record<string, PendingVerdict>>({})
-  /* Which trades have been sent to the analyzer, so StrictMode's double effect does not double the requests. */
-  const requested = useRef<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [ledger, setLedger] = useState<LedgerState>({ kind: 'loading' })
@@ -1240,140 +1265,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     return m
   }, [pendingOffers])
 
-  /*
-   * The AllFantasy read on every pending trade the viewer can see, from the
-   * analyzer the Trade Center already posts to. Capped so a league with a
-   * pile of open offers does not turn one tab into a request storm (the
-   * route rate-limits at 20/min); the rest keep the offer without the read.
-   *
-   * ⚠ NO NEW API ROUTE. Same `/api/trade-value/analyze`, same input shape.
-   */
-  const pendingForRead = useMemo(
-    () => activeTrades.filter((t) => t.status !== 'accepted' && t.status !== 'scheduled').slice(0, 6),
-    [activeTrades],
-  )
-
-  useEffect(() => {
-    for (const t of pendingForRead) {
-      if (requested.current.has(t.id)) continue
-      requested.current.add(t.id)
-
-      const offer = offerById.get(t.id) ?? null
-      // Provider offers already passed through the canonical Decision OS on the
-      // server. Reuse that immutable read instead of calling the legacy analyzer
-      // and producing a second, potentially contradictory verdict.
-      if (offer?.evaluation) {
-        const evaluation = offer.evaluation
-        const degraded = evaluation.coverageStatus !== 'complete'
-        const valueGiven = evaluation.valueGiven
-        const valueReceived = evaluation.valueReceived
-        const hasSignal = !degraded && valueGiven != null && valueReceived != null
-        const viewerDiff = hasSignal && valueReceived !== 0
-          ? ((valueReceived - valueGiven) / Math.abs(valueReceived)) * 100
-          : null
-        const partnerDiff = hasSignal && valueGiven !== 0
-          ? ((valueGiven - valueReceived) / Math.abs(valueGiven)) * 100
-          : null
-        setVerdicts((prev) => ({
-          ...prev,
-          [t.id]: {
-            kind: 'ok',
-            fairnessScore: evaluation.fairnessScore,
-            fairnessLabel: evaluation.recommendation,
-            confidenceLabel: `${evaluation.confidenceScore}% confidence`,
-            degraded,
-            giveGrade: projectedLetterFor({ percentDiff: viewerDiff, hasSignal }),
-            getGrade: projectedLetterFor({ percentDiff: partnerDiff, hasSignal }),
-            giveTotal: valueGiven,
-            getTotal: valueReceived,
-            values: {},
-            dropped: [],
-          },
-        }))
-        continue
-      }
-      if (t.decisionRecommendation) {
-        const giveTotal = t.proposalValueGiven ?? null
-        const getTotal = t.proposalValueReceived ?? null
-        const hasSignal = giveTotal != null && getTotal != null && (t.decisionCoveragePct ?? 0) === 100
-        const percentDiff = hasSignal && getTotal !== 0 ? ((getTotal - giveTotal) / Math.abs(getTotal)) * 100 : null
-        const inversePercentDiff = hasSignal && giveTotal !== 0 ? ((giveTotal - getTotal) / Math.abs(giveTotal)) * 100 : null
-        setVerdicts((prev) => ({
-          ...prev,
-          [t.id]: {
-            kind: 'ok',
-            fairnessScore: null,
-            fairnessLabel: t.decisionRecommendation ?? 'Decision OS review',
-            confidenceLabel: typeof t.decisionCoveragePct === 'number' ? `${t.decisionCoveragePct}% asset coverage` : null,
-            degraded: !hasSignal,
-            giveGrade: projectedLetterFor({ percentDiff, hasSignal }),
-            getGrade: projectedLetterFor({ percentDiff: inversePercentDiff, hasSignal }),
-            giveTotal,
-            getTotal,
-            values: {},
-            dropped: [],
-          },
-        }))
-        continue
-      }
-      const give = offer ? fromBuilderAssets(offer.give) : toAnalyzeAssets(t.sent)
-      const get = offer ? fromBuilderAssets(offer.get) : toAnalyzeAssets(t.received)
-      const dropped = [...give.dropped, ...get.dropped]
-      if (give.assets.length === 0 && get.assets.length === 0) {
-        setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'skipped', why: 'Nothing in this offer could be priced.' } }))
-        continue
-      }
-      setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'loading' } }))
-
-      void (async () => {
-        try {
-          const r = await fetch('/api/trade-value/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sportFilter: 'ALL',
-              leagueId: league.id,
-              strategy: 'neutral',
-              teamContext: 'my_team',
-              sideGive: give.assets,
-              sideGet: get.assets,
-            }),
-          })
-          const j = (await r.json().catch(() => ({}))) as AnalyzeResponse
-          if (!r.ok) {
-            setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'failed' } }))
-            return
-          }
-          const values: Record<string, number | null> = {}
-          for (const l of [...(j.players?.give ?? []), ...(j.players?.get ?? [])]) {
-            values[l.name.toLowerCase()] = typeof l.marketValue === 'number' ? l.marketValue : null
-          }
-          const allUnpriced = Object.values(values).length > 0 && Object.values(values).every((v) => v == null)
-          const degraded = Boolean(j.degraded) || allUnpriced
-          const hasSignal = !degraded
-          const pd = typeof j.percentDiff === 'number' ? j.percentDiff : null
-          setVerdicts((prev) => ({
-            ...prev,
-            [t.id]: {
-              kind: 'ok',
-              fairnessScore: typeof j.fairnessScore === 'number' ? j.fairnessScore : null,
-              fairnessLabel: j.labels?.fairnessLabel ?? 'No verdict',
-              confidenceLabel: j.labels?.confidenceLabel ?? null,
-              degraded,
-              giveGrade: projectedLetterFor({ percentDiff: pd, hasSignal }),
-              getGrade: projectedLetterFor({ percentDiff: pd != null ? -pd : null, hasSignal }),
-              giveTotal: typeof j.giveTotal === 'number' ? j.giveTotal : null,
-              getTotal: typeof j.getTotal === 'number' ? j.getTotal : null,
-              values,
-              dropped,
-            },
-          }))
-        } catch {
-          setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'failed' } }))
-        }
-      })()
-    }
-  }, [pendingForRead, offerById, league.id])
+  /* THE grade per open offer, carried on the row by the trades panel — nothing is fetched here. */
+  const verdictFor = useCallback((t: LeagueTradeHistoryItem): PendingVerdict | undefined => {
+    const offer = offerById.get(t.id) ?? null
+    const grade = t.leagueGrade ?? offer?.leagueGrade ?? null
+    const giveNames = offer ? offer.give.map((a) => a.name) : t.sent.map((a) => a.label)
+    const getNames = offer ? offer.get.map((a) => a.name) : t.received.map((a) => a.label)
+    return pendingVerdictFromGrade(grade, giveNames, getNames)
+  }, [offerById])
 
 
   const completedRows = useMemo<LogRow[]>(() => {
@@ -1560,7 +1459,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 key={t.id}
                 trade={t}
                 offer={offerById.get(t.id) ?? null}
-                verdict={verdicts[t.id]}
+                verdict={verdictFor(t)}
                 sport={sport}
                 tradeCenterHref={tradeCenterHref}
                 providerUrl={providerUrl}
@@ -1702,7 +1601,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     key={t.id}
                     trade={t}
                     offer={offerById.get(t.id) ?? null}
-                    verdict={verdicts[t.id]}
+                    verdict={verdictFor(t)}
                     sport={sport}
                     tradeCenterHref={tradeCenterHref}
                     providerUrl={providerUrl}

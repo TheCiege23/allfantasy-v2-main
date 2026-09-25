@@ -63,8 +63,13 @@ const MUST_WIRE: ReadonlyArray<{ file: string; why: string }> = [
     why: 'assembles the context a proposed trade is graded against',
   },
   {
-    file: 'lib/trade-value-console/runTradeConsoleAnalysis.ts',
-    why: 'the trade value console',
+    /*
+     * The trade value console's pricer and chart, moved out of runTradeConsoleAnalysis.ts on
+     * 2026-09-24 so the one trade grade prices every surface with them — see
+     * __tests__/trade-value/one-grade-surfaces.test.ts for the console still calling it.
+     */
+    file: 'lib/trade-value-console/leagueTradePricing.ts',
+    why: 'the trade value console and every surface sharing its grade',
   },
   {
     file: 'lib/season-strategy.ts',

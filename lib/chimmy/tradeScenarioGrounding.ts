@@ -8,6 +8,9 @@ import { extractPickMentions, pickLabel, type PickMention } from './tradePickMen
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import {
   allRosteredIds,
   findRosteredByName,
@@ -27,9 +30,14 @@ import type {
  *
  * Chimmy brief item 8 (scenario comparisons). The engines existed; nothing a chat question could
  * reach produced a before/after. This resolves a described trade against the league's real
- * rosters and runs it through `evaluateCanonicalTrade` — the same evaluator the Trade Center uses —
- * so the answer carries the value on each side and, when it can be computed honestly, the
- * starting lineup before and after.
+ * rosters: the VALUE and the GRADE come from the one trade grader (`lib/decision-os/trade/leagueTradeGrader.ts`)
+ * — the same letter the Trade Center, the pending-offer cards and /core Trades give this deal — and
+ * `evaluateCanonicalTrade` supplies the starting lineup before and after, when it can be computed
+ * honestly.
+ *
+ * 🛑 THE GRADE USED TO COME FROM THE CANONICAL EVALUATOR, and this header claimed that was "the same
+ * evaluator the Trade Center uses". By 2026-09-24 it was not: the canonical grader gives ONE fairness
+ * letter for both teams, so Chimmy called a 1.5x deal a C while the Trade Center called it an A.
  *
  * 🛑 THE LEAGUE ID MUST BE THE MEMBERSHIP-PROVEN ONE. Every roster in the league is read here, so a
  * caller-supplied id would be a full read of someone else's league. The route passes
@@ -61,12 +69,16 @@ export interface TradeScenarioDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
   loadPlayerNames: (sport: string, ids: string[]) => Promise<Map<string, { name: string | null; position: string | null }>>
   evaluate: (args: EvaluateCanonicalTradeArgs, deps: { resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null> }) => Promise<CanonicalTradeEvaluation>
+  /** THE grade for the deal, from the viewer's side. */
+  grade: (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeGradeView>
 }
 
 const defaultDeps: TradeScenarioDeps = {
   resolveWorld: resolveCanonicalWorld,
   loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
   evaluate: evaluateCanonicalTrade,
+  grade: async ({ leagueId, userId, give, get }) =>
+    gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), { give, get, viewerSide: true }),
 }
 
 export const PLAYOFF_ODDS_UNAVAILABLE =
@@ -264,6 +276,23 @@ export async function buildTradeScenario(
     ...chosen.getPicks.map((p) => toPickAsset(p, chosen.partnerRosterId, viewerRoster.rosterId)),
   ]
 
+  /* Players by name and picks by season/round — what the one grader prices (see `tradeGradeInputs`). */
+  const gradeSide = (players: Located[], picks: PickMention[]): GradeInputs => ({
+    assets: [
+      ...players.map((p) => ({ kind: 'player' as const, name: p.name })),
+      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round })),
+    ],
+    unpriceable: [],
+  })
+  const gradePromise = deps
+    .grade({
+      leagueId: args.leagueId,
+      userId: args.userId,
+      give: gradeSide(chosen.give, chosen.givePicks),
+      get: gradeSide(chosen.get, chosen.getPicks),
+    })
+    .catch((): TradeGradeView => ({ graded: false, reason: 'The trade could not be graded just now.', basis: null }))
+
   let evaluation: CanonicalTradeEvaluation
   try {
     evaluation = await deps.evaluate(
@@ -288,6 +317,7 @@ export async function buildTradeScenario(
     }
   }
 
+  const grade = await gradePromise
   const partnerTeamId = world.rosters.find((r) => r.rosterId === chosen.partnerRosterId)?.teamId ?? null
   const partnerTeam = world.teams.find((t) => t.teamId === partnerTeamId) ?? null
 
@@ -319,14 +349,29 @@ export async function buildTradeScenario(
     get: [...chosen.get.map(strip), ...chosen.getPicks.map((p) => stripPick(p, chosen.partnerRosterId))],
     partnerTeamName: partnerTeam?.displayName || partnerTeam?.ownerName || 'the other team',
     ...(tradedPicks > 0 ? { picks: tradedPicks } : {}),
-    value: {
-      given: evaluation.valueGiven,
-      received: evaluation.valueReceived,
-      delta: evaluation.valueDelta,
-      grade: evaluation.grade,
-      coveragePct: evaluation.coveragePct,
-      coverageStatus: evaluation.coverageStatus,
-    },
+    value: grade.graded
+      ? {
+          given: grade.giveValue,
+          received: grade.getValue,
+          delta: grade.getValue - grade.giveValue,
+          grade: grade.letter,
+          coveragePct: 100,
+          coverageStatus: 'complete' as const,
+          label: grade.label,
+          basis: grade.basis,
+          withheld: null,
+        }
+      : {
+          given: null,
+          received: null,
+          delta: null,
+          grade: null,
+          coveragePct: 0,
+          coverageStatus: 'blocked' as const,
+          label: null,
+          basis: grade.basis,
+          withheld: grade.reason,
+        },
     lineup,
     lineupWeek: impact?.week ?? null,
     lineupUnavailable: lineup ? null : impact?.blockedReason ?? 'The starting lineup could not be priced for this league.',
@@ -408,11 +453,15 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
   const lines = [
     "TRADE SCENARIO (computed from this league's real rosters by the AllFantasy trade evaluator — repeat these numbers, do not estimate your own):",
     `- You give: ${list(s.give)}. You get: ${list(s.get)} from ${s.partnerTeamName}.`,
-    `- Value (AllFantasy value scale): you send ${fmt(s.value.given, 0)}, you receive ${fmt(s.value.received, 0)}` +
-      (s.value.delta != null ? ` (${signed(s.value.delta, 0)})` : '') +
-      (s.value.grade ? `; grade ${s.value.grade}` : '') +
-      (s.value.coverageStatus !== 'complete' ? `; value coverage ${s.value.coverageStatus} (${Math.round(s.value.coveragePct)}%)` : '') +
-      '.',
+    /*
+     * THE grade — the letter the Trade Center and the offer cards give this same deal. Said so in the
+     * line, so the model does not present it as a second opinion.
+     */
+    s.value.grade
+      ? `- League value (${s.value.basis ?? "this league's chart"}): you send ${fmt(s.value.given, 0)}, you receive ${fmt(s.value.received, 0)}` +
+        (s.value.delta != null ? ` (${signed(s.value.delta, 0)})` : '') +
+        `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}. This is the same grade the Trade Center gives this trade.`
+      : `- Grade: NOT GRADED — ${(s.value.withheld ?? "the trade could not be priced on this league's chart").replace(/\.$/, '')}. Do not grade it yourself.`,
     /*
      * The week and the rules are named in the line itself: this is ONE week under the league's own
      * scoring, and a model left to guess would call it a season rate.
