@@ -298,6 +298,14 @@ function AdminOverviewDeck({
             <span>League recovery (writes to real leagues)</span>
             <span className="text-rose-100/65">Open</span>
           </a>
+          {/* Rose for the same reason: it moves and deletes stored chat photos. */}
+          <a
+            href="/admin/chat-photo-migration"
+            className="flex items-center justify-between rounded-2xl border border-rose-300/15 bg-rose-300/[0.08] px-4 py-3 text-sm font-bold text-rose-100 transition hover:border-rose-300/35"
+          >
+            <span>Chat photo migration (public → private storage)</span>
+            <span className="text-rose-100/65">Open</span>
+          </a>
           <a
             href="/api/admin/status"
             className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/78 transition hover:border-white/25"
