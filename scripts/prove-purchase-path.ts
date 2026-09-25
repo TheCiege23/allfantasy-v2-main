@@ -15,6 +15,8 @@
  *   4. The first invoice and a RENEWAL a month later (a Stripe test clock) keep the plan active and
  *      move its period forward — the renewal bug fixed in #1219.
  *   5. Cancelling locks the depth again.
+ *   6. A PARTIAL refund changes nothing; a FULL refund, or a chargeback (Stripe's disputing test
+ *      card), ends access AND cancels the subscription in Stripe — owner's rule, 2026-09-24.
  *
  * Every Stripe object handed to the webhook is the REAL object from the sandbox, re-read at API
  * version 2025-05-28.basil — the version the live endpoint is on, whose field moves #1219 fixed.
@@ -389,6 +391,88 @@ async function main() {
       openB.player && openB.trade && openB.edge && canceledB.status === 200 && !lockedB.player && !lockedB.trade && !lockedB.edge,
       `bought ${JSON.stringify(openB)}, cancelled ${JSON.stringify(lockedB)}`,
     )
+
+    // ── 7. Refunds and chargebacks: a payment taken back ends the plan AND the billing ──────────
+    const buyer = async (tag: string, paymentMethod: string) => {
+      const buyerEmail = `paywall-proof-${tag}+${stamp}@allfantasy.test`
+      const u = await prisma.appUser.create({ data: { email: buyerEmail, username: `paywall_proof_${tag}_${stamp}` }, select: { id: true } })
+      userIds.push(u.id)
+      const buyerClock = await stripe.testHelpers.testClocks.create({ frozen_time: Math.floor(Date.now() / 1000), name: `paywall proof ${tag} ${stamp}` })
+      clockIds.push(buyerClock.id)
+      const cus = await stripe.customers.create({
+        email: buyerEmail,
+        test_clock: buyerClock.id,
+        payment_method: paymentMethod,
+        invoice_settings: { default_payment_method: paymentMethod },
+        metadata: { af_paywall_proof: '1' },
+      })
+      const co = await buildStripeCheckoutSessionForSku({ sku: 'af_pro_monthly', userId: u.id, userEmail: buyerEmail, stripeCustomerId: cus.id, env })
+      const ses = co ? await stripe.checkout.sessions.retrieve(co.sessionId, {}, basil) : null
+      if (!ses) throw new Error(`no checkout session for buyer ${tag}`)
+      const bought = await stripe.subscriptions.create({ customer: cus.id, items: [{ price: env.STRIPE_PRICE_AF_PRO_MONTHLY }], metadata: ses.metadata ?? {} })
+      await deliver('checkout.session.completed', {
+        ...ses,
+        status: 'complete',
+        payment_status: 'paid',
+        subscription: bought.id,
+        customer: cus.id,
+        customer_details: { email: buyerEmail },
+      })
+      // The first invoice's payment — through invoice payments, as the webhook itself has to on basil.
+      const invoiceId = String(bought.latest_invoice)
+      const pays = await stripe.invoicePayments.list({ invoice: invoiceId, limit: 1 })
+      const piRef = pays.data[0]?.payment?.payment_intent
+      const paymentIntentId = typeof piRef === 'string' ? piRef : piRef?.id ?? null
+      if (!paymentIntentId) throw new Error(`no payment for buyer ${tag}`)
+      return { userId: u.id, email: buyerEmail, subscriptionId: bought.id, paymentIntentId }
+    }
+    const open = (d: { player: boolean; trade: boolean; edge: boolean }) => d.player && d.trade && d.edge
+    const shut = (d: { player: boolean; trade: boolean; edge: boolean }) => !d.player && !d.trade && !d.edge
+
+    const c = await buyer('c', 'pm_card_visa')
+    const pi = await stripe.paymentIntents.retrieve(c.paymentIntentId)
+    const chargeId = typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id
+    if (!chargeId) throw new Error('no charge for the refund buyer')
+    await stripe.refunds.create({ payment_intent: c.paymentIntentId, amount: 100 })
+    const partial = await deliver('charge.refunded', await stripe.charges.retrieve(chargeId, {}, basil))
+    const afterPartial = await depths(c.userId, c.email, afterLaunch)
+    const billingAfterPartial = (await stripe.subscriptions.retrieve(c.subscriptionId)).status
+    check(
+      'a partial refund changes nothing: the plan and the billing stay',
+      partial.status === 200 && partial.body.purchaseType === 'refund_partial' && open(afterPartial) && billingAfterPartial === 'active',
+      `recorded ${String(partial.body.purchaseType)}; depths ${JSON.stringify(afterPartial)}; billing ${billingAfterPartial}`,
+    )
+    await stripe.refunds.create({ payment_intent: c.paymentIntentId })
+    const full = await deliver('charge.refunded', await stripe.charges.retrieve(chargeId, {}, basil))
+    const afterFull = await depths(c.userId, c.email, afterLaunch)
+    const billingAfterFull = (await stripe.subscriptions.retrieve(c.subscriptionId)).status
+    check(
+      'a full refund ends access AND stops billing',
+      full.status === 200 && full.body.purchaseType === 'refund_revoked' && shut(afterFull) && billingAfterFull === 'canceled',
+      `recorded ${String(full.body.purchaseType)}; depths ${JSON.stringify(afterFull)}; billing ${billingAfterFull}`,
+    )
+    // Stripe then sends the cancellation the webhook just made; it must not reopen anything.
+    const followUp = await deliver('customer.subscription.deleted', await stripe.subscriptions.retrieve(c.subscriptionId, {}, basil))
+    const afterFollowUp = await depths(c.userId, c.email, afterLaunch)
+    check('and the cancellation Stripe sends next keeps it locked', followUp.status === 200 && shut(afterFollowUp), JSON.stringify(afterFollowUp))
+
+    const d = await buyer('d', 'pm_card_createDispute')
+    let dispute: Stripe.Dispute | null = null
+    for (let i = 0; i < 20 && !dispute; i++) {
+      dispute = (await stripe.disputes.list({ payment_intent: d.paymentIntentId, limit: 1 })).data[0] ?? null
+      if (!dispute) await new Promise((r) => setTimeout(r, 3000))
+    }
+    check('the sandbox raises a chargeback on its disputing test card', Boolean(dispute), dispute ? dispute.id : 'no dispute after 60s')
+    if (dispute) {
+      const disputed = await deliver('charge.dispute.created', await stripe.disputes.retrieve(dispute.id, {}, basil))
+      const afterDispute = await depths(d.userId, d.email, afterLaunch)
+      const billingAfterDispute = (await stripe.subscriptions.retrieve(d.subscriptionId)).status
+      check(
+        'a chargeback ends access AND stops billing',
+        disputed.status === 200 && disputed.body.purchaseType === 'dispute_revoked' && shut(afterDispute) && billingAfterDispute === 'canceled',
+        `recorded ${String(disputed.body.purchaseType)}; depths ${JSON.stringify(afterDispute)}; billing ${billingAfterDispute}`,
+      )
+    }
 
     assertNoOutbound()
     check('no Meta, email, SMS or AI token was set at any point', true)

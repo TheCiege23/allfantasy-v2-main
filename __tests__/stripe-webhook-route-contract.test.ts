@@ -24,6 +24,14 @@ const userSubscriptionCreateMock = vi.hoisted(() => vi.fn())
 const userProfileUpsertMock = vi.hoisted(() => vi.fn())
 const adminSubscriptionGrantFindManyMock = vi.hoisted(() => vi.fn())
 
+// Refunds and chargebacks: the reversal itself is unit-tested (payment-reversal.test.ts);
+// here only whether the route calls it, with what, and what it records.
+const reverseSubscriptionForPaymentMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/subscription/paymentReversal", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/subscription/paymentReversal")>()),
+  reverseSubscriptionForPayment: reverseSubscriptionForPaymentMock,
+}))
+
 // Token purchase mocks — used by persistTokenPurchaseFromCheckout path
 const grantTokensFromPackagePurchaseMock = vi.hoisted(() => vi.fn())
 
@@ -530,5 +538,81 @@ describe("Stripe webhook route contracts", () => {
         }),
       })
     )
+  }, 60000)
+})
+
+
+/*
+ * A payment taken back ends the plan and stops billing (owner's rule, 2026-09-24). A partial refund
+ * is a credit and must not touch the subscription.
+ */
+describe("Stripe webhook route — refunds and chargebacks", () => {
+  const post = async () => {
+    const { POST } = await import("@/app/api/stripe/webhook/route")
+    const res = await POST(
+      createMockNextRequest("http://localhost/api/stripe/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "sig_test" },
+        body: "{}",
+      }) as any
+    )
+    return { status: res.status, body: await res.json() }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    findUniqueMock.mockResolvedValue(null)
+    createMock.mockResolvedValue({ id: "row-1" })
+    updateMock.mockResolvedValue({ id: "row-1" })
+    reverseSubscriptionForPaymentMock.mockResolvedValue({ outcome: "revoked", subscriptionId: "sub_1" })
+  })
+
+  it("a full refund ends the plan it paid for", async () => {
+    constructEventMock.mockReturnValue({
+      id: "evt_refund_full",
+      type: "charge.refunded",
+      data: { object: { id: "ch_1", amount: 999, amount_refunded: 999, refunded: true, payment_intent: "pi_1", customer: "cus_1" } },
+    })
+    const { status, body } = await post()
+    expect(status).toBe(200)
+    expect(reverseSubscriptionForPaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "refund", paymentIntentId: "pi_1", customerId: "cus_1", sourceId: "ch_1" })
+    )
+    expect(body).toMatchObject({ eventType: "charge.refunded", purchaseType: "refund_revoked" })
+  }, 60000)
+
+  it("🛑 a partial refund changes nothing", async () => {
+    constructEventMock.mockReturnValue({
+      id: "evt_refund_partial",
+      type: "charge.refunded",
+      data: { object: { id: "ch_1", amount: 999, amount_refunded: 100, refunded: false, payment_intent: "pi_1", customer: "cus_1" } },
+    })
+    const { body } = await post()
+    expect(reverseSubscriptionForPaymentMock).not.toHaveBeenCalled()
+    expect(body).toMatchObject({ purchaseType: "refund_partial" })
+  }, 60000)
+
+  it("a chargeback ends the plan it paid for", async () => {
+    constructEventMock.mockReturnValue({
+      id: "evt_dispute",
+      type: "charge.dispute.created",
+      data: { object: { id: "dp_1", charge: "ch_1", payment_intent: "pi_1" } },
+    })
+    const { body } = await post()
+    expect(reverseSubscriptionForPaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "dispute", paymentIntentId: "pi_1", sourceId: "dp_1" })
+    )
+    expect(body).toMatchObject({ purchaseType: "dispute_revoked" })
+  }, 60000)
+
+  it("a refund of a one-time purchase (no subscription) is recorded as such", async () => {
+    reverseSubscriptionForPaymentMock.mockResolvedValue({ outcome: "no_subscription", subscriptionId: null })
+    constructEventMock.mockReturnValue({
+      id: "evt_refund_tokens",
+      type: "charge.refunded",
+      data: { object: { id: "ch_2", amount: 499, amount_refunded: 499, refunded: true, payment_intent: "pi_2", customer: "cus_1" } },
+    })
+    const { body } = await post()
+    expect(body).toMatchObject({ purchaseType: "refund_no_subscription" })
   }, 60000)
 })
