@@ -1,11 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, Coins, Crown, Shield, Telescope } from 'lucide-react'
-import {
-  trackTokenPurchaseClicked,
-  trackUpgradeEntryClicked,
-} from '@/lib/monetization-analytics'
+import { CheckCircle2, Crown, Shield, Telescope } from 'lucide-react'
+import { trackUpgradeEntryClicked } from '@/lib/monetization-analytics'
 
 const AF_WAR_ROOM_FEATURES = [
   'Draft build strategy',
@@ -60,26 +57,11 @@ export function AFWarRoomPlanSpotlight({ className = '' }: { className?: string 
             <Telescope className="h-3.5 w-3.5" />
             Upgrade to AF Legacy
           </Link>
-          <Link
-            href="/tokens?ruleCode=ai_war_room_multi_step_planning"
-            onClick={() =>
-              trackTokenPurchaseClicked({
-                ruleCode: 'ai_war_room_multi_step_planning',
-                surface: 'af_war_room_spotlight',
-                pagePath: window.location.pathname,
-              })
-            }
-            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/35 bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-500/25"
-            data-testid="af-war-room-token-link"
-          >
-            <Coins className="h-3.5 w-3.5" />
-            Buy tokens
-          </Link>
         </div>
       </div>
 
       <p className="mt-1 text-xs text-white/65">
-        AF Legacy is the premium strategy and drafting tier. Use subscription access or tokens where policy allows.
+        AF Legacy is the premium strategy and drafting tier. Its tools come with the plan; tokens don&apos;t buy them.
       </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">

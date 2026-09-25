@@ -149,10 +149,8 @@ test.describe('@monetization af war room monetization click audit', () => {
 
     await expect(page.getByTestId('af-war-room-spotlight')).toBeVisible()
     await expect(page.getByTestId('af-war-room-upgrade-link')).toHaveAttribute('href', /\/upgrade\?plan=war_room/)
-    await expect(page.getByTestId('af-war-room-token-link')).toHaveAttribute(
-      'href',
-      /\/tokens\?ruleCode=ai_war_room_multi_step_planning/
-    )
+    // No "Buy tokens" here: no AF Legacy tool accepts tokens (lib/tokens/tokenPurchasable.ts).
+    await expect(page.getByTestId('af-war-room-token-link')).toHaveCount(0)
 
     await expect(page.getByTestId('af-war-room-plan-diff-af-legacy')).toBeVisible()
     await expect(page.getByTestId('af-war-room-plan-diff-af-pro')).toBeVisible()
