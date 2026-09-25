@@ -111,8 +111,10 @@ describe('🛑 an unexpected failure still answers JSON', () => {
   })
 
   it('logs the failure without the request URL or a credential in it', async () => {
+    // A reserved example host, not a real vendor URL: a monitored provider host in a literal trips
+    // the required DB-First boundary check. The shape that matters — a token in the query string — is kept.
     h.persist.mockRejectedValue(
-      new Error('fetch failed https://rest.datafeeds.rolling-insights.com/api/v1/live?RSC_token=SECRET123 (500)'),
+      new Error('fetch failed https://provider.example.test/api/v1/live?token=SECRET123 (500)'),
     )
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -121,7 +123,7 @@ describe('🛑 an unexpected failure still answers JSON', () => {
     const logged = errSpy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
     expect(logged).toContain('fetch failed')
     expect(logged).not.toContain('SECRET123')
-    expect(logged).not.toContain('rolling-insights.com')
+    expect(logged).not.toContain('provider.example.test')
     errSpy.mockRestore()
   })
 
