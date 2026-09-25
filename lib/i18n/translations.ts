@@ -2868,7 +2868,7 @@ export const translations: Record<string, Record<string, string>> = {
     "tokens.v4.colCost": "Cost",
     "tokens.v4.colPlan": "Requires",
     "tokens.v4.freeTitle": "What never costs tokens",
-    "tokens.v4.freeBody": "Two Chimmy questions a day, and anything computed from your league data without a written judgement: scores, standings, rosters, matchups, deadlines and lineup checks. Tokens are only for actions that produce written analysis.",
+    "tokens.v4.freeBody": "Anything computed from your league data without a written judgement: scores, standings, rosters, matchups, deadlines and lineup checks. Tokens are only for actions that produce written analysis. And Chimmy tops you up: if your balance is under two answers' worth, it goes back up to two once a day.",
     "tokens.v4.recentTitle": "Recent spend",
     "tokens.v4.recentEmpty": "You have not spent any tokens yet.",
     "tokens.v4.packsTitle": "Top up",

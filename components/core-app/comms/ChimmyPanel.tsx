@@ -32,6 +32,7 @@ import { describeOutOfAnswers, type OutOfAnswers } from '@/lib/chimmy/outOfAnswe
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import '@/components/core-app/af-comms.css'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
@@ -1314,7 +1315,10 @@ export function ChimmyPanel({
         {planStatus
           ? describeAllowanceNote(planStatus, tokenCost)
           : tokenCost != null
-            ? `Chimmy answers may cost ${tokenCost} tokens. Free lookups and typing cost nothing.`
+            ? // The daily floor, said up front: a balance under two answers' worth is topped back
+              // up to two once a UTC day (lib/tokens/dailyFreeTokens.ts). A top-up TO a floor, not a
+              // gift on top — so "two free questions" would be untrue for anyone holding tokens.
+              `Chimmy answers may cost ${tokenCost} tokens. Under ${FREE_CHIMMY_QUESTIONS_PER_DAY} answers' worth, your balance tops back up to ${FREE_CHIMMY_QUESTIONS_PER_DAY} once a day. Free lookups and typing cost nothing.`
             : 'Chimmy answers are included in your plan.'}
       </p>
     </div>
