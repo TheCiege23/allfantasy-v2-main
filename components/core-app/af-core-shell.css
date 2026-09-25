@@ -1937,7 +1937,17 @@
  * localStorage value — that population is strictly smaller than the one the old
  * default made flash, and moving the flash is the honest description of it.
  */
-@media (min-width: 721px) {
+/*
+ * ⚠ 1281px, NOT 721px (2026-09-25). Below 1081 the nav column is hidden, so an
+ * expanded-by-default rail left a tablet with a 300px league list, NO nav and no
+ * tab bar — Trades, Waivers and Player Finder were unreachable from 721 to 1080
+ * (every iPad, portrait and landscape). The tablet default is now the collapsed
+ * crest strip plus the nav; see the tablet block at the end of this file. And
+ * 1081–1280 laptops (a 1280 MacBook, a 1366 ultrabook at 110% zoom) got 300 + 232px of chrome
+ * and a 548–748px page, so they default to the crest strip too; opening the
+ * rail is one click and is remembered.
+ */
+@media (min-width: 1281px) {
   .af-core.af-shell:not([data-rail-open='false']) {
     grid-template-columns: 300px 232px minmax(0, 1fr);
   }
@@ -2022,11 +2032,9 @@
  * Appended as its own top-level block: equal specificity to the rule above, so
  * source order decides, and nesting it would silently narrow everything below.
  */
-@media (min-width: 721px) and (max-width: 1080px) {
-  .af-core.af-shell:not([data-rail-open='false']) {
-    grid-template-columns: 300px minmax(0, 1fr);
-  }
-}
+/* (The absent-attribute tablet rule that stood here is retired: an absent
+   preference is no longer expanded below 1081px — see the tablet block at the
+   end of this file. The explicit 'true' case keeps its own rule above.) */
 
 /*
  * ── Phone hit targets ───────────────────────────────────────────────────────
@@ -3006,4 +3014,29 @@ html[data-mode='light'] .af-core {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/*
+ * ── Tablet (721–1080px): collapsed rail + the nav column ────────────────────
+ *
+ * 🛑 THIS BAND HAD NO NAVIGATION AT ALL UNTIL 2026-09-25. `.af-nav` is hidden
+ * at ≤1080 and `.af-tabbar` only exists at ≤720, so between the two a tablet
+ * got the league rail and the screen and nothing else — measured at 768, 820,
+ * 1024 and 1080: nav `none`, tab bar `none`. The only way to another screen was
+ * the search box.
+ *
+ * Unless the reader explicitly opened the rail, the rail is the 68px crest strip
+ * and the nav comes back as a slightly narrower column. An explicitly opened
+ * rail keeps the 300px + content layout (league-browsing mode); the rail toggle
+ * moves between the two.
+ *
+ * Its own top-level block at end of file, per this stylesheet's convention.
+ */
+@media (min-width: 721px) and (max-width: 1080px) {
+  .af-core.af-shell:not([data-rail-open='true']) {
+    grid-template-columns: 68px 208px minmax(0, 1fr);
+  }
+  .af-core.af-shell:not([data-rail-open='true']) .af-nav {
+    display: flex;
+  }
 }

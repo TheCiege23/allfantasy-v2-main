@@ -26,6 +26,9 @@
   flex-direction: column;
   gap: 18px;
   max-width: 1180px;
+  /* The narrow-row rules key on THIS box, not the viewport — see the
+     @container block at the end of this file. */
+  container: af-board / inline-size;
 }
 
 .af-core .af-bd-head {
@@ -525,9 +528,15 @@
 
 /* ── two-column split (Week, Standings) ─────────────────────────────────── */
 
+/*
+ * `minmax(0, 1fr)`, never bare `1fr`: a bare track's minimum is its content's
+ * min-content, and the rows' nowrap sub lines ("Get to 8 wins — 8 of your last
+ * 14 — …") are one unbreakable run, so the right column grew past the viewport
+ * and the whole Standings page scrolled sideways at 1440px (2026-09-25).
+ */
 .af-core .af-bd-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 28px;
   align-items: start;
 }
@@ -1039,7 +1048,7 @@
 
 @media (max-width: 900px) {
   .af-core .af-bd-split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
   }
 }
@@ -1251,4 +1260,57 @@
      time makes the one piece of feedback this adds the hardest thing to read. */
   filter: saturate(0.7);
   cursor: progress;
+}
+
+/*
+ * ── Narrow BOARD, wide viewport ──────────────────────────────────────────────
+ *
+ * The two-line row and the one-column split above key on the VIEWPORT (≤760 /
+ * ≤900), but the space a board gets is the viewport MINUS the shell's rail and
+ * nav. On a tablet (768–1080) and a 1100–1280 laptop the board measured 492–804px
+ * while the viewport rules stayed off, so My team's fixed-column rows ran their
+ * "Open in Sleeper" link off the right edge (document 924px wide at 820,
+ * 2026-09-25). The same rules, keyed on the board's own width.
+ */
+@container af-board (max-width: 900px) {
+  .af-core .af-bd-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+
+@container af-board (max-width: 760px) {
+  .af-core .af-bd-row {
+    flex-wrap: wrap;
+    gap: 9px 10px;
+    padding: 12px 4px;
+  }
+  .af-core .af-bd-league,
+  .af-core .af-bd-league--wide {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+  .af-core .af-bd-mid {
+    order: 3;
+    flex-basis: 100%;
+    padding-left: 45px;
+    gap: 12px;
+  }
+  .af-core .af-bd-stat,
+  .af-core .af-bd-stat--narrow {
+    width: auto;
+    flex: none;
+  }
+  .af-core .af-bd-cta {
+    width: auto;
+    order: 4;
+    margin-left: auto;
+  }
+  .af-core .af-bd-side { min-width: 0; flex-basis: 100%; }
+  .af-core .af-bd-sec-head,
+  .af-core .af-bd-card-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
 }

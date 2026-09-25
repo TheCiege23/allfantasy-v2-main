@@ -751,7 +751,11 @@
 .af-rk-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .af-rk-filter-actions { display: flex; gap: 8px; }
 
-.af-rk-tablewrap { overflow: auto; border-radius: 12px; border: 1px solid var(--line); }
+/* `position: relative` makes this the containing block for the table's visually-hidden
+   (absolutely positioned) sort labels. Without it they escape the scroller and the whole
+   page scrolled sideways on a tablet — 1087px on an 820px iPad (2026-09-25). Same trap
+   the Standings table hit. */
+.af-rk-tablewrap { position: relative; overflow: auto; border-radius: 12px; border: 1px solid var(--line); }
 .af-rk-tablewrap--virtual { overscroll-behavior: contain; }
 .af-rk-grid-table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .af-rk-caption { caption-side: top; text-align: left; padding: 10px 12px 4px; font-size: 12px; color: var(--muted); }
