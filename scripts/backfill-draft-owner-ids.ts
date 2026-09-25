@@ -26,6 +26,8 @@ import {
 
 /** The same depth the import walks. */
 const MAX_PREVIOUS_SEASONS = 12
+/** Rows per UPDATE statement. */
+const WRITE_CHUNK = 1000
 
 function arg(name: string): string | null {
   const hit = process.argv.find((a) => a === `--${name}` || a.startsWith(`--${name}=`))
@@ -50,19 +52,27 @@ const deps: DraftOwnerBackfillDeps = {
       where: { leagueId },
       select: { draftId: true, season: true, round: true, pickNumber: true, playerId: true, metadata: true },
     }),
+  /*
+   * ⚠ ONE SET-BASED STATEMENT PER CHUNK, NOT A ROW-BY-ROW TRANSACTION. The first run wrapped ~550
+   * single-row UPDATEs per league in an interactive `$transaction`, whose default timeout is 5 s;
+   * against production under load nearly every league timed out and rolled back ("Transaction not
+   * found"). Each statement below is atomic on its own and the write is add-only, so a re-run after
+   * any interruption simply fills what is still missing.
+   */
   write: async (updates: DraftOwnerUpdate[]) => {
     let written = 0
-    // One transaction per league: a league is either filled or untouched.
-    await prisma.$transaction(async (tx) => {
-      for (const u of updates) {
-        // Merge, never replace, and never overwrite an owner a later sync already wrote.
-        written += await tx.$executeRaw`
-          UPDATE dw_draft_facts
-             SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('ownerSleeperId', ${u.ownerSleeperId}::text)
-           WHERE "draftId" = ${u.draftId}
-             AND (metadata IS NULL OR NOT (metadata ? 'ownerSleeperId'))`
-      }
-    })
+    for (let i = 0; i < updates.length; i += WRITE_CHUNK) {
+      const chunk = updates.slice(i, i + WRITE_CHUNK)
+      const ids = chunk.map((u) => u.draftId)
+      const owners = chunk.map((u) => u.ownerSleeperId)
+      // Merge, never replace, and never overwrite an owner a later sync already wrote.
+      written += await prisma.$executeRaw`
+        UPDATE dw_draft_facts AS d
+           SET metadata = COALESCE(d.metadata, '{}'::jsonb) || jsonb_build_object('ownerSleeperId', u.owner)
+          FROM unnest(${ids}::text[], ${owners}::text[]) AS u(id, owner)
+         WHERE d."draftId" = u.id
+           AND (d.metadata IS NULL OR NOT (d.metadata ? 'ownerSleeperId'))`
+    }
     return written
   },
 }
