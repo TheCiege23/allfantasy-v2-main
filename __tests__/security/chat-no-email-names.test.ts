@@ -11,6 +11,7 @@ const EMAIL = 'someone.private@example.test'
 
 const h = vi.hoisted(() => ({
   memberFindFirst: vi.fn(),
+  memberFindMany: vi.fn(),
   memberUpdateMany: vi.fn(),
   messageFindMany: vi.fn(),
   count: vi.fn(),
@@ -18,12 +19,12 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    platformChatThreadMember: { findFirst: h.memberFindFirst, updateMany: h.memberUpdateMany },
+    platformChatThreadMember: { findFirst: h.memberFindFirst, findMany: h.memberFindMany, updateMany: h.memberUpdateMany },
     platformChatMessage: { findMany: h.messageFindMany, count: h.count },
   },
 }))
 
-import { getPlatformThreadById, getPlatformThreadMessages } from '@/lib/platform/chat-service'
+import { getPlatformThreadById, getPlatformThreadMessages, getThreadMembers } from '@/lib/platform/chat-service'
 import { bracketMessagesToPlatform } from '@/lib/chat-core/league-message-proxy'
 import { bracketMessageToPlatformShape } from '@/lib/chat-core/ChatCoreService'
 
@@ -75,6 +76,21 @@ describe('DMs and huddles', () => {
     const thread = await getPlatformThreadById('me', 't1')
     expect(thread?.title).toBe('Direct message')
     expect(JSON.stringify(thread)).not.toContain(EMAIL)
+    // The list row's avatar people (2026-09-25): named "Manager", selected without email.
+    expect(thread?.context?.members).toEqual([{ id: 'u2', name: 'Manager', avatarUrl: null }])
+    const userSelect = h.memberFindFirst.mock.calls[0][0].include.thread.include.members.select.user.select
+    expect(userSelect).not.toHaveProperty('email')
+    expect(userSelect).toHaveProperty('avatarUrl', true)
+  })
+
+  it('🛑 the huddle members sheet selects no email and returns none', async () => {
+    h.memberFindFirst.mockResolvedValue({ id: 'mem' })
+    h.memberFindMany.mockResolvedValue([
+      { userId: 'u2', user: { id: 'u2', username: 'dana', displayName: null, avatarUrl: null, email: EMAIL } },
+    ])
+    const members = await getThreadMembers('me', 't1')
+    expect(JSON.stringify(members)).not.toContain(EMAIL)
+    expect(h.memberFindMany.mock.calls[0][0].include.user.select).not.toHaveProperty('email')
   })
 })
 

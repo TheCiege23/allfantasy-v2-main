@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Lock, Search } from 'lucide-react'
+import { ThreadListRow, type ThreadRowContext } from './ThreadListRow'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
@@ -52,6 +53,11 @@ export type PlatformThread = {
    * endpoint and the semantics all existed.
    */
   isMuted?: boolean
+  /**
+   * The list row's preview, "You:" flag, time and the other people's avatars. Filtered on the
+   * server so a preview never shows a message the thread would not (see chat-service).
+   */
+  context?: ThreadRowContext | null
 }
 
 type PlatformMessage = {
@@ -123,6 +129,12 @@ export function ThreadPanel({
   const [reactionBusy, setReactionBusy] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
+  /* "5m" has to become "6m" without a reload; a minute is the list's finest unit. */
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
   /** The whole open conversation — the drop target for photos. */
   const panelRef = useRef<HTMLDivElement | null>(null)
   const activeThreadId = useRef<string | null>(null)
@@ -139,6 +151,8 @@ export function ThreadPanel({
         error?: string
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load conversations.')
+      // Times are measured against the moment the list arrived, not when the panel mounted.
+      setNow(new Date())
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
       setThreads([])
@@ -741,21 +755,7 @@ export function ThreadPanel({
             </p>
           </div>
         ) : (
-          threads.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className="af-cm-threadrow"
-              onClick={() => open(t)}
-            >
-              <span className="af-cm-threadrow-title">
-                {t.title || `${t.memberCount} people`}
-              </span>
-              {t.unreadCount > 0 ? (
-                <span className="af-cm-threadrow-unread">{t.unreadCount}</span>
-              ) : null}
-            </button>
-          ))
+          threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}
         {error ? <p className="af-cm-error">{error}</p> : null}
       </div>
