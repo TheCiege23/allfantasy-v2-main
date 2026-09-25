@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { openaiChatJson } from '@/lib/openai-client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 
 const COASTAL_ADJ = ['Pacific', 'Atlantic', 'Gulf', 'Northern', 'Southern', 'Eastern', 'Western', 'Central']
 const NATURE_THEME = ['Storm', 'Thunder', 'Tide', 'Peak', 'Ridge', 'Canyon', 'River', 'Forest']
@@ -130,11 +131,9 @@ export async function generateLeagueNamesWithAi(args: {
   count: number
   avoid: string[]
 }): Promise<string[] | null> {
-  const profile = await prisma.userProfile.findFirst({
-    where: { userId: args.userId },
-    select: { afCommissionerSub: true },
-  })
-  if (!profile?.afCommissionerSub) return null
+  // The live plan, not the profile flag (lib/subscription/livePlanFlags.ts).
+  const plans = await resolveLivePlanFlags(args.userId)
+  if (!plans.commissioner) return null
 
   const sport = normalizeToSupportedSport(args.sport)
   const prompt = `Generate ${args.count} unique fantasy sports league names for ${sport} tournament. Conference theme: ${args.theme ?? 'general'}. Round: ${args.roundLabel}. Existing names to avoid: ${JSON.stringify(args.avoid)}. Names should feel premium, organized, and cohesive. Each name should be 2-3 words. Respond with JSON: {"names": string[] } only.`

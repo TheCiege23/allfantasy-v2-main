@@ -1,5 +1,6 @@
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
+import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 
 export type WarRoomAiContext = {
   leagueId: string
@@ -57,23 +58,26 @@ export async function loadWarRoomAiContext(leagueId: string, userId: string): Pr
   })
   if (!league) return null
 
-  const profile = await prisma.userProfile.findUnique({
-    where: { userId },
-    select: {
-      afWarRoomSub: true,
-      riskProfile: true,
-      draftStyle: true,
-      dynastyWindow: true,
-      preferredBuild: true,
-      preferredPositionsJson: true,
-      fadePositionsJson: true,
-      aiStrategyModeDefault: true,
-      aiExplanationStyle: true,
-      aiVoicePreference: true,
-    },
-  })
+  const [profile, plans] = await Promise.all([
+    prisma.userProfile.findUnique({
+      where: { userId },
+      select: {
+        riskProfile: true,
+        draftStyle: true,
+        dynastyWindow: true,
+        preferredBuild: true,
+        preferredPositionsJson: true,
+        fadePositionsJson: true,
+        aiStrategyModeDefault: true,
+        aiExplanationStyle: true,
+        aiVoicePreference: true,
+      },
+    }),
+    // The live plan, not the profile flag (lib/subscription/livePlanFlags.ts).
+    resolveLivePlanFlags(userId),
+  ])
 
-  const hasWarRoomSubscription = profile?.afWarRoomSub === true
+  const hasWarRoomSubscription = plans.warRoom
   const userPrefs = profile
     ? {
         riskProfile: profile.riskProfile,

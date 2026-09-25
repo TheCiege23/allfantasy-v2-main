@@ -8,6 +8,7 @@ import { runUnifiedAlertEngine } from '@/lib/chimmy-alerts'
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 import type { ChimmyAlertContext, ChimmyAlertSignalBundle, ChimmyAlertUserPreferences } from '@/lib/chimmy-alerts'
 import { mapAlertPreferenceToSensitivity, resolveChimmyPersonalizationProfile } from '@/lib/chimmy-personalization'
+import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,12 +33,10 @@ async function buildContext(input: {
   signalBundle?: ChimmyAlertSignalBundle
   userPreferences?: ChimmyAlertUserPreferences
 }): Promise<ChimmyAlertContext | null> {
-  const [profile, subscriptionProfile, personalization, injuredStartersSignal] = await Promise.all([
+  const [profile, plans, personalization, injuredStartersSignal] = await Promise.all([
     getSettingsProfile(input.userId),
-    prisma.userProfile.findUnique({
-      where: { userId: input.userId },
-      select: { afProSub: true, afCommissionerSub: true },
-    }),
+    // The live plan, not the profile flags (lib/subscription/livePlanFlags.ts).
+    resolveLivePlanFlags(input.userId),
     resolveChimmyPersonalizationProfile(input.userId).catch(() => null),
     // Cross-league by design (one portfolio pass, filtered per league below). A caller
     // that already supplies the signal skips the cost; a portfolio failure degrades to
@@ -157,8 +156,8 @@ async function buildContext(input: {
       ...(input.userPreferences ?? {}),
     },
     subscriptionState: {
-      hasPremium: Boolean(subscriptionProfile?.afProSub),
-      hasCommissioner: Boolean(subscriptionProfile?.afCommissionerSub) || role === 'commissioner',
+      hasPremium: plans.pro,
+      hasCommissioner: plans.commissioner || role === 'commissioner',
       hasAdmin: false,
     },
   }

@@ -64,7 +64,8 @@ const FREE_COMMISSIONER = 'user-free'
 beforeEach(() => {
   vi.clearAllMocks()
   requireCommissionerRoleMock.mockResolvedValue(undefined)
-  // No plan anywhere: neither the legacy profile flag nor the entitlement resolver.
+  // No plan: the entitlement resolver says no. (The profile flag is no longer read; the mock stays so a
+  // regression that reads it again sees `false`, not a missing delegate.)
   resolveForUserMock.mockResolvedValue({ hasAccess: false })
   prismaMock.userProfile.findFirst.mockResolvedValue({ afCommissionerSub: false })
   prismaMock.league.findFirst.mockResolvedValue({

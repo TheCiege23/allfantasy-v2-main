@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
+import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export const dynamic = 'force-dynamic'
@@ -17,17 +18,23 @@ const VALID_DRAFT_TYPES = ['snake', 'linear', 'auction', 'slow_draft']
  * Gated behind AF Commissioner Subscription.
  */
 export async function POST(req: Request) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null }
+  } | null
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const profile = await prisma.userProfile.findFirst({
-    where: { userId: session.user.id },
-    select: { afCommissionerSub: true },
-  })
-  if (!profile?.afCommissionerSub) {
-    return NextResponse.json({ error: 'AF Commissioner subscription required' }, { status: 403 })
+  // The live plan, not the profile flag (lib/subscription/livePlanFlags.ts).
+  const plans = await resolveLivePlanFlags(session.user.id, session.user.email)
+  if (!plans.commissioner) {
+    return NextResponse.json(
+      {
+        error: 'AF Commissioner subscription required',
+        upgradePath: upgradePathForPlan('af_commissioner', { feature: 'ai_quick_create' }),
+      },
+      { status: 403 },
+    )
   }
 
   const body = (await req.json().catch(() => ({}))) as { prompt?: string }
