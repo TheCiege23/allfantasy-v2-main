@@ -2960,3 +2960,39 @@
   .af-cm .af-cm-tab { min-height: 44px; padding-block: 2px; }
   .af-cm .af-cm-audience { padding-block: 4px; }
 }
+
+/*
+ * ── Phones: chat is the whole screen ──
+ * Owner, 2026-09-25: "full-screen on phones, like Sleeper". Every layer above made the phone
+ * dialog an inset card — page showing above and on both sides, a rounded border — which left the
+ * conversation a floating card on a 390px screen (live test phone-05). Under 521px it is now the
+ * screen: edge to edge, no border, no radius. Tablets and desktop keep the panel.
+ *
+ * The notch and the home bar pad the INSIDE (header top, footer bottom), so neither covers the
+ * close button or the links. The composer already carries its own bottom inset.
+ *
+ * With the keyboard up, the earlier rule pins the dialog to the visible region with 6px margins;
+ * full-screen drops the margins. Same specificity, later in the file, so this one wins.
+ */
+@media (max-width: 520px) {
+  .af-cm[data-mode='overlay'] {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .af-cm[data-mode='overlay'] .af-cm-head { padding-top: max(10px, env(safe-area-inset-top, 0px)); }
+  .af-cm[data-mode='overlay'] .af-cm-foot { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .af-cm[data-mode='overlay'][data-keyboard='open'] {
+    top: var(--af-comms-vv-top, 0px);
+    bottom: auto;
+    height: var(--af-comms-vh, 100dvh);
+  }
+}
