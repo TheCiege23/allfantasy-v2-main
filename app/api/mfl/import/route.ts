@@ -8,6 +8,8 @@ import {
   ImportedLeagueConflictError,
   persistImportedLeagueFromNormalization,
 } from '@/lib/league-import/ImportedLeagueCommitService'
+import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-import/commissionerGate'
+import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
 
 async function getMFLConnection() {
   const cookieStore = await cookies()
@@ -93,7 +95,14 @@ export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport
     return auth.response
   }
 
-  let body: { sourceId?: string; leagueId?: string; season?: number; startYear?: number; endYear?: number } = {}
+  let body: {
+    sourceId?: string
+    leagueId?: string
+    season?: number
+    startYear?: number
+    endYear?: number
+    attestation?: { accepted?: boolean; statement?: string }
+  } = {}
   try {
     body = await req.json()
   } catch {
@@ -110,6 +119,26 @@ export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport
         : ''
 
   if (sourceId) {
+    /*
+     * 🛑 THIS BRANCH USED TO PERSIST AFTER ONLY `requireVerifiedUser()`: any verified account
+     * could import any MFL league id and become its AllFantasy owner. `checkMfl` proves
+     * membership from the caller's own stored API key; MFL has no commissioner flag, so a
+     * full-league commit also needs the attestation — exactly as /api/leagues/import/commit.
+     */
+    const gateAttestation = body.attestation?.accepted
+      ? { accepted: true, statement: body.attestation.statement }
+      : undefined
+    const gate = await assertImportCommissioner({
+      appUserId: auth.userId,
+      provider: 'mfl',
+      sourceLeagueId: sourceId,
+      requireCommissioner: true,
+      attestation: gateAttestation,
+    })
+    if (!gate.ok) {
+      return commissionerGateFailureResponse(gate, { attestationHint: true })
+    }
+
     const normalizedResult = await runImportedLeagueNormalizationPipeline({
       provider: 'mfl',
       sourceId,
@@ -129,7 +158,19 @@ export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport
         provider: 'mfl',
         normalized: normalizedResult.normalized,
         allowUpdateExisting: true,
+        // The caller's own franchise, proven by the gate — claims their team on import.
+        importerSourceManagerId: gate.sourceManagerId ?? null,
       })
+
+      if (gate.verification === 'attestation' && gateAttestation) {
+        void recordImportAttestation({
+          leagueId: persisted.league.id,
+          appUserId: auth.userId,
+          provider: 'mfl',
+          sourceLeagueId: sourceId,
+          attestation: gateAttestation,
+        }).catch(() => {})
+      }
 
       return NextResponse.json({
         success: true,
