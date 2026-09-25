@@ -85,7 +85,7 @@ type PlayoffMatchupRow = {
 }
 
 /** A matchup that two teams actually play: not a bye, not already decided. */
-function isContested(m: PlayoffMatchupRow): m is PlayoffMatchupRow & { homeRosterId: string; awayRosterId: string } {
+function isContested<T extends PlayoffMatchupRow>(m: T): m is T & { homeRosterId: string; awayRosterId: string } {
   return Boolean(m.homeRosterId && m.awayRosterId) && m.status !== 'bye' && !m.winnerRosterId
 }
 
