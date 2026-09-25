@@ -16,6 +16,7 @@ import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/compon
 import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
 import { ChatSearch } from './ChatSearch'
 import { useTypingSignal } from './useTypingSignal'
+import { PeoplePicker } from './PeoplePicker'
 
 /**
  * DMs and Huddle, on the platform chat threads that already exist.
@@ -30,7 +31,8 @@ import { useTypingSignal } from './useTypingSignal'
  * consumes the shared chat endpoints exactly as they are. The one server change
  * was teaching the EXISTING create endpoint to resolve usernames for `dm` as it
  * already did for `group` — without it, starting a DM needed a user uuid that no
- * surface in the drawer has.
+ * surface in the drawer has. (2026-09-25: one exception, `league-mates`, for the
+ * people picker — measured inside the budget; see that route's header.)
  *
  * ⚠ ONE COMPONENT, TWO TABS. A DM and a huddle differ only in `threadType` and
  * in how many people you may add. List, open, read, post and read-state are
@@ -127,7 +129,8 @@ export function ThreadPanel({
   const [openThread, setOpenThread] = useState<PlatformThread | null>(null)
   const [messages, setMessages] = useState<PlatformMessage[]>([])
   const [hiddenBlocked, setHiddenBlocked] = useState(0)
-  const [invite, setInvite] = useState('')
+  /** Why the last attempt to START a conversation failed — shown under the picker, not the list. */
+  const [startError, setStartError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [replyTo, setReplyTo] = useState<PlatformMessage | null>(null)
   const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
@@ -508,41 +511,44 @@ export function ThreadPanel({
 
   const signalTyping = useTypingSignal(openThread?.id ?? null)
 
-  const start = useCallback(async () => {
-    const names = invite
-      .split(',')
-      .map((n) => n.trim())
-      .filter(Boolean)
-    if (names.length === 0 || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/shared/chat/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadType: kind, usernames: names }),
-      })
-      const data = (await res.json().catch(() => ({}))) as {
-        thread?: PlatformThread
-        error?: string
+  /*
+   * Both ways in answer `{ thread }` or `{ error }`: a league-mate tapped for a DM goes through
+   * `/dm/start`; typed usernames, and every huddle, through `/threads` as before. Both refuse a
+   * conversation across a block with a neutral 403, whose words are shown as they are.
+   */
+  const startConversation = useCallback(
+    async (url: string, body: Record<string, unknown>) => {
+      if (busy) return
+      setBusy(true)
+      setStartError(null)
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          thread?: PlatformThread
+          error?: string
+        }
+        /*
+         * The endpoint says exactly what went wrong — an unknown username, or more
+         * than one person on a DM. Surfaced verbatim, because a generic failure is
+         * one the user cannot act on.
+         */
+        if (!res.ok || !data.thread) {
+          throw new Error(data.error ?? 'Could not start that conversation.')
+        }
+        await loadThreads()
+        open(data.thread)
+      } catch (e) {
+        setStartError(e instanceof Error ? e.message : 'Could not start that conversation.')
+      } finally {
+        setBusy(false)
       }
-      /*
-       * The endpoint says exactly what went wrong — an unknown username, or more
-       * than one person on a DM. Surfaced verbatim, because a generic failure is
-       * one the user cannot act on.
-       */
-      if (!res.ok || !data.thread) {
-        throw new Error(data.error ?? 'Could not start that conversation.')
-      }
-      setInvite('')
-      await loadThreads()
-      open(data.thread)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start that conversation.')
-    } finally {
-      setBusy(false)
-    }
-  }, [invite, kind, busy, loadThreads, open])
+    },
+    [busy, loadThreads, open],
+  )
 
   /*
    * ── Report and Block, from the message actions sheet ──────────────────────────────
@@ -933,24 +939,14 @@ export function ThreadPanel({
     <div className="af-cm-panel">
       <div className="af-cm-privacy">{privacy}</div>
 
-      <form
-        className="af-cm-composer"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void start()
-        }}
-      >
-        <input
-          className="af-cm-input"
-          value={invite}
-          onChange={(e) => setInvite(e.target.value)}
-          placeholder={kind === 'dm' ? 'Username to message' : 'Usernames, comma separated'}
-          aria-label={kind === 'dm' ? 'Username to message' : 'Usernames to add'}
-        />
-        <button type="submit" className="af-cm-send" disabled={busy || !invite.trim()}>
-          Start
-        </button>
-      </form>
+      <PeoplePicker
+        kind={kind}
+        busy={busy}
+        error={startError}
+        onEdit={() => setStartError(null)}
+        onPickDm={(person) => void startConversation('/api/shared/chat/dm/start', { username: person.username })}
+        onSubmit={(usernames) => void startConversation('/api/shared/chat/threads', { threadType: kind, usernames })}
+      />
 
       <div className="af-cm-thread">
         {threads == null ? (

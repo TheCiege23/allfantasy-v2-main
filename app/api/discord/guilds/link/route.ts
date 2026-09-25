@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { linkVerifiedGuild, verifyGuildManager } from '@/lib/discord/guild-access'
+import { canManageDiscordBridge } from '@/lib/discord/bridgeAccess'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +17,10 @@ export const dynamic = 'force-dynamic'
  * connected Discord account owns or manages that server (verifyGuildManager — Administrator or Manage
  * Server), and an existing link is never handed to someone else (linkVerifiedGuild). The server name
  * comes from Discord, not from the request.
+ *
+ * The league check is the bridge's one rule — head commissioner or co-commissioner
+ * (`canManageDiscordBridge`) — so a co-commissioner the setup screen invites to link a server is
+ * not then refused here. The Discord-side check above stays per person.
  */
 export async function POST(req: Request) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -33,11 +37,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'leagueId and guildId required' }, { status: 400 })
   }
 
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { userId: true },
-  })
-  if (!league || league.userId !== userId) {
+  if (!(await canManageDiscordBridge(leagueId, userId))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

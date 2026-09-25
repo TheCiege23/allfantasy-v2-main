@@ -50,11 +50,12 @@ export type { CommsLeague } from './ChimmyPanel'
  *   4. CHIMMY ALWAYS SHOWS ITS CURRENT SCOPE — the chip in the header. A user must
  *      never have to guess what an answer was grounded in.
  *   5. DISCORD SAYS WHO CONTROLS IT — `DISCORD_PRIVACY`. Only the commissioner
- *      can connect, disconnect, or re-map the bridge; the tab shows a real
- *      invite (`createOrReuseChannelInvite`, minted with the bot's actual
- *      CREATE_INSTANT_INVITE grant) rather than pretending the server can be
- *      created on someone's behalf — Discord's own API refuses that past 10
- *      guilds, so the flow is always "join the one your commissioner made".
+ *      (or a co-commissioner) can connect, disconnect, or re-map the bridge; the
+ *      tab shows the league's real invite — stored on the league, pasted by the
+ *      commissioner or kept when the channel was made, never minted on a
+ *      member's open — rather than pretending the server can be created on
+ *      someone's behalf. Discord's own API refuses that past 10 guilds, so the
+ *      flow is always "join the one your commissioner made".
  *
  * ⚠ AUTO-SCOPE IS FUNCTIONALLY REAL, NOT ILLUSTRATIVE. 23b's core value prop is
  * that a docked Chimmy follows the page: open it on a league's roster and the
@@ -268,9 +269,10 @@ function LeaguePanel({
 
 type DiscordStatus = {
   botConfigured: boolean
+  /** Head commissioner or co-commissioner — the same rule the setup routes enforce. */
   isCommissioner: boolean
   missingPermissions: string[] | null
-  /** Null when no channel is linked yet, or Discord couldn't be reached just now. */
+  /** The league's stored invite; null until the commissioner has set one. Needs no channel. */
   inviteUrl: string | null
   channel: {
     channelName: string | null
@@ -305,6 +307,11 @@ function DiscordPanel({
   const [attempt, setAttempt] = useState(0)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
+  /*
+   * Something to join or open. An invite alone is enough — a commissioner can paste their server's
+   * link without ever adding the bot — so it is checked before "is the bot configured".
+   */
+  const joinable = status && (status.inviteUrl || (status.botConfigured && status.channel)) ? status : null
 
   useEffect(() => {
     if (!scopeId) {
@@ -389,12 +396,53 @@ function DiscordPanel({
               </button>
             </div>
           </>
+        ) : joinable ? (
+          <>
+            <p className="af-cm-empty-t">
+              {joinable.channel
+                ? `#${joinable.channel.channelName ?? 'channel'}${joinable.channel.guildName ? ` in ${joinable.channel.guildName}` : ''}`
+                : `${scope?.name ?? 'Your league'} has a Discord`}
+            </p>
+            {!joinable.channel ? (
+              <p className="af-cm-empty-b">Trash talk, draft nights, voice chat — it all happens there. Jump in.</p>
+            ) : null}
+            {joinable.channel && joinable.missingPermissions && joinable.missingPermissions.length > 0 ? (
+              <p className="af-cm-empty-b af-cm-warn">
+                This server is missing permissions it needs ({joinable.missingPermissions.join(', ')})
+                {joinable.isCommissioner
+                  ? ' — re-invite the bot from Discord settings.'
+                  : ' — ask your commissioner to reconnect the bot.'}
+              </p>
+            ) : null}
+            <div className="af-cm-actions">
+              {joinable.inviteUrl ? (
+                <a href={joinable.inviteUrl} target="_blank" rel="noopener noreferrer" className="af-cm-linkbtn">
+                  Join the league Discord ↗
+                </a>
+              ) : null}
+              {joinable.channel ? (
+                <a
+                  href={joinable.channel.channelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="af-cm-linkbtn"
+                >
+                  Open channel ↗
+                </a>
+              ) : null}
+              {joinable.isCommissioner ? (
+                <Link href={`/core/discord?league=${encodeURIComponent(scopeId)}`} className="af-cm-linkbtn">
+                  Manage Discord
+                </Link>
+              ) : null}
+            </div>
+          </>
         ) : !status?.botConfigured ? (
           <>
             <p className="af-cm-empty-t">Discord isn&apos;t set up on this deployment</p>
             <p className="af-cm-empty-b">There is no bot configured to relay for any league right now.</p>
           </>
-        ) : !status.channel ? (
+        ) : (
           status.isCommissioner ? (
             <>
               <p className="af-cm-empty-t">No Discord channel yet for {scope?.name}</p>
@@ -414,46 +462,6 @@ function DiscordPanel({
               </p>
             </>
           )
-        ) : (
-          <>
-            <p className="af-cm-empty-t">
-              #{status.channel.channelName ?? 'channel'}
-              {status.channel.guildName ? ` in ${status.channel.guildName}` : ''}
-            </p>
-            {status.missingPermissions && status.missingPermissions.length > 0 ? (
-              <p className="af-cm-empty-b af-cm-warn">
-                This server is missing permissions it needs ({status.missingPermissions.join(', ')})
-                {status.isCommissioner
-                  ? ' — re-invite the bot from Discord settings.'
-                  : ' — ask your commissioner to reconnect the bot.'}
-              </p>
-            ) : null}
-            <div className="af-cm-actions">
-              {status.inviteUrl ? (
-                <a
-                  href={status.inviteUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="af-cm-linkbtn"
-                >
-                  Join our Discord ↗
-                </a>
-              ) : null}
-              <a
-                href={status.channel.channelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="af-cm-linkbtn"
-              >
-                Open channel ↗
-              </a>
-              {status.isCommissioner ? (
-                <Link href={`/core/discord?league=${encodeURIComponent(scopeId)}`} className="af-cm-linkbtn">
-                  Manage Discord
-                </Link>
-              ) : null}
-            </div>
-          </>
         )}
       </div>
     </div>

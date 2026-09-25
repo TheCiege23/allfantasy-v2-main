@@ -8,6 +8,7 @@ import { validateCommissionerPatch } from "@/lib/commissioner-settings"
 import type { LeagueSettingsPatch } from "@/lib/commissioner-settings/types"
 import { prisma } from "@/lib/prisma"
 import { STRUCTURAL_LEAGUE_KEYS, structuralPatchRefusal } from "@/lib/league/structuralSettingsLock"
+import { leagueChatThreadLinkRefusal } from "@/lib/league/leagueChatThreadLink"
 
 type SessionUser = {
   id?: string
@@ -59,6 +60,9 @@ export async function PATCH(
   if (!validation.valid) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
+  // Only this league's own chat may be linked (lib/league/leagueChatThreadLink.ts).
+  const chatLinkRefusal = leagueChatThreadLinkRefusal(params.leagueId, body?.leagueChatThreadId)
+  if (chatLinkRefusal) return NextResponse.json({ error: chatLinkRefusal }, { status: 400 })
   // Sport, season, team count, format and dynasty are fixed once the draft has started.
   if (STRUCTURAL_LEAGUE_KEYS.some((key) => (body as Record<string, unknown>)[key] !== undefined)) {
     const current = await prisma.league.findUnique({

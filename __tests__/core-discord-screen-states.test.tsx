@@ -16,8 +16,14 @@ import { render, screen } from '@testing-library/react'
  * gate still drops an id they cannot), and each state says what is actually true.
  */
 
-const h = vi.hoisted(() => ({ getDiscordBridge: vi.fn() }))
+const h = vi.hoisted(() => ({ getDiscordBridge: vi.fn(), membership: vi.fn(), invite: vi.fn() }))
 vi.mock('@/lib/core-app/discordBridge', () => ({ getDiscordBridge: h.getDiscordBridge }))
+/*
+ * A member's state now carries the league's stored invite, and is only reached after the canonical
+ * membership check (2026-09-25). Both are behind these two; discord-join-screens runs them for real.
+ */
+vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: h.membership }))
+vi.mock('@/lib/discord/leagueInvite', () => ({ readLeagueDiscordInvite: h.invite }))
 
 import { loadDiscordBridgeScreen } from '@/lib/core-app/discordBridgeScreen'
 import { DiscordBridgeNotice } from '@/components/core-app/screens/DiscordBridgeNotice'
@@ -46,8 +52,10 @@ describe('loadDiscordBridgeScreen', () => {
 
   it('a league the user plays in but does not run is "not-commissioner", named', async () => {
     h.getDiscordBridge.mockResolvedValueOnce(null)
+    h.membership.mockResolvedValueOnce({ ok: true, access: { isMember: true } })
+    h.invite.mockResolvedValueOnce(null)
     const out = await loadDiscordBridgeScreen('u1', LEAGUE)
-    expect(out).toEqual({ state: 'not-commissioner', league: LEAGUE })
+    expect(out).toEqual({ state: 'not-commissioner', league: LEAGUE, inviteUrl: null })
   })
 
   it('no league in the URL (or one the rail gate dropped) asks for one, and reads nothing', async () => {

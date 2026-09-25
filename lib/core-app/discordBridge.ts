@@ -3,6 +3,8 @@ import { isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { leagueTemplateUrl } from '@/lib/discord/template'
 import { DISCORD_INBOUND_SCHEDULED } from '@/lib/discord/inboundStatus'
+import { canManageDiscordBridge } from '@/lib/discord/bridgeAccess'
+import { storedDiscordInvite } from '@/lib/discord/inviteLink'
 
 /**
  * 32a — the Discord bridge, read from real state.
@@ -190,6 +192,12 @@ export type DiscordBridgeData = {
   templateUrl?: string | null
   /** False until Discord → AllFantasy runs on a schedule; the screen must not offer it. */
   inboundAvailable?: boolean
+  /**
+   * The invite every league member gets a "Join the league Discord" button for — stored on the
+   * league (`League.settings.discordInviteUrl`), pasted by a commissioner or kept from channel
+   * creation. Null until one exists. Optional for the same fixture reason as the four above.
+   */
+  inviteUrl?: string | null
 }
 
 /**
@@ -219,10 +227,14 @@ export async function getDiscordBridge(
 ): Promise<DiscordBridgeData | null> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { id: true, name: true, userId: true },
+    select: { id: true, name: true, settings: true },
   })
-  // Commissioner-only surface: this screen configures the whole league's bridge.
-  if (!league || league.userId !== userId) return null
+  /*
+   * Commissioner-only surface: this screen configures the whole league's bridge. "Commissioner" is
+   * the head commissioner AND co-commissioners (2026-09-25) — `canManageDiscordBridge`, the rule
+   * every bridge write route checks, so nobody is shown a control the server then refuses.
+   */
+  if (!league || !(await canManageDiscordBridge(leagueId, userId))) return null
 
   const [profile, link, teams] = await Promise.all([
     prisma.userProfile.findUnique({
@@ -318,7 +330,12 @@ export async function getDiscordBridge(
           select: { guildName: true, linkedByUserId: true },
         })
       : null
-  const serverReady = Boolean(guildLink && guildLink.linkedByUserId === userId)
+  /*
+   * Ready when THIS person added AllFantasy to the server — or when the league's channel already
+   * lives there. The second case is a co-commissioner opening a league the head commissioner set up:
+   * the server is the league's and AllFantasy is in it, so steps 2 and 3 are done, not "make a server".
+   */
+  const serverReady = Boolean(guildLink) && (guildLink?.linkedByUserId === userId || Boolean(link))
 
   return {
     leagueId: league.id,
@@ -335,5 +352,6 @@ export async function getDiscordBridge(
     installUrl: `/api/discord/bot-install?leagueId=${encodeURIComponent(league.id)}`,
     templateUrl: leagueTemplateUrl(),
     surfacesPending: true,
+    inviteUrl: storedDiscordInvite(league.settings),
   }
 }

@@ -1,5 +1,5 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { get, put } from '@vercel/blob'
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { BlobNotFoundError, get, head, put } from '@vercel/blob'
 
 type PrivateS3Config = { endpoint: string; region: string; bucketName: string; accessKeyId: string; secretAccessKey: string; urlStyle?: string }
 
@@ -22,6 +22,13 @@ function client(config: PrivateS3Config) {
 
 export function privateChatStorageConfigured(): boolean {
   return Boolean(process.env.CHAT_PRIVATE_S3_CONFIG || process.env.CHAT_PRIVATE_BLOB_READ_WRITE_TOKEN)
+}
+
+/** Which backend `putPrivateChatFile` would write to. Names a KIND, never a value, so it is safe to report. */
+export function privateChatStorageKind(): 's3' | 'blob' | 'none' {
+  if (process.env.CHAT_PRIVATE_S3_CONFIG) return 's3'
+  if (process.env.CHAT_PRIVATE_BLOB_READ_WRITE_TOKEN) return 'blob'
+  return 'none'
 }
 
 export async function putPrivateChatFile(key: string, file: Blob, contentType: string): Promise<string> {
@@ -69,4 +76,38 @@ export async function getPrivateChatFile(key: string): Promise<{ stream: Readabl
   if (!token) throw new Error('Private storage unavailable')
   const blob = await get(key, { access: 'private', token, useCache: false })
   return blob?.statusCode === 200 ? { stream: blob.stream, contentType: blob.blob.contentType } : null
+}
+
+/**
+ * Does a private chat object exist at `key`? Metadata only — nothing is downloaded.
+ *
+ * Used by the public-photo migration (`lib/chat-core/publicPhotoMigration.ts`) twice: to reuse a
+ * copy an earlier run already wrote, and — the one that matters — to PROVE a private copy exists
+ * before the public original is deleted. So "not found" must be a positive answer from the store
+ * (`false`), and anything else (auth, network, a misconfigured bucket) must THROW rather than read
+ * as either answer: a check that cannot tell "absent" from "could not look" would delete an
+ * original whose copy was never verified.
+ */
+export async function privateChatFileExists(key: string): Promise<boolean> {
+  const config = s3Config()
+  if (config) {
+    const s3 = client(config)
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: config.bucketName, Key: key }))
+      return true
+    } catch (error) {
+      const e = error as { name?: string; $metadata?: { httpStatusCode?: number } }
+      if (e?.name === 'NotFound' || e?.name === 'NoSuchKey' || e?.$metadata?.httpStatusCode === 404) return false
+      throw error
+    } finally { s3.destroy() }
+  }
+  const token = process.env.CHAT_PRIVATE_BLOB_READ_WRITE_TOKEN
+  if (!token) throw new Error('Private storage unavailable')
+  try {
+    await head(key, { token })
+    return true
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return false
+    throw error
+  }
 }

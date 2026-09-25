@@ -27,7 +27,10 @@ vi.mock('@/lib/prisma', () => ({
     league: { findFirst: h.leagueFindFirst },
     discordGuildLink: { findUnique: h.guildLinkFindUnique },
     discordLeagueChannel: { findFirst: h.channelFindFirst, create: h.channelCreate, update: h.channelUpdate },
-    leagueTeam: { findMany: h.teamsFindMany },
+    // `findFirst` (and `roster`) are read by the role check — `canManageDiscordBridge` → `getLeagueRole` —
+    // once the caller is not the owner. Nobody in this file is a co-commissioner.
+    leagueTeam: { findMany: h.teamsFindMany, findFirst: async () => null },
+    roster: { findFirst: async () => null },
     userProfile: { findMany: h.profilesFindMany },
   },
 }))

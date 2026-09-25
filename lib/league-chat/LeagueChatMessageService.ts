@@ -32,6 +32,30 @@ export async function getRepliesForMessage(parentMessageId: string) {
 import { prisma } from '@/lib/prisma'
 import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import type { PlatformChatMessage } from '@/types/platform-shared'
+import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
+
+/**
+ * Chimmy's identity on a row that carries the server-owned marker (see chimmyIdentity.ts).
+ *
+ * The row's `userId` is the league owner — the only real `AppUser` a Chimmy post can be authored
+ * by, since the column is a required foreign key — so without this every reader would show
+ * Chimmy's words under the commissioner's name and face. The swap happens HERE, where every league
+ * chat reader already gets its rows, so no surface can forget it:
+ *   - `senderUserId` null: never "your" message for the commissioner, never editable or deletable
+ *     from the list, never reportable/blockable as a person, and never hidden by blocking them;
+ *   - `senderName` 'Chimmy', and no user avatar — surfaces draw Chimmy's sparkle.
+ */
+function withChimmyIdentity<T extends PlatformChatMessage>(message: T, metadata: unknown): T {
+  if (!isChimmyAuthored(metadata)) return message
+  return {
+    ...message,
+    senderUserId: null,
+    senderName: CHIMMY_DISPLAY_NAME,
+    senderUsername: null,
+    senderAvatarUrl: null,
+    senderAvatarPreset: null,
+  }
+}
 
 /*
  * 🛑 NO EMAIL HERE (2026-09-25). The sender's name fell back to their email address when they had no
@@ -192,7 +216,7 @@ export async function getLeagueChatMessages(
       ...privacy,
     }
     const meta = Object.keys(withPresence).length > 0 ? withPresence : undefined
-    return meta ? { ...base, metadata: meta } : base
+    return withChimmyIdentity(meta ? { ...base, metadata: meta } : base, rawMeta)
   }).map((message) => {
     const metadata =
       'metadata' in message
@@ -303,7 +327,7 @@ export async function createLeagueChatMessage(
       ...(cr.globalBroadcastId ? { globalBroadcastId: cr.globalBroadcastId } : {}),
     }
   }
-  return out
+  return withChimmyIdentity(out, cm)
 }
 
 export async function updateLeagueChatMessage(

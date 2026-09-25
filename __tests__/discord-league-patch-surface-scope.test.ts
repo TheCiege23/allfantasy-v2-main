@@ -31,6 +31,10 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findFirst: mocks.leagueFindFirst },
+    // The gate is `canManageDiscordBridge` → `getLeagueRole`, which looks for a co-commissioner's
+    // claimed team (and a roster) once the caller is not the owner. Nobody here has either.
+    leagueTeam: { findFirst: async () => null },
+    roster: { findFirst: async () => null },
     discordLeagueChannel: { updateMany: mocks.channelUpdateMany },
   },
 }))
@@ -153,7 +157,7 @@ describe('reports a write that changed nothing', () => {
   })
 })
 
-describe('the authorization gate is unchanged', () => {
+describe('the authorization gate (head or co-commissioner; co-commissioners are covered in discord-join-routes)', () => {
   it('401s an anonymous caller before reading anything', async () => {
     mocks.getServerSession.mockResolvedValue(null)
     const res = await patch({ leagueId: LEAGUE_ID, syncEnabled: true })
@@ -162,7 +166,7 @@ describe('the authorization gate is unchanged', () => {
     expect(mocks.channelUpdateMany).not.toHaveBeenCalled()
   })
 
-  it('403s a non-owner and writes nothing', async () => {
+  it('403s a non-commissioner and writes nothing', async () => {
     mocks.leagueFindFirst.mockResolvedValue({ userId: 'someone-else' })
     const res = await patch({ leagueId: LEAGUE_ID, syncEnabled: true })
     expect(res.status).toBe(403)

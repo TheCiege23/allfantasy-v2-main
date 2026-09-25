@@ -7,6 +7,7 @@ import {
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
 import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
 import { prisma } from "@/lib/prisma"
+import { isChimmyAuthored } from "@/lib/league-chat/chimmyIdentity"
 
 async function canAccessVirtualLeague(leagueId: string, userId: string): Promise<boolean> {
   const bracketMember = await (prisma as any).bracketLeagueMember.findUnique({
@@ -68,6 +69,16 @@ export async function PATCH(
       select: { id: true, metadata: true },
     })
     if (!leagueMessage) return NextResponse.json({ error: "Message not found" }, { status: 404 })
+    /*
+     * 🛑 A CHIMMY POST IS NOT ITS TECHNICAL AUTHOR'S TO REWRITE. It is stored under the league owner
+     * (the row needs a real AppUser — lib/league-chat/chimmyIdentity.ts), so the sender check above
+     * passes for the commissioner. Editing would put the commissioner's words under Chimmy's badge,
+     * which is forging the badge from the inside. Deleting one stays allowed: that removes words,
+     * it does not put new ones in Chimmy's mouth.
+     */
+    if (isChimmyAuthored(leagueMessage.metadata)) {
+      return NextResponse.json({ error: "Chimmy's posts can't be edited." }, { status: 403 })
+    }
 
     const updated = await (prisma as any).leagueChatMessage.update({
       where: { id: messageId },

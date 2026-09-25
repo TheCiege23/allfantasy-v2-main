@@ -3,16 +3,17 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
-import {
-  isBotConfigured,
-  missingBotPermissions,
-  createOrReuseChannelInvite,
-  getChannel,
-  channelVisibility,
-} from '@/lib/discord/bot'
+import { isBotConfigured, missingBotPermissions, getChannel, channelVisibility } from '@/lib/discord/bot'
 import { DISCORD_INBOUND_SCHEDULED } from '@/lib/discord/inboundStatus'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { BRIDGE_SURFACES } from '@/lib/core-app/discordBridge'
+import { canManageDiscordBridge } from '@/lib/discord/bridgeAccess'
+import {
+  INVALID_DISCORD_INVITE_MESSAGE,
+  normalizeDiscordInviteUrl,
+  storedDiscordInvite,
+} from '@/lib/discord/inviteLink'
+import { writeLeagueDiscordInvite } from '@/lib/discord/leagueInvite'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,18 +43,29 @@ const DEFAULT_SURFACE = 'league_chat'
  * Was commissioner-only (`league.userId !== session.user.id`). Widened to
  * requireLeagueApiAccess — the one membership predicate, per lib/api/require-
  * league-access.ts — because a linked channel's invite link needs to reach every
- * member, not just the commissioner who set it up. PATCH below is unchanged and
- * stays commissioner-only; only read access grew.
+ * member, not just the commissioner who set it up. Someone outside the league is
+ * refused there, before anything is read, so they never see the invite.
+ *
+ * 🛑 THE INVITE IS READ FROM THE LEAGUE, NEVER MINTED HERE. This used to call
+ * `createOrReuseChannelInvite` on every read — a Discord list, and on a miss a
+ * Discord CREATE, from every member's drawer open. It is now
+ * `League.settings.discordInviteUrl`, written only by the commissioner's own
+ * actions (see lib/discord/leagueInvite.ts), and it does not need a channel or a
+ * bot: a commissioner can paste their server's link and be done.
  */
 export async function GET(req: NextRequest) {
   const access = await requireLeagueApiAccess(req.nextUrl.searchParams?.get('leagueId'))
   if (!access.ok) return access.response
-  const { leagueId, userId, access: membership } = access
+  const { leagueId, userId } = access
 
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { name: true },
-  })
+  const [league, canManage] = await Promise.all([
+    prisma.league.findFirst({
+      where: { id: leagueId },
+      select: { name: true, settings: true },
+    }),
+    // The same rule PATCH enforces, so "Manage Discord" is offered to exactly who can use it.
+    canManageDiscordBridge(leagueId, userId),
+  ])
 
   const profile = await prisma.userProfile.findUnique({
     where: { userId },
@@ -74,28 +86,28 @@ export async function GET(req: NextRequest) {
    * commissioner can change it there). Not fetched for the drawer's member view:
    * one fewer Discord call on every drawer open, and members do not need it.
    */
-  const wantDetail = req.nextUrl.searchParams?.get('detail') === '1' && membership.isCommissioner
+  const wantDetail = req.nextUrl.searchParams?.get('detail') === '1' && canManage
 
   // Servers that installed the bot under the old permission integer still hold a
   // narrower grant. Only worth asking Discord once a channel is actually linked.
-  const [missingPermissions, inviteUrl, visibility] = link
+  const [missingPermissions, visibility] = link
     ? await Promise.all([
         missingBotPermissions(link.guildId),
-        createOrReuseChannelInvite(link.channelId),
         wantDetail
           ? getChannel(link.channelId)
               .then((info) => (info ? channelVisibility(info, link.guildId) : 'gone'))
               .catch(() => null)
           : Promise.resolve(null),
       ])
-    : [[] as string[], null, null]
+    : [[] as string[], null]
 
   return NextResponse.json({
     botConfigured: isBotConfigured(),
-    isCommissioner: membership.isCommissioner,
+    /** Head commissioner or co-commissioner — may open the setup screen. */
+    isCommissioner: canManage,
     missingPermissions,
-    /** Null when no channel is linked yet, or Discord couldn't be reached. */
-    inviteUrl,
+    /** The league's stored invite (re-validated on read); null until one is set. */
+    inviteUrl: storedDiscordInvite(league?.settings),
     /** False until Discord → AllFantasy has a schedule; the UI must not offer it before. */
     inboundAvailable: DISCORD_INBOUND_SCHEDULED,
     discordConnected: Boolean(profile?.discordUserId),
@@ -130,6 +142,8 @@ export async function PATCH(req: Request) {
     syncEnabled?: boolean
     syncOutbound?: boolean
     syncInbound?: boolean
+    /** A Discord invite to store on the league; null or '' removes it. */
+    inviteUrl?: unknown
   } | null
 
   const leagueId = typeof body?.leagueId === 'string' ? body.leagueId.trim() : ''
@@ -143,21 +157,54 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Unknown surface' }, { status: 400 })
   }
 
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { userId: true },
-  })
-  if (!league || league.userId !== session.user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  /*
+   * Head commissioner or co-commissioner (owner's decision, 2026-09-25) — `canManageDiscordBridge`,
+   * the same rule the setup screen uses to decide whether to show itself. This was
+   * `league.userId !== session.user.id`, so a co-commissioner was shown nothing they could save.
+   * A missing league has no role, so it is refused here too.
+   */
+  if (!(await canManageDiscordBridge(leagueId, session.user.id))) {
+    return NextResponse.json(
+      { error: 'Only the commissioner or a co-commissioner can change this league’s Discord.' },
+      { status: 403 },
+    )
+  }
+
+  /*
+   * The invite members join through. Validated here whatever the screen already checked — every
+   * member of the league is sent to this link. Refused BEFORE any write, including a toggle that
+   * rides along in the same body, so a bad link never half-applies a request.
+   */
+  const hasInvite = body !== null && Object.prototype.hasOwnProperty.call(body, 'inviteUrl')
+  let inviteUrl: string | null = null
+  if (hasInvite) {
+    const raw = body?.inviteUrl
+    const clearing = raw === null || (typeof raw === 'string' && raw.trim() === '')
+    if (!clearing) {
+      inviteUrl = normalizeDiscordInviteUrl(raw)
+      if (!inviteUrl) {
+        return NextResponse.json({ error: INVALID_DISCORD_INVITE_MESSAGE, code: 'invalid-invite' }, { status: 400 })
+      }
+    }
   }
 
   const data: Record<string, boolean> = {}
   if (typeof body?.syncEnabled === 'boolean') data.syncEnabled = body.syncEnabled
   if (typeof body?.syncOutbound === 'boolean') data.syncOutbound = body.syncOutbound
   if (typeof body?.syncInbound === 'boolean') data.syncInbound = body.syncInbound
+  const hasToggles = Object.keys(data).length > 0
 
-  if (Object.keys(data).length === 0) {
+  if (!hasToggles && !hasInvite) {
     return NextResponse.json({ error: 'No toggles' }, { status: 400 })
+  }
+
+  /*
+   * An invite on its own is a league setting, not a channel toggle: it needs no channel row and no
+   * bot. A commissioner who already runs a server can paste its link and stop there.
+   */
+  if (!hasToggles) {
+    await writeLeagueDiscordInvite(leagueId, inviteUrl)
+    return NextResponse.json({ ok: true, inviteUrl })
   }
 
   /*
@@ -205,6 +252,10 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'No channel mapped to that surface' }, { status: 404 })
   }
 
+  if (hasInvite) {
+    await writeLeagueDiscordInvite(leagueId, inviteUrl)
+    return NextResponse.json({ ok: true, surface, updated: count, inviteUrl })
+  }
   return NextResponse.json({ ok: true, surface, updated: count })
 }
 

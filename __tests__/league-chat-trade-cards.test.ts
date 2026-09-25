@@ -6,7 +6,14 @@ const h = vi.hoisted(() => ({
   cacheUpsert: vi.fn(),
   tradeFindMany: vi.fn(),
   playerFindMany: vi.fn(),
-  createMessage: vi.fn(),
+  teamFindMany: vi.fn(),
+  /*
+   * Cards post through `postChimmyMoment` now (as Chimmy, deduped, capped). It used to be
+   * `createLeagueChatMessage`; mocking the OLD dependency would let the real moment run against
+   * this file's partial Prisma and every assertion below would be measuring nothing.
+   */
+  postMoment: vi.fn(),
+  marketValues: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -15,11 +22,11 @@ vi.mock('@/lib/prisma', () => ({
     sportsDataCache: { findUnique: h.cacheFindUnique, upsert: h.cacheUpsert },
     leagueTrade: { findMany: h.tradeFindMany },
     sportsPlayer: { findMany: h.playerFindMany },
+    leagueTeam: { findMany: h.teamFindMany },
   },
 }))
-vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({
-  createLeagueChatMessage: h.createMessage,
-}))
+vi.mock('@/lib/league-chat/chimmyMoments', () => ({ postChimmyMoment: h.postMoment }))
+vi.mock('@/lib/league-chat/chimmyTradeMoment', () => ({ readTradeMarketValues: h.marketValues }))
 
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 
@@ -40,14 +47,19 @@ function trade(over: Record<string, unknown> = {}) {
   }
 }
 
+/** The first moment posted. */
+function posted() {
+  return h.postMoment.mock.calls[0][0] as { text: string; card: Record<string, any>; messageType: string; kind: string; dedupeKey: string }
+}
+
 /** The body of the first card posted. */
 function postedBody() {
-  return h.createMessage.mock.calls[0][2] as string
+  return posted().text
 }
 
 /** The metadata of the first card posted. */
 function postedMeta() {
-  return h.createMessage.mock.calls[0][3].metadata as Record<string, any>
+  return posted().card
 }
 
 /** The watermark most recently written. */
@@ -68,7 +80,9 @@ beforeEach(() => {
     { sleeperId: '8148', name: "Ja'Marr Chase", position: 'WR', team: 'CIN' },
   ])
   h.cacheUpsert.mockResolvedValue({})
-  h.createMessage.mockResolvedValue({ id: 'msg1' })
+  h.teamFindMany.mockResolvedValue([])
+  h.postMoment.mockResolvedValue({ posted: true, messageId: 'msg1' })
+  h.marketValues.mockResolvedValue(null)
 })
 
 describe('trade cards', () => {
@@ -83,7 +97,7 @@ describe('trade cards', () => {
     const out = await syncTradeCardsForLeague('l1')
 
     expect(out).toEqual({ status: 'seeded' })
-    expect(h.createMessage).not.toHaveBeenCalled()
+    expect(h.postMoment).not.toHaveBeenCalled()
     expect(h.tradeFindMany).not.toHaveBeenCalled()
   })
 
@@ -108,7 +122,7 @@ describe('trade cards', () => {
 
     expect(out).toEqual({ status: 'scanned', posted: 1 })
     expect(postedBody()).toBe("Casey traded Travis Kelce for Ja'Marr Chase")
-    expect(h.createMessage.mock.calls[0][3].type).toBe('trade')
+    expect(posted().messageType).toBe('trade')
   })
 
   /* Names or nothing — every traded id in production resolves. */
@@ -143,7 +157,7 @@ describe('trade cards', () => {
     const out = await syncTradeCardsForLeague('l1')
 
     expect(out).toEqual({ status: 'scanned', posted: 1 })
-    expect(h.createMessage).toHaveBeenCalledTimes(1)
+    expect(h.postMoment).toHaveBeenCalledTimes(1)
   })
 
   it('counts picks on either side', async () => {
@@ -219,5 +233,67 @@ describe('trade cards', () => {
   it('ignores an empty league id', async () => {
     expect(await syncTradeCardsForLeague('')).toEqual({ status: 'skipped', reason: 'no-league' })
     expect(h.leagueFindUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('trade cards are Chimmy moments', () => {
+  /** Mocked market values as `readTradeMarketValues` returns them — Chase 8,800, Kelce 3,560. */
+  const MARKET = [
+    { player: { sleeperId: '8148', name: "Ja'Marr Chase", position: 'WR', maybeTeam: 'CIN' }, value: 8800 },
+    { player: { sleeperId: '6813', name: 'Travis Kelce', position: 'TE', maybeTeam: 'KC' }, value: 3560 },
+  ]
+
+  it('posts each trade as a Chimmy "trade" moment, deduped on the Sleeper transaction', async () => {
+    h.tradeFindMany.mockResolvedValue([trade()])
+
+    await syncTradeCardsForLeague('l1')
+
+    expect(posted()).toMatchObject({ leagueId: 'l1', kind: 'trade', dedupeKey: 'sleeper:tx1', messageType: 'trade' })
+  })
+
+  it('folds Chimmy’s take — winner and real numbers — into the same message as the card', async () => {
+    h.marketValues.mockResolvedValue({ players: MARKET, isDynasty: true })
+    h.tradeFindMany.mockResolvedValue([
+      trade({ playersGiven: ['6813'], playersReceived: ['8148'], history: { sleeperUsername: 'Casey' } }),
+      trade({ playersGiven: ['8148'], playersReceived: ['6813'], history: { sleeperUsername: 'Jordan' } }),
+    ])
+
+    const out = await syncTradeCardsForLeague('l1')
+
+    expect(out).toEqual({ status: 'scanned', posted: 1 })
+    expect(h.postMoment).toHaveBeenCalledTimes(1)
+    expect(postedBody()).toMatch(
+      /^On paper, Casey wins this one, and it isn't close: 8,800 of market value coming in, 3,560 going out \(\+5,240\)\. Jordan/,
+    )
+    expect(postedMeta().tradeCard).toMatchObject({ manager: 'Casey', partner: 'Jordan', valueGave: 3560, valueGot: 8800 })
+  })
+
+  it('names a manager stored as a Sleeper user id by the league’s own name', async () => {
+    h.teamFindMany.mockResolvedValue([{ platformUserId: '736512345', ownerName: 'Casey', teamName: 'Casey’s Crew' }])
+    h.tradeFindMany.mockResolvedValue([trade({ history: { sleeperUsername: '736512345' } })])
+
+    await syncTradeCardsForLeague('l1')
+
+    expect(postedBody()).toBe("Casey traded Travis Kelce for Ja'Marr Chase")
+    expect(postedBody()).not.toContain('736512345')
+  })
+
+  it('posts nothing while Chimmy is switched off, and never cards those trades later', async () => {
+    h.leagueFindUnique.mockResolvedValue({ id: 'l1', userId: 'owner', platformLeagueId: 'sl-1', settings: { chimmySpeaksUp: false } })
+
+    const before = Date.now()
+    expect(await syncTradeCardsForLeague('l1')).toEqual({ status: 'scanned', posted: 0 })
+    expect(h.tradeFindMany).not.toHaveBeenCalled()
+    expect(h.postMoment).not.toHaveBeenCalled()
+    expect(Date.parse(watermark().since)).toBeGreaterThanOrEqual(before)
+  })
+
+  it('a moment the day’s cap refused is not counted as posted, and the watermark still moves past it', async () => {
+    const newest = new Date('2026-08-22T09:00:00.000Z')
+    h.postMoment.mockResolvedValue({ posted: false, reason: 'daily_cap' })
+    h.tradeFindMany.mockResolvedValue([trade({ tradeDate: newest })])
+
+    expect(await syncTradeCardsForLeague('l1')).toEqual({ status: 'scanned', posted: 0 })
+    expect(watermark().since).toBe(newest.toISOString())
   })
 })

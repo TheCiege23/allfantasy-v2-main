@@ -1,18 +1,26 @@
+import '@/components/core-app/af-discord.css'
 import type { DiscordBridgeScreen } from '@/lib/core-app/discordBridgeScreen'
 
 /**
- * `/core/discord` when there is no bridge to render: no league picked, a league this user does not
- * run, or a read that failed. Each says what is actually true — see `loadDiscordBridgeScreen`.
+ * `/core/discord` when there is no bridge to render: no league picked, a league this user plays in
+ * but does not run, or a read that failed. Each says what is actually true — see
+ * `loadDiscordBridgeScreen`.
+ *
+ * ⚠ A MEMBER GETS A JOIN BUTTON AND NOTHING ELSE. Once the commissioner (or a co-commissioner) has
+ * stored the league's invite, `not-commissioner` carries it and this renders one link out to
+ * Discord. No switch, no field, no setup step — those live on the screen only the people who run the
+ * league reach, and the routes behind them refuse everyone else anyway.
  */
 export function DiscordBridgeNotice({
   screen,
 }: {
   screen: Exclude<DiscordBridgeScreen, { state: 'ready' }>
 }) {
+  const member = screen.state === 'not-commissioner' ? screen : null
   return (
-    <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+    <div className="af-frame af-dc" style={{ padding: 24, maxWidth: 720 }}>
       <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-        Discord bridge
+        {member ? 'Your league’s Discord' : 'Discord bridge'}
       </h1>
       {screen.state === 'unavailable' ? (
         <>
@@ -31,10 +39,24 @@ export function DiscordBridgeNotice({
             Try again
           </a>
         </>
-      ) : screen.state === 'not-commissioner' ? (
+      ) : member?.inviteUrl ? (
+        <div className="af-dc-join">
+          <p className="af-dc-join-lede">
+            {member.league.name} has its own Discord server — trash talk, draft nights, voice chat. Get in
+            there before the group chat moves on without you.
+          </p>
+          <a className="af-btn af-dc-btn af-dc-join-btn" href={member.inviteUrl} target="_blank" rel="noopener noreferrer">
+            Join the league Discord ↗
+          </a>
+          <p className="af-dc-hint">
+            Opens Discord. Your commissioner runs the server, and AllFantasy doesn&apos;t read what&apos;s said
+            there.
+          </p>
+        </div>
+      ) : member ? (
         <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-          Only the commissioner who runs {screen.league.name} on AllFantasy can set up its Discord.
-          Once they connect it, the invite shows up in the Discord tab of your chat.
+          {member.league.name} doesn&apos;t have a Discord link yet. Your commissioner or a co-commissioner
+          sets it up — once they do, a Join button shows up here and in the Discord tab of your chat.
         </p>
       ) : (
         <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>

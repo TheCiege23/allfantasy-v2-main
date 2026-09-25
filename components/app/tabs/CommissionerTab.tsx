@@ -54,7 +54,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
   const [lineupLockRuleDraft, setLineupLockRuleDraft] = useState('')
   const [forceCorrectRosterId, setForceCorrectRosterId] = useState('')
   const [draftState, setDraftState] = useState<DraftSessionState | null>(null)
-  const [commissionerSettings, setCommissionerSettings] = useState<{ settings?: { leagueChatThreadId?: string } } | null>(null)
   const [runningWaiver, setRunningWaiver] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
   const [transferUserId, setTransferUserId] = useState('')
@@ -90,14 +89,13 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
       setLoading(true)
       setError(null)
       try {
-        const [pendingRes, settingsRes, inviteRes, managersRes, lineupRes, draftRes, commSettingsRes] = await Promise.all([
+        const [pendingRes, settingsRes, inviteRes, managersRes, lineupRes, draftRes] = await Promise.all([
           fetch(`${base}/waivers?type=pending`),
           fetch(`${base}/waivers?type=settings`),
           fetch(`${base}/invite`),
           fetch(`${base}/managers`),
           fetch(`${base}/lineup`),
           fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/session`, { cache: 'no-store' }),
-          fetch(`${base}/settings`, { cache: 'no-store' }),
         ])
         if (!active) return
         if (pendingRes.status === 403 || settingsRes.status === 403) setError('Commissioner access denied')
@@ -110,7 +108,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
           const data = await draftRes.json()
           setDraftState({ session: data?.session ?? null, leagueId })
         }
-        if (commSettingsRes.ok) setCommissionerSettings(await commSettingsRes.json())
         void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/prestige-governance?includeSnapshot=true&summaryLimit=8`, {
           cache: 'no-store',
         })
@@ -301,7 +298,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
   const canResume = draftStatus === 'paused'
   const canDraftControls = draftStatus === 'in_progress' || draftStatus === 'paused'
   const hasPicks = Array.isArray(session?.picks) && session.picks.length > 0
-  const threadId = commissionerSettings?.settings?.leagueChatThreadId ?? null
   const premiumActionHref = useCallback(
     (featureId: SubscriptionFeatureId, unlockedHref: string) =>
       hasAccess(featureId) ? unlockedHref : buildFeatureUpgradePath(featureId),
@@ -708,14 +704,10 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
             <Megaphone className="h-4 w-4" /> Broadcast message
           </h2>
-          <p className="mt-1 text-xs text-white/60">Send an @everyone message to league chat. Link league chat in Settings (or Chat tab) first.</p>
-          {threadId ? (
-            <div className="mt-3">
-              <CommissionerBroadcastForm threadId={threadId} leagueId={leagueId} />
-            </div>
-          ) : (
-            <p className="mt-2 text-xs text-white/50">League chat not linked. Go to Settings → link chat to enable broadcast.</p>
-          )}
+          <p className="mt-1 text-xs text-white/60">Send an @everyone message straight into league chat.</p>
+          <div className="mt-3">
+            <CommissionerBroadcastForm leagueId={leagueId} />
+          </div>
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-black/20 p-4">

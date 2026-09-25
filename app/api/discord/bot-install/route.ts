@@ -8,6 +8,7 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { discordOAuthConfigValid } from '@/lib/discord/oauth-config'
 import { BOT_LEAGUE_COOKIE, installReturnPath, safeLeagueId } from '@/lib/discord/installReturn'
+import { canManageDiscordBridge } from '@/lib/discord/bridgeAccess'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,8 @@ const BASE = process.env.NEXTAUTH_URL ?? 'https://www.allfantasy.ai'
  * Start "Add AllFantasy to your Discord server".
  *
  * `?leagueId=<id>` (optional) — started from that league's `/core/discord` setup
- * screen. When the signed-in user commissions it, the league is remembered in an
+ * screen. When the signed-in user commissions it — head commissioner or co-commissioner,
+ * `canManageDiscordBridge`, the same rule as the screen — the league is remembered in an
  * HttpOnly cookie and every outcome — success, refusal, cancel — returns there
  * instead of Settings. A league id they do not commission is ignored (Settings
  * behaviour), never trusted.
@@ -31,12 +33,7 @@ export async function GET(req?: NextRequest) {
     return NextResponse.redirect(new URL(`/login?callbackUrl=${encodeURIComponent(back)}`, BASE))
   }
 
-  const leagueId = requested
-    ? (await prisma.league.findFirst({
-        where: { id: requested, userId: session.user.id },
-        select: { id: true },
-      }))?.id ?? null
-    : null
+  const leagueId = requested && (await canManageDiscordBridge(requested, session.user.id)) ? requested : null
   const back = (status: string) => NextResponse.redirect(new URL(installReturnPath(leagueId, status), BASE))
 
   if (!discordOAuthConfigValid(DISCORD_CLIENT_ID, DISCORD_BOT_CALLBACK_URI)) {

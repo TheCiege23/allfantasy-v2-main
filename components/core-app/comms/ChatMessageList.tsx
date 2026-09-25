@@ -9,11 +9,12 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { ArrowDown, Ban, Copy, CornerUpLeft, Flag, MoreHorizontal, Pencil, Pin, SmilePlus, Trash2 } from 'lucide-react'
+import { ArrowDown, Ban, Copy, CornerUpLeft, Flag, MoreHorizontal, Pencil, Pin, SmilePlus, Sparkles, Trash2 } from 'lucide-react'
 import { REPORT_REASONS, type ReportReason } from '@/lib/moderation/shared'
 import { QUICK_REACTIONS, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { isNearBottom } from '@/lib/chat-core/useChatPolling'
+import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import {
   formatChatMessageTimestamp,
   formatChatMessageTimestampFull,
@@ -149,6 +150,34 @@ function MessageAvatar({ name, url }: { name: string; url: string | null | undef
       ) : (
         <span className="af-cm-avatar-initials">{initialsFor(name)}</span>
       )}
+    </span>
+  )
+}
+
+/**
+ * Chimmy's face in a conversation: the sparkle the Chimmy tab wears, never a user's photo.
+ *
+ * ⚠ DRAWN ONLY FROM THE SERVER-OWNED MARKER (`isChimmyAuthored(metadata)`), NEVER FROM A NAME. A member
+ * who calls themselves "Chimmy" gets their own avatar and no badge; the client allowlist
+ * (lib/chat-core/clientMessageInput.ts) is what keeps the marker off anything a member posts.
+ */
+function ChimmyAvatar() {
+  return (
+    <span className="af-cm-avatar af-cm-avatar-chimmy" aria-hidden="true" data-testid="chimmy-avatar">
+      <Sparkles size={16} aria-hidden />
+    </span>
+  )
+}
+
+/** "✦ Chimmy" as a badge, and what the moment was ("Weekly awards", "Trade take") when it was one. */
+function ChimmyByline({ label }: { label: string | null }) {
+  return (
+    <span className="af-cm-msg-author af-cm-chimmy-byline">
+      <span className="af-cm-chimmy-badge" data-testid="chimmy-badge">
+        <Sparkles size={11} aria-hidden />
+        {CHIMMY_DISPLAY_NAME}
+      </span>
+      {label ? <span className="af-cm-chimmy-kind">{label}</span> : null}
     </span>
   )
 }
@@ -369,7 +398,12 @@ export function ChatMessageList({
               </div>
             )
           }
-          const mine = item.mine
+          /*
+           * Chimmy's rows are authored by the league owner underneath (a required FK), so they are
+           * never "mine" — not even for the commissioner — whatever id the wire carries.
+           */
+          const chimmy = isChimmyAuthored(m.metadata)
+          const mine = item.mine && !chimmy
           const deleted = isDeletedMessage(m.metadata)
           const rich = !deleted && richOf(m)
           const tag = tagFor ? tagFor(m) : null
@@ -394,17 +428,28 @@ export function ChatMessageList({
               data-run-end={item.endsRun}
               data-flash={flashId === m.id || undefined}
               data-menu={menuFor === m.id || undefined}
+              data-chimmy={chimmy || undefined}
             >
               {!mine ? (
                 item.startsRun ? (
-                  <MessageAvatar name={m.authorName} url={m.avatarUrl} />
+                  chimmy ? (
+                    <ChimmyAvatar />
+                  ) : (
+                    <MessageAvatar name={m.authorName} url={m.avatarUrl} />
+                  )
                 ) : (
                   <span className="af-cm-avatar-gap" aria-hidden="true" />
                 )
               ) : null}
 
               <div className="af-cm-col">
-                {!mine && item.startsRun ? <span className="af-cm-msg-author">{m.authorName}</span> : null}
+                {!mine && item.startsRun ? (
+                  chimmy ? (
+                    <ChimmyByline label={chimmyMomentLabelOf(m.metadata)} />
+                  ) : (
+                    <span className="af-cm-msg-author">{m.authorName}</span>
+                  )
+                ) : null}
                 {tag ? <span className="af-cm-msg-tag">{tag}</span> : null}
 
                 {m.parentMessageId && !deleted ? (
@@ -420,7 +465,7 @@ export function ChatMessageList({
                   data-deleted={deleted || undefined}
                   tabIndex={0}
                   role="article"
-                  aria-label={`${mine ? 'You' : m.authorName}${time ? `, ${time}` : ''}${deleted ? ', deleted' : ''}. Press Enter for actions.`}
+                  aria-label={`${mine ? 'You' : chimmy ? CHIMMY_DISPLAY_NAME : m.authorName}${time ? `, ${time}` : ''}${deleted ? ', deleted' : ''}. Press Enter for actions.`}
                   title={formatChatMessageTimestampFull(m.createdAt) || undefined}
                   onClick={(e) => {
                     if (swallowClickFor.current === m.id) {
@@ -671,7 +716,11 @@ export function ChatMessageList({
           }
           pinBusy={pinBusy}
           onEdit={
-            onEdit && viewerId && menuMessage.authorId === viewerId && menuMessage.messageType !== 'gif'
+            onEdit &&
+            viewerId &&
+            menuMessage.authorId === viewerId &&
+            menuMessage.messageType !== 'gif' &&
+            !isChimmyAuthored(menuMessage.metadata)
               ? () => {
                   setEditing({ id: menuMessage.id, text: menuMessage.body, busy: false, error: null })
                   setMenuFor(null)
@@ -679,7 +728,7 @@ export function ChatMessageList({
               : undefined
           }
           onDelete={
-            onDelete && viewerId && menuMessage.authorId === viewerId
+            onDelete && viewerId && menuMessage.authorId === viewerId && !isChimmyAuthored(menuMessage.metadata)
               ? async () => {
                   const target = menuMessage
                   setMenuFor(null)

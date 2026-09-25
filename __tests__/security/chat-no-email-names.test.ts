@@ -15,18 +15,25 @@ const h = vi.hoisted(() => ({
   memberUpdateMany: vi.fn(),
   messageFindMany: vi.fn(),
   count: vi.fn(),
+  leagueFindMany: vi.fn(),
+  appUserFindMany: vi.fn(),
+  blockFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     platformChatThreadMember: { findFirst: h.memberFindFirst, findMany: h.memberFindMany, updateMany: h.memberUpdateMany },
     platformChatMessage: { findMany: h.messageFindMany, count: h.count },
+    league: { findMany: h.leagueFindMany },
+    appUser: { findMany: h.appUserFindMany },
+    platformBlockedUser: { findMany: h.blockFindMany },
   },
 }))
 
 import { getPlatformThreadById, getPlatformThreadMessages, getThreadMembers } from '@/lib/platform/chat-service'
 import { bracketMessagesToPlatform } from '@/lib/chat-core/league-message-proxy'
 import { bracketMessageToPlatformShape } from '@/lib/chat-core/ChatCoreService'
+import { listLeagueMates } from '@/lib/chat-core/leagueMates'
 
 function msg(over: Record<string, unknown>) {
   return {
@@ -107,5 +114,21 @@ describe('bracket-pool chat and the chat-core shape', () => {
     const one = bracketMessageToPlatformShape(rows[0] as never, 'league:l1')
     expect(one.senderName).toBe('Manager')
     expect(JSON.stringify(one)).not.toContain(EMAIL)
+  })
+})
+
+describe('the DM / huddle people picker (league-mates)', () => {
+  it('🛑 selects no email and returns none — a nameless league-mate is shown by handle', async () => {
+    h.leagueFindMany.mockResolvedValue([
+      { name: 'Dynasty Degens', userId: 'me', redraftMembers: [], rosters: [], teams: [{ claimedByUserId: 'u2' }] },
+    ])
+    h.blockFindMany.mockResolvedValue([])
+    // Even if a widened read handed an email back, it must not reach the answer.
+    h.appUserFindMany.mockResolvedValue([{ id: 'u2', username: 'dana', displayName: null, avatarUrl: null, email: EMAIL }])
+    const mates = await listLeagueMates('me', '')
+    expect(mates).toEqual([{ id: 'u2', displayName: 'dana', username: 'dana', avatarUrl: null, sharedLeagues: ['Dynasty Degens'] }])
+    expect(JSON.stringify(mates)).not.toContain(EMAIL)
+    expect(h.appUserFindMany.mock.calls[0][0].select).not.toHaveProperty('email')
+    expect(h.appUserFindMany.mock.calls[0][0].select).toEqual({ id: true, username: true, displayName: true, avatarUrl: true })
   })
 })

@@ -115,6 +115,39 @@ export async function hasBlockBetween(userId: string, otherUserIds: string[]): P
   }
 }
 
+/**
+ * Everyone with a block in EITHER direction with `userId` — people they blocked, and people who
+ * blocked them. For lists that SUGGEST people (the DM / huddle picker), where a per-person yes/no
+ * like `hasBlockBetween` would cost one query per suggestion.
+ *
+ * Fails CLOSED, as `getBlockedUserIdsForRead` does: one retry, then `BlockListUnavailableError`, so
+ * a database blip cannot put someone who blocked you back into your suggestions. A missing table
+ * (P2021) is the one error that answers "nobody", because then no block can exist.
+ *
+ * The returned set carries no direction, on purpose — a caller must not be able to tell a blocked
+ * user who blocked whom.
+ */
+export async function getBlockedEitherWayUserIds(userId: string): Promise<Set<string>> {
+  if (!userId) return new Set()
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const rows = await prisma.platformBlockedUser.findMany({
+        where: { OR: [{ blockerUserId: userId }, { blockedUserId: userId }] },
+        select: { blockerUserId: true, blockedUserId: true },
+      })
+      const ids = new Set<string>()
+      for (const r of rows) {
+        ids.add(r.blockerUserId === userId ? r.blockedUserId : r.blockerUserId)
+      }
+      ids.delete(userId)
+      return ids
+    } catch (err) {
+      if (isMissingTableError(err)) return new Set()
+    }
+  }
+  throw new BlockListUnavailableError()
+}
+
 export async function getBlockedUsersWithDetails(blockerUserId: string): Promise<BlockedUserInfo[]> {
   if (!blockerUserId) return []
   try {

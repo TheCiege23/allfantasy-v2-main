@@ -9,7 +9,7 @@ import { seedSurvivorFaqToLeagueChat } from '@/lib/survivor/survivorFaq'
 export const dynamic = 'force-dynamic'
 
 /**
- * POST: Post Survivor+Exile FAQ to linked league chat as broadcast + pin (commissioner only).
+ * POST: Post Survivor+Exile FAQ into the league's own chat as broadcast + pin (commissioner only).
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null

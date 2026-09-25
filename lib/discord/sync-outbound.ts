@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { postLeagueChatEmbed, isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
+import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 
 export type OutboundSyncInput = {
   leagueId: string
@@ -98,9 +99,17 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
 
   const leagueName = row.league.name ?? 'League'
 
+  /*
+   * The ROW decides who said it, as it decides whether it may leave. A Chimmy post is authored by the
+   * league owner (a required FK — see lib/league-chat/chimmyIdentity.ts), so a caller passing the
+   * row's sender name would put Chimmy's words under the commissioner's name in Discord. The marker
+   * is server-owned, so no member can use this to post as Chimmy either.
+   */
+  const chimmy = isChimmyAuthored(msg.metadata)
+
   const discordMessageId = await postLeagueChatEmbed(row.channelId, {
-    authorName: input.authorName,
-    authorAvatar: input.authorAvatarUrl ?? undefined,
+    authorName: chimmy ? CHIMMY_DISPLAY_NAME : input.authorName,
+    authorAvatar: chimmy ? undefined : (input.authorAvatarUrl ?? undefined),
     text: input.text,
     gifUrl: input.gifUrl ?? undefined,
     leagueName,

@@ -3157,3 +3157,227 @@
 .af-cm-member-name { flex: 1; min-width: 0; overflow: hidden; font-size: 14px; color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
 .af-cm-member-you { color: var(--muted); }
 .af-cm-member-handle { flex: none; max-width: 40%; overflow: hidden; font-size: 12px; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
+
+/*
+ * ══ People picker — 2026-09-25 (owner: pick someone from your own leagues, with search, instead
+ *    of typing an exact username). The DM and huddle "new conversation" box: a combobox whose
+ *    listbox of league-mates sits in the flow under it rather than floating, so it can never be
+ *    clipped by the drawer or hidden under the thread list.
+ *
+ * Top level and last on purpose — no rule here is inside a query, and the one width-dependent
+ * value (the gutter) uses container units with a plain fallback instead of a new breakpoint.
+ * Every tap target is 44px or more: option rows 56px, chip × 44px, Start 44px.
+ */
+.af-cm-pick {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-inline: 16px;
+  padding-inline: clamp(16px, 3cqi, 22px);
+}
+.af-cm-pick .af-cm-pick-form {
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 8px;
+  border: 0;
+  background: transparent;
+}
+.af-cm-pick .af-cm-pick-input { min-height: 44px; }
+.af-cm-pick .af-cm-pick-input:focus { box-shadow: 0 0 0 2px var(--accent-line); }
+.af-cm-pick .af-cm-pick-start {
+  width: auto;
+  min-width: 64px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+}
+.af-cm-pick .af-cm-pick-error { margin: 0; padding: 0 2px 8px; font-size: 12.5px; line-height: 1.4; }
+
+.af-cm-pick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 0 0;
+  list-style: none;
+}
+.af-cm-pick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 44px;
+  padding-left: 5px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+/* Small enough that two chips share a row on a 390px phone, so a huddle of four is two rows, not four. */
+.af-cm-pick-chip .af-cm-pick-av { width: 28px; height: 28px; }
+.af-cm-pick-chip .af-cm-dmrow-initials { font-size: 10px; }
+.af-cm-pick-chip-name { min-width: 0; max-width: 112px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.af-cm-pick-chip-x {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 42px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+}
+.af-cm-pick-chip-x:hover { color: var(--text); }
+.af-cm-pick-chip-x:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.af-cm-pick-chip-x:disabled { opacity: 0.45; cursor: default; }
+
+.af-cm-pick-pop {
+  margin: 0 0 10px;
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface2);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  scrollbar-width: thin;
+}
+.af-cm-pick-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 14px 6px;
+  background: var(--surface2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-cm-pick-list { margin: 0; padding: 0 0 6px; list-style: none; }
+.af-cm-pick-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.af-cm-pick-opt:hover { background: rgba(255, 255, 255, 0.04); }
+.af-cm-pick-opt[data-active='true'] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.af-cm-pick-opt[aria-disabled='true'] { opacity: 0.55; cursor: default; }
+.af-cm-pick-opt .af-cm-pick-av { width: 40px; height: 40px; }
+.af-cm-pick-av .af-cm-dmrow-initials { font-size: 12px; }
+.af-cm-pick-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.af-cm-pick-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.af-cm-pick-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-cm-pick-handle {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-cm-pick-league {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-cm-pick-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.af-cm-pick-opt[data-picked='true'] .af-cm-pick-check { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.af-cm-pick-note { margin: 0; padding: 12px 14px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/*
+ * Discord tab (2026-09-25): the Join / Open channel / Manage links sit under a CENTRED title, and
+ * `.af-cm-empty` loses its side padding above (`padding: 22px 0`), so the row started flush against
+ * the drawer's edge. Centred and inset here; scoped to the empty state so IntegrityFlagCard's own
+ * `.af-cm-actions` row is untouched. Three classes, to outrank `.af-core .af-cm-actions`.
+ */
+.af-cm .af-cm-empty .af-cm-actions {
+  justify-content: center;
+  padding-inline: 16px;
+}
+
+/* ── Chimmy in league chat: sparkle avatar, "✦ Chimmy" badge, the moment it was ──────────────
+ * Drawn only for rows carrying the server-owned marker (lib/league-chat/chimmyIdentity.ts).
+ * Appended as top-level blocks on purpose: nothing here sits inside an existing @media query. */
+.af-cm-avatar.af-cm-avatar-chimmy {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
+}
+.af-cm-col > .af-cm-msg-author.af-cm-chimmy-byline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding-left: 2px;
+}
+.af-cm-chimmy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.af-cm-chimmy-kind {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-cm-row[data-chimmy='true'] .af-cm-bubble {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* Market value beside "Gave" / "Got" on a Chimmy trade card, and where the trade stands. */
+.af-cm-trade-value {
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.af-cm-trade-valuenote,
+.af-cm-trade-note {
+  margin: 0;
+  font-size: 10.5px;
+}
