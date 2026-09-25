@@ -535,9 +535,22 @@ function buildEspnMemberDirectory(rawMembers: unknown): Map<string, EspnMemberSu
   return directory
 }
 
+/** An ESPN SWID / member id, braced or not. Never a person's name. */
+const ESPN_GUID_PATTERN = /^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$/i
+
+/**
+ * A display name that is really an id. `buildEspnMemberDirectory` stores a nameless member's id
+ * as its `displayName`, and the owner fallbacks below do the same, so "has a displayName" is not
+ * "has a name".
+ */
+function isEspnIdStandIn(name: string, ownerId: string): boolean {
+  const trimmed = name.trim()
+  return !trimmed || trimmed === ownerId || ESPN_GUID_PATTERN.test(trimmed)
+}
+
 function resolveEspnOwners(team: Record<string, any>, members: Map<string, EspnMemberSummary>) {
   const ownerRefs = Array.isArray(team.owners) ? team.owners : []
-  const resolvedOwners: EspnMemberSummary[] = []
+  const resolvedOwners: Array<EspnMemberSummary & { ownerId: string }> = []
 
   for (const ownerRef of ownerRefs) {
     if (isRecord(ownerRef)) {
@@ -548,6 +561,7 @@ function resolveEspnOwners(team: Record<string, any>, members: Map<string, EspnM
           : `${typeof ownerRef.firstName === 'string' ? ownerRef.firstName : ''} ${typeof ownerRef.lastName === 'string' ? ownerRef.lastName : ''}`.trim()
       if (ownerId || displayName) {
         resolvedOwners.push({
+          ownerId,
           id: ownerId || displayName || String(team.id ?? 'manager'),
           displayName: displayName || members.get(ownerId)?.displayName || ownerId || String(team.id ?? 'Manager'),
         })
@@ -557,7 +571,7 @@ function resolveEspnOwners(team: Record<string, any>, members: Map<string, EspnM
 
     const ownerId = String(ownerRef ?? '').trim()
     if (!ownerId) continue
-    resolvedOwners.push(members.get(ownerId) ?? { id: ownerId, displayName: ownerId })
+    resolvedOwners.push({ ...(members.get(ownerId) ?? { id: ownerId, displayName: ownerId }), ownerId })
   }
 
   const uniqueOwners = resolvedOwners.filter(
@@ -566,11 +580,24 @@ function resolveEspnOwners(team: Record<string, any>, members: Map<string, EspnM
   )
 
   const managerId = uniqueOwners[0]?.id ?? String(team.primaryOwner ?? team.id ?? 'manager')
-  const managerName = uniqueOwners.map((owner) => owner.displayName).filter(Boolean).join(' / ')
+  const managerName = uniqueOwners
+    .map((owner) => owner.displayName)
+    .filter((name, index) => !isEspnIdStandIn(name ?? '', uniqueOwners[index].ownerId))
+    .join(' / ')
 
+  /*
+   * 🛑 THIS FELL BACK TO THE OWNER ID, AND ON ESPN THAT IS A SWID GUID. A public league read
+   * without cookies often has no `members`, so nothing resolves an owner id to a person and
+   * `LeagueTeam.ownerName` became '{EC0584BF-…}' for every team (measured on the test DB, two
+   * leagues). Fall back to the team's own name, then `Manager <team id>`.
+   *
+   * ⚠ DISPLAY ONLY. `managerId` above stays the raw owner id: it is a join key (claims,
+   * `platformUserId`, the viewer-team match) and must never be prettified.
+   */
+  const teamNo = String(team.id ?? '').trim()
   return {
     managerId,
-    managerName: managerName || `Manager ${managerId}`,
+    managerName: managerName || buildEspnTeamName(team, teamNo ? `Manager ${teamNo}` : 'Manager'),
   }
 }
 
@@ -1412,6 +1439,7 @@ export async function fetchEspnScheduleForSync(
  * regression test that does not require a live ESPN league.
  */
 export { parseEspnRosterEntries as parseEspnRosterEntriesForTest }
+export { resolveEspnOwners as resolveEspnOwnersForTest }
 
 /**
  * Test seam for the schedule parse, exported for the same reason as the roster one: the
