@@ -1051,6 +1051,15 @@ export async function getMyTeamData(
     String(league.platform ?? '')
   )
 
+  /*
+   * ⚠ THE BYE PASS RUNS HERE, BEFORE ANYTHING READS A PROJECTION. It ran after the bench check,
+   * which then never saw a player on bye: every `onBye` was still false, so a bye starter kept
+   * his feed projection (or, with none on file, got no advice at all) and a bench player on bye
+   * could be recommended to replace him. The totals below were already moved after it for the
+   * same reason; the bench check was left behind.
+   */
+  const byes = await zeroByeWeekPlayers(resolved, sport, sportsWeek)
+
   // Sleeper encodes an unfilled starting slot as "0" — that is the handoff's
   // "FLEX is empty" state, and it must survive as an empty slot rather than
   // being filtered out into a shorter lineup that looks complete.
@@ -1281,8 +1290,6 @@ export async function getMyTeamData(
         : { ownPct: 0, startPct: null }
     }
   }
-
-  const byes = await zeroByeWeekPlayers(resolved, sport, sportsWeek)
 
   const upcomingByes = byes
     ? [...byes.byWeek.entries()]
