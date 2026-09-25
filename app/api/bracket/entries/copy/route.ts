@@ -58,34 +58,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const isPaidLeague = Boolean(rules.isPaidLeague)
-  if (isPaidLeague) {
-    const payments = await (prisma as any).bracketPayment.findMany({
-      where: {
-        userId: auth.userId,
-        leagueId: source.leagueId,
-        tournamentId: source.league.tournamentId,
-        status: "completed",
-      },
-      select: { paymentType: true },
-    })
-
-    const hasPaidFirst = payments.some((p: any) => p.paymentType === "first_bracket_fee")
-    const hasUnlimited = payments.some((p: any) => p.paymentType === "unlimited_unlock")
-
-    if (!hasPaidFirst) {
-      return NextResponse.json(
-        { error: "PAYMENT_REQUIRED", paymentType: "first_bracket_fee" },
-        { status: 402 }
-      )
-    }
-    if (currentCount >= 3 && !hasUnlimited) {
-      return NextResponse.json(
-        { error: "PAYMENT_REQUIRED", paymentType: "unlimited_unlock" },
-        { status: 402 }
-      )
-    }
-  }
+  /*
+   * 🛑 NO IN-APP BRACKET FEE (owner's decision, 2026-09-25). A paid bracket league
+   * used to answer 402 here until the member had bought a $2 "first bracket fee" and,
+   * past three entries, a $3 unlock. That fee was never payable: compliance-guardrails
+   * has refused `first_bracket_fee` as in-app league dues since 2026-03-30, and its
+   * Stripe products were never created — so the gate could only ever say no. A paid
+   * league is a commissioner-run pool paid outside AllFantasy (FanCred); the entry
+   * limit above is the only cap.
+   */
 
   const tournament = await prisma.bracketTournament.findUnique({
     where: { id: source.league.tournamentId },

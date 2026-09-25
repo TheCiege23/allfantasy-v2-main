@@ -277,29 +277,6 @@ describe("middleware enforces the lock wherever the request appears to be", () =
   })
 })
 
-describe("the bracket checkout joins the paid gate", () => {
-  it("refuses Nevada with 451 PAID_GEO_BLOCKED", async () => {
-    const res = await middleware(
-      new NextRequest(new URL("https://www.allfantasy.ai/api/bracket/stripe/checkout"), {
-        method: "POST",
-        headers: { "cf-ipcountry": "US", "cf-region-code": "NV", "cf-connecting-ip": HOME_IP },
-      }),
-    )
-    expect(res.status).toBe(451)
-    expect((await res.json()).error).toBe("PAID_GEO_BLOCKED")
-  })
-
-  it("does not touch its webhook, which Stripe calls from anywhere", async () => {
-    const res = await middleware(
-      new NextRequest(new URL("https://www.allfantasy.ai/api/bracket/stripe/webhook"), {
-        method: "POST",
-        headers: { "cf-ipcountry": "US", "cf-region-code": "NV", "cf-connecting-ip": HOME_IP },
-      }),
-    )
-    expect(res.status).not.toBe(451)
-  })
-})
-
 /*
  * The CARD lock (2026-09-25): a purchase with a restricted state's card billing
  * address was refunded, and the account is kept off PAID surfaces only — from

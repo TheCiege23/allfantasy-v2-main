@@ -28,7 +28,6 @@ vi.mock("@/lib/stripe-client", () => ({
 const IMPORTERS: Record<string, () => Promise<{ POST: (req: never) => Promise<Response> }>> = {
   "monetization/checkout/subscription": () => import("@/app/api/monetization/checkout/subscription/route"),
   "monetization/checkout/tokens": () => import("@/app/api/monetization/checkout/tokens/route"),
-  "bracket/stripe/checkout": () => import("@/app/api/bracket/stripe/checkout/route"),
 }
 
 async function postTo(route: string, body: object) {
@@ -44,7 +43,6 @@ async function postTo(route: string, body: object) {
 const ROUTES = [
   ["monetization/checkout/subscription", { sku: "af_pro_monthly" }],
   ["monetization/checkout/tokens", { sku: "af_tokens_5" }],
-  ["bracket/stripe/checkout", { leagueId: "lg_1", paymentType: "first_bracket_fee" }],
 ] as const
 
 describe("checkout refuses a card-locked account before Stripe", () => {
