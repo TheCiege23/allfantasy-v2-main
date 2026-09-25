@@ -768,7 +768,20 @@ export async function persistImportedLeagueFromNormalization(
       seasonYear,
       sourceManagerId: options.importerSourceManagerId,
     })
-    if (joined) return joined
+    if (joined) {
+      /*
+       * ⚠ THE JOIN RETURNS BEFORE THE ORDINARY PATH'S `calculateAndSaveRank` BELOW, so
+       * without this a joiner is never ranked (measured: `rank_calculated_at` stayed null
+       * after a successful join). The ledger counts their claimed team, so rank them here.
+       * Non-fatal, like the call it mirrors — a failed rank must not undo a successful join.
+       */
+      try {
+        await calculateAndSaveRank(userId)
+      } catch (err) {
+        console.warn('[ImportedLeagueCommitService] calculateAndSaveRank (join) non-fatal:', err)
+      }
+      return joined
+    }
   }
 
   const resolvedSport = resolveImportedLeagueSport(normalized)

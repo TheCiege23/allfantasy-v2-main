@@ -73,6 +73,10 @@ vi.mock('@/lib/prisma', () => ({
       }),
     },
     franchiseSeason: { findMany: vi.fn(async () => []) },
+    // The ledger's claimed-team source (see __tests__/career-ledger-claimed-teams.test.ts).
+    // Without these the loader silently takes that source's degrade path on every test.
+    leagueTeam: { findMany: vi.fn(async () => []) },
+    leagueSeason: { findMany: vi.fn(async () => []) },
     sportsDataCache: {
       findMany: vi.fn(async (args: { where: unknown }) => {
         const keys = inList(args.where, ['cacheKey', 'in']) ?? []
