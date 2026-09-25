@@ -1,3 +1,9 @@
+/*
+ * 🛑 NO EMAIL IN ANY CHAT NAME (2026-09-25). DM titles and sender names fell back to the account's
+ * email address when it had no display name or username, so the other people in a DM or huddle saw
+ * it. The email column is no longer selected anywhere in this file; names go display name, username,
+ * then "Manager" (system rows keep "System" / their Chimmy label).
+ */
 import { prisma } from '@/lib/prisma'
 import type { PlatformChatMessage, PlatformChatThread } from '@/types/platform-shared'
 import { getDefaultChatSport, resolveSportForChatRoom } from '@/lib/chat-core'
@@ -77,7 +83,6 @@ async function normalizeThread(row: any, memberRow: any, appUserId: string): Pro
   const dmTitle =
     otherDmMember?.user?.displayName ||
     otherDmMember?.user?.username ||
-    otherDmMember?.user?.email ||
     "Direct message"
   const unreadCount = await resolveUnreadCountForMember(
     appUserId,
@@ -144,7 +149,6 @@ async function getUnifiedThreads(appUserId: string): Promise<PlatformChatThread[
                     id: true,
                     username: true,
                     displayName: true,
-                    email: true,
                   },
                 },
               },
@@ -267,7 +271,6 @@ export async function getPlatformThreadById(appUserId: string, threadId: string)
                     id: true,
                     username: true,
                     displayName: true,
-                    email: true,
                   },
                 },
               },
@@ -386,7 +389,6 @@ export async function getPlatformThreadMessages(
             id: true,
             displayName: true,
             username: true,
-            email: true,
             avatarUrl: true,
             profile: { select: { avatarPreset: true } },
           },
@@ -425,8 +427,8 @@ export async function getPlatformThreadMessages(
         senderName:
           msg.sender?.displayName ||
           msg.sender?.username ||
-          msg.sender?.email ||
-          resolveSystemSenderName(msg.messageType, msg.metadata),
+          // A real person with no name is a "Manager", never "System"; system rows keep their label.
+          (msg.senderUserId ? "Manager" : resolveSystemSenderName(msg.messageType, msg.metadata)),
         senderUsername: msg.sender?.username || null,
         senderAvatarUrl: msg.sender?.avatarUrl ?? null,
         senderAvatarPreset: msg.sender?.profile?.avatarPreset ?? null,
@@ -469,7 +471,6 @@ export async function searchPlatformThreadMessages(
             id: true,
             displayName: true,
             username: true,
-            email: true,
             avatarUrl: true,
             profile: { select: { avatarPreset: true } },
           },
@@ -502,8 +503,8 @@ export async function searchPlatformThreadMessages(
         senderName:
           msg.sender?.displayName ||
           msg.sender?.username ||
-          msg.sender?.email ||
-          resolveSystemSenderName(msg.messageType, msg.metadata),
+          // A real person with no name is a "Manager", never "System"; system rows keep their label.
+          (msg.senderUserId ? "Manager" : resolveSystemSenderName(msg.messageType, msg.metadata)),
         senderUsername: msg.sender?.username || null,
         senderAvatarUrl: msg.sender?.avatarUrl ?? null,
         senderAvatarPreset: msg.sender?.profile?.avatarPreset ?? null,
@@ -580,7 +581,6 @@ export async function editPlatformThreadMessage(
             id: true,
             displayName: true,
             username: true,
-            email: true,
             avatarUrl: true,
             profile: { select: { avatarPreset: true } },
           },
@@ -611,7 +611,6 @@ export async function editPlatformThreadMessage(
             id: true,
             displayName: true,
             username: true,
-            email: true,
             avatarUrl: true,
             profile: { select: { avatarPreset: true } },
           },
@@ -623,7 +622,7 @@ export async function editPlatformThreadMessage(
       id: updated.id,
       threadId,
       senderUserId: updated.senderUserId || null,
-      senderName: updated.sender?.displayName || updated.sender?.username || updated.sender?.email || 'User',
+      senderName: updated.sender?.displayName || updated.sender?.username || 'Manager',
       senderUsername: updated.sender?.username || null,
       senderAvatarUrl: updated.sender?.avatarUrl ?? null,
       senderAvatarPreset: updated.sender?.profile?.avatarPreset ?? null,
@@ -746,7 +745,6 @@ export async function createPlatformThreadMessage(
               id: true,
               displayName: true,
               username: true,
-              email: true,
               avatarUrl: true,
               profile: { select: { avatarPreset: true } },
             },
@@ -771,7 +769,7 @@ export async function createPlatformThreadMessage(
       id: created.id,
       threadId,
       senderUserId: created.senderUserId || null,
-      senderName: created.sender?.displayName || created.sender?.username || created.sender?.email || 'User',
+      senderName: created.sender?.displayName || created.sender?.username || 'Manager',
       senderUsername: created.sender?.username || null,
       senderAvatarUrl: created.sender?.avatarUrl ?? null,
       senderAvatarPreset: created.sender?.profile?.avatarPreset ?? null,
