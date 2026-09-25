@@ -168,7 +168,9 @@ describe('scoreActivePlayoffRound', () => {
     const m1 = updates.find((u) => u.id === 'm1')!
     expect(m1.data.homeScore).toBeUndefined()
     expect(m1.data.awayScore).toBeUndefined()
-    expect(m1.data.status).toBe('active')
+    // The column is CHECK-constrained (scheduled/in_progress/final/bye/cancelled); a live round
+    // must not write the runtime's 'active', and writes no status at all.
+    expect(m1.data.status).toBeUndefined()
     expect(m1.data.metadata.live).toMatchObject({ homeScore: 88.4, awayScore: 91.2, weeks: [15] })
     expect(m1.data.metadata.bracketType).toBe('championship')
   })
