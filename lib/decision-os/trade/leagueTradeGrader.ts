@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { leagueTypeBasis, type LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { loadLeagueForTrade, type LoadedTradeLeague } from '@/lib/trade-value-console/league-loader'
 import { gradeBaseOf, gradeOnLeagueValue, isNonPlayerLine, type LeagueGrade } from '@/lib/trade-value-console/leagueGrade'
 import {
@@ -137,6 +138,8 @@ export async function gradePricedSides(args: {
 export type LeagueTradeGrader = {
   leagueId: string
   chart: LeagueTradeChart
+  /** The league type every grade here is priced under, and how we know it. Also on each grade. */
+  leagueType: LeagueTypeBasis
   /**
    * Price and grade one deal on this league's chart. `give` is what the graded side sends.
    * `viewerSide: true` says that side is the viewer's roster, which is what lets roster need count.
@@ -184,45 +187,71 @@ export async function createLeagueTradeGrader(args: {
         : null
   const chart = await resolveLeagueTradeChart({ leagueRow, leagueSnapshot, leagueNormCtx })
   const sport = normalizeToSupportedSport(leagueSnapshot.sport)
+  /*
+   * The league type every grade from this grader is priced under, and how we know it — carried ON
+   * the grade so each surface can say it beside the letter (Guap, 2026-09-25: the manager must be
+   * told how much their league type matters). Withheld grades carry it too: "not graded" in a
+   * league we assumed was redraft is also worth a confirm.
+   */
+  const leagueType = leagueTypeBasis({
+    settings: leagueRow.settings,
+    leagueType: leagueRow.leagueType,
+    platform: leagueRow.platform ?? null,
+  })
+  const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
+
+  // An arrow, not a function declaration: a hoisted declaration loses the `leagueRow` null narrowing.
+  const gradeOnce = async ({
+    give,
+    get,
+    viewerSide,
+  }: {
+    give: TradeAssetInput[]
+    get: TradeAssetInput[]
+    viewerSide: boolean
+  }): Promise<TradeGradeView> => {
+    try {
+      const dataGaps: string[] = []
+      const opts = {
+        effectiveSport: sport,
+        nflCtx: chart.nflCtx,
+        waiverBudget: chart.waiverBudget,
+        dataGaps,
+        fcPlayers: chart.fcPlayers,
+        resolveEnrichmentIds: false,
+      }
+      const [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
+      const unresolved = [...g.unresolved, ...t.unresolved]
+      if (unresolved.length > 0) {
+        return {
+          graded: false,
+          reason: `${unresolved.slice(0, 4).join(', ')} could not be found in the ${sport} player database, so this deal is not graded.`,
+          basis: null,
+        }
+      }
+      const { grade } = await gradePricedSides({
+        chart,
+        giveLines: g.lines,
+        getLines: t.lines,
+        givePriced: applyChartTePremium(chart, g.priced),
+        getPriced: applyChartTePremium(chart, t.priced),
+        need:
+          viewerSide && args.userId
+            ? { leagueId: args.leagueId, userId: args.userId, sport, starters: leagueRow.starters }
+            : null,
+      })
+      return grade
+    } catch {
+      return { graded: false, reason: 'This deal could not be priced just now.', basis: null }
+    }
+  }
 
   return {
     leagueId: args.leagueId,
     chart,
-    async grade({ give, get, viewerSide }) {
-      try {
-        const dataGaps: string[] = []
-        const opts = {
-          effectiveSport: sport,
-          nflCtx: chart.nflCtx,
-          waiverBudget: chart.waiverBudget,
-          dataGaps,
-          fcPlayers: chart.fcPlayers,
-          resolveEnrichmentIds: false,
-        }
-        const [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
-        const unresolved = [...g.unresolved, ...t.unresolved]
-        if (unresolved.length > 0) {
-          return {
-            graded: false,
-            reason: `${unresolved.slice(0, 4).join(', ')} could not be found in the ${sport} player database, so this deal is not graded.`,
-            basis: null,
-          }
-        }
-        const { grade } = await gradePricedSides({
-          chart,
-          giveLines: g.lines,
-          getLines: t.lines,
-          givePriced: applyChartTePremium(chart, g.priced),
-          getPriced: applyChartTePremium(chart, t.priced),
-          need:
-            viewerSide && args.userId
-              ? { leagueId: args.leagueId, userId: args.userId, sport, starters: leagueRow.starters }
-              : null,
-        })
-        return grade
-      } catch {
-        return { graded: false, reason: 'This deal could not be priced just now.', basis: null }
-      }
+    leagueType,
+    async grade(deal) {
+      return withType(await gradeOnce(deal))
     },
   }
 }

@@ -31,6 +31,7 @@ import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
+import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { markOnce, track, type Sport } from '@/lib/analytics/dataLayer'
 import { readBackfillOutcome } from '@/lib/league-import/backfillOutcome'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
@@ -2691,6 +2692,11 @@ export function ImportV4({
                 ? { href: postImportChimmyHref(phase.leagueId, phase.sport), label: 'Have Chimmy check your lineup' }
                 : null
             }
+            /*
+              The league type decides how every trade in this league is graded, and the import
+              never asked. `alwaysShow`: an ordinary redraft guess is exactly the one to check.
+            */
+            leagueTypeCheck={phase.leagueId ? <LeagueTypeConfirm leagueId={phase.leagueId} alwaysShow /> : null}
             onImportAnother={() => {
               setAccount('')
               reset()

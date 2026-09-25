@@ -43,6 +43,7 @@ import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
+import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -1975,6 +1976,11 @@ export function TradeCenter(props: {
               <span>{result.valueBasis.label}</span>
             </p>
           ) : null}
+          {/*
+            Which league type that chart is for, and whether anyone confirmed it. The league-type
+            control sits in this page's header (CoreLeagueContextBar, `#league-type`).
+          */}
+          <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
 
           <div className="af-tc-verdict-row">
             {yourGrade || theirGrade ? (

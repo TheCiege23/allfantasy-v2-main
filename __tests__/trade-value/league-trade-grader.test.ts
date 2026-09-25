@@ -138,6 +138,22 @@ describe('createLeagueTradeGrader', () => {
     })
     expect(v.graded).toBe(false)
   })
+
+  /*
+   * 🛑 EVERY GRADE SAYS WHICH LEAGUE TYPE IT WAS PRICED UNDER, AND HOW WE KNOW (2026-09-25) — the
+   * surfaces print it beside the letter. Withheld grades carry it too.
+   */
+  it('carries the league type on the grader and on every grade, graded or withheld', async () => {
+    const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    // The fixture's column says dynasty, but its settings carry no provider flag and no confirmation.
+    const expected = { type: 'dynasty', label: 'Dynasty', source: 'assumed', platform: null }
+    expect(g.leagueType).toEqual(expected)
+    const graded1 = await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    expect(graded1.leagueType).toEqual(expected)
+    const withheld = await g.grade({ give: [{ kind: 'player', name: 'Nobody McUnknown' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    expect(withheld.graded).toBe(false)
+    expect(withheld.leagueType).toEqual(expected)
+  })
 })
 
 describe('gradeDeal', () => {

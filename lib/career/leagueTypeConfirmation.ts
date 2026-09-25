@@ -8,8 +8,10 @@ import {
   isLeagueConceptType,
   isPirateBaseFormat,
   readConfirmedPirateBase,
+  readProviderKeeperFact,
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
+import { leagueTypeBasis, type LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 
 /**
  * Read and confirm a league's format.
@@ -62,6 +64,11 @@ export type LeagueTypeState = {
    * than inflated, which is the right direction to be wrong in.
    */
   rankableType: SuggestedType | null
+  /**
+   * The type trade grades in this league are priced under right now, and how we know it — the same
+   * `leagueTypeBasis` the grade itself carries, so the league-type control shows what the grades use.
+   */
+  gradedAs: LeagueTypeBasis
 }
 
 export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirmation | null {
@@ -122,7 +129,7 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
       where: { id: leagueId },
       select: {
         id: true, name: true, leagueType: true, isDynasty: true,
-        guillotineMode: true, settings: true,
+        guillotineMode: true, settings: true, platform: true,
       },
     })
     .catch(() => null)
@@ -131,6 +138,7 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
   const suggestion = suggestLeagueType({
     name: league.name,
     isDynasty: league.isDynasty,
+    isKeeper: readProviderKeeperFact(league.settings),
     guillotineMode: league.guillotineMode,
     currentType: league.leagueType,
   })
@@ -143,6 +151,7 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
     suggestion,
     confirmation,
     rankableType: confirmation?.type ?? null,
+    gradedAs: leagueTypeBasis({ settings: league.settings, leagueType: league.leagueType, platform: league.platform }),
   }
 }
 

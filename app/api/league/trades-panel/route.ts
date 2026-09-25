@@ -35,6 +35,7 @@ import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 
 export const dynamic = 'force-dynamic'
@@ -802,6 +803,12 @@ export async function GET(req: NextRequest) {
   }
 
   /*
+   * The league type every grade on this panel is priced under, and how we know it — once, for the
+   * tab to say beside its grades (the grades carry it too). Every return below includes it.
+   */
+  const leagueTypeInfo = leagueTypeBasis({ settings: league.settings, leagueType: league.leagueType, platform: league.platform })
+
+  /*
    * The manager's saved draft for this league, if the table is there.
    *
    * ⚠ A MISSING TABLE IS A NULL, NOT A 500. The migration is applied by hand on
@@ -856,6 +863,7 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({
         draft,
+        leagueType: leagueTypeInfo,
         tradeBlock: [] as LeagueTradeBlockPanelItem[],
         tradeBlockNote: tradeBlockSupport('yahoo').note,
         activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades, evaluations, grades)],
@@ -885,6 +893,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       draft,
+      leagueType: leagueTypeInfo,
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
       /*
        * An imported league's empty block is a platform we cannot read, not a league with nothing on
@@ -1107,6 +1116,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     draft,
+    leagueType: leagueTypeInfo,
     tradeBlock,
     tradeBlockNote,
     tradeBlockReadable,

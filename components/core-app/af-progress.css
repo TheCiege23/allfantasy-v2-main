@@ -332,6 +332,12 @@
   color: var(--muted);
 }
 
+/* The league-type ask (LeagueTypeConfirm) — its card carries its own border and padding. */
+.af-core .af-done-league-type {
+  margin: 0 0 18px;
+  text-align: left;
+}
+
 /* The enable-alerts ask, shown once the import has given us something to alert about.
    Sits above the actions so it is seen before the user taps through to their league. */
 .af-core .af-done-push {
