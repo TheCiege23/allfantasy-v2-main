@@ -65,7 +65,11 @@ describe('Chimmy drawer — plan allowance', () => {
 
   it('still quotes the price to everyone else', () => {
     open(null)
-    expect(screen.getByText('Chimmy answers may cost 10 tokens. Free lookups and typing cost nothing.')).toBeTruthy()
+    expect(
+      screen.getByText(
+        "Chimmy answers may cost 10 tokens. Under 2 answers' worth, your balance tops back up to 2 once a day. Free lookups and typing cost nothing.",
+      ),
+    ).toBeTruthy()
   })
 
   it('marks an included answer and moves the count, with no consent prompt', async () => {

@@ -123,7 +123,7 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(screen.getByRole('button', { name: 'Fast' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Deep' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Which league needs me most\?/ })).toBeInTheDocument()
-    expect(screen.getByText('Chimmy answers may cost 9 tokens. Free lookups and typing cost nothing.')).toBeInTheDocument()
+    expect(screen.getByText('Chimmy answers may cost 9 tokens. Under 2 answers\' worth, your balance tops back up to 2 once a day. Free lookups and typing cost nothing.')).toBeInTheDocument()
 
     // What the hands-on test saw on the old page, none of which the drawer has.
     for (const gone of [/AI Quick Ask/, /AI Hub/, /AI Status/, /Wallet Summary/, /Chimmy shortcuts/, /Assistant mode/]) {
