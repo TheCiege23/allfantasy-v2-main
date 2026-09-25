@@ -2,6 +2,7 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
 import type { MarketValuesPayload } from '@/lib/trade-intel/marketValueService'
 import type { AfValue } from '@/lib/trade-intel/afValue'
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { GradedTrade, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import {
   TRADE_GRADE_DIMENSION_FRAMEWORK,
@@ -581,5 +582,73 @@ export function buildTradeExpectation(params: BuildParams): TradeExpectation {
         { id: 'historical-context', status: historical ? 'missing' : 'not-applicable', detail: historical ? 'Current values and rosters are future information and are excluded from the decision grade.' : 'This trade belongs to the league’s current season.' },
       ],
     },
+  }
+}
+
+/**
+ * Rebase a market-only expectation onto THE grade (`lib/decision-os/trade/tradeGrade.ts`).
+ *
+ * 🛑 THE LETTER BEFORE POINTS ARRIVE WAS A GRADE OF ITS OWN (until 2026-09-25): an AF-value blend,
+ * the gap measured against the MEAN of the two sides at .10/.25, with anything inside the valuation
+ * noise forced to C. The same deal read one letter in the grade email and another in the Trade
+ * Center. Now the letter, the edge and the side totals are the one grade's — the league's own chart
+ * and scoring, the gap against the larger side — and side two is its exact mirror.
+ *
+ * What stays is everything this module measures that a letter does not: prior production, roster
+ * needs, the uncertainty of the valuations (`insideNoise` and `confidence` remain as caveats, they
+ * no longer rewrite the letter), and the specialty/historical withholding, which this never
+ * overrides — a withheld scope keeps its null letters.
+ *
+ * `null` for `oneGrade` means it could not be computed; a market-only letter is then withheld too,
+ * rather than falling back to the old rule.
+ */
+export function withOneGrade(exp: TradeExpectation, oneGrade: TradeGradeView | null): TradeExpectation {
+  if (exp.evaluation.scope !== 'market-only' || exp.sides.length !== 2) return exp
+  const [a, b] = exp.sides as [SideExpectation, SideExpectation]
+  if (!oneGrade || !oneGrade.graded) {
+    const why = oneGrade && !oneGrade.graded ? oneGrade.reason : 'the league grade could not be computed'
+    return {
+      ...exp,
+      sides: [{ ...a, projected: null }, { ...b, projected: null }],
+      missing: [...exp.missing, `grade withheld: ${why}`],
+    }
+  }
+  const g = oneGrade
+  const giveLines = g.lines.filter((l) => l.side === 'give')
+  const getLines = g.lines.filter((l) => l.side === 'get')
+  const priced = (assets: AssetExpectation[], lines: typeof giveLines) =>
+    lines.length === assets.length ? assets.map((x, i) => ({ ...x, marketValue: lines[i]!.leagueValue })) : assets
+  const projected = (base: ProjectedGrade | null, letter: GradeLetter, pd: number, net: number): ProjectedGrade => ({
+    uncertainty: base?.uncertainty ?? null,
+    insideNoise: base?.insideNoise ?? false,
+    productionDisagrees: base?.productionDisagrees ?? false,
+    confidence: base?.confidence ?? 'moderate',
+    letter,
+    valueEdge: Math.round(pd * 10) / 1000,
+    valueNet: net,
+  })
+  const net = g.getValue - g.giveValue
+  return {
+    ...exp,
+    sides: [
+      {
+        ...a,
+        assetsIn: priced(a.assetsIn, getLines),
+        assetsOut: priced(a.assetsOut, giveLines),
+        marketIn: g.getValue,
+        marketOut: g.giveValue,
+        marketNet: net,
+        projected: projected(a.projected, g.letter, g.percentDiff, net),
+      },
+      {
+        ...b,
+        assetsIn: priced(b.assetsIn, giveLines),
+        assetsOut: priced(b.assetsOut, getLines),
+        marketIn: g.giveValue,
+        marketOut: g.getValue,
+        marketNet: -net,
+        projected: projected(b.projected, g.partnerLetter, -g.percentDiff, -net),
+      },
+    ],
   }
 }

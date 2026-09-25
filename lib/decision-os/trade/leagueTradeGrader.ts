@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { PricedAsset } from '@/lib/hybrid-valuation'
+import { prisma } from '@/lib/prisma'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -156,14 +157,19 @@ export type LeagueTradeGrader = {
  */
 export async function createLeagueTradeGrader(args: {
   leagueId: string
-  userId: string
+  /**
+   * The viewer, when there is one. Optional: a completed trade, a receipt for someone else's
+   * deal or the grade email has no viewer, and then roster need is simply not priced. The league's
+   * chart does not depend on it — with a league row, `marketContextFor` decides every chart input.
+   */
+  userId?: string | null
   /** Supply these when the caller already has them, so the league is not read twice. */
   leagueRow?: LoadedTradeLeague | null
   leagueNormCtx?: NormalizedLeagueContext | null
 }): Promise<LeagueTradeGrader | null> {
   const leagueRow =
     args.leagueRow ??
-    (await loadLeagueForTrade({ leagueId: args.leagueId, userId: args.userId, membershipPreverified: true }).catch(
+    (await loadLeagueForTrade({ leagueId: args.leagueId, userId: args.userId ?? '', membershipPreverified: true }).catch(
       () => null,
     ))
   if (!leagueRow) return null
@@ -171,9 +177,11 @@ export async function createLeagueTradeGrader(args: {
   const leagueNormCtx =
     args.leagueNormCtx !== undefined
       ? args.leagueNormCtx
-      : await resolveNormalizedLeagueContext({ userId: args.userId, leagueId: args.leagueId })
-          .then((lc) => (lc.ok ? lc.context : null))
-          .catch(() => null)
+      : args.userId
+        ? await resolveNormalizedLeagueContext({ userId: args.userId, leagueId: args.leagueId })
+            .then((lc) => (lc.ok ? lc.context : null))
+            .catch(() => null)
+        : null
   const chart = await resolveLeagueTradeChart({ leagueRow, leagueSnapshot, leagueNormCtx })
   const sport = normalizeToSupportedSport(leagueSnapshot.sport)
 
@@ -206,7 +214,10 @@ export async function createLeagueTradeGrader(args: {
           getLines: t.lines,
           givePriced: applyChartTePremium(chart, g.priced),
           getPriced: applyChartTePremium(chart, t.priced),
-          need: viewerSide ? { leagueId: args.leagueId, userId: args.userId, sport, starters: leagueRow.starters } : null,
+          need:
+            viewerSide && args.userId
+              ? { leagueId: args.leagueId, userId: args.userId, sport, starters: leagueRow.starters }
+              : null,
         })
         return grade
       } catch {
@@ -229,4 +240,36 @@ export async function gradeDeal(
   const why = unpriceableReason(args.give, args.get)
   if (why) return { graded: false, reason: why, basis: null }
   return grader.grade({ give: args.give.assets, get: args.get.assets, viewerSide: args.viewerSide })
+}
+
+/**
+ * Names for native trade items that carry only a Sleeper id (a Trade Center proposal stores no
+ * metadata). One query for the whole batch, one row per id — `SportsPlayer` holds several for many
+ * players. Never throws: an unreadable table means "no names", and the grade withholds on its own.
+ */
+export async function loadNativePlayerNames(
+  items: ReadonlyArray<{ itemType: string | null | undefined; itemReference: string | null; metadata: unknown }>,
+): Promise<(id: string) => string | null> {
+  const ids = [
+    ...new Set(
+      items
+        .filter((i) => {
+          const type = String(i.itemType ?? 'player').toLowerCase()
+          if (type.includes('pick') || type.includes('faab')) return false
+          const m = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? (i.metadata as Record<string, unknown>) : {}
+          return !(typeof m.playerName === 'string' && m.playerName.trim()) && !(typeof m.name === 'string' && m.name.trim())
+        })
+        .map((i) => i.itemReference)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  ]
+  const byId = new Map<string, string>()
+  const store = (prisma as typeof prisma & { sportsPlayer?: typeof prisma.sportsPlayer }).sportsPlayer
+  if (ids.length > 0 && store && typeof store.findMany === 'function') {
+    const rows = await store
+      .findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, name: true } })
+      .catch(() => [] as Array<{ sleeperId: string | null; name: string }>)
+    for (const r of rows) if (r.sleeperId && r.name && !byId.has(r.sleeperId)) byId.set(r.sleeperId, r.name)
+  }
+  return (id: string) => byId.get(id) ?? null
 }

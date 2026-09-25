@@ -142,9 +142,12 @@ export function buildTradeDecisionSnapshot(input: {
         reason: input.serverDecisionResult.reason,
         participants: input.serverDecisionResult.participants.map((participant) => {
           const outcome = outcomeByRosterId.get(participant.rosterId) ?? null
+          // THE grade (lib/decision-os/trade/tradeGrade.ts) — the letter every trade screen shows.
           const marketLine = participant.grade && participant.valueGiven != null && participant.valueReceived != null
-            ? `Market grade ${participant.grade}: receives ${Math.round(participant.valueReceived)} in value and sends ${Math.round(participant.valueGiven)}.`
-            : `Market grade withheld at ${participant.coveragePct}% asset coverage.`
+            ? `League-value grade ${participant.grade}${participant.gradeLabel ? ` (${participant.gradeLabel})` : ''}: receives ${Math.round(participant.valueReceived)} and sends ${Math.round(participant.valueGiven)} on this league's values.`
+            : participant.gradeWithheld
+              ? `League-value grade withheld: ${participant.gradeWithheld.replace(/\.$/, '')}.`
+              : `League-value grade withheld at ${participant.coveragePct}% asset coverage.`
           const outcomeLine = outcome
             ? `${verified?.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability changes from ${outcome.beforePct.toFixed(1)}% to ${outcome.afterPct.toFixed(1)}% (${outcome.deltaPct >= 0 ? '+' : ''}${outcome.deltaPct.toFixed(1)}%).`
             : 'A verified paired outcome simulation was not available for this team.'
