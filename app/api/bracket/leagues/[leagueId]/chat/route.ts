@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isAllowedGifUrl } from "@/lib/rich-message/GIFIntegrationResolver"
+import { sanitizeClientImageUrl } from "@/lib/chat-core/clientMessageInput"
 
 const messageInclude = {
   user: {
@@ -128,13 +129,25 @@ export async function POST(
 
   if (type === "image") {
     if (!imageUrl) return NextResponse.json({ error: "Image URL required" }, { status: 400 })
+    /*
+     * Only a photo in OUR storage for THIS pool: `/api/bracket/chat-upload` returns
+     * `/api/chat/upload?path=chat/bracket/<leagueId>/image/…`, and that is the shape kept (the same
+     * rule the shared-thread route applies — lib/chat-core/clientMessageInput.ts). This stored any URL
+     * at all, which every member's browser then loaded. The uploader's old public
+     * `…/bracket-chat/<userId>/…` URLs are not accepted for new posts; rows that already have one are
+     * not touched.
+     */
+    const ownImageUrl = sanitizeClientImageUrl(imageUrl, { kind: "bracket", id: params.leagueId })
+    if (!ownImageUrl) {
+      return NextResponse.json({ error: "That photo isn't from this pool's uploads." }, { status: 400 })
+    }
     const msg = await (prisma as any).bracketLeagueMessage.create({
       data: {
         leagueId: params.leagueId,
         userId,
         message: message || "",
         type: "image",
-        imageUrl,
+        imageUrl: ownImageUrl,
         replyToId: replyToId || null,
       },
       include: messageInclude,

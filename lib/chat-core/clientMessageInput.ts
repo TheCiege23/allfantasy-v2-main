@@ -38,6 +38,8 @@
  */
 
 import { sanitizeDraftChatRichMeta } from '@/lib/draft-room/draft-chat-contract'
+import { chatUploadReadUrl, parseChatUploadPath, type ChatUploadScope } from '@/lib/chat-core/chatUploadAccess'
+import { isAllowedGifUrl } from '@/lib/rich-message/GIFIntegrationResolver'
 
 export const CLIENT_MESSAGE_TYPES = ['text', 'poll', 'image', 'gif', 'file'] as const
 export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number]
@@ -129,4 +131,63 @@ export function buildClientPollBody(rawMetadata: unknown, rawBody: string): stri
     }
   }
   return rawBody
+}
+
+const UPLOAD_PROBE_ORIGIN = 'https://same-site.invalid'
+
+/**
+ * A client-supplied `imageUrl` (the column every viewer's browser loads as an `<img src>`), reduced to
+ * OUR OWN storage — or null.
+ *
+ * 🛑 THE SHARED-THREAD ROUTE STORED ANY STRING HERE (found 2026-09-25) on its league and bracket
+ * branches, and the league read path copies it into the message for rendering. So any https host —
+ * a tracking pixel — could be put in front of every member.
+ *
+ * Census of what our uploaders return (2026-09-25): `/api/chat/upload` and `/api/shared/chat/upload`
+ * both return `chatUploadReadUrl(path)` — `/api/chat/upload?path=chat/…`, private storage whose reader
+ * re-checks membership on every open. That is the one upload shape kept, and only when the path is
+ * one the reader itself would accept (`parseChatUploadPath`); it is rebuilt from the parsed path, so
+ * nothing else rides along in the query. No client of the shared-thread route sends `imageUrl` today
+ * (every composer puts media in `metadata` or the body), so this is the whole contract.
+ *
+ * `/api/bracket/chat-upload` (the bracket pool composer) now returns the same private shape, under
+ * `chat/bracket/<leagueId>/image/…`. Its OLD public Vercel Blob URLs (`…/bracket-chat/<userId>/…`)
+ * are deliberately NOT accepted for new posts: "any *.blob.vercel-storage.com host" would admit every
+ * OTHER Blob store on the internet too — the tracking-host hole under a trusted-looking name. Rows
+ * that already carry one are untouched; this runs only on the way in.
+ *
+ * Pass `scope` when the route knows which chat the message is going into: an upload path is then kept
+ * only when it belongs to THAT chat, which is where the upload routes store it.
+ *
+ * A GIF from a service we can name (`isAllowedGifUrl`: https on Klipy / GIPHY / Tenor's CDN) is kept,
+ * so a GIF that travels in this field still renders.
+ */
+export function sanitizeClientImageUrl(raw: unknown, scope?: ChatUploadScope): string | null {
+  if (typeof raw !== 'string') return null
+  const value = raw.trim()
+  if (!value || value.length > 2048) return null
+
+  if (value.startsWith('/') && !/^[/\\][/\\]/.test(value)) {
+    try {
+      const url = new URL(value, UPLOAD_PROBE_ORIGIN)
+      const keys = [...url.searchParams.keys()]
+      const path = url.searchParams.get('path')
+      const parsed = path ? parseChatUploadPath(path) : null
+      if (
+        url.origin === UPLOAD_PROBE_ORIGIN &&
+        url.pathname === '/api/chat/upload' &&
+        keys.length === 1 &&
+        path &&
+        parsed &&
+        (!scope || (parsed.scope.kind === scope.kind && parsed.scope.id === scope.id))
+      ) {
+        return chatUploadReadUrl(path)
+      }
+    } catch {
+      /* not a URL */
+    }
+    return null
+  }
+
+  return isAllowedGifUrl(value) ? value : null
 }

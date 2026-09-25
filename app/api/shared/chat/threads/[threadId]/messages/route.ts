@@ -29,6 +29,7 @@ import { filterMessagesByBlocked } from '@/lib/moderation'
 import { filterBbReadableMessages, resolveBbWriteChannel } from '@/lib/big-brother/bbChatChannelAccess'
 import {
   buildClientPollBody,
+  sanitizeClientImageUrl,
   sanitizeClientMessageMetadata,
   sanitizeClientMessageType,
 } from '@/lib/chat-core/clientMessageInput'
@@ -245,8 +246,13 @@ export async function POST(
     typeof body?.parentMessageId === 'string' && body.parentMessageId.trim().length > 0
       ? body.parentMessageId.trim()
       : null
-  const imageUrl =
-    typeof body?.imageUrl === 'string' && body.imageUrl.trim().length > 0 ? body.imageUrl.trim() : null
+  /*
+   * Every viewer's browser loads `imageUrl` as an image, so only our own private upload URL for THIS
+   * chat (or a GIF from a named GIF service) is stored — never a host the sender picked. Resolved per
+   * branch below, because the chat it must belong to is only known once the branch is.
+   * See sanitizeClientImageUrl.
+   */
+  const rawImageUrl: unknown = body?.imageUrl
 
   if (!message) {
     return NextResponse.json({ error: 'Message body required' }, { status: 400 })
@@ -263,6 +269,7 @@ export async function POST(
       where: { leagueId_userId: { leagueId, userId: user.appUserId } },
     })
     if (member) {
+      const imageUrl = sanitizeClientImageUrl(rawImageUrl, { kind: 'bracket', id: leagueId })
       const created = await (prisma as any).bracketLeagueMessage.create({
         data: {
           leagueId,
@@ -292,6 +299,7 @@ export async function POST(
       if (!bbWrite.ok) {
         return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
       }
+      const imageUrl = sanitizeClientImageUrl(rawImageUrl, { kind: 'league', id: leagueId })
       const leagueMetadata: Record<string, unknown> | undefined = bbWrite.channel
         ? { ...(metadata ?? {}), bbChannel: bbWrite.channel }
         : metadata
