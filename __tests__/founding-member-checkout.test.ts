@@ -30,6 +30,9 @@ vi.mock("@/lib/prisma", () => ({ prisma: { appUser: { findUnique: mocks.findUniq
 vi.mock("next-auth", () => ({ getServerSession: mocks.getServerSession }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 vi.mock("@/lib/geo/enforcePaidSubscriptionGeo", () => ({ enforcePaidSubscriptionGeo: vi.fn(async () => null) }))
+// The account-lock read (paid-state card check) is tested in paid-account-lock-checkout.test.ts.
+// Mocked here so "no account lookup" keeps meaning the FOUNDING lookup and nothing else.
+vi.mock("@/lib/geo/enforcePaidAccountLock", () => ({ enforcePaidAccountLock: vi.fn(async () => null) }))
 vi.mock("@/lib/meta-capi", () => ({ trackMetaServerEvent: vi.fn(async () => null) }))
 vi.mock("@/lib/monetization/stripeCustomerForUser", () => ({
   findStripeCustomerIdForUser: vi.fn(async () => null),
