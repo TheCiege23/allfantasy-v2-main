@@ -7,6 +7,7 @@ import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
 import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
+import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
@@ -92,6 +93,14 @@ async function runLegacyAutomationBridge() {
     }),
   )
 
+  // Bashing expiry, the announcement queue, scheduled weekly updates, animation delivery. Their own
+  // route is on no schedule and the cron list is full, so they ride this tick. See zombieAutomation.ts.
+  const zombieHousekeeping = await runZombieHousekeeping().catch((e: unknown) => ({
+    leaguesChecked: 0,
+    announcementsPosted: 0,
+    errors: [e instanceof Error ? e.message : String(e)],
+  }))
+
   const c2cLeagues = await prisma.c2CLeague.findMany({ select: { leagueId: true } })
   let c2cMatchupsRecalculated = 0
   for (const { leagueId } of c2cLeagues) {
@@ -120,6 +129,8 @@ async function runLegacyAutomationBridge() {
     survivorBridge,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
+    zombieHousekeepingLeagues: zombieHousekeeping.leaguesChecked,
+    zombieHousekeepingErrors: zombieHousekeeping.errors,
     c2cLeaguesSynced: c2cLeagues.length,
   }
 }
@@ -373,6 +384,7 @@ export async function GET(request: Request) {
       status:
         r.survivorBridge.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
+        r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
         r.redraft.guillotineFailed > 0
@@ -384,6 +396,8 @@ export async function GET(request: Request) {
         survivorFailed: r.survivorBridge.failed,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
+        zombieHousekeepingLeagues: r.zombieHousekeepingLeagues,
+        zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,
         redraft: r.redraft,
       },

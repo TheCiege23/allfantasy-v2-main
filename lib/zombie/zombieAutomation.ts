@@ -29,7 +29,58 @@ export async function processZombieAnnouncementQueue(): Promise<number> {
 }
 
 /**
- * Called from score-sync cron or `/api/zombie/automation` to advance weekly horde state.
+ * Everything the zombie tick does besides resolving a week, for every active league:
+ *   - a bashing decision whose window has passed defaults (spare),
+ *   - due scheduled announcements are marked posted,
+ *   - a weekly update with a set day and hour posts in that hour,
+ *   - animations older than a day are marked delivered.
+ *
+ * 🛑 NONE OF THIS RAN. Its only caller was `/api/zombie/automation`, which is on no schedule, and the
+ * cron list is at its ceiling (60/60 — `scripts/cron-budget-check.mjs`). So it runs from the
+ * five-minute score-sync, which already resolves zombie weeks. Every step is idempotent at that
+ * cadence: expiry and delivery act on rows past a deadline, the queue on rows due and unposted, and
+ * a weekly update posts once per week (a posted announcement for that week stops the next tick).
+ *
+ * Never throws: each failure is collected, so one bad league costs its own step and nothing else.
+ */
+export async function runZombieHousekeeping(): Promise<{
+  leaguesChecked: number
+  announcementsPosted: number
+  errors: string[]
+}> {
+  const errors: string[] = []
+  const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
+  try {
+    await processExpiredBashingDecisionsForAll()
+  } catch (e) {
+    errors.push(`bashing-expiry: ${why(e)}`)
+  }
+
+  let announcementsPosted = 0
+  try {
+    announcementsPosted = await processZombieAnnouncementQueue()
+  } catch (e) {
+    errors.push(`announcements: ${why(e)}`)
+  }
+
+  let active: Array<{ id: string; leagueId: string }> = []
+  try {
+    active =
+      (await prisma.zombieLeague.findMany({ where: { status: 'active' }, select: { id: true, leagueId: true } })) ?? []
+  } catch (e) {
+    errors.push(`leagues: ${why(e)}`)
+  }
+  for (const z of active) {
+    await scheduleWeeklyUpdate(z.leagueId).catch((e) => errors.push(`${z.id} weekly-update: ${why(e)}`))
+    await deliverPendingAnimations(z.leagueId).catch((e) => errors.push(`${z.id} animations: ${why(e)}`))
+  }
+
+  return { leaguesChecked: active.length, announcementsPosted, errors }
+}
+
+/**
+ * `/api/zombie/automation`: resolve each active league's current week, then the housekeeping above.
+ * The scheduled path is score-sync, which resolves weeks itself and calls `runZombieHousekeeping`.
  */
 export async function runZombieAutomationTick(opts?: { force?: boolean }): Promise<{
   leaguesProcessed: number
@@ -41,18 +92,6 @@ export async function runZombieAutomationTick(opts?: { force?: boolean }): Promi
   const errors: string[] = []
   let skippedIdempotent = 0
   let skippedIncomplete = 0
-  try {
-    await processExpiredBashingDecisionsForAll()
-  } catch (e) {
-    errors.push(`bashing-expiry: ${e instanceof Error ? e.message : String(e)}`)
-  }
-
-  let announcementsPosted = 0
-  try {
-    announcementsPosted = await processZombieAnnouncementQueue()
-  } catch (e) {
-    errors.push(`announcements: ${e instanceof Error ? e.message : String(e)}`)
-  }
 
   const active = await prisma.zombieLeague.findMany({
     where: { status: { in: ['active', 'registering'] } },
@@ -76,17 +115,21 @@ export async function runZombieAutomationTick(opts?: { force?: boolean }): Promi
         skippedIncomplete += 1
         continue
       }
-      await scheduleWeeklyUpdate(z.leagueId).catch((e) =>
-        errors.push(`${z.id} weekly-update: ${e instanceof Error ? e.message : String(e)}`),
-      )
-      await deliverPendingAnimations(z.leagueId).catch((e) =>
-        errors.push(`${z.id} animations: ${e instanceof Error ? e.message : String(e)}`),
-      )
       leaguesProcessed += 1
     } catch (e) {
       errors.push(`${z.id}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
-  return { leaguesProcessed, errors, skippedIdempotent, skippedIncomplete, announcementsPosted }
+  // After resolution, so a week resolved on this tick is the one a scheduled update can post.
+  const housekeeping = await runZombieHousekeeping()
+  errors.push(...housekeeping.errors)
+
+  return {
+    leaguesProcessed,
+    errors,
+    skippedIdempotent,
+    skippedIncomplete,
+    announcementsPosted: housekeeping.announcementsPosted,
+  }
 }

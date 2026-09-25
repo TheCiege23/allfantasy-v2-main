@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   guillotine: vi.fn(),
   seasons: vi.fn(),
+  housekeeping: vi.fn(),
 }))
 
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
@@ -45,6 +46,7 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
 }))
 vi.mock('@/lib/redraft/scoreSyncBatch', () => ({ rotatingBatch: <T,>(xs: T[]) => xs, SCORE_SYNC_BATCH: 50 }))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
+vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 
 import { GET } from '@/app/api/redraft/score-sync/route'
 
@@ -60,6 +62,7 @@ beforeEach(() => {
     if (seasonId === 's-guillotine') return { seasonId, outcome: 'chopped', week: 3 }
     return { seasonId, outcome: 'not_guillotine' }
   })
+  m.housekeeping.mockResolvedValue({ leaguesChecked: 0, announcementsPosted: 0, errors: [] })
 })
 
 describe('score-sync — native guillotine', () => {
@@ -78,6 +81,41 @@ describe('score-sync — native guillotine', () => {
       guillotineOutcomes: { chopped: 1 },
     })
     // A failed chop pass is a degraded run, never a clean one.
+    expect(body.summary.status).toBe('partial')
+  })
+})
+
+describe('score-sync — zombie housekeeping', () => {
+  /*
+   * Its own route (`/api/zombie/automation`) is on no schedule and the cron list is full, so the
+   * five-minute score-sync runs it: bashing-decision expiry, the announcement queue, scheduled weekly
+   * updates, animation delivery.
+   */
+  beforeEach(() => {
+    m.seasons.mockResolvedValue([])
+  })
+
+  it('runs once on every scheduled tick', async () => {
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: Record<string, unknown>; summary: { status: string } }
+    expect(m.housekeeping).toHaveBeenCalledTimes(1)
+    expect(body.result).toMatchObject({ zombieHousekeepingErrors: [] })
+    expect(body.summary.status).toBe('success')
+  })
+
+  it('a housekeeping failure makes the run partial, and says what failed', async () => {
+    m.housekeeping.mockResolvedValue({ leaguesChecked: 1, announcementsPosted: 0, errors: ['z1 weekly-update: db blip'] })
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { summary: { status: string; metadata: Record<string, unknown> } }
+    expect(body.summary.status).toBe('partial')
+    expect(body.summary.metadata).toMatchObject({ zombieHousekeepingErrors: ['z1 weekly-update: db blip'] })
+  })
+
+  it('a housekeeping crash costs the housekeeping, never the sweep', async () => {
+    m.housekeeping.mockRejectedValue(new Error('boom'))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { summary: { status: string } }
+    expect(res.status).toBe(200)
     expect(body.summary.status).toBe('partial')
   })
 })

@@ -403,9 +403,18 @@ export async function scheduleWeeklyUpdate(leagueId: string): Promise<void> {
   const now = new Date()
   if (now.getUTCDay() !== z.weeklyUpdateDay || now.getUTCHours() !== z.weeklyUpdateHour) return
 
-  const week = Math.max(1, z.currentWeek || 1)
-  const res = await getResolutionForWeek(z.id, week)
-  if (res?.status !== 'complete') return
+  /*
+   * 🛑 THE LATEST RESOLVED WEEK, NOT `currentWeek`. Resolution advances `currentWeek` to the week it
+   * opens (#1240), so the week `currentWeek` names has not been played yet and never has a complete
+   * resolution — this returned before posting, every week, for every league with a set post time.
+   */
+  const latest = await prisma.zombieWeeklyResolution.findFirst({
+    where: { zombieLeagueId: z.id, status: 'complete' },
+    orderBy: { week: 'desc' },
+    select: { week: true },
+  })
+  if (!latest) return
+  const week = latest.week
   if (!z.weeklyUpdateAutoPost || z.weeklyUpdateApproval) return
 
   const dup = await prisma.zombieAnnouncement.findFirst({
