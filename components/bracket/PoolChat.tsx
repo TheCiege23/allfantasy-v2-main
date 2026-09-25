@@ -263,6 +263,9 @@ export function PoolChat({
     try {
       const formData = new FormData()
       formData.append("file", file)
+      // Pool photos are private: stored only after the server proves you are in this pool,
+      // and served back only to its members.
+      formData.append("leagueId", leagueId)
       const res = await fetch("/api/bracket/chat-upload", { method: "POST", body: formData })
       if (!res.ok) throw new Error("Upload failed")
       const { url } = await res.json()
