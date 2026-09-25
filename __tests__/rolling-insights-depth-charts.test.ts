@@ -10,7 +10,13 @@ describe('Rolling Insights depth chart normalization', () => {
       {},
       { id: null, player: 'Missing Id' },
       { id: '123', player: '' },
-      { id: '456', player: 'Rome Odunze', number: '15', status: 'Active', img: 'headshot.png' },
+      {
+        id: '456',
+        player: 'Rome Odunze',
+        number: '15',
+        status: 'Active',
+        img: 'https://cdn.example.test/headshot.png',
+      },
       { player_id: 789, name: 'Backup Receiver', position: 'WR2' },
     ])
 
@@ -21,7 +27,7 @@ describe('Rolling Insights depth chart normalization', () => {
         position: 'WR',
         number: 15,
         status: 'Active',
-        img: 'headshot.png',
+        img: 'https://cdn.example.test/headshot.png',
       },
       {
         id: '789',
@@ -32,5 +38,18 @@ describe('Rolling Insights depth chart normalization', () => {
         img: null,
       },
     ])
+  })
+
+  /*
+   * RI answers a missing headshot with the literal string `contact_support` (and a bare
+   * word or filename is a RELATIVE <img src>, i.e. a 404 on our own origin). Only a real
+   * URL survives normalization — see lib/media/imageUrl.ts.
+   */
+  it('drops image values that are not URLs', () => {
+    const players = normalizeRIDepthChartPlayers('WR', [
+      { id: '1', player: 'No Headshot', img: 'contact_support' },
+      { id: '2', player: 'Bare Filename', img: 'headshot.png' },
+    ])
+    expect(players.map((p) => p.img)).toEqual([null, null])
   })
 })
