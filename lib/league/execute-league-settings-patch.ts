@@ -179,16 +179,11 @@ export async function executeLeagueSettingsPatch(
     if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
   }
 
-  const [profile, commissionerEntitlement] = await Promise.all([
-    prisma.userProfile.findFirst({
-      where: { userId },
-      select: { afCommissionerSub: true },
-    }),
-    new EntitlementResolver()
-      .resolveForUser(userId, 'commissioner_ai_tools')
-      .catch(() => ({ hasAccess: false })),
-  ])
-  const hasSub = Boolean(profile?.afCommissionerSub) || Boolean(commissionerEntitlement.hasAccess)
+  // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
+  const commissionerEntitlement = await new EntitlementResolver()
+    .resolveForUser(userId, 'commissioner_ai_tools')
+    .catch(() => ({ hasAccess: false }))
+  const hasSub = Boolean(commissionerEntitlement.hasAccess)
 
   const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
   if (premiumCommissionerKeys.length > 0 && !hasSub) {

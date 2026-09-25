@@ -65,7 +65,10 @@ describe('G32 NFL redraft league home contracts', () => {
     expect(executePatch).toContain('commissioner_ai_tools')
     expect(executePatch).toContain('AF Commissioner or AF Supreme is required')
     expect(settingsRoute).toContain('EntitlementResolver')
-    expect(settingsRoute).toContain('Boolean(profile?.afCommissionerSub) || Boolean(commissionerEntitlement.hasAccess)')
+    // The live entitlement alone — the stale profile flag no longer grants (lib/subscription/livePlanFlags.ts).
+    expect(settingsRoute).toContain('hasAfCommissionerSub: Boolean(commissionerEntitlement.hasAccess)')
+    expect(settingsRoute).not.toMatch(/afCommissionerSub:\s*true|profile\?\.afCommissionerSub/)
+    expect(executePatch).not.toMatch(/afCommissionerSub:\s*true|profile\?\.afCommissionerSub/)
   })
 
   it('keeps the redraft intro one-time by default while allowing replay and reduced-motion fallback', () => {

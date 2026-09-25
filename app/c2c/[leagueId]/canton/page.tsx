@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import Link from 'next/link'
-import { prisma } from '@/lib/prisma'
+import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 import { C2CRosterClient } from '../roster/C2CRosterClient'
 
 export const dynamic = 'force-dynamic'
@@ -14,10 +14,8 @@ export default async function C2CCantonPage({ params }: { params: Promise<{ leag
     redirect(`/login?callbackUrl=${encodeURIComponent(`/c2c/${leagueId}/canton`)}`)
   }
 
-  const profile = await prisma.userProfile.findUnique({
-    where: { userId: session.user.id },
-    select: { afCommissionerSub: true },
-  })
+  // The live plan, not the profile flag (lib/subscription/livePlanFlags.ts).
+  const plans = await resolveLivePlanFlags(session.user.id)
 
   return (
     <div className="min-h-screen bg-[#040915]">
@@ -33,7 +31,7 @@ export default async function C2CCantonPage({ params }: { params: Promise<{ leag
       <C2CRosterClient
         leagueId={leagueId}
         userId={session.user.id}
-        hasAfSub={profile?.afCommissionerSub ?? false}
+        hasAfSub={plans.commissioner}
         initialViewMode="canton"
       />
     </div>
