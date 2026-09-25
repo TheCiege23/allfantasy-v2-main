@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { computeWeeklyMedianResults, isMatchupComplete } from '@/lib/redraft/medianGame'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 /**
  * Recompute standings from matchup scores already written from PlayerWeeklyScore.
@@ -149,6 +150,8 @@ export async function updateStandings(
     })
   }
 
+  await mirrorNativeLeagueTeamRecords(seasonId, rows, seedByRoster)
+
   // G15.2 — publish (best-effort, never throws). Logs each standings recompute;
   // player-level granularity is carried by competition.score.updated (wired later).
   await getPlatformEvents().emit(EVENT.STANDINGS_UPDATED, {
@@ -161,4 +164,60 @@ export async function updateStandings(
   })
 
   return { seasonId, week, rostersUpdated: rows.size, matchupsCounted }
+}
+
+/**
+ * Copy each native team's record onto its `LeagueTeam` row — the row the league page, its standings
+ * sidebar and the league cards read.
+ *
+ * 🛑 A NATIVE LEAGUE SHOWED EVERY TEAM AT 0-0 ALL SEASON. The season engine writes records to
+ * `RedraftRoster` only; `LeagueTeam.wins/losses/pointsFor` is written by the import paths and by
+ * nothing native. Measured 2026-09-25 on a simulated 10-team season: 14 weeks played, 70-70 and
+ * 13,786 points on the redraft rosters, 0-0 and 0.0 on every team the league page showed.
+ *
+ * The link is the one the rest of the native stack uses: `LeagueTeam.externalId` is the generic
+ * `Roster.id`, and that roster's `platformUserId` is the season roster's `ownerId` (10 of 10
+ * matched on that season). Imports are left alone — their provider sync owns these columns.
+ * Best-effort like the event above it: a failure here must never cost the standings themselves.
+ */
+async function mirrorNativeLeagueTeamRecords(
+  seasonId: string,
+  rows: Map<string, { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }>,
+  seedByRoster: Map<string, number>,
+): Promise<void> {
+  try {
+    const season = await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { leagueId: true } })
+    if (!season) return
+    const league = await prisma.league.findFirst({ where: { id: season.leagueId }, select: { platform: true } })
+    if (!league || !isNativePlatform(league.platform)) return
+
+    const seasonRosters = await prisma.redraftRoster.findMany({ where: { seasonId }, select: { id: true, ownerId: true } })
+    const leagueRosters = await prisma.roster.findMany({
+      where: { leagueId: season.leagueId, platformUserId: { in: seasonRosters.map((r) => r.ownerId) } },
+      select: { id: true, platformUserId: true },
+    })
+    const rosterIdByOwner = new Map(leagueRosters.map((r) => [r.platformUserId, r.id]))
+
+    for (const sr of seasonRosters) {
+      const row = rows.get(sr.id)
+      const externalId = rosterIdByOwner.get(sr.ownerId)
+      if (!row || !externalId) continue
+      await prisma.leagueTeam.updateMany({
+        where: { leagueId: season.leagueId, externalId },
+        data: {
+          wins: row.wins,
+          losses: row.losses,
+          ties: row.ties,
+          pointsFor: Math.round(row.pointsFor * 100) / 100,
+          pointsAgainst: Math.round(row.pointsAgainst * 100) / 100,
+          currentRank: seedByRoster.get(sr.id) ?? null,
+        },
+      })
+    }
+  } catch (error) {
+    console.warn('[standings] league team record mirror failed', {
+      seasonId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
