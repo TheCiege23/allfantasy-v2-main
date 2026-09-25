@@ -67,7 +67,31 @@ const SEEN_TTL_MS = 2 * 365 * 24 * 60 * 60 * 1000
  * as "no offers outstanding", which is the correct reading of a record that never tracked any, and
  * does not cost every league a second quiet run.
  */
-type SeenRecord = { version: 2; seen: string[]; pending?: string[]; lastRunIso: string }
+type SeenRecord = { version: 2; seen: string[]; pending?: string[]; owed?: OwedAlert[]; lastRunIso: string }
+
+/**
+ * An alert this league still owes somebody: planned, but not yet delivered to everyone it is for.
+ *
+ * 🛑 THE BUG THIS EXISTS FOR (2026-09-25). A trade is marked seen BEFORE it is graded and sent, so
+ * a sweep that crashes or retries can never email it twice. But that made every failure after the
+ * write permanent: "grading unavailable", "not present in graded ledger yet", "rosters
+ * unavailable", or one failed send, and the email was gone for good. Seen and delivered were one
+ * bit.
+ *
+ * Now they are two. `seen` still says "planned" and is still written first. What was planned and
+ * not yet delivered stays here and is retried by the next sweep. Duplicates are stopped by a claim
+ * row per (alert, recipient, channel) — `claimSend` — rather than by never trying again.
+ *
+ * `since` is when the alert was first planned; an alert still owed after `OWED_MAX_AGE_MS` is
+ * dropped as stale news rather than retried forever. Optional, like `pending`: a record written
+ * before it existed owes nothing.
+ */
+export type OwedAlert = { kind: 'offer' | 'completion'; id: string; since: string }
+
+/** Past this, an undelivered alert is stale news: dropped and logged, not sent. */
+export const OWED_MAX_AGE_MS = 48 * 60 * 60 * 1000
+
+const owedKey = (a: Pick<OwedAlert, 'kind' | 'id'>): string => `${a.kind}:${a.id}`
 
 async function readSeen(sleeperLeagueId: string): Promise<SeenRecord | null> {
   const row = await prisma.sportsDataCache
@@ -77,22 +101,75 @@ async function readSeen(sleeperLeagueId: string): Promise<SeenRecord | null> {
   return data?.version === 2 && Array.isArray(data.seen) ? data : null
 }
 
-async function writeSeen(sleeperLeagueId: string, seen: string[], pending: string[] = []): Promise<void> {
+async function writeSeen(
+  sleeperLeagueId: string,
+  seen: string[],
+  pending: string[] = [],
+  owed: OwedAlert[] = [],
+): Promise<void> {
   const cacheKey = `${SEEN_PREFIX}${sleeperLeagueId}`
-  const data = { version: 2, seen: seen.slice(-500), pending: pending.slice(-200), lastRunIso: new Date().toISOString() } as unknown as object
+  const data = { version: 2, seen: seen.slice(-500), pending: pending.slice(-200), owed: owed.slice(-100), lastRunIso: new Date().toISOString() } as unknown as object
   const expiresAt = new Date(Date.now() + SEEN_TTL_MS)
   await prisma.sportsDataCache
     .upsert({ where: { cacheKey }, update: { data, expiresAt }, create: { cacheKey, data, expiresAt } })
     .catch(() => null)
 }
 
+/**
+ * One delivery, claimed before it is attempted — so a retried alert reaches only the people it
+ * has not reached yet, and two overlapping sweeps cannot both send it.
+ *
+ * Keys are `trade-notify:sent:v1:<sleeperLeagueId>:<kind>:<tradeId>:<channel>:<userId>`, created
+ * with a unique key; a unique violation means someone already delivered it. Rows outlive
+ * `OWED_MAX_AGE_MS` by a wide margin, which is all they need: past that nothing retries.
+ */
+export const SENT_CLAIM_PREFIX = 'trade-notify:sent:v1:'
+const SENT_CLAIM_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+type ClaimResult = 'ours' | 'taken' | 'unavailable'
+
+function sentClaimKey(
+  sleeperLeagueId: string,
+  alert: Pick<OwedAlert, 'kind' | 'id'>,
+  channel: 'email' | 'push',
+  userId: string,
+): string {
+  return `${SENT_CLAIM_PREFIX}${sleeperLeagueId}:${alert.kind}:${alert.id}:${channel}:${userId}`
+}
+
+/**
+ * ⚠ 'unavailable' FAILS OPEN — the caller sends anyway. A claim store that cannot be written is the
+ * database being down, and the sweep has already failed to read or write its seen record by then;
+ * sending without a claim is exactly what this service did before claims existed.
+ */
+async function claimSend(key: string): Promise<ClaimResult> {
+  try {
+    await prisma.sportsDataCache.create({
+      data: { cacheKey: key, data: { claimedAt: new Date().toISOString() }, expiresAt: new Date(Date.now() + SENT_CLAIM_TTL_MS) },
+    })
+    return 'ours'
+  } catch (e) {
+    const code = e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : null
+    return code === 'P2002' ? 'taken' : 'unavailable'
+  }
+}
+
+/** A send that failed gives its claim back, so the next sweep tries that recipient again. */
+async function releaseSend(key: string): Promise<void> {
+  await prisma.sportsDataCache.deleteMany({ where: { cacheKey: key } }).catch(() => undefined)
+}
+
 export type TradeNotificationPlan = {
-  /** Offers nobody has been told about yet. */
+  /** Offers to announce: new ones, plus owed ones still open. */
   offers: FeedTrade[]
-  /** Trade ids to announce as completed. */
+  /** Trade ids to announce as completed: new ones, plus owed ones. */
   completions: string[]
   seen: string[]
   pending: string[]
+  /** Everything in `offers` and `completions`, owed until it is delivered. */
+  owed: OwedAlert[]
+  /** Owed alerts this run gave up on — too old, or an offer no longer open. Logged, never sent. */
+  dropped: OwedAlert[]
 }
 
 /**
@@ -107,10 +184,18 @@ export type TradeNotificationPlan = {
  * So an offer is remembered in `pending` until it completes, and a completed trade is announced
  * when it is new OR was last seen pending. An offer that is withdrawn simply never completes; it
  * ages out of the capped list.
+ *
+ * Owed alerts (see `OwedAlert`) are carried into the plan again:
+ *  - an owed COMPLETION is retried whether or not it is still in the feed, because the feed is a
+ *    few weeks wide and the email is built from the graded ledger, not from the feed;
+ *  - an owed OFFER is retried only while the feed still shows it open. Accepted, it is announced as
+ *    a completion instead (it is still in `pending`); withdrawn or out of the window, it is dropped;
+ *  - anything owed longer than `OWED_MAX_AGE_MS` is dropped.
  */
 export function planTradeNotifications(
   feed: FeedTrade[],
-  record: { seen: string[]; pending?: string[] },
+  record: { seen: string[]; pending?: string[]; owed?: OwedAlert[] },
+  nowMs: number = Date.now(),
 ): TradeNotificationPlan {
   const seen = new Set(record.seen)
   const pending = new Set(record.pending ?? [])
@@ -118,6 +203,9 @@ export function planTradeNotifications(
   const completions: string[] = []
   const newIds: string[] = []
   const handled = new Set<string>()
+  const nowIso = new Date(nowMs).toISOString()
+  const owed = new Map<string, OwedAlert>()
+  const dropped: OwedAlert[] = []
 
   for (const trade of feed) {
     if (handled.has(trade.id)) continue
@@ -135,7 +223,39 @@ export function planTradeNotifications(
     }
   }
 
-  return { offers, completions, seen: [...record.seen, ...newIds], pending: [...pending] }
+  const feedById = new Map(feed.map((t) => [t.id, t]))
+  for (const prior of record.owed ?? []) {
+    if (!prior || (prior.kind !== 'offer' && prior.kind !== 'completion') || typeof prior.id !== 'string') continue
+    const sinceMs = Date.parse(prior.since)
+    if (!Number.isFinite(sinceMs) || nowMs - sinceMs > OWED_MAX_AGE_MS) {
+      dropped.push(prior)
+      continue
+    }
+    if (prior.kind === 'completion') {
+      if (!completions.includes(prior.id)) completions.push(prior.id)
+      owed.set(owedKey(prior), prior)
+      continue
+    }
+    const live = feedById.get(prior.id)
+    if (live?.status !== 'pending') {
+      // Accepted: announced as a completion above, if it was still pending. Gone: nothing to answer.
+      dropped.push(prior)
+      continue
+    }
+    if (!offers.some((o) => o.id === prior.id)) offers.push(live)
+    owed.set(owedKey(prior), prior)
+  }
+
+  for (const offer of offers) {
+    const key = owedKey({ kind: 'offer', id: offer.id })
+    if (!owed.has(key)) owed.set(key, { kind: 'offer', id: offer.id, since: nowIso })
+  }
+  for (const id of completions) {
+    const key = owedKey({ kind: 'completion', id })
+    if (!owed.has(key)) owed.set(key, { kind: 'completion', id, since: nowIso })
+  }
+
+  return { offers, completions, seen: [...record.seen, ...newIds], pending: [...pending], owed: [...owed.values()], dropped }
 }
 
 export type LeagueNotifyResult = {
@@ -147,6 +267,8 @@ export type LeagueNotifyResult = {
   /** Open offers announced this run. */
   newOffers: number
   emailsSent: number
+  /** Alerts still owed after this run — retried by the next sweep. */
+  stillOwed?: number
   error?: string
 }
 
@@ -303,125 +425,164 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     }
 
     const plan = planTradeNotifications(feed, seenRecord)
-    if (plan.offers.length === 0 && plan.completions.length === 0) return base
+    if (plan.dropped.length > 0) {
+      // Never silent: an alert given up on is the thing this record exists to prevent.
+      console.warn('[trade-notify] owed alerts dropped undelivered', {
+        sleeperLeagueId,
+        dropped: plan.dropped.map((a) => ({ alert: owedKey(a), since: a.since })),
+      })
+    }
+    if (plan.offers.length === 0 && plan.completions.length === 0) {
+      if (plan.dropped.length > 0) await writeSeen(sleeperLeagueId, plan.seen, plan.pending, plan.owed)
+      return base
+    }
     base.newTrades = plan.completions.length
     base.newOffers = plan.offers.length
 
-    // Mark seen regardless — a grading or send hiccup must not cause duplicate emails later.
-    await writeSeen(sleeperLeagueId, plan.seen, plan.pending)
-
     /*
-     * A completion this sweep noticed goes into the trade archive now, from the feed already in
-     * hand — for leagues nobody has opened since, this sweep is the first reader to see it
-     * (`archiveFeedTrades.ts`). Awaited, not backgrounded: a cron has no response to protect, and
-     * a background write could outlive the run's budget. It never throws.
+     * Seen AND owed, written before anything is sent. A crash from here on leaves every alert owed
+     * for the next sweep, and the per-recipient claims (`claimSend`) stop that retry from reaching
+     * anyone who already has it. This used to write `seen` alone, "so a grading or send hiccup must
+     * not cause duplicate emails later" — which it achieved by never trying again.
      */
-    if (plan.completions.length > 0) await archiveCompletedFeedTrades({ sleeperLeagueId, feed })
-
-    // Recipients: AF users attached to any AF league row for this Sleeper league.
-    const afLeagues: AfLeagueRow[] = await prisma.league.findMany({
-      where: { platform: 'sleeper', platformLeagueId: sleeperLeagueId },
-      select: {
-        id: true,
-        name: true,
-        userId: true,
-        sport: true,
-        teams: { select: { claimedByUserId: true, platformUserId: true } },
-      },
-      // Deterministic, so the fallback row below is the same one on every run.
-      orderBy: { createdAt: 'asc' },
-    })
-    if (afLeagues.length === 0) return base
-    const recipients = await resolveRecipients(afLeagues)
-
-    /*
-     * ⚠ THE DM HALF DOES NOT DEPEND ON WHO GETS EMAIL. `recipients` is filtered by email opt-outs
-     * and deliverability; the offer card in the two managers' DM is a chat message, not a mail, so
-     * a manager who unsubscribed from trade emails still sees the offer in the conversation. This
-     * used to return here when no one could be emailed — which would also have skipped the DM.
-     */
-    if (plan.completions.length > 0) {
-      await announceCompletionsInDms(sleeperLeagueId, plan.completions)
+    await writeSeen(sleeperLeagueId, plan.seen, plan.pending, plan.owed)
+    const delivered = new Set<string>()
+    try {
+      return await deliverPlan({ sleeperLeagueId, feed, plan, base, delivered })
+    } finally {
+      // Whatever was not confirmed delivered stays owed — including after an unexpected throw.
+      const stillOwed = plan.owed.filter((a) => !delivered.has(owedKey(a)))
+      base.stillOwed = stillOwed.length
+      if (stillOwed.length !== plan.owed.length) {
+        await writeSeen(sleeperLeagueId, plan.seen, plan.pending, stillOwed)
+      }
     }
-    if (recipients.length === 0 && plan.offers.length === 0) return base
+  } catch (err) {
+    console.error('[trade-notify] league sweep failed', { sleeperLeagueId, err })
+    return { ...base, error: 'unexpected failure' }
+  }
+}
 
-    /*
-     * 🛑 THE RECIPIENT'S OWN COPY OF THE LEAGUE, NEVER `afLeagues[0]`.
-     *
-     * A Sleeper league imported by several AllFantasy users is one AF row PER importer. Every link
-     * used to point at `afLeagues[0]` — whichever row the query returned first — and /core treats a
-     * `?league=` the viewer does not play as unauthorised and redirects to the cross-league board,
-     * which cannot show a Sleeper trade. So everyone but one importer clicked "See the full
-     * breakdown" and landed somewhere the trade was not. Measured 2026-09-24: 28 Sleeper leagues,
-     * 65 AF rows. A mute is saved per row too, so the footer and the push gate take the same row.
-     */
-    const rowFor = (userId: string): AfLeagueRow =>
-      afLeagues.find((l) => l.userId === userId || l.teams.some((t) => t.claimedByUserId === userId)) ??
-      afLeagues[0]
-    const tradeUrl = (rowId: string, transactionId: string) =>
-      `/core/trades?league=${encodeURIComponent(rowId)}&trade=${encodeURIComponent(transactionId)}`
-    const unsubscribeUrlFor = (email: string) =>
-      `${getBaseUrl()}/api/email/unsubscribe?token=${encodeURIComponent(createEmailUnsubscribeToken(email))}`
+/**
+ * Send what `plan` announces. Every alert confirmed delivered to everyone it is for is added to
+ * `delivered`; the caller keeps the rest owed.
+ */
+async function deliverPlan(args: {
+  sleeperLeagueId: string
+  feed: FeedTrade[]
+  plan: TradeNotificationPlan
+  base: LeagueNotifyResult
+  delivered: Set<string>
+}): Promise<LeagueNotifyResult> {
+  const { sleeperLeagueId, feed, plan, base, delivered } = args
+  const settleCompletions = (ids: string[]) => ids.forEach((id) => delivered.add(owedKey({ kind: 'completion', id })))
 
-    if (plan.offers.length > 0) {
-      const sent = await notifyOffers({ sleeperLeagueId, offers: plan.offers, afLeagues, recipients, rowFor, tradeUrl, unsubscribeUrlFor })
-      base.emailsSent += sent.emailsSent
-      if (sent.error) base.error = sent.error
-    }
+  /*
+   * A completion this sweep noticed goes into the trade archive now, from the feed already in
+   * hand — for leagues nobody has opened since, this sweep is the first reader to see it
+   * (`archiveFeedTrades.ts`). Awaited, not backgrounded: a cron has no response to protect, and
+   * a background write could outlive the run's budget. It never throws, and it upserts, so an
+   * owed completion archived again on retry costs a few no-op writes.
+   */
+  if (plan.completions.length > 0) await archiveCompletedFeedTrades({ sleeperLeagueId, feed })
 
-    // Nobody to email about a completion: skip the forced grade refresh it would cost.
-    if (plan.completions.length === 0 || recipients.length === 0) return base
+  // Recipients: AF users attached to any AF league row for this Sleeper league.
+  const afLeagues: AfLeagueRow[] = await prisma.league.findMany({
+    where: { platform: 'sleeper', platformLeagueId: sleeperLeagueId },
+    select: {
+      id: true,
+      name: true,
+      userId: true,
+      sport: true,
+      teams: { select: { claimedByUserId: true, platformUserId: true } },
+    },
+    // Deterministic, so the fallback row below is the same one on every run.
+    orderBy: { createdAt: 'asc' },
+  })
+  if (afLeagues.length === 0) {
+    // Nobody on AllFantasy to tell: nothing is owed to anyone.
+    plan.owed.forEach((a) => delivered.add(owedKey(a)))
+    return base
+  }
+  const recipients = await resolveRecipients(afLeagues)
 
-    // Fresh grades so the new trade is included and graded.
-    const grades = await getTradeGrades(sleeperLeagueId, { force: true })
-    if (!grades) return { ...base, error: 'grading unavailable — trade recorded, email skipped' }
+  /*
+   * ⚠ THE DM HALF DOES NOT DEPEND ON WHO GETS EMAIL. `recipients` is filtered by email opt-outs
+   * and deliverability; the offer card in the two managers' DM is a chat message, not a mail, so
+   * a manager who unsubscribed from trade emails still sees the offer in the conversation. This
+   * used to return here when no one could be emailed — which would also have skipped the DM.
+   */
+  if (plan.completions.length > 0) {
+    await announceCompletionsInDms(sleeperLeagueId, plan.completions)
+  }
+  if (recipients.length === 0 && plan.offers.length === 0) {
+    settleCompletions(plan.completions)
+    return base
+  }
 
-    const newTrades = grades.trades.filter((t) => plan.completions.includes(transactionIdOf(t.id)))
-    if (newTrades.length === 0) return { ...base, error: 'new trade not present in graded ledger yet' }
+  /*
+   * 🛑 THE RECIPIENT'S OWN COPY OF THE LEAGUE, NEVER `afLeagues[0]`.
+   *
+   * A Sleeper league imported by several AllFantasy users is one AF row PER importer. Every link
+   * used to point at `afLeagues[0]` — whichever row the query returned first — and /core treats a
+   * `?league=` the viewer does not play as unauthorised and redirects to the cross-league board,
+   * which cannot show a Sleeper trade. So everyone but one importer clicked "See the full
+   * breakdown" and landed somewhere the trade was not. Measured 2026-09-24: 28 Sleeper leagues,
+   * 65 AF rows. A mute is saved per row too, so the footer and the push gate take the same row.
+   */
+  const rowFor = (userId: string): AfLeagueRow =>
+    afLeagues.find((l) => l.userId === userId || l.teams.some((t) => t.claimedByUserId === userId)) ??
+    afLeagues[0]
+  const tradeUrl = (rowId: string, transactionId: string) =>
+    `/core/trades?league=${encodeURIComponent(rowId)}&trade=${encodeURIComponent(transactionId)}`
+  const unsubscribeUrlFor = (email: string) =>
+    `${getBaseUrl()}/api/email/unsubscribe?token=${encodeURIComponent(createEmailUnsubscribeToken(email))}`
 
-    const { sleeperIdOf } = await sleeperIdResolver(afLeagues, recipients, rowFor)
-    const gradeFor = completedGradeCache()
+  if (plan.offers.length > 0) {
+    const sent = await notifyOffers({ sleeperLeagueId, offers: plan.offers, afLeagues, recipients, rowFor, tradeUrl, unsubscribeUrlFor })
+    base.emailsSent += sent.emailsSent
+    sent.delivered.forEach((id) => delivered.add(owedKey({ kind: 'offer', id })))
+    if (sent.error) base.error = sent.error
+  }
 
-    for (const trade of newTrades) {
-      for (const recipient of recipients) {
-        const row = rowFor(recipient.id)
-        const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
-        const href = tradeUrl(row.id, transactionIdOf(trade.id))
-        /*
-         * 🛑 THE RECIPIENT'S OWN ROW, GRADED BY THE APP'S OWN FUNCTION (2026-09-25). This used to grade
-         * once per trade on `findFirst({ platformLeagueId })` — whichever importer's copy came back —
-         * so the inbox said B (+24%) where the reader's screen said A (+25%): two rows, two sets of
-         * settings, one band edge. Now each row is graded by `oneGradeForCompletedTrade`, which is
-         * what /core Trades and the home band call for this trade, once per row.
-         */
-        const { grade, leagueType } = await gradeFor(row.id, trade)
-        const { subject, html } = buildTradeGradeEmail({
-          leagueName,
-          trade,
-          ledgerUrl: `${getBaseUrl()}${href}`,
-          grade,
-          leagueType,
-          viewerOwnerId: sleeperIdOf(recipient.id),
-          confirmUrl: confirmUrlFor(row.id),
-          /*
-           * 22a's footer. `leagueId` powers the PER-LEAGUE mute — at 61 leagues,
-           * a global unsubscribe is not a real choice, because it makes silencing
-           * one noisy league cost you every trade email you actually wanted.
-           *
-           * The unsubscribe token is minted per RECIPIENT, inside this loop. It
-           * is signed over their own address, so hoisting it out of the loop
-           * would send every member of the league the same link and let any one
-           * of them unsubscribe the rest.
-           */
-          baseUrl: getBaseUrl(),
-          leagueId: row.id,
-          unsubscribeUrl: unsubscribeUrlFor(recipient.email),
-        })
-        const sent = await sendTemplatedEmail({ to: recipient.email, subject, html }).catch(
-          () => ({ ok: false as const }),
-        )
-        if (sent.ok) base.emailsSent += 1
+  // Nobody to email about a completion: skip the forced grade refresh it would cost.
+  if (plan.completions.length === 0) return base
+  if (recipients.length === 0) {
+    settleCompletions(plan.completions)
+    return base
+  }
 
+  // Fresh grades so the new trade is included and graded.
+  const grades = await getTradeGrades(sleeperLeagueId, { force: true })
+  if (!grades) {
+    // Mutated, not copied: the caller records `stillOwed` on this same object.
+    base.error = 'grading unavailable — completion owed, retried next sweep'
+    return base
+  }
+
+  const newTrades = grades.trades.filter((t) => plan.completions.includes(transactionIdOf(t.id)))
+  const inLedger = new Set(newTrades.map((t) => transactionIdOf(t.id)))
+  const notYet = plan.completions.filter((id) => !inLedger.has(id))
+  if (notYet.length > 0) {
+    base.error = `${notYet.length} completed trade(s) not in the graded ledger yet — owed, retried next sweep`
+  }
+  if (newTrades.length === 0) return base
+
+  const { sleeperIdOf } = await sleeperIdResolver(afLeagues, recipients, rowFor)
+  const gradeFor = completedGradeCache()
+
+  for (const trade of newTrades) {
+    const transactionId = transactionIdOf(trade.id)
+    let everyoneHasIt = true
+    for (const recipient of recipients) {
+      const row = rowFor(recipient.id)
+      const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
+      const href = tradeUrl(row.id, transactionId)
+      const outcome = await deliverToRecipient({
+        sleeperLeagueId,
+        alert: { kind: 'completion', id: transactionId },
+        recipient,
+        leagueRowId: row.id,
         /*
          * ⚠ AND THE PHONE. This service emailed and stopped, so a trade landing
          * — one of the two things a manager actually wants a buzz for — never
@@ -433,28 +594,116 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
          * OWN league row: imported leagues are per-user copies, so a mute is saved on theirs.
          * A settings read that fails sends nothing.
          */
-        const pushGate = await decidePushForUser(recipient.id, {
-          category: 'trade_accept_reject',
+        pushCategory: 'trade_accept_reject',
+        push: (subject) => ({
+          title: `Trade accepted in ${leagueName}`,
+          body: subject,
+          href,
+          tag: `trade:${row.id}:${trade.id}`,
+          type: 'trade',
           leagueId: row.id,
-          severity: 'medium',
-        }).catch(() => null)
-        if (pushGate?.allowed) {
-          await sendPushToUser(recipient.id, {
-            title: `Trade accepted in ${leagueName}`,
-            body: subject,
-            href,
-            tag: `trade:${row.id}:${trade.id}`,
-            type: 'trade',
+        }),
+        compose: async () => {
+          /*
+           * 🛑 THE RECIPIENT'S OWN ROW, GRADED BY THE APP'S OWN FUNCTION (2026-09-25). This used to grade
+           * once per trade on `findFirst({ platformLeagueId })` — whichever importer's copy came back —
+           * so the inbox said B (+24%) where the reader's screen said A (+25%): two rows, two sets of
+           * settings, one band edge. Now each row is graded by `oneGradeForCompletedTrade`, which is
+           * what /core Trades and the home band call for this trade, once per row.
+           */
+          const { grade, leagueType } = await gradeFor(row.id, trade)
+          return buildTradeGradeEmail({
+            leagueName,
+            trade,
+            ledgerUrl: `${getBaseUrl()}${href}`,
+            grade,
+            leagueType,
+            viewerOwnerId: sleeperIdOf(recipient.id),
+            confirmUrl: confirmUrlFor(row.id),
+            /*
+             * 22a's footer. `leagueId` powers the PER-LEAGUE mute — at 61 leagues,
+             * a global unsubscribe is not a real choice, because it makes silencing
+             * one noisy league cost you every trade email you actually wanted.
+             *
+             * The unsubscribe token is minted per RECIPIENT, inside this loop. It
+             * is signed over their own address, so hoisting it out of the loop
+             * would send every member of the league the same link and let any one
+             * of them unsubscribe the rest.
+             */
+            baseUrl: getBaseUrl(),
             leagueId: row.id,
-          }).catch(() => [])
-        }
-      }
+            unsubscribeUrl: unsubscribeUrlFor(recipient.email),
+          })
+        },
+      })
+      if (outcome.emailed) base.emailsSent += 1
+      if (!outcome.delivered) everyoneHasIt = false
     }
-    return base
-  } catch (err) {
-    console.error('[trade-notify] league sweep failed', { sleeperLeagueId, err })
-    return { ...base, error: 'unexpected failure' }
+    if (everyoneHasIt) delivered.add(owedKey({ kind: 'completion', id: transactionId }))
   }
+  return base
+}
+
+/**
+ * One alert to one recipient: the email and the push, each claimed before it is attempted, so a
+ * retried alert reaches only the people it has not reached yet.
+ *
+ * `delivered` is about the EMAIL — sent now, or by an earlier sweep. Push stays best-effort as it
+ * always was: a failed push is not retried, and a push the user's settings refuse is not owed.
+ * `compose` runs only when something still needs sending, so a retry does not re-grade the trade
+ * for everyone who already has it.
+ */
+async function deliverToRecipient(args: {
+  sleeperLeagueId: string
+  alert: Pick<OwedAlert, 'kind' | 'id'>
+  recipient: Recipient
+  leagueRowId: string
+  pushCategory: 'trade_proposals' | 'trade_accept_reject'
+  push: (subject: string) => Parameters<typeof sendPushToUser>[1]
+  compose: () => Promise<{ subject: string; html: string }>
+}): Promise<{ delivered: boolean; emailed: boolean }> {
+  const { sleeperLeagueId, alert, recipient } = args
+  const emailKey = sentClaimKey(sleeperLeagueId, alert, 'email', recipient.id)
+  const emailClaim = await claimSend(emailKey)
+  const needEmail = emailClaim !== 'taken'
+
+  const pushGate = await decidePushForUser(recipient.id, {
+    category: args.pushCategory,
+    leagueId: args.leagueRowId,
+    severity: 'medium',
+  }).catch(() => null)
+  const pushKey = sentClaimKey(sleeperLeagueId, alert, 'push', recipient.id)
+  const pushClaim: ClaimResult = pushGate?.allowed ? await claimSend(pushKey) : 'taken'
+  const needPush = pushClaim !== 'taken'
+
+  if (!needEmail && !needPush) return { delivered: true, emailed: false }
+
+  let message: { subject: string; html: string }
+  try {
+    message = await args.compose()
+  } catch (err) {
+    console.warn('[trade-notify] alert not composed — owed, retried next sweep', {
+      sleeperLeagueId,
+      alert: owedKey(alert),
+      name: err instanceof Error ? err.name : typeof err,
+    })
+    if (emailClaim === 'ours') await releaseSend(emailKey)
+    if (pushClaim === 'ours') await releaseSend(pushKey)
+    return { delivered: false, emailed: false }
+  }
+
+  let emailed = false
+  if (needEmail) {
+    const sent = await sendTemplatedEmail({ to: recipient.email, subject: message.subject, html: message.html }).catch(
+      () => ({ ok: false as const }),
+    )
+    emailed = sent.ok
+    if (!sent.ok && emailClaim === 'ours') await releaseSend(emailKey)
+  }
+  if (needPush) {
+    await sendPushToUser(recipient.id, args.push(message.subject)).catch(() => [])
+  }
+  return { delivered: !needEmail || emailed, emailed }
 }
 
 /**
@@ -468,6 +717,8 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
  * platform id on the recipient's own row, else the Sleeper id on their profile, then the Sleeper
  * roster that id owns. A looser rule would alert someone the league page then shows nothing to,
  * which is the email-says-yes, page-says-no failure this change exists to remove.
+ *
+ * `delivered` lists the offers every manager in them now has; the rest stay owed.
  */
 async function notifyOffers(args: {
   sleeperLeagueId: string
@@ -477,12 +728,12 @@ async function notifyOffers(args: {
   rowFor: (userId: string) => AfLeagueRow
   tradeUrl: (rowId: string, transactionId: string) => string
   unsubscribeUrlFor: (email: string) => string
-}): Promise<{ emailsSent: number; error?: string }> {
+}): Promise<{ emailsSent: number; delivered: string[]; error?: string }> {
   const { sleeperLeagueId, offers, afLeagues, recipients, rowFor, tradeUrl, unsubscribeUrlFor } = args
   const rosters: SleeperRoster[] | null = await fetchLeagueRosters(sleeperLeagueId)
   if (!rosters || rosters.length === 0) {
-    // The offer stays in `pending`, so its completion is still announced; only the alert is lost.
-    return { emailsSent: 0, error: 'rosters unavailable — offer recorded, alert skipped' }
+    // Owed, not lost: the next sweep retries while the offer is still open.
+    return { emailsSent: 0, delivered: [], error: 'rosters unavailable — offer owed, retried next sweep' }
   }
 
   /*
@@ -508,7 +759,9 @@ async function notifyOffers(args: {
   const sleeperUrl = sleeperLink?.verified ? sleeperLink.href : null
 
   let emailsSent = 0
+  const delivered: string[] = []
   for (const offer of offers) {
+    let everyoneHasIt = true
     for (const recipient of recipients) {
       const sleeperId = sleeperIdOf(recipient.id)
       if (!sleeperId || sleeperId === offer.creator) continue
@@ -518,53 +771,53 @@ async function notifyOffers(args: {
       const row = rowFor(recipient.id)
       const leagueName = row.name ?? afLeagues[0].name ?? 'your league'
       const href = tradeUrl(row.id, offer.id)
-      const { assetsGiven, assetsReceived } = buildTradeAssetsForRoster({ tx: offer.tx, userRosterId: rosterId, players })
-      /*
-       * THE grade the /core Trades inbox shows for this offer: the recipient's own row, their side,
-       * their roster need (`viewerSide: true`) — `lib/core-app/trades.ts` runs exactly this pair. A
-       * grade that cannot be computed withholds its letter; the alert still goes.
-       */
-      const grader = await createLeagueTradeGrader({ leagueId: row.id, userId: recipient.id }).catch(() => null)
-      const grade = await gradeDeal(grader, {
-        give: gradeInputsFromPending(assetsGiven),
-        get: gradeInputsFromPending(assetsReceived),
-        viewerSide: true,
-      }).catch(() => null)
-      const { subject, html } = buildPendingTradeOfferEmail({
-        leagueName,
-        proposerName: proposerNameOf(offer.creator),
-        youGet: assetsReceived,
-        youGive: assetsGiven,
-        reviewUrl: `${getBaseUrl()}${href}`,
-        sleeperUrl,
-        grade,
-        leagueType: grade?.leagueType ?? grader?.leagueType ?? null,
-        confirmUrl: confirmUrlFor(row.id),
-        baseUrl: getBaseUrl(),
-        leagueId: row.id,
-        unsubscribeUrl: unsubscribeUrlFor(recipient.email),
-      })
-      const sent = await sendTemplatedEmail({ to: recipient.email, subject, html }).catch(
-        () => ({ ok: false as const }),
-      )
-      if (sent.ok) emailsSent += 1
-
-      const pushGate = await decidePushForUser(recipient.id, {
-        category: 'trade_proposals',
-        leagueId: row.id,
-        severity: 'medium',
-      }).catch(() => null)
-      if (pushGate?.allowed) {
-        await sendPushToUser(recipient.id, {
+      const outcome = await deliverToRecipient({
+        sleeperLeagueId,
+        alert: { kind: 'offer', id: offer.id },
+        recipient,
+        leagueRowId: row.id,
+        pushCategory: 'trade_proposals',
+        push: (subject) => ({
           title: `Trade offer in ${leagueName}`,
           body: subject,
           href,
           tag: `trade:${row.id}:${offer.id}`,
           type: 'trade',
           leagueId: row.id,
-        }).catch(() => [])
-      }
+        }),
+        compose: async () => {
+          const { assetsGiven, assetsReceived } = buildTradeAssetsForRoster({ tx: offer.tx, userRosterId: rosterId, players })
+          /*
+           * THE grade the /core Trades inbox shows for this offer: the recipient's own row, their side,
+           * their roster need (`viewerSide: true`) — `lib/core-app/trades.ts` runs exactly this pair. A
+           * grade that cannot be computed withholds its letter; the alert still goes.
+           */
+          const grader = await createLeagueTradeGrader({ leagueId: row.id, userId: recipient.id }).catch(() => null)
+          const grade = await gradeDeal(grader, {
+            give: gradeInputsFromPending(assetsGiven),
+            get: gradeInputsFromPending(assetsReceived),
+            viewerSide: true,
+          }).catch(() => null)
+          return buildPendingTradeOfferEmail({
+            leagueName,
+            proposerName: proposerNameOf(offer.creator),
+            youGet: assetsReceived,
+            youGive: assetsGiven,
+            reviewUrl: `${getBaseUrl()}${href}`,
+            sleeperUrl,
+            grade,
+            leagueType: grade?.leagueType ?? grader?.leagueType ?? null,
+            confirmUrl: confirmUrlFor(row.id),
+            baseUrl: getBaseUrl(),
+            leagueId: row.id,
+            unsubscribeUrl: unsubscribeUrlFor(recipient.email),
+          })
+        },
+      })
+      if (outcome.emailed) emailsSent += 1
+      if (!outcome.delivered) everyoneHasIt = false
     }
+    if (everyoneHasIt) delivered.push(offer.id)
 
     await postOfferToManagersDm({
       sleeperLeagueId,
@@ -585,7 +838,7 @@ async function notifyOffers(args: {
       })
     })
   }
-  return { emailsSent }
+  return { emailsSent, delivered }
 }
 
 /**

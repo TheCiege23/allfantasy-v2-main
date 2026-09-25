@@ -50,6 +50,16 @@ vi.mock('@/lib/prisma', () => ({
         h.store.set(where.cacheKey, JSON.parse(JSON.stringify(create.data)))
         return {}
       },
+      // The per-recipient delivery claim: a unique key, so a second create is P2002 like Postgres.
+      create: async ({ data }: { data: { cacheKey: string; data: unknown } }) => {
+        if (h.store.has(data.cacheKey)) throw Object.assign(new Error('unique'), { code: 'P2002' })
+        h.store.set(data.cacheKey, data.data)
+        return {}
+      },
+      deleteMany: async ({ where }: { where: { cacheKey: string } }) => {
+        h.store.delete(where.cacheKey)
+        return { count: 1 }
+      },
     },
     league: { findMany: h.leagueFindMany },
     appUser: {
@@ -342,5 +352,177 @@ describe('🛑 the completion of an offer we saw pending is announced, league-wi
     h.currentIds.mockResolvedValue([trade('complete')])
     await detectAndNotifyLeague('SL1')
     expect(h.leagueFindMany.mock.calls[0][0]).toMatchObject({ orderBy: { createdAt: 'asc' } })
+  })
+})
+
+/**
+ * 🛑 NEVER LOSE AN ALERT (2026-09-25). The seen-set is written before grading, so any failure after
+ * that write — grading unavailable, a trade not in the graded ledger yet, rosters unavailable, one
+ * failed send — used to drop the email for good. An alert is now OWED until delivered, retried by
+ * the next sweep, and claimed per recipient so the retry reaches only the people it missed.
+ */
+describe('🛑 an undelivered alert is owed and retried, never lost and never sent twice', () => {
+  const owed = () =>
+    ((h.store.get(SEEN_KEY) as { owed?: Array<{ kind: string; id: string }> }).owed ?? []).map((a) => `${a.kind}:${a.id}`)
+  const mailedTo = () => (h.sendEmail.mock.calls as Array<[{ to: string }]>).map(([m]) => m.to).sort()
+  const EVERYONE = ['a@example.org', 'b@example.org', 'c@example.org']
+
+  it('grading unavailable: nothing is sent, the completion stays owed, and the next sweep sends it once', async () => {
+    h.currentIds.mockResolvedValue([trade('complete')])
+    h.getTradeGrades.mockResolvedValueOnce(null)
+    const first = await detectAndNotifyLeague('SL1')
+    expect(first.error).toMatch(/grading unavailable/)
+    expect(h.sendEmail).not.toHaveBeenCalled()
+    expect(owed()).toEqual(['completion:T1'])
+    expect(first.stillOwed).toBe(1)
+
+    const second = await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(EVERYONE)
+    expect(second.stillOwed).toBe(0)
+    expect(owed()).toEqual([])
+
+    // A third sweep has nothing new and nothing owed: nobody hears about it twice.
+    h.sendEmail.mockClear()
+    await detectAndNotifyLeague('SL1')
+    expect(h.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('a completed trade not in the graded ledger yet is owed, then announced when it lands', async () => {
+    h.currentIds.mockResolvedValue([trade('complete')])
+    h.getTradeGrades.mockResolvedValueOnce({ trades: [] })
+    const first = await detectAndNotifyLeague('SL1')
+    expect(first.error).toMatch(/not in the graded ledger yet/)
+    expect(h.sendEmail).not.toHaveBeenCalled()
+    expect(owed()).toEqual(['completion:T1'])
+
+    await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(EVERYONE)
+    expect(owed()).toEqual([])
+  })
+
+  it('an owed completion is retried after it leaves the feed window — the email is built from the ledger', async () => {
+    h.currentIds.mockResolvedValueOnce([trade('complete')])
+    h.getTradeGrades.mockResolvedValueOnce(null)
+    await detectAndNotifyLeague('SL1')
+    h.currentIds.mockResolvedValue([])
+    await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(EVERYONE)
+  })
+
+  it('one failed send: the next sweep emails ONLY the recipient it missed, and buzzes nobody again', async () => {
+    h.currentIds.mockResolvedValue([trade('complete')])
+    h.sendEmail.mockImplementation(async (m: { to: string }) => ({ ok: m.to !== 'b@example.org' }))
+    const first = await detectAndNotifyLeague('SL1')
+    expect(first.emailsSent).toBe(2)
+    expect(owed()).toEqual(['completion:T1'])
+    expect(h.sendPush).toHaveBeenCalledTimes(3)
+
+    h.sendEmail.mockReset()
+    h.sendEmail.mockResolvedValue({ ok: true })
+    h.sendPush.mockClear()
+    const second = await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(['b@example.org'])
+    expect(second.emailsSent).toBe(1)
+    expect(owed()).toEqual([])
+    expect(h.sendPush).not.toHaveBeenCalled()
+    // Only B's copy was composed again: 3 on the first sweep, 1 on the retry.
+    expect(h.gradeEmail).toHaveBeenCalledTimes(4)
+  })
+
+  it('rosters unavailable: the offer is owed, and the next sweep tells B once', async () => {
+    h.currentIds.mockResolvedValue([trade('pending')])
+    h.rosters.mockResolvedValueOnce(null)
+    const first = await detectAndNotifyLeague('SL1')
+    expect(first.error).toMatch(/rosters unavailable/)
+    expect(owed()).toEqual(['offer:T1'])
+
+    await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(['b@example.org'])
+    expect(owed()).toEqual([])
+    await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(['b@example.org'])
+  })
+
+  it('a sweep that throws after marking the trade seen leaves it owed, and the next sweep sends it', async () => {
+    h.currentIds.mockResolvedValue([trade('complete')])
+    h.getTradeGrades.mockRejectedValueOnce(new Error('connection reset'))
+    const first = await detectAndNotifyLeague('SL1')
+    expect(first.error).toBe('unexpected failure')
+    expect(first.stillOwed).toBe(1)
+    expect(owed()).toEqual(['completion:T1'])
+
+    await detectAndNotifyLeague('SL1')
+    expect(mailedTo()).toEqual(EVERYONE)
+  })
+
+  it('two overlapping sweeps in the same state send each email once', async () => {
+    h.currentIds.mockResolvedValue([trade('complete')])
+    await Promise.all([detectAndNotifyLeague('SL1'), detectAndNotifyLeague('SL1')])
+    expect(mailedTo()).toEqual(EVERYONE)
+  })
+
+  it('a failed send gives its claim back — the store holds no email claim for the recipient it missed', async () => {
+    h.currentIds.mockResolvedValue([trade('complete')])
+    h.sendEmail.mockImplementation(async (m: { to: string }) => ({ ok: m.to !== 'b@example.org' }))
+    await detectAndNotifyLeague('SL1')
+    const claims = [...h.store.keys()].filter((k) => k.startsWith('trade-notify:sent:v1:SL1:completion:T1:email:')).sort()
+    expect(claims).toEqual([
+      'trade-notify:sent:v1:SL1:completion:T1:email:uA',
+      'trade-notify:sent:v1:SL1:completion:T1:email:uC',
+    ])
+  })
+})
+
+describe('owed alerts in the pure plan', () => {
+  const NOW = Date.parse('2026-09-25T12:00:00Z')
+  const since = (hoursAgo: number) => new Date(NOW - hoursAgo * 3600_000).toISOString()
+
+  it('new alerts are owed from now', () => {
+    const plan = planTradeNotifications([trade('pending')], { seen: [] }, NOW)
+    expect(plan.owed).toEqual([{ kind: 'offer', id: 'T1', since: new Date(NOW).toISOString() }])
+  })
+
+  it('an owed completion keeps its original `since`', () => {
+    const plan = planTradeNotifications([], { seen: ['T1'], owed: [{ kind: 'completion', id: 'T1', since: since(3) }] }, NOW)
+    expect(plan.completions).toEqual(['T1'])
+    expect(plan.owed).toEqual([{ kind: 'completion', id: 'T1', since: since(3) }])
+  })
+
+  it('anything owed longer than 48h is dropped as stale, not sent', () => {
+    const plan = planTradeNotifications([], { seen: ['T1'], owed: [{ kind: 'completion', id: 'T1', since: since(49) }] }, NOW)
+    expect(plan.completions).toEqual([])
+    expect(plan.dropped.map((a) => a.id)).toEqual(['T1'])
+    expect(plan.owed).toEqual([])
+  })
+
+  it('an owed offer that was accepted is dropped as an offer and announced as a completion', () => {
+    const plan = planTradeNotifications(
+      [trade('complete')],
+      { seen: ['T1'], pending: ['T1'], owed: [{ kind: 'offer', id: 'T1', since: since(1) }] },
+      NOW,
+    )
+    expect(plan.offers).toEqual([])
+    expect(plan.completions).toEqual(['T1'])
+    expect(plan.dropped).toEqual([{ kind: 'offer', id: 'T1', since: since(1) }])
+  })
+
+  it('an owed offer that was withdrawn is dropped', () => {
+    const plan = planTradeNotifications([], { seen: ['T1'], pending: ['T1'], owed: [{ kind: 'offer', id: 'T1', since: since(1) }] }, NOW)
+    expect(plan.offers).toEqual([])
+    expect(plan.dropped.map((a) => a.kind)).toEqual(['offer'])
+  })
+
+  it('an owed offer still open is retried', () => {
+    const plan = planTradeNotifications(
+      [trade('pending')],
+      { seen: ['T1'], pending: ['T1'], owed: [{ kind: 'offer', id: 'T1', since: since(1) }] },
+      NOW,
+    )
+    expect(plan.offers.map((o) => o.id)).toEqual(['T1'])
+  })
+
+  it('a malformed owed entry is ignored, not thrown on', () => {
+    const plan = planTradeNotifications([], { seen: [], owed: [null as never, { kind: 'x', id: 'T9', since: since(1) } as never] }, NOW)
+    expect(plan.owed).toEqual([])
   })
 })
