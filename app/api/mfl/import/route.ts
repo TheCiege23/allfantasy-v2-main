@@ -10,6 +10,7 @@ import {
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-import/commissionerGate'
 import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
+import { importerManagerIdForRosters } from '@/lib/league-import/importerManagerId'
 
 async function getMFLConnection() {
   const cookieStore = await cookies()
@@ -159,7 +160,13 @@ export const POST = withApiUsage({ endpoint: "/api/mfl/import", tool: "MflImport
         normalized: normalizedResult.normalized,
         allowUpdateExisting: true,
         // The caller's own franchise, proven by the gate — claims their team on import.
-        importerSourceManagerId: gate.sourceManagerId ?? null,
+        // ⚠ Translated from franchise id to the rosters' manager key (owner_id where MFL publishes
+        // one). See lib/league-import/importerManagerId.ts.
+        importerSourceManagerId: importerManagerIdForRosters(
+          'mfl',
+          gate.sourceManagerId,
+          normalizedResult.normalized.rosters,
+        ),
       })
 
       if (gate.verification === 'attestation' && gateAttestation) {

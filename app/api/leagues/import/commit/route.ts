@@ -26,6 +26,7 @@ import {
   recordImportAttestation,
 } from '@/lib/league-import/commissionerGate'
 import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
+import { importerManagerIdForRosters } from '@/lib/league-import/importerManagerId'
 import { redactAndCap } from '@/lib/security/redactSecrets'
 
 /**
@@ -210,7 +211,13 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
        * caller may import at all — and it was dropped here. That is why every
        * non-Sleeper import landed with no claimed team and went invisible.
        */
-      importerSourceManagerId: gate.sourceManagerId ?? null,
+      // ⚠ Translated into the rosters' key space: MFL's gate answers with a FRANCHISE id, its
+      // rosters key managers on owner_id. See lib/league-import/importerManagerId.ts.
+      importerSourceManagerId: importerManagerIdForRosters(
+        provider,
+        gate.sourceManagerId,
+        result.normalized.rosters,
+      ),
       /* Validated above against this league's rosters; feeds ONLY the bootstrap's claim on the
          importer's own league row — never the cross-account join. */
       importerSourceTeamId: claimSourceTeamId || null,

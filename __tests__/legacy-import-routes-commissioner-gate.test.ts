@@ -222,6 +222,36 @@ describe('POST /api/mfl/import — commissioner gate', () => {
     )
   })
 
+  it('translates the franchise id to that team’s owner id when the league publishes owner ids', async () => {
+    /*
+     * 🛑 MFL rosters key managers on owner_id; the gate answers with a franchise id. Handed over raw,
+     * it matched no roster and the importer's own team was never claimed.
+     */
+    pipelineMock.mockResolvedValue({
+      success: true,
+      normalized: {
+        ...NORMALIZED,
+        rosters: [
+          { source_team_id: '0003', source_manager_id: 'owner-ccc' },
+          { source_team_id: '0004', source_manager_id: 'owner-ddd' },
+        ],
+      },
+    })
+    assertImportCommissionerMock.mockResolvedValue({ ok: true, verification: 'attestation', sourceManagerId: '0004' })
+    const { POST } = await import('@/app/api/mfl/import/route')
+    const res = await (POST as any)(
+      post('http://localhost/api/mfl/import', {
+        sourceId: '2026:55555',
+        attestation: { accepted: true, statement: 'commish' },
+      }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(persistMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'mfl', importerSourceManagerId: 'owner-ddd' }),
+    )
+  })
+
   it('does not gate the no-league-id request, which never writes (501 historical path)', async () => {
     const { POST } = await import('@/app/api/mfl/import/route')
     const res = await (POST as any)(post('http://localhost/api/mfl/import', { startYear: 2020, endYear: 2025 }))
