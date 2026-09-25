@@ -19,7 +19,7 @@ import {
   getClientLeagueCreateOptionsCatalog,
   setClientLeagueCreateOptionsCatalog,
 } from '@/lib/create-league-v2/options-catalog-client'
-import { getScoringPresetOptionsForSelection } from '@/lib/create-league-v2/rules-engine'
+import { getScoringPresetOptionsForSelection, isSportAllowedForType } from '@/lib/create-league-v2/rules-engine'
 import {
   findScoringPresetRule,
   listScoringPresetOptions,
@@ -42,7 +42,7 @@ import {
 } from '@/lib/nfl-scoring/NflScoringPresets'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
-const WIZARD_LEAGUE_TYPES: LeagueTypeId[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
+const WIZARD_LEAGUE_TYPES: LeagueTypeId[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine']
 
 function state(overrides: Partial<CreateLeagueV2State>): CreateLeagueV2State {
   return {
@@ -84,7 +84,9 @@ describe('create catalog only names presets that exist', () => {
 
   it('the wizard dropdown for every sport and league type is non-empty and fully accepted', () => {
     for (const leagueType of WIZARD_LEAGUE_TYPES) {
-      for (const sport of SUPPORTED_SPORTS) {
+      // The wizard offers a concept only for the sports the catalog allows it (guillotine: no
+      // NCAAB or soccer), so those are the pairings that must be fully accepted.
+      for (const sport of SUPPORTED_SPORTS.filter((s) => isSportAllowedForType(s, leagueType))) {
         const allowed = LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport[leagueType]?.[sport] ?? []
         const offered = getScoringPresetOptionsForSelection({ leagueType, sport, idpSelected: false }).map((o) => o.id)
         expect(offered.length, `${leagueType}/${sport}`).toBeGreaterThan(0)
