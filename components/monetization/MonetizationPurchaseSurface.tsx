@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { HIGHLIGHT_TO_PLAN_FAMILY } from "@/lib/monetization/entitlements";
+import { purchaseReturnPath, upgradePathForPlan } from "@/lib/monetization/upgradeDestination";
 import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync";
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
@@ -131,18 +132,6 @@ function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export function normalizePlanFamilyInput(input: string | null | undefined): PlanFamily | null {
-  if (!input) return null;
-  const value = input.trim().toLowerCase();
-  if (value === "af_pro" || value === "pro") return "af_pro";
-  if (value === "af_commissioner" || value === "commissioner") return "af_commissioner";
-  // Legacy "all-access" deep links now resolve to the surviving AF Supreme bundle.
-  if (value === "af_all_access" || value === "all_access") return "af_supreme";
-  if (value === "af_war_room" || value === "war_room") return "af_war_room";
-  if (value === "af_supreme" || value === "supreme") return "af_supreme";
-  return null;
-}
-
 export default function MonetizationPurchaseSurface({
   pagePath,
   title,
@@ -175,6 +164,8 @@ export default function MonetizationPurchaseSurface({
 
   const searchParams = useSearchParams();
   const highlightParam = searchParams?.get("highlight");
+  // Back from Stripe or from signing in, the buyer lands on the plan they chose.
+  const returnPath = purchaseReturnPath(pagePath, searchParams);
 
   useEffect(() => {
     if (!highlightParam) return;
@@ -295,7 +286,7 @@ export default function MonetizationPurchaseSurface({
     const result = await resolveCheckoutUrl({
       sku,
       productType,
-      returnPath: pagePath,
+      returnPath,
       couponCode: appliedCouponCode,
     });
     if (!result.ok) {
@@ -354,7 +345,7 @@ export default function MonetizationPurchaseSurface({
               </Link>
               <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    href="/signup"
+                    href={`/signup?next=${encodeURIComponent(returnPath)}`}
                     className="inline-flex min-h-[54px] items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-400 via-cyan-400 to-fuchsia-400 px-8 text-lg font-extrabold text-[#041018] shadow-2xl shadow-cyan-500/30 ring-2 ring-cyan-300/40 transition hover:from-cyan-300 hover:to-fuchsia-300 hover:scale-[1.04] focus:outline-none focus:ring-4 focus:ring-emerald-300"
                     style={{ letterSpacing: '0.04em' }}
                     data-testid="pricing-cta-signup"
@@ -362,7 +353,7 @@ export default function MonetizationPurchaseSurface({
                     Unlock Full Access — Sign Up Free
                   </Link>
                 <Link
-                  href={`/login?next=${encodeURIComponent(pagePath)}`}
+                  href={`/login?next=${encodeURIComponent(returnPath)}`}
                   className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/20 bg-white/[0.06] px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
                   data-testid="pricing-cta-signin"
                 >
@@ -648,7 +639,7 @@ export default function MonetizationPurchaseSurface({
                     </ul>
                     {focused && focusPlanFamily !== "af_supreme" ? (
                       <Link
-                        href="/pricing?highlight=supreme"
+                        href={upgradePathForPlan("af_supreme")}
                         onClick={() =>
                           trackUpgradeEntryClicked({
                             targetPlan: "supreme",
