@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { buildRecipeSettingsMerge, type RecipeKey } from '@/lib/core-app/commissioner/recipes'
 import type { CommissionerHubData } from '@/lib/core-app/commissionerHub'
+import { buildChimmySpeaksUpMerge } from '@/lib/league-chat/chimmyIdentity'
 
 /**
  * Automation recipe switches (brief item 8).
@@ -25,37 +26,51 @@ export function AutomationRecipes({
 }) {
   const router = useRouter()
   const [values, setValues] = useState(recipes.values)
-  const [busy, setBusy] = useState<RecipeKey | null>(null)
+  /* Missing on an older payload means the default: on. */
+  const [chimmyOn, setChimmyOn] = useState(recipes.chimmySpeaksUp !== false)
+  const [busy, setBusy] = useState<RecipeKey | 'chimmy' | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  async function save(settingsMerge: Record<string, unknown>): Promise<boolean> {
+    try {
+      const res = await fetch('/api/league/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ leagueId, settingsMerge }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setError(body?.error ?? `Could not save (${res.status}).`)
+        return false
+      }
+      router.refresh()
+      return true
+    } catch {
+      setError('Could not reach AllFantasy. Nothing was changed.')
+      return false
+    }
+  }
 
   async function toggle(key: RecipeKey, enabled: boolean) {
     setBusy(key)
     setError(null)
     const previous = values
     setValues({ ...values, [key]: enabled })
-    try {
-      const res = await fetch('/api/league/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          leagueId,
-          settingsMerge: buildRecipeSettingsMerge(previous, { key, enabled }, new Date()),
-        }),
-      })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null
-        setValues(previous)
-        setError(body?.error ?? `Could not save (${res.status}).`)
-        return
-      }
-      router.refresh()
-    } catch {
-      setValues(previous)
-      setError('Could not reach AllFantasy. Nothing was changed.')
-    } finally {
-      setBusy(null)
-    }
+    if (!(await save(buildRecipeSettingsMerge(previous, { key, enabled }, new Date())))) setValues(previous)
+    setBusy(null)
+  }
+
+  /*
+   * One top-level boolean (`chimmySpeaksUp`), so the shallow `settingsMerge` cannot clobber anything
+   * else. Same route, same commissioner gate, same audit row as the recipes.
+   */
+  async function toggleChimmy(enabled: boolean) {
+    setBusy('chimmy')
+    setError(null)
+    setChimmyOn(enabled)
+    if (!(await save(buildChimmySpeaksUpMerge(enabled)))) setChimmyOn(!enabled)
+    setBusy(null)
   }
 
   return (
@@ -67,6 +82,30 @@ export function AutomationRecipes({
         </p>
       ) : null}
       <ul className="af-ch-recipe-list">
+        <li data-on={chimmyOn} data-testid="chimmy-speaks-up">
+          <div className="af-ch-recipe-body">
+            <p className="af-ch-recipe-label">Chimmy speaks up in league chat</p>
+            <p className="af-ch-recipe-desc">
+              Chimmy posts the weekly awards and a take on every trade — who won it on paper, with the numbers. Up to
+              four moments a day, plus the weekly awards. Off keeps Chimmy quiet in this league&apos;s chat, the weekly
+              recap included.
+            </p>
+            <p className="af-ch-recipe-meta">Posts as Chimmy, with Chimmy&apos;s badge · on by default</p>
+          </div>
+          <label className="af-ch-switch">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={chimmyOn}
+              disabled={busy != null}
+              aria-label={`Chimmy speaks up in league chat: ${chimmyOn ? 'on' : 'off'}`}
+              onChange={(e) => toggleChimmy(e.target.checked)}
+            />
+            <span aria-hidden className="af-ch-switch-track">
+              <span className="af-ch-switch-thumb" />
+            </span>
+          </label>
+        </li>
         {recipes.catalog.map((r) => {
           const on = values[r.key]
           const disabled = r.unavailable != null || busy != null
@@ -76,7 +115,11 @@ export function AutomationRecipes({
                 <p className="af-ch-recipe-label">{r.label}</p>
                 <p className="af-ch-recipe-desc">{r.description}</p>
                 <p className="af-ch-recipe-meta">
-                  {r.unavailable ? r.unavailable : `${r.cadence} · posts in league chat`}
+                  {r.unavailable
+                    ? r.unavailable
+                    : r.key === 'weeklyRecap'
+                      ? `${r.cadence} · posted by Chimmy${chimmyOn ? '' : ' — off while Chimmy is quiet'}`
+                      : `${r.cadence} · posts in league chat`}
                 </p>
               </div>
               <label className="af-ch-switch">

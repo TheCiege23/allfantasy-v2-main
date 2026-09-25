@@ -15,6 +15,7 @@ import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { isDraftRoomSource, type LeagueDraftLink } from '@/lib/league-chat/draftChatLink'
+import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import '@/components/core-app/af-comms.css'
 
@@ -110,11 +111,21 @@ function str(v: unknown): string | null {
   return typeof v === 'string' && v ? v : null
 }
 
+/**
+ * Chimmy's rows as Chimmy, whichever route delivered them. The server already swaps the identity in
+ * (LeagueChatMessageService); this keeps the reply bar, the quote and "who is this" honest even for a
+ * row that reached the drawer some other way. Decided by the server-owned marker, never the name.
+ */
+function asChimmyWhenMarked(m: LeagueMessage): LeagueMessage {
+  if (!isChimmyAuthored(m.metadata)) return m
+  return { ...m, authorId: null, author: CHIMMY_DISPLAY_NAME, avatarUrl: null }
+}
+
 /** `/api/league/chat`'s toClientMessage: flat `authorName` / `text`. */
 function fromLeagueWire(m: Record<string, unknown>): LeagueMessage | null {
   const id = str(m.id)
   if (!id) return null
-  return {
+  return asChimmyWhenMarked({
     id,
     parentMessageId: str(m.parentMessageId),
     authorId: str(m.authorId),
@@ -125,14 +136,14 @@ function fromLeagueWire(m: Record<string, unknown>): LeagueMessage | null {
     messageType: str(m.messageType),
     metadata: m.metadata && typeof m.metadata === 'object' ? (m.metadata as Record<string, unknown>) : null,
     source: str(m.source),
-  }
+  })
 }
 
 /** The shared thread route's PlatformChatMessage: `senderName` / `body`. */
 function fromThreadWire(m: Record<string, unknown>): LeagueMessage | null {
   const id = str(m.id)
   if (!id) return null
-  return {
+  return asChimmyWhenMarked({
     id,
     parentMessageId: str(m.parentMessageId),
     authorId: str(m.senderUserId),
@@ -143,7 +154,7 @@ function fromThreadWire(m: Record<string, unknown>): LeagueMessage | null {
     messageType: str(m.messageType),
     metadata: m.metadata && typeof m.metadata === 'object' ? (m.metadata as Record<string, unknown>) : null,
     source: str(m.channelSource),
-  }
+  })
 }
 
 function readDraftLink(value: unknown): LeagueDraftLink | null {

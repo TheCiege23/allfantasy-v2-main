@@ -10,7 +10,9 @@
  *   - forge a `tradeCard`, or pick `messageType: 'broadcast'` for the commissioner-announcement style.
  *
  * So request paths keep an ALLOWLIST, never a denylist: a key nobody listed is a key some server
- * writer owns. Server writers (the Discord inbound relay, bots, trade cards, awards and stats jobs,
+ * writer owns. That includes Chimmy's identity marker — `chimmy`, `chimmyMoment`, `chimmyPrivateReply`,
+ * `chimmyResponse` (lib/league-chat/chimmyIdentity.ts `CHIMMY_SERVER_KEYS`): readers draw Chimmy's name,
+ * sparkle avatar and badge from it, so admitting any of them here would let a member wear the badge. Server writers (the Discord inbound relay, bots, trade cards, awards and stats jobs,
  * commissioner broadcasts) call `createLeagueChatMessage` / `createSystemMessage` / prisma directly
  * and never pass through this module, so they keep every key they write.
  *

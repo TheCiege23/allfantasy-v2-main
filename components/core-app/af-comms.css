@@ -3330,4 +3330,53 @@
 .af-cm .af-cm-empty .af-cm-actions {
   justify-content: center;
   padding-inline: 16px;
+
+/* ── Chimmy in league chat: sparkle avatar, "✦ Chimmy" badge, the moment it was ──────────────
+ * Drawn only for rows carrying the server-owned marker (lib/league-chat/chimmyIdentity.ts).
+ * Appended as top-level blocks on purpose: nothing here sits inside an existing @media query. */
+.af-cm-avatar.af-cm-avatar-chimmy {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
+}
+.af-cm-col > .af-cm-msg-author.af-cm-chimmy-byline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding-left: 2px;
+}
+.af-cm-chimmy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.af-cm-chimmy-kind {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-cm-row[data-chimmy='true'] .af-cm-bubble {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* Market value beside "Gave" / "Got" on a Chimmy trade card, and where the trade stands. */
+.af-cm-trade-value {
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.af-cm-trade-valuenote,
+.af-cm-trade-note {
+  margin: 0;
+  font-size: 10.5px;
 }

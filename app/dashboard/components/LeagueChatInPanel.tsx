@@ -8,6 +8,7 @@ import { ChatSenderAvatar } from './chat/ChatSenderAvatar'
 import { isLeagueMessageThreaded } from './chat/chat-timestamps'
 import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
+import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 
 export type LeagueChatMessage = {
   id: string
@@ -551,13 +552,18 @@ export function LeagueChatInPanel({
           <div>
             {visibleMessages.map((message, index) => {
               const meta = message.metadata
-              const isChimmyBubble =
-                meta?.chimmy === true && (meta?.bigBrother === true || meta?.idp === true)
               const chimmyPrivateReply = meta?.chimmyPrivateReply === true
+              /*
+               * Every Chimmy post — weekly awards, trade takes, the command replies — by the server-owned
+               * marker (lib/league-chat/chimmyIdentity.ts), never by a name. Private replies keep their
+               * own "only you" bubble below.
+               */
+              const isChimmyBubble = isChimmyAuthored(meta) && !chimmyPrivateReply
+              const chimmyMomentLabel = isChimmyBubble ? chimmyMomentLabelOf(meta) : null
               const isVoteProgress = meta?.bbVoteProgress === true
               const urgency = meta?.urgency === true
               const displayName =
-                isChimmyBubble ? 'Chimmy' : message.author_display_name
+                isChimmyBubble ? CHIMMY_DISPLAY_NAME : message.author_display_name
               const isPrivateToViewer =
                 message.isPrivate === true && message.visibleToUserId === userId
               const isGlobalBroadcast = message.messageSubtype === 'global_broadcast'
@@ -631,13 +637,26 @@ export function LeagueChatInPanel({
 
               if (isChimmyBubble) {
                 return (
-                  <div key={message.id} className="mt-2 flex items-start gap-2 py-1.5">
-                    <div className="mt-0.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-bold text-cyan-200">
-                      C
+                  <div key={message.id} className="mt-2 flex items-start gap-2 py-1.5" data-chimmy="true">
+                    <div
+                      className="mt-0.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[13px] text-cyan-200"
+                      aria-hidden
+                    >
+                      ✦
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="mb-0.5 flex min-w-0 items-baseline">
-                        <span className="text-[13px] font-semibold text-cyan-200/90">{displayName}</span>
+                        <span
+                          className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 text-[12px] font-bold text-cyan-200"
+                          data-testid="chimmy-badge"
+                        >
+                          ✦ {displayName}
+                        </span>
+                        {chimmyMomentLabel ? (
+                          <span className="ml-1.5 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
+                            {chimmyMomentLabel}
+                          </span>
+                        ) : null}
                         <span className="ml-1.5 shrink-0 text-[11px] text-white/30">
                           {formatChatTime(message.createdAt)}
                         </span>

@@ -20,6 +20,16 @@ export type TradeCard = {
   picksGot: number
   season: number | null
   week: number | null
+  /** The other side, when the writer knew it. */
+  partner?: string | null
+  /** FAAB, specialty assets — anything that is not a player or a draft pick — as labels. */
+  extrasGave?: string[]
+  extrasGot?: string[]
+  /** Market value of each side from `manager`'s point of view. Present only with Chimmy's take. */
+  valueGave?: number | null
+  valueGot?: number | null
+  /** Where the trade stands, e.g. "Accepted. It goes to commissioner review before it processes." */
+  note?: string | null
 }
 
 /**
@@ -46,6 +56,11 @@ export type TradeCard = {
  * trade the moment it lands turns a card people can talk about into a verdict
  * they have to argue with, and this app already knows that a letter grade with
  * no data behind it is worse than no grade at all.
+ *
+ * The verdict, when there is one, is CHIMMY'S and it is the message text above
+ * this card (lib/league-chat/chimmyTradeTake.ts) — made only when every asset on
+ * both sides has a market value. The card then shows each side's number, so the
+ * take can be checked against the facts it came from. No values, no numbers.
  */
 export function TradeCardView({
   card,
@@ -66,15 +81,19 @@ export function TradeCardView({
   return <CompletedTradeView card={card} />
 }
 
+const fmtValue = (n: number) => Math.round(n).toLocaleString('en-US')
+
 function CompletedTradeView({ card }: { card: TradeCard }) {
-  const side = (assets: TradeAsset[], picks: number) => {
+  const side = (assets: TradeAsset[], picks: number, extras: string[] = []) => {
     const parts: string[] = assets.map((a) => {
       const meta = [a.position, a.team].filter(Boolean).join(' · ')
       return meta ? `${a.name ?? 'Unknown player'} (${meta})` : (a.name ?? 'Unknown player')
     })
     if (picks > 0) parts.push(`${picks} pick${picks === 1 ? '' : 's'}`)
+    parts.push(...extras)
     return parts.length > 0 ? parts : ['nothing']
   }
+  const valued = typeof card.valueGave === 'number' && typeof card.valueGot === 'number'
 
   const when = [
     card.season != null ? `${card.season}` : null,
@@ -89,28 +108,37 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
         <span className="af-cm-trade-icon" aria-hidden="true">
           ⇄
         </span>
-        {card.manager} made a trade
+        {card.partner ? `${card.manager} traded with ${card.partner}` : `${card.manager} made a trade`}
         {when ? <span className="af-cm-trade-when"> · {when}</span> : null}
       </p>
 
       <div className="af-cm-trade-sides">
         <div className="af-cm-trade-side">
-          <span className="af-cm-trade-label">Gave</span>
+          <span className="af-cm-trade-label">
+            Gave
+            {valued ? <span className="af-cm-trade-value" data-testid="trade-value-gave"> · {fmtValue(card.valueGave!)}</span> : null}
+          </span>
           <ul className="af-cm-trade-list">
-            {side(card.gave, card.picksGave).map((t, i) => (
+            {side(card.gave, card.picksGave, card.extrasGave).map((t, i) => (
               <li key={`gave-${i}`}>{t}</li>
             ))}
           </ul>
         </div>
         <div className="af-cm-trade-side">
-          <span className="af-cm-trade-label">Got</span>
+          <span className="af-cm-trade-label">
+            Got
+            {valued ? <span className="af-cm-trade-value" data-testid="trade-value-got"> · {fmtValue(card.valueGot!)}</span> : null}
+          </span>
           <ul className="af-cm-trade-list">
-            {side(card.got, card.picksGot).map((t, i) => (
+            {side(card.got, card.picksGot, card.extrasGot).map((t, i) => (
               <li key={`got-${i}`}>{t}</li>
             ))}
           </ul>
         </div>
       </div>
+
+      {valued ? <p className="af-cm-trade-when af-cm-trade-valuenote">Market value, from FantasyCalc.</p> : null}
+      {card.note ? <p className="af-cm-trade-when af-cm-trade-note">{card.note}</p> : null}
     </div>
   )
 }

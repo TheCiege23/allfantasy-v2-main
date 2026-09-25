@@ -43,6 +43,12 @@ type TradeCard = {
   picksGot: number
   season: number | null
   week: number | null
+  partner?: string | null
+  extrasGave?: string[]
+  extrasGot?: string[]
+  valueGave?: number | null
+  valueGot?: number | null
+  note?: string | null
 }
 
 function str(v: unknown): string | null {
@@ -119,6 +125,10 @@ function readTradeCard(meta: RichMetadata): TradeCard | null {
   const manager = str(t.manager)
   if (!manager) return null
 
+  const labels = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map((x) => str(x)).filter((x): x is string => x !== null).slice(0, 12) : []
+  const value = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+
   return {
     manager,
     gave: side(t.gave),
@@ -127,6 +137,13 @@ function readTradeCard(meta: RichMetadata): TradeCard | null {
     picksGot: typeof t.picksGot === 'number' ? t.picksGot : 0,
     season: typeof t.season === 'number' ? t.season : null,
     week: typeof t.week === 'number' ? t.week : null,
+    /* Chimmy's trade cards (lib/league-chat/chimmyTradeMoment.ts) add these; older cards have none. */
+    partner: str(t.partner),
+    extrasGave: labels(t.extrasGave),
+    extrasGot: labels(t.extrasGot),
+    valueGave: value(t.valueGave),
+    valueGot: value(t.valueGot),
+    note: str(t.note),
   }
 }
 

@@ -165,6 +165,28 @@ function announceTradeStatusInDm(input: {
   )
 }
 
+/**
+ * Chimmy's trade card in LEAGUE chat — the trade, and who won it on paper with the market numbers,
+ * as ONE message (lib/league-chat/chimmyTradeMoment.ts). Posted once the last manager accepts, with a
+ * line saying where the trade stands when it still has a review or a veto window ahead.
+ *
+ * Fire-and-forget through a dynamic import, like the DM path above: the trade is committed before this
+ * runs, the moment never throws, and it reads market values from the database only — never a vendor.
+ */
+function announceTradeInLeagueChat(tradeId: string, note: string | null = null): void {
+  try {
+    void import('@/lib/league-chat/chimmyTradeMoment')
+      .then(({ postNativeTradeMoment }) => postNativeTradeMoment({ tradeId, note }))
+      .catch((e: unknown) => {
+        console.warn('[tradeService] league chat trade card failed', {
+          name: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+        })
+      })
+  } catch {
+    /* never let the chat path reach the trade action */
+  }
+}
+
 type PlannedTradeNotice = {
   userId: string
   type: 'trade_proposed' | 'trade_countered'
@@ -701,6 +723,7 @@ export async function acceptAfLeagueTrade(input: {
       title: 'Your trade offer was accepted',
     })
     announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
+    announceTradeInLeagueChat(trade.id)
     return { status: 'processed' }
   }
 
@@ -737,6 +760,7 @@ export async function acceptAfLeagueTrade(input: {
       actorUserId: input.userId,
       detail: 'It goes to commissioner review before it processes.',
     })
+    announceTradeInLeagueChat(trade.id, 'Accepted. It goes to commissioner review before it processes.')
     return { status: 'awaiting_commissioner' }
   }
 
@@ -773,6 +797,7 @@ export async function acceptAfLeagueTrade(input: {
       actorUserId: input.userId,
       detail: 'The league veto window is open before it processes.',
     })
+    announceTradeInLeagueChat(trade.id, 'Accepted. The league veto window is open before it processes.')
     return { status: 'awaiting_votes' }
   }
 
@@ -785,6 +810,7 @@ export async function acceptAfLeagueTrade(input: {
     title: 'Your trade offer was accepted',
   })
   announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
+  announceTradeInLeagueChat(trade.id)
   return { status: 'processed' }
 }
 

@@ -42,6 +42,7 @@ import {
 } from './commissioner/areas'
 import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
 import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
+import { readChimmySpeaksUp } from '@/lib/league-chat/chimmyIdentity'
 import {
   memberActivityFromReads,
   quietManagerNames,
@@ -182,6 +183,11 @@ export type CommissionerHubData = {
     /** False until the platform toggle is set — saved switches do not send yet. */
     sendEnabled: boolean
     catalog: Array<{ key: RecipeKey; label: string; description: string; cadence: string; unavailable: string | null }>
+    /**
+     * "Chimmy speaks up in league chat" — `League.settings.chimmySpeaksUp`, default ON. Off silences
+     * every Chimmy moment (weekly awards, trade takes …); see lib/league-chat/chimmyMoments.ts.
+     */
+    chimmySpeaksUp: boolean
   }
   /** The charts whose rows this loader already holds; the rest stream in. */
   charts: { scoring: HubChart | null; balance: HubChart | null; engagement: HubChart | null }
@@ -970,6 +976,7 @@ export async function getCommissionerHub(input: {
         cadence: r.cadence,
         unavailable: r.unavailableReason({ platform, sport }),
       })),
+      chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {
       scoring: matchups ? scoringChart(matchups) : null,
