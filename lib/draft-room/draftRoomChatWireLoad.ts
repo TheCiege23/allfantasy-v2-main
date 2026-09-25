@@ -78,6 +78,7 @@ export async function loadDraftChatWireMessages(leagueId: string, userId: string
       leagueId,
       sanitizePlayerContext: sanitizeDraftChatPlayerContext,
       parsePollPayload: normalizedParsePoll,
+      viewerUserId: userId,
     }),
   )
 

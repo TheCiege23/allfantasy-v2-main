@@ -70,12 +70,21 @@ export async function getLeagueChatMessages(
      * alongside them.
      */
     includeDraftRoom?: boolean
+    /**
+     * Leave these `type`s out. League chat uses it to keep the draft room's pick-by-pick feed
+     * (`draft_pick`) out of the transcript while it folds the draft room's conversation in.
+     * `type` is NOT NULL (default 'text'), so `notIn` cannot drop an ordinary row the way a
+     * bare `NOT` on the nullable `source` column once did.
+     */
+    excludeMessageTypes?: string[]
   }
 ): Promise<PlatformChatMessage[]> {
   const limit = Math.min(options.limit ?? 50, 100)
   const where: Record<string, unknown> = { leagueId }
   if (Array.isArray(options.messageTypeIn) && options.messageTypeIn.length > 0) {
     where.type = { in: options.messageTypeIn }
+  } else if (Array.isArray(options.excludeMessageTypes) && options.excludeMessageTypes.length > 0) {
+    where.type = { notIn: options.excludeMessageTypes }
   }
   if (typeof options.source === 'string' && options.source.trim()) {
     where.source = options.source.trim()

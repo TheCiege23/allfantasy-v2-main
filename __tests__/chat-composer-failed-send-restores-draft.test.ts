@@ -23,7 +23,11 @@ import { describe, expect, it } from 'vitest'
  */
 
 const COMPOSER = 'app/dashboard/components/chat/ChatComposer.tsx'
-const DRAWER = 'components/core-app/comms/CommsDrawer.tsx'
+/*
+ * The league send handler moved out of CommsDrawer.tsx into LeagueConversation.tsx, which the
+ * drawer, the league page and the draft room all render — so it is checked where it now lives.
+ */
+const LEAGUE = 'components/core-app/comms/LeagueConversation.tsx'
 const THREAD = 'components/core-app/comms/ThreadPanel.tsx'
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 
@@ -87,7 +91,7 @@ describe('both send handlers signal failure instead of swallowing it', () => {
    * composer nothing. What matters is that the rejection propagates.
    */
   it.each([
-    ['CommsDrawer', DRAWER],
+    ['LeagueConversation', LEAGUE],
     ['ThreadPanel', THREAD],
   ])('%s rethrows after recording the error', (_label, file) => {
     const code = stripComments(read(file))
@@ -95,11 +99,11 @@ describe('both send handlers signal failure instead of swallowing it', () => {
   })
 
   it.each([
-    ['CommsDrawer', DRAWER],
+    ['LeagueConversation', LEAGUE],
     ['ThreadPanel', THREAD],
   ])('%s throws on its guard paths rather than returning silently', (_label, file) => {
     const code = stripComments(read(file))
-    expect(code).toMatch(/if \(!scopeId\) throw|if \(!openThread\) throw/)
+    expect(code).toMatch(/if \(!scopeId\) throw|if \(!leagueId\) throw|if \(!openThread\) throw/)
     expect(code).toMatch(/throw new Error\('still sending the previous message'\)/)
     expect(code).toMatch(/throw new Error\('nothing to send'\)/)
   })
@@ -126,13 +130,27 @@ describe('both send handlers signal failure instead of swallowing it', () => {
   }
 
   it.each([
-    ['CommsDrawer', DRAWER],
+    ['LeagueConversation', LEAGUE],
     ['ThreadPanel', THREAD],
   ])('%s has no silent guard return inside sendPayload', (_label, file) => {
     const body = sendPayloadBody(file)
     expect(body).not.toMatch(/if \(!scopeId \|\| sending\) return/)
     expect(body).not.toMatch(/if \(!openThread \|\| busy\) return/)
     expect(body).not.toMatch(/Object\.keys\(metadata\)\.length === 0\) return/)
+  })
+
+  /*
+   * The draft room's box is the same composer now, and its send handler lives in the draft
+   * room client. Same contract: record the error, then REJECT, or the message is gone.
+   */
+  it('the draft room rejects after recording a failed send', () => {
+    const code = stripComments(read('components/app/draft-room/DraftRoomPageClient.tsx'))
+    const start = code.indexOf('const handleSendChat')
+    expect(start).toBeGreaterThan(-1)
+    const body = code.slice(start, code.indexOf('\n  const ', start + 20))
+    expect(body).toMatch(/setChatSendError\(why\)\n\s*throw new Error\(why\)/)
+    expect(body).toMatch(/setChatSendError\(offline\)\n\s*throw new Error\(offline\)/)
+    expect(body).toMatch(/throw new Error\('nothing to send'\)/)
   })
 
   it('leaves unrelated guards alone — toggleMute may still return silently', () => {

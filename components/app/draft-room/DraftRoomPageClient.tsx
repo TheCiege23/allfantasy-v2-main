@@ -23,7 +23,7 @@ import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { SportAwareDraftRoom } from '@/components/app/draft-room/SportAwareDraftRoom'
 import { QueuePanel } from '@/components/app/draft-room/QueuePanel'
 import { DraftIntelQueuePanel } from '@/components/app/draft-room/DraftIntelQueuePanel'
-import { DraftChatPanel, type DraftChatMessage } from '@/components/app/draft-room/DraftChatPanel'
+import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
 import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
 import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
@@ -1584,96 +1584,68 @@ export function DraftRoomPageClient({
     fetchChat()
   }, [fetchSession, fetchQueue, fetchDraftSettings, fetchDraftAssistantContext, fetchChat])
 
-  /**
-   * Toggle a chat reaction via the shared reactions route. Optimistic update
-   * mutates local state immediately (add or remove by emoji+userId) so the UI
-   * feels snappy; the next `fetchChat()` reconciles the authoritative counts
-   * from the server. Falls through silently on failure — the reconcile fetch
-   * restores the correct state.
+  /*
+   * Reactions, votes, edits and deletes are the chat panel's own now (the league-room routes,
+   * then `onRefreshChat`). The handler that lived here decided add-vs-remove inside a React
+   * state UPDATER, which React may run after the request had already been chosen — so taking a
+   * reaction back could POST it again instead of DELETE-ing it.
    */
-  const handleReactChat = useCallback(
-    async (messageId: string, emoji: string) => {
-      if (!viewerAppUserId) return
-      let didAdd = true
-      setChatMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== messageId) return m
-          const reactions = Array.isArray((m as { reactions?: unknown }).reactions)
-            ? ([...((m as { reactions: Array<{ emoji: string; count: number; userIds: string[] }> }).reactions)])
-            : []
-          const idx = reactions.findIndex((r) => r.emoji === emoji)
-          if (idx >= 0) {
-            const entry = reactions[idx]!
-            if (entry.userIds.includes(viewerAppUserId)) {
-              const userIds = entry.userIds.filter((id) => id !== viewerAppUserId)
-              didAdd = false
-              if (userIds.length === 0) reactions.splice(idx, 1)
-              else reactions[idx] = { ...entry, userIds, count: userIds.length }
-            } else {
-              const userIds = [...entry.userIds, viewerAppUserId]
-              reactions[idx] = { ...entry, userIds, count: userIds.length }
-            }
-          } else {
-            reactions.push({ emoji, count: 1, userIds: [viewerAppUserId] })
-          }
-          return { ...m, reactions }
-        }),
-      )
-      try {
-        const roomId = `league:${leagueId}`
-        await fetch(
-          `/api/shared/chat/threads/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}/reactions`,
-          {
-            method: didAdd ? 'POST' : 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ emoji }),
-          },
-        )
-      } catch {
-        /* reconcile on next fetch */
-      } finally {
-        fetchChat()
-      }
-    },
-    [viewerAppUserId, leagueId, fetchChat],
-  )
 
   const [chatSending, setChatSending] = useState(false)
   const [chatSendError, setChatSendError] = useState<string | null>(null)
   const [pickSuccessFlash, setPickSuccessFlash] = useState<string | null>(null)
 
+  /*
+   * 🛑 THIS MUST REJECT ON FAILURE. The chat composer clears the box before it awaits this and
+   * only puts the message back when it rejects — a swallowed error is a lost message. It
+   * resolves with the new row's id so the panel can announce @mentions.
+   */
   const handleSendChat = useCallback(
-    async (text: string) => {
-      if (!text.trim() || chatSending) return
+    async (payload: DraftChatSendPayload): Promise<{ id: string }> => {
+      const text = payload.text.trim()
+      const hasMeta = Boolean(payload.metadata && Object.keys(payload.metadata).length > 0)
+      if (!text && !hasMeta) throw new Error('nothing to send')
+      if (chatSending) throw new Error('still sending the previous message')
       setChatSending(true)
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: text.trim() }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (res.ok && data.message) {
-          setChatSendError(null)
-          sendProductAnalyticsBeacon(DRAFT_ROOM.CHAT_SEND, {
-            leagueId,
-            len: text.trim().length,
-            leagueSync: typeof data.syncActive === 'boolean' ? data.syncActive : undefined,
+        let res: Response
+        try {
+          res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              ...(hasMeta ? { metadata: payload.metadata } : {}),
+              ...(payload.parentMessageId ? { parentMessageId: payload.parentMessageId } : {}),
+            }),
           })
-          setChatMessages((prev) => {
-            const msg = data.message as (typeof prev)[0]
-            if (prev.some((m) => m.id === msg.id)) return prev
-            return [...prev, msg].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-          })
-          if (typeof data.syncActive === 'boolean') {
-            setChatSyncActive(data.syncActive)
-          }
-        } else {
-          setChatSendError(typeof data?.error === 'string' ? data.error : 'Message could not be sent. Try again.')
+        } catch (err) {
+          draftRoomWarn('chat-send', err)
+          const offline = 'Could not send message. Check your connection and try again.'
+          setChatSendError(offline)
+          throw new Error(offline)
         }
-      } catch (err) {
-        draftRoomWarn('chat-send', err)
-        setChatSendError('Could not send message. Check your connection and try again.')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data?.message) {
+          const why = typeof data?.error === 'string' ? data.error : 'Message could not be sent. Try again.'
+          setChatSendError(why)
+          throw new Error(why)
+        }
+        setChatSendError(null)
+        sendProductAnalyticsBeacon(DRAFT_ROOM.CHAT_SEND, {
+          leagueId,
+          len: text.length,
+          leagueSync: typeof data.syncActive === 'boolean' ? data.syncActive : undefined,
+        })
+        const msg = data.message as DraftChatMessage
+        setChatMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [...prev, msg].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+        })
+        if (typeof data.syncActive === 'boolean') {
+          setChatSyncActive(data.syncActive)
+        }
+        return { id: msg.id }
       } finally {
         setChatSending(false)
       }
@@ -3986,12 +3958,13 @@ export function DraftRoomPageClient({
         onBroadcast={isCommissioner ? handleBroadcastOpen : undefined}
         onAiSuggestionClick={() => setMobileTab('helper')}
         onReconnect={handleChatReconnect}
+        onRefreshChat={fetchChat}
         currentUserId={viewerAppUserId}
-        onReact={viewerAppUserId ? handleReactChat : undefined}
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
         sendError={chatSendError}
         onDismissSendError={() => setChatSendError(null)}
         leagueId={leagueId}
+        leagueName={leagueName}
         unreadCount={chatMessagesWithAi.filter((m) => m.unread).length}
       />
     ),
@@ -4005,10 +3978,11 @@ export function DraftRoomPageClient({
       handleBroadcastOpen,
       setMobileTab,
       handleChatReconnect,
+      fetchChat,
       viewerAppUserId,
-      handleReactChat,
       presentationVariant,
       leagueId,
+      leagueName,
     ]
   )
 

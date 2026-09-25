@@ -2716,3 +2716,136 @@
 .af-cm-convo > .af-cm-seenby { margin: 0; padding: 2px 16px 0; }
 .af-cm-convo > .af-cm-replybar { margin: 4px 12px 0; border-radius: 0 8px 8px 0; align-items: center; font-size: 11.5px; }
 .af-cm .af-cm-convo > .af-cm-replybar .af-cm-replybar-x { min-width: 44px; min-height: 44px; margin: -10px -8px -10px auto; }
+
+/*
+ * ── The same conversation OUTSIDE the drawer: the league page and the draft room ──
+ * `.af-cm` carries the tokens and the container query the conversation is built on, and
+ * also `position: fixed` for the drawer. An embedded copy keeps the first two and sits in
+ * the page's flow instead. Its height is its own — bounded — so the list scrolls inside it
+ * and the message box stays in view; `data-fill` hands the height to a parent that has one.
+ */
+.af-cm.af-cm-embed {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  height: min(78dvh, 760px);
+  min-height: 420px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  box-shadow: none;
+  overflow: hidden;
+}
+.af-cm.af-cm-embed[data-fill='true'] { height: auto; min-height: 0; flex: 1 1 0; border: 0; border-radius: 0; }
+.af-cm-embed > .af-cm-panel { min-height: 0; }
+
+/*
+ * 🛑 THE PICKERS OPEN UPWARD, AND AN EMBEDDED CHAT CAN BE SHORT. The draft room's chat dock is
+ * ~250px tall at some widths; a 256px GIF picker opened above its composer ran out of the top
+ * of the panel and was clipped by every `overflow: hidden` on the way up — the same way the old
+ * draft composer's menu was. The embed is a SIZE container, so a picker is capped at the room
+ * actually above the box and scrolls inside that, instead of disappearing.
+ */
+.af-cm.af-cm-embed { container: af-cm / size; }
+.af-cm-embed .af-chat-picker { max-height: max(150px, calc(100cqh - 140px)); overflow-y: auto; overscroll-behavior: contain; }
+.af-cm-embed [data-testid='draft-chat-input'] { border: 0; box-shadow: none; min-height: 44px; }
+
+/* DMs / Huddles on the league page's Messages tab. */
+.af-cm-kindswitch { display: flex; flex: none; gap: 6px; padding: 10px 14px 0; }
+.af-cm-kindswitch .af-cm-draft-toggle { margin-top: 0; padding: 4px 12px; font-size: 11.5px; }
+.af-cm-threadhead .af-cm-askchimmy { margin-top: 0; white-space: nowrap; }
+
+/* "Draft room" over a message posted from the draft. */
+.af-cm-msg-tag {
+  padding: 1px 7px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* A row that is not somebody talking: a draft pick, the draft copilot. No bubble, no actions. */
+.af-cm-row.af-cm-row-system { justify-content: center; margin: 8px 0; }
+.af-cm-row-system > * { width: min(100%, 460px); }
+.af-cm-row-system[data-flash='true'] > * { box-shadow: 0 0 0 3px var(--accent); }
+
+/* Your draft is live: a way into the room from league chat. */
+.af-cm-draftlive {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 8px 14px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text2);
+  font-size: 12px;
+}
+.af-cm-draftlive b { color: var(--text); }
+.af-cm-draftlive-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--good, #34d399); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2); }
+.af-cm-draftlive-text { flex: 1 1 180px; min-width: 0; }
+.af-cm-draftlive-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/*
+ * A picker that could not fit above a short box (the draft room's dock) floats over the page
+ * instead, portalled to <body> so no panel's `overflow: hidden` or size container can cut it.
+ * It keeps `.af-cm` for the tokens; everything the drawer's `.af-cm` adds is undone here.
+ */
+.af-cm.af-cm-floatpicker {
+  position: fixed;
+  inset: auto;
+  z-index: 120;
+  display: block;
+  height: auto;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85);
+}
+.af-cm-floatpicker > .af-chat-picker { overflow-y: auto; overscroll-behavior: contain; border-radius: 14px; }
+
+/* The draft room's chat, popped out of its dock on a laptop: a tall panel on the right. */
+.af-dc-popped { box-shadow: 0 30px 90px -30px rgba(0, 0, 0, 0.9); }
+
+/*
+ * A docked chat (the draft room's dock, the league page's Messages tab) driven by a MOUSE:
+ * 44px thumb targets are a phone rule, and on a ~240px dock they cost the conversation two of
+ * its four visible lines. Touch screens keep 44px — this block only matches a fine pointer.
+ */
+@media (hover: hover) and (pointer: fine) {
+  .af-cm-embed[data-fill='true'] .af-chat-tool[aria-label],
+  .af-cm-embed[data-fill='true'] .af-chat-send[aria-label] { min-width: 32px; min-height: 32px; }
+  .af-cm-embed[data-fill='true'] [data-testid='draft-chat-input'] { min-height: 36px; }
+  .af-cm-embed[data-fill='true'] [data-testid='league-chat-composer'] { padding: 2px 4px 4px; }
+  .af-cm .af-dc-composer { padding: 6px 8px; }
+}
+
+/*
+ * Docked in the draft room, the chat IS the bottom-right corner, and the War Room's 56px round
+ * button is fixed there (bottom 16px, right 16px). Measured at 1280x900 it sat over the right
+ * end of the box and the top of the send button. Keep the box out from under it on a laptop;
+ * on a phone the chat scrolls with the page, so the corner is only briefly shared.
+ */
+@media (min-width: 768px) {
+  .af-cm .af-dc-composer[data-fab-corner='true'] { padding-right: 68px; }
+}

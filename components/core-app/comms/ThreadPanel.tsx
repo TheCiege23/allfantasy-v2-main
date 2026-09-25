@@ -85,7 +85,27 @@ function toListMessage(m: PlatformMessage): ChatListMessage {
   }
 }
 
-export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: string }) {
+/** What "Ask Chimmy about this chat" hands over: the thread, and its last few lines. */
+export type ThreadAskChimmy = {
+  threadId: string
+  threadType: 'dm' | 'group'
+  title: string
+  recent: Array<{ name: string; body: string }>
+}
+
+export function ThreadPanel({
+  kind,
+  privacy,
+  onAskChimmy,
+}: {
+  kind: 'dm' | 'group'
+  privacy: string
+  /**
+   * The league page's Messages tab offers "Ask Chimmy about this chat", seeded with the
+   * conversation. Absent in the drawer, whose Chimmy tab is one tap away already.
+   */
+  onAskChimmy?: (ask: ThreadAskChimmy) => void
+}) {
   const { data: session } = useSession()
   const viewerId = session?.user?.id ?? null
   const [threads, setThreads] = useState<PlatformThread[] | null>(null)
@@ -515,6 +535,26 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
               <Search size={15} aria-hidden />
             </button>
           </span>
+          {onAskChimmy ? (
+            <button
+              type="button"
+              className="af-cm-draft-toggle af-cm-askchimmy"
+              data-testid="league-chat-dm-ai-chat-button"
+              onClick={() =>
+                onAskChimmy({
+                  threadId: openThread.id,
+                  threadType: kind,
+                  title: openThread.title || '',
+                  recent: messages
+                    .slice(-10)
+                    .map((m) => ({ name: m.senderName || m.senderUsername || 'Someone', body: m.body ?? '' }))
+                    .filter((m) => m.body.trim().length > 0),
+                })
+              }
+            >
+              Ask Chimmy about this chat
+            </button>
+          ) : null}
         </div>
 
         {searching ? (
