@@ -339,13 +339,41 @@ export async function loadLeagueSeriesMap(
 }
 
 /**
+ * Which of two rows for the SAME league and the SAME season to keep: the one imported first, then
+ * the lower id. Never "whichever the database returned first".
+ *
+ * 🛑 THAT IS WHAT IT WAS, AND IT FLIPPED THE LEAGUE ID ON ALMOST EVERY PAGE LOAD. One Sleeper league
+ * is one `League` row PER IMPORTER, and a viewer who imported a league somebody else also imported
+ * sees both — same season, same name. The query orders by `[season desc, name asc]`, which ties
+ * them, so Postgres returned either one and the rail's link for that league changed between loads.
+ * Measured 2026-09-25 on KBFL: `c3edd6f0…` and `42957321…` alternated, and every `?league=` link
+ * built from the other copy was dropped by `/core` as "not your league".
+ */
+export function defaultLeagueRowTieBreak(a: Record<string, unknown>, b: Record<string, unknown>): number {
+  const created = (x: Record<string, unknown>) => {
+    const raw = x.createdAt
+    const t = raw instanceof Date ? raw.getTime() : typeof raw === 'string' ? Date.parse(raw) : NaN
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
+  }
+  const ca = created(a)
+  const cb = created(b)
+  if (ca !== cb) return ca < cb ? -1 : 1
+  const ia = String(a.id ?? '')
+  const ib = String(b.id ?? '')
+  return ia < ib ? -1 : ia > ib ? 1 : 0
+}
+
+/**
  * @param seriesByPlatformLeagueId optional chain map from `loadLeagueSeriesMap`. Omit it and
  * this behaves exactly as before — every existing caller is unaffected, which matters because
  * a dozen surfaces read this list and none of them asked for their rows to start disappearing.
+ * @param preferOnTie decides between two rows of the same league and season; negative keeps `a`.
+ * Defaults to `defaultLeagueRowTieBreak`.
  */
 export function collapseLeagueSeasons<T extends Record<string, unknown>>(
   rows: T[],
   seriesByPlatformLeagueId?: ReadonlyMap<string, string>,
+  preferOnTie: (a: T, b: T) => number = defaultLeagueRowTieBreak,
 ): T[] {
   const byLeague = new Map<string, T>()
   const passthrough: T[] = []
@@ -371,6 +399,7 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(
     }
     const seasonOf = (x: T) => (typeof x.season === 'number' ? (x.season as number) : -1)
     if (seasonOf(lg) > seasonOf(seen)) byLeague.set(key, lg)
+    else if (seasonOf(lg) === seasonOf(seen) && preferOnTie(lg, seen) < 0) byLeague.set(key, lg)
   }
 
   return [...passthrough, ...byLeague.values()]
@@ -777,7 +806,21 @@ export async function getDashboardLeagueListForUser(
         (filtered as any[]).map((l) => String(l?.id ?? '')).filter(Boolean),
       )
     : undefined
-  const deduped = collapseLeagueSeasons(filtered as any[], seriesMap)
+  /*
+   * Two importers' rows of one league, same season: the viewer's OWN import wins, then
+   * `defaultLeagueRowTieBreak`. Either way the same row every time — see that function for what
+   * a database-order tie cost.
+   */
+  const viewerOwnedRowIds = new Set(
+    (genericLeagues as Array<{ id?: unknown; userId?: unknown }>)
+      .filter((lg) => lg.userId === userId)
+      .map((lg) => String(lg.id)),
+  )
+  const preferViewerRow = (a: Record<string, unknown>, b: Record<string, unknown>): number => {
+    const own = Number(viewerOwnedRowIds.has(String(b.id))) - Number(viewerOwnedRowIds.has(String(a.id)))
+    return own !== 0 ? own : defaultLeagueRowTieBreak(a, b)
+  }
+  const deduped = collapseLeagueSeasons(filtered as any[], seriesMap, preferViewerRow)
 
   const leaguesSorted = deduped.sort((a: any, b: any) => {
     const aDate = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0

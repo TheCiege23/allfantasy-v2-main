@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
+import { findPlayedAlias } from '@/lib/core-app/leagueRowAlias'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
@@ -706,6 +707,16 @@ export default async function AfCorePage({
     for (const [key, value] of Object.entries(sp)) {
       if (key !== 'league' && typeof value === 'string') safeParams.set(key, value)
     }
+    /*
+     * Another importer's copy of a league the viewer plays: land on THEIR copy instead of
+     * dropping the league. The target comes from `playedLeagues`, so this never widens what the
+     * viewer can reach (lib/core-app/leagueRowAlias.ts).
+     */
+    const requested = await prisma.league
+      .findUnique({ where: { id: selectedLeagueId }, select: { platform: true, platformLeagueId: true } })
+      .catch(() => null)
+    const alias = findPlayedAlias(requested, playedLeagues)
+    if (alias) safeParams.set('league', alias)
     const query = safeParams.toString()
     redirect(`/core${segment ? `/${segment}` : ''}${query ? `?${query}` : ''}`)
   }
