@@ -591,7 +591,8 @@ describe("POST /api/chat/chimmy contract", () => {
   it.each([false, true])('grounds advice in the saved strategy without activating a proposal (tool loop: %s)', async toolLoop => {
     const previousFlag = process.env.CHIMMY_TOOL_LOOP_ENABLED
     process.env.CHIMMY_TOOL_LOOP_ENABLED = String(toolLoop)
-    strategyToolLoopMock.mockResolvedValue({ text: 'Use your saved preference.' })
+    // The full ChimmyToolLoopResult shape: the route reads `toolsUsed` and `turns` for follow-ups.
+    strategyToolLoopMock.mockResolvedValue({ text: 'Use your saved preference.', toolsUsed: [], turns: 1 })
     try {
     resolveNormalizedLeagueContextMock.mockResolvedValueOnce({ ok: true, context: { season: 2026 } })
     readSavedStrategyMock.mockResolvedValueOnce({ active: 'balanced', revision: 3,

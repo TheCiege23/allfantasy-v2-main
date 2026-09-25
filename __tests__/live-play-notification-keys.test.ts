@@ -72,6 +72,8 @@ describe('push tag', () => {
   it('the DISPATCHER uses it, so the tag is not decorative', () => {
     // Call-site token, not a comment: a helper nothing calls protects nothing.
     const src = readFileSync(join(process.cwd(), 'lib/notifications/NotificationDispatcher.ts'), 'utf8')
-    expect(src).toContain('tag: pushTagFor(category, meta)')
+    // The second argument carries the caller's meta with the stored league folded in, so pin
+    // the call, not its exact arguments (a caller's own `meta.pushTag` still wins inside it).
+    expect(src).toMatch(/tag: pushTagFor\(category, \{ \.\.\.\(meta \?\? \{\}\)/)
   })
 })

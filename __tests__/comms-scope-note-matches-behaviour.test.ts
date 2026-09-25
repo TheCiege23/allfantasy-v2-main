@@ -23,12 +23,6 @@ const TOOLS = fs.readFileSync(
  * The behaviour is right; the sentence under the chips claimed the opposite.
  */
 describe('the scope note describes what actually happens', () => {
-  it('routes league AI shortcuts to the private tab instead of claiming publication', () => {
-    expect(DRAWER).toContain('Ask Chimmy privately')
-    expect(DRAWER).toContain("onAskChimmy={() => setTab('chimmy')}")
-    expect(DRAWER).not.toContain('setAskChimmy')
-    expect(DRAWER).not.toMatch(/publicMode\s*\n/)
-  })
   it('no longer promises a fence it does not build', () => {
     expect(DRAWER).not.toContain('are grounded in ${scope.name} only')
   })

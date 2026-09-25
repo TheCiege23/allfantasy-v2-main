@@ -69,15 +69,28 @@ it('continues other market captures when one write fails and marks the run parti
   expect(result.partial).toBe(true)
   expect(result.combos[0].skipped).toBe('storage unavailable')
 })
-it('rejects ambiguous identities and malformed values without mixing pick rows into players', async () => {
+// Picks are stored, not filtered (so a trade containing one can be graded); a FantasyCalc pick
+// carries a synthetic sleeperId and keeps position PICK so unscoped readers can exclude it.
+it('rejects ambiguous identities and malformed values, and stores a pick as a pick', async () => {
   mocks.fetch.mockResolvedValue({ ok: true, json: async () => [player, { ...player, value: 5000 },
     { player: { name: 'Bad', sleeperId: 'bad', position: 'QB' }, value: NaN },
-    { player: { name: 'Pick', position: 'PICK' }, value: 2000 },
+    { player: { name: '2027 Round 1', sleeperId: 'DP_0_0', position: 'PICK' }, value: 2000 },
     { ...player, player: { ...player.player, sleeperId: 'good' } }] })
   const result = await ingestPlayerValues(now)
   expect(result.partial).toBe(true)
   expect(result.combos[0].invalidRows).toBe(3)
-  expect(result.combos[0].picksFiltered).toBe(1)
+  expect(result.combos[0].picksStored).toBe(1)
+  const written = mocks.createMany.mock.calls[0][0].data as Array<{ sleeperId: string; position: string | null }>
+  expect(written.map(r => r.sleeperId).sort()).toEqual(['DP_0_0', 'good'])
+  expect(written.find(r => r.sleeperId === 'DP_0_0')?.position).toBe('PICK')
+})
+it('counts an id-less row as invalid, pick or not', async () => {
+  mocks.fetch.mockResolvedValue({ ok: true, json: async () => [
+    { player: { name: 'Pick', position: 'PICK' }, value: 2000 },
+    { ...player, player: { ...player.player, sleeperId: 'good' } }] })
+  const result = await ingestPlayerValues(now)
+  expect(result.combos[0].invalidRows).toBe(1)
+  expect(result.combos[0].picksStored).toBe(0)
   expect(mocks.createMany.mock.calls[0][0].data.map((r: { sleeperId: string }) => r.sleeperId)).toEqual(['good'])
 })
 it('refuses a malformed payload without abandoning the remaining profiles', async () => {

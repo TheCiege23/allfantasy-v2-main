@@ -63,7 +63,8 @@ describe('dedupe key identity', () => {
   it('keys on the stable play identity, not on the player', async () => {
     await ingest(swing())
     const key = h.dispatchNotification.mock.calls[0][0].meta.sourceKey
-    expect(key).toContain(`evt:${GAME}|101|rushing_yards|88`)
+    // Main's key format: `${type}:${sport}:${stableId}` — no `evt:` marker.
+    expect(key).toBe(`live_score_swing:NFL:${GAME}|101|rushing_yards|88`)
     expect(key).not.toBe('live_score_swing:101:Bijan Robinson')
   })
 

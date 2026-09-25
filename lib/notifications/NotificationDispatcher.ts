@@ -306,8 +306,10 @@ export async function dispatchNotification(
           title,
           body: body ?? undefined,
           href: actionHref,
-          // One tag per category unless the caller names one per event — see pushTagFor.
-          tag: pushTagFor(category, meta),
+          // One tag per category and league unless the caller names one per event — see
+          // pushTagFor. The league is the one the row was stored against, so a muted anchor
+          // league never names the push that went out for the leagues that survived it.
+          tag: pushTagFor(category, { ...(meta ?? {}), leagueId: rowLeagueId }),
           type,
         }).catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
       }

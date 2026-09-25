@@ -2964,8 +2964,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        */
       styleLine: [
         personalizationDirectives,
-        savedStrategyPrompt,
         renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
+        savedStrategyPrompt,
       ]
         .filter(Boolean)
         .join('\n\n'),

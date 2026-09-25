@@ -23,7 +23,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getServerSession: vi.fn(),
   leagueFindFirst: vi.fn(),
+  channelFindFirst: vi.fn(),
   channelUpdateMany: vi.fn(),
+  verifyGuildManager: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
@@ -31,9 +33,11 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findFirst: mocks.leagueFindFirst },
-    discordLeagueChannel: { updateMany: mocks.channelUpdateMany },
+    discordLeagueChannel: { findFirst: mocks.channelFindFirst, updateMany: mocks.channelUpdateMany },
   },
 }))
+// Enabling sync re-checks Manage Server on the mapped guild; that is an external lookup.
+vi.mock('@/lib/discord/guild-access', () => ({ verifyGuildManager: mocks.verifyGuildManager }))
 // The GET half of this route pulls the bot client; PATCH never touches it.
 vi.mock('@/lib/api/require-league-access', () => ({ requireLeagueApiAccess: vi.fn() }))
 vi.mock('@/lib/discord/bot', () => ({
@@ -47,6 +51,8 @@ import { PATCH } from '@/app/api/discord/league/route'
 
 const OWNER = 'app-user-uuid-owner'
 const LEAGUE_ID = 'league-under-test'
+/** The mapping row the handler reads first; the write is scoped to exactly this row. */
+const MAPPING = { id: 'mapping-row-1', guildId: 'guild-1' }
 
 function patch(body: unknown) {
   return PATCH(
@@ -67,6 +73,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.getServerSession.mockResolvedValue({ user: { id: OWNER } })
   mocks.leagueFindFirst.mockResolvedValue({ userId: OWNER })
+  mocks.channelFindFirst.mockResolvedValue(MAPPING)
+  mocks.verifyGuildManager.mockResolvedValue(true)
   mocks.channelUpdateMany.mockResolvedValue({ count: 1 })
 })
 
@@ -84,7 +92,7 @@ describe('scopes the write to one surface', () => {
 
   it('writes the surface the caller named', async () => {
     await patch({ leagueId: LEAGUE_ID, surface: 'commissioner_notes', syncEnabled: true })
-    expect(sentWhere()).toEqual({ leagueId: LEAGUE_ID, surface: 'commissioner_notes' })
+    expect(sentWhere()).toEqual({ id: MAPPING.id, leagueId: LEAGUE_ID, surface: 'commissioner_notes' })
   })
 
   it('defaults to league_chat for callers that predate surfaces', async () => {
@@ -95,7 +103,7 @@ describe('scopes the write to one surface', () => {
      * to exactly the row they were already editing.
      */
     await patch({ leagueId: LEAGUE_ID, syncInbound: true })
-    expect(sentWhere()).toEqual({ leagueId: LEAGUE_ID, surface: 'league_chat' })
+    expect(sentWhere()).toEqual({ id: MAPPING.id, leagueId: LEAGUE_ID, surface: 'league_chat' })
   })
 
   it.each([
@@ -106,7 +114,7 @@ describe('scopes the write to one surface', () => {
     const res = await patch({ leagueId: LEAGUE_ID, surface, syncEnabled: true })
     if (label.startsWith('an empty')) {
       expect(res.status).toBe(200)
-      expect(sentWhere()).toEqual({ leagueId: LEAGUE_ID, surface: 'league_chat' })
+      expect(sentWhere()).toEqual({ id: MAPPING.id, leagueId: LEAGUE_ID, surface: 'league_chat' })
     } else {
       expect(res.status).toBe(400)
       expect(mocks.channelUpdateMany, 'a bad surface reached the database').not.toHaveBeenCalled()
@@ -125,10 +133,12 @@ describe('scopes the write to one surface', () => {
       vi.clearAllMocks()
       mocks.getServerSession.mockResolvedValue({ user: { id: OWNER } })
       mocks.leagueFindFirst.mockResolvedValue({ userId: OWNER })
+      mocks.channelFindFirst.mockResolvedValue(MAPPING)
+      mocks.verifyGuildManager.mockResolvedValue(true)
       mocks.channelUpdateMany.mockResolvedValue({ count: 1 })
       const res = await patch({ leagueId: LEAGUE_ID, surface: s.id, syncEnabled: true })
       expect(res.status, `${s.id} was rejected`).toBe(200)
-      expect(sentWhere()).toEqual({ leagueId: LEAGUE_ID, surface: s.id })
+      expect(sentWhere()).toEqual({ id: MAPPING.id, leagueId: LEAGUE_ID, surface: s.id })
     }
   })
 })
@@ -150,6 +160,30 @@ describe('reports a write that changed nothing', () => {
   it('reports the surface and row count on success', async () => {
     const res = await patch({ leagueId: LEAGUE_ID, surface: 'league_chat', syncEnabled: false })
     await expect(res.json()).resolves.toEqual({ ok: true, surface: 'league_chat', updated: 1 })
+  })
+})
+
+describe('reads the mapping first, and gates enabling on the guild', () => {
+  it('404s a surface with no mapped channel, without writing', async () => {
+    mocks.channelFindFirst.mockResolvedValue(null)
+    const res = await patch({ leagueId: LEAGUE_ID, surface: 'draft_room', syncEnabled: true })
+    expect(res.status).toBe(404)
+    expect(mocks.channelUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('403s enabling sync without Manage Server on the mapped guild, and writes nothing', async () => {
+    mocks.verifyGuildManager.mockResolvedValue(false)
+    const res = await patch({ leagueId: LEAGUE_ID, syncEnabled: true })
+    expect(res.status).toBe(403)
+    expect(mocks.verifyGuildManager).toHaveBeenCalledWith(OWNER, MAPPING.guildId)
+    expect(mocks.channelUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('lets a commissioner turn sync OFF without the external guild check', async () => {
+    mocks.verifyGuildManager.mockResolvedValue(false)
+    const res = await patch({ leagueId: LEAGUE_ID, syncEnabled: false, syncOutbound: false })
+    expect(res.status).toBe(200)
+    expect(mocks.verifyGuildManager).not.toHaveBeenCalled()
   })
 })
 

@@ -889,6 +889,8 @@ export function scoreWaiverCandidates(
 
   for (const candidate of candidates) {
     if (!scorablePosition(candidate.position, ctx)) continue
+    // `NaN < 200` is false, so a non-finite value slipped past the gate below and was scored.
+    if (!Number.isFinite(candidate.value)) continue
     if (candidate.value < 200) continue
 
     const dimensions: WaiverDimensions = {

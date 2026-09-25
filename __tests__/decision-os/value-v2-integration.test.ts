@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-value/snapshot'
 import { scoreWaiverCandidates, type WaiverScoringContext } from '@/lib/waiver-engine/waiver-scoring'
+import { mapSlotToPositions } from '@/lib/waiver-engine/team-needs'
 import { buildConsoleValueV2Shadow } from '@/lib/decision-os/value-v2/consoleShadow'
 import type { MarketObservationV2 } from '@/lib/decision-os/value-v2/market'
 
@@ -53,13 +54,19 @@ it('refuses unpriced players rather than counting ADP-only output as evidence', 
   const snapshot = buildTradeValueSnapshot({ proposerRosterId: 'A', receiverRosterId: 'B', context, assets: [asset('A', 'B'), missing] })
   expect(snapshot.grade.grade).toBeNull()
 })
-it('scores K and grouped IDP candidates only for matching leagues and rejects non-finite values', () => {
+// Main's rule (scorablePosition): score a candidate only when the league's own slots accept its
+// position, and never a kicker/punter/team unit, which the trade-value scale does not price.
+it('scores grouped IDP candidates only for matching leagues, never a kicker, and rejects non-finite values', () => {
+  const startable = (slots: string[]) => [...new Set(slots.flatMap(mapSlotToPositions))]
   const ctx: WaiverScoringContext = { goal: 'balanced', needs: [], surplus: [], isSF: false, isTEP: false, numTeams: 12,
-    isDynasty: false, rosterPlayers: [], currentWeek: 1, rosterPositions: ['K', 'IDP_FLEX'],
-    teamNeeds: { weakestSlots: [], biggestNeed: null, byeWeekClusters: [], positionalDepth: [], dropCandidates: [] } }
+    isDynasty: false, rosterPlayers: [], currentWeek: 1,
+    teamNeeds: { weakestSlots: [], biggestNeed: null, byeWeekClusters: [], positionalDepth: [], dropCandidates: [],
+      startablePositions: startable(['K', 'IDP_FLEX']) } }
   const candidates = ['K', 'LB', 'EDGE', 'WR'].map(position => ({ playerId: position, playerName: position, position, team: null, age: 25,
     value: 1000, source: 'league', assetValue: { marketValue: 1000, impactValue: 1000, vorpValue: 500, volatility: 0.1 } }))
-  expect(scoreWaiverCandidates(candidates, ctx).map(p => p.position)).toEqual(expect.arrayContaining(['K', 'LB', 'EDGE']))
-  expect(scoreWaiverCandidates(candidates, { ...ctx, rosterPositions: ['WR'] }).map(p => p.position)).toEqual(['WR'])
-  expect(scoreWaiverCandidates([{ ...candidates[0], value: NaN }], ctx)).toEqual([])
+  expect(scoreWaiverCandidates(candidates, ctx).map(p => p.position).sort()).toEqual(['EDGE', 'LB'])
+  const wrOnly = { ...ctx, teamNeeds: { ...ctx.teamNeeds, startablePositions: startable(['WR']) } }
+  expect(scoreWaiverCandidates(candidates, wrOnly).map(p => p.position)).toEqual(['WR'])
+  // On a position the league DOES start, so the finite-value gate is what rejects it.
+  expect(scoreWaiverCandidates([{ ...candidates[1], value: NaN }], ctx)).toEqual([])
 })
