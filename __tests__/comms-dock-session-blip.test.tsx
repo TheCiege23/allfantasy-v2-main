@@ -257,3 +257,39 @@ describe('only the chat bubble goes back to where you were', () => {
     expect(activeTab()).toMatch(/Chimmy/)
   })
 })
+
+/*
+ * Under /core the dock now OUTLIVES the shell (CommsDockHost), so a docked drawer that marked the
+ * old `.af-shell` must mark the new one when a screen change swaps it — or the new page slides back
+ * under the drawer. `shellKey` is what tells it the element changed.
+ */
+describe('a docked drawer across a shell swap', () => {
+  it('re-marks the new .af-shell with data-comms-docked', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: true, media: q, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }))
+    const shellA = document.createElement('div')
+    shellA.className = 'af-shell'
+    document.body.appendChild(shellA)
+    const dockProps = {
+      leagues: leagues as never,
+      pageLeagueId: 'L1',
+      chimmyTokenCost: 10,
+      dockable: true,
+    }
+    const view = render(<CommsDock {...dockProps} shellKey="A" />)
+    fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
+    expect(shellA.getAttribute('data-comms-docked')).toBe('true')
+
+    /* The screen change: the old shell leaves, a new one arrives, the dock stays. */
+    shellA.remove()
+    const shellB = document.createElement('div')
+    shellB.className = 'af-shell'
+    document.body.appendChild(shellB)
+    view.rerender(<CommsDock {...dockProps} shellKey="B" />)
+
+    expect(shellB.getAttribute('data-comms-docked')).toBe('true')
+    shellB.remove()
+  })
+})
