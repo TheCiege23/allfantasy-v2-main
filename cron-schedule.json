@@ -106,7 +106,7 @@
     },
     {
       "path": "/api/cron/import-schedules?riProfiles=1",
-      "schedule": "10 9 * * *"
+      "schedule": "10 3,9 * * *"
     },
     {
       "path": "/api/cron/import-schedules?odds=1",
