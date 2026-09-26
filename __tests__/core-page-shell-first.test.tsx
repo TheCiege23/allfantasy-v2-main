@@ -440,4 +440,14 @@ describe('/core with an unknown segment', () => {
   })
 })
 
-vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: vi.fn(async () => {}) }))
+/*
+ * 🛑 GATED LIKE EVERY OTHER SHELL READ, AND THAT IS THE POINT. Both were serial stages in front of
+ * (hubs) or behind (plan allowance) the shell's parallel wave, and a mock that resolved instantly
+ * could not see it — the "starts every shell read before any resolves" case above passed over two
+ * waits it had no way to observe. Gated, each must have started while the rest are still pending.
+ */
+vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: (shell.hubs = gatedValue(undefined)) }))
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/chimmy/planAllowance')>()),
+  readChimmyPlanAllowance: (shell.planAllowance = gatedValue(null)),
+}))

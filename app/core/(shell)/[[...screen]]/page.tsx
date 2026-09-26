@@ -665,6 +665,16 @@ export default async function AfCorePage({
   // getDashboardLeagueListForUser returns { leagues, sleeperUserId } — NOT an
   // array — and types its leagues as `unknown[]`, so nothing stops a caller from
   // mapping the payload itself. The dashboard page casts the same way.
+  /*
+   * ⚠ STARTED HERE, AWAITED WHERE IT IS USED. It needs only the session, and it was awaited ALONE
+   * after the whole shell wave — a third serial stage on every /core render for a value the wave
+   * never needed. Same inputs, same fallback, same place it is read.
+   */
+  const chimmyPlanRead = readChimmyPlanAllowance({
+    userId,
+    email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
+  }).catch(() => null)
+
   const leagueListPayload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
@@ -813,7 +823,17 @@ export default async function AfCorePage({
    * for the cross-league offers strip. Resolved through the same
    * resolveLeagueCardTypeKey the rail uses, so the two never disagree.
    */
-  await attachLeagueHubs(userId, rail)
+  /*
+   * ⚠ STARTED HERE, AWAITED AFTER THE SHELL WAVE. It was awaited on its own before the wave began —
+   * a serial stage in front of every other shell read — though `hub` is only read when the shell's
+   * props are built, well after the wave. It writes `hub` onto these same rail objects, so nothing
+   * that already holds one (`selectedRailLeague` below) misses it.
+   *
+   * The no-op `.catch` only marks the promise handled, so a redirect that throws before the await
+   * cannot leave an unhandled rejection; the await below still rethrows exactly as before.
+   */
+  const railHubsRead = attachLeagueHubs(userId, rail)
+  railHubsRead.catch(() => {})
 
   const tradeLeagueRow = selectedLeagueRow
   const tradeLeagueTypeKey = tradeLeagueRow
@@ -1130,6 +1150,7 @@ export default async function AfCorePage({
     railMatchups,
     access,
   ] = await shellReads
+  await railHubsRead
 
   /*
    * The league-first landing. A redirect, so it must stay in AfCorePage ahead of the shell render
@@ -1241,10 +1262,7 @@ export default async function AfCorePage({
    * says "Included with AF Pro: N left today" instead of quoting a token price they will not pay.
    * Null for plans without Chimmy and on any failure — the price then shows exactly as before.
    */
-  const chimmyPlanState = await readChimmyPlanAllowance({
-    userId,
-    email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
-  }).catch(() => null)
+  const chimmyPlanState = await chimmyPlanRead
   const chimmyPlanAllowance = chimmyPlanState ? planAllowanceMeta(chimmyPlanState, chimmyPlanState.remaining > 0) : null
 
   /*
