@@ -34,6 +34,7 @@ describe('claimPlaceholderRoster native open slots', () => {
         ]),
         findFirst: vi.fn(async ({ where }: { where: { id?: string } }) => (where.id === 'roster-2' ? openRoster : null)),
         update: vi.fn().mockResolvedValue({ id: 'roster-2' }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       appUser: {
         findMany: vi.fn().mockResolvedValue([{ id: 'app-user-1' }]),
@@ -80,9 +81,9 @@ describe('claimPlaceholderRoster native open slots', () => {
     })
 
     expect(result).toEqual({ claimed: true, rosterId: 'roster-2', matchedBy: 'native_open_slot' })
-    expect(tx.roster.update).toHaveBeenCalledWith(
+    expect(tx.roster.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'roster-2' },
+        where: { id: 'roster-2', leagueId: 'league-1', platformUserId: 'open-slot-league-1-2' },
         data: expect.objectContaining({
           platformUserId: 'app-user-2',
           settings: expect.objectContaining({ openSlot: false }),

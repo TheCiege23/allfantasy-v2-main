@@ -111,6 +111,19 @@ describe('countSeatsHeldByPeople', () => {
 })
 
 describe('assignLeagueSeat', () => {
+  it('refuses an ownership change committed after the initial read', async () => {
+    const db = nativeLeague()
+    const original = db.roster.updateMany
+    db.roster.updateMany = async (args: { where: Row; data: Row }) => {
+      db.roster.rows.find((r: Row) => r.id === 'r2').platformUserId = 'ben'
+      return original(args)
+    }
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).toMatchObject({ ok: false, code: 'ROSTER_TAKEN' })
+    expect(db.roster.rows.find((r: Row) => r.id === 'r2').platformUserId).toBe('ben')
+    expect(db.leagueTeam.rows.find((r: Row) => r.id === 't2').claimedByUserId).toBeNull()
+    expect(db.redraftLeagueMember.rows.some((r: Row) => r.userId === 'amy')).toBe(false)
+  })
+
   it('writes the roster, team, entry slot, membership and season roster together', async () => {
     const db = nativeLeague()
     const result = await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })

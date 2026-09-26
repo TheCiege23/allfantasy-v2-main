@@ -216,8 +216,6 @@ export async function validateFantasyInviteCode(
   if (visibility === "invite_only" && !allowInviteLink) {
     return { valid: false, error: "INVITE_DISABLED", preview }
   }
-  if (isFull) return { valid: false, error: "LEAGUE_FULL", preview }
-
   if (options?.userId) {
     const existing = await prisma.roster.findUnique({
       where: {
@@ -227,6 +225,8 @@ export async function validateFantasyInviteCode(
     })
     if (existing) return { valid: false, error: "ALREADY_MEMBER", preview }
   }
+
+  if (isFull) return { valid: false, error: "LEAGUE_FULL", preview }
 
   if (requiresPassword) {
     if (!options?.password?.trim()) return { valid: false, error: "PASSWORD_REQUIRED", preview }

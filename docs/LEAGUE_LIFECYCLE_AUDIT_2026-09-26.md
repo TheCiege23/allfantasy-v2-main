@@ -76,3 +76,11 @@ A real local Next server connected to the known test database passed the authent
 Automatic review initially rejected this test because inherited Meta credentials might send test conversions. The safer rerun restarted the server with Meta pixel/conversion, email and shared Redis credentials explicitly disabled. Server logs confirmed the Meta event was skipped because no conversion token was set. No signup endpoint was called.
 
 Remaining acceptance includes the full authenticated browser journey through joins/settings/draft picks, full-size real drafts, active-pool remote image coverage, cross-sport stats/ADP completeness and each offered specialty lifecycle.
+
+## Authenticated concurrent joins and settings
+
+Two real cookie-authenticated managers competed for the final native seat. Baseline: a concurrent finance initialization returned HTTP 500 (LeagueFinance.leagueId uniqueness), and with finance pre-created both requests returned success for one seat. The fix uses atomic finance initialization, a league-row lock before join capacity checks, and an ownership-conditional seat update that refuses a changed owner before writing team/membership mirrors.
+
+The repaired authenticated test returned one 200 and one 409 (League is full), with exactly two roster owners. It also exposed an existing-member retry incorrectly refused by the full-league check; membership is now recognized before capacity refusal. Rejoining creates no additional roster. A member PATCH of draft settings returned 403; the commissioner's PATCH returned 200 and persisted 3RR. Concurrent real finance initialization returned the same record to both callers. Synthetic leagues/users were removed, and the owned local server was stopped with temporary Next/TypeScript settings restored.
+
+Sixty targeted unit assertions passed across seat assignment, stale ownership, full-league rejoin, finance creation, entry-fee guards, imported identities and invitation contracts. The real test uses the guarded test database; no production fixtures were created.
