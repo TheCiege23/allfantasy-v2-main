@@ -11,6 +11,8 @@ import {
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
+import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -202,6 +204,8 @@ async function resolveGrades(
       picksGiven: true, picksReceived: true,
       /* The other manager's display name, for the breakdown's labels. */
       partnerName: true,
+      /* Which side of the graded ledger is the OTHER one — see `draftedPickNamesForRow`. */
+      partnerRosterId: true,
       history: { select: { sleeperUsername: true } },
     },
     /*
@@ -293,16 +297,37 @@ async function resolveGrades(
   // Warm the per-player analytics cache the pricer reads, in ONE query, before sixty deals hit it.
   await getPlayerAnalyticsBatch([...playerById.values()].map((p) => p.name)).catch(() => null)
 
+  /*
+   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). This row stores a pick
+   * as `{ season, round }`, which cannot name the player; the league's graded ledger already did
+   * (`archivedPickOutcomes.ts`). One DB read, only for trades that moved a pick. A league with no
+   * ledger (every non-Sleeper platform today) gets nothing back and grades exactly as before.
+   */
+  const ledgerSides = await loadLedgerSidesForTrades(
+    distinctTrades
+      .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
+      .map((t) => ({ sleeperLeagueId: platformLeagueId, transactionId: t.transactionId })),
+  )
+
   const graded: GradedTrade[] = await Promise.all(distinctTrades.map(async (t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
-    const picksIn = pickAssets(t.picksReceived)
-    const picksOut = pickAssets(t.picksGiven)
+    const pickRef = (p: { pickSeason?: string; pickRound?: number }) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null })
+    const drafted = draftedPickNamesForRow(
+      {
+        picksIn: pickAssets(t.picksReceived).map(pickRef),
+        picksOut: pickAssets(t.picksGiven).map(pickRef),
+        partnerRosterId: t.partnerRosterId ?? null,
+      },
+      ledgerSides.get(ledgerKey(platformLeagueId, t.transactionId)),
+    )
+    const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
+    const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
     const g = await gradeArchivedTrade(grader, {
       received: recv.map(nameOf),
       gave: gave.map(nameOf),
-      picksIn: picksIn.map((p) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null, label: p.name })),
-      picksOut: picksOut.map((p) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null, label: p.name })),
+      picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
+      picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
       currentSeason,
     })
 

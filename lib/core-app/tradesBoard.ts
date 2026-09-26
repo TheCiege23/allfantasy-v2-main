@@ -21,6 +21,8 @@ import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
+import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
+import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
@@ -740,10 +742,23 @@ export async function getTradesBoard(
     if (!h) return []
     const league = leagueByPlatformId.get(h.sleeperLeagueId)
     if (!league) return []
-    return [{ ...t, leagueId: league.id, username: h.sleeperUsername }]
+    return [{ ...t, leagueId: league.id, username: h.sleeperUsername, sleeperLeagueId: h.sleeperLeagueId }]
   })
 
   const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved)
+
+  /*
+   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25), on this board too. The
+   * row stores a pick as `{ season, round }`, which cannot name the player; the league's graded
+   * ledger already did (`archivedPickOutcomes.ts`). One DB read for every card, and only for cards
+   * that moved a pick. Before this, a 2026 8th swapped for a 2026 6th after that draft graded C at
+   * "560 for 560" — both priced off a generic curve as picks that no longer existed.
+   */
+  const ledgerSides = await loadLedgerSidesForTrades(
+    [...firstByLeague.values()]
+      .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
+      .map((t) => ({ sleeperLeagueId: t.sleeperLeagueId, transactionId: t.transactionId })),
+  )
 
   /* Latest graded trade per league, built from the surviving copy. */
   const latestByLeague = new Map<string, BoardTrade>()
@@ -762,8 +777,16 @@ export async function getTradesBoard(
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
     const pickPrice = pricerByBook.get(`${leagueBook.format}:${leagueBook.qbFormat}`)
-    const sentPicks = pickAssets(t.picksGiven, pickPrice)
-    const recvPicks = pickAssets(t.picksReceived, pickPrice)
+    const drafted = draftedPickNamesForRow(
+      {
+        picksIn: pickAssets(t.picksReceived).map((p) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null })),
+        picksOut: pickAssets(t.picksGiven).map((p) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null })),
+        partnerRosterId: t.partnerRosterId ?? null,
+      },
+      ledgerSides.get(ledgerKey(t.sleeperLeagueId, t.transactionId)),
+    )
+    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut)
+    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn)
 
     const defenders = defendersFor(t.leagueId, leagueBook)
 
@@ -774,7 +797,12 @@ export async function getTradesBoard(
      * chart today, from this row's point of view.
      */
     const nameOfId = (id: string) => playerById.get(id)?.name?.trim() || null
-    const pickRef = (p: TradeAsset) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null, label: p.name })
+    const pickRef = (p: TradeAsset & { drafted?: string | null }) => ({
+      season: p.pickSeason ?? null,
+      round: p.pickRound ?? null,
+      label: p.name,
+      drafted: p.drafted ?? null,
+    })
     const g = await gradeArchivedTrade(await completedTradeGraderFor(t.leagueId), {
       received: recvIds.map(nameOfId),
       gave: sentIds.map(nameOfId),

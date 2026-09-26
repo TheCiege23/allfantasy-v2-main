@@ -86,7 +86,45 @@ type WireDraft = {
   draft_id: string
   season: string
   status: string
-  slot_to_roster_id?: Record<string, number> | null
+  slot_to_roster_id?: Record<string, number | string> | null
+  /** user_id → draft slot. */
+  draft_order?: Record<string, number | string> | null
+}
+
+function hasSlotMap(draft: Pick<WireDraft, 'slot_to_roster_id'>): boolean {
+  return !!draft.slot_to_roster_id && Object.keys(draft.slot_to_roster_id).length > 0
+}
+
+/**
+ * Which draft slot each roster held — the key the draft results are read by, since a traded pick is
+ * named by its ORIGINAL owner's roster and taken in that roster's slot.
+ *
+ * `slot_to_roster_id` first. Without it, the same answer in two hops the draft also carries:
+ * `draft_order` (user → slot) and the rosters' owners (user → roster). Null when neither gives a
+ * single slot, so nothing downstream guesses.
+ *
+ * ⚠ NOT FROM THE PICKS. A pick's `roster_id` is the roster that MADE it — for a traded pick, the new
+ * owner — so reading slots off the picks would hand a traded slot to the wrong roster.
+ */
+export function rosterToDraftSlot(
+  draft: Pick<WireDraft, 'slot_to_roster_id' | 'draft_order'>,
+  rosters: ReadonlyArray<{ roster_id: number; owner_id?: string | null }>,
+): Map<number, number> | null {
+  const out = new Map<number, number>()
+  const put = (rosterId: unknown, slot: unknown) => {
+    const r = Number(rosterId)
+    const s = Number(slot)
+    if (Number.isInteger(r) && r > 0 && Number.isInteger(s) && s > 0) out.set(r, s)
+  }
+  if (hasSlotMap(draft)) {
+    for (const [slot, rosterId] of Object.entries(draft.slot_to_roster_id!)) put(rosterId, slot)
+  } else if (draft.draft_order) {
+    const rosterOfUser = new Map(
+      rosters.filter((r) => typeof r.owner_id === 'string' && r.owner_id).map((r) => [r.owner_id as string, r.roster_id]),
+    )
+    for (const [userId, slot] of Object.entries(draft.draft_order)) put(rosterOfUser.get(userId), slot)
+  }
+  return out.size > 0 ? out : null
 }
 type WireDraftPick = {
   round: number
@@ -248,13 +286,23 @@ async function collectSeason(league: WireLeague, idx: number, missing: string[])
     : null
 
   let draftPickResolver: SeasonData['draftPickResolver'] = null
-  const draft = (drafts ?? []).find((d) => d.status === 'complete') ?? (drafts ?? [])[0] ?? null
-  if (draft) {
-    const picks = await j<WireDraftPick[]>(`/draft/${draft.draft_id}/picks`)
-    const slotToRoster = draft.slot_to_roster_id ?? null
-    if (picks && slotToRoster) {
-      const rosterToSlot = new Map<number, number>()
-      for (const [slot, rosterId] of Object.entries(slotToRoster)) rosterToSlot.set(rosterId, Number(slot))
+  const listed = (drafts ?? []).find((d) => d.status === 'complete') ?? (drafts ?? [])[0] ?? null
+  if (listed) {
+    /*
+     * 🛑 THE LEAGUE'S DRAFT LIST DOES NOT CARRY `slot_to_roster_id` — only `/draft/{id}` does.
+     * This read the map off the list entry, found nothing, and built no resolver, so every used
+     * pick came back unresolved ("2026 round 6", graded as a pick that no longer exists) and the
+     * used-pick ruling (#1306) resolved nothing in production. Measured 2026-09-25 on a live keeper
+     * league (Sleeper 1313185505852018688): the list's 2025 and 2026 drafts both returned
+     * `slot_to_roster_id: null`, while `/draft/{id}` for the 2026 one returned all twelve slots.
+     * So when the list entry lacks the map, the draft itself is read, beside the picks call.
+     */
+    const [picks, full] = await Promise.all([
+      j<WireDraftPick[]>(`/draft/${listed.draft_id}/picks`),
+      hasSlotMap(listed) ? Promise.resolve(null) : j<WireDraft>(`/draft/${listed.draft_id}`),
+    ])
+    const rosterToSlot = rosterToDraftSlot(full ?? listed, rosters ?? [])
+    if (picks && rosterToSlot) {
       const bySlot = new Map<string, WireDraftPick>()
       for (const p of picks) bySlot.set(`${p.round}:${p.draft_slot}`, p)
       draftPickResolver = (round, originalRosterId) => {

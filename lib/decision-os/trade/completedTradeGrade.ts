@@ -70,9 +70,26 @@ export async function oneGradeForCompletedTrade(
   return gradeDeal(await (deps.graderFor ?? completedTradeGraderFor)(leagueId), { ...inputs, viewerSide: false })
 }
 
-type ArchivedPick = { season: string | number | null; round: number | null; label: string }
+type ArchivedPick = {
+  season: string | number | null
+  round: number | null
+  label: string
+  /**
+   * The player drafted with this pick, when the league's graded ledger resolved it
+   * (`lib/core-app/archivedPickOutcomes.ts`). Absent means unknown, not unused.
+   */
+  drafted?: string | null
+}
 
-/** One side of an archived trade row in the grader's terms. Unnamed players and used picks are named, never zeroed. */
+/**
+ * One side of an archived trade row in the grader's terms. Unnamed players and used picks are named,
+ * never zeroed.
+ *
+ * A used pick is graded as the player drafted with it — the same ruling, and the same order of
+ * checks, as `completedTradeInputs`: the drafted player FIRST, so a current-season pick whose draft
+ * has been held counts as the player and not as a still-to-come pick. It keeps its place in the
+ * list (players, then picks), which is the order the board prints values in.
+ */
 function archivedSide(players: ReadonlyArray<string | null>, picks: ReadonlyArray<ArchivedPick>, currentSeason: number): GradeInputs {
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const name of players) {
@@ -81,7 +98,9 @@ function archivedSide(players: ReadonlyArray<string | null>, picks: ReadonlyArra
   }
   for (const p of picks) {
     const year = Number(p.season)
-    if (Number.isFinite(year) && year >= currentSeason && p.round != null && p.round > 0) out.assets.push({ kind: 'pick', year, round: p.round })
+    const drafted = p.drafted?.trim()
+    if (drafted) out.assets.push({ kind: 'player', name: drafted })
+    else if (Number.isFinite(year) && year >= currentSeason && p.round != null && p.round > 0) out.assets.push({ kind: 'pick', year, round: p.round })
     else out.unpriceable.push(p.label)
   }
   return out

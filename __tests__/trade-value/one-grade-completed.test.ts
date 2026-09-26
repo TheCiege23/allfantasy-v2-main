@@ -183,3 +183,60 @@ describe('completedTradeInputs — used picks become the drafted player', () => 
     expect(inputs.get.unpriceable).toEqual(['2023 round 3'])
   })
 })
+
+/*
+ * 🛑 THE ARCHIVED HALF OF THE SAME RULING. A board card or /core Trades row stores a pick as
+ * `{ season, round }`; once the ledger names the player drafted with it, the row grades THAT player,
+ * checked first, in the pick's place — measured in production 2026-09-25: a 2026 8th for a 2026 6th
+ * after that draft graded C at "560 for 560".
+ */
+describe('gradeArchivedTrade — a used pick with a drafted player is graded as that player', () => {
+  const recorder = () => {
+    const calls: Array<{ give: TradeAssetInput[]; get: TradeAssetInput[]; viewerSide: boolean }> = []
+    const grader = {
+      leagueId: 'L',
+      chart: {} as LeagueTradeGrader['chart'],
+      grade: async (args: (typeof calls)[number]) => {
+        calls.push(args)
+        return graded(1000, 1000)
+      },
+    } as LeagueTradeGrader
+    return { calls, grader }
+  }
+
+  it('a current-season pick whose draft is done is the player, not a pick — in the pick’s place', async () => {
+    const { calls, grader } = recorder()
+    await gradeArchivedTrade(grader, {
+      received: ['Alpha Back'], gave: [],
+      picksIn: [{ season: '2026', round: 6, label: '2026 6th', drafted: 'Kyler Murray' }],
+      picksOut: [{ season: '2026', round: 8, label: '2026 8th', drafted: 'Alec Pierce' }],
+      currentSeason: 2026,
+    })
+    expect(calls[0]).toEqual({
+      give: [{ kind: 'player', name: 'Alec Pierce' }],
+      get: [{ kind: 'player', name: 'Alpha Back' }, { kind: 'player', name: 'Kyler Murray' }],
+      viewerSide: false,
+    })
+  })
+
+  it('an older used pick the ledger resolved is graded instead of withholding the letter', async () => {
+    const { calls, grader } = recorder()
+    const g = await gradeArchivedTrade(grader, {
+      received: [], gave: ['Beta Wide'],
+      picksIn: [{ season: '2024', round: 2, label: '2024 2nd', drafted: 'Rookie Two' }], picksOut: [],
+      currentSeason: 2026,
+    })
+    expect(g.graded).toBe(true)
+    expect(calls[0]!.get).toEqual([{ kind: 'player', name: 'Rookie Two' }])
+  })
+
+  it('no drafted player: unchanged — a future pick is a pick, an old one withholds, named', async () => {
+    const { calls, grader } = recorder()
+    await gradeArchivedTrade(grader, {
+      received: [], gave: [],
+      picksIn: [{ season: '2027', round: 1, label: '2027 1st', drafted: null }], picksOut: [{ season: '2027', round: 2, label: '2027 2nd', drafted: '  ' }],
+      currentSeason: 2026,
+    })
+    expect(calls[0]).toMatchObject({ give: [{ kind: 'pick', year: 2027, round: 2 }], get: [{ kind: 'pick', year: 2027, round: 1 }] })
+  })
+})
