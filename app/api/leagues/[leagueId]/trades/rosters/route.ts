@@ -10,6 +10,7 @@ import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProvi
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
+import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
@@ -286,6 +287,7 @@ export async function GET(
           where: { id: leagueId },
           select: {
             season: true,
+            platformLeagueId: true,
             sport: true,
             platform: true,
             starters: true,
@@ -716,7 +718,7 @@ export async function GET(
    * what keeps a missing snapshot table from costing the rosters.
    */
   const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, values] = await Promise.all([
+  const [stock, projections, values, leagueValues] = await Promise.all([
     stockIds.length > 0
       ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
@@ -733,6 +735,15 @@ export async function GET(
           ppr,
         }).catch(() => new Map())
       : Promise.resolve(new Map()),
+    loadLeagueTradeValues({
+      prisma,
+      platformLeagueId: league?.platform === 'sleeper' ? league.platformLeagueId : null,
+      isDynasty: valueBook.format === 'DYNASTY',
+      prefetched: {
+        rosterPositions: rosterPositions.length ? rosterPositions : null,
+        numTeams: Number(league?.leagueSize) || rosters.length || null,
+      },
+    }).catch(() => null),
   ])
 
   /*
@@ -754,7 +765,8 @@ export async function GET(
       }
       // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
       // which the picker renders differently from a low value.
-      p.value = values.get(p.name.toLowerCase())?.value ?? null
+      p.value = leagueValues?.byNameLower.get(p.name.trim().toLowerCase())?.value
+        ?? values.get(p.name.toLowerCase())?.value ?? null
       const projection = projections.get(p.id)
       const leagueProjection = projection?.componentStats
         ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null

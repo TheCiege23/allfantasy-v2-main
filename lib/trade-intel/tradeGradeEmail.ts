@@ -540,7 +540,7 @@ export function buildPendingTradeOfferEmail(params: {
       `<td valign="middle" style="padding-left:14px">${eyebrow('Our read, from your side')}` +
       `<div style="font-size:17px;font-weight:800;color:${GRADE_COLORS[g.letter].fg};margin-top:3px">${escapeHtml(g.label)} · ${escapeHtml(gapText(g.percentDiff))}</div></td></tr></table>` +
       `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:12px">${escapeHtml(g.recommendation)}</div>` +
-      `<div style="font-size:11px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(`On ${g.basis ? `${g.basis} ` : 'this league’s '}values as of today${g.needApplied ? ', counting how it fits your roster' : ''} — the same grade AllFantasy shows for this offer.`)}</div>` +
+      `<div style="font-size:11px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(`On ${g.basis ? `${g.basis} ` : 'this league’s '}values as of today${g.needApplied ? ', counting how it fits your roster' : ''}; values at email time. The site uses the same evaluator with the latest data. Realized fantasy points after a completed trade are a separate result.`)}</div>` +
       `</td></tr><tr><td style="height:12px"></td></tr>`
     : params.grade && !params.grade.graded
       ? card(`${eyebrow('Not graded')}<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">${escapeHtml(params.grade.reason)}</div>`)

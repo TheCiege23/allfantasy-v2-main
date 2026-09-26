@@ -500,12 +500,21 @@ export async function getLeagueHomeData(
       }
     })
 
+  const currentWeek =
+    leagueWeekFromSettings(league.settings) ??
+    (league.platformLeagueId
+      ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week ?? null
+      : null)
+  const seasonStatus = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+    ? (league.settings as Record<string, unknown>).status : null
+  const seasonFinished = ['complete', 'completed'].includes(String(seasonStatus ?? '').toLowerCase())
   const powerBoard =
     league.season != null
       ? await getAllPlayBoard({
           leagueId: league.id,
           platformLeagueId: league.platformLeagueId,
           seasonYear: league.season,
+          throughWeek: seasonFinished || currentWeek == null ? null : currentWeek - 1,
         }).catch(() => null)
       : null
 
@@ -734,12 +743,6 @@ export async function getLeagueHomeData(
    * unscored row (sync bootstraps all 18 weeks at 0-0, so `max(week)` returns
    * 18 in August).
    */
-  const currentWeek =
-    leagueWeekFromSettings(league.settings) ??
-    (league.platformLeagueId
-      ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week ?? null
-      : null)
-
   /*
    * Which weeks this league plays, and which one to show.
    *

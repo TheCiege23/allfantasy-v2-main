@@ -18,6 +18,10 @@ const findFirstLeagueTeam = vi.fn()
 const findUniqueUserProfile = vi.fn()
 const findManySportsPlayer = vi.fn()
 const getPlayerValues = vi.fn()
+const loadLeagueValues = vi.fn()
+vi.mock('@/lib/league-values/leagueTradeValues', () => ({
+  loadLeagueTradeValues: (...args: unknown[]) => loadLeagueValues(...args),
+}))
 const resolveTeamByeWeeks = vi.fn()
 const resolveProviderPlayers = vi.fn()
 const findManyFuturePick = vi.fn()
@@ -138,6 +142,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     findFirstLeagueTeam.mockResolvedValue(null)
     findUniqueUserProfile.mockResolvedValue(null)
     getPlayerValues.mockResolvedValue(new Map())
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map() })
     resolveTeamByeWeeks.mockResolvedValue(new Map())
     resolveProviderPlayers.mockResolvedValue(new Map())
   })
@@ -146,6 +151,20 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     assertLeagueMember.mockResolvedValue({ ok: false, status: 403 })
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     expect(res.status).toBe(403)
+  })
+
+  it('prices a defender from this league even when the offensive market has no match', async () => {
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', platformLeagueId: 'provider-league' })
+    findManyRoster.mockResolvedValue([{ id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1'] } }])
+    findManySportsPlayer.mockResolvedValue([])
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map([
+      ['p1', { value: 875, position: 'LB', basis: 'idp-vorp' }],
+    ]) })
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = await res.json()
+    expect(body.rosters[0].players[0]).toMatchObject({ value: 875, unpricedReason: null })
+    expect(loadLeagueValues).toHaveBeenCalledWith(expect.objectContaining({ platformLeagueId: 'provider-league' }))
   })
 
   it('returns every roster in the league (not just the owner\'s) for a real league member', async () => {

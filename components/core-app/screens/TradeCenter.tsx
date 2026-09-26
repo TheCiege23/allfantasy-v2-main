@@ -201,6 +201,7 @@ type EngineLine = Line & {
 }
 
 type AnalyzeResult = {
+  counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
   fairnessScore?: number
   confidenceScore?: number
@@ -1322,7 +1323,8 @@ export function TradeCenter(props: {
         <h1>Trade Center</h1>
         <p className="af-tc-lede">
           Build a deal across any league you&rsquo;re in and any asset class it allows. Context
-          below the verdict is additive &mdash; it never touches the score above it.
+          explains the league scoring and roster needs used in the grade. Schedule and
+          strategy notes help you judge the deal alongside that value.
         </p>
         {/*
           🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
@@ -1961,7 +1963,7 @@ export function TradeCenter(props: {
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
-              projected &mdash; the realized grade locks in once real production posts
+              proposal value today &mdash; realized production is tracked separately after completion
             </span>
           </div>
 
@@ -2084,6 +2086,27 @@ export function TradeCenter(props: {
             </div>
           ) : null}
 
+          {(result.counterOffers ?? []).length > 0 ? (
+            <div className="af-tc-moves">
+              <div className="af-label">Re-evaluated counteroffers</div>
+              <p className="af-tc-row-sub">Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.</p>
+              <ul>
+                {result.counterOffers!.map(counter => (
+                  <li key={`${counter.addTo}-${counter.name}`}>
+                    <strong>{counter.addTo === 'get' ? 'Ask for' : 'Offer'} {counter.name}</strong>
+                    <span className="af-tc-row-sub">Market {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
+                    <span className="af-tc-row-sub">
+                      You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
+                    </span>
+                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name, playerId: counter.rosterPlayerId, position: counter.position, team: null, value: counter.marketValue })}>
+                      Add to proposal
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           {(result.dataGaps ?? []).length > 0 ? (
             <>
               <div className="af-label">What we couldn&rsquo;t see</div>
@@ -2129,12 +2152,12 @@ export function TradeCenter(props: {
 
           <div className="af-tc-pairs">
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">Wins now</div>
-              <div className="af-tc-pair-value">{intel.whoWinsNow ?? '—'}</div>
+              <div className="af-tc-pair-label">Asset production lean</div>
+              <div className="af-tc-pair-value">{intel.whoWinsNow === 'unknown' ? 'Unavailable' : intel.whoWinsNow ?? '—'}</div>
             </div>
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">Wins long term</div>
-              <div className="af-tc-pair-value">{intel.whoWinsLongTerm ?? '—'}</div>
+              <div className="af-tc-pair-label">League value lean</div>
+              <div className="af-tc-pair-value">{intel.whoWinsLongTerm === 'unknown' ? 'Unavailable' : intel.whoWinsLongTerm ?? '—'}</div>
             </div>
           </div>
 
@@ -2155,8 +2178,8 @@ export function TradeCenter(props: {
 
           <div className="af-label">How these values become advice</div>
           <div className="af-tc-value-layers">
-            <div><span>Market baseline</span><strong>{money(balance?.give)} sent · {money(balance?.get)} received</strong></div>
-            <div><span>Lineup effect</span><strong>{result?.needNotes?.[0] ?? 'No league-specific lineup edge was measured.'}</strong></div>
+            <div><span>League value</span><strong>{money(balance?.give)} sent · {money(balance?.get)} received</strong></div>
+            <div><span>Roster need</span><strong>{result?.needNotes?.[0] ?? 'No league-specific roster-need edge was measured.'}</strong></div>
             <div><span>Consolidation</span><strong>{give.length} assets out · {get.length} assets in{result?.scaleNotes?.[0] ? ` · ${result.scaleNotes[0]}` : ''}</strong></div>
             <div><span>Team direction</span><strong>{result?.postureNotes?.[0] ?? intel?.rebuilderRecommendation ?? 'Use the contender and rebuilder reads for your current direction.'}</strong></div>
             <div><span>Data freshness</span><strong>{valueSources.length ? `Latest available ${valueSources.join(' + ')} snapshots` : 'No priced source was returned for this deal.'}</strong></div>

@@ -79,6 +79,8 @@ export async function getAllPlayBoard(args: {
   leagueId: string
   platformLeagueId: string | null
   seasonYear: number
+  /** Inclusive last finalized week. Live scores must never become recorded wins. */
+  throughWeek?: number | null
 }): Promise<AllPlayBoard | null> {
   if (!args.platformLeagueId) return null
 
@@ -94,6 +96,7 @@ export async function getAllPlayBoard(args: {
 
   const byWeek = new Map<number, typeof rows>()
   for (const r of rows) {
+    if (args.throughWeek != null && r.week > args.throughWeek) continue
     const list = byWeek.get(r.week) ?? []
     list.push(r)
     byWeek.set(r.week, list)

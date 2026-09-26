@@ -17,7 +17,7 @@ import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 import type { LeagueValueAdjustment } from './leagueTradeValue'
 
 /** One asset in the deal, as the need model sees it. `base` orders who fills a hole first. */
-export type NeedLine = { name: string; position: string | null; base: number | null }
+export type NeedLine = { name: string; position: string | null; base: number | null; injuryStatus?: string | null }
 
 export type NeedFactors = {
   give: Array<LeagueValueAdjustment | null>
@@ -71,7 +71,7 @@ export function allocateNeedFactors(args: {
     const byPos = new Map<string, number[]>()
     lines.forEach((l, i) => {
       const pos = l.position?.toUpperCase().trim()
-      if (!pos) return
+      if (!pos || isRuledOut(l.injuryStatus ?? null)) return
       byPos.set(pos, [...(byPos.get(pos) ?? []), i])
     })
     for (const [pos, idxs] of byPos) {
@@ -165,7 +165,7 @@ export async function loadViewerNeedFactors(args: {
     const remaining = players.filter((p) => p.sleeperId && !outgoing.has(p.sleeperId)).map(slotOf)
     const incoming: RosteredSlot[] = get
       .filter((g) => g.position)
-      .map((g) => ({ position: g.position!, unavailable: false }))
+      .map((g) => ({ position: g.position!, unavailable: isRuledOut(g.injuryStatus ?? null) }))
 
     const needAfterOutgoing = computeRosterNeed({ requirements, rostered: remaining })
     const needAfterTrade = computeRosterNeed({ requirements, rostered: [...remaining, ...incoming] })

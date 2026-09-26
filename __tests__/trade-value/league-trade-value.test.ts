@@ -156,4 +156,11 @@ describe('allocateNeedFactors — which assets a roster need applies to', () => 
     })
     expect(out).toEqual({ give: [null], get: [null] })
   })
+  it('does not give an unavailable acquisition a premium for filling a starting hole', () => {
+    const out = allocateNeedFactors({
+      give: [], get: [{ ...line('Injured TE', 'TE', 3000), injuryStatus: 'IR' }],
+      needAfterOutgoing: needOf([]), needAfterTrade: needOf([]), scarcity: emptyWire('TE'),
+    })
+    expect(out.get).toEqual([null])
+  })
 })

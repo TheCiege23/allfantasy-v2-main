@@ -5,6 +5,7 @@ import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import type { LeagueValueAdjustment } from '@/lib/trade-value/leagueTradeValue'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { EvaluatedCounterOffer } from './counterOffers'
 
 export type TradeSportFilter = 'ALL' | SupportedSport
 
@@ -184,8 +185,8 @@ export type TradeConsoleSourceFlags = {
 export type TradeIntelligence = {
   fairnessVerdict: string
   confidenceScore: number
-  whoWinsNow: 'you' | 'opponent' | 'even'
-  whoWinsLongTerm: 'you' | 'opponent' | 'even'
+  whoWinsNow: 'you' | 'opponent' | 'even' | 'unknown'
+  whoWinsLongTerm: 'you' | 'opponent' | 'even' | 'unknown'
   contenderRecommendation: string
   rebuilderRecommendation: string
   tradeWarnings: string[]
@@ -279,6 +280,7 @@ export type TradeConsoleAnalyzeResult = {
   negotiationToolkit: Record<string, unknown> | null
   /** Present when league opponent roster was loaded; not part of the trade's receive side. */
   opponentRosterTargets?: TradeConsoleOpponentRosterTarget[]
+  counterOffers?: EvaluatedCounterOffer[]
   tradeIntelligence: TradeIntelligence
   chimmyPayload: Record<string, unknown>
   /** Time engine + lock hints (same as other AI tools). */

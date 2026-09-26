@@ -11,6 +11,8 @@ export type SurplusGrade = 'core' | 'soft_surplus' | 'hard_surplus'
 
 export type Asset = {
   id: string
+  /** Provider player ID from the actual roster; distinct from the engine's name-based ID. */
+  rosterPlayerId?: string
   type: AssetType
   value: number
 
