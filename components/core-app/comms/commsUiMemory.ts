@@ -10,7 +10,11 @@ import type { CommsTab } from './CommsDrawer'
  * screen change re-suspends and REPLACES the shell — CommsDock included. The chat closed, its bubble
  * disappeared while the next screen loaded, and it came back closed on whatever tab it started with
  * (owner report 2026-09-25: "the chat bubble closes … and doesn't come back"). The drawer's own
- * comment claimed it "stays mounted across navigations"; it does not.
+ * comment claimed it "stays mounted across navigations"; it did not.
+ *
+ * ⚠ SINCE CommsDockHost IT DOES, UNDER /core: the dock now lives in `app/core/layout.tsx` and a
+ * screen change no longer remounts it. This memory remains the restore for a FULL reload (and for
+ * any mount outside that layout), which a layout cannot survive either.
  *
  * Remembered per signed-in user, so one account's chat state never opens for another. sessionStorage,
  * not localStorage: a new tab or tomorrow starts closed, which is what a chat bubble should do.

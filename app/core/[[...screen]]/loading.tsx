@@ -1,6 +1,8 @@
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
+import { CommsDockHold } from '@/components/core-app/comms/CommsDockHost'
+
 /**
  * AF Core — the streaming boundary for every /core screen, until its SHELL is ready.
  *
@@ -51,6 +53,8 @@ import '@/components/core-app/af-core-shell.css'
 export default function AfCoreLoading() {
   return (
     <div className="af-core af-shell af-sk-shell" aria-busy="true">
+      {/* Keeps the chat bubble up while this screen's replacement loads — see CommsDockHost. */}
+      <CommsDockHold />
       {/*
         The rail, nav and topbar are chrome: identical on every /core screen and
         already correct before any loader has returned. They are drawn as solid

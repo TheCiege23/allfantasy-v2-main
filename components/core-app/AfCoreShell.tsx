@@ -7,7 +7,7 @@ import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { useRouter } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
-import CommsDock from '@/components/core-app/comms/CommsDock'
+import { ShellCommsDock } from '@/components/core-app/comms/CommsDockHost'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import { AfCrest } from '@/components/core-app/AfCrest'
@@ -2321,8 +2321,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         </>
       ) : null}
 
+      {/*
+        Under /core the dock is HOSTED by app/core/layout.tsx, so a screen change (which replaces
+        this whole shell) cannot unmount it; this only hands it the page's props. See CommsDockHost.
+      */}
       {comms ? (
-        <CommsDock
+        <ShellCommsDock
+          leagueFirst={Boolean(props.leagueFirst)}
           leagues={comms.leagues}
           pageLeagueId={props.selectedLeagueId ?? null}
           chimmyTokenCost={comms.chimmyTokenCost}

@@ -2685,6 +2685,8 @@ html[data-mode='light'] .af-core {
   .af-core.af-shell[data-league-first='true'] .af-nav,
   .af-core.af-shell[data-league-first='true'] .af-topbar-right,
   .af-core.af-shell[data-league-first='true'] .af-cm-launch,
+  /* Under /core the bubble is rendered by app/core/layout.tsx, outside the shell (CommsDockHost). */
+  .af-core[data-comms-host][data-league-first='true'] .af-cm-launch,
   body:has(.af-core.af-shell[data-league-first='true']) [data-af-mode-toggle] {
     display: none !important;
   }

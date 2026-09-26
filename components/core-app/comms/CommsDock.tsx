@@ -21,7 +21,10 @@ import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
  * unmount it on navigation, which is the failure it exists to avoid. Same reason
  * the read-only chip and the geo notice live in the shell.
  * 🛑 THE SHELL ITSELF IS STILL REPLACED on a /core screen change — the page's loading
- * boundary sits above it — so where the user was is restored from commsUiMemory.ts.
+ * boundary sits above it — so under /core the dock is no longer rendered BY the shell: the
+ * shell publishes its props to `CommsDockHost` in `app/core/layout.tsx`, which owns the one
+ * instance and keeps it mounted through the load. commsUiMemory.ts still restores where the
+ * user was after a full reload.
  *
  * ⚠ DOCKED IS CHOSEN BY THE PAGE, NOT BY THE VIEWPORT ALONE. 23b docks beside a
  * roster or matchup — screens where you are reading one league and asking about
@@ -62,6 +65,12 @@ export type CommsDockProps = {
    * that people clear without reading.
    */
   mentions?: number
+  /**
+   * Which shell is on screen, when the dock outlives it (CommsDockHost). Each /core screen mounts a
+   * NEW `.af-shell` element, so a docked drawer must re-mark the new one or the page slides back
+   * under it.
+   */
+  shellKey?: string
 }
 
 /*
@@ -82,6 +91,7 @@ export function CommsDock({
   supportEmail = null,
   unread = 0,
   mentions = 0,
+  shellKey,
 }: CommsDockProps) {
   const { data: session } = useSession()
   /*
@@ -164,7 +174,8 @@ export function CommsDock({
     if (open && mode === 'docked') shell.setAttribute('data-comms-docked', 'true')
     else shell.removeAttribute('data-comms-docked')
     return () => shell.removeAttribute('data-comms-docked')
-  }, [open, mode])
+    // `shellKey`: a new screen is a new `.af-shell` element, which must be re-marked.
+  }, [open, mode, shellKey])
 
   const close = useCallback(() => setOpen(false), [])
 
