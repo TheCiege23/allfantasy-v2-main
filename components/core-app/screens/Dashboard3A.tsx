@@ -758,7 +758,6 @@ export function Dash3AMatchups({
   leagues,
   week,
   winProb,
-  weekLabel,
   freshness = null,
 }: {
   /** The summary's ranked league list — only its live scores are read here. */
@@ -784,6 +783,7 @@ export function Dash3AMatchups({
     them: number
     note: string
     completed: boolean
+    period: string | null
   }> = [
     ...leagues
       .filter((l) => l.score)
@@ -795,6 +795,7 @@ export function Dash3AMatchups({
         them: l.score!.opponent,
         note: `vs ${l.score!.opponentName}`,
         completed: false,
+        period: null,
       })),
     ...(week?.rows ?? [])
       .filter((r) => !liveKeys.has(r.leagueId))
@@ -808,13 +809,18 @@ export function Dash3AMatchups({
           ? r.pointsFor === r.pointsAgainst ? 'you tied' : r.pointsFor > r.pointsAgainst ? 'you won' : 'you lost'
           : 'scores so far'}`,
         completed: r.completed === true,
+        period: `${r.season} · Week ${r.week}`,
       })),
   ]
+  const shown = scored.slice(0, 4)
+  const periods = [...new Set(shown.map((m) => m.period))]
+  const matchupPeriod = periods.length === 1 && periods[0]
+    ? periods[0] : shown.length > 0 ? 'League periods' : 'Available scores'
   return (
             <section className="af3a-sec">
               <header className="af3a-sechead">
-                <h2>This week&rsquo;s matchups</h2>
-                <span className="af3a-note">{weekLabel ?? 'This week'}</span>
+                <h2>League matchups</h2>
+                <span className="af3a-note">{matchupPeriod}</span>
               </header>
 
               {scored.length === 0 ? (
@@ -827,7 +833,7 @@ export function Dash3AMatchups({
                 </div>
               ) : (
                 <div className="af3a-grid2">
-                  {scored.slice(0, 4).map((m) => (
+                  {shown.map((m) => (
                     <article key={m.key} className="af3a-match">
                       <span className={`af3a-tile ${platformClass(m.platform)}`}>
                         {platformTile(m.platform)}

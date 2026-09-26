@@ -39,11 +39,21 @@ A Chrome preview of Kaimon Rucker for Jordyn Brooks exposed an ungraded proposal
 
 The tested behavior covers both missing pricing and unrelated context gaps: a fully priced shared grade remains visible when a roster or projection lookup is incomplete. This corrects the misleading display, not the 35 missing player prices in the audited league.
 
-## Remaining work
+## Core sport and period context release
 
-The next coverage release preserves individual defensive projection refusals through the league board, player-name join, roster API and trade review: missing history, insufficient sample, no recorded defensive production, unavailable replacement level, and scoring gaps. These diagnostics remain available even when no defender can be priced. Identity collisions still refuse a name-based assignment. Existing replacement-derived player prices remain unchanged. The review explains that an unpriced asset withholds the whole trade grade.
+A college kickoff could open an urgent NFL league because the countdown action used the first league in the attention list. It now selects the highest-priority league in the scheduled game's sport, including quiet same-sport leagues, and falls back to Player Finder when none matches. The portfolio cache version advances to retire stale actions. Schedule metadata coalescing also requires the same sport before combining provider rows.
+
+The matchup card derives its period label from the displayed score rows rather than the next scheduled game. Mixed or unknown league periods use a general label instead of claiming a common week. The scores retain their existing completion evidence and odds rules.
+
+Validation: 42 focused tests across four files, including mixed NFL/college accounts, no matching league, mixed matchup periods, cached summaries and completed/partial results.
+
+## Defender pricing diagnostics release
+
+The coverage release preserves individual defensive projection refusals through the league board, player-name join, roster API and trade review: missing history, insufficient sample, no recorded defensive production, unavailable replacement level, and scoring gaps. These diagnostics remain available even when no defender can be priced. Temporary history-read failures remain retryable outages rather than missing-history claims. Identity collisions still refuse a name-based assignment. Existing replacement-derived player prices remain unchanged. The review explains that an unpriced asset withholds the whole trade grade. Validation: 145 focused tests across 11 files.
 
 Read-only production inspection found different underlying inputs for two missing linebackers: one had recorded games with no defensive production, while the other had only two recorded games. This release exposes those limitations; it does not invent prices for either player. Sleeper documents [tackle calculation](https://support.sleeper.com/en/articles/4056297-how-are-tackles-calculated) and [stacking scoring categories](https://support.sleeper.com/en/articles/3186339-what-stacks); defender estimates must continue to use the league's actual scoring rules.
+
+## Remaining work
 
 1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
 2. Complete missing NFL/IDP/college asset pricing with documented per-player inputs and provider coverage. Do not substitute identical placeholder values.
