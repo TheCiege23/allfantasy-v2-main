@@ -96,7 +96,7 @@ The release checkout is based on the deployed `main` commit `0b8b61eafed13ddbbfd
 
 - Focused release checks: **85 tests passed across 10 files**, plus the rivalry regression.
 - An initial broad run hit timeouts under concurrent load. With two workers, the full Core suite passed **788 tests across 85 files**; a separate live-score/outlook run passed **97 tests across seven files**.
-- The deployed branch's baseline typecheck reports **143 errors**. Patched comparison and a production build are still outstanding.
+- Baseline and patched typechecks both report **143 errors**, with identical file/error-code counts and none in the changed files. Some diagnostic type-member ordering differs. This is not a clean global typecheck. A production build is still outstanding.
 - No production deployment has been made from this audit.
 
 ## Provider basis
