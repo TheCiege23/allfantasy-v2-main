@@ -27,7 +27,7 @@ export default function SyncPauseButton({ leagueId, paused }: { leagueId: string
     <button type="button" className="af-btn" disabled={saving} onClick={save} style={{ minHeight: 44 }}>
       {saving ? 'Saving…' : savedPaused ? 'Resume account sync' : 'Pause account sync'}
     </button>
-    <p className="af-sy-sub">{savedPaused ? 'Excluded from your account’s Sync now. History stays available.' : 'Pause an inactive league to exclude it from your account’s Sync now.'} Other members’ syncs and shared scheduled collection are unaffected.</p>
+    <p className="af-sy-sub">{savedPaused ? 'Excluded from your account’s Sync now and sidebar score refresh. History stays available.' : 'Pause an inactive league to stop your account’s Sync now and sidebar score refresh for this connection.'} Other members’ syncs and shared scheduled collection are unaffected.</p>
     {error ? <p role="alert">{error}</p> : null}
   </div>
 }

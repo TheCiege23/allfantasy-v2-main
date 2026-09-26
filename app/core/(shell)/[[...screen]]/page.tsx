@@ -786,6 +786,7 @@ export default async function AfCorePage({
     id: l.id,
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
+    syncPaused: pausedSyncLeagueIds?.has(l.id) ?? false,
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
     /*
      * ⚠ THE LOADER ALREADY SELECTS avatarUrl AND logoUrl — this mapping used to
