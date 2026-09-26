@@ -23,6 +23,9 @@ export interface SalaryCapConfig {
   sport: LeagueSport
   mode: SalaryCapMode
   startupCap: number
+  /** Declared startup season, falling back to persisted configuration creation year. */
+  capStartYear?: number
+  season?: number | null
   capGrowthPercent: number
   contractMinYears: number
   contractMaxYears: number

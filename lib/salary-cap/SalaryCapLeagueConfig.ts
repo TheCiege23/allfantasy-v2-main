@@ -56,10 +56,14 @@ function toFutureDraftType(s: unknown): FutureDraftType {
 export async function getSalaryCapConfig(leagueId: string): Promise<SalaryCapConfig | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, sport: true, leagueVariant: true, settings: true },
+    select: { id: true, sport: true, leagueVariant: true, settings: true, season: true },
   })
   if (!league) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
+  const settings = (league.settings ?? {}) as Record<string, unknown>
+  const declaredStartYear = typeof settings.capStartYear === 'number'
+    && Number.isInteger(settings.capStartYear) && settings.capStartYear >= 1900 && settings.capStartYear <= 3000
+    ? settings.capStartYear : undefined
 
   const row = await prisma.salaryCapLeagueConfig.findUnique({
     where: { leagueId },
@@ -71,6 +75,8 @@ export async function getSalaryCapConfig(leagueId: string): Promise<SalaryCapCon
       sport,
       mode: toMode(row.mode),
       startupCap: row.startupCap,
+      capStartYear: declaredStartYear ?? (row.createdAt instanceof Date ? row.createdAt.getUTCFullYear() : undefined),
+      season: league.season,
       capGrowthPercent: row.capGrowthPercent,
       contractMinYears: row.contractMinYears,
       contractMaxYears: row.contractMaxYears,
@@ -99,7 +105,6 @@ export async function getSalaryCapConfig(leagueId: string): Promise<SalaryCapCon
 
   if (league.leagueVariant !== SALARY_CAP_VARIANT) return null
 
-  const settings = (league.settings ?? {}) as Record<string, unknown>
   const startupCap =
     (settings.startupCap as number) ??
     DEFAULT_STARTUP_CAP_BY_SPORT[sport] ??
@@ -110,6 +115,8 @@ export async function getSalaryCapConfig(leagueId: string): Promise<SalaryCapCon
     sport,
     mode: toMode(settings.mode ?? 'dynasty'),
     startupCap,
+    capStartYear: declaredStartYear,
+    season: league.season,
     capGrowthPercent:
       (settings.capGrowthPercent as number) ??
       DEFAULT_CAP_GROWTH_BY_SPORT[sport] ??
