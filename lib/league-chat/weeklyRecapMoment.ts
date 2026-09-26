@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { LeagueH2HPayload, WeeklyAwards } from '@/lib/league-history/sleeperH2HService'
+import { CLOSE_FINISH_MAX_MARGIN } from '@/lib/league-chat/closeFinishRule'
 import {
   chimmyMomentDedupeCacheKey,
   postChimmyMoment,
@@ -65,7 +66,7 @@ export function chimmyCall(
     )
   }
 
-  if (awards.narrowEscape && awards.narrowEscape.margin <= 3) {
+  if (awards.narrowEscape && awards.narrowEscape.margin <= CLOSE_FINISH_MAX_MARGIN) {
     const w = nameOf(awards.narrowEscape.winnerOwnerId)
     const l = nameOf(awards.narrowEscape.loserOwnerId)
     const m = awards.narrowEscape.margin.toFixed(1)

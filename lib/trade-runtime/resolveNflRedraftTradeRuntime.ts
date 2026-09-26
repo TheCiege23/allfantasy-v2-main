@@ -567,6 +567,28 @@ function proposalAssetsForDb(assets: NflRedraftTradeAssetState[]): Prisma.InputJ
   })) as Prisma.InputJsonArray
 }
 
+/**
+ * Chimmy's trade card in LEAGUE chat — the trade, and who won it on paper with the market numbers, as
+ * ONE message (lib/league-chat/chimmyTradeMoment.ts `postRedraftTradeMoment`), the same take builder
+ * and the same DATABASE-only values an AllFantasy league trade gets (tradeService.ts).
+ *
+ * Fire-and-forget through a dynamic import, exactly like tradeService's: the trade is committed
+ * before this runs, the moment never throws, and nothing on the chat path can fail or slow the trade.
+ */
+function announceRedraftTradeInLeagueChat(proposalId: string): void {
+  try {
+    void import('@/lib/league-chat/chimmyTradeMoment')
+      .then(({ postRedraftTradeMoment }) => postRedraftTradeMoment({ proposalId }))
+      .catch((e: unknown) => {
+        console.warn('[redraftTradeRuntime] league chat trade card failed', {
+          name: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+        })
+      })
+  } catch {
+    /* never let the chat path reach the trade action */
+  }
+}
+
 async function applyExecutedTrade(input: {
   state: NflRedraftTradeRuntimeState
   proposalId: string
@@ -649,6 +671,9 @@ async function applyExecutedTrade(input: {
       },
     })
   })
+
+  // The trade is committed: league chat hears about it whatever the bookkeeping below does.
+  announceRedraftTradeInLeagueChat(input.proposalId)
 
   await recordTradeLeagueEvents(execution.events)
   await recordTradeAudit({

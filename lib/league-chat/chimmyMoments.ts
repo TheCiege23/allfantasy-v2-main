@@ -13,9 +13,10 @@ import {
 /**
  * `postChimmyMoment` — THE one way Chimmy speaks up in a league's chat on its own.
  *
- * Weekly awards and trade takes post through it today; close finishes, upsets and starter injuries
- * are meant to be built on it next. Everything a moment needs to be safe to fire from a cron, a
- * request path or a retry loop lives here, so a new moment is one call:
+ * Weekly awards, trade takes (AllFantasy, redraft and imported Sleeper trades), commissioner notices,
+ * close finishes and upsets (weekMatchupMoments.ts) and starter injuries (starterInjuryMoment.ts) all
+ * post through it. Everything a moment needs to be safe to fire from a cron, a request path or a retry
+ * loop lives here, so a new moment is one call:
  *
  * ```ts
  * import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'

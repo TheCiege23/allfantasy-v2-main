@@ -11,14 +11,17 @@ import { buildChimmyTradeTake, type TradeTakeAsset, type TradeTakeSide } from '@
  * Trades, as Chimmy moments: the card for a trade that just happened, with Chimmy's take on who won it
  * on paper folded into the SAME message — one post, never a card and then a separate opinion.
  *
- * Two writers use this:
+ * Three writers use this:
  *   - `postNativeTradeMoment` — an AllFantasy league trade the moment its last manager accepts it
  *     (`acceptAfLeagueTrade` in lib/league-trade-engine/tradeService.ts, fire-and-forget).
+ *   - `postRedraftTradeMoment` — an NFL redraft league trade the moment the trade runtime executes it
+ *     (`applyExecutedTrade` in lib/trade-runtime/resolveNflRedraftTradeRuntime.ts, fire-and-forget) —
+ *     accepted, commissioner-approved, or passed by league vote.
  *   - `lib/league-chat/tradeChatCards.ts` — trades imported from Sleeper, carded on the league chat read.
  *
- * 🛑 VALUES ARE READ FROM THE DATABASE AND NOTHING ELSE. Both writers run on request paths (an accept
- * POST, a chat GET), so this reads the `SportsDataCache` rows `lib/fantasycalc-db.ts` keeps warm and
- * never calls FantasyCalc — not even on a cache miss, which is the one thing
+ * 🛑 VALUES ARE READ FROM THE DATABASE AND NOTHING ELSE. Every writer runs on a request path (an accept
+ * POST, a redraft trade-runtime POST, a chat GET), so this reads the `SportsDataCache` rows
+ * `lib/fantasycalc-db.ts` keeps warm and never calls FantasyCalc — not even on a cache miss, which is the one thing
  * `getFantasyCalcValuesDbFirst` would do. No cached values, or values older than
  * `MAX_VALUE_AGE_MS`, means no take: the card still posts, without a verdict.
  */
@@ -123,6 +126,77 @@ export type ChimmyTradeCard = {
   note?: string | null
 }
 
+// ─── One trade, already parsed: the take, the card, the post ────────────────────────────────────
+
+/** One traded asset, as every writer parses it: what the take prices, what the card shows. */
+export type ParsedTradeAsset = {
+  asset: TradeTakeAsset
+  card: TradeCardAsset | null
+  pick: boolean
+  extra: string | null
+  label: string
+}
+
+/**
+ * The take (when every asset has a market value from the DATABASE), the card, and ONE Chimmy post —
+ * shared by the native and redraft writers so the two cannot word or price a trade differently.
+ */
+async function postParsedTradeMoment(input: {
+  leagueId: string
+  league: TradeLeagueFacts & { season?: unknown }
+  tradeId: string
+  dedupeKey: string
+  proposerName: string
+  receiverName: string
+  /** What the proposer RECEIVES. */
+  toProposer: ParsedTradeAsset[]
+  /** What the receiver RECEIVES. */
+  toReceiver: ParsedTradeAsset[]
+  note: string | null
+  now: Date
+}): Promise<PostChimmyMomentResult> {
+  const { toProposer, toReceiver, proposerName, receiverName, now } = input
+  const sides: [TradeTakeSide, TradeTakeSide] = [
+    { manager: proposerName, receives: toProposer.map((p) => p.asset) },
+    { manager: receiverName, receives: toReceiver.map((p) => p.asset) },
+  ]
+  const values = await readTradeMarketValues(input.league, now)
+  const take = values
+    ? buildChimmyTradeTake({ sides, players: values.players, isDynasty: values.isDynasty, seed: input.tradeId, now })
+    : null
+
+  const tradeCard: ChimmyTradeCard = {
+    transactionId: input.tradeId,
+    manager: proposerName,
+    partner: receiverName,
+    season: typeof input.league.season === 'number' ? input.league.season : null,
+    week: null,
+    gave: toReceiver.map((p) => p.card).filter((c): c is TradeCardAsset => c !== null),
+    got: toProposer.map((p) => p.card).filter((c): c is TradeCardAsset => c !== null),
+    picksGave: toReceiver.filter((p) => p.pick).length,
+    picksGot: toProposer.filter((p) => p.pick).length,
+    extrasGave: toReceiver.map((p) => p.extra).filter((e): e is string => Boolean(e)),
+    extrasGot: toProposer.map((p) => p.extra).filter((e): e is string => Boolean(e)),
+    valueGave: take ? take.sides[0].sent : null,
+    valueGot: take ? take.sides[0].received : null,
+    note: input.note,
+    tradedAt: now.toISOString(),
+  }
+  const text =
+    take?.text ??
+    `${proposerName} traded ${describeList(toReceiver.map((p) => p.label))} to ${receiverName} for ${describeList(toProposer.map((p) => p.label))}.`
+
+  return postChimmyMoment({
+    leagueId: input.leagueId,
+    kind: 'trade',
+    dedupeKey: input.dedupeKey,
+    text,
+    card: { tradeCard },
+    messageType: 'trade',
+    now,
+  })
+}
+
 // ─── Native AllFantasy league trades ────────────────────────────────────────────────────────────
 
 type NativeItem = {
@@ -210,8 +284,7 @@ export async function postNativeTradeMoment(input: {
     const playerById = new Map<string, { name: string; position: string | null; team: string | null }>()
     for (const p of players) if (p.sleeperId && !playerById.has(p.sleeperId)) playerById.set(p.sleeperId, p)
 
-    type Parsed = { asset: TradeTakeAsset; card: TradeCardAsset | null; pick: boolean; extra: string | null; label: string }
-    const parse = (item: NativeItem): Parsed => {
+    const parse = (item: NativeItem): ParsedTradeAsset => {
       const meta = record(item.metadata)
       const type = String(item.itemType ?? '').toLowerCase()
       if (type === 'player' && item.itemReference) {
@@ -242,50 +315,180 @@ export async function postNativeTradeMoment(input: {
       return { asset: { kind: 'other', label }, card: null, pick: false, extra: label, label }
     }
 
-    const toProposer = items.filter((i) => i.toRosterId === trade.proposerRosterId).map(parse)
-    const toReceiver = items.filter((i) => i.toRosterId === trade.receiverRosterId).map(parse)
-
-    const sides: [TradeTakeSide, TradeTakeSide] = [
-      { manager: proposerName, receives: toProposer.map((p) => p.asset) },
-      { manager: receiverName, receives: toReceiver.map((p) => p.asset) },
-    ]
-    const values = await readTradeMarketValues(league, now)
-    const take = values
-      ? buildChimmyTradeTake({ sides, players: values.players, isDynasty: values.isDynasty, seed: trade.id, now })
-      : null
-
-    const tradeCard: ChimmyTradeCard = {
-      transactionId: trade.id,
-      manager: proposerName,
-      partner: receiverName,
-      season: typeof league.season === 'number' ? league.season : null,
-      week: null,
-      gave: toReceiver.map((p) => p.card).filter((c): c is TradeCardAsset => c !== null),
-      got: toProposer.map((p) => p.card).filter((c): c is TradeCardAsset => c !== null),
-      picksGave: toReceiver.filter((p) => p.pick).length,
-      picksGot: toProposer.filter((p) => p.pick).length,
-      extrasGave: toReceiver.map((p) => p.extra).filter((e): e is string => Boolean(e)),
-      extrasGot: toProposer.map((p) => p.extra).filter((e): e is string => Boolean(e)),
-      valueGave: take ? take.sides[0].sent : null,
-      valueGot: take ? take.sides[0].received : null,
-      note: input.note ?? null,
-      tradedAt: now.toISOString(),
-    }
-    const text =
-      take?.text ??
-      `${proposerName} traded ${describeList(toReceiver.map((p) => p.label))} to ${receiverName} for ${describeList(toProposer.map((p) => p.label))}.`
-
-    return await postChimmyMoment({
+    return await postParsedTradeMoment({
       leagueId: trade.leagueId,
-      kind: 'trade',
+      league,
+      tradeId: trade.id,
       dedupeKey: `native:${trade.id}`,
-      text,
-      card: { tradeCard },
-      messageType: 'trade',
+      proposerName,
+      receiverName,
+      toProposer: items.filter((i) => i.toRosterId === trade.proposerRosterId).map(parse),
+      toReceiver: items.filter((i) => i.toRosterId === trade.receiverRosterId).map(parse),
+      note: input.note ?? null,
       now,
     })
   } catch (e) {
     console.warn('[chimmyTradeMoment] native trade take failed', {
+      error: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+    })
+    return { posted: false, reason: 'error' }
+  }
+}
+
+// ─── NFL redraft league trades (the trade runtime) ──────────────────────────────────────────────
+
+type RedraftAssetRow = {
+  fromRosterId: string
+  toRosterId: string
+  assetType: string
+  playerId: string | null
+  playerName: string | null
+  pickSeason: number | null
+  pickRound: number | null
+  metadata: unknown
+}
+
+type RedraftRosterPlayerRow = { playerId: string; playerName: string; position: string; team: string | null }
+
+export type RedraftTradeMomentResult =
+  | PostChimmyMomentResult
+  | { posted: false; reason: 'not_found' | 'not_processed' | 'not_two_team' }
+
+/**
+ * Post the Chimmy trade card — with the take when every asset has a market value — for an NFL redraft
+ * trade the runtime just executed. Once per proposal (`redraft:<proposalId>`). Values from the
+ * DATABASE only (`readTradeMarketValues` → `readFantasyCalcValuesFromDb`), never the vendor. FAAB or
+ * "future considerations" on either side means no take: the card still posts, without a verdict.
+ * Never throws.
+ */
+export async function postRedraftTradeMoment(input: {
+  proposalId: string
+  note?: string | null
+  now?: Date
+}): Promise<RedraftTradeMomentResult> {
+  const now = input.now ?? new Date()
+  try {
+    const proposal = await prisma.redraftTradeProposal.findUnique({
+      where: { id: input.proposalId },
+      select: {
+        id: true,
+        leagueId: true,
+        status: true,
+        proposerRosterId: true,
+        receiverRosterId: true,
+        assets: {
+          select: {
+            fromRosterId: true,
+            toRosterId: true,
+            assetType: true,
+            playerId: true,
+            playerName: true,
+            pickSeason: true,
+            pickRound: true,
+            metadata: true,
+          },
+        },
+      },
+    })
+    if (!proposal) return { posted: false, reason: 'not_found' }
+    // Only a trade that actually went through is news; the runtime marks it accepted as it executes.
+    if (proposal.status !== 'accepted' && proposal.status !== 'processed') return { posted: false, reason: 'not_processed' }
+    const assets = proposal.assets as RedraftAssetRow[]
+    const participants = new Set([
+      proposal.proposerRosterId,
+      proposal.receiverRosterId,
+      ...assets.flatMap((a) => [a.fromRosterId, a.toRosterId]),
+    ])
+    if (participants.size !== 2) return { posted: false, reason: 'not_two_team' }
+
+    const rosterIds = [proposal.proposerRosterId, proposal.receiverRosterId]
+    const playerIds = assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => a.playerId as string)
+    const [league, rosters, rosterPlayers] = await Promise.all([
+      prisma.league.findUnique({
+        where: { id: proposal.leagueId },
+        select: { id: true, sport: true, isDynasty: true, scoring: true, leagueSize: true, settings: true, season: true },
+      }),
+      prisma.redraftRoster.findMany({
+        where: { id: { in: rosterIds } },
+        select: { id: true, ownerId: true, ownerName: true, teamName: true },
+      }),
+      playerIds.length
+        ? prisma.redraftRosterPlayer
+            .findMany({
+              where: { playerId: { in: playerIds }, rosterId: { in: rosterIds } },
+              select: { playerId: true, playerName: true, position: true, team: true },
+            })
+            .catch(() => [] as RedraftRosterPlayerRow[])
+        : Promise.resolve([] as RedraftRosterPlayerRow[]),
+    ])
+    if (!league) return { posted: false, reason: 'not_found' }
+
+    const ownerIds = rosters.map((r) => r.ownerId).filter((v): v is string => Boolean(v))
+    const users = ownerIds.length
+      ? await prisma.appUser
+          .findMany({ where: { id: { in: ownerIds } }, select: { id: true, displayName: true, username: true } })
+          .catch(() => [] as Array<{ id: string; displayName: string | null; username: string | null }>)
+      : []
+    const nameFor = (rosterId: string): string => {
+      const roster = rosters.find((r) => r.id === rosterId)
+      const user = roster?.ownerId ? users.find((u) => u.id === roster.ownerId) : undefined
+      return safeDisplayName([user?.displayName, user?.username, roster?.ownerName, roster?.teamName], 'A league mate')
+    }
+    const proposerName = nameFor(proposal.proposerRosterId)
+    const receiverName = nameFor(proposal.receiverRosterId)
+
+    const playerById = new Map<string, { name: string; position: string | null; team: string | null }>()
+    for (const p of rosterPlayers as RedraftRosterPlayerRow[]) {
+      if (!playerById.has(p.playerId)) playerById.set(p.playerId, { name: p.playerName, position: p.position, team: p.team })
+    }
+
+    const parse = (a: RedraftAssetRow): ParsedTradeAsset => {
+      const meta = record(a.metadata)
+      const type = String(a.assetType ?? '').toLowerCase()
+      if (type === 'player' && a.playerId) {
+        const known = playerById.get(a.playerId)
+        const name = str(a.playerName) ?? known?.name ?? str(meta.playerName) ?? null
+        const position = known?.position ?? str(meta.position) ?? null
+        const team = known?.team ?? str(meta.team) ?? null
+        return {
+          // The runtime's player ids are the draft pool's (Sleeper ids for the NFL pool); the take
+          // falls back to name, position and team when an id is not one FantasyCalc knows.
+          asset: { kind: 'player', sleeperId: a.playerId, name, position, team },
+          card: { id: a.playerId, name, position, team },
+          pick: false,
+          extra: null,
+          label: name ?? 'an unknown player',
+        }
+      }
+      if (type === 'draft_pick') {
+        const season = a.pickSeason ?? num(meta.pickSeason ?? meta.season)
+        const round = a.pickRound ?? num(meta.pickRound ?? meta.round)
+        const label = season && round ? `a ${season} round ${round} pick` : round ? `a round ${round} pick` : 'a draft pick'
+        return { asset: { kind: 'pick', season, round }, card: null, pick: true, extra: null, label }
+      }
+      const label =
+        type === 'faab'
+          ? `$${num(meta.amount ?? meta.faab ?? meta.faabAmount) ?? 0} FAAB`
+          : type === 'future_consideration'
+            ? 'future considerations'
+            : (str(meta.label) ?? 'a special asset')
+      return { asset: { kind: 'other', label }, card: null, pick: false, extra: label, label }
+    }
+
+    return await postParsedTradeMoment({
+      leagueId: proposal.leagueId,
+      league,
+      tradeId: proposal.id,
+      dedupeKey: `redraft:${proposal.id}`,
+      proposerName,
+      receiverName,
+      toProposer: assets.filter((a) => a.toRosterId === proposal.proposerRosterId).map(parse),
+      toReceiver: assets.filter((a) => a.toRosterId === proposal.receiverRosterId).map(parse),
+      note: input.note ?? null,
+      now,
+    })
+  } catch (e) {
+    console.warn('[chimmyTradeMoment] redraft trade take failed', {
       error: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
     })
     return { posted: false, reason: 'error' }

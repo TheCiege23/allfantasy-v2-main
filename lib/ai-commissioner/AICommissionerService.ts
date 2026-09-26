@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'
 import { commissionerAlertsText } from '@/lib/league-chat/chimmyCommissionerNotices'
+import { resolveCommissionerNoticeNames } from '@/lib/league-chat/commissionerNoticeNames'
 import { openaiChatText } from '@/lib/openai-client'
 import { buildAiCacheKey, readAiResultCache, writeAiResultCache } from '@/lib/ai-result-cache'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
@@ -220,11 +221,13 @@ async function fanOutCommissionerNotices(input: {
    */
   if (input.mode === 'chat' || input.mode === 'both') {
     const ids = input.createdAlerts.map((a) => a.alertId).sort()
+    // Names, never ids, in what the league reads; the stored alerts keep their ids.
+    const names = await resolveCommissionerNoticeNames(input.leagueId, input.createdAlerts.slice(0, 1))
     await postChimmyMoment({
       leagueId: input.leagueId,
       kind: 'commissioner_alerts',
       dedupeKey: `cycle:${ids[0]}:${ids.length}`,
-      text: commissionerAlertsText(input.createdAlerts),
+      text: commissionerAlertsText(input.createdAlerts, names),
       card: { commissionerAlerts: { count: input.createdAlerts.length } },
     })
   }

@@ -42,10 +42,18 @@ export const CHIMMY_MARKER_KEY = 'chimmy'
 export const CHIMMY_SERVER_KEYS = ['chimmy', 'chimmyMoment', 'chimmyPrivateReply', 'chimmyResponse'] as const
 
 /**
- * What Chimmy posts. `weekly_awards`, `trade`, `commissioner_notice` and `commissioner_alerts` are
- * posted today; `close_finish`, `upset` and `starter_injury` are reserved for the moments built on
- * `postChimmyMoment` next.
+ * The metadata flags that, set to `true`, make a row Chimmy's. `isChimmyAuthored` reads exactly these,
+ * and the chat bubble's unread query (lib/chat-core/chatBadge.ts) filters on exactly these — one list,
+ * so the badge and the byline cannot disagree about which rows are Chimmy's.
+ */
+export const CHIMMY_AUTHOR_FLAG_KEYS = ['chimmy', 'chimmyPrivateReply', 'chimmyResponse'] as const
+
+/**
+ * What Chimmy posts. Every kind below goes through `postChimmyMoment`:
  *
+ *   - `close_finish` / `upset` — ONE combined post per league per week once the week is final, under
+ *                              whichever it leads with (lib/league-chat/weekMatchupMoments.ts).
+ *   - `starter_injury`       — a starter ruled out before his kickoff (lib/league-chat/starterInjuryMoment.ts).
  *   - `commissioner_notice`  — a governance notice the COMMISSIONER chose to send ("Send notice" in
  *                              the AI Commissioner panel). A person asked for it, so it skips the cap.
  *   - `commissioner_alerts`  — the automatic governance cycle's summary, when the commissioner set
@@ -87,7 +95,7 @@ function record(value: unknown): Record<string, unknown> | null {
 export function isChimmyAuthored(metadata: unknown): boolean {
   const meta = record(metadata)
   if (!meta) return false
-  return meta.chimmy === true || meta.chimmyPrivateReply === true || meta.chimmyResponse === true
+  return CHIMMY_AUTHOR_FLAG_KEYS.some((key) => meta[key] === true)
 }
 
 /** The moment a Chimmy post was for, when it was one (awards, trade …). */

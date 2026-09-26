@@ -17,6 +17,8 @@ import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
+import { createRunBudget } from '@/lib/cron/runBudget'
+import { runWeekMatchupMomentsSweep } from '@/lib/league-chat/weekMatchupMoments'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -41,9 +43,21 @@ export const maxDuration = 300
  *
  * Cron: Tuesdays (see vercel.json). Manual: a signed-in league member may pass
  * ?leagueId= to post their league's recap now (still deduped).
+ *
+ * Right after the recaps, the same fire posts each league's CLOSE FINISHES AND UPSETS for the week
+ * that just ended — one combined Chimmy post per league per week, for native and imported NFL leagues
+ * alike, read from Postgres only (lib/league-chat/weekMatchupMoments.ts). No new cron route: it rides
+ * this one, inside the same run budget.
  */
 
 const MAX_RECAP_EMAILS = 25
+
+/**
+ * The recaps stop with this much of the shared run budget left, so the close-finish/upset pass always
+ * gets a turn. That pass is Postgres reads and one insert per league; the recap's cold H2H sync is
+ * the expensive step, and it is the one that waits for the next fire when time is short.
+ */
+const MOMENTS_RESERVE_MS = 60_000
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: platform feed for the week's results
 
@@ -163,15 +177,15 @@ export async function GET(req: NextRequest) {
   const isCron = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`
 
   if (isCron) {
-    // Time budget: this function caps at maxDuration 300s, and a cold league's
+    // Time budget: the platform edge severs at 300s, and a cold league's
     // first H2H sync is the expensive step. Stop walking with headroom to spare
     // and report the leftover honestly — the per-week dedupe means the next
-    // fire (or a manual re-run) resumes exactly where this one stopped.
+    // fire (or a manual re-run) resumes exactly where this one stopped. One
+    // budget (lib/cron/runBudget) covers the recaps AND the moments pass after them.
     const sweep = await withSyncJobRun(
       { jobName: 'cron-weekly-awards', trigger: 'cron' },
       async () => {
-        const startedAt = Date.now()
-        const TIME_BUDGET_MS = 240_000
+        const budget = createRunBudget()
         const leagues = await prisma.league.findMany({
           where: { platform: 'sleeper', platformLeagueId: { not: '' } },
           select: { id: true, name: true, platformLeagueId: true, userId: true, settings: true },
@@ -195,7 +209,7 @@ export async function GET(req: NextRequest) {
             optedOut += 1
             continue
           }
-          if (Date.now() - startedAt > TIME_BUDGET_MS) {
+          if (budget.remainingMs() <= MOMENTS_RESERVE_MS) {
             skippedForTime += 1
             continue
           }
@@ -209,15 +223,26 @@ export async function GET(req: NextRequest) {
             errors.push(l.id)
           }
         }
-        return { leagues: leagues.length, posted, emailsSent, skippedForTime, optedOut, errors }
+        /*
+         * Close finishes and upsets, right after the recaps: one combined Chimmy post per league per
+         * week, deduped per league-week, counted against Chimmy's daily cap, silent when the league
+         * switched Chimmy off. Whatever budget the recaps left.
+         */
+        const moments = await runWeekMatchupMomentsSweep({ budget })
+        return { leagues: leagues.length, posted, emailsSent, skippedForTime, optedOut, errors, moments }
       },
       (r) => ({
         rowsRead: r.leagues,
-        rowsWritten: r.posted,
-        rowsSkipped: r.skippedForTime,
+        rowsWritten: r.posted + r.moments.posted,
+        rowsSkipped: r.skippedForTime + r.moments.skippedForTime,
         errors: r.errors.map((id) => `league ${id}`),
-        warnings: r.skippedForTime > 0 ? [`time budget hit — ${r.skippedForTime} league(s) deferred to the next fire`] : [],
-        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut },
+        warnings: [
+          ...(r.skippedForTime > 0 ? [`time budget hit — ${r.skippedForTime} league(s) deferred to the next fire`] : []),
+          ...(r.moments.skippedForTime > 0
+            ? [`time budget hit — close finishes/upsets not checked for ${r.moments.skippedForTime} league(s) this week`]
+            : []),
+        ],
+        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut, moments: r.moments },
       }),
     )
     return NextResponse.json({
