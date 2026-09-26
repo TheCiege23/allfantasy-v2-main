@@ -415,7 +415,7 @@ function fmtPct(n: number | null): string {
 
 function finishLabel(r: CareerLedgerRow): string {
   if (r.specialty === 'draft_only') return 'Draft only'
-  if (!isResultRow(r)) return 'Not started'
+  if (!isResultRow(r)) return 'No results recorded'
   if (!r.completed) return 'In progress'
   if (r.wonChampionship) return 'Champion'
   if (r.madePlayoffs) return 'Playoffs'

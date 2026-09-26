@@ -299,13 +299,13 @@ function LeagueList({
                     <span className="af-pf-team-meta af-num">
                       {l.team.record
                         ? `${l.team.record}${
-                            l.team.rank != null
+                            l.team.rank != null && l.team.rank > 0
                               ? ` · #${l.team.rank}${l.team.teamCount ? ` of ${l.team.teamCount}` : ''}`
                               : ''
                           }`
                         : l.team.teamCount
-                          ? `${l.team.teamCount}-team league · season not started`
-                          : 'season not started'}
+                          ? `${l.team.teamCount}-team league · no record imported`
+                          : 'no record imported'}
                     </span>
                   </>
                 ) : (

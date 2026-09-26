@@ -1885,17 +1885,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const portfolioScreenOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
 
-  const portfolioScreenFresh =
-    activeKey === 'portfolio' && portfolioScreenOnSummary
-      ? await readPortfolioSummary(userId, leagues as unknown as Dash34LeagueRow[]).catch(() => null)
-      : null
-
-  const portfolio =
-    activeKey === 'portfolio'
-      ? portfolioScreenOnSummary
-        ? (portfolioScreenFresh?.data ?? null)
-        : await getPortfolio(userId).catch(() => null)
-      : null
   /*
    * ── THE CROSS-LEAGUE BOARD ─────────────────────────────────────────────
    *
@@ -1912,8 +1901,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * a starter ruled out ten minutes ago — and the home and the tab badges already show them; the
    * action ranking must agree with both. Same summary-or-live choice as `loadLineupLeagues` below.
    */
-  const [portfolioInsights, portfolioRecorded, portfolioLineup] = activeKey === 'portfolio'
+  const [portfolio, portfolioInsights, portfolioRecorded, portfolioLineup] = activeKey === 'portfolio'
     ? await Promise.all([
+        (portfolioScreenOnSummary
+          ? readPortfolioSummary(userId, leagues as unknown as Dash34LeagueRow[]).then(d => d?.data ?? null)
+          : getPortfolio(userId)
+        ).catch(() => null),
         readPortfolioInsights(userId, leagues as unknown as Array<{ id: string; season?: number | string | null }>).catch(
           () => null,
         ),
@@ -1937,7 +1930,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           })
           .catch(() => null),
       ])
-    : [null, [], null]
+    : [null, null, [], null]
   const portfolioFilter = activeKey === 'portfolio'
     ? parseFilter((param) => (typeof sp[param] === 'string' ? (sp[param] as string) : null))
     : null

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { leagueArtUrl } from './leagueArt'
-import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
+import { findRostersForTeams, rosterTeamKey, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { keepBestPerRealLeague } from './realLeague'
 
@@ -167,11 +167,15 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
   }
 
   const leagueIds = [...new Set(teams.map((t) => t.leagueId))]
-  const counts = await prisma.leagueTeam.groupBy({
-    by: ['leagueId'],
-    where: { leagueId: { in: leagueIds } },
-    _count: { _all: true },
-  })
+  const [counts, rosters] = await Promise.all([
+    prisma.leagueTeam.groupBy({
+      by: ['leagueId'],
+      where: { leagueId: { in: leagueIds } },
+      _count: { _all: true },
+    }),
+    findRostersForTeams(teams.flatMap(t => t.platformUserId
+      ? [{ leagueId: t.leagueId, platformManagerId: t.platformUserId }] : [])),
+  ])
   const teamCountBy = new Map(counts.map((c) => [c.leagueId, c._count._all]))
 
   const out: PortfolioLeague[] = []
@@ -184,11 +188,11 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
      * holds the RESOLVED AllFantasy id once a manager links their account,
      * while `LeagueTeam.platformUserId` keeps the raw platform id — so this
      * lookup silently missed every linked manager, and got worse as more people
-     * linked. `findRosterForTeam` tries the durable `source_manager_id` first
+     * linked. The batch resolver tries the durable `source_manager_id` first
      * and falls back to the direct column, reaching 96 of 98.
      */
     const roster = t.platformUserId
-      ? await findRosterForTeam(t.leagueId, t.platformUserId)
+      ? rosters.get(rosterTeamKey(t.leagueId, t.platformUserId)) ?? null
       : null
 
     /*
@@ -224,7 +228,9 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
         ? {
             name: t.teamName,
             record: recordOf({ wins: t.wins, losses: t.losses, ties: t.ties }),
-            rank: t.currentRank ?? null,
+            rank: t.currentRank != null && t.currentRank > 0 &&
+              (teamCountBy.get(t.leagueId) == null || t.currentRank <= teamCountBy.get(t.leagueId)!)
+              ? t.currentRank : null,
             teamCount: teamCountBy.get(t.leagueId) ?? null,
           }
         : null,

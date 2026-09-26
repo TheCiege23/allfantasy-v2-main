@@ -164,7 +164,10 @@ const BOARD = fs.readFileSync(
 
 describe('portfolio cross-league board', () => {
   it('loads the stored insights only for the portfolio screen', () => {
-    expect(CORE_PAGE).toMatch(/activeKey === 'portfolio'\s*\?\s*await Promise\.all\(\[\s*readPortfolioInsights\(/)
+    const load = CORE_PAGE.slice(CORE_PAGE.indexOf('const [portfolio, portfolioInsights,'), CORE_PAGE.indexOf('const portfolioFilter'))
+    expect(load).toMatch(/activeKey === 'portfolio'\s*\?\s*await Promise\.all\(/)
+    expect(load).toContain('readPortfolioInsights(')
+    expect(load).toContain('readPortfolioSummary(')
     expect(CORE_PAGE).toContain('insights={portfolioInsights?.data ?? null}')
     expect(CORE_PAGE).not.toContain('exposure={portfolioExposure}')
   })

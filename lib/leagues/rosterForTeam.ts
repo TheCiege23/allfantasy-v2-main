@@ -85,6 +85,43 @@ export async function findRosterForTeam(
   }
 }
 
+export function rosterTeamKey(leagueId: string, platformManagerId: string): string {
+  return JSON.stringify([leagueId, platformManagerId])
+}
+
+/** Same ownership contract as the single-team reader, in one database round trip. */
+export async function findRostersForTeams(
+  teams: readonly { leagueId: string; platformManagerId: string }[],
+): Promise<Map<string, RosterForTeam>> {
+  const requested = [...new Map(teams.filter(t => t.platformManagerId)
+    .map(t => [rosterTeamKey(t.leagueId, t.platformManagerId), t])).values()]
+  if (requested.length === 0) return new Map()
+  const rows = await prisma.$queryRaw<Array<{
+    leagueId: string; platformManagerId: string; id: string; playerData: unknown; matched_by: string
+  }>>`
+    SELECT requested."leagueId", requested."platformManagerId", roster.*
+      FROM jsonb_to_recordset(${JSON.stringify(requested)}::jsonb)
+        AS requested("leagueId" text, "platformManagerId" text)
+      CROSS JOIN LATERAL (
+        SELECT id, "playerData",
+               CASE WHEN ("playerData"::jsonb)->>'source_manager_id' = requested."platformManagerId"
+                    THEN 'source_manager_id' ELSE 'platform_user_id' END AS matched_by
+          FROM rosters
+         WHERE "leagueId" = requested."leagueId"
+           AND (("playerData"::jsonb)->>'source_manager_id' = requested."platformManagerId"
+                OR "platformUserId" = requested."platformManagerId")
+         ORDER BY CASE WHEN ("playerData"::jsonb)->>'source_manager_id' = requested."platformManagerId"
+                       THEN 0 ELSE 1 END
+         LIMIT 1
+      ) AS roster
+  `
+  return new Map<string, RosterForTeam>(rows.map(row => [rosterTeamKey(row.leagueId, row.platformManagerId), {
+    id: row.id,
+    playerData: row.playerData,
+    matchedBy: row.matched_by === 'source_manager_id' ? 'source_manager_id' : 'platform_user_id',
+  }]))
+}
+
 /**
  * The player ids on a roster, however the platform stored them.
  *

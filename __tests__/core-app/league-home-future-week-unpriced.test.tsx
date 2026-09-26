@@ -104,6 +104,28 @@ const noteOf = (data: LeagueHomeData) =>
     '.af-lh-weeknote',
   )?.textContent ?? '').replace(/\s+/g, ' ')
 
+describe('League Home waiver budget column', () => {
+  it.each([false, undefined])('withholds stored budgets when FAAB is not confirmed (%s)', faabEnabled => {
+    const data = page(board(null))
+    data.faabEnabled = faabEnabled
+    data.standings = { available: true, data: [{ teamId: 'one', teamName: 'Team One', ownerName: '',
+      wins: 1, losses: 1, ties: 0, pointsFor: 200, rank: 1, isYou: true, faabRemaining: 100 }] }
+    const root = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />).container
+    expect(root.querySelector('.af-standings-wrap')?.textContent).not.toContain('FAAB')
+    expect(root.querySelector('.af-standings-faab')).toBeNull()
+  })
+  it('retains budgets and unavailable balances for confirmed FAAB leagues', () => {
+    const data = page(board(null))
+    data.faabEnabled = true
+    data.standings = { available: true, data: ['one', 'two'].map((teamId, i) => ({
+      teamId, teamName: teamId, ownerName: '', wins: 1, losses: 1, ties: 0,
+      pointsFor: 200, rank: i + 1, isYou: i === 0, faabRemaining: i === 0 ? 100 : null,
+    })) }
+    const root = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />).container
+    expect(Array.from(root.querySelectorAll('.af-standings-faab')).map(e => e.textContent)).toEqual(['$100', '—'])
+  })
+})
+
 describe('League Home future-week note', () => {
   it('names the projection week when the board has league-scored totals', () => {
     const note = noteOf(page(board(null)))

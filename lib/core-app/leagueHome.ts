@@ -130,6 +130,8 @@ export type LeagueStanding = {
 export type SeasonStage = TimelinePhase
 
 export type LeagueHomeData = {
+  /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
+  faabEnabled?: boolean
   /**
    * The other league in this one's franchise — the C2C half of an NFL league, or
    * the NFL half of a C2C one.
@@ -543,12 +545,16 @@ export async function getLeagueHomeData(
    * A miss here costs one dash in one column — it is a display join, not a
    * gate, so it does not need the three-candidate fallback the scoreboard uses.
    */
-  const rosterRows = await prisma.roster
-    .findMany({
-      where: { leagueId },
-      select: { platformUserId: true, faabRemaining: true },
-    })
-    .catch((): Array<{ platformUserId: string; faabRemaining: number | null }> => [])
+  const [rosterRows, waiverSettings] = await Promise.all([
+    prisma.roster.findMany({
+        where: { leagueId },
+        select: { platformUserId: true, faabRemaining: true },
+      })
+      .catch((): Array<{ platformUserId: string; faabRemaining: number | null }> => []),
+    prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true } })
+      .catch(() => null),
+  ])
+  const faabEnabled = waiverSettings?.waiverType?.toLowerCase() === 'faab'
 
   const rosterCountForDraft = rosterRows.length
   const faabBy = new Map(rosterRows.map((r) => [r.platformUserId, r.faabRemaining]))
@@ -693,7 +699,7 @@ export async function getLeagueHomeData(
               pointsFor: t.pointsFor,
               rank: t.currentRank,
               isYou: t.id === yours?.id,
-              faabRemaining: t.platformUserId ? faabBy.get(t.platformUserId) ?? null : null,
+              faabRemaining: faabEnabled && t.platformUserId ? faabBy.get(t.platformUserId) ?? null : null,
             })),
           }
 
@@ -894,6 +900,7 @@ export async function getLeagueHomeData(
           }
         : null,
     standings,
+    faabEnabled,
     /*
      * The timeline marks "you are here" against a week number. Before a draft there is no
      * meaningful week, and the League.lifecycleState default of in_season is exactly what
