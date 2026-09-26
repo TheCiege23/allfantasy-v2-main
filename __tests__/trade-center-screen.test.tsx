@@ -74,13 +74,8 @@ describe('⚠ the honesty rules the design called load-bearing', () => {
     expect(SRC).toContain('result && !blocked')
   })
 
-  it('⚠ never lets a score stand alone when there is no signal', () => {
-    /*
-     * gradeScale.ts warns that C spans a wide band, so a trade we know nothing
-     * about lands mid-C and looks identical to a genuinely even one.
-     */
-    expect(SRC).toContain('no signal, not that the trade is fair')
-  })
+  // Withheld-grade behavior is covered by the rendered analysis regression in
+  // trades/trade-center-league-value.test.tsx, including legacy numeric payloads.
 
   it('⚠ keeps the note groups visually separate from the verdict', () => {
     // That separation is product logic, not decoration — the design brief said

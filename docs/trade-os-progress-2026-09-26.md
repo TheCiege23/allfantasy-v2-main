@@ -33,6 +33,12 @@ Lineup receipts show all incoming and outgoing players from the optimizer's comp
 
 Sleeper documents [live scoring and later stat corrections](https://support.sleeper.com/en/articles/2441282-stat-corrections) and [weekly score adjustments](https://support.sleeper.com/en/articles/3410666-adjusting-weekly-lineups-scores). These changes distinguish partial scores from recorded outcomes; they do not promise immutable results.
 
+## Withheld proposal verdict accuracy
+
+A Chrome preview of Kaimon Rucker for Jordyn Brooks exposed an ungraded proposal still showing `100/100`, `Even` and confidence. The presentation now follows the shared grade: withheld proposals emit null fairness/confidence scores and no side advantage, explain the missing grade, and suppress directional meters and balancing advice. Trade Center and the trade modal guard legacy numeric payloads too; Chimmy receives the withheld shared grade and safe summary rather than a fairness endorsement. Available asset values and roster context remain visible. Unknown or placeholder source names do not count as independent source agreement.
+
+The tested behavior covers both missing pricing and unrelated context gaps: a fully priced shared grade remains visible when a roster or projection lookup is incomplete. This corrects the misleading display, not the 35 missing player prices in the audited league.
+
 ## Remaining work
 
 1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.

@@ -16,6 +16,7 @@ vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal)
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
+import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 
 const player = (id: string, name: string, position: string, value: number) => ({
   id, name, position, team: 'X', value, imageUrl: null, byeWeek: null, injuryStatus: null, stock: null, stockDelta: null,
@@ -93,6 +94,31 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('a withheld shared grade suppresses legacy scores, confidence, meters and balancing advice', async () => {
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, fairnessScore: 100,
+        labels: { fairnessLabel: 'Even', confidenceLabel: 'MEDIUM' },
+        grade: { graded: false, reason: 'One asset has no recorded value.', basis: null },
+        tradeIntelligence: { why: 'Even · Confidence 72%.', whoWinsLongTerm: 'even', rebalanceSuggestions: ['Ask for a star to balance it.'] },
+      }) } : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    const verdict = container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')!
+    expect(verdict.textContent).toContain('Grade unavailable')
+    expect(verdict.textContent).toContain('One asset has no recorded value.')
+    expect(verdict.querySelector('.af-tc-score-num')).toBeNull()
+    expect(verdict.querySelector('.af-tc-conf')).toBeNull()
+    expect(verdict.querySelector('.af-tc-track-wrap')).toBeNull()
+    expect(verdict.querySelector('.af-tc-grade')).toBeNull()
+    expect(container.querySelector('.af-tc-dos')!.textContent).not.toMatch(/Confidence 72|Ask for a star/)
+    const listener = vi.fn()
+    window.addEventListener(COMMS_OPEN_EVENT, listener)
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Chimmy to explain' }))
+    window.removeEventListener(COMMS_OPEN_EVENT, listener)
+    expect(listener).toHaveBeenCalledOnce()
+    expect((listener.mock.calls[0][0] as CustomEvent).detail.prefill).toContain('The proposal grade is unavailable.')
+    expect((listener.mock.calls[0][0] as CustomEvent).detail.prefill).not.toContain('The analyzer says: Even')
+  })
   it('shows future cap failure beside a value grade with stored contract terms', async () => {
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, salaryCap: {

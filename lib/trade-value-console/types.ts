@@ -184,7 +184,7 @@ export type TradeConsoleSourceFlags = {
 
 export type TradeIntelligence = {
   fairnessVerdict: string
-  confidenceScore: number
+  confidenceScore: number | null
   whoWinsNow: 'you' | 'opponent' | 'even' | 'unknown'
   whoWinsLongTerm: 'you' | 'opponent' | 'even' | 'unknown'
   contenderRecommendation: string
@@ -219,11 +219,11 @@ export type TradeConsoleAnalyzeResult = {
   league: TradeConsoleLeagueSnapshot | null
   labels: {
     fairnessLabel: string
-    sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed'
+    sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed' | null
     confidenceLabel: string
   }
-  fairnessScore: number
-  confidenceScore: number
+  fairnessScore: number | null
+  confidenceScore: number | null
   percentDiff: number
   giveTotal: number
   getTotal: number

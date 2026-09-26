@@ -11,6 +11,20 @@ const input: Parameters<typeof buildTradeIntelligence>[0] = {
 }
 
 describe('trade commentary and counter targets', () => {
+  it('withholds fairness, confidence and balancing advice even when legacy drivers claim a strong win', () => {
+    const result = buildTradeIntelligence({ ...input, proposalGraded: false, strategy: 'contender',
+      drivers: { lean: 'Strong Win' }, negotiationToolkit: { counters: [{ description: 'Ask for a star to make it fair' }] },
+      opponentRosterTargets: [{ name: 'Depth', position: 'RB', marketValue: 300 }],
+    })
+    expect(result.fairnessVerdict).toContain('Proposal grade unavailable')
+    expect(result.fairnessVerdict).not.toMatch(/Major overpay|League value delta|Confidence \d/)
+    expect(result.confidenceScore).toBeNull()
+    expect(result.whoWinsLongTerm).toBe('unknown')
+    expect(result.rebalanceSuggestions).toEqual([])
+    expect(result.contenderRecommendation).not.toContain('Strong Win')
+    expect(result.alternateTargetsNote).not.toContain('shortfall')
+    expect(result.alternateTargets[0].name).toBe('Depth')
+  })
   it('keeps a priced league verdict when context is incomplete and omits the conflicting driver verdict', () => {
     const result = buildTradeIntelligence({ ...input, degraded: true, proposalGraded: true,
       drivers: { verdict: 'Strong Win' }, dataGaps: ['Missing roster context'] })

@@ -52,6 +52,7 @@ export function buildTradeIntelligence(args: {
   /** Echo normalized scoring labels for AI (no invented rules). */
   scoringSummary?: string | null
 }): TradeIntelligence {
+  const proposalGraded = args.proposalGraded !== false
   const marketWho: TradeIntelligence['whoWinsNow'] =
     args.sideAdvantage === 'you' ? 'you' : args.sideAdvantage === 'opponent' ? 'opponent' : 'even'
 
@@ -70,7 +71,9 @@ export function buildTradeIntelligence(args: {
   /** Long-term: dynasty uses composite % delta; redraft aligns with market tilt (ROS proxy). */
   const whoWinsLongTerm: TradeIntelligence['whoWinsLongTerm'] = args.proposalGraded === false ? 'unknown' : marketWho
 
-  const fairnessVerdict = `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The grade uses the displayed league values, including scoring and roster-need adjustments. Asset projections describe production, not a change in starting-lineup points or win probability. Confidence ${Math.round(args.confidenceScore)}%.${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
+  const fairnessVerdict = proposalGraded
+    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The grade uses the displayed league values, including scoring and roster-need adjustments. Asset projections describe production, not a change in starting-lineup points or win probability. Confidence ${Math.round(args.confidenceScore)}%.${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
+    : 'Proposal grade unavailable. The shared evaluator withheld this grade; priced assets and roster context alone do not establish that the complete trade is fair.'
 
   const tradeWarnings: string[] = []
   for (const w of args.injuryNotes.slice(0, 6)) {
@@ -86,7 +89,7 @@ export function buildTradeIntelligence(args: {
 
   const rebalanceSuggestions: string[] = []
   const tk = args.negotiationToolkit
-  if (tk && typeof tk === 'object') {
+  if (proposalGraded && tk && typeof tk === 'object') {
     const counters = (tk as { counters?: Array<{ description?: string }> }).counters
     if (Array.isArray(counters)) {
       for (const c of counters.slice(0, 6)) {
@@ -102,7 +105,7 @@ export function buildTradeIntelligence(args: {
     }
   }
 
-  const deficit = args.giveTotal - args.getTotal
+  const deficit = proposalGraded ? args.giveTotal - args.getTotal : 0
   const alt = (args.opponentRosterTargets ?? [])
     .filter((t) => Number.isFinite(t.marketValue) && t.marketValue > 0)
     .sort((a, b) => deficit > 0
@@ -145,7 +148,9 @@ export function buildTradeIntelligence(args: {
 
   let contenderRecommendation =
     args.strategy === 'contender' || args.strategy === 'win_now'
-      ? `Contender mode: prioritize win-now market value and lineup lift. Current lean: ${args.drivers.lean ?? 'see drivers'}.`
+      ? proposalGraded
+        ? `Contender mode: prioritize win-now market value and lineup lift. Current lean: ${args.drivers.lean ?? 'see drivers'}.`
+        : 'Contender mode: proposal value is unavailable. Review complete asset projections and eligibility before judging a lineup benefit.'
       : `Contender read: ${whoWinsNow === 'you' ? 'the incoming assets project for more combined points.' : whoWinsNow === 'opponent' ? 'the outgoing assets project for more combined points.' : whoWinsNow === 'unknown' ? 'weekly production is unavailable.' : 'the assets have similar combined projections.'} A combined asset projection is not a starting-lineup improvement or a win forecast.`
 
   if (args.league?.isDynasty === false) {
@@ -181,7 +186,7 @@ export function buildTradeIntelligence(args: {
 
   return {
     fairnessVerdict,
-    confidenceScore: Math.round(args.confidenceScore),
+    confidenceScore: proposalGraded ? Math.round(args.confidenceScore) : null,
     whoWinsNow,
     whoWinsLongTerm,
     contenderRecommendation,

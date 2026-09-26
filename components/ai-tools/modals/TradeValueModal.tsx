@@ -458,7 +458,9 @@ export function TradeValueModal({
     }
   }, [detailId])
 
-  const fairnessScore = typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
+  const proposalGrade = result?.grade as { graded?: boolean; reason?: string } | undefined
+  const proposalUnavailable = proposalGrade?.graded === false
+  const fairnessScore = !proposalUnavailable && typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
   const labels = result?.labels as { fairnessLabel?: string; confidenceLabel?: string } | undefined
   /**
    * Phase 3B (alongside). Absent unless DECISION_OS_TRADE_CANONICAL_VISIBLE is on AND the
@@ -504,7 +506,7 @@ export function TradeValueModal({
   const tradeIntelligence = result?.tradeIntelligence as
     | {
         fairnessVerdict?: string
-        confidenceScore?: number
+        confidenceScore?: number | null
         whoWinsNow?: string
         whoWinsLongTerm?: string
         contenderRecommendation?: string
@@ -890,10 +892,10 @@ export function TradeValueModal({
           </div>
           <p className="text-[20px] font-black tabular-nums text-[#00d4aa]">
             {fairnessScore != null ? fairnessScore : '—'}
-            <span className="text-[11px] font-bold text-[#5c6480]">/100</span>
+            {fairnessScore != null ? <span className="text-[11px] font-bold text-[#5c6480]">/100</span> : null}
           </p>
         </div>
-        <div className="relative mt-4">
+        {fairnessScore != null ? <div className="relative mt-4">
           <div className="mb-1 flex justify-between text-[9px] font-bold uppercase tracking-wide text-[#5c6480]">
             <span>LOPSIDED</span>
             <span className="text-[#9ba3bf]">EVEN</span>
@@ -905,10 +907,10 @@ export function TradeValueModal({
               style={{ left: `${Math.min(100, Math.max(0, fairnessScore ?? 50))}%` }}
             />
           </div>
-        </div>
+        </div> : null}
         <p className="mt-3 text-[12px] leading-relaxed text-[#9ba3bf]">
-          <span className="font-semibold text-[#00d4aa]">{labels?.fairnessLabel ?? 'Run analysis to score this deal.'}</span>{' '}
-          {labels?.confidenceLabel ? <span className="text-[#5c6480]">· {labels.confidenceLabel}</span> : null}
+          <span className="font-semibold text-[#00d4aa]">{proposalUnavailable ? 'Grade unavailable' : labels?.fairnessLabel ?? 'Run analysis to score this deal.'}</span>{' '}
+          {proposalUnavailable ? proposalGrade.reason : labels?.confidenceLabel ? <span className="text-[#5c6480]">· {labels.confidenceLabel}</span> : null}
         </p>
         {/*
           * A SECOND OPINION, NEVER THE VERDICT. The console's own answer above is unchanged; this
@@ -919,7 +921,7 @@ export function TradeValueModal({
           * comment was right and the code was wrong, and nothing caught it because this modal has
           * no test. Keep the branching in the tested function; this block only chooses words.
           */}
-        {decisionOsState ? (
+        {!proposalUnavailable && decisionOsState ? (
           <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#9ba3bf]">
             <span className="rounded-[3px] bg-[#1b2030] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-[#7c88ad]">
               Decision OS
@@ -974,14 +976,14 @@ export function TradeValueModal({
             <p className="mb-0 text-[11px] font-semibold uppercase tracking-wider text-sky-200/90">
               Trade Value AI engine
             </p>
-            {typeof tradeIntelligence.confidenceScore === 'number' ? (
+            {!proposalUnavailable && typeof tradeIntelligence.confidenceScore === 'number' ? (
               <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold tabular-nums text-sky-100/90">
                 Confidence {tradeIntelligence.confidenceScore}%
               </span>
             ) : null}
           </div>
-          <p className="text-[13px] leading-relaxed text-[#c8d4f0]">{tradeIntelligence.fairnessVerdict}</p>
-          {tradeIntelligence.why ? (
+          <p className="text-[13px] leading-relaxed text-[#c8d4f0]">{proposalUnavailable ? 'Proposal grade unavailable. Priced assets alone do not establish that the complete trade is fair.' : tradeIntelligence.fairnessVerdict}</p>
+          {!proposalUnavailable && tradeIntelligence.why ? (
             <p className="mt-3 text-[12px] leading-relaxed text-[#b0bdd8]" data-testid="trade-value-why-summary">
               {tradeIntelligence.why}
             </p>
@@ -1019,7 +1021,7 @@ export function TradeValueModal({
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">League value lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
-                {tradeIntelligence.whoWinsLongTerm === 'you'
+                {proposalUnavailable ? 'Unavailable' : tradeIntelligence.whoWinsLongTerm === 'you'
                   ? 'You (framework lean)'
                   : tradeIntelligence.whoWinsLongTerm === 'opponent'
                     ? 'Opponent (framework lean)'
@@ -1030,11 +1032,11 @@ export function TradeValueModal({
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/[0.06] px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-emerald-200/70">Contender read</p>
-              <p className="text-[12px] leading-snug text-[#c8e6d8]">{tradeIntelligence.contenderRecommendation}</p>
+              <p className="text-[12px] leading-snug text-[#c8e6d8]">{proposalUnavailable ? 'Proposal value is unavailable; review complete projections and eligibility.' : tradeIntelligence.contenderRecommendation}</p>
             </div>
             <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.06] px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-violet-200/70">Rebuilder read</p>
-              <p className="text-[12px] leading-snug text-[#d8cff5]">{tradeIntelligence.rebuilderRecommendation}</p>
+              <p className="text-[12px] leading-snug text-[#d8cff5]">{proposalUnavailable ? 'The shared evaluator withheld the complete proposal grade.' : tradeIntelligence.rebuilderRecommendation}</p>
             </div>
           </div>
           {tradeIntelligence.tradeWarnings && tradeIntelligence.tradeWarnings.length > 0 ? (
@@ -1047,7 +1049,7 @@ export function TradeValueModal({
               </ul>
             </div>
           ) : null}
-          {tradeIntelligence.rebalanceSuggestions && tradeIntelligence.rebalanceSuggestions.length > 0 ? (
+          {!proposalUnavailable && tradeIntelligence.rebalanceSuggestions && tradeIntelligence.rebalanceSuggestions.length > 0 ? (
             <div className="mt-3 rounded-lg border border-[#a78bfa]/25 bg-[#a78bfa]/[0.06] px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd]">Rebalance ideas</p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-[#e8e0ff]">
@@ -1103,7 +1105,7 @@ export function TradeValueModal({
         </div>
       ) : null}
 
-      {toolkit?.counters && toolkit.counters.length > 0 ? (
+      {!proposalUnavailable && toolkit?.counters && toolkit.counters.length > 0 ? (
         <div className="at-panel mt-3 p-3">
           <p className="at-section-title mb-2">Rebalance</p>
           <p className="mb-2 text-[11px] text-[#5c6480]">Players / pieces to adjust to even the deal:</p>
