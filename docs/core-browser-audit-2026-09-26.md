@@ -89,6 +89,7 @@ The user supplied the exact Railway app and environment link after initially sel
 - Connected Accounts loaded the account's Sleeper, ESPN and Fantrax connections. Yahoo is explicitly unavailable; MFL and Fleaflicker are not connected. These states must not be reported as successful sync coverage.
 - Settings correctly identifies existing admin subscription access, while Core incorrectly showed Free with 20 tokens. Core now passes the trusted session email to its existing entitlement resolver and labels existing bypass access explicitly; no access rights were added.
 - Rivalry radar also counted the current partial week as a completed meeting. Its history now uses the saved current-period marker; the regression retains the completed Week 2 win and excludes the partial Week 3 loss.
+- During the later college-football check, live cards displayed clocks, scores, possession, leaders and play details. Inactive cached NCAAF count was 116, changing to 65 on loading its active feed; cached/live fixture-count parity remains open. Home also showed duplicate upcoming college fixtures and Week 2 labels while the rail showed Week 3; these Home data paths require further investigation.
 
 ## Isolated release verification
 
