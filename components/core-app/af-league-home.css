@@ -963,9 +963,15 @@
   line-height: 1.5;
   color: var(--muted);
 }
-.af-ch-open {
+/* Card actions must fit narrow tablet columns, including translated labels. */
+.af-core .af-btn.af-ch-open {
   align-self: flex-start;
   margin-top: 2px;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 8px 14px;
+  white-space: normal;
+  text-align: center;
 }
 
 /* ── Buzz body: sentence, bid, and the faces that moved ──────────────── */
