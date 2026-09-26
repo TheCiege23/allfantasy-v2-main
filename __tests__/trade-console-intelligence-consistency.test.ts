@@ -11,6 +11,14 @@ const input: Parameters<typeof buildTradeIntelligence>[0] = {
 }
 
 describe('trade commentary and counter targets', () => {
+  it('keeps a priced league verdict when context is incomplete and omits the conflicting driver verdict', () => {
+    const result = buildTradeIntelligence({ ...input, degraded: true, proposalGraded: true,
+      drivers: { verdict: 'Strong Win' }, dataGaps: ['Missing roster context'] })
+    expect(result.whoWinsLongTerm).toBe('opponent')
+    expect(result.why).not.toContain('Engine verdict: Strong Win')
+    expect(buildTradeIntelligence({ ...input, strategy: 'rebuilder', drivers: { verdict: 'Strong Win' } }).rebuilderRecommendation).not.toContain('Strong Win')
+    expect(buildTradeIntelligence({ ...input, proposalGraded: false }).whoWinsLongTerm).toBe('unknown')
+  })
   it('does not turn absent projections into a production winner or invent a second dynasty grade band', () => {
     const result = buildTradeIntelligence({ ...input, percentDiff: 9, sideAdvantage: 'even',
       league: { isDynasty: true, name: 'Dynasty', quickModeBadges: [] } as never })

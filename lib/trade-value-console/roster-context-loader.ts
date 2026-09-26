@@ -14,6 +14,7 @@ import { loadImportedFuturePicks } from '@/lib/league-trade-engine/importedFutur
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { inventoryPickId, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { livePickValue } from './leagueTradePricing'
+import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 
 /** Mirrors internal `RosterContext` in trade-engine (not exported). */
 export type TradeEngineRosterContext = {
@@ -229,8 +230,13 @@ export async function loadTradeEngineRosterContext(args: {
   })
 
   const claimedTeam = teams.find(t => t.claimedByUserId === args.userId)
-  const userPlatformId = claimedTeam?.platformUserId ?? args.userId
-  const userRoster = rosters.find((r) => r.platformUserId === userPlatformId)
+  // Imported viewer rows can carry either the app ID or the provider ID. The shared
+  // resolver also handles linked, unclaimed teams and chooses the newest synced row.
+  const viewer = await resolveViewerLeagueRoster(args.leagueId, args.userId).catch(() => null)
+  const userPlatformId = viewer?.ok ? viewer.team.platformUserId : claimedTeam?.platformUserId ?? args.userId
+  const userRoster = viewer?.ok
+    ? rosters.find(r => r.id === viewer.roster.id)
+    : rosters.find(r => r.platformUserId === args.userId) ?? rosters.find(r => r.platformUserId === userPlatformId)
   if (!userRoster) {
     args.dataGaps.push('No synced roster row for your account in this league — lineup impact uses trade assets only.')
     return {

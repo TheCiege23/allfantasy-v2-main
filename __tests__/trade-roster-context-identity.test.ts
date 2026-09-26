@@ -6,16 +6,23 @@ const h = vi.hoisted(() => ({
     { externalId: '2', platformUserId: 'sleeper-other', claimedByUserId: null, teamName: 'Other', ownerName: 'Other' },
   ],
   mine: ['p1'] as string[],
+  claimed: true,
+  rosterOwner: 'sleeper-me',
   picks: [] as Array<{ season: number; round: number; originalTeamId: string; ownerTeamId: string; source: 'stored' }>,
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findFirst: async () => ({ id: 'L', sport: 'NFL', starters: ['QB', 'RB'] }) },
-  leagueTeam: { findMany: async () => h.teams },
+  leagueTeam: { findMany: async () => h.teams, findFirst: async ({ where }: { where: { platformUserId?: string } }) =>
+    where.platformUserId ? h.teams.find(t => t.platformUserId === where.platformUserId) : h.claimed ? h.teams[0] : null },
+  userProfile: { findUnique: async () => ({ sleeperUserId: 'sleeper-me' }) },
   roster: { findMany: async () => [
-    { id: 'my-roster', platformUserId: 'sleeper-me', playerData: { players: h.mine, draftPicks: [{ year: 2026, round: 1, playerId: 'drafted-player' }] }, faabRemaining: 20 },
+    { id: 'my-roster', platformUserId: h.rosterOwner, playerData: { players: h.mine, draftPicks: [{ year: 2026, round: 1, playerId: 'drafted-player' }] }, faabRemaining: 20 },
     { platformUserId: 'sleeper-other', playerData: { players: ['p2'] }, faabRemaining: 20 },
-  ] },
+  ], findFirst: async ({ where, orderBy }: { where: { platformUserId: { in: string[] } }; orderBy: unknown }) => {
+    expect(orderBy).toEqual({ updatedAt: 'desc' })
+    return where.platformUserId.in.includes(h.rosterOwner) ? { id: 'my-roster', playerData: { players: h.mine } } : null
+  } },
 } }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: async () => ({ ok: true }) }))
 vi.mock('@/lib/data/players', () => ({ getPlayer: async () => null }))
@@ -34,7 +41,15 @@ vi.mock('@/lib/hybrid-valuation', () => ({ pricePick: async () => ({ name: '2027
 import { loadTradeEngineRosterContext } from '@/lib/trade-value-console/roster-context-loader'
 const load = (opponentTeamExternalId?: string) => loadTradeEngineRosterContext({ leagueId: 'L', userId: 'account-me',
   opponentTeamExternalId, effectiveSport: 'NFL', nflCtx: { asOfDate: new Date(), isSuperFlex: false }, dataGaps: [] })
-beforeEach(() => { h.mine = ['p1']; h.picks = [] })
+beforeEach(() => { h.mine = ['p1']; h.picks = []; h.claimed = true; h.rosterOwner = 'sleeper-me' })
+
+it('resolves an unclaimed linked team whose bootstrap roster carries the app ID', async () => {
+  h.claimed = false
+  h.rosterOwner = 'account-me'
+  const context = await load('2')
+  expect(context.rosterCtx?.yourRoster[0].rosterPlayerId).toBe('p1')
+  expect(context.rosterCtx?.theirRoster[0].rosterPlayerId).toBe('p2')
+})
 
 it('resolves app identity to provider identity and preserves the actual player IDs', async () => {
   const context = await load('2')
