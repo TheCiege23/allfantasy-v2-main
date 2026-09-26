@@ -2,6 +2,7 @@ import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { optimizeLineupDeterministic } from '@/lib/lineup-optimizer-engine/LineupOptimizerEngine'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
+import { weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
 
 export type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE'
 
@@ -30,6 +31,19 @@ export async function selectBestBallLineupForRoster(input: {
 }): Promise<BestBallLineupResult> {
   if (input.rosterPlayerIds.length === 0) {
     return { status: 'UNAVAILABLE', starterIds: [], totalProjectedPoints: null, missingPlayerIds: [], notes: ['Roster is empty.'] }
+  }
+
+  // A sport or week `player_game_stats` cannot answer by `weekOrRound` — the daily sports, or
+  // week 0, which would match a daily sport's WHOLE season. See weekKeyedStatsUnavailableReason.
+  const refused = weekKeyedStatsUnavailableReason(input.leagueSport, input.weekOrRound)
+  if (refused) {
+    return {
+      status: 'UNAVAILABLE',
+      starterIds: [],
+      totalProjectedPoints: null,
+      missingPlayerIds: [...input.rosterPlayerIds],
+      notes: [`Best Ball optimization is unavailable: ${refused}`],
+    }
   }
 
   const [template, stats, players] = await Promise.all([

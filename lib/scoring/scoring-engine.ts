@@ -58,6 +58,9 @@ export type LeagueWeekScoreResult = {
   rosterCount: number
   updatedTeamCount: number
   locked: boolean
+  /** `unavailable`: nothing was written for this week — see `unavailable` for which teams and why. */
+  status: 'scored' | 'unavailable'
+  unavailable: Array<{ rosterId: string; teamId: string | null; reason: string }>
 }
 
 export async function scoreLeagueWeek(input: {
@@ -92,7 +95,9 @@ export async function scoreLeagueWeek(input: {
       weekOrRound: input.weekOrRound,
       rosterCount: 0,
       updatedTeamCount: 0,
-      locked: Boolean(input.lockScores),
+      locked: false,
+      status: 'unavailable',
+      unavailable: [{ rosterId: '', teamId: null, reason: 'League not found.' }],
     }
   }
 
@@ -102,9 +107,28 @@ export async function scoreLeagueWeek(input: {
   const teamIdByRosterExternalId = new Map(league.teams.map((team) => [team.externalId, team.id]))
   const teamScores = new Map<string, number>()
 
+  /*
+   * 🛑 SCORE EVERY TEAM FIRST, WRITE ONLY IF EVERY TEAM COULD BE SCORED.
+   *
+   * This used to upsert each roster as it went, and an unscoreable roster was written as 0 points:
+   * a daily sport (whose game stats carry no week), a week nobody has played yet, or a roster whose
+   * ids match no stat row. Those zeros then flowed into pointsFor and currentRank for the whole
+   * league, and `lockScores` could seal them. An unscoreable week is now written NOT AT ALL —
+   * a stale standings table is recoverable, a confident wrong one is not.
+   */
+  const pending: Array<{
+    teamId: string
+    points: number
+    data: { starterIds: string[]; bestBallEnabled: boolean; bestBallStatus: string | null; byPlayerId: Record<string, number> }
+  }> = []
+  const unavailableTeams: LeagueWeekScoreResult['unavailable'] = []
+
   for (const roster of league.rosters) {
     const rosterPlayerIds = getRosterPlayerIds(roster.playerData)
     if (rosterPlayerIds.length === 0) continue
+    // Only a roster with a team is ever written, so only it is scored or can block the week.
+    const teamId = teamIdByRosterExternalId.get(roster.platformUserId)
+    if (!teamId) continue
 
     // On UNAVAILABLE/unfillable the engine returns EMPTY starterIds by contract, so the
     // fallback below uses the roster's actual starters instead of an arbitrary all-zero
@@ -132,10 +156,37 @@ export async function scoreLeagueWeek(input: {
       formatType,
     })
 
-    const teamId = teamIdByRosterExternalId.get(roster.platformUserId)
-    if (!teamId) continue
+    if (score.status === 'UNAVAILABLE') {
+      unavailableTeams.push({ rosterId: roster.id, teamId, reason: score.unavailableReason ?? 'unavailable' })
+      continue
+    }
+    pending.push({
+      teamId,
+      points: score.totalPoints,
+      data: {
+        starterIds: starterIds.length > 0 ? starterIds : rosterPlayerIds,
+        bestBallEnabled,
+        bestBallStatus: bestBallResult?.status ?? null,
+        byPlayerId: score.byPlayerId,
+      },
+    })
+  }
 
-    teamScores.set(teamId, score.totalPoints)
+  if (unavailableTeams.length > 0) {
+    return {
+      leagueId: league.id,
+      season: input.season,
+      weekOrRound: input.weekOrRound,
+      rosterCount: league.rosters.length,
+      updatedTeamCount: 0,
+      locked: false,
+      status: 'unavailable',
+      unavailable: unavailableTeams,
+    }
+  }
+
+  for (const { teamId, points, data } of pending) {
+    teamScores.set(teamId, points)
     await prisma.teamPerformance.upsert({
       where: {
         teamId_season_week: {
@@ -145,27 +196,17 @@ export async function scoreLeagueWeek(input: {
         },
       },
       update: {
-        points: score.totalPoints,
+        points,
         result: input.lockScores ? 'locked' : undefined,
-        data: {
-          starterIds: starterIds.length > 0 ? starterIds : rosterPlayerIds,
-          bestBallEnabled,
-          bestBallStatus: bestBallResult?.status ?? null,
-          byPlayerId: score.byPlayerId,
-        },
+        data,
       },
       create: {
         teamId,
         season: input.season,
         week: input.weekOrRound,
-        points: score.totalPoints,
+        points,
         result: input.lockScores ? 'locked' : null,
-        data: {
-          starterIds: starterIds.length > 0 ? starterIds : rosterPlayerIds,
-          bestBallEnabled,
-          bestBallStatus: bestBallResult?.status ?? null,
-          byPlayerId: score.byPlayerId,
-        },
+        data,
       },
     })
   }
@@ -238,5 +279,7 @@ export async function scoreLeagueWeek(input: {
     rosterCount: league.rosters.length,
     updatedTeamCount: teamScores.size,
     locked: Boolean(input.lockScores),
+    status: 'scored',
+    unavailable: [],
   }
 }
