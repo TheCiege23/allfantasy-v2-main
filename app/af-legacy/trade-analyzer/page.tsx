@@ -34,8 +34,13 @@ type TradeAsset =
   | { type: 'faab'; faab: { amount: number } }
 
 type AnalyzeResult = {
-  grade?: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F'
+  /** The one trade engine's letter. Null when it withheld the grade — see `gradeWithheld`. */
+  grade?: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F' | null
+  /** Why there is no letter, in words the manager can act on. */
+  gradeWithheld?: string | null
+  gradeLabel?: string | null
   verdict:
+    | null
     | 'Fair'
     | 'Slightly favors A'
     | 'Slightly favors B'
@@ -2128,8 +2133,17 @@ export default function LegacyTradeAnalyzerPage() {
                       </span>
                     )}
                   </div>
-                  <VerdictPill verdict={result.verdict} />
+                  <VerdictPill verdict={result.verdict ?? undefined} />
                 </div>
+
+                {!result.grade && result.gradeWithheld && (
+                  <div
+                    data-testid="trade-grade-withheld"
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 mb-4 text-sm text-amber-200"
+                  >
+                    <span className="font-semibold">Not graded.</span> {result.gradeWithheld}
+                  </div>
+                )}
 
                 {result.expertAnalysis && (
                   <div className="rounded-2xl bg-gradient-to-br from-purple-500/10 to-cyan-500/10 border border-purple-500/20 p-4 mb-4">

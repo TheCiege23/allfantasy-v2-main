@@ -48,6 +48,8 @@ export type TradeGradeLine = {
   name: string
   marketValue: number | null
   leagueValue: number | null
+  /** Where the price came from (`fantasycalc`, `idp_league`, …). Absent on views built before 2026-09-26. */
+  source?: string | null
 }
 
 /** One asset whose league value differs from its market value, and why. */

@@ -12235,6 +12235,34 @@ model TradeDecisionSnapshot {
   @@map("trade_decision_snapshots")
 }
 
+/// One trade evaluation, as it was computed. Written by `evaluateTrade()` in
+/// `lib/decision-os/trade/evaluateTrade.ts` — the one trade engine — for every surface that grades a
+/// deal. APPEND-ONLY: a new evaluation is a new row, and nothing updates an old one, so a grade can
+/// always be traced to the evidence it was taken on. No `updatedAt` on purpose.
+model TradeEvaluationReceipt {
+  id             String   @id @default(cuid())
+  surface        String   @db.VarChar(48)
+  modelVersion   String   @db.VarChar(48)
+  leagueId       String?
+  userId         String?
+  graded         Boolean
+  /// The graded side's letter (A–F). Null when the grade was withheld.
+  letter         String?  @db.VarChar(2)
+  /// Signed from the graded side, whole percent of the larger side. Null when withheld.
+  percentDiff    Int?
+  withheldReason String?  @db.Text
+  /// sha256 of the normalized input, so the same deal evaluated twice can be found.
+  inputHash      String   @db.VarChar(64)
+  receipt        Json
+  evaluatedAt    DateTime @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([leagueId, evaluatedAt])
+  @@index([userId, evaluatedAt])
+  @@index([inputHash])
+  @@map("trade_evaluation_receipts")
+}
+
 /// One processing batch (scheduled, manual, FCFS immediate, etc.).
 model WaiverRun {
   id                String              @id @default(uuid())

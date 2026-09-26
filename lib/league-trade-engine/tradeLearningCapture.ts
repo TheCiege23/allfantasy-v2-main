@@ -5,7 +5,7 @@
  * Wires real AfLeagueTrade proposals/completions into the existing
  * TradeOfferEvent/TradeOutcomeEvent calibration pipeline. Reuses the
  * existing, unmodified scoring model (computeTradeDrivers +
- * calibrateAcceptProbability — the same pipeline runCoreEngine() uses,
+ * calibrateAcceptProbability — the pipeline the deleted runCoreEngine() used,
  * minus its AI-narrative/negotiation-toolkit layer, which calibration
  * doesn't need) and the existing event-logger writers. No new prediction
  * math; this file is the "asset-shape adapter" the ADR describes.

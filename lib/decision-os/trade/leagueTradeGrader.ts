@@ -62,6 +62,7 @@ function linesOf(leagueGrade: LeagueGrade): TradeGradeLine[] {
     name: l.name,
     marketValue: l.unpriced ? null : l.marketValue,
     leagueValue: l.leagueValue ?? null,
+    source: l.dataSource ?? null,
   })
   return [...leagueGrade.giveLines.map(one('give')), ...leagueGrade.getLines.map(one('get'))]
 }

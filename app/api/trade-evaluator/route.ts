@@ -56,6 +56,10 @@ import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middle
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
+import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
+import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
+import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
   buildNormalizedTradeContext,
@@ -898,6 +902,52 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     const senderReceivedTotal = senderReceivedComposite
 
     const teamANetValue = senderReceivedComposite - senderGivenComposite
+
+    /*
+     * 🛑 THE LETTER IS THE ONE TRADE ENGINE'S (2026-09-26). This route never produced a letter of its
+     * own: the page turned `percentDiff` into one in the browser (`gradeFromPercentDiff`), on a third
+     * scale. `evaluateTrade()` now grades the deal from the SENDER's side on the league's own values
+     * and returns a saved receipt; the page shows that letter, or the reason there is none.
+     *
+     * Started here and awaited at the response, so it overlaps the AI calls rather than adding to them.
+     * ⚠ `viewerSide: false` — the caller is not proven to be the sender, so roster need is not priced.
+     */
+    const pickInput = (p: { year: number; round: number; tier?: string | null }) => ({
+      kind: 'pick' as const,
+      year: p.year,
+      round: p.round,
+      ...(p.tier === 'early' || p.tier === 'mid' || p.tier === 'late' ? { tier: p.tier } : {}),
+    })
+    const sideInputs = (names: string[], picks: Array<{ year: number; round: number; tier?: string | null }>, faab: number | null | undefined): GradeInputs => ({
+      assets: [
+        ...names.filter((n) => n.trim()).map((name) => ({ kind: 'player' as const, name: name.trim() })),
+        ...picks.map(pickInput),
+        ...(typeof faab === 'number' && faab > 0 ? [{ kind: 'faab' as const, amount: faab }] : []),
+      ],
+      unpriceable: names.filter((n) => !n.trim()).map(() => 'a player with no name'),
+    })
+    const evaluationReceiptPromise: Promise<TradeEvaluationReceipt> = (async () => {
+      const evaluationLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: data.league_id, userId })
+      const notYourLeague: Partial<EvaluateTradeDeps> =
+        data.league_id && !evaluationLeagueId
+          ? { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) }
+          : {}
+      return evaluateTrade(
+        {
+          surface: 'trade-evaluator',
+          leagueId: evaluationLeagueId,
+          userId,
+          give: sideInputs(senderPlayerNames, senderPicksData, data.sender.gives_faab),
+          get: sideInputs(receiverPlayerNames, receiverPicksData, data.receiver.gives_faab),
+          viewerSide: false,
+        },
+        notYourLeague,
+      )
+    })()
+    const oneGradePayload = async () => {
+      const receipt = await evaluationReceiptPromise
+      return { tradeGrade: receiptGradeFields(receipt), evaluationReceipt: receipt }
+    }
     const teamBNetValue = senderGivenComposite - senderReceivedComposite
 
     const allPlayerNames = [...senderPlayerNames, ...receiverPlayerNames]
@@ -2013,6 +2063,7 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
         evaluation: parsed,
         schemaValid: false,
         warning: 'Response partially validated — AI output did not match strict schema',
+        ...(await oneGradePayload()),
         rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
         tokenSpend: gate.tokenSpend
           ? {
@@ -2250,6 +2301,7 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
       success: true,
       evaluation: evalData,
       schemaValid: true,
+      ...(await oneGradePayload()),
       /*
        * The RESOLVED superflex answer and how it was reached.
        *

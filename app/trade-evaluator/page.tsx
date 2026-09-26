@@ -90,8 +90,10 @@ interface TradeResult {
   verdict: VerdictKey
   fairnessScore: number
   fairnessMethod: string | null
-  senderGrade: string
-  receiverGrade: string
+  /** Null when the grade was withheld — `gradeWithheld` says why. */
+  senderGrade: string | null
+  receiverGrade: string | null
+  gradeWithheld: string | null
   valueDelta: number
   confidencePct: number
   recommendation: string
@@ -196,6 +198,15 @@ interface ApiTradeResponse {
     sensitivitySentence?: string
   }
   negotiationToolkit?: NegotiationToolkit
+  /** The one trade engine's grade, from the sender's side (`lib/decision-os/trade/evaluateTrade.ts`). */
+  tradeGrade?: {
+    grade: string | null
+    partnerGrade: string | null
+    gradeLabel: string | null
+    gradeWithheld: string | null
+    percentDiff: number | null
+    evaluationReceiptId: string | null
+  }
   dualModeGrades?: {
     atTheTime?: { percentDiff?: number; grade?: string }
     withHindsight?: { percentDiff?: number; grade?: string }
@@ -361,6 +372,11 @@ function driverDetail(driver: ApiDriver) {
   return pieces.length > 0 ? pieces.join(" · ") : "Deterministic trade engine signal."
 }
 
+/*
+ * ⚠ HISTORICAL MODE ONLY. A live evaluation's letter is the server's one grade (`payload.tradeGrade`);
+ * this client scale survives only for an `asOfDate` evaluation's receiver side, beside the server's
+ * own historical letter — a known second scale left for a later phase.
+ */
 function gradeFromPercentDiff(percentDiff: number): string {
   if (percentDiff > 20) return "A+"
   if (percentDiff > 10) return "A"
@@ -470,11 +486,22 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     50
   )
   const valueDelta = Number(payload.valuationReport?.teamA?.netValue ?? 0)
-  const percentDiff = pickPercentDiff(payload, asOfDate)
-  const senderGrade =
-    (asOfDate ? payload.dualModeGrades?.atTheTime?.grade : payload.dualModeGrades?.withHindsight?.grade) ??
-    gradeFromPercentDiff(percentDiff)
-  const receiverGrade = gradeFromPercentDiff(-percentDiff)
+  /*
+   * 🛑 THE LETTER IS THE SERVER'S ONE GRADE, NOT ONE MADE HERE. This used to be
+   * `gradeFromPercentDiff` over the route's composite totals — a third scale, computed in the
+   * browser. A withheld grade shows no letter and the reason, never a fallback letter.
+   */
+  const historical = Boolean(asOfDate)
+  const historicalPercentDiff = historical ? pickPercentDiff(payload, asOfDate) : null
+  const senderGrade = historical
+    ? payload.dualModeGrades?.atTheTime?.grade ?? gradeFromPercentDiff(historicalPercentDiff ?? 0)
+    : payload.tradeGrade?.grade ?? null
+  const receiverGrade = historical
+    ? gradeFromPercentDiff(-(historicalPercentDiff ?? 0))
+    : payload.tradeGrade?.partnerGrade ?? null
+  const gradeWithheld = historical
+    ? null
+    : payload.tradeGrade?.gradeWithheld ?? (payload.tradeGrade ? null : 'The grade could not be computed for this trade.')
   const analysisBullets = [
     ...(payload.acceptProbability?.acceptBullets ?? []),
     ...(payload.evaluation?.explanation?.leagueContextNotes ?? []),
@@ -500,6 +527,7 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     fairnessMethod: payload.tradeInsights?.fairnessMethod ?? null,
     senderGrade,
     receiverGrade,
+    gradeWithheld,
     valueDelta,
     confidencePct: clampScore(
       payload.serverConfidence?.score ??
@@ -1310,14 +1338,19 @@ function TradeHubInner() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Grades</div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
-                      <div className="text-3xl font-black text-cyan-200">{result.senderGrade}</div>
+                      <div className="text-3xl font-black text-cyan-200">{result.senderGrade ?? '—'}</div>
                       <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-cyan-100/70">Sender</div>
                     </div>
                     <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4 text-center">
-                      <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade}</div>
+                      <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade ?? '—'}</div>
                       <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-fuchsia-100/70">Receiver</div>
                     </div>
                   </div>
+                  {result.gradeWithheld && (
+                    <div data-testid="trade-grade-withheld" className="mt-3 text-xs text-amber-200/90">
+                      Not graded. {result.gradeWithheld}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">

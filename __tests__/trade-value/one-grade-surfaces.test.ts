@@ -32,6 +32,10 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/core-app/recentTrades.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the dashboard trade band verdict' },
   { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTrade\(/, what: 'the /core Trades grade list' },
   { file: 'lib/core-app/tradesBoard.ts', entry: /gradeArchivedTrade\(/, what: 'the cross-league trades board' },
+  /* The one trade engine, Phase 1 (2026-09-26): these call `evaluateTrade()` and show its receipt's letter. */
+  { file: 'lib/league-trade-engine/serverTradeDecision.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the proposal-time receipt, through the engine' },
+  { file: 'app/api/trade-evaluator/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: '/trade-evaluator' },
+  { file: 'server/api-route-modules/legacy/trade/analyze/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the legacy trade analyzer' },
 ]
 
 /* The private letters these surfaces used to print. Shapes, not words: a call, not a mention. */
@@ -43,6 +47,8 @@ const PRIVATE_LETTERS: ReadonlyArray<{ name: string; shape: RegExp }> = [
   { name: 'the rank-space share grade', shape: /\bgradeTrade\(\s*\{\s*label:/ },
   { name: 'the legacy canonical verdict', shape: /buildLegacyCanonicalGrade\(/ },
   { name: 'a value edge on the mean of both sides', shape: /letterForValueEdge\(/ },
+  { name: 'the flat-200 FantasyCalc balance', shape: /calculateTradeBalance\(/ },
+  { name: "the canonical memo's fairness letter", shape: /canonicalFairnessGrade\(/ },
 ]
 
 describe.each(SURFACES)('$what', ({ file, entry }) => {
@@ -99,6 +105,14 @@ describe('positive controls — the guards can fail', () => {
     expect(PRIVATE_LETTERS[4]!.shape.test("const g = gradeTrade(\n      { label: 'received', assets: recvGradeable },")).toBe(true)
     expect(PRIVATE_LETTERS[5]!.shape.test('const graded = buildLegacyCanonicalGrade({')).toBe(true)
     expect(PRIVATE_LETTERS[6]!.shape.test("const letter = insideNoise ? 'C' : letterForValueEdge(valueEdge)")).toBe(true)
+    expect(PRIVATE_LETTERS[7]!.shape.test('tradeBalance = calculateTradeBalance(\n        newsAdjustedCalcMap,')).toBe(true)
+    expect(PRIVATE_LETTERS[8]!.shape.test('= canonicalFairnessGrade(sideA, sideB, input.profiles)')).toBe(true)
+  })
+
+  it('the engine-entry shape matches a real call and not the dynasty-tiers helper of the same name', () => {
+    const entry = /evaluateTrade\(\s*\{\s*surface:/
+    expect(entry.test("await evaluateTrade(\n      {\n        surface: 'legacy-trade-analyze',")).toBe(true)
+    expect(entry.test('const tierEvaluation = evaluateTrade(\n        tierAssetsA,')).toBe(false)
   })
 
   it('the comment stripper leaves code and removes prose', () => {
@@ -108,5 +122,32 @@ describe('positive controls — the guards can fail', () => {
 
   it('the analyzer fetch shape matches the call it replaced', () => {
     expect(/fetch\('\/api\/trade-value\/analyze'/.test("const r = await fetch('/api/trade-value/analyze', {")).toBe(true)
+  })
+})
+
+/*
+ * 🛑 NO FLAT DEFAULT VALUE FOR A PLAYER NOBODY COULD FIND (2026-09-26). `calculateTradeBalance`
+ * priced every FantasyCalc miss at 200 and graded the deal anyway, and the legacy prompt told the
+ * model to do the same. The one engine withholds the grade instead; these files must not bring the
+ * default back.
+ */
+const FLAT_DEFAULT = /(\?\?|\|\|)\s*200\b|UNKNOWN_PLAYER_VALUE|value ~200|depth ~200/
+
+describe('no flat default value for an unknown player', () => {
+  it.each([
+    'lib/fantasycalc.ts',
+    'server/api-route-modules/legacy/trade/analyze/route.ts',
+    'app/api/trade-evaluator/route.ts',
+    'lib/decision-os/trade/evaluateTrade.ts',
+    'lib/decision-os/trade/receiptViews.ts',
+  ])('%s', (file) => {
+    expect(code(file)).not.toMatch(FLAT_DEFAULT)
+  })
+
+  it('positive control: the shape matches the code it replaced', () => {
+    expect(FLAT_DEFAULT.test('value: lookup?.value || UNKNOWN_PLAYER_VALUE,')).toBe(true)
+    expect(FLAT_DEFAULT.test('const v = fcPlayer?.value || 200')).toBe(true)
+    expect(FLAT_DEFAULT.test('treat them as low-value depth players (value ~200).')).toBe(true)
+    expect(FLAT_DEFAULT.test('return NextResponse.json(body, { status: 200 })')).toBe(false)
   })
 })
