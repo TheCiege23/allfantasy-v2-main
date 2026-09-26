@@ -2181,7 +2181,7 @@ export default async function AdminPage({
           ) : null}
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Users</h2>
             <div className="mt-4 overflow-x-auto">
@@ -2261,7 +2261,7 @@ export default async function AdminPage({
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Payments</h2>
             <div className="mt-4 overflow-x-auto">
