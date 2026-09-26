@@ -78,7 +78,7 @@ describe('pointBoardAtReachableLeagues', () => {
 
 describe('the /core page applies it to every board read', () => {
   it('both the live read and the cached summary go through the remap', () => {
-    const page = readFileSync(join(process.cwd(), 'app/core/[[...screen]]/page.tsx'), 'utf8')
+    const page = readFileSync(join(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
     expect(page).toMatch(/const tradesBoard = tradesBoardRead\s*\?\s*pointBoardAtReachableLeagues\(/)
     expect(page).toMatch(/const tradesBoardRead = wantsTradesBoard[\s\S]{0,200}tradesBoardFresh\?\.data[\s\S]{0,120}getTradesBoard\(/)
   })
