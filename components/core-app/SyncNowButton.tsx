@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -51,6 +51,7 @@ export type SyncNowButtonProps = {
 export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: SyncNowButtonProps) {
   const router = useRouter()
   const { phase, message, completion } = useSyncExternalStore(subscribeClientSync, getClientSyncSnapshot, getServerSyncSnapshot)
+  useEffect(() => { void resumeClientSync()?.catch(() => undefined) }, [])
   useEffect(() => {
     if (claimClientSyncRefresh(completion)) router.refresh()
   }, [completion, router])

@@ -72,12 +72,23 @@ export type SyncRunOutcome = {
 /** The backstop. Not a cap on work — see the header. */
 export const MAX_ROUNDS = 200
 
+export type SyncCheckpoint = {
+  only: string[] | null
+  total: number
+  synced: number
+  locked: number
+  failed: number
+  rounds: number
+}
+
 export type RunSyncRoundsDeps = {
   initialOnly?: string[]
+  initialCheckpoint?: SyncCheckpoint
   /** Posts one round. `only` is null on the first round, then the previous `remaining`. */
   post: (only: string[] | null) => Promise<SyncPostResult>
   /** Progress between rounds. A 50-league account is minutes of work. */
   onProgress?: (text: string) => void
+  onCheckpoint?: (checkpoint: SyncCheckpoint) => void
   /** Overridable so a test can reach the backstop without 40 fabricated rounds. */
   maxRounds?: number
 }
@@ -85,13 +96,13 @@ export type RunSyncRoundsDeps = {
 export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOutcome> {
   const maxRounds = deps.maxRounds ?? MAX_ROUNDS
 
-  let only: string[] | null = deps.initialOnly ?? null
-  let total = 0
-  let synced = 0
-  let locked = 0
-  let failed = 0
-  let rounds = 0
-  let exhausted = false
+  let only: string[] | null = deps.initialCheckpoint?.only ?? deps.initialOnly ?? null
+  let total = deps.initialCheckpoint?.total ?? 0
+  let synced = deps.initialCheckpoint?.synced ?? 0
+  let locked = deps.initialCheckpoint?.locked ?? 0
+  let failed = deps.initialCheckpoint?.failed ?? 0
+  let rounds = deps.initialCheckpoint?.rounds ?? 0
+  let exhausted = rounds >= maxRounds && Boolean(only?.length)
 
   while (rounds < maxRounds) {
     rounds += 1
@@ -144,6 +155,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
     deps.onProgress?.(`Checked ${synced + locked + failed} of ${total} · synced ${synced}…`)
 
     const rest = Array.isArray(round.remaining) ? round.remaining : []
+    deps.onCheckpoint?.({ only: rest, total, synced, locked, failed, rounds })
     /* Stop 1 — the honest terminator. */
     if (rest.length === 0) break
     /* Stop 2 — a server that reported work left but attempted none of it. */
