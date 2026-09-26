@@ -798,3 +798,23 @@
     margin-block: -11px;
   }
 }
+
+/* ── A starter who is a certain zero (components/core-app/screens/Matchup.tsx) ──
+ *
+ * OUT or BYE beside his 0.0 — loud, like My Team's bye badge, because it is not a
+ * caveat on the number, it is the reason for it. Its own top-level block at end of
+ * file, outside every @media query, so it applies at every width.
+ */
+.af-mu-flag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+  color: var(--bad);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  vertical-align: 2px;
+}

@@ -9,7 +9,7 @@ import {
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
-import { projectedFinalFor, winProbabilityFor } from './matchupProjections'
+import { projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
@@ -148,6 +148,11 @@ export type MatchupPlayerCell = {
   actual: number | null
   /** The platform recorded an unfilled starting slot. A hole, not a player. */
   empty: boolean
+  /**
+   * Why a starter's `projected` is a certain 0 — ruled out, or his club is off this week. Null for
+   * everyone else, including a starter we merely could not price (that is `projected: null`).
+   */
+  unavailable: Unavailable | null
 }
 
 export type MatchupSlot = {
@@ -430,6 +435,8 @@ export async function getMatchupData(
     opponent: opponentRow
       ? { platformUserId: oppTeam?.platformUserId ?? null, rosterId: String(opponentRow.rosterId) }
       : null,
+    // A Sleeper league's live lineups for this week, where Sleeper can vouch for them.
+    source: { platform: league.platform, platformLeagueId },
   })
 
   const anyProjected =
@@ -582,7 +589,7 @@ export async function getMatchupData(
       }
 
   const cellFor = (
-    entry: { playerId: string; projected: number | null } | undefined,
+    entry: { playerId: string; projected: number | null; unavailable?: Unavailable | null } | undefined,
   ): MatchupPlayerCell | null => {
     if (!entry) return null
     if (entry.playerId === EMPTY_SLOT) {
@@ -597,6 +604,7 @@ export async function getMatchupData(
         projected: null,
         actual: null,
         empty: true,
+        unavailable: null,
       }
     }
     /*
@@ -619,6 +627,7 @@ export async function getMatchupData(
         projected: entry.projected,
         actual: actualBy.get(entry.playerId) ?? null,
         empty: false,
+        unavailable: entry.unavailable ?? null,
       }
     }
     const identity = identityBy.get(entry.playerId)
@@ -646,6 +655,7 @@ export async function getMatchupData(
       projected: entry.projected,
       actual: actualBy.get(entry.playerId) ?? null,
       empty: false,
+      unavailable: entry.unavailable ?? null,
     }
   }
 
