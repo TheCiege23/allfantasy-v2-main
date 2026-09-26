@@ -5,11 +5,14 @@ const db = vi.hoisted(() => ({
   delete: vi.fn(),
   create: vi.fn(),
   transaction: vi.fn(),
+  metadata: vi.fn(),
+  groupBy: vi.fn(),
 }))
 vi.mock('@/lib/sleeper-client', () => ({ getLeagueMatchups: db.fetch }))
+vi.mock('@/lib/core-app/leagueWeekMetadata', () => ({ readLeagueWeekMetadata: db.metadata }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   weeklyMatchup: {
-    groupBy: vi.fn(async () => [{ week: 1, _max: { updatedAt: new Date(0) }, _sum: { pointsFor: 100 } }]),
+    groupBy: db.groupBy,
     deleteMany: db.delete,
     createMany: db.create,
   },
@@ -18,9 +21,20 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
 beforeEach(() => {
   vi.clearAllMocks()
+  db.metadata.mockResolvedValue([])
+  db.groupBy.mockResolvedValue([{ week: 1, _max: { updatedAt: new Date(0) }, _sum: { pointsFor: 100 } }])
   db.delete.mockResolvedValue({ count: 2 })
   db.create.mockResolvedValue({ count: 2 })
   db.transaction.mockImplementation(async (callback) => callback({ weeklyMatchup: { deleteMany: db.delete, createMany: db.create } }))
+})
+it('refreshes the provider current week even when an older week is empty', async () => {
+  db.metadata.mockResolvedValue([{ season: 2026, status: 'active', settings: { leg: '3' } }])
+  db.groupBy.mockResolvedValue([1, 2, 3, 4].map((week) => ({
+    week, _max: { updatedAt: new Date(0) }, _sum: { pointsFor: week === 1 ? 0 : 100 },
+  })))
+  db.fetch.mockResolvedValue([])
+  await ensureMatchupsCached('P', 4, 2026)
+  expect(db.fetch.mock.calls.map((call) => call[1])).toEqual([2, 3, 4])
 })
 it('keeps the last scores when the provider refresh fails', async () => {
   db.fetch.mockRejectedValueOnce(new Error('provider unavailable'))
