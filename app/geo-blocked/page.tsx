@@ -22,9 +22,8 @@ export default async function GeoBlockedPage({
         <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
         <h1 className="mb-2 text-2xl font-black sm:text-3xl">🚫 AllFantasy.ai Is Not Available in Washington State</h1>
         <p className="mb-6 text-sm leading-7 text-white/70">
-          We&apos;re sorry, but Washington state law (RCW 9.46.240) classifies all fantasy sports — including free contests — as
-          sports wagering. Operating or offering fantasy sports services in Washington is a violation of state law, regardless of
-          whether an entry fee is charged.
+          We&apos;re sorry, but Washington state law (RCW 9.46.240) prohibits fantasy sports services, including free play,
+          regardless of whether a fee is charged.
         </p>
         <p className="mb-8 text-sm leading-7 text-white/70">
           We comply with all applicable state laws and therefore cannot provide access to AllFantasy.ai from Washington.
