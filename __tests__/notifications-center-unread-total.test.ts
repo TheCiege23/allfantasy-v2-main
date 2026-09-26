@@ -47,6 +47,18 @@ const sixtyAllRead = Array.from({ length: 60 }, (_, i) => ({
 const NOW = new Date('2026-08-31T00:00:00Z')
 
 describe('getNotificationsCenter unread total', () => {
+  it('routes lineup alerts to the roster and keeps player-news picks out of Draft HQ', async () => {
+    findMany.mockResolvedValue([
+      { ...sixtyAllRead[0], id: 'lineup', type: 'lineup_alert', title: 'Doubtful starter', body: 'Review your lineup', leagueId: 'L1', meta: { notificationCategory: 'lineup_alerts' } },
+      { ...sixtyAllRead[0], id: 'news', type: 'player_news', title: 'Player News', body: 'Monday picks by a proven model', leagueId: 'L1' },
+    ])
+    count.mockResolvedValue(2)
+    const data = await getNotificationsCenter({ userId: 'u1', issues: [], now: NOW })
+    expect(data.rest[0]?.action).toMatchObject({ label: 'Review lineup', href: '/core/my-team?league=L1' })
+    expect(data.rest[1]?.kind).toBe('all')
+    expect(data.rest[1]?.action?.href).toBe('/core?league=L1')
+    expect(data.counts.drafts).toBe(0)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     discordFindFirst.mockResolvedValue(null)

@@ -230,6 +230,17 @@ describe('charts', () => {
     expect(chart?.bars.map((b) => b.label)).toEqual(['Wk 1'])
     expect(chart?.bars[0].value).toBe(110)
   })
+
+  it('excludes the partial current week and counts a completed zero-score team', () => {
+    const chart = scoringChart([
+      { week: 2, pointsFor: 100, pointsAgainst: 0, matchupId: 1 },
+      { week: 2, pointsFor: 0, pointsAgainst: 100, matchupId: 1 },
+      { week: 3, pointsFor: 29, pointsAgainst: 47, matchupId: 1 },
+    ], { currentWeek: 3, complete: false })
+    expect(chart?.bars.map((b) => b.label)).toEqual(['Wk 2'])
+    expect(chart?.bars[0].value).toBe(50)
+    expect(chart?.subtitle).toContain('completed week')
+  })
 })
 
 describe('league areas, guides and connections', () => {

@@ -4,6 +4,7 @@ import type { LeagueHub } from './leagueHubGroups'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { getDash34Data, type Dash34LeagueRow } from './dash34'
+import { getRailMatchups } from './railMatchups'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
 
 /**
@@ -176,7 +177,10 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
   const played = rows.filter((r) => r.isLegacyBoardItem !== true)
   const legacy = rows.filter((r) => r.isLegacyBoardItem === true)
 
-  const dash = await getDash34Data(userId, played as Dash34LeagueRow[], now).catch(() => null)
+  const [dash, matchups] = await Promise.all([
+    getDash34Data(userId, played as Dash34LeagueRow[], now).catch(() => null),
+    getRailMatchups(userId, played).catch(() => null),
+  ])
 
   const rowById = new Map<string, RawRow>()
   for (const r of played) rowById.set(r.id, r)
@@ -189,8 +193,12 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
 
   const leagues: MyLeaguesLeague[] = ranked.map((l) => {
     const row = rowById.get(l.id)
+    const matchup = matchups?.byLeague[l.id]
     return {
       ...l,
+      matchupNote: matchup
+        ? `Week ${matchup.week} · ${matchup.yourTeam ?? 'Your team'} ${matchup.scored ? matchup.yourScore.toFixed(1) : ''}${matchup.unpaired ? ' · league scoreboard' : ` vs ${matchup.opponentTeam ?? 'Opponent'} ${matchup.scored ? matchup.opponentScore.toFixed(1) : ''}`}`
+        : l.matchupNote,
       tier: tierOf(l),
       isDynasty: Boolean(row?.isDynasty),
       isCommissioner: Boolean(row?.isCommissioner),
@@ -226,7 +234,7 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
     history,
     counts,
     platforms,
-    coverage: dash?.coverage ?? [],
+    coverage: (dash?.coverage ?? []).filter((item) => item.label !== 'Live scores' || !Object.keys(matchups?.byLeague ?? {}).length),
     notice: dash?.notice ?? null,
   }
 }

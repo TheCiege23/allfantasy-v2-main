@@ -86,6 +86,7 @@ const RUN_ROW_CAP = 12
 const WAIVER_TYPE_LABEL: Record<string, string> = {
   faab: 'FAAB',
   rolling: 'Rolling priority',
+  reverse_standings: 'Reverse standings priority',
   fcfs: 'First come, first served',
   standard: 'Standard priority',
   off: 'No waivers',

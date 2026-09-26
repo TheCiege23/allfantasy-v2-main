@@ -32,14 +32,14 @@ function toBoolFromNumeric(v: unknown): boolean | undefined {
 
 /**
  * Sleeper `settings.waiver_type` int → AF vocabulary.
- *   2 → 'faab', 1 → 'rolling', 0 → 'off'.
+ *   2 → 'faab', 1 → 'reverse_standings', 0 → 'rolling'.
  * Unknown / missing returns `undefined` so downstream keeps whatever default it holds.
  */
 function mapSleeperWaiverType(v: unknown): string | undefined {
   const n = toIntOrUndef(v)
   if (n === 2) return 'faab'
-  if (n === 1) return 'rolling'
-  if (n === 0) return 'off'
+  if (n === 1) return 'reverse_standings'
+  if (n === 0) return 'rolling'
   return undefined
 }
 
@@ -50,6 +50,7 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const seasonNum = league.season ? parseInt(league.season, 10) : null
     const rosterCount = league.total_rosters ?? league.settings?.num_teams ?? 0
     const settings = (league.settings ?? {}) as Record<string, unknown>
+    const currentWeek = Number(settings.leg)
     const type = settings.type
     const isDynasty = type === 2
     /*
@@ -117,6 +118,9 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       // Explicit `null` (not `undefined`) when genuinely absent — an honest "no status
       // reported" signal, never a fabricated default.
       status: league.status ?? null,
+      ...(Number.isInteger(currentWeek) && currentWeek > 0 && currentWeek <= 30
+        ? { current_week: currentWeek }
+        : {}),
       playoff_team_count: playoffTeams ?? undefined,
       regular_season_length: regularSeasonLength,
       schedule_unit: 'week',

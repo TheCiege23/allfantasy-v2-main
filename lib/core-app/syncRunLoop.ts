@@ -70,9 +70,10 @@ export type SyncRunOutcome = {
 }
 
 /** The backstop. Not a cap on work — see the header. */
-export const MAX_ROUNDS = 40
+export const MAX_ROUNDS = 200
 
 export type RunSyncRoundsDeps = {
+  initialOnly?: string[]
   /** Posts one round. `only` is null on the first round, then the previous `remaining`. */
   post: (only: string[] | null) => Promise<SyncPostResult>
   /** Progress between rounds. A 50-league account is minutes of work. */
@@ -84,7 +85,7 @@ export type RunSyncRoundsDeps = {
 export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOutcome> {
   const maxRounds = deps.maxRounds ?? MAX_ROUNDS
 
-  let only: string[] | null = null
+  let only: string[] | null = deps.initialOnly ?? null
   let total = 0
   let synced = 0
   let locked = 0
@@ -121,7 +122,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
 
     /* The denominator is fixed by the first round: later rounds recompute the
        same candidate set server-side, so it should not move under us. */
-    if (rounds === 1) total = round.totalCandidates ?? 0
+    if (rounds === 1) total = round.totalCandidates ?? deps.initialOnly?.length ?? 0
     synced += round.synced ?? 0
     locked += round.locked ?? 0
     failed += round.failed ?? 0
@@ -140,7 +141,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
       }
     }
 
-    deps.onProgress?.(`Synced ${synced + locked + failed} of ${total}…`)
+    deps.onProgress?.(`Checked ${synced + locked + failed} of ${total} · synced ${synced}…`)
 
     const rest = Array.isArray(round.remaining) ? round.remaining : []
     /* Stop 1 — the honest terminator. */
@@ -173,7 +174,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
   return {
     status: stragglers > 0 ? 'partial' : 'done',
     tone: stragglers > 0 ? 'attention' : 'ok',
-    message: stragglers > 0 ? `Synced ${synced} of ${total}` : `Synced ${synced}`,
+    message: stragglers > 0 ? `Synced ${synced} of ${total} · ${failed} failed · ${locked} already syncing` : `Synced ${synced}`,
     total,
     synced,
     locked,

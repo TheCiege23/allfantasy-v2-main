@@ -337,6 +337,7 @@ function readSetting(settings: unknown, keys: string[]): number | null {
 const WAIVER_TYPE_LABEL: Record<string, string> = {
   faab: 'FAAB blind bidding',
   rolling: 'Rolling waiver priority',
+  reverse_standings: 'Reverse standings priority',
   fcfs: 'First come, first served',
   standard: 'Standard waiver priority',
   off: 'No waivers — free agents are instant',
@@ -617,9 +618,12 @@ export async function getCommissionerHub(input: {
   }
 
   // ── Season position ─────────────────────────────────────────────────────
-  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m)).map((m) => m.week)
+  const statedWeek = leagueWeekFromSettings(settingsJson)
+  const seasonComplete = ['complete', 'completed', 'finished'].includes(seasonStatus)
+  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m) &&
+    (seasonComplete || statedWeek == null || m.week < statedWeek)).map((m) => m.week)
   const lastPlayedWeek = scoredWeeks.length > 0 ? Math.max(...scoredWeeks) : null
-  const currentWeek = leagueWeekFromSettings(settingsJson) ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
+  const currentWeek = statedWeek ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
   const inSeason = seasonStatus === 'in_season' || (native && lastPlayedWeek != null && seasonStatus !== 'complete')
 
   /*
@@ -939,7 +943,7 @@ export async function getCommissionerHub(input: {
             data: (() => {
               const kind = String(waiverSettings.waiverType).toLowerCase()
               const label = WAIVER_TYPE_LABEL[kind] ?? kind
-              return waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
+              return kind === 'faab' && waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
             })(),
           }
         : {
@@ -1014,7 +1018,7 @@ export async function getCommissionerHub(input: {
       chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {
-      scoring: matchups ? scoringChart(matchups) : null,
+      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }) : null,
       balance: balanceChart(
         teams.map((t) => ({ name: teamLabel(t), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
       ),

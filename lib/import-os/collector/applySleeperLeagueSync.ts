@@ -223,6 +223,19 @@ async function applyLeagueState(
     existing.name, existing.avatarUrl, existing.scoring, existing.status,
     existing.leagueSize, existing.isDynasty, existing.rosterSize, JSON.stringify(existingSettings),
   ])
+  // Refresh the imported rule mirror as well as the League column. Bootstrap
+  // only fills null fields, so it cannot repair an earlier incorrect enum.
+  // The provider does not expose every processing rule: leave those untouched.
+  if (normalized.league.waiver_type !== undefined) {
+    await prisma.leagueWaiverSettings.updateMany({
+      where: { leagueId },
+      data: {
+        waiverType: normalized.league.waiver_type,
+        ...(typeof normalized.league.faab_budget === 'number'
+          ? { faabBudget: normalized.league.faab_budget } : {}),
+      },
+    })
+  }
   await prisma.league.update({ where: { id: leagueId }, data })
   const after = await prisma.league.findUnique({
     where: { id: leagueId },

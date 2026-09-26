@@ -18,6 +18,7 @@ import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSigna
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
+import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
 import ConnectedFranchiseWarRoom from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
@@ -32,8 +33,10 @@ import {
   resolveImportCoverageSummary,
   UNKNOWN_IMPORT_COVERAGE,
 } from '@/lib/league-import/importCoverageSummary'
-import DevyCore from '@/components/core-app/screens/DevyCore'
-import DevyLeagueTab from '@/components/core-app/screens/DevyLeagueTab'
+import {
+  DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
+  Matchup, Trades, Waivers, DraftHq, DraftBoard,
+} from '@/components/core-app/screens/LazyScreens'
 import { getDevyCoreData, leagueDevyNav, looksLikeDevyFormat, NO_DEVY_NAV } from '@/lib/core-app/devy'
 import type { TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
@@ -48,7 +51,6 @@ import {
   type PortfolioSummaryMeta,
 } from '@/lib/core-app/homePortfolioSummary'
 import { getChatBadge } from '@/lib/chat-core/chatBadge'
-import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import {
   LeagueDataCoverage,
@@ -57,7 +59,6 @@ import {
 } from '@/components/core-app/LeagueDataCoverage'
 import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
-import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
@@ -65,15 +66,12 @@ import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
-import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
-import Matchup from '@/components/core-app/screens/Matchup'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
-import Trades from '@/components/core-app/screens/Trades'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
 import { getTradesBoard, pointBoardAtReachableLeagues } from '@/lib/core-app/tradesBoard'
@@ -82,19 +80,16 @@ import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import { resolveCurrentWeek } from '@/lib/core-app/currentWeek'
 import FormatHub from '@/components/core-app/screens/FormatHub'
 import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
-import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
 import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
-import DraftHq from '@/components/core-app/screens/DraftHq'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
-import DraftBoard from '@/components/core-app/screens/DraftBoard'
 import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
 import { getScoutData } from '@/lib/core-app/scout'
@@ -1105,7 +1100,7 @@ export default async function AfCorePage({
      * chat. `null` on a read failure omits the chip rather than showing a made-up
      * tier or a zero balance the user does not actually have.
      */
-    aiAccessResolver.resolveForUser({ userId, now }).catch(() => null),
+    aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now }).catch(() => null),
   ])
   // Awaited below the admin gate. Every read above degrades rather than throws, but should one
   // ever reject while the gate is still being read, this keeps it from surfacing as unhandled;
@@ -1234,10 +1229,12 @@ export default async function AfCorePage({
          * Showing 'Free' is true today. Restoring the chip is a SPEND decision: put the
          * trial floor back first, then this line.
          */
-        name: access.hasSubscription
+        name: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)
+          ? 'AF Supreme · admin access'
+          : access.hasSubscription
           ? titleCase(access.subscription.plans[0] ?? 'premium')
           : 'Free',
-        tokensLeft: access.tokenBalance,
+        tokensLeft: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email) ? null : access.tokenBalance,
       }
     : null
 
@@ -4288,7 +4285,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             initial={liveGame}
             sport={liveGameSport}
             gameId={liveGameId}
-            backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}`}
+            backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
           <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />

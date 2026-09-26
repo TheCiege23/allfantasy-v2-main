@@ -55,6 +55,8 @@ export interface NormalizedLeagueSettings {
    * every provider mapper despite `League.status` existing in the schema) silently hid real leagues
    * from `lib/leagues/leagueListFilter.ts`'s "no status" exclusion heuristic. */
   status?: string | null
+  /** Provider-reported current matchup period, persisted for live/final score boundaries. */
+  current_week?: number
   playoff_team_count?: number
   regular_season_length?: number
   schedule_unit?: string

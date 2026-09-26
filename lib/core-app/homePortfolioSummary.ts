@@ -75,7 +75,7 @@ export const HOME_RIVALS_SCREEN = 'home-rivals'
  */
 export const HOME_PORTFOLIO_VERSION = 2
 export const HOME_EXPOSURE_VERSION = 1
-export const HOME_RIVALS_VERSION = 1
+export const HOME_RIVALS_VERSION = 2
 export const HOME_PORTFOLIO_TTL_MS = 3 * 60_000
 export const HOME_PORTFOLIO_SWR_MS = 10 * 60_000
 /**

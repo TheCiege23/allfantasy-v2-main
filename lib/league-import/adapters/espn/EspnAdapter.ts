@@ -198,6 +198,9 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         // (derived from `status.finalScoringPeriod` vs. current matchup period)
         // is the real, honest signal ESPN's API actually exposes.
         status: raw.league.isFinished ? 'complete' : 'in_season',
+        ...(raw.league.currentWeek != null && Number.isInteger(raw.league.currentWeek) && raw.league.currentWeek > 0
+          ? { current_week: raw.league.currentWeek }
+          : {}),
         playoff_team_count: raw.settings?.playoffTeamCount ?? raw.league.playoffTeamCount ?? undefined,
         regular_season_length:
           raw.settings?.regularSeasonMatchupCount ??

@@ -22,6 +22,22 @@ import { describe, expect, it, vi } from 'vitest'
 import { runSyncRounds, MAX_ROUNDS, type SyncPostResult } from '@/lib/core-app/syncRunLoop'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 
+describe('selected league refresh', () => {
+  it('sends only that league and reports the filtered candidate count', async () => {
+    const post = vi.fn(async (): Promise<SyncPostResult> => round({ totalCandidates: 1, attempted: 1, synced: 1 }))
+    const out = await runSyncRounds({ post, initialOnly: ['sleeper:123'] })
+    expect(post).toHaveBeenCalledWith(['sleeper:123'])
+    expect(out.total).toBe(1)
+    expect(out.status).toBe('done')
+  })
+  it('does not call an excluded league a successful refresh', async () => {
+    const post = vi.fn(async (): Promise<SyncPostResult> => round({ totalCandidates: 0, attempted: 0, synced: 0 }))
+    const out = await runSyncRounds({ post, initialOnly: ['sleeper:unavailable'] })
+    expect(out.status).toBe('empty')
+    expect(out.synced).toBe(0)
+  })
+})
+
 /** A round the server would send. Defaults describe a clean, finished run. */
 function round(over: Partial<{
   ok: boolean
@@ -143,7 +159,7 @@ describe('runSyncRounds — honest outcomes', () => {
 
     expect(out.status).toBe('partial')
     expect(out.tone).toBe('attention')
-    expect(out.message).toBe('Synced 1 of 3')
+    expect(out.message).toBe('Synced 1 of 3 · 1 failed · 1 already syncing')
   })
 
   it('keeps partial progress visible when a later round dies', async () => {

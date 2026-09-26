@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
+import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 
@@ -54,6 +56,7 @@ export type SyncDataRow = {
 }
 
 export type LeagueSyncData = {
+  syncKey?: string | null
   league: { id: string; name: string; platform: string }
   /** When this league was first connected to AllFantasy. */
   connectedSince: Date | null
@@ -241,21 +244,19 @@ export async function getLeagueSync(
       key: 'rosters',
       label: 'Rosters',
       note: 'Every roster, bench and IR or taxi slot',
-      state: rowState('rosters', rosterLatest?.updatedAt ?? null),
+      state: rowState('teams_rosters', rosterLatest?.updatedAt ?? null),
     },
     {
       key: 'transactions',
       label: 'Transactions',
       note: 'Trades, waiver claims and free-agent moves',
-      state: rowState('recent_transactions', null),
+      state: rowState('transactions', null),
     },
     {
       key: 'scores',
       label: 'Scores and matchups',
-      note: 'Weekly results, and every play while games are live',
-      state: matchupLatest
-        ? { kind: 'live', detail: `updated ${describeAge(matchupLatest.updatedAt, now)}` }
-        : { kind: 'never', detail: 'no weekly results on file' },
+      note: 'Weekly results and the latest scores received from your platform',
+      state: rowState('league_state', matchupLatest?.updatedAt ?? null),
     },
     {
       key: 'standings',
@@ -279,6 +280,11 @@ export async function getLeagueSync(
 
   return {
     available: true,
+    syncKey: (() => {
+      const provider = resolveProvider(String(league.platform ?? ''))
+      return provider && isImportProviderAvailable(provider) && league.platformLeagueId
+        ? `${provider}:${league.platformLeagueId}` : null
+    })(),
     league: {
       id: league.id,
       name: leagueName,

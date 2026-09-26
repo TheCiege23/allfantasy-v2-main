@@ -42,6 +42,7 @@ export type NotificationFilter =
   | 'commissioner'
 
 export type NotificationRow = {
+  relatedIds?: string[]
   id: string
   /** Which filter chip this falls under. */
   kind: NotificationFilter
@@ -265,6 +266,23 @@ function classify(text: string): NotificationFilter {
   return 'all'
 }
 
+/** Prefer structured categories; a news headline mentioning picks is not a draft alert. */
+function classifyStored(type: string, title: string, body: string | null, meta: unknown): NotificationFilter {
+  const category = categoryFromMeta(meta)
+  if (category) {
+    if (['lineup_reminders', 'lineup_alerts', 'injury_alerts'].includes(category)) return 'lineups'
+    if (['trade_proposals', 'trade_accept_reject'].includes(category)) return 'trades'
+    if (category === 'waiver_processing') return 'waivers'
+    if (category === 'chat_mentions') return 'mentions'
+    if (['league_announcements', 'commissioner_alerts'].includes(category)) return 'commissioner'
+    if (['draft_alerts', 'draft_intel_alerts'].includes(category)) return 'drafts'
+    return 'all'
+  }
+  if (/news/i.test(type)) return 'all'
+  const typed = classify(type)
+  return typed !== 'all' ? typed : classify(`${title} ${body ?? ''}`)
+}
+
 function severityOf(raw: string | null | undefined): 'bad' | 'warn' | 'info' {
   const s = (raw ?? '').toLowerCase()
   if (s === 'high' || s === 'critical' || s === 'bad') return 'bad'
@@ -382,7 +400,7 @@ export async function getNotificationsCenter(input: {
     kind === 'trades' ? 'trade' : kind === 'waivers' ? 'waivers' : kind === 'lineups' ? 'lineup' : 'league'
 
   const rest: NotificationRow[] = stored.map((n) => {
-    const kind = classify(`${n.type} ${n.title} ${n.body ?? ''}`)
+    const kind = classifyStored(n.type, n.title, n.body, n.meta)
     const handoff =
       n.leagueId && n.league
         ? handoffFor(
@@ -417,8 +435,8 @@ export async function getNotificationsCenter(input: {
       severity: severityOf(n.severity),
       action: n.leagueId
         ? {
-            label: `${verbFor(kind)} it`,
-            href: `/core?league=${encodeURIComponent(n.leagueId)}`,
+            label: kind === 'lineups' ? 'Review lineup' : kind === 'trades' ? 'Review trade' : kind === 'waivers' ? 'Review waivers' : kind === 'drafts' ? 'Open Draft HQ' : 'Open league',
+            href: `/core${kind === 'lineups' ? '/my-team' : kind === 'trades' ? '/trades' : kind === 'waivers' ? '/waivers' : kind === 'drafts' ? '/draft-hq' : ''}?league=${encodeURIComponent(n.leagueId)}`,
             external: false,
           }
         : null,

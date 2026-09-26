@@ -98,7 +98,7 @@ const STALE_WHILE_REVALIDATE_MS = 6 * 60 * 60_000
 registerScreenSummary<SeasonOutlook | null>({
   screen: SEASON_OUTLOOK_SCREEN,
   /** ⚠ Bump whenever `SeasonOutlook` changes shape — the version is part of the cache key. */
-  version: 2,
+  version: 3,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a partial league sweep would desynchronize the focused and cross-league boards.

@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   cacheUpsert: vi.fn(),
   groupBy: vi.fn(),
   ingest: vi.fn(),
+  metadata: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -16,6 +17,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/sleeper/sync/ingestSleeperPlayerScores', () => ({ ingestSleeperPlayerScoresForWeek: h.ingest }))
+vi.mock('@/lib/core-app/leagueWeekMetadata', () => ({ readLeagueWeekMetadata: h.metadata }))
 vi.mock('@/lib/live/playByPlayFeed', () => ({ inProgressRiGameIds: vi.fn(async () => []) }))
 
 import {
@@ -32,6 +34,7 @@ const leagues = (n: number) => Array.from({ length: n }, (_, i) => ({ platformLe
 beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
   h.cacheFind.mockResolvedValue(null)
+  h.metadata.mockResolvedValue([])
   h.cacheUpsert.mockResolvedValue({})
   // Week 1 played, week 2 the frontier.
   h.groupBy.mockResolvedValue([
@@ -154,6 +157,18 @@ describe('nflSeasonFor', () => {
 })
 
 describe('sleeperScoreTargetWeeks', () => {
+  it('uses the saved provider week despite an old empty or partially scored week', async () => {
+    h.metadata.mockResolvedValue([{ season: 2026, status: 'active', settings: { leg: '3' } }])
+    h.groupBy.mockResolvedValue([{ week: 1, _sum: { pointsFor: 0 } }, { week: 3, _sum: { pointsFor: 27 } }])
+    await expect(sleeperScoreTargetWeeks('L1', 2026)).resolves.toEqual([3, 2])
+    expect(h.groupBy).not.toHaveBeenCalled()
+  })
+
+  it('does not apply a different season provider marker to archived scores', async () => {
+    h.metadata.mockResolvedValue([{ season: 2026, status: 'active', settings: { leg: '3' } }])
+    await expect(sleeperScoreTargetWeeks('L1', 2025)).resolves.toEqual([2, 1])
+  })
+
   it('targets the frontier and the week before it', async () => {
     await expect(sleeperScoreTargetWeeks('L1', 2026)).resolves.toEqual([2, 1])
     expect(h.groupBy.mock.calls[0][0].where).toEqual({ leagueId: 'L1', seasonYear: 2026 })

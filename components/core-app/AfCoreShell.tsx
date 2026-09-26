@@ -1950,6 +1950,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     href={item.href}
                     className="af-nav-item"
                     data-core-nav=""
+                    prefetch={false}
                     data-active={item.key === active}
                     aria-current={item.key === active ? 'page' : undefined}
                   >

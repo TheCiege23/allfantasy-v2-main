@@ -142,7 +142,7 @@ export function DashboardV2({
         />
       </MobileChrome>
 
-      <main className="af-d2-main">
+      <div className="af-d2-main">
         {/*
           ⚠ COMPLIANCE, NOT CHROME. AfCoreShell renders this once so every screen
           inside it inherits the check — and this screen deliberately sits OUTSIDE
@@ -394,7 +394,7 @@ export function DashboardV2({
             hasCareer={Boolean(career && !career.isEmpty)}
           />
         </section>
-      </main>
+      </div>
 
       {/*
         Collapsed by default; opening is the user's decision. Nothing is generated

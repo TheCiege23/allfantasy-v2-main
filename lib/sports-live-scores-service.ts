@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { redactSecrets } from '@/lib/security/redactSecrets'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import type { LeagueSport } from '@prisma/client'
 import {
   DEFAULT_SPORT,
@@ -353,8 +353,8 @@ export function mapChainScoreToLiveScore(raw: Record<string, unknown>, _sport: L
   const awayRaw = String(raw.awayTeam ?? raw.away_team ?? raw.away ?? '').trim()
   if (!gameId || !homeRaw || !awayRaw) return null
 
-  const homeTeam = normalizeTeamAbbrev(homeRaw) || homeRaw
-  const awayTeam = normalizeTeamAbbrev(awayRaw) || awayRaw
+  const homeTeam = liveTeamAbbreviation(homeRaw, _sport)
+  const awayTeam = liveTeamAbbreviation(awayRaw, _sport)
   const status =
     String(raw.status ?? raw.game_status ?? raw.state ?? 'scheduled') || 'scheduled'
   const dateRaw = raw.date ?? raw.startTime ?? raw.start_time
@@ -559,12 +559,9 @@ export async function fetchEspnScoreboard(
        */
       const teamBox = comp.status.type.state === 'in' || comp.status.type.state === 'post'
       /*
-       * ⚠ A LIVE-ONLY SPORT KEEPS ESPN'S OWN ABBREVIATIONS. `normalizeTeamAbbrev` is
-       * the NFL table: it turned the WNBA's Los Angeles Sparks ("LA") into "LAR" and
-       * the Washington Mystics ("WSH") into "WAS". League sports keep it, because
-       * roster tie-ins match players to games through it.
+       * Only NFL uses the NFL alias table. Other sports retain provider abbreviations.
        */
-      const abbrev = (raw: string) => (isLiveOnlySport(sport) ? raw : normalizeTeamAbbrev(raw) || raw)
+      const abbrev = (raw: string) => liveTeamAbbreviation(raw, sport)
       return {
         gameId: event.id,
         homeTeam: abbrev(home.team.abbreviation),
@@ -1459,8 +1456,8 @@ async function readCachedLiveScoreRows(options: {
       ...(team
         ? {
             OR: [
-              { homeTeam: normalizeTeamAbbrev(team) || team },
-              { awayTeam: normalizeTeamAbbrev(team) || team },
+              { homeTeam: liveTeamAbbreviation(team, sport) },
+              { awayTeam: liveTeamAbbreviation(team, sport) },
             ],
           }
         : {}),
@@ -1491,7 +1488,7 @@ export async function getCachedLiveScoresForSport(options: {
   // Was: RI-if-present, else EVERY row from every source blended together.
   // That blend is how one fixture rendered once per feed, and how a dead feed's
   // 0-0 rows sat beside a live one's real score.
-  const useRows = pickFreshestSourceRows(cachedGames)
+  const useRows = pickFreshestSourceRows(cachedGames, Date.now(), sport === 'NFL' || sport === 'NCAAF' ? 'week' : 'day')
   const scores = await withCollegeTeamIdentity(sport, useRows.map(dbRowToLiveScore))
   const now = Date.now()
   const latestFetched =
@@ -1707,7 +1704,7 @@ export async function getLiveScoresForSport(options: {
   if (scores.length === 0) {
     // Same rule as the cached-only reader: one source, the freshest that ranks
     // highest, never a blend across feeds.
-    const useRows = pickFreshestSourceRows(cachedGames)
+    const useRows = pickFreshestSourceRows(cachedGames, Date.now(), sport === 'NFL' || sport === 'NCAAF' ? 'week' : 'day')
     scores = await withCollegeTeamIdentity(sport, useRows.map(dbRowToLiveScore))
     source = useRows[0]?.source === 'rolling_insights' ? 'db_cache_ri' : 'db_cache'
     fetchedAt = useRows[0]?.fetchedAt?.toISOString() ?? null
@@ -1715,7 +1712,7 @@ export async function getLiveScoresForSport(options: {
 
   const filtered = team
     ? scores.filter((s) => {
-        const norm = normalizeTeamAbbrev(team) || team
+        const norm = liveTeamAbbreviation(team, sport)
         return s.homeTeam === norm || s.awayTeam === norm
       })
     : scores

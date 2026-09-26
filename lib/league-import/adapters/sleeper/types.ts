@@ -19,6 +19,7 @@ export interface SleeperLeagueRaw {
     [divisionName: `division_${number}`]: string | undefined
   }
   settings?: {
+    leg?: number
     type?: number
     playoff_teams?: number
     num_teams?: number

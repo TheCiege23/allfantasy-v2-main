@@ -61,7 +61,7 @@ export const maxDuration = 300
  * the response still has to be written — a budget that runs to the ceiling
  * returns a timeout instead of the `remaining` list the loop needs to continue.
  */
-const TIME_BUDGET_MS = 200_000
+const TIME_BUDGET_MS = 20_000
 
 type LeagueOutcome = {
   key: string
@@ -126,7 +126,8 @@ export async function POST(req: NextRequest) {
 
   await Promise.all(
     Array.from(groups.values()).map(async (group) => {
-      for (const candidate of group) {
+      // Return progress after one league per provider, before the edge request window expires.
+      for (const candidate of group.slice(0, 1)) {
         /*
          * Checked BEFORE each league rather than after, so a league is never
          * started that the response cannot wait for. The first league in every
@@ -252,8 +253,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    /** Every resyncable league on the account — the denominator for progress. */
-    totalCandidates: all.length,
+    /** Candidates in this batch's requested scope; the client fixes the first denominator. */
+    totalCandidates: queue.length,
     /** Attempted in THIS round. */
     attempted: results.length,
     synced: results.filter((r) => r.status === 'synced').length,
