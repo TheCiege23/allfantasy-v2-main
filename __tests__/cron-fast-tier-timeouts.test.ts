@@ -86,6 +86,17 @@ describe('the real fast tier', () => {
     expect(tooTight).toEqual([])
   })
 
+  /*
+   * One route may tick every 5 minutes on a 300s budget, and ONLY because it caps its own per-tick
+   * work below that budget: `trade-grade-notify` hosts the 5-minute offer sweep (Guap's ruling,
+   * 2026-09-25), which stops STARTING leagues at 120s, while its 18-week rotation and offer ledger —
+   * the work the 300s was sized for — run only every third tick (`claimRotationTick`). The
+   * exception is checked against those two lines, so removing either turns this red again.
+   */
+  const BUDGETED_EVERY_TICK: Record<string, RegExp[]> = {
+    '/api/cron/trade-grade-notify': [/detectAndNotifyRecent\(\{ deadlineMs: 120_000/, /claimRotationTick\(\)/],
+  }
+
   it('keeps every timeout well inside its own cadence for the slow-cadence jobs', () => {
     // A long timeout is only safe because the routes declaring 300s run every 15-30 minutes.
     const { fast } = classifyCrons(readVercelCrons())
@@ -93,6 +104,12 @@ describe('the real fast tier', () => {
       const budget = routeMaxDurationMs(c.path, (rel: string) => readFileSync(rel, 'utf8'))
       if (budget !== 300_000) continue
       const minutes = Number(c.schedule.split(' ')[0].replace('*/', ''))
+      if (BUDGETED_EVERY_TICK[c.path]) {
+        const src = readFileSync(`app${c.path}/route.ts`, 'utf8')
+        for (const proof of BUDGETED_EVERY_TICK[c.path]!) expect(src).toMatch(proof)
+        expect(minutes).toBeGreaterThanOrEqual(5)
+        continue
+      }
       expect(minutes).toBeGreaterThanOrEqual(15)
     }
   })
