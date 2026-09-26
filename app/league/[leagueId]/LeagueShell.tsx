@@ -108,13 +108,20 @@ import { MyPicksTab } from './tabs/MyPicksTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
 import { LeagueTabPlaceholder } from './tabs/LeagueTabPlaceholder'
 import { PlayerStatCard } from './components/PlayerStatCard'
-// Deferred: only rendered once `settingsOpen` is true (AnimatePresence-gated inside),
-// and carries LeagueSettingsControlCenter's whole commissioner-settings tree with it.
+// Deferred, and carries LeagueSettingsControlCenter's whole commissioner-settings tree with it.
+// 🛑 THIS COMMENT USED TO SAY "only rendered once `settingsOpen` is true" AND IT WAS NOT: the modal
+// was mounted on every league page with `open={false}`, so this chunk downloaded on every view,
+// and when that download failed — a 120 s webpack chunk timeout on a loaded dev server, measured
+// 2026-09-26 at 136 s — the ChunkLoadError had no boundary nearer than the page and replaced the
+// WHOLE league page with "League temporarily unavailable", for a window nobody had opened.
+// It is now mounted on first open (see `settingsEverOpened`) inside its own ErrorBoundary.
 const LeagueSettingsModal = dynamic(
   () => import('./components/LeagueSettingsModal').then((m) => m.LeagueSettingsModal),
   { ssr: false }
 )
 import { CommissionerSettingsModal } from './components/CommissionerSettingsModal'
+import { ErrorBoundary } from '@/components/error-handling/ErrorBoundary'
+import { toast } from 'sonner'
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
 import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
 import { RedraftTab } from './tabs/RedraftTab'
@@ -780,6 +787,15 @@ export function LeagueShell({
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsInitialPanel, setSettingsInitialPanel] = useState<string | null>(null)
+  /*
+   * The settings modal mounts on FIRST open and then stays mounted, so its code is fetched only
+   * when someone asks for settings and its close animation still plays afterwards. Set during
+   * render so the first open mounts it in the same pass. See the note on `LeagueSettingsModal`.
+   */
+  const settingsEverOpened = useRef(false)
+  if (settingsOpen) settingsEverOpened.current = true
+  /* Its code failed to load: every later open says so instead of silently doing nothing. */
+  const [settingsLoadFailed, setSettingsLoadFailed] = useState(false)
   const [leaveLeagueHintOpen, setLeaveLeagueHintOpen] = useState(false)
   const [portalMounted, setPortalMounted] = useState(false)
   const [idpUi, setIdpUi] = useState<{ active: boolean; positionMode: string } | null>(null)
@@ -1053,6 +1069,22 @@ export function LeagueShell({
       window.history.replaceState(null, '', q ? `${base}?${q}` : base)
     }
   }, [activeTab, league.id, nflRedraftCore, pathname, searchParams, tabDefs])
+
+  /*
+   * The settings code could not be fetched. The lazy loader caches its failure, so a retry needs a
+   * reload; say that on every open rather than leave a Settings button that does nothing.
+   */
+  const settingsLoadFailedMessage = 'Settings didn’t load. Refresh the page to try again.'
+  const onSettingsLoadError = useCallback(() => {
+    setSettingsLoadFailed(true)
+    closeLeagueSettingsModal()
+    toast.error(settingsLoadFailedMessage)
+  }, [closeLeagueSettingsModal])
+  useEffect(() => {
+    if (!settingsOpen || !settingsLoadFailed) return
+    closeLeagueSettingsModal()
+    toast.error(settingsLoadFailedMessage)
+  }, [settingsOpen, settingsLoadFailed, closeLeagueSettingsModal])
 
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
@@ -1687,8 +1719,10 @@ export function LeagueShell({
           )
         : null}
 
-      {portalMounted
+      {portalMounted && settingsEverOpened.current && !settingsLoadFailed
         ? createPortal(
+            /* A failure here closes settings and says so — it must never take the league page down. */
+            <ErrorBoundary fallback={null} onError={onSettingsLoadError}>
             <LeagueSettingsModal
               open={settingsOpen}
               onClose={closeLeagueSettingsModal}
@@ -1705,7 +1739,8 @@ export function LeagueShell({
                 closeLeagueSettingsModal()
                 setActiveTab(nflRedraftCore ? 'draft' : tabDefs[0]?.id ?? 'draft')
               }}
-            />,
+            />
+            </ErrorBoundary>,
             document.body,
           )
         : null}
