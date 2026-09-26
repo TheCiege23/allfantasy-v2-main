@@ -24,8 +24,15 @@ export async function resolveEvaluationLeagueId(args: {
   const supplied = args.suppliedLeagueId?.trim()
   const userId = args.userId?.trim()
   if (!supplied || !userId) return null
-  const rows = await prisma.league
-    .findMany({
+  /*
+   * ⚠ `try` AROUND THE CALL, NOT `.catch` ON ITS PROMISE. A `.catch` only sees a rejection; a delegate
+   * that is missing or throws synchronously escaped it and turned a grading gap into a 500 for the
+   * whole trade evaluator — found by `trade-evaluator-normalized-context.test.ts`, whose Prisma mock
+   * has no `league.findMany`.
+   */
+  let rows: Array<{ id: string; userId: string }> = []
+  try {
+    rows = await prisma.league.findMany({
       where: {
         AND: [
           { OR: [{ id: supplied }, { platformLeagueId: supplied }] },
@@ -37,7 +44,9 @@ export async function resolveEvaluationLeagueId(args: {
       orderBy: [{ season: 'desc' }, { id: 'asc' }],
       take: 10,
     })
-    .catch(() => [] as Array<{ id: string; userId: string }>)
+  } catch {
+    return null
+  }
   if (rows.length === 0) return null
   return (rows.find((r) => r.id === supplied) ?? rows.find((r) => r.userId === userId) ?? rows[0]!).id
 }

@@ -165,6 +165,14 @@ describe('resolveEvaluationLeagueId — only a league the viewer belongs to', ()
     findMany.mockImplementation(() => Promise.reject(new Error('down')))
     expect(await resolveEvaluationLeagueId({ suppliedLeagueId: 'sl_1', userId: 'u1' })).toBeNull()
   })
+
+  /* The regression that made /api/trade-evaluator 500: a `.catch` never sees a synchronous throw. */
+  it('a delegate that throws synchronously is no league too', async () => {
+    findMany.mockImplementation(() => {
+      throw new TypeError('findMany is not a function')
+    })
+    expect(await resolveEvaluationLeagueId({ suppliedLeagueId: 'sl_1', userId: 'u1' })).toBeNull()
+  })
 })
 
 function base() {

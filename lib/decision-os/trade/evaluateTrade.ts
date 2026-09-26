@@ -240,7 +240,8 @@ export async function evaluateTrade(
   const d: EvaluateTradeDeps = { ...defaultEvaluateTradeDeps, ...deps }
   const evaluatedAt = input.evaluatedAt ?? new Date().toISOString()
 
-  const gradePromise = d.grade(input).catch(
+  // Through `.then`, so a grader that throws SYNCHRONOUSLY is a withheld grade too, not a thrown call.
+  const gradePromise = Promise.resolve().then(() => d.grade(input)).catch(
     (): TradeGradeView => ({ graded: false, reason: 'This deal could not be priced just now.', basis: null }),
   )
 

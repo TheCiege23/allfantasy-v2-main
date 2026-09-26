@@ -166,6 +166,14 @@ describe('evaluateTrade — refusals, never a default value', () => {
     expect(r.grade).toMatchObject({ graded: false, reason: 'This deal could not be priced just now.' })
   })
 
+  it('a grader that throws SYNCHRONOUSLY is a withheld grade as well', async () => {
+    const grade = (() => {
+      throw new TypeError('boom')
+    }) as unknown as EvaluateTradeDeps['grade']
+    const r = await evaluateTrade(base(), deps({ grade }))
+    expect(r.grade).toMatchObject({ graded: false, reason: 'This deal could not be priced just now.' })
+  })
+
   it('a league that cannot be read withholds instead of grading', async () => {
     const r = await evaluateTrade(base({ grader: null }), { saveReceipt: async () => ({ id: 'r' }) })
     expect(r.grade).toMatchObject({ graded: false, reason: expect.stringContaining('could not be loaded') })
