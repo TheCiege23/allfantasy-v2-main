@@ -134,3 +134,32 @@ describe('dashboard league list — slim settings', () => {
     expect(fallback?.args).toEqual({ where: { id: { in: ['paid', 'free'] } }, select: { id: true, settings: true } })
   })
 })
+
+/*
+ * `rosterDetail: 'count'` — the /core page's opt-in. Measured on the test DB 2026-09-26 for the heaviest
+ * account: 2,051 KB → 1,000 KB and ~530 ms → ~260 ms warm, with the output identical once `rosters` is
+ * removed from both sides (sorted-key sha256 7032c9273c3c2bb1) and the same 906 roster rows counted.
+ */
+describe('dashboard league list — rosterDetail', () => {
+  it('🛑 the default still returns every roster with its playerData — eleven callers read it', async () => {
+    await getDashboardLeagueListForUser(USER)
+    expect(membershipCall().args.select.rosters).toEqual({
+      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+    })
+  })
+
+  it("🛑 'count' selects roster ids only", async () => {
+    await getDashboardLeagueListForUser(USER, { rosterDetail: 'count' })
+    expect(membershipCall().args.select.rosters).toEqual({ select: { id: true } })
+  })
+
+  it("'count' keeps the team-count fallback, which is the only thing the loader reads rosters for", async () => {
+    db.answers['league.findMany'] = (args) =>
+      args?.where?.id?.in
+        ? []
+        : [{ ...leagueRow('sized'), leagueSize: null, rosters: [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }] }]
+    const { leagues } = (await getDashboardLeagueListForUser(USER, { rosterDetail: 'count' })) as { leagues: any[] }
+    expect(leagues.find((l) => l.id === 'sized').teamCount).toBe(3)
+  })
+})
+

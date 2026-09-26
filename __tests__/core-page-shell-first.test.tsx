@@ -438,6 +438,20 @@ describe('/core with an unknown segment', () => {
     // Positive control for the "before the session" assertion above: a known segment does read it.
     expect(getServerSession).toHaveBeenCalled()
   })
+
+  /*
+   * 🛑 THE FRAME'S FIRST READ ASKS FOR ROSTER IDS ONLY. Every lineup on a /core screen is read by
+   * the loader that shows it; this list's rosters were ~1.1 MB of payload on every click for the
+   * heaviest test account and nothing on the page read them. See `rosterDetail` in the loader.
+   */
+  it("reads the league list with rosterDetail: 'count'", { timeout: 180_000 }, async () => {
+    h.gated = false
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    vi.mocked(getDashboardLeagueListForUser).mockClear()
+    const AfCorePage = await loadPage()
+    await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
+    expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count' })
+  })
 })
 
 /*

@@ -675,7 +675,11 @@ export default async function AfCorePage({
     email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
   }).catch(() => null)
 
-  const leagueListPayload = await getDashboardLeagueListForUser(userId).catch(() => null)
+  /*
+   * `rosterDetail: 'count'` — this page reads no roster off the list; every screen that needs a lineup
+   * queries rosters itself. See the option's note in get-dashboard-league-list.ts for the census.
+   */
+  const leagueListPayload = await getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null)
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
   /*
