@@ -128,18 +128,6 @@ export function Tools({ data }: ToolsProps) {
 
       <p className="af-tl-scopenote">{data.leagueScopedNote}</p>
 
-      {/*
-        The pending product decision, on the page rather than only in a comment.
-        The handoff asks that implementation not silently pick a direction; the
-        honest version of "not picking" is saying so where it can be seen.
-      */}
-      {data.openDecision ? (
-        <aside className="af-tl-decision">
-          <p className="af-tl-decision-eyebrow af-label">Open decision</p>
-          <h2 className="af-tl-decision-title">{data.openDecision.title}</h2>
-          <p className="af-tl-decision-body">{data.openDecision.body}</p>
-        </aside>
-      ) : null}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import {
 } from './playerIdentityCompose'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
+import { leagueWeekProgress } from './leagueWeekProgress'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
@@ -355,7 +356,8 @@ export async function getMatchupData(
    * explicit ?week= still wins; only the inference changed. See
    * lib/core-app/currentWeek.ts.
    */
-  const latest = await resolveCurrentWeekForLeague(platformLeagueId, weekParam ?? null)
+  const progress = leagueWeekProgress(league)
+  const latest = await resolveCurrentWeekForLeague(platformLeagueId, weekParam ?? progress.currentWeek)
 
   if (!latest) {
     const noWeek = {
@@ -376,7 +378,7 @@ export async function getMatchupData(
 
   const week: MatchupData['week'] = {
     available: true,
-    data: { week: latest.week, season: latest.seasonYear, isFinal: anyPoints },
+    data: { week: latest.week, season: latest.seasonYear, isFinal: progress.isFinal(latest.seasonYear, latest.week) },
   }
 
   if (!myTeam?.externalId) {

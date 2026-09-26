@@ -50,6 +50,7 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const seasonNum = league.season ? parseInt(league.season, 10) : null
     const rosterCount = league.total_rosters ?? league.settings?.num_teams ?? 0
     const settings = (league.settings ?? {}) as Record<string, unknown>
+    const currentWeek = Number(settings.leg)
     const type = settings.type
     const isDynasty = type === 2
     /*
@@ -117,6 +118,9 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       // Explicit `null` (not `undefined`) when genuinely absent — an honest "no status
       // reported" signal, never a fabricated default.
       status: league.status ?? null,
+      ...(Number.isInteger(currentWeek) && currentWeek > 0 && currentWeek <= 30
+        ? { current_week: currentWeek }
+        : {}),
       playoff_team_count: playoffTeams ?? undefined,
       regular_season_length: regularSeasonLength,
       schedule_unit: 'week',

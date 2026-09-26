@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { runSyncRounds } from '@/lib/core-app/syncRunLoop'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -26,9 +26,8 @@ import { runSyncRounds } from '@/lib/core-app/syncRunLoop'
  * stale-data problem it was added to fix, wearing a success message.
  */
 
-type Phase = 'idle' | 'busy' | 'done' | 'error'
-
 export type SyncNowButtonProps = {
+  onlyKey?: string | null
   /**
    * `panel` is the full-width action row on the /core home screen — the visible
    * button. `chip` is the compact topbar form carried on every other screen.
@@ -49,71 +48,26 @@ export type SyncNowButtonProps = {
   eligibleCount: number | null
 }
 
-export function SyncNowButton({ variant = 'chip', eligibleCount }: SyncNowButtonProps) {
+export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: SyncNowButtonProps) {
   const router = useRouter()
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [message, setMessage] = useState<string | null>(null)
-  /* A full-account resync outlives most screens; don't set state after unmount. */
-  const alive = useRef(true)
+  const { phase, message, completion } = useSyncExternalStore(subscribeClientSync, getClientSyncSnapshot, getServerSyncSnapshot)
   useEffect(() => {
-    alive.current = true
-    return () => {
-      alive.current = false
-    }
-  }, [])
+    if (claimClientSyncRefresh(completion)) router.refresh()
+  }, [completion, router])
 
   /* Only a counted zero disables. See `eligibleCount` above for why null does not. */
   const nothingToSync = eligibleCount === 0
   const disabled = phase === 'busy' || nothingToSync
 
-  const run = useCallback(async () => {
+  const run = useCallback(() => {
     if (phase === 'busy' || nothingToSync) return
-    setPhase('busy')
-    setMessage(null)
+    void startClientSync(onlyKey).catch(() => undefined)
+  }, [phase, nothingToSync, onlyKey])
 
-    /*
-     * The loop itself is `runSyncRounds` in lib/core-app/syncRunLoop.ts — pure,
-     * injectable and unit-tested, because it is the one part of this feature
-     * that can do unbounded work against live vendor APIs. All this component
-     * supplies is the transport and the unmount guard.
-     */
-    const outcome = await runSyncRounds({
-      post: async (only) => {
-        try {
-          const res = await fetch('/api/core/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            cache: 'no-store',
-            body: JSON.stringify(only ? { only } : {}),
-          })
-          return { httpOk: res.ok, round: await res.json().catch(() => null) }
-        } catch {
-          return { httpOk: false, round: null }
-        }
-      },
-      onProgress: (text) => {
-        if (alive.current) setMessage(text)
-      },
-    })
-
-    /* Navigated away mid-run. Rounds already sent still completed server-side. */
-    if (!alive.current) return
-
-    setPhase(outcome.tone === 'ok' ? 'done' : 'error')
-    setMessage(outcome.message)
-
-    /*
-     * Every /core screen is server-rendered from the tables the sync just
-     * wrote, so a refresh is what makes the press visible. Without it the
-     * button reports success beside numbers that have not moved.
-     */
-    router.refresh()
-  }, [phase, nothingToSync, router])
-
-  const label = phase === 'busy' ? 'Syncing…' : 'Sync now'
+  const label = phase === 'busy' ? 'Syncing…' : onlyKey ? 'Sync this league' : 'Sync now'
   const hint = nothingToSync
     ? 'Import a league first — there is nothing to sync yet'
-    : 'Pick up new activity in your connected leagues'
+    : onlyKey ? 'Refresh rosters, scores and activity for this league' : 'Pick up new activity in your connected leagues'
 
   const button = (
     <button

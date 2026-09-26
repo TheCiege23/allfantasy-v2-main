@@ -119,9 +119,9 @@ describe('getLivePageData — WNBA', () => {
     expect([g.away.abbrev, g.home.abbrev]).toEqual(['LA', 'WSH'])
   })
 
-  it('control: a league sport still goes through the NFL table, as before', async () => {
+  it('control: NFL still uses its historical team aliases', async () => {
     const { getLivePageData } = await import('@/lib/live/liveScoresPage')
-    const g = (await getLivePageData({ userId: null, sport: 'NBA', scope: 'all' })).games[0]!
+    const g = (await getLivePageData({ userId: null, sport: 'NFL', scope: 'all' })).games[0]!
     expect([g.away.abbrev, g.home.abbrev]).toEqual(['LAR', 'WAS'])
   })
 })
@@ -178,10 +178,10 @@ describe('ESPN — WNBA', () => {
     expect(fetchWithChain).not.toHaveBeenCalled()
   })
 
-  it('control: the NBA scoreboard still maps WSH to WAS', async () => {
+  it('control: the NFL scoreboard still maps WSH to WAS', async () => {
     fetchMock.mockImplementation(async () => ok({ events: [wnbaEvent()] }))
     const { fetchEspnScoreboard } = await import('@/lib/sports-live-scores-service')
-    const [r] = await fetchEspnScoreboard('NBA')
+    const [r] = await fetchEspnScoreboard('NFL')
     expect([r!.homeTeam, r!.awayTeam]).toEqual(['WAS', 'LAR'])
   })
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import SyncNowButton from '../SyncNowButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
 
@@ -78,6 +79,9 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </p>
       </header>
 
+      {data.syncKey ? <SyncNowButton onlyKey={data.syncKey} eligibleCount={1} /> : (
+        <p className="af-sy-sub">This league has no supported external connection to refresh.</p>
+      )}
       {/* ── The stuck-run warning ───────────────────────────────────── */}
       {orphanedRun ? (
         <div className="af-sy-alert" data-tone="bad">

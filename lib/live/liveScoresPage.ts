@@ -9,11 +9,11 @@ import {
 } from '@/lib/sports-live-scores-service'
 import { getPlayFeed, type PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import { estimateWinProbability, type WinProbability } from '@/lib/live/winProbability'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
-import { isLiveOnlySport, isLiveSport, type LiveSport } from '@/lib/sport-scope'
+import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
 import {
   basketballPeriodLabel,
   espnScoreboardDatesForWindow,
@@ -825,10 +825,9 @@ export async function getLivePageData(opts: {
   const nowMs = Date.now()
   const games: LiveGameCard[] = rows.map((sourceRow) => {
     const row = withRememberedPresentation(sport, sourceRow, nowMs)
-    // A live-only sport keeps ESPN's abbreviations: the NFL table would make the
-    // WNBA's "LA" Sparks "LAR" (see fetchEspnScoreboard).
-    const home = isLiveOnlySport(sport) ? row.homeTeam : normalizeTeamAbbrev(row.homeTeam) || row.homeTeam
-    const away = isLiveOnlySport(sport) ? row.awayTeam : normalizeTeamAbbrev(row.awayTeam) || row.awayTeam
+    // NFL aliases such as STL -> LAR must not rename baseball or basketball clubs.
+    const home = liveTeamAbbreviation(row.homeTeam, sport)
+    const away = liveTeamAbbreviation(row.awayTeam, sport)
     const involved = [...(byTeam.get(home) ?? []), ...(byTeam.get(away) ?? [])]
 
     const tieIns: LiveRosterTieIn[] = []
@@ -932,13 +931,13 @@ export async function getLivePageData(opts: {
        */
       leadersArePregame: !played && (row.leaders ?? []).length > 0,
       espnDetail: row.leaders !== undefined,
-      winProbability: estimateWinProbability({
+      winProbability: sport === 'NFL' && played && !row.completed ? estimateWinProbability({
         homeScore: row.homeScore,
         awayScore: row.awayScore,
         period: row.period,
         clock: row.clock,
         completed: row.completed,
-      }),
+      }) : null,
       topPerformer: row.topPerformer,
       tieIns,
       leaguesAffected: new Set(tieIns.map((t) => t.leagueId)).size,

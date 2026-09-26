@@ -637,7 +637,7 @@ export function PlayerFinder({
         </p>
       </aside>
 
-      <main className="af-pf-main">
+      <section className="af-pf-main" aria-label="Player details">
         {/* ── Game day home: your flagged starters, before any search ──── */}
         {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}
 
@@ -1112,7 +1112,7 @@ export function PlayerFinder({
             <p className="af-pf-unavailable">Pick a match to see slots, injury and season history.</p>
           </section>
         )}
-      </main>
+      </section>
 
       {/*
         The decision column. It renders only when there is a resolved player AND

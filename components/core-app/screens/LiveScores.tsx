@@ -590,7 +590,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                 scope={scope}
                 selectedLeagueId={selectedLeagueId}
                 lastPlay={latestPlayByGame.get(game.gameId) ?? null}
-                detailHref={gameDetailHref(game, '/core/live')}
+                detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
                 scoreChanged={litGames.has(game.gameId)}
               />
             ))
@@ -827,7 +827,7 @@ export function GameCard({
 }) {
   const lowDataOn = useLowData().lowData
   const wp = game.winProbability
-  const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
+  const weekLabel = game.week != null && game.week > 0 ? `${game.sport} · Week ${game.week}` : game.sport
   const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
   const isBasketball = isBasketballSport(game.sport)
   const situation = game.situation

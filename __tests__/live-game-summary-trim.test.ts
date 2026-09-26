@@ -244,6 +244,11 @@ describe('athletesInPlayText', () => {
 })
 
 describe('cache lifetime and card link', () => {
+  it('retains the selected league when opening a core game detail', () => {
+    const game = { sport: 'MLB', gameId: '401817091', espnDetail: true }
+    expect(gameDetailHref(game, '/core/live', 'league-one')).toBe('/core/live?sport=MLB&game=401817091&league=league-one')
+    expect(gameDetailHref(game, '/live', 'league-one')).toBe('/live?sport=MLB&game=401817091')
+  })
   it('caches live games briefly and finals for hours', () => {
     expect(summaryTtlMs('in')).toBe(20_000)
     expect(summaryTtlMs('pre')).toBe(300_000)

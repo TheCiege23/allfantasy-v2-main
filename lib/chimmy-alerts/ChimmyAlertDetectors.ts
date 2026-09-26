@@ -59,7 +59,7 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
       : 'Update your lineup.'
     const swap = player.replacement
       ? player.replacement.projectedPoints != null
-        ? ` ${player.replacement.playerName} is your best bench option (${player.replacement.projectedPoints.toFixed(1)} projected).`
+        ? ` Consider ${player.replacement.playerName} from your bench (${player.replacement.projectedPoints.toFixed(1)} projected); check slot eligibility and player locks.`
         : ` ${player.replacement.playerName} is available on your bench.`
       : ''
     // Staleness is stated, never silently dropped — an old designation may no longer hold.

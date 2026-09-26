@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   cache: new Map<string, unknown>(),
   upsert: vi.fn(),
   focus: vi.fn(),
+  leagueMetadata: {} as Record<string, unknown>,
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -23,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
           : h.teams,
       ),
     },
-    league: { findMany: vi.fn(async () => [{ id: 'L1', sport: 'NFL' }]) },
+    league: { findMany: vi.fn(async () => [{ id: 'L1', sport: 'NFL', ...h.leagueMetadata }]) },
     sportsDataCache: {
       findMany: vi.fn(async (args: { where: { cacheKey: { in: string[] } } }) =>
         args.where.cacheKey.in.filter((k) => h.cache.has(k)).map((k) => ({ cacheKey: k, data: h.cache.get(k) })),
@@ -97,6 +98,7 @@ const LEAGUE = {
 beforeEach(() => {
   vi.clearAllMocks()
   h.cache.clear()
+  h.leagueMetadata = {}
   h.upsert.mockImplementation(async (args: { create: { cacheKey: string; data: unknown } }) => {
     h.cache.set(args.create.cacheKey, args.create.data)
     return {}
@@ -106,6 +108,16 @@ beforeEach(() => {
 })
 
 describe('getSeasonOutlook', () => {
+  it('keeps a partially scored current week in the remaining schedule', async () => {
+    h.leagueMetadata = { season: 2026, settings: { leg: 4 } }
+    for (const r of h.matchups) {
+      if (r.week === 4) { r.pointsFor = 29; r.pointsAgainst = 47; r.win = 0 }
+    }
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.leagues[0].you!.schedule?.pastGames).toBe(3)
+    expect(out.leagues[0].weeksRemaining).toBe(3)
+    expect(out.leagues[0].assumptions.remainingGames).toBe(12)
+  })
   it('uses the league-stated field and stops the schedule at the last regular week', async () => {
     const out = await getSeasonOutlook('me', [LEAGUE])
     const l = out.leagues[0]

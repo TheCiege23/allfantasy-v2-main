@@ -356,8 +356,8 @@ function buildWaiverOpportunity(input: ManagerRecommendationInput): Recommendati
       : null,
     prerequisites: ['League must use waiver wire (not free-agent system)'],
     recommendedActions: [
-      { action: 'Review available players every Tuesday morning', rationale: 'Waiver claims process weekly — early priority claims are highest value' },
-      { action: 'Set waiver priority targets before the weekly deadline', rationale: 'Avoids reactive claims based only on the latest game results' },
+      { action: 'Review available players and your league’s pickup rules', rationale: 'Check when claims process or whether free agents can be added immediately' },
+      { action: 'Set pickup targets before your league’s next deadline', rationale: 'Use your league’s actual claim schedule when planning moves' },
       { action: 'Monitor injury reports for pickup opportunities', rationale: 'Streamlining transactions improves roster ceiling' },
     ],
     rollbackCriteria: ['Dismiss when waiver or trade activity rises above the minimal threshold'],

@@ -548,7 +548,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
       </nav>
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
-      <main className="af3a-main">
+      <div className="af3a-main">
         <div className="af3a-topbar">
           <TopSearch />
           <span className="af3a-chip">
@@ -640,7 +640,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             </div>
           </section>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

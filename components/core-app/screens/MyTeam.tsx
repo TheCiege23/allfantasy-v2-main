@@ -68,7 +68,7 @@ function LockCountdown({
   const s = total % 60
 
   const label = locked
-    ? 'Locked'
+    ? 'Games started'
     : d > 0
       ? `${d}d ${h}h ${m}m`
       : `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
@@ -87,11 +87,12 @@ function LockCountdown({
         and are headings.
       */}
       <span className="af-label af-mt-lock-label">
-        {week != null ? `Week ${week} locks` : 'Lineup locks'}
+        {week != null ? `Week ${week} · first kickoff` : 'First kickoff'}
       </span>
       <span className="af-num af-mt-lock-time">{label}</span>
       <span className="af-mt-lock-note">
         {at.toUTCString().slice(0, 22)} UTC
+        {locked ? ' · check individual player locks on your platform' : null}
         {anyEmptySlot ? ' · a starting slot is still empty' : null}
       </span>
       {anyEmptySlot && !locked ? (

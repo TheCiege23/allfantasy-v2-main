@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueWeekProgress } from './leagueWeekProgress'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -218,9 +219,15 @@ export async function getLeagueCareer(
   const bySeason = new Map<number, CareerSeasonLine>()
   const rivals = new Map<string, { wins: number; losses: number; meetings: number; marginSum: number }>()
 
+  const progress = leagueWeekProgress(league)
+  const seenGames = new Set<string>()
   for (const f of facts) {
     if (!isCompleted(f)) continue
     if (f.season == null) continue
+    if (progress.currentWeek != null && !progress.isFinal(f.season, f.weekOrPeriod)) continue
+    const key = `${f.season}:${f.weekOrPeriod}:${[String(f.teamA), String(f.teamB)].sort().join(':')}`
+    if (seenGames.has(key)) continue
+    seenGames.add(key)
 
     const aIsMine = mySlots.has(String(f.teamA))
     const bIsMine = mySlots.has(String(f.teamB))

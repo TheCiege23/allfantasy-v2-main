@@ -18,6 +18,7 @@ import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSigna
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
+import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
 import ConnectedFranchiseWarRoom from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
@@ -1105,7 +1106,7 @@ export default async function AfCorePage({
      * chat. `null` on a read failure omits the chip rather than showing a made-up
      * tier or a zero balance the user does not actually have.
      */
-    aiAccessResolver.resolveForUser({ userId, now }).catch(() => null),
+    aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now }).catch(() => null),
   ])
   // Awaited below the admin gate. Every read above degrades rather than throws, but should one
   // ever reject while the gate is still being read, this keeps it from surfacing as unhandled;
@@ -1234,10 +1235,12 @@ export default async function AfCorePage({
          * Showing 'Free' is true today. Restoring the chip is a SPEND decision: put the
          * trial floor back first, then this line.
          */
-        name: access.hasSubscription
+        name: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)
+          ? 'AF Supreme · admin access'
+          : access.hasSubscription
           ? titleCase(access.subscription.plans[0] ?? 'premium')
           : 'Free',
-        tokensLeft: access.tokenBalance,
+        tokensLeft: isSubscriptionEntitlementBypassUserId(userId, session?.user?.email) ? null : access.tokenBalance,
       }
     : null
 
@@ -4288,7 +4291,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             initial={liveGame}
             sport={liveGameSport}
             gameId={liveGameId}
-            backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}`}
+            backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
           <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />

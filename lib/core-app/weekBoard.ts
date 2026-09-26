@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom } from './currentWeek'
+import { leagueWeekProgress } from './leagueWeekProgress'
+import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
 import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
 
@@ -336,6 +338,7 @@ type LeagueInput = {
 }
 
 export type MatchupRow = {
+  finalized?: boolean
   leagueId: string
   seasonYear: number
   week: number
@@ -386,7 +389,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     }
   }
 
-  const [rows, teams, mine, priorFacts] = await Promise.all([
+  const [rows, teams, mine, priorFacts, periodMetadata] = await Promise.all([
     prisma.weeklyMatchup.findMany({
       where: { leagueId: { in: platformIds } },
       select: {
@@ -473,6 +476,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
         }>
       }
     })(),
+    readLeagueWeekMetadata(leagues.map((l) => l.id)),
   ])
 
   /*
@@ -577,10 +581,17 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    * slate to protect, and resolving from history is what keeps a league whose only scoring is
    * imported from vanishing entirely.
    */
+  const progressByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, leagueWeekProgress(l)]))
+  const seasonByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, l.season]))
   const resolved = resolveCurrentWeekFrom(rows.length > 0 ? rows : priorRows)
-  const latest: { season: number; week: number } | null = resolved
+  const stated = [...progressByLeague].flatMap(([pid, progress]) => {
+    const season = seasonByLeague.get(pid)
+    return progress.currentWeek != null && season != null && rows.some((r) => r.leagueId === pid && r.seasonYear === season && r.week === progress.currentWeek)
+      ? [{ season, week: progress.currentWeek }] : []
+  }).sort((a, b) => b.season - a.season || a.week - b.week)[0]
+  const latest: { season: number; week: number } | null = stated ?? (resolved
     ? { season: resolved.season, week: resolved.week }
-    : null
+    : null)
 
   /*
    * ⚠ THE COMBINED SET IS WHAT LEAVES, AND THE TWO CONSUMERS WANT DIFFERENT HALVES OF IT.
@@ -589,7 +600,10 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    * scored row regardless of season, which is precisely the point of this change.
    */
   return {
-    rows: priorRows.length > 0 ? [...rows, ...priorRows] : rows,
+    rows: (priorRows.length > 0 ? [...rows, ...priorRows] : rows).map((r) => {
+      const progress = progressByLeague.get(r.leagueId)
+      return { ...r, finalized: progress?.currentWeek != null ? progress.isFinal(r.seasonYear, r.week) : undefined }
+    }),
     leagueByPlatformId,
     myRosters,
     rosterNames,
@@ -602,7 +616,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
 export function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sigma: number; n: number }> {
   const buckets = new Map<string, number[]>()
   for (const r of rows) {
-    if (!isScored(r)) continue
+    if (r.finalized === false || !isScored(r)) continue
     const key = `${r.leagueId}:${r.rosterId}`
     const list = buckets.get(key)
     if (list) list.push(r.pointsFor)
@@ -757,7 +771,7 @@ export function priorSeasonRowsFromFacts(
 export function buildFormProfiles(rows: MatchupRow[]): Map<string, { mu: number; n: number }> {
   const buckets = new Map<string, number[]>()
   for (const r of rows) {
-    if (!isScored(r)) continue
+    if (r.finalized === false || !isScored(r)) continue
     const key = `${r.leagueId}:${r.rosterId}`
     const list = buckets.get(key)
     if (list) list.push(r.pointsFor)
@@ -1232,7 +1246,7 @@ export async function getWeekBoard(
           if (them.rosterId !== oppRosterId) continue
           // Only games actually played count as meetings; a scheduled fixture is
           // not a head-to-head result.
-          if (!isScored(you) && !isScored(them)) continue
+          if (you.finalized === false || them.finalized === false || (!isScored(you) && !isScored(them))) continue
           meetings += 1
           marginSum += you.pointsFor - them.pointsFor
           if (you.pointsFor > them.pointsFor) wins += 1
@@ -1267,7 +1281,7 @@ export async function getWeekBoard(
           pair.a.pointsAgainst > 0 ||
           pair.b.pointsFor > 0 ||
           pair.b.pointsAgainst > 0
-        if (!scored) continue
+        if (!scored || pair.a.finalized === false || pair.b.finalized === false) continue
         // A tie advances neither column; it is rare and inventing a bucket for
         // it would misreport two teams rather than omit one game.
         if (pair.a.pointsFor === pair.b.pointsFor) continue
@@ -1406,7 +1420,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
 
     const isThisWeek = pair.season === latest.season && pair.week === latest.week
 
-    if (isScored(you) || isScored(them)) {
+    if (you.finalized !== false && them.finalized !== false && (isScored(you) || isScored(them))) {
       // A completed meeting contributes to the series.
       const margin = you.pointsFor - them.pointsFor
       const won = margin > 0

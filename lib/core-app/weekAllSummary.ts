@@ -51,7 +51,7 @@ const STALE_WHILE_REVALIDATE_MS = 10 * 60_000
 registerScreenSummary<WeekAllData | null>({
   screen: WEEK_SCREEN,
   /** ⚠ Bump whenever `WeekAllData` changes shape — the version is part of the cache key. */
-  version: 1,
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped summary cannot be swept by league. Empty on purpose.

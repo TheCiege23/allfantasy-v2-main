@@ -27,6 +27,13 @@ function payload(overrides: Partial<SleeperImportPayload> = {}): SleeperImportPa
 }
 
 describe('SleeperLeagueMapper — status field (Phase OS-C5)', () => {
+  it('preserves the provider current week without inventing one for missing or invalid values', () => {
+    expect(SleeperLeagueMapper.map(payload({ league: rawLeague({ settings: { leg: 3 } }) }))?.current_week).toBe(3)
+    for (const leg of [undefined, 0, -1, 3.5, 99]) {
+      const mapped = SleeperLeagueMapper.map(payload({ league: rawLeague({ settings: { leg } }) }))
+      expect(mapped).not.toHaveProperty('current_week')
+    }
+  })
   it('maps Sleeper\'s real "complete" status through, never dropping it', () => {
     const result = SleeperLeagueMapper.map(payload({ league: rawLeague({ status: 'complete' }) }))
     expect(result?.status).toBe('complete')
