@@ -23,16 +23,49 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   const sinceDate = sinceRaw ? new Date(sinceRaw) : null
   const sinceOk = sinceDate && !Number.isNaN(sinceDate.getTime()) ? sinceDate : new Date(Date.now() - 60_000)
 
+  /*
+   * 🛑 THE TIMERS OUTLIVED THE VIEWER. This stream had no `cancel()` and never looked at the
+   * request's abort signal, so when a tab left a Survivor league — navigation, close, EventSource
+   * giving up — both intervals kept running for the full 300 s: two audit-table queries every 4 s
+   * against a stream nobody was reading, and a heartbeat that threw `ERR_INVALID_STATE: Controller
+   * is already closed` as an uncaughtException every 5 s (63 of them from ONE tab in a dev session,
+   * 2026-09-26). Every reopen stacked another orphaned pair.
+   *
+   * Now any of the three ways a stream ends — the client cancels, the request aborts, a write
+   * fails — stops the timers at once, and a failed database read ends that tick instead of
+   * surfacing as an unhandled rejection. Same write guard `app/api/zombie/animations` uses.
+   */
+  let shutdown: () => void = () => {}
+
   const stream = new ReadableStream({
     start(controller) {
       const enc = new TextEncoder()
+      let closed = false
+      let iv: ReturnType<typeof setInterval> | null = null
+      let hb: ReturnType<typeof setInterval> | null = null
+      let endTimer: ReturnType<typeof setTimeout> | null = null
+      shutdown = () => {
+        if (closed) return
+        closed = true
+        if (iv) clearInterval(iv)
+        if (hb) clearInterval(hb)
+        if (endTimer) clearTimeout(endTimer)
+        req.signal.removeEventListener('abort', shutdown)
+      }
+      req.signal.addEventListener('abort', shutdown)
       const send = (data: unknown) => {
-        controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`))
+        if (closed) return
+        try {
+          controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`))
+        } catch {
+          shutdown()
+        }
       }
       send({ type: 'connected', leagueId })
 
       const seen = new Set<string>()
       const tick = async () => {
+        if (closed) return
         const [entries, logs] = await Promise.all([
           prisma.survivorAuditEntry.findMany({
             where: { leagueId, createdAt: { gte: sinceOk } },
@@ -97,18 +130,26 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
         }
       }
 
-      void tick()
-      const iv = setInterval(() => void tick(), 4000)
-      const hb = setInterval(() => send({ type: 'heartbeat', t: Date.now() }), 5000)
-      setTimeout(() => {
-        clearInterval(iv)
-        clearInterval(hb)
+      const safeTick = () => {
+        tick().catch(() => {
+          /* One failed read skips one tick; the next one retries. */
+        })
+      }
+      safeTick()
+      iv = setInterval(safeTick, 4000)
+      hb = setInterval(() => send({ type: 'heartbeat', t: Date.now() }), 5000)
+      endTimer = setTimeout(() => {
+        shutdown()
         try {
           controller.close()
         } catch {
           /* ignore */
         }
       }, 300_000)
+      if (req.signal.aborted) shutdown()
+    },
+    cancel() {
+      shutdown()
     },
   })
 
