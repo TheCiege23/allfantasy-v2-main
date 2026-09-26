@@ -28,7 +28,8 @@ describe('GET /api/players/search', () => {
           sport: 'NBA',
           OR: expect.any(Array),
         }),
-        take: 5,
+        // Over-fetched: a person is one row per provider, collapsed after the query.
+        take: 20,
       })
     )
   })
@@ -42,7 +43,7 @@ describe('GET /api/players/search', () => {
     expect(sportsPlayerFindManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.not.objectContaining({ sport: expect.anything() }),
-        take: 7,
+        take: 28,
       })
     )
   })
@@ -86,5 +87,37 @@ describe('GET /api/players/search', () => {
     const res = await GET(req)
     const body = await res.json()
     expect(body).toEqual([])
+  })
+  it('returns one result per person when several providers hold the same sleeperId', async () => {
+    // Measured on production 2026-09-26: "Caleb Williams" rendered three times.
+    sportsPlayerFindManyMock.mockResolvedValue([
+      { id: 'a', externalId: 'sleeper:11560', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: 'https://r2.thesportsdb.com/x.png', sleeperId: '11560', age: 24, number: null, college: 'USC' },
+      { id: 'b', externalId: '8390', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: null, sleeperId: '11560', age: 25, number: 18, college: 'USC' },
+      { id: 'c', externalId: 'tsdb_34249077', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: 'https://r2.thesportsdb.com/x.png', sleeperId: '11560', age: 25, number: null, college: null },
+    ])
+    const { GET } = await import('@/app/api/players/search/route')
+    const body = await (await GET(new Request('http://localhost/api/players/search?q=caleb'))).json()
+
+    expect(body).toHaveLength(1)
+    // The row with a headshot leads; a field it lacks is filled from a sibling.
+    expect(body[0]).toMatchObject({ id: 'a', externalId: 'sleeper:11560', number: 18, slug: 'caleb-williams-nfl-11560' })
+  })
+
+  it('never collapses on name: same name, different sleeperId stays two people', async () => {
+    sportsPlayerFindManyMock.mockResolvedValue([
+      { id: '1', externalId: 'x1', name: 'Kyle Williams', sport: 'NFL', position: 'WR', team: 'NE', imageUrl: null, sleeperId: '1001', age: 23, number: null, college: null },
+      { id: '2', externalId: 'x2', name: 'Kyle Williams', sport: 'NFL', position: 'WR', team: 'NE', imageUrl: null, sleeperId: '1002', age: 37, number: null, college: null },
+    ])
+    const { GET } = await import('@/app/api/players/search/route')
+    const body = await (await GET(new Request('http://localhost/api/players/search?q=kyle'))).json()
+    expect(body.map((p: { sleeperId: string }) => p.sleeperId)).toEqual(['1001', '1002'])
+  })
+
+  it('keeps the same sleeperId in different sports apart, and caps the output at limit', async () => {
+    const row = (id: string, sport: string, sleeperId: string) => ({ id, externalId: id, name: 'Same Name', sport, position: 'G', team: null, imageUrl: null, sleeperId, age: null, number: null, college: null })
+    sportsPlayerFindManyMock.mockResolvedValue([row('1', 'NBA', '77'), row('2', 'NFL', '77'), row('3', 'NFL', '78')])
+    const { GET } = await import('@/app/api/players/search/route')
+    const body = await (await GET(new Request('http://localhost/api/players/search?q=same&limit=2'))).json()
+    expect(body.map((p: { id: string }) => p.id)).toEqual(['1', '2'])
   })
 })

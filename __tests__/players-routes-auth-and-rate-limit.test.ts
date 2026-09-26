@@ -45,9 +45,12 @@ describe('GET /api/players/search — rate limiting', () => {
 
     const ok = await GET(searchReq('10.0.0.2', 'q=Mahomes&limit=50'))
     expect(ok.status).toBe(200)
+    // The DB read over-fetches to collapse one-row-per-provider duplicates, but stays
+    // hard-bounded; the response itself never exceeds `limit`.
     expect(sportsPlayerFindManyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 50 })
+      expect.objectContaining({ take: 200 })
     )
+    expect(((await ok.json()) as unknown[]).length).toBeLessThanOrEqual(50)
   })
 
   it('returns 429 with Retry-After once one IP exhausts its window', async () => {

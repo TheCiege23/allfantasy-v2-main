@@ -60,22 +60,85 @@ export async function GET(req: Request) {
     // `externalId` is what the Player Finder's links are keyed on (sport-qualified,
     // see lib/core-app/playerRef.ts); additive, every earlier caller ignores it.
     select: { id: true, externalId: true, name: true, sport: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
-    take: limit,
-    orderBy: { name: 'asc' },
+    // Over-fetch: one person is stored once PER PROVIDER (Sleeper, Rolling Insights,
+    // TheSportsDB…), so `limit` rows can be as few as limit/3 people. See collapse below.
+    take: Math.min(limit * PROVIDER_ROWS_PER_PERSON, 200),
+    orderBy: [{ name: 'asc' }, { id: 'asc' }],
   });
 
-  const withSlug = players
-    .map((p: { name: string; sport: string; sleeperId: string | null; imageUrl: string | null }) => ({
+  const withSlug = collapseSamePerson(
+    players.map((p: SearchRow) => ({
       ...p,
       // 959 NFL rows carry a bare filename, not a URL; a `src` of that 404s
       // against the current route. Null is the honest value for those.
       imageUrl: asHeadshotUrl(p.imageUrl),
-      slug: playerSlug(p),
     }))
+  )
+    .map((p) => ({ ...p, slug: playerSlug(p) }))
     // Belt-and-suspenders: the where-clause already requires sleeperId, but
     // playerSlug also refuses an unknown sport or an unkebabable name — a hit
     // this endpoint cannot address is dropped rather than sent to the client.
-    .filter((p: { slug: string | null }) => p.slug !== null);
+    .filter((p) => p.slug !== null)
+    .slice(0, limit);
 
   return NextResponse.json(withSlug);
+}
+
+const PROVIDER_ROWS_PER_PERSON = 4;
+
+type SearchRow = {
+  id: string;
+  externalId: string;
+  name: string;
+  sport: string;
+  position: string | null;
+  team: string | null;
+  imageUrl: string | null;
+  sleeperId: string | null;
+  age: number | null;
+  number: number | null;
+  college: string | null;
+};
+
+/**
+ * One result per person. `SportsPlayer` holds a row per provider, so "Caleb Williams"
+ * came back three times — `sleeper:11560`, RI `8390`, `tsdb_34249077` — all carrying
+ * sleeperId 11560 and all linking to the same /players page.
+ *
+ * Keyed on (sport, sleeperId), a PROVIDER-NATIVE id, never on name: same-name NFL rows
+ * can be different people (see the PlayerIdentityMap duplicate notes), and sleeperId
+ * is only unique within a sport. Nothing is merged in the database; this only stops
+ * one person rendering as several clickable results.
+ *
+ * The row with a real headshot represents the group (first in name order otherwise);
+ * its empty fields are filled from the other rows.
+ */
+function collapseSamePerson(rows: SearchRow[]): SearchRow[] {
+  const groups = new Map<string, SearchRow[]>();
+  const loose: SearchRow[] = [];
+  for (const row of rows) {
+    if (!row.sleeperId) {
+      loose.push(row);
+      continue;
+    }
+    const key = `${row.sport}|${row.sleeperId}`;
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
+  }
+
+  const collapsed: SearchRow[] = [];
+  for (const group of groups.values()) {
+    const lead = group.find((r) => r.imageUrl) ?? group[0]!;
+    const merged = { ...lead };
+    for (const field of ['position', 'team', 'imageUrl', 'age', 'number', 'college'] as const) {
+      if (merged[field] != null) continue;
+      const donor = group.find((r) => r[field] != null);
+      if (donor) (merged as Record<string, unknown>)[field] = donor[field];
+    }
+    collapsed.push(merged);
+  }
+
+  // Map iteration keeps first-seen order, which is the query's name order.
+  return [...collapsed, ...loose];
 }
