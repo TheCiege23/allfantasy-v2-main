@@ -19,11 +19,13 @@ const unavailable = (reason: string): ProposalCapResult => ({ status: 'unavailab
 /** Called after league membership validation. Resolve team identities once for the proposal and counters.
  * Contract IDs/salaries come exclusively from stored, owned contracts, never from the browser. */
 export async function prepareProposalCap(args: {
-  leagueId: string; userId: string; opponentTeamExternalId?: string | null
+  leagueId: string; userId: string; opponentTeamExternalId?: string | null; requiresCap?: boolean
 }): Promise<CapEvaluator> {
   try {
     const config = await getSalaryCapConfig(args.leagueId)
-    if (!config) return async () => ({ status: 'not_applicable' })
+    if (!config) return args.requiresCap
+      ? async () => unavailable('This league is marked Salary Cap, but its contract rules have not been configured or imported.')
+      : async () => ({ status: 'not_applicable' })
     const missing = (reason: string): CapEvaluator => async () => unavailable(reason)
     if (!config.configId) return missing('Persist salary-cap rules before checking this proposal.')
     if (!args.opponentTeamExternalId) return missing('Select the other team to check both teams’ cap commitments.')

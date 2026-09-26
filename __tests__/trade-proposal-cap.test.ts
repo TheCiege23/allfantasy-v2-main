@@ -49,6 +49,11 @@ describe('proposal affordability', () => {
     expect(await (await prepareProposalCap(args))(give, [])).toEqual({ status: 'not_applicable' })
     expect(m.contracts).not.toHaveBeenCalled()
   })
+  it('does not treat a labeled salary-cap league with missing rules as an ordinary league', async () => {
+    m.config.mockResolvedValue(null)
+    expect(await (await prepareProposalCap({ ...args, requiresCap: true }))(give, []))
+      .toMatchObject({ status: 'unavailable', reason: expect.stringContaining('marked Salary Cap') })
+  })
   it('requires a counterparty and does not treat FAAB as salary cash', async () => {
     expect(await (await prepareProposalCap({ ...args, opponentTeamExternalId: null }))(give, [])).toMatchObject({ status: 'unavailable' })
     expect(await (await prepareProposalCap(args))([{ kind: 'faab', amount: 10 }], [])).toMatchObject({ status: 'unavailable', reason: expect.stringContaining('FAAB') })

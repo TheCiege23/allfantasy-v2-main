@@ -661,7 +661,8 @@ export async function runTradeConsoleAnalysis(
 
   const evaluateCap = input.leagueId && input.userId
     ? await prepareProposalCap({ leagueId: input.leagueId.trim(), userId: input.userId,
-        opponentTeamExternalId: input.opponentTeamExternalId })
+        opponentTeamExternalId: input.opponentTeamExternalId,
+        requiresCap: leagueSnapshot?.quickModeBadges.includes('Salary Cap') })
     : async () => ({ status: 'not_applicable' as const })
   const salaryCap = await evaluateCap(input.sideGive, input.sideGet)
   const capNote = proposalCapNote(salaryCap)
