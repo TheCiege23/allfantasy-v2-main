@@ -77,8 +77,7 @@ export async function ensureMatchupsCached(
     if (!cached) {
       missingWeeks.push(w)
     } else if (refreshWeeks.has(w) && now - cached.updatedAt.getTime() > staleThresholdMs) {
-      await prisma.weeklyMatchup.deleteMany({ where: { leagueId, seasonYear, week: w } })
-      missingWeeks.push(w)
+        missingWeeks.push(w)
     }
   }
 
@@ -121,9 +120,13 @@ export async function ensureMatchupsCached(
     })
 
     if (rows.length > 0) {
-      await prisma.weeklyMatchup.createMany({
-        data: rows,
-        skipDuplicates: true,
+      // Keep the last usable scores until a non-empty replacement has arrived.
+      // Replacing a week atomically also preserves them if the insert fails.
+      await prisma.$transaction(async (tx) => {
+        if (cachedWeeks.has(week)) {
+          await tx.weeklyMatchup.deleteMany({ where: { leagueId, seasonYear, week } })
+        }
+        await tx.weeklyMatchup.createMany({ data: rows, skipDuplicates: true })
       })
     }
   }
