@@ -65,7 +65,8 @@ describe("sameOriginApiUrl", () => {
     expect(sameOriginApiUrl(new Request(`${ORIGIN}/api/y`), page)?.pathname).toBe("/api/y")
   })
   it("rejects other origins and non-API paths", () => {
-    expect(sameOriginApiUrl("https://api.sleeper.app/api/v1/x", page)).toBeNull()
+    // A neutral host: a real provider URL here trips the DB-first guard as a live call.
+    expect(sameOriginApiUrl("https://example.com/api/v1/x", page)).toBeNull()
     expect(sameOriginApiUrl("/apiary", page)).toBeNull()
     expect(sameOriginApiUrl("/core", page)).toBeNull()
   })
