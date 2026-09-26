@@ -3,6 +3,7 @@ import 'server-only'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
 import { evaluateCounterOffers } from './counterOffers'
+import { prepareProposalCap, proposalCapNote } from './proposalCap'
 import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
@@ -658,7 +659,19 @@ export async function runTradeConsoleAnalysis(
       .sort((a, b) => b.marketValue - a.marketValue)
   }
 
+  const evaluateCap = input.leagueId && input.userId
+    ? await prepareProposalCap({ leagueId: input.leagueId.trim(), userId: input.userId,
+        opponentTeamExternalId: input.opponentTeamExternalId,
+        requiresCap: leagueSnapshot?.quickModeBadges.includes('Salary Cap') })
+    : async () => ({ status: 'not_applicable' as const })
+  const salaryCap = await evaluateCap(input.sideGive, input.sideGet)
+  const capNote = proposalCapNote(salaryCap)
+  if (capNote) evaluation.bullets.unshift(capNote)
   const counterOffers = await evaluateCounterOffers({
+    canRecommend: salaryCap.status === 'not_applicable' ? undefined : async (give, get) => {
+      const cap = await evaluateCap(give, get)
+      return cap.status === 'evaluated' && cap.legal
+    },
     grade: input.opponentTeamExternalId && rosterCtxForDrivers?.theirRoster?.length
       ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
     give: input.sideGive,
@@ -778,7 +791,7 @@ export async function runTradeConsoleAnalysis(
     confidenceScore,
     degraded,
     dataGaps,
-    injuryNotes,
+    injuryNotes: capNote ? [capNote, ...injuryNotes] : injuryNotes,
     drivers: driverPayload,
     negotiationToolkit,
     opponentRosterTargets: opponentRosterTargets?.map((t) => ({
@@ -904,6 +917,7 @@ export async function runTradeConsoleAnalysis(
     rosterSummary: rosterSummaryOut,
     opponentRosterTargets: opponentRosterTargets ?? [],
     tradeIntelligence,
+    salaryCap,
     structuredLeagueContext: structuredNotes,
     validation,
     sourceFlags,
@@ -1010,6 +1024,7 @@ export async function runTradeConsoleAnalysis(
     negotiationToolkit,
     opponentRosterTargets,
     counterOffers,
+    salaryCap,
     tradeIntelligence,
     chimmyPayload,
     timeContext: aiEnvelope?.time ?? null,

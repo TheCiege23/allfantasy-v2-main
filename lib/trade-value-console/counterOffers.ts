@@ -23,6 +23,7 @@ export async function evaluateCounterOffers(input: {
   yourTargets: TradeConsoleOpponentRosterTarget[]
   theirTargets: TradeConsoleOpponentRosterTarget[]
   evaluate: (give: TradeAssetInput[], get: TradeAssetInput[]) => Promise<TradeGradeView>
+  canRecommend?: (give: TradeAssetInput[], get: TradeAssetInput[]) => Promise<boolean>
 }): Promise<EvaluatedCounterOffer[]> {
   if (!input.grade.graded || input.grade.sideAdvantage === 'even') return []
   const baseline = Math.abs(input.grade.getValue - input.grade.giveValue)
@@ -44,9 +45,11 @@ export async function evaluateCounterOffers(input: {
     // while retaining the roster ID for duplicate checks above.
     const asset: TradeAssetInput = { kind: 'player', name: candidate.name }
     try {
+      const give = addTo === 'give' ? [...input.give, asset] : input.give
+      const get = addTo === 'get' ? [...input.get, asset] : input.get
+      if (input.canRecommend && !await input.canRecommend(give, get)) return null
       const grade = await input.evaluate(
-        addTo === 'give' ? [...input.give, asset] : input.give,
-        addTo === 'get' ? [...input.get, asset] : input.get,
+        give, get,
       )
       if (!grade.graded) return null
       const remainingGap = Math.abs(grade.getValue - grade.giveValue)

@@ -8,6 +8,16 @@ const grade = (give: number, get: number) => gradeTrade({ giveValue: give, getVa
 const target = (name: string, marketValue: number) => ({ id: name, name, position: 'WR', marketValue })
 
 describe('counteroffer package evaluation', () => {
+  it('excludes a value-balanced package when affordability fails or cannot be verified', async () => {
+    const evaluate = vi.fn(async () => grade(1000, 1000))
+    const canRecommend = vi.fn(async (_give, get) => get.at(-1)?.name === 'Affordable')
+    const offers = await evaluateCounterOffers({ grade: grade(1000, 700), give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Received' }], yourTargets: [],
+      theirTargets: [target('Unaffordable', 300), target('Affordable', 310)], evaluate, canRecommend })
+    expect(offers.map(o => o.name)).toEqual(['Affordable'])
+    expect(evaluate).toHaveBeenCalledTimes(1)
+    expect(canRecommend).toHaveBeenCalledTimes(2)
+  })
   it('uses the recalculated league grade rather than promising equality from the shortlist price', async () => {
     const evaluate = vi.fn(async (_give, get) => grade(1000, get.at(-1)?.name === 'Depth' ? 960 : 1400))
     const offers = await evaluateCounterOffers({ grade: grade(1000, 700), give: [{ kind: 'player', name: 'Given' }],

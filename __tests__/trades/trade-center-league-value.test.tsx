@@ -93,6 +93,28 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('shows future cap failure beside a value grade with stored contract terms', async () => {
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, salaryCap: {
+        status: 'evaluated', legal: false, contracts: [{ side: 'get', name: 'Trey McBride', salary: 30, expires: 2027 }],
+        impact: { years: [{ capYear: 2027, fromCapHit: 110, fromCap: 100, toCapHit: 60, toCap: 100, fromLegal: false, toLegal: true }] },
+      } }) } : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    const verdict = container.querySelector('.af-tc-verdict:not(.af-tc-verdict--pending)')!.textContent!
+    expect(verdict).toContain('Salary-cap affordability')
+    expect(verdict).toContain('salary 30 through 2027')
+    expect(verdict).toContain('Your post-trade cap room -10')
+    expect(verdict).toContain('Fails cap or floor rules')
+  })
+  it('discloses unavailable cap inputs instead of implying an affordable trade', async () => {
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, salaryCap: { status: 'unavailable', reason: 'Missing owned contract.' } }) }
+      : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    expect(screen.getByText(/Missing owned contract/).textContent).toContain('value grade does not establish cap legality')
+  })
   it('adds a re-evaluated counter to the right side and clears the previous verdict', async () => {
     const counterGrade = gradeTrade({ giveValue: 5000, getValue: 5000, giveMarket: 5000, getMarket: 5000,
       unpriced: 0, giveCount: 1, getCount: 2, basis: 'League', scoringApplied: false, needApplied: false,

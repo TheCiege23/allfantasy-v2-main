@@ -281,6 +281,7 @@ export type TradeConsoleAnalyzeResult = {
   /** Present when league opponent roster was loaded; not part of the trade's receive side. */
   opponentRosterTargets?: TradeConsoleOpponentRosterTarget[]
   counterOffers?: EvaluatedCounterOffer[]
+  salaryCap?: import('./proposalCap').ProposalCapResult
   tradeIntelligence: TradeIntelligence
   chimmyPayload: Record<string, unknown>
   /** Time engine + lock hints (same as other AI tools). */
