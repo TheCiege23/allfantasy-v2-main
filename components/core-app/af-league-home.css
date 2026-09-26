@@ -364,6 +364,10 @@
   font-size: 13px;
   color: var(--text2);
 }
+.af-standings-wrap[data-faab='false'] .af-standings-head,
+.af-standings-wrap[data-faab='false'] .af-standings-row {
+  grid-template-columns: 24px minmax(0, 1fr) 48px 48px;
+}
 .af-standings-row[data-you='true'] {
   background: var(--accent-soft);
   color: var(--text);

@@ -14,7 +14,10 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/leagues/rosterForTeam', () => ({
-  findRosterForTeam: h.findRoster,
+  findRostersForTeams: async (teams: Array<{ leagueId: string; platformManagerId: string }>) =>
+    new Map(await Promise.all(teams.map(async t => [JSON.stringify([t.leagueId, t.platformManagerId]),
+      await h.findRoster(t.leagueId, t.platformManagerId)]))),
+  rosterTeamKey: (leagueId: string, platformManagerId: string) => JSON.stringify([leagueId, platformManagerId]),
   rosterPlayerIds: (pd: any) => (Array.isArray(pd?.players) ? pd.players.map(String) : null),
 }))
 
@@ -132,6 +135,14 @@ describe('one league imported twice shows once', () => {
 })
 
 describe('the roster count uses the resolver that actually works', () => {
+  it.each([0, -1, 11])('withholds impossible rank %s without losing the provider record', async currentRank => {
+    h.teamFindMany.mockResolvedValue([claimedTeam({ currentRank, wins: 1, losses: 1 })])
+    h.groupBy.mockResolvedValue([{ leagueId: 'l-mine', _count: { _all: 10 } }])
+    const out = await getPortfolio(USER)
+    const rows = out.leagues.available ? out.leagues.data : []
+    expect(rows[0].team?.rank).toBeNull()
+    expect(rows[0].team?.record).toBe('1-1')
+  })
   /*
    * ⚠ MATCHING ON `Roster.platformUserId` REACHES 13 OF 98 CLAIMED TEAMS.
    * `findRosterForTeam` tries the durable `source_manager_id` first and reaches

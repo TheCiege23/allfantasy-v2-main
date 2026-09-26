@@ -816,7 +816,7 @@ export function LeagueHome({
           {/* Standings */}
           <StatePanel title="Standings" state={data.standings}>
             {(rows) => (
-              <div className="af-standings-wrap">
+              <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
                 <WorkbookBarChart
                   title="Points for by team"
                   subtitle="Current standings leaders"
@@ -831,15 +831,14 @@ export function LeagueHome({
                 />
                 {/*
                   Column heads, because three numeric columns without them is a
-                  guessing game. FAAB rather than "waiver": this league bids,
-                  it does not queue, and the two words describe opposite systems.
+                  guessing game. The budget column only applies to confirmed FAAB leagues.
                 */}
                 <div className="af-standings-head" aria-hidden>
                   <span />
                   <span />
                   <span className="af-label">W-L</span>
                   <span className="af-label">PF</span>
-                  <span className="af-label">FAAB</span>
+                  {data.faabEnabled === true ? <span className="af-label">FAAB</span> : null}
                 </div>
                 <ol className="af-standings">
                   {rows.slice(0, 6).map((t, i) => (
@@ -856,13 +855,13 @@ export function LeagueHome({
                       {/*
                         ⚠ A DASH, NOT $0, WHEN WE DO NOT KNOW. The importer stores
                         null whenever it could not compute budget minus spend, and
-                        a league that does not use FAAB stores null for everyone.
+                        a non-FAAB league can retain irrelevant imported balances.
                         "$0" would tell a manager holding a full budget that they
                         are broke.
                       */}
-                      <span className="af-standings-faab af-num">
+                      {data.faabEnabled === true ? <span className="af-standings-faab af-num">
                         {t.faabRemaining == null ? '\u2014' : `$${t.faabRemaining}`}
-                      </span>
+                      </span> : null}
                     </li>
                   ))}
                 </ol>

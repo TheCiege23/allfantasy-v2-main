@@ -56,7 +56,7 @@ vi.mock('@/lib/league-history/leagueWarehouseReads', async (importOriginal) => (
   readActivityWindow: reads.activityWindow,
 }))
 
-import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import { getLeagueHomeData, type LeagueHomeData } from '@/lib/core-app/leagueHome'
 
 const L = 'league-1'
 const U = 'user-1'
@@ -93,9 +93,9 @@ const team = (teamName: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
-function load(opts: { platform: string; lastSyncedAt: Date | null }): Promise<Card> {
+function loadHome(opts: { platform: string; lastSyncedAt: Date | null; results?: boolean }): Promise<LeagueHomeData | null> {
   db.answers['leagueTeam.findMany'] = () => [
-    team('Ada', { claimedByUserId: U, isCoCommissioner: true }),
+    team('Ada', { claimedByUserId: U, isCoCommissioner: true, wins: opts.results ? 1 : 0 }),
     team('Bea'),
     team('Cy'),
     // An empty seat is not a quiet manager.
@@ -119,7 +119,10 @@ function load(opts: { platform: string; lastSyncedAt: Date | null }): Promise<Ca
     claimedTeam: vi.fn(async () => ({ externalId: 'Ada', teamName: 'Ada' })),
     claimedTeams: vi.fn(async () => [{ externalId: 'Ada' }]),
   }
-  return getLeagueHomeData(L, U, null, ctx as never).then((d) => (d as unknown as { commissioner: Card }).commissioner)
+  return getLeagueHomeData(L, U, null, ctx as never)
+}
+function load(opts: { platform: string; lastSyncedAt: Date | null }): Promise<Card> {
+  return loadHome(opts).then(d => (d as unknown as { commissioner: Card }).commissioner)
 }
 
 beforeEach(() => {
@@ -143,6 +146,16 @@ beforeEach(() => {
     { managerName: 'Bea', currentCount: 1, priorCount: 2 },
   ])
   reads.activityWindow.mockResolvedValue({ lastActivityAt: new Date(Date.now() - DAY), tradeCount: 1, waiverCount: 3, eventCount: 40 })
+})
+
+describe('overview waiver balances', () => {
+  it.each(['rolling', 'reverse_standings', 'faab'])('only publishes balances for confirmed FAAB (%s)', async waiverType => {
+    db.answers['leagueWaiverSettings.findUnique'] = () => ({ waiverType })
+    db.answers['roster.findMany'] = () => [{ platformUserId: 'p-Ada', faabRemaining: 100 }]
+    const home = await loadHome({ platform: 'sleeper', lastSyncedAt: new Date(), results: true })
+    expect(home?.faabEnabled).toBe(waiverType === 'faab')
+    expect(home?.standings.available && home.standings.data[0].faabRemaining).toBe(waiverType === 'faab' ? 100 : null)
+  })
 })
 
 describe('an imported league’s commissioner card', () => {
