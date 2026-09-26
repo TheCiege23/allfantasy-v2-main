@@ -45,7 +45,7 @@ The reproducible aggregate audit is scripts/audit-league-lifecycle-readonly.cjs.
 
 1. Exercise real authenticated league creation, joins, draft setup, picks, completion and scoring against an isolated test database, including concurrent joins/picks.
 2. Verify active draft-pool image URLs, identity matching, logos, stats and ADP for each supported sport. Fix ingestion and mappings where real coverage is missing; do not invent ADP or disguise logos as headshots.
-3. Run a complete dynasty and keeper year-two scenario with carried rosters, traded rookie picks and locked keeper picks.
+3. Exercise the authenticated dynasty and keeper offseason UI, including keeper selection/locking and future-pick trading; the real service/database carryover and next-draft paths have passed fixture verification.
 4. Verify every offered specialty concept through its real lifecycle. Automation unit coverage alone is not complete product acceptance.
 5. Verify released code paths after Railway reports a successful deployment. The user has authorized code releases; production test-data writes have not been performed.
 
@@ -58,3 +58,5 @@ A real known-test-database service smoke passed for redraft (2 teams), dynasty (
 That smoke exposed a UI/server mismatch: dynasty, keeper and Best Ball offered team counts the server rejects. The follow-up uses the canonical sport/concept catalog for limits and steps, and resets an incompatible selection when changing concepts. Four rendered UI regression tests pass, including server acceptance of every offered specialized count.
 
 Protected CI for the first release passed, including the check for no new TypeScript errors. The earlier full compiler baseline errors remain outside this change.
+
+The expanded real test-database smoke also passed next-season creation for all three formats. Dynasty carried all 80 active players into the next season, created a rookies-only draft and applied one traded future pick. Keeper placed one locked keeper in its next full draft. Redraft created its next standard draft. A second renewal request returned DRAFT_STILL_OPEN for each format. Cleanup explicitly verified zero tracked leagues, users and weekly-score rows. This uses a completed-season fixture and seeded keeper/future-pick records, not a full authenticated offseason UI journey.

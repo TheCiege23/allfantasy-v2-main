@@ -7,6 +7,8 @@ import { createCanonicalLeagueInTransaction } from '../lib/league-creation/canon
 import { createDefaultLeagueRosterConfig } from '../lib/roster-engine/UnifiedRosterConfigService'
 import { applyDefaultNflScoringOnCreate } from '../lib/nfl-scoring'
 import { syncCompletedDraftToRedraftSeason } from '../lib/redraft/finalizeDraftToRedraftSeason'
+import { createNextLeagueDraft } from '../lib/live-draft-engine/createNextLeagueDraft'
+import { ensureNextRedraftSeasonShell } from '../lib/redraft/offseason/ensureNextRedraftSeasonShell'
 import { updateStandings } from '../lib/redraft/standingsEngine'
 import { updateMatchupScores, calculateScoreFromSportConfig } from '../lib/redraft/scoringEngine'
 import { configureEventInfrastructure, InMemoryOutboxStore, resetPlatformEvents } from '../lib/events'
@@ -81,7 +83,25 @@ async function main() {
         const expectedWins = Number(points > Number(opponentPoints)) + Number(points > median)
         if (roster.pointsFor !== points || roster.wins !== expectedWins || roster.losses !== 2 - expectedWins || game.medianScore !== median) throw new Error('MEDIAN_STANDINGS_PARITY_' + concept)
       }
-      results.push({ weeklyScoringVerified: true, medianStandingsVerified: true, concept, draftRounds: draft.rounds, rosters: rosters.length, players, matchups, totalWeeks: season.totalWeeks, medianGame: season.medianGame, repeatAddedPlayers: second.redraftPlayersCreated, twoReceptionsScore: receptionScore })
+      await prisma.redraftSeason.update({ where: { id: season.id }, data: { status: 'complete' } })
+      if (concept === 'dynasty') {
+        await prisma.futureDraftPick.create({ data: { leagueId: created.leagueId, pickSeason: season.season + 1, round: 1, originalRosterId: generic[0].id, currentOwnerId: generic[1].id, traded: true } })
+      }
+      if (concept === 'keeper') {
+        const shell = await ensureNextRedraftSeasonShell(created.leagueId, season.id)
+        if (!shell) throw new Error('KEEPER_SHELL')
+        const owner = await prisma.redraftRoster.findFirstOrThrow({ where: { seasonId: shell.id, ownerId: userIds[0] } })
+        await prisma.keeperRecord.create({ data: { leagueId: created.leagueId, seasonId: shell.id, rosterId: owner.id, playerId: picks[0].playerId, playerName: picks[0].playerName, position: 'QB', sport: 'NFL', originalDraftYear: season.season, costRound: 2, status: 'locked' } })
+      }
+      const renewal = await createNextLeagueDraft(created.leagueId, userIds[0])
+      if (!renewal.ok) throw new Error('RENEWAL_' + concept + '_' + renewal.code)
+      const nextDraft = await prisma.draftSession.findUniqueOrThrow({ where: { id: renewal.sessionId } })
+      if (renewal.season !== season.season + 1 || nextDraft.status !== 'pre_draft') throw new Error('RENEWAL_SEASON')
+      if (concept === 'dynasty' && (renewal.playersCarried !== players || renewal.kind !== 'rookie' || renewal.tradedPicksApplied !== 1 || nextDraft.playerPool !== 'rookies_only')) throw new Error('DYNASTY_RENEWAL_PARITY')
+      if (concept === 'keeper' && (renewal.keepersPlaced !== 1 || !Array.isArray(nextDraft.keeperSelections) || nextDraft.keeperSelections.length !== 1)) throw new Error('KEEPER_RENEWAL_PARITY')
+      const repeatedRenewal = await createNextLeagueDraft(created.leagueId, userIds[0])
+      if (repeatedRenewal.ok || repeatedRenewal.code !== 'DRAFT_STILL_OPEN') throw new Error('DUPLICATE_RENEWAL')
+      results.push({ renewalVerified: true, renewalKind: renewal.kind, playersCarried: renewal.playersCarried, keepersPlaced: renewal.keepersPlaced, tradedPicksApplied: renewal.tradedPicksApplied, weeklyScoringVerified: true, medianStandingsVerified: true, concept, draftRounds: draft.rounds, rosters: rosters.length, players, matchups, totalWeeks: season.totalWeeks, medianGame: season.medianGame, repeatAddedPlayers: second.redraftPlayersCreated, twoReceptionsScore: receptionScore })
     }
   } finally {
     if (scorePlayerIds.length) await prisma.playerWeeklyScore.deleteMany({ where: { playerId: { in: scorePlayerIds } } })
@@ -89,7 +109,9 @@ async function main() {
     if (userIds.length) await prisma.appUser.deleteMany({ where: { id: { in: userIds } } })
     const remainingLeagues = await prisma.league.count({ where: { id: { in: leagueIds } } })
     const remainingUsers = await prisma.appUser.count({ where: { id: { in: userIds } } })
-    console.log(JSON.stringify({ target: 'known test database', results, cleanup: { remainingLeagues, remainingUsers } }, null, 2))
+    const remainingScores = await prisma.playerWeeklyScore.count({ where: { playerId: { in: scorePlayerIds } } })
+    if (remainingLeagues || remainingUsers || remainingScores) throw new Error('SYNTHETIC_CLEANUP_INCOMPLETE')
+    console.log(JSON.stringify({ target: 'known test database', results, cleanup: { remainingLeagues, remainingUsers, remainingScores } }, null, 2))
     await prisma.$disconnect()
   }
 }
