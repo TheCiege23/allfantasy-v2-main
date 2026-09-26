@@ -119,7 +119,7 @@ describe('/api/chimmy and the AF Pro allowance', () => {
     h.readPlan.mockResolvedValue(LEFT)
     h.runAgentPipeline.mockRejectedValue(new Error('provider down'))
     await ask()
-    expect(h.releasePlan).toHaveBeenCalledWith({ userId: 'session-user' })
+    expect(h.releasePlan).toHaveBeenCalledWith({ userId: 'session-user', state: await h.takePlan.mock.results[0].value })
   })
 
   it('gives the included answer back when a stored-data answer makes the model call unnecessary', async () => {

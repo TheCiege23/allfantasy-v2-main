@@ -98,7 +98,8 @@ describe('takeChimmyPlanAllowance', () => {
 describe('releaseChimmyPlanAllowance', () => {
   it('reports a failed release without throwing', async () => {
     const d = deps({ giveBack: vi.fn(async () => { throw new Error('x') }) })
-    await expect(releaseChimmyPlanAllowance({ userId: 'u1' }, d)).resolves.toBe(false)
+    const state = await takeChimmyPlanAllowance({ userId: 'u1', state: (await readChimmyPlanAllowance({ userId: 'u1' }, d))! }, d)
+    await expect(releaseChimmyPlanAllowance({ userId: 'u1', state: state! }, d)).resolves.toBe(false)
     expect(d.giveBack).toHaveBeenCalledTimes(1)
   })
 })
@@ -146,7 +147,9 @@ describe('the default counter', () => {
   it('gives back only down to zero', async () => {
     db.updateMany.mockResolvedValue({ count: 1 })
     const { releaseChimmyPlanAllowance: release } = await realDeps()
-    await release({ userId: 'u1' })
+    db.create.mockResolvedValue({})
+    const reserved = await takeChimmyPlanAllowance({ userId: 'u1', state })
+    await release({ userId: 'u1', state: reserved! })
     expect(db.updateMany.mock.calls[0][0]).toMatchObject({
       where: { callsMade: { gt: 0 } },
       data: { callsMade: { decrement: 1 } },

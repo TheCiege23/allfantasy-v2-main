@@ -41,9 +41,9 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('gives the included answer back when nothing was delivered, and when the request throws', () => {
-    expect(ROUTE).toMatch(/if \(!delivery\.delivered && planIncluded && userId\) \{\s*\n\s*const released = await releaseChimmyPlanAllowance\(\{ userId \}\)/)
+    expect(ROUTE).toMatch(/if \(!delivery\.delivered && planIncluded && userId\) \{\s*\n\s*const released = await releaseChimmyPlanAllowance\(\{ userId, state: planIncluded \}\)/)
     expect(ROUTE).toContain('planMeta = released && planMeta')
-    expect(ROUTE).toMatch(/\} catch \(error\) \{\s*\n\s*if \(planIncluded && userId\) await releaseChimmyPlanAllowance\(\{ userId \}\)/)
+    expect(ROUTE).toMatch(/\} catch \(error\) \{\s*\n\s*if \(planIncluded && userId\) await releaseChimmyPlanAllowance\(\{ userId, state: planIncluded \}\)/)
   })
 
   it('covers the live-search answer too, taken only once a sourced answer exists', () => {

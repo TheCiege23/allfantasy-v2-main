@@ -69,7 +69,7 @@ export interface PlanAllowanceDeps {
   readUsed: (endpoint: string, window: { windowStart: Date; windowEnd: Date }) => Promise<number>
   /** Atomically take one if fewer than `limit` are used. Returns the new count, or null when none was left. */
   take: (endpoint: string, window: { windowStart: Date; windowEnd: Date }, limit: number) => Promise<number | null>
-  giveBack: (endpoint: string, window: { windowStart: Date; windowEnd: Date }) => Promise<void>
+  giveBack: (endpoint: string, window: { windowStart: Date; windowEnd: Date }) => Promise<void | boolean>
   now: () => Date
   limit: () => number
 }
@@ -119,14 +119,25 @@ const defaultDeps: PlanAllowanceDeps = {
     return row?.callsMade ?? limit
   },
   giveBack: async (endpoint, { windowStart, windowEnd }) => {
-    await prisma.apiRateLimitRecord.updateMany({
+    const updated = await prisma.apiRateLimitRecord.updateMany({
       where: { provider: PROVIDER, endpoint, windowStart, windowEnd, callsMade: { gt: 0 } },
       data: { callsMade: { decrement: 1 } },
     })
+    return updated.count === 1
   },
   now: () => new Date(),
   limit: () => CHIMMY_PLAN_DAILY_INCLUDED,
 }
+
+// Server-only ownership of a successful take. A read-only view is never a refund receipt.
+// Keep the original UTC window: a slow answer can finish after midnight.
+type AllowanceReservation = {
+  userId: string
+  window: { windowStart: Date; windowEnd: Date }
+  counted: boolean
+  release?: Promise<boolean>
+}
+const reservations = new WeakMap<ChimmyPlanAllowanceState, AllowanceReservation>()
 
 /**
  * Whether the caller's plan includes Chimmy, and how much of today's allowance is left. Reads only.
@@ -175,27 +186,44 @@ export async function takeChimmyPlanAllowance(
   deps: PlanAllowanceDeps = defaultDeps,
 ): Promise<ChimmyPlanAllowanceState | null> {
   const window = utcDayWindow(deps.now())
+  const receipt = (state: ChimmyPlanAllowanceState, counted: boolean) => {
+    reservations.set(state, { userId: args.userId, window, counted })
+    return state
+  }
   let used: number | null
   try {
     used = await deps.take(endpointFor(args.userId), window, args.state.limit)
   } catch {
-    return { ...args.state }
+    // No successful take was observed. Cleanup must never subtract another turn's answer.
+    const used = args.state.resetsAt === window.windowEnd.toISOString()
+      ? args.state.used : await deps.readUsed(endpointFor(args.userId), window).catch(() => 0)
+    return receipt({ ...args.state, used, remaining: Math.max(0, args.state.limit - used),
+      resetsAt: window.windowEnd.toISOString() }, false)
   }
   if (used == null) return null
-  return { ...args.state, used, remaining: Math.max(0, args.state.limit - used) }
+  return receipt({ ...args.state, used, remaining: Math.max(0, args.state.limit - used),
+    resetsAt: window.windowEnd.toISOString() }, true)
 }
 
 /** Give back an included answer that was never delivered. Report failure without throwing. */
 export async function releaseChimmyPlanAllowance(
-  args: { userId: string },
+  args: { userId: string; state: ChimmyPlanAllowanceState },
   deps: PlanAllowanceDeps = defaultDeps,
 ): Promise<boolean> {
-  try {
-    await deps.giveBack(endpointFor(args.userId), utcDayWindow(deps.now()))
-    return true
-  } catch {
-    return false
-  }
+  const reservation = reservations.get(args.state)
+  if (!reservation || reservation.userId !== args.userId || !reservation.counted) return false
+  if (reservation.release) return reservation.release
+  const release = Promise.resolve().then(async () => {
+    try {
+      return (await deps.giveBack(endpointFor(args.userId), reservation.window)) !== false
+    } catch {
+      return false
+    }
+  })
+  reservation.release = release
+  // A database timeout can occur after the decrement commits. Never try it twice without
+  // a durable reconciliation record; preserve the failure instead of risking a second refund.
+  return release
 }
 
 /** The shape the route reports in `meta.planAllowance` — defined once, in the client-safe view module. */
