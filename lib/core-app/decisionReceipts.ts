@@ -108,6 +108,11 @@ export type LineupReceipt = {
   benched: { name: string; points: number } | null
   /** The weakest starter who did not belong in it. */
   started: { name: string; points: number } | null
+  /** Whole legal-lineup difference, not a guessed one-for-one substitution. */
+  lineupChanges?: {
+    in: Array<{ name: string; points: number }>
+    out: Array<{ name: string; points: number }>
+  }
   /** Core's lineup screen for that league. */
   href: string
 }
@@ -726,8 +731,10 @@ export async function getLineupReceipts(args: {
         continue
       }
       const best = new Set(row.optimal.assignments.map((a) => a.playerId))
-      const benched = players.filter((p) => !p.wasStarter && best.has(p.playerId)).sort((a, b) => b.points - a.points)[0]
-      const started = players.filter((p) => p.wasStarter && !best.has(p.playerId)).sort((a, b) => a.points - b.points)[0]
+      const incoming = players.filter((p) => !p.wasStarter && best.has(p.playerId)).sort((a, b) => b.points - a.points)
+      const outgoing = players.filter((p) => p.wasStarter && !best.has(p.playerId)).sort((a, b) => a.points - b.points)
+      const benched = incoming[0]
+      const started = outgoing[0]
       const pointsLeft = Math.max(0, round1(row.pointsLeftOnBench))
       receipts.push({
         id: `${l.id}:${week}`,
@@ -739,6 +746,10 @@ export async function getLineupReceipts(args: {
         perfect: pointsLeft === 0,
         benched: benched ? { name: benched.playerName ?? 'Unmatched player', points: round1(benched.points) } : null,
         started: started ? { name: started.playerName ?? 'Unmatched player', points: round1(started.points) } : null,
+        lineupChanges: {
+          in: incoming.map((p) => ({ name: p.playerName ?? 'Unmatched player', points: round1(p.points) })),
+          out: outgoing.map((p) => ({ name: p.playerName ?? 'Unmatched player', points: round1(p.points) })),
+        },
         href: `/core/my-team?league=${encodeURIComponent(l.id)}`,
       })
     }
