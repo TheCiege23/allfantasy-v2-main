@@ -35,12 +35,15 @@ const h = vi.hoisted(() => ({
   oneGrade: vi.fn(),
   createGrader: vi.fn(),
   gradeDeal: vi.fn(),
+  ledger: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
 // The archive write (its own suite: __tests__/import-os/archive-feed-trades.test.ts). Mocked so this
 // suite stays hermetic, and so the sweep's call can be asserted.
 vi.mock('@/lib/import-os/collector/archiveFeedTrades', () => ({ archiveCompletedFeedTrades: h.archive }))
+// The offer-ledger write (its own suite: __tests__/provider-trades/ledger-from-sweep.test.ts).
+vi.mock('@/lib/provider-trades/syncProviderTradeOffers', () => ({ recordSweptTradesOnLedger: h.ledger }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: {
@@ -201,6 +204,7 @@ beforeEach(() => {
   h.oneGrade.mockImplementation(async (rowId: string) => (rowId === 'af-A' ? view('A', 25) : view('B', 24)))
   h.createGrader.mockImplementation(async (args: { leagueId: string; userId: string }) => ({ ...args, leagueType: LEAGUE_TYPE }))
   h.gradeDeal.mockImplementation(async () => view('B', 14))
+  h.ledger.mockResolvedValue({ offersWritten: 0, leaguesFailed: 0 })
 })
 
 describe('planTradeNotifications (pure)', () => {
@@ -526,3 +530,51 @@ describe('owed alerts in the pure plan', () => {
     expect(plan.owed).toEqual([])
   })
 })
+
+/*
+ * 🛑 THE OFFER LEDGER HEARS IT FROM THE SWEEP (Phase 2). 124 of 124 offers in eight days were first
+ * recorded already accepted, because only the ledger's own rotation wrote it. The sweep that alerts
+ * on an offer now records it — pending, on every AF copy of the league — in the same pass.
+ */
+describe('🛑 an announced trade reaches the offer ledger in the same pass', () => {
+  beforeEach(() => h.ledger.mockResolvedValue({ offersWritten: 1, leaguesFailed: 0 }))
+
+  it('a new offer is recorded PENDING, on every AF copy of the league', async () => {
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.ledger).toHaveBeenCalledTimes(1)
+    const arg = h.ledger.mock.calls[0][0] as { leagues: Array<{ id: string }>; trades: Array<{ id: string; status: string }> }
+    expect(arg.leagues.map((l) => l.id)).toEqual(['af-A', 'af-B'])
+    expect(arg.trades.map((t) => [t.id, t.status])).toEqual([['T1', 'pending']])
+  })
+
+  it('its completion is recorded too — the status change the ledger was missing', async () => {
+    h.store.set(SEEN_KEY, { version: 2, seen: ['T1'], pending: ['T1'], lastRunIso: 'x' })
+    h.currentIds.mockResolvedValue([trade('complete')])
+    await detectAndNotifyLeague('SL1')
+    expect((h.ledger.mock.calls[0][0] as { trades: Array<{ status: string }> }).trades.map((t) => t.status)).toEqual(['complete'])
+  })
+
+  it('a trade already seen and unchanged is NOT rewritten every tick', async () => {
+    h.store.set(SEEN_KEY, { version: 2, seen: ['T1'], pending: ['T1'], lastRunIso: 'x' })
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.ledger).not.toHaveBeenCalled()
+  })
+
+  it('only what is announced — an old, already-seen trade in the same feed is not rewritten', async () => {
+    h.store.set(SEEN_KEY, { version: 2, seen: ['T0'], pending: [], lastRunIso: 'x' })
+    h.currentIds.mockResolvedValue([{ ...trade('complete'), id: 'T0' }, trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect((h.ledger.mock.calls[0][0] as { trades: Array<{ id: string }> }).trades.map((t) => t.id)).toEqual(['T1'])
+  })
+
+  it('a ledger failure never costs the alert', async () => {
+    // The writer never throws (ledger-from-sweep.test.ts); a failure reaches the sweep as a count.
+    h.ledger.mockResolvedValue({ offersWritten: 0, leaguesFailed: 2 })
+    h.currentIds.mockResolvedValue([trade('pending')])
+    await detectAndNotifyLeague('SL1')
+    expect(h.sendEmail).toHaveBeenCalledTimes(1)
+  })
+})
+

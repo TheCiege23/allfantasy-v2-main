@@ -78,6 +78,11 @@ export type FeedTrade = {
   /** The week the transaction is filed under — the archive stores it (`LeagueTrade.week`). */
   week?: number
   tx: Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks' | 'waiver_budget'>>
+  /**
+   * The transaction exactly as Sleeper sent it — for the offer ledger's `payload` and its fields
+   * this type does not model (`consenter_ids`, `leg`). Absent on a row built anywhere but here.
+   */
+  raw?: Record<string, unknown>
 }
 
 const NOTIFIABLE_STATUSES = new Set(['complete', 'pending'])
@@ -128,6 +133,7 @@ export async function currentTradeIds(
         createdMs: typeof t.created === 'number' ? t.created : null,
         week: weekNumbers[index],
         tx: { adds: t.adds, drops: t.drops, draft_picks: t.draft_picks, waiver_budget: t.waiver_budget },
+        raw: t as unknown as Record<string, unknown>,
       })
     }
   }
