@@ -118,6 +118,11 @@ export async function acquireAutomationLock(
     }
     return { ok: true, backend: "postgres" }
   } catch (e) {
+    // Concurrent transactions can both observe an absent/expired lease. The losing
+    // insert (P2002), or expired-row delete (P2025), is contention, not an outage.
+    // Draft callers must retry instead of entering the infrastructure fail-open path.
+    const code = e && typeof e === 'object' ? (e as { code?: unknown }).code : undefined
+    if (code === 'P2002' || code === 'P2025') return { ok: false, reason: "Lock held (postgres)" }
     const msg = e instanceof Error ? e.message : String(e)
     return { ok: false, reason: `Postgres lock error: ${msg}` }
   }
