@@ -91,11 +91,27 @@ type WireTrade = Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_pick
   created?: number | null
 }
 
-export async function currentTradeIds(sleeperLeagueId: string, options?: { requireComplete?: boolean }): Promise<FeedTrade[] | null> {
+/**
+ * The trades in a league's transaction feed — every week, or only `options.weeks`.
+ *
+ * ⚠ A WEEKS-LIMITED READ IS A SLICE, NOT THE FEED. It is what the 5-minute offer sweep reads
+ * (`detectAndNotifyRecent`): a new offer is filed under the week it is sent in, so the current weeks
+ * are where one can appear, at 3 requests a league instead of 18. It cannot see an old offer being
+ * answered or a trade filed under an earlier week, so nothing may treat "absent from a slice" as
+ * "gone" — and a league's first read (the seen-set bootstrap) must never come from one.
+ */
+export async function currentTradeIds(
+  sleeperLeagueId: string,
+  options?: { requireComplete?: boolean; weeks?: ReadonlyArray<number> },
+): Promise<FeedTrade[] | null> {
+  const weekNumbers = options?.weeks
+    ? [...new Set(options.weeks)].filter((w) => Number.isInteger(w) && w >= 1 && w <= MAX_WEEKS).sort((a, b) => a - b)
+    : Array.from({ length: MAX_WEEKS }, (_, i) => i + 1)
+  if (weekNumbers.length === 0) return null
   const weeks = await Promise.all(
-    Array.from({ length: MAX_WEEKS }, (_, i) =>
+    weekNumbers.map((week) =>
       j<WireTrade[]>(
-        `/league/${sleeperLeagueId}/transactions/${i + 1}`,
+        `/league/${sleeperLeagueId}/transactions/${week}`,
       ),
     ),
   )
@@ -110,7 +126,7 @@ export async function currentTradeIds(sleeperLeagueId: string, options?: { requi
         rosterIds: Array.isArray(t.roster_ids) ? t.roster_ids.map(Number).filter(Number.isFinite) : [],
         creator: typeof t.creator === 'string' && t.creator ? t.creator : null,
         createdMs: typeof t.created === 'number' ? t.created : null,
-        week: index + 1,
+        week: weekNumbers[index],
         tx: { adds: t.adds, drops: t.drops, draft_picks: t.draft_picks, waiver_budget: t.waiver_budget },
       })
     }

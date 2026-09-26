@@ -76,7 +76,9 @@ describe('🛑 the first run after this change must not spam', () => {
 
   it('the bootstrap path still records everything and notifies nothing', () => {
     const code = strip(NOTIFY)
-    expect(code).toMatch(/if \(!seenRecord\)\s*\{[\s\S]{0,220}?bootstrap: true/)
+    // The window is wider since the 5-minute sweep: a sliced read must bootstrap from a FULL read
+    // (or defer), which puts that branch between the test and the bootstrap return.
+    expect(code).toMatch(/if \(!seenRecord\)\s*\{[\s\S]{0,900}?bootstrap: true/)
   })
 })
 
