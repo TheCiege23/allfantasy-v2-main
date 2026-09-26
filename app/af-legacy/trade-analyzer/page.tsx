@@ -2114,8 +2114,8 @@ export default function LegacyTradeAnalyzerPage() {
               <Card
                 className={cx(
                   'transition-shadow duration-300',
-                  verdictBorderTint(result.verdict),
-                  verdictHoverGlow(result.verdict)
+                  verdictBorderTint(result.verdict ?? undefined),
+                  verdictHoverGlow(result.verdict ?? undefined)
                 )}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">

@@ -912,12 +912,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
      * Started here and awaited at the response, so it overlaps the AI calls rather than adding to them.
      * ⚠ `viewerSide: false` — the caller is not proven to be the sender, so roster need is not priced.
      */
-    const pickInput = (p: { year: number; round: number; tier?: string | null }) => ({
-      kind: 'pick' as const,
-      year: p.year,
-      round: p.round,
-      ...(p.tier === 'early' || p.tier === 'mid' || p.tier === 'late' ? { tier: p.tier } : {}),
-    })
+    const PICK_TIERS = ['early', 'mid', 'late'] as const
+    const pickInput = (p: { year: number; round: number; tier?: string | null }): GradeInputs['assets'][number] => {
+      const tier = PICK_TIERS.find((t) => t === p.tier)
+      return { kind: 'pick', year: p.year, round: p.round, ...(tier ? { tier } : {}) }
+    }
     const sideInputs = (names: string[], picks: Array<{ year: number; round: number; tier?: string | null }>, faab: number | null | undefined): GradeInputs => ({
       assets: [
         ...names.filter((n) => n.trim()).map((name) => ({ kind: 'player' as const, name: name.trim() })),

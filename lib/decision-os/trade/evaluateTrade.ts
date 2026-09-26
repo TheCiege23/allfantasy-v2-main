@@ -156,17 +156,43 @@ type ReceiptDelegate = { create(args: { data: Record<string, unknown>; select: {
  * `TradeEvaluationReceipt` model, and production can run this code before its migration is applied —
  * the second raises P2021 on write. Both must end as `persisted: false`, never as a lost grade.
  */
-async function defaultSaveReceipt(row: TradeEvaluationReceiptRow): Promise<{ id: string }> {
-  const store = (prisma as unknown as { tradeEvaluationReceipt?: ReceiptDelegate }).tradeEvaluationReceipt
-  if (!store || typeof store.create !== 'function') throw new Error('trade_evaluation_receipts is not in the generated client')
-  return store.create({
-    data: {
-      ...row,
-      receipt: JSON.parse(JSON.stringify(row.receipt)) as Record<string, unknown>,
-    },
-    select: { id: true },
-  })
+export function createReceiptSaver(opts: {
+  store: () => ReceiptDelegate | undefined
+  now?: () => number
+  /** How long to stop trying after the table is reported missing. */
+  backoffMs?: number
+}): (row: TradeEvaluationReceiptRow) => Promise<{ id: string }> {
+  const now = opts.now ?? Date.now
+  const backoffMs = opts.backoffMs ?? 10 * 60_000
+  let skipUntil = 0
+  return async (row) => {
+    /*
+     * ⚠ BACK OFF WHILE THE TABLE IS MISSING. Until the migration is applied every write raises P2021,
+     * and the production Prisma client logs every error — one log line per trade evaluated. After a
+     * P2021 this stops asking for `backoffMs`, then tries again, so applying the migration takes
+     * effect without a deploy.
+     */
+    if (now() < skipUntil) throw new Error('trade_evaluation_receipts is missing; backing off')
+    const store = opts.store()
+    if (!store || typeof store.create !== 'function') throw new Error('trade_evaluation_receipts is not in the generated client')
+    try {
+      return await store.create({
+        data: {
+          ...row,
+          receipt: JSON.parse(JSON.stringify(row.receipt)) as Record<string, unknown>,
+        },
+        select: { id: true },
+      })
+    } catch (error) {
+      if ((error as { code?: unknown } | null)?.code === 'P2021') skipUntil = now() + backoffMs
+      throw error
+    }
+  }
 }
+
+const defaultSaveReceipt = createReceiptSaver({
+  store: () => (prisma as unknown as { tradeEvaluationReceipt?: ReceiptDelegate }).tradeEvaluationReceipt,
+})
 
 export const defaultEvaluateTradeDeps: EvaluateTradeDeps = {
   grade: defaultGrade,

@@ -1349,14 +1349,13 @@ function buildUserPrompt(args: {
         verdict: tradeBalance.verdict,
         breakdown: tradeBalance.breakdown,
         unknownPlayers: tradeBalance.unknownPlayers || [],
-        guidance: `AUTHORITATIVE VALUE CALCULATION (from FantasyCalc - ~1M real trades):
+        guidance: `AUTHORITATIVE VALUE CALCULATION (AllFantasy trade engine, on this league's values):
 • Team A RECEIVES: ${tradeBalance.sideAValue} total value
 • Team B RECEIVES: ${tradeBalance.sideBValue} total value
 • Value Gap: ${Math.abs(tradeBalance.difference)} (${tradeBalance.percentDiff}% difference)
-• Initial Verdict: ${tradeBalance.verdict}
+• Verdict: ${tradeBalance.verdict}
 
-
-YOUR GRADE MUST ALIGN WITH THESE VALUES. Adjust ±1 level for context, but DO NOT flip the winner.`
+The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; do not adjust them.`
       } : null,
 
       structuredDriverData: tradeDriverData ? {
