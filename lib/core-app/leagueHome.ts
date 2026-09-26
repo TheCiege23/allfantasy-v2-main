@@ -406,6 +406,7 @@ export async function getLeagueHomeData(
         platformLeagueId: league.platformLeagueId,
         ownerSleeperId: owner.sleeperUserId,
         sport: String(league.sport),
+        alertOnNewOffers: true,
       }).catch(() => null)
       /*
        * This scan already knows the offers waiting on you in this league; the Trades

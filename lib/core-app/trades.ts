@@ -552,6 +552,8 @@ async function resolvePendingOffers(
     platformLeagueId: league.platformLeagueId,
     ownerSleeperId: viewerSleeperId,
     sport: league.sport,
+    // A screen's read: a pending offer found here raises its alert now (`screenTradeAlerts.ts`).
+    alertOnNewOffers: true,
   }).catch(() => null)
 
   /* A throw and a refusal are the same fact to a reader: we did not look. */
