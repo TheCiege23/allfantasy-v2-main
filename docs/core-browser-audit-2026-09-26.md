@@ -142,3 +142,11 @@ The release checkout is based on the deployed `main` commit `0b8b61eafed13ddbbfd
 - Six focused regression files passed, covering 43 checks for provider mapping, refresh settings, completed-week boundaries, season outlook and sync continuation. Deployment and the populated-account recheck remain outstanding.
 
 Sleeper distinguishes `week`, `display_week` and league `leg`; a nonzero score is not evidence that a fantasy week has finished. See [Sleeper API documentation](https://docs.sleeper.com/) and [Sleeper's weekly score adjustment rules](https://support.sleeper.com/en/articles/3410666-adjusting-weekly-lineups-scores), which describe final scoring after the final game of a week completes.
+
+### Final release follow-up
+
+- Commissioner scoring charts exclude the provider's current week, include legitimate completed zero scores, and explicitly label uncertain progress when no marker exists.
+- Identical notifications from the same league and day are grouped without deleting receipts. A grouped action marks every underlying receipt; a failed PATCH keeps the unread count and presents retry feedback.
+- Draft HQ retains its page heading when no upcoming draft exists.
+- These final regressions passed: 39 tests across three files. The current-week matchup-cache follow-up passed 33 checks across four files.
+- All GitHub checks on 4b7c60d9ad passed, including four unit shards, the TypeScript regression guard, mobile smoke/auth, draft room, onboarding, retention and referral checks. The final follow-up revision requires fresh CI and Railway build verification.

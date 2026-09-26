@@ -74,7 +74,10 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
             </div>
           </>
         ) : (
-          <Unavailable reason={data.session.reason} />
+          <>
+            <h1 className="af-display af-dh-title">Draft HQ</h1>
+            <Unavailable reason={data.session.reason} />
+          </>
         )}
       </section>
 

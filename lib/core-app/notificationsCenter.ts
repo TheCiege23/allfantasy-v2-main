@@ -42,6 +42,7 @@ export type NotificationFilter =
   | 'commissioner'
 
 export type NotificationRow = {
+  relatedIds?: string[]
   id: string
   /** Which filter chip this falls under. */
   kind: NotificationFilter

@@ -617,9 +617,12 @@ export async function getCommissionerHub(input: {
   }
 
   // ── Season position ─────────────────────────────────────────────────────
-  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m)).map((m) => m.week)
+  const statedWeek = leagueWeekFromSettings(settingsJson)
+  const seasonComplete = ['complete', 'completed', 'finished'].includes(seasonStatus)
+  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m) &&
+    (seasonComplete || statedWeek == null || m.week < statedWeek)).map((m) => m.week)
   const lastPlayedWeek = scoredWeeks.length > 0 ? Math.max(...scoredWeeks) : null
-  const currentWeek = leagueWeekFromSettings(settingsJson) ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
+  const currentWeek = statedWeek ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
   const inSeason = seasonStatus === 'in_season' || (native && lastPlayedWeek != null && seasonStatus !== 'complete')
 
   /*
@@ -1014,7 +1017,7 @@ export async function getCommissionerHub(input: {
       chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {
-      scoring: matchups ? scoringChart(matchups) : null,
+      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }) : null,
       balance: balanceChart(
         teams.map((t) => ({ name: teamLabel(t), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
       ),
