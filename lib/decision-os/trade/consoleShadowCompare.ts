@@ -159,7 +159,7 @@ function hasIndependentValue(
 export function compareConsoleVerdictWithCanonicalGrade(input: {
   give: ConsoleComparableAsset[]
   get: ConsoleComparableAsset[]
-  consoleAdvantage: 'even' | 'you' | 'opponent' | 'mixed'
+  consoleAdvantage: 'even' | 'you' | 'opponent' | 'mixed' | null
   context: { sport: string; leagueType?: string | null; scoring?: string | null }
   currentSeason?: number | null
   /**
@@ -256,7 +256,7 @@ export function compareConsoleVerdictWithCanonicalGrade(input: {
    * because they were genuinely produced — only the agreement claim is withdrawn.
    */
   const agreement =
-    snapshot.grade.confidenceScore <= 0
+    snapshot.grade.confidenceScore <= 0 || input.consoleAdvantage == null
       ? null
       : input.consoleAdvantage === 'mixed'
         ? null
