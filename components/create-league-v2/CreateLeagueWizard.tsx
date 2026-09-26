@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -176,6 +177,7 @@ export function CreateLeagueWizard(props: WizardProps) {
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-10">
         <section className="space-y-5">
           <header className="space-y-3">
+            <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-44 max-w-full sm:w-52" />
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
               {t('createLeague.g30.eyebrow')}
             </p>

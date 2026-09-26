@@ -91,6 +91,9 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   }
   if (isDynastyConcept(lt) && state.dynasty) {
     const d = state.dynasty
+    conceptSetup.startupRosterDepth = d.startupRosterDepth
+    conceptSetup.benchCount = d.benchCount
+    conceptSetup.irCount = d.irCount
     conceptSetup.taxiSlots = d.taxiSlotCount
     conceptSetup.taxiEligibilityYears = d.taxiEligibilityYears
     conceptSetup.taxiLockDeadlineWeek = d.taxiLockDeadlineWeek
@@ -142,7 +145,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
 
   const tradeReviewMode =
     state.tradeReviewMode === 'none'
-      ? 'none'
+      ? 'instant'
       : state.tradeReviewMode === 'league_vote'
         ? 'league_vote'
         : 'commissioner'

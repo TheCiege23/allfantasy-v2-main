@@ -9,6 +9,7 @@ import {
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import KeeperPanel from '@/components/app/draft-room/KeeperPanel'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
@@ -57,7 +58,6 @@ const CommissionerControlCenterModal = dynamic(
 )
 const PostDraftView = dynamic(() => import('@/components/app/draft-room/PostDraftView'), { ssr: false })
 const AuctionSpotlightPanel = dynamic(() => import('@/components/app/draft-room/AuctionSpotlightPanel'), { ssr: false })
-const KeeperPanel = dynamic(() => import('@/components/app/draft-room/KeeperPanel'), { ssr: false })
 const PreDraftWizard = dynamic(
   () => import('@/components/commissioner/PreDraftWizard').then((m) => m.PreDraftWizard),
   { ssr: false },
@@ -4178,9 +4178,9 @@ export function DraftRoomPageClient({
           backgroundRepeat: 'no-repeat',
         } as const)
       : ({
-          backgroundImage: `linear-gradient(180deg, rgba(${sportAccent},0.1), rgba(4,9,21,0.75)), url('/branding/allfantasy-ai-for-fantasy-sports-logo.png')`,
-          backgroundSize: 'cover, 340px',
-          backgroundPosition: 'center, right -36px bottom -30px',
+          backgroundImage: `linear-gradient(180deg, rgba(${sportAccent},0.1), rgba(4,9,21,0.75)), url('/brand/allfantasy-wordmark-transparent.png')`,
+          backgroundSize: 'cover, min(60%, 340px)',
+          backgroundPosition: 'center, right 16px bottom 16px',
           backgroundRepeat: 'no-repeat, no-repeat',
         } as const)
   const boardOrderSourceLabel =

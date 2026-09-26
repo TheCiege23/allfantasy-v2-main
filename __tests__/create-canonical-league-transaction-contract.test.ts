@@ -381,3 +381,38 @@ describe('createCanonicalLeagueInTransaction contract', () => {
     }
   })
 })
+
+
+describe('creation choices persist into runtime records', () => {
+  it.each(['none', 'instant'])('persists %s review as immediate trades', async (tradeReviewMode) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ tradeReviewMode }), buildEngine())
+    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0]?.[0].data.commissionerTradeReviewType).toBe('instant')
+    expect(tx.league.create.mock.calls[0]?.[0].data.settings.trade_review_mode).toBe('instant')
+  })
+  it.each([['snake', true], ['linear', false], ['auction', false]])('applies 3RR only to %s drafts', async (draftType, enabled) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ draftType, conceptSetup: { thirdRoundReversal: true } }), buildEngine())
+    expect(tx.draftSession.create.mock.calls[0]?.[0].data.thirdRoundReversal).toBe(enabled)
+    expect(tx.league.create.mock.calls[0]?.[0].data.settings.third_round_reversal).toBe(enabled)
+  })
+  it('keeps disabled Best Ball trades disabled', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'best_ball', tradeReviewMode: 'none', conceptSetup: { bestBall: { mode: 'underdog' } } }), buildEngine({ leagueFormatId: 'best_ball' }))
+    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0]?.[0].data.commissionerTradeReviewType).toBe('none')
+  })
+})
+
+
+describe('dynasty commissioner choices reach the runtime', () => {
+  it('persists startup depth, slots, waiver and playoff choices', async () => {
+    const tx = buildTx()
+    const setup = { startupRosterDepth: 24, benchCount: 11, irCount: 0, taxiSlots: 3, regularSeasonWeeks: 12, playoffTeamCount: 4, waiverTypeRecommended: 'rolling', faabBudget: 0 }
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'dynasty', conceptSetup: setup }), buildEngine({ leagueFormatId: 'dynasty' }))
+    expect(tx.leagueSettings.create.mock.calls[0]?.[0].data.rounds).toBe(24)
+    expect(tx.draftSession.create.mock.calls[0]?.[0].data.rounds).toBe(24)
+    expect(tx.redraftLeagueDraftProfile.create.mock.calls[0]?.[0].data.rounds).toBe(24)
+    expect(tx.leagueWaiverSettings.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'rolling', faabBudget: 0 })
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ playoffTeams: 4, playoffStartWeek: 13, settings: { bench_slots: 11, ir_slots: 0, taxi_slots: 3, regular_season_weeks: 12, playoff_team_count: 4 } })
+  })
+})

@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'crypto'
+import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
 import { Prisma } from '@prisma/client'
 import type { LeagueSport } from '@prisma/client'
@@ -180,16 +181,45 @@ export async function createCanonicalLeagueInTransaction(
   })
   const managerCount = foundationDefaults.managerCount
   const draftSettings = foundationDefaults.draftSettings
-  const draftRounds = readNumber(draftSettings, 'rounds', draftDefaults.rounds_default)
+  const dynastySetup = formatId === 'dynasty' ? body.conceptSetup ?? {} : {}
+  const draftRounds = readNumber(dynastySetup, 'startupRosterDepth', readNumber(draftSettings, 'rounds', draftDefaults.rounds_default))
+  if (formatId === 'dynasty') {
+    const roster = resolveDynastyCreationRoster(sport, dynastySetup)
+    Object.assign(foundationDefaults.rosterSettings, {
+      starter_slots: roster.starters, starterSlots: roster.starters,
+      rosterSlots: Object.values(roster.starters).reduce((sum, count) => sum + count, 0),
+      benchSlots: roster.benchSlots, irSlots: roster.irSlots, taxiSlots: roster.taxiSlots,
+      totalRosterSlots: roster.totalRosterSlots,
+    })
+    if (typeof dynastySetup.regularSeasonWeeks === 'number') {
+      foundationDefaults.playoffSettings.playoffStartWeek = dynastySetup.regularSeasonWeeks + 1
+      foundationDefaults.playoffSettings.playoff_start_week = dynastySetup.regularSeasonWeeks + 1
+    }
+    if (typeof dynastySetup.playoffTeamCount === 'number') {
+      foundationDefaults.playoffSettings.playoffTeams = dynastySetup.playoffTeamCount
+      foundationDefaults.playoffSettings.playoff_team_count = dynastySetup.playoffTeamCount
+    }
+    foundationDefaults.draftSettings.rounds = draftRounds
+    foundationDefaults.waiverSettings.waiverType = dynastySetup.waiverTypeRecommended ?? foundationDefaults.waiverSettings.waiverType
+    foundationDefaults.waiverSettings.waiver_type = foundationDefaults.waiverSettings.waiverType
+    if (typeof dynastySetup.faabBudget === 'number') {
+      foundationDefaults.waiverSettings.faabBudget = dynastySetup.faabBudget
+      foundationDefaults.waiverSettings.FAAB_budget_default = dynastySetup.faabBudget
+    }
+    if (typeof dynastySetup.waiverTypeRecommended === 'string') waiverDefaults.waiver_type = dynastySetup.waiverTypeRecommended
+    if (typeof dynastySetup.faabBudget === 'number') waiverDefaults.FAAB_budget_default = dynastySetup.faabBudget
+  }
   const timerSeconds = readNumber(draftSettings, 'timerSeconds', draftDefaults.timer_seconds_default ?? 90)
   const pickTimerPreset = secondsToPickTimerPreset(timerSeconds)
+  const thirdRoundReversal = coreDraft === 'snake' &&
+    (bestBallSettings?.thirdRoundReversal ?? body.conceptSetup?.thirdRoundReversal === true)
 
   const tradeReview =
     bestBallSettings && !bestBallSettings.tradesEnabled
       ? 'none'
-      : body.tradeReviewMode === 'none' || body.tradeReviewMode == null
-      ? 'commissioner'
-      : body.tradeReviewMode
+      : body.tradeReviewMode === 'none'
+        ? 'instant'
+        : body.tradeReviewMode ?? 'commissioner'
 
   log?.('canonical_transaction_start', { appUserId, sport, formatId })
 
@@ -222,6 +252,20 @@ export async function createCanonicalLeagueInTransaction(
     trade_review_mode: tradeReview,
     requested_draft_type: body.draftType,
     canonical_draft_mode: body.draftType,
+    third_round_reversal: thirdRoundReversal,
+    draft_third_round_reversal: thirdRoundReversal,
+    draftSettings: { ...engine.settingsSnapshot.draftSettings, rounds: draftRounds, thirdRoundReversal },
+    ...(formatId === 'dynasty' ? {
+      starter_slots: foundationDefaults.rosterSettings.starter_slots,
+      bench_slots: foundationDefaults.rosterSettings.benchSlots,
+      ir_slots: foundationDefaults.rosterSettings.irSlots,
+      taxi_slots: foundationDefaults.rosterSettings.taxiSlots,
+      regular_season_weeks: dynastySetup.regularSeasonWeeks,
+      playoff_team_count: dynastySetup.playoffTeamCount,
+      rosterSettings: foundationDefaults.rosterSettings,
+      waiverSettings: foundationDefaults.waiverSettings,
+      playoffSettings: foundationDefaults.playoffSettings,
+    } : {}),
     language: body.language ?? 'en',
     default_team_count: managerCount,
     foundation_defaults: {
@@ -395,7 +439,9 @@ export async function createCanonicalLeagueInTransaction(
       bbMatchupFormat: bestBallSettings?.matchupFormat,
       bbTiebreaker: bestBallSettings?.tieRule,
       bbOptimizerTiming: 'period_end',
-      playoffTeams: clampPlayoffTeams(bestBallSettings?.playoffTeams ?? playoffTeamsDefault),
+      playoffTeams: typeof dynastySetup.playoffTeamCount === 'number'
+        ? dynastySetup.playoffTeamCount
+        : clampPlayoffTeams(bestBallSettings?.playoffTeams ?? playoffTeamsDefault),
       playoffSeedingRule:
         bestBallSettings?.matchupFormat === 'cumulative'
           ? 'points_only'
@@ -935,6 +981,7 @@ export async function createCanonicalLeagueInTransaction(
       auctionBudgetPerTeam: auctionBudget,
       sportType: sport,
       sessionKind: 'live',
+      thirdRoundReversal,
       cpuAutoPick: true,
       aiAutoPick: isAuto,
       ...(sessionDevyConfig ? { devyConfig: sessionDevyConfig as Prisma.InputJsonValue } : {}),

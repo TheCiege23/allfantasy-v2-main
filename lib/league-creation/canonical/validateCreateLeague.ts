@@ -3,6 +3,8 @@
  */
 
 import { z } from 'zod'
+import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
+import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import type { LeagueSport } from '@prisma/client'
 import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
@@ -57,6 +59,17 @@ export function stripForbiddenCreateLeagueFields(input: unknown): {
   return { body: o, strippedKeys }
 }
 
+const dynastyCreationChoicesSchema = z.object({
+  startupRosterDepth: z.number().int().min(1).max(80).optional(),
+  benchCount: z.number().int().min(0).max(50).optional(),
+  irCount: z.number().int().min(0).max(10).optional(),
+  taxiSlots: z.number().int().min(0).max(20).optional(),
+  regularSeasonWeeks: z.number().int().min(6).max(40).optional(),
+  playoffTeamCount: z.number().int().min(2).max(32).optional(),
+  waiverTypeRecommended: z.enum(['faab', 'rolling', 'reverse_standings']).optional(),
+  faabBudget: z.number().int().min(0).max(10000).optional(),
+}).passthrough()
+
 const SPORTS = z.enum(['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'])
 
 export const createLeagueBodySchema = z.object({
@@ -68,7 +81,7 @@ export const createLeagueBodySchema = z.object({
   leagueName: z.string().min(1).max(100).trim(),
   conceptSetup: z.record(z.unknown()).optional().nullable(),
   soccerPipeline: z.enum(['mls', 'euro']).optional().nullable(),
-  timezone: z.string().min(1).max(64).optional(),
+  timezone: z.string().trim().min(1).max(64).refine(isValidIanaTimeZone, 'Choose a valid IANA timezone').optional(),
   language: z.enum(['en', 'es']).optional(),
   tradeReviewMode: z.enum(['commissioner', 'league_vote', 'instant', 'none']).optional(),
 })
@@ -111,6 +124,28 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
 
   const data = parsed.data as ValidatedCreateLeagueBody
   const sport = normalizeToSupportedSport(data.sport)
+  const schedule = data.conceptSetup ?? {}
+  const date = schedule.draftDate
+  const time = schedule.draftTime
+  const zone = schedule.draftTimezone ?? data.timezone ?? 'America/New_York'
+  const scheduleErrors: ValidationIssue[] = []
+  if (schedule.draftTimezone != null && (typeof zone !== 'string' || !isValidIanaTimeZone(zone))) {
+    scheduleErrors.push({ path: 'conceptSetup.draftTimezone', message: 'Choose a valid draft timezone' })
+  }
+  if (date || time) {
+    const validDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+      !Number.isNaN(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date
+    const validTime = typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+    if (!validDate) scheduleErrors.push({ path: 'conceptSetup.draftDate', message: 'Choose a valid draft date' })
+    if (!validTime) scheduleErrors.push({ path: 'conceptSetup.draftTime', message: 'Choose a valid draft time' })
+    if (validDate && validTime && typeof zone === 'string' && isValidIanaTimeZone(zone) &&
+        Number.isNaN(toUtc(date as string, time as string, zone).getTime())) {
+      scheduleErrors.push({ path: 'conceptSetup.draftDate', message: 'Choose a valid draft schedule' })
+    }
+  }
+  if (scheduleErrors.length) {
+    return { ok: false, error: scheduleErrors[0].message, status: 400, errors: scheduleErrors }
+  }
 
   if (sport === 'SOCCER' && !data.soccerPipeline) {
     return {
@@ -154,6 +189,22 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
   }
 
   const formatId = normalized.formatId
+  if (formatId === 'dynasty') {
+    const choices = dynastyCreationChoicesSchema.safeParse(data.conceptSetup ?? {})
+    if (!choices.success) {
+      return { ok: false, error: choices.error.issues[0]?.message ?? 'Invalid dynasty settings', status: 400,
+        errors: issuesFromZod(choices.error).map((issue) => ({ ...issue, path: 'conceptSetup.' + issue.path })) }
+    }
+    if (typeof choices.data.startupRosterDepth === 'number' &&
+        choices.data.startupRosterDepth > resolveDynastyCreationRoster(data.sport, choices.data).totalRosterSlots) {
+      return { ok: false, error: 'Startup draft rounds exceed roster capacity', status: 400,
+        errors: [{ path: 'conceptSetup.startupRosterDepth', message: 'Add roster slots or reduce startup draft rounds so the draft can finish' }] }
+    }
+    if (typeof choices.data.playoffTeamCount === 'number' && choices.data.playoffTeamCount > data.teamCount) {
+      return { ok: false, error: 'Playoff teams cannot exceed team count', status: 400,
+        errors: [{ path: 'conceptSetup.playoffTeamCount', message: 'Playoff teams cannot exceed team count' }] }
+    }
+  }
   const idpRequested = normalized.aliasTags.includes('idp')
   const rawDraftType = String(data.draftType ?? '').trim().toLowerCase()
 
