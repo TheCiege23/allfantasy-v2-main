@@ -10,6 +10,8 @@ The salary-cap validation endpoint accepted client-provided salaries, wrote ledg
 
 [Reality Sports Online's format documentation](https://realitysportsonline.com/Content.aspx?articleID=how-it-works) treats salary commitments in the current and future years as constraints on available cap room. Its documented guarantees and cut penalties demonstrate why current cap space alone cannot establish future affordability. AllFantasy uses its own configured contract and dead-money rules; RSO's individual percentages and acceleration rules are not imported.
 
+[Sleeper's roster-limit documentation](https://support.sleeper.com/en/articles/3956140-can-a-team-go-over-the-roster-limit) permits trades over the roster limit and restricts subsequent roster operations until capacity is restored. [Its positional-limit documentation](https://support.sleeper.com/en/articles/5379935-how-do-i-set-positional-limits) excludes IR and taxi players from position limits. Capacity warnings must therefore describe the required roster cleanup, without universally claiming the imported platform will reject the trade.
+
 ## Next implementation priorities
 
 1. **Connect contract diagnostics to the shared proposal grader and counteroffer search.** Show salary, expiry, each team's post-trade cap room, and the binding year. Withhold a final legality conclusion when required contracts or rules are missing. A fair player-value package may still be unaffordable.
