@@ -27,7 +27,8 @@ import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topS
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
-import { railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
+import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
+import { speculationGate } from '@/components/core-app/speculationGate'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
@@ -1285,6 +1286,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     pendingLinkRef.current?.removeAttribute('data-nav-pending')
     link.setAttribute('data-nav-pending', 'true')
     pendingLinkRef.current = link
+    /* The screen the manager asked for is the one render that must not share the server. */
+    speculationGate.noteNavigation()
     setNavPending(target)
   }
 
@@ -1307,10 +1310,37 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     ) {
       return
     }
+    /*
+     * ⚠ REFUSED BY THE GATE IS NOT WARMED. Dropped rather than queued — a queue would only move
+     * the burst — and not recorded, so resting on this crest again once the server is free can
+     * still warm it.
+     */
+    if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
     router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
   }
+  /*
+   * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
+   * first cancels it. Crossing the rail on the way to something else used to warm every league
+   * it passed — see `railPrefetch.ts`.
+   */
+  const railDwellRef = useRef<{ leagueId: string; timer: number } | null>(null)
+  const cancelRailDwell = () => {
+    if (railDwellRef.current) window.clearTimeout(railDwellRef.current.timer)
+    railDwellRef.current = null
+  }
+  const startRailDwell = (leagueId: string) => {
+    cancelRailDwell()
+    railDwellRef.current = {
+      leagueId,
+      timer: window.setTimeout(() => {
+        railDwellRef.current = null
+        warmRailLeague(leagueId)
+      }, RAIL_WARM_DWELL_MS),
+    }
+  }
+  useEffect(() => cancelRailDwell, [])
 
   /*
    * The expanded league rail — 2026-09-07 handoff (`AF League List.dc.html`).
@@ -1723,9 +1753,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                  * See `railPrefetch.ts`.
                  */
                 prefetch={railAutoPrefetch ? undefined : false}
-                /* Pointing at a league IS intent, unlike scrolling past it. FULL prefetch. */
-                onMouseEnter={() => warmRailLeague(l.id)}
-                onFocus={() => warmRailLeague(l.id)}
+                /* RESTING on a league is intent; passing over it is not. FULL prefetch, via the gate. */
+                onMouseEnter={() => startRailDwell(l.id)}
+                onMouseLeave={cancelRailDwell}
+                onFocus={() => startRailDwell(l.id)}
+                onBlur={cancelRailDwell}
                 className="af-rail-tile af-platform"
                 data-core-nav=""
                 data-platform={l.platform}
