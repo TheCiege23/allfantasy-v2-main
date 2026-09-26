@@ -1986,7 +1986,7 @@ export function TradeCenter(props: {
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
 
           {result.salaryCap && result.salaryCap.status !== 'not_applicable' ? (
-            <div className="af-tc-league-moves" role="status">
+            <div className="af-tc-cap-check" role="status">
               <div className="af-label">Salary-cap affordability</div>
               {result.salaryCap.status === 'unavailable' ? (
                 <p>{result.salaryCap.reason} The value grade does not establish cap legality.</p>

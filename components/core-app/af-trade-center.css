@@ -2495,6 +2495,24 @@
   display: grid;
   gap: 8px;
 }
+.af-tc-cap-check {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.af-tc-cap-check p { margin: 0; }
+.af-tc-cap-check ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-tc-cap-check li {
+  min-width: 0;
+  font-size: 13px;
+}
 .af-tc-moves ul {
   display: grid;
   gap: 10px;
