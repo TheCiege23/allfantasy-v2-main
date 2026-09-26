@@ -9,6 +9,34 @@
 /** Slot names that are not a playing position. */
 const NON_PLAYING = new Set(['BN', 'IR', 'TAXI', 'RES', 'BENCH'])
 
+/** Reserve assignments free active spots; incoming players require active space
+ * until the manager explicitly assigns them to an eligible reserve slot. */
+export function activeRosterCapacity(args: {
+  slots: unknown
+  players: string[]
+  reserve: unknown
+  taxi: unknown
+  outgoingIds: string[]
+}): { rosterSize: number | null; held: number; outgoing: number } {
+  const owned = new Set(args.players)
+  const reserved = new Set<string>()
+  for (const list of [args.reserve, args.taxi]) {
+    if (Array.isArray(list)) for (const item of list) {
+      const id = String(item)
+      if (owned.has(id)) reserved.add(id)
+    }
+  }
+  const active = new Set(Array.from(owned).filter((id) => !reserved.has(id)))
+  const slotNames: unknown[] | null = Array.isArray(args.slots) ? args.slots : null
+  const slots = slotNames && slotNames.length > 0 && slotNames.every((slot) => typeof slot === 'string')
+    ? slotNames.filter((slot) => typeof slot === 'string' && !['IR', 'TAXI', 'RES'].includes(slot.toUpperCase())).length : null
+  return {
+    rosterSize: slots,
+    held: active.size,
+    outgoing: Array.from(new Set(args.outgoingIds)).filter((id) => active.has(id)).length,
+  }
+}
+
 /* ── 1. Roster crunch ──────────────────────────────────────────────────────
  *
  * ⚠ IN A DEEP LEAGUE YOU CANNOT ABSORB PLAYERS. Taking three back for one is a
@@ -47,8 +75,8 @@ export function assessRosterCrunch(args: {
     netChange,
     forcedDrops,
     basis:
-      forcedDrops > 0
-        ? `this deal leaves you ${after} players against ${rosterSize} spots — you would have to drop ${forcedDrops}, and in a league this deep those are gone the moment you do`
+      forcedDrops > 0 && rosterSize != null
+        ? `this deal leaves you ${after} active players against ${rosterSize} active spots — you need to free ${forcedDrops} spots through drops or eligible reserve assignments${held > rosterSize ? ` (your roster already exceeds active capacity by ${held - rosterSize})` : ''}`
         : rosterSize != null && netChange > 0 && after >= rosterSize
           ? `this fills your last roster spot — you have no room to absorb anything else`
           : null,

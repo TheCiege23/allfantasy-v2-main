@@ -10,6 +10,7 @@ import {
   assessConcentration,
   assessDeadline,
   assessRosterCrunch,
+  activeRosterCapacity,
   assessUnpriced,
 } from '@/lib/trade-intel/rosterShape'
 
@@ -116,7 +117,7 @@ describe('assessRosterCrunch: a 3-for-1 that forces two drops is not a 3-for-1',
   it('⚠ counts the drops a deep league makes permanent', () => {
     const c = assessRosterCrunch({ rosterSize: 25, held: 25, incoming: 3, outgoing: 1 })
     expect(c.forcedDrops).toBe(2)
-    expect(c.basis).toContain('drop 2')
+    expect(c.basis).toContain('free 2 spots')
   })
 
   it('says nothing when there is room', () => {
@@ -127,6 +128,28 @@ describe('assessRosterCrunch: a 3-for-1 that forces two drops is not a 3-for-1',
     const c = assessRosterCrunch({ rosterSize: null, held: 40, incoming: 5, outgoing: 0 })
     expect(c.forcedDrops).toBe(0)
     expect(c.basis).toBeNull()
+  })
+})
+
+describe('active roster capacity', () => {
+  it('keeps six reserve/taxi players out of a 27-slot active roster', () => {
+    const players = Array.from({ length: 33 }, (_, i) => String(i + 1))
+    const capacity = activeRosterCapacity({ slots: Array(27).fill('BN'), players,
+      reserve: ['28', '29'], taxi: ['30', '31', '32', '33'], outgoingIds: ['1'] })
+    expect(assessRosterCrunch({ ...capacity, incoming: 2 }).forcedDrops).toBe(1)
+  })
+
+  it('sending a reserve player does not free an active spot', () => {
+    const capacity = activeRosterCapacity({ slots: ['QB', 'BN', 'IR', 'TAXI'],
+      players: ['a', 'b', 'c'], reserve: ['c', 'foreign'], taxi: ['c'], outgoingIds: ['c'] })
+    expect(capacity).toEqual({ rosterSize: 2, held: 2, outgoing: 0 })
+    expect(assessRosterCrunch({ ...capacity, incoming: 1 }).forcedDrops).toBe(1)
+  })
+
+  it('deduplicates owned players and departures and withholds unknown limits', () => {
+    expect(activeRosterCapacity({ slots: [], players: ['a', 'a', 'b'], reserve: null,
+      taxi: null, outgoingIds: ['a', 'a', 'foreign'] }))
+      .toEqual({ rosterSize: null, held: 2, outgoing: 1 })
   })
 })
 
