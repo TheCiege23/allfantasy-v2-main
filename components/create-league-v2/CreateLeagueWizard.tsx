@@ -423,7 +423,7 @@ export function LeagueBasicsStep({
             data-testid="g30-team-count"
           />
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
-            {teamCountStep === 1 ? `${teamCountOptions[0]}–${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
+            {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
         </label>
       </div>

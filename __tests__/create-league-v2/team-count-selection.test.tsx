@@ -34,6 +34,7 @@ describe('simple creation team choices agree with the server', () => {
     expect(count).toHaveAttribute('min', '2')
     expect(count).toHaveAttribute('max', '32')
     expect(count).toHaveAttribute('step', '1')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
     fireEvent.click(screen.getByTestId('g30-league-type-redraft'))
     expect(onChange.mock.calls[0][0].teamCount).toBe(32)
   })
