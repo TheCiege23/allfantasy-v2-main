@@ -118,11 +118,18 @@ The user supplied the exact Railway app and environment link after initially sel
 - GitHub's only newly failing unit-test file expected the removed `Week 1 locks` wording. Updated that assertion to verify `Week 1 · first kickoff`, consistent with individual player locks; all 37 My Team tests passed. Mobile smoke/auth, onboarding, retention, referral and draft-room checks passed on revision `f98347283a`.
 - The broad suite under a concurrent build passed 787 checks with one trade-history timeout; all 11 tests in that file passed on a standalone rerun.
 
+### Screen loading measurement
+
+- Ten interactive screens now use a client lazy-import boundary while retaining default server rendering. This follows [Next.js lazy-loading guidance](https://nextjs.org/docs/app/guides/lazy-loading); the data readers remain on the server.
+- Both optimized builds completed successfully. Core route size fell from 219 KB to 197 KB; reported first-load JavaScript fell from 644 KB to 593 KB (about 8%). Core page CSS entries fell from 38 to 29, and their uncompressed total fell from 821,994 to 688,882 bytes (about 16%). These are build assets, not measured deployed user latency.
+- The comparison froze the lazy-screen changes before compilation. Subsequent server-side daily-feed and snap-distance changes were made during that build, so this is not a claim that an immutable final revision was fully built. Their focused regression checks passed separately; final CI and deployed verification remain required.
+- Follow-up global typecheck again reports 143 errors, with none in the modified screen registry, score selectors, game summary or their tests. The repository retains its existing type debt.
+
 The release checkout is based on the deployed `main` commit `0b8b61eafed13ddbbfd4167e5c4a63875ddc1fb0`, on branch `codex/core-browser-audit-20260926`. Newer shell route and navigation changes were preserved. The shared development checkout's unrelated edits are not included.
 
 - Focused release checks: **85 tests passed across 10 files**, plus the rivalry regression.
 - An initial broad run hit timeouts under concurrent load. With two workers, the full Core suite passed **788 tests across 85 files**; a separate live-score/outlook run passed **97 tests across seven files**.
-- Baseline and initial patched typechecks both report **143 errors**, with identical file/error-code counts and none in the changed files. Some diagnostic type-member ordering differs. This is not a clean global typecheck. The optimized Home build passed; the screen-bundle comparison build is still being checked.
+- Baseline and initial patched typechecks both report **143 errors**, with identical file/error-code counts and none in the changed files. Some diagnostic type-member ordering differs. This is not a clean global typecheck. Both optimized local builds passed, with the revision limitations above.
 - No production deployment has been made from this audit.
 
 ## Provider basis
