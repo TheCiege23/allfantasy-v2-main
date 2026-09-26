@@ -75,7 +75,7 @@ export default async function NoGamblingPolicyPage({ searchParams }: NoGamblingP
             </li>
           ))}
         </ul>
-        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Paid Contests Restricted</h3>
+        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Paid Features Restricted</h3>
         <ul className="list-disc list-inside space-y-2 ml-4">
           {paidBlockStates.map((state) => (
             <li key={state.code}>

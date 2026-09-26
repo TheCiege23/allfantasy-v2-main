@@ -94,7 +94,7 @@ export default async function PaidRestrictedPage({
           <p className="mb-2 font-semibold text-white/80">Why is this restricted?</p>
           <p>
             {meta?.details ??
-              `${stateName} state law currently classifies paid fantasy sports contests as a form of illegal gambling. We comply with all state laws.`}
+              `${stateName} restricts paid fantasy sports. Free features remain available. We comply with all state laws.`}
           </p>
           <p className="mt-3">
             <strong>Legal citation:</strong> {meta?.legalBasis ?? "See state gaming regulations."}
