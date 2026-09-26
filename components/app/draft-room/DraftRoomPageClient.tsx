@@ -4178,9 +4178,9 @@ export function DraftRoomPageClient({
           backgroundRepeat: 'no-repeat',
         } as const)
       : ({
-          backgroundImage: `linear-gradient(180deg, rgba(${sportAccent},0.1), rgba(4,9,21,0.75)), url('/branding/allfantasy-ai-for-fantasy-sports-logo.png')`,
-          backgroundSize: 'cover, 340px',
-          backgroundPosition: 'center, right -36px bottom -30px',
+          backgroundImage: `linear-gradient(180deg, rgba(${sportAccent},0.1), rgba(4,9,21,0.75)), url('/brand/allfantasy-wordmark-transparent.png')`,
+          backgroundSize: 'cover, min(60%, 340px)',
+          backgroundPosition: 'center, right 16px bottom 16px',
           backgroundRepeat: 'no-repeat, no-repeat',
         } as const)
   const boardOrderSourceLabel =

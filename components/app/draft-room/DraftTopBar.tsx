@@ -593,7 +593,9 @@ export function DraftTopBar({
                   e.currentTarget.style.display = 'none'
                 }}
               />
-            ) : null}
+            ) : (
+              <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={28} height={30} className="h-8 w-7 shrink-0 object-contain" data-testid="draft-topbar-brand-logo" />
+            )}
 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
