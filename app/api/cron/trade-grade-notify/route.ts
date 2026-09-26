@@ -3,8 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import {
+  claimRotationTick,
   detectAndNotifyAll,
   detectAndNotifyLeague,
+  detectAndNotifyRecent,
+  type RecentSweepResult,
 } from '@/lib/trade-intel/tradeNotifyService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import {
@@ -20,7 +23,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 /**
- * Trade-completion sweep (cron, every 15 min via cron-schedule.json):
+ * Trade-completion sweep (cron; cadence in cron-schedule.json). The 5-minute offer sweep runs every
+ * tick; the full-feed rotation and offer ledger at most every 15 minutes (`claimRotationTick`):
  *  - Cron mode: `Authorization: Bearer ${CRON_SECRET}` → sweeps every imported
  *    Sleeper league, detects newly completed trades, emails instant grades.
  *  - Manual mode: a signed-in league member may pass ?leagueId=<AF league id>
@@ -107,7 +111,56 @@ export async function GET(req: NextRequest) {
       results: [],
     }
 
-    const results = await withSyncJobRun(
+    /*
+     * 🛑 THE 5-MINUTE OFFER SWEEP, EVERY TICK (Guap's ruling, 2026-09-25). Every current-season
+     * Sleeper league, on the weeks a new offer can be filed under — see `detectAndNotifyRecent`.
+     * The rotation below read 20 leagues per 15 minutes, a lap of hours, and 124 of 124 offers in
+     * eight days were first seen already accepted.
+     *
+     * ⚠ IT RUNS FIRST AND IS BUDGETED: it stops STARTING leagues at 120s, so it cannot eat the
+     * rotation's time or this route's `maxDuration`. Its own `sync_job_runs` identity, for the same
+     * reason as the passengers: a lane that reports the driver's heartbeat reports nothing.
+     */
+    let offerSweep: (Omit<RecentSweepResult, 'results'> & { leagues: number; newOffers: number; newTrades: number; emailsSent: number; deferred: number }) | { error: string }
+    try {
+      const sweep = await withSyncJobRun(
+        { jobName: 'cron-trade-offer-sweep', trigger: 'cron' },
+        () => detectAndNotifyRecent({ deadlineMs: 120_000, concurrency: 6, bootstrapLimit: 5 }),
+        (r) => ({
+          rowsRead: r.results.length,
+          rowsWritten: r.results.reduce((a, x) => a + x.emailsSent, 0),
+          errors: r.results.filter((x) => x.error).map((x) => `${x.sleeperLeagueId}: ${x.error}`),
+          metadata: {
+            newOffers: r.results.reduce((a, x) => a + x.newOffers, 0),
+            newTrades: r.results.reduce((a, x) => a + x.newTrades, 0),
+            bootstrapped: r.results.filter((x) => x.bootstrap).length,
+            deferred: r.results.filter((x) => x.deferred).length,
+            unstarted: r.unstarted,
+            sports: r.sports,
+          },
+        }),
+      )
+      offerSweep = {
+        sports: sweep.sports,
+        unstarted: sweep.unstarted,
+        leagues: sweep.results.length,
+        newOffers: sweep.results.reduce((a, x) => a + x.newOffers, 0),
+        newTrades: sweep.results.reduce((a, x) => a + x.newTrades, 0),
+        emailsSent: sweep.results.reduce((a, x) => a + x.emailsSent, 0),
+        deferred: sweep.results.filter((x) => x.deferred).length,
+      }
+    } catch (e) {
+      console.error('[cron/trade-grade-notify] 5-minute offer sweep failed', e)
+      offerSweep = { error: e instanceof Error ? e.message : String(e) }
+    }
+
+    /*
+     * The full-feed rotation and the offer-ledger sweep keep their 15-minute cadence while the route
+     * ticks every 5: they read 18 weeks a league, and their cost was sized against 15.
+     */
+    const rotationDue = await claimRotationTick()
+
+    const results = !rotationDue ? [] : await withSyncJobRun(
       { jobName: 'cron-trade-grade-notify', trigger: 'cron' },
       /* Eight recently viewed leagues every fifteen minutes, plus twelve from the
        * durable cursor rotation. This keeps the route below its 300s budget
@@ -147,7 +200,9 @@ export async function GET(req: NextRequest) {
      */
     const SWEEP_BUDGET_FLOOR_MS = 120_000
     const elapsedMs = Date.now() - cronStartedAt
-    if (elapsedMs > maxDuration * 1000 - SWEEP_BUDGET_FLOOR_MS) {
+    if (!rotationDue) {
+      offerLedger = { ...offerLedger, skipped: 'runs with the full-feed rotation, every 15 minutes' }
+    } else if (elapsedMs > maxDuration * 1000 - SWEEP_BUDGET_FLOOR_MS) {
       /*
        * Not an error, and reported rather than silent: the ledger is eventually-consistent by
        * design, so a skipped cycle is a normal outcome. A sweep that never reports skipping is
@@ -184,6 +239,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       mode: 'cron' as const,
       scheduledTrades,
+      offerSweep,
+      rotation: rotationDue ? ('ran' as const) : ('not due' as const),
       offerLedger,
       leagues: results.length,
       newTrades: results.reduce((a, r) => a + r.newTrades, 0),

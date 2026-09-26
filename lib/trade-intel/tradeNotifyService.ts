@@ -20,8 +20,8 @@ import {
   type FeedTrade,
   type SleeperRoster,
 } from '@/lib/trade-intel/sleeperTradeSync'
-import { buildTradeAssetsForRoster } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { getAllPlayers, getLeagueUsers } from '@/lib/api-cache/SleeperCacheLayer'
+import { buildTradeAssetsForRoster, recentWeeksFromState } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { getAllPlayers, getLeagueUsers, getSleeperState, type SleeperSportState } from '@/lib/api-cache/SleeperCacheLayer'
 import { resolveSourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 
@@ -196,6 +196,11 @@ export function planTradeNotifications(
   feed: FeedTrade[],
   record: { seen: string[]; pending?: string[]; owed?: OwedAlert[] },
   nowMs: number = Date.now(),
+  /**
+   * The feed is a WEEKS SLICE (the 5-minute sweep), not every week. An owed offer absent from a
+   * slice may simply be filed under a week the slice did not read, so it is carried, not dropped.
+   */
+  options: { slice?: boolean } = {},
 ): TradeNotificationPlan {
   const seen = new Set(record.seen)
   const pending = new Set(record.pending ?? [])
@@ -237,6 +242,11 @@ export function planTradeNotifications(
       continue
     }
     const live = feedById.get(prior.id)
+    if (!live && options.slice) {
+      // Not in this slice is not gone: keep owing it until a read that covers it, or it ages out.
+      owed.set(owedKey(prior), prior)
+      continue
+    }
     if (live?.status !== 'pending') {
       // Accepted: announced as a completion above, if it was still pending. Gone: nothing to answer.
       dropped.push(prior)
@@ -269,6 +279,8 @@ export type LeagueNotifyResult = {
   emailsSent: number
   /** Alerts still owed after this run — retried by the next sweep. */
   stillOwed?: number
+  /** Why a league was left for another pass without being read. Not an error. */
+  deferred?: string
   error?: string
 }
 
@@ -402,7 +414,19 @@ type SleeperUserRow = { user_id?: string; display_name?: string; metadata?: { te
 type SleeperPlayerRow = { full_name?: string; first_name?: string; last_name?: string; position?: string; team?: string }
 
 /** Detect + notify for one Sleeper league id (may map to several AF league rows). */
-export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<LeagueNotifyResult> {
+export async function detectAndNotifyLeague(
+  sleeperLeagueId: string,
+  options: {
+    /** Read only these weeks — the 5-minute sweep's slice. Omitted: every week. */
+    weeks?: ReadonlyArray<number>
+    /**
+     * First reads this sweep may still spend on a full feed. A slice can never bootstrap a league,
+     * so a sliced read of a league with no seen record spends one of these on a full read instead,
+     * or defers the league to the full-feed rotation when none are left.
+     */
+    bootstrapBudget?: { left: number }
+  } = {},
+): Promise<LeagueNotifyResult> {
   const base: LeagueNotifyResult = {
     sleeperLeagueId,
     checked: false,
@@ -412,19 +436,35 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     emailsSent: 0,
   }
   try {
-    const feed = await currentTradeIds(sleeperLeagueId)
-    if (feed == null) return { ...base, error: 'transaction feed unavailable' }
-    base.checked = true
-
+    const slice = options.weeks != null
     const seenRecord = await readSeen(sleeperLeagueId)
     if (!seenRecord) {
-      // First run: record history, notify nothing (no retro spam). An offer open right now is
-      // remembered as pending, so its completion — which happens after this — is still announced.
-      await writeSeen(sleeperLeagueId, uniqueIds(feed), uniqueIds(feed.filter((f) => f.status === 'pending')))
+      /*
+       * First run: record history, notify nothing (no retro spam). An offer open right now is
+       * remembered as pending, so its completion — which happens after this — is still announced.
+       *
+       * 🛑 FROM THE WHOLE FEED, NEVER A SLICE. A seen-set bootstrapped from three weeks would leave
+       * every trade in the other fifteen unseen, and the next full read would announce all of them
+       * as new — the retro-spam burst this bootstrap exists to prevent.
+       */
+      if (slice) {
+        if (!options.bootstrapBudget || options.bootstrapBudget.left <= 0) {
+          return { ...base, deferred: 'no seen record yet — bootstrapped by a full read, not this slice' }
+        }
+        options.bootstrapBudget.left -= 1
+      }
+      const full = await currentTradeIds(sleeperLeagueId)
+      if (full == null) return { ...base, error: 'transaction feed unavailable' }
+      base.checked = true
+      await writeSeen(sleeperLeagueId, uniqueIds(full), uniqueIds(full.filter((f) => f.status === 'pending')))
       return { ...base, bootstrap: true }
     }
 
-    const plan = planTradeNotifications(feed, seenRecord)
+    const feed = await currentTradeIds(sleeperLeagueId, slice ? { weeks: options.weeks } : undefined)
+    if (feed == null) return { ...base, error: 'transaction feed unavailable' }
+    base.checked = true
+
+    const plan = planTradeNotifications(feed, seenRecord, Date.now(), { slice })
     if (plan.dropped.length > 0) {
       // Never silent: an alert given up on is the thing this record exists to prevent.
       console.warn('[trade-notify] owed alerts dropped undelivered', {
@@ -1036,3 +1076,126 @@ export async function detectAndNotifyAll(limit = 50, priorityLimit = 0): Promise
 
   return results
 }
+
+/* ─────────────────────────── the 5-minute offer sweep ─────────────────────────── */
+
+export type RecentSweepResult = {
+  results: LeagueNotifyResult[]
+  /** The weeks read per sport, or why a sport was left to the rotation. */
+  sports: Record<string, { weeks: number[] } | { skipped: string }>
+  /** Leagues not started because the deadline arrived; the next tick starts elsewhere. */
+  unstarted: number
+}
+
+/**
+ * Every current-season Sleeper league, read on the weeks a new offer can be filed under right now.
+ *
+ * 🛑 WHY (Guap's ruling, 2026-09-25: "every 5 minutes, every Sleeper league, current and previous
+ * week, on the worker"). The only sweep was the rotation below: 12 leagues from a cursor plus 8
+ * recently viewed, every 15 minutes, each reading all 18 weeks. At ~339 leagues that is a lap of
+ * hours — measured, 124 of 124 offers in eight days were first seen already ACCEPTED, so an "a
+ * trade is waiting on you" alert almost never arrived while there was still a decision to make.
+ *
+ * A new offer is filed under the week it is sent in, so this reads only Sleeper's current week and
+ * its neighbours (`recentWeeksFromState`, the window the Trade Center scan already uses) — 3
+ * requests a league instead of 18, which is what makes every league every tick affordable.
+ *
+ * ⚠ IT DOES NOT REPLACE THE ROTATION. A slice cannot see an old offer answered under an earlier
+ * week, and cannot bootstrap a league (see `detectAndNotifyLeague`). The full-feed rotation keeps
+ * both jobs; this is the latency lane in front of it.
+ *
+ * ⚠ ONLY SPORTS SLEEPER KEEPS A CLOCK FOR (NFL, NBA). Without `/state/<sport>` there is no current
+ * week to slice by, and guessing one would read the wrong weeks while reporting success. Those
+ * leagues stay on the rotation, and the result says so per sport.
+ *
+ * ⚠ A LEAGUE FROM A FINISHED SEASON IS NOT READ. An imported league row can be last year's league
+ * id, whose feed will never change again; reading it every five minutes is pure cost.
+ *
+ * ⚠ BOUNDED TWICE. `concurrency` caps the requests in flight; `deadlineMs` stops STARTING leagues
+ * once the tick's budget is spent, so this lane can never eat the route's `maxDuration`. The start
+ * point rotates with the clock, so a sweep that runs out of time does not starve the same tail
+ * every tick. Duplicate delivery across overlapping ticks is already impossible: every email and
+ * push is claimed per recipient first (`claimSend`).
+ */
+export async function detectAndNotifyRecent(
+  opts: { concurrency?: number; deadlineMs?: number; bootstrapLimit?: number; nowMs?: number } = {},
+): Promise<RecentSweepResult> {
+  const concurrency = Math.max(1, opts.concurrency ?? 6)
+  const startedAt = opts.nowMs ?? Date.now()
+  const deadline = startedAt + (opts.deadlineMs ?? 120_000)
+  const bootstrapBudget = { left: Math.max(0, opts.bootstrapLimit ?? 5) }
+
+  const rows = await prisma.league.findMany({
+    where: { platform: 'sleeper', platformLeagueId: { not: '' } },
+    select: { platformLeagueId: true, sport: true, season: true },
+    distinct: ['platformLeagueId'],
+    orderBy: { platformLeagueId: 'asc' },
+  })
+
+  const sports: RecentSweepResult['sports'] = {}
+  const stateBySport = new Map<string, SleeperSportState | null>()
+  for (const sport of new Set(rows.map((r) => String(r.sport ?? 'NFL').toUpperCase()))) {
+    stateBySport.set(sport, await getSleeperState(sport).catch(() => null))
+  }
+
+  const work: Array<{ id: string; weeks: number[] }> = []
+  for (const row of rows) {
+    const sport = String(row.sport ?? 'NFL').toUpperCase()
+    const state = stateBySport.get(sport) ?? null
+    const weeks = state ? [...recentWeeksFromState(state)] : []
+    if (weeks.length === 0) {
+      sports[sport] ??= { skipped: 'Sleeper keeps no current week for this sport — left to the full-feed rotation' }
+      continue
+    }
+    sports[sport] ??= { weeks }
+    const stateSeason = Number(state?.season)
+    if (Number.isFinite(stateSeason) && Number.isFinite(row.season) && row.season < stateSeason) continue
+    work.push({ id: row.platformLeagueId, weeks })
+  }
+
+  // Rotate the start with the clock so an over-budget tick does not starve the same tail forever.
+  const offset = work.length > 0 ? Math.floor(startedAt / 300_000) % work.length : 0
+  const ordered = [...work.slice(offset), ...work.slice(0, offset)]
+
+  const results: LeagueNotifyResult[] = []
+  let next = 0
+  let unstarted = 0
+  const runner = async () => {
+    for (;;) {
+      const i = next++
+      if (i >= ordered.length) return
+      if (Date.now() >= deadline) {
+        unstarted += 1
+        continue
+      }
+      const { id, weeks } = ordered[i]!
+      results.push(await detectAndNotifyLeague(id, { weeks, bootstrapBudget }))
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, ordered.length)) }, runner))
+  return { results, sports, unstarted }
+}
+
+/**
+ * Whether this tick runs the full-feed rotation, which stays on its 15-minute cadence while the
+ * route ticks every 5. Stamped in one cache row; true when the last run is at least 14 minutes old
+ * (a minute of slack, because ticks do not land on the minute).
+ *
+ * ⚠ FAILS TOWARD RUNNING. A stamp that cannot be read or written means doing the rotation, which is
+ * what every tick did before this lane existed — never skipping it indefinitely.
+ */
+const ROTATION_STAMP_KEY = 'trade-notify:rotation-stamp:v1'
+export const ROTATION_INTERVAL_MS = 14 * 60 * 1000
+
+export async function claimRotationTick(nowMs: number = Date.now()): Promise<boolean> {
+  const row = await prisma.sportsDataCache.findUnique({ where: { cacheKey: ROTATION_STAMP_KEY } }).catch(() => null)
+  const last = Number((row?.data as { lastRunMs?: unknown } | null)?.lastRunMs)
+  if (Number.isFinite(last) && nowMs - last < ROTATION_INTERVAL_MS && nowMs >= last) return false
+  const data = { lastRunMs: nowMs }
+  const expiresAt = new Date(nowMs + 30 * 24 * 60 * 60 * 1000)
+  await prisma.sportsDataCache
+    .upsert({ where: { cacheKey: ROTATION_STAMP_KEY }, update: { data, expiresAt }, create: { cacheKey: ROTATION_STAMP_KEY, data, expiresAt } })
+    .catch(() => null)
+  return true
+}
+
