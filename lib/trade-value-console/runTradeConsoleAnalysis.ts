@@ -766,6 +766,7 @@ export async function runTradeConsoleAnalysis(
   })
 
   const tradeIntelligence = buildTradeIntelligence({
+    proposalGraded: grade.graded,
     league: leagueSnapshot,
     strategy: input.strategy,
     teamContext: input.teamContext,

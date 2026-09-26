@@ -26,6 +26,8 @@ export function buildTradeIntelligence(args: {
   getTotal: number
   confidenceScore: number
   degraded: boolean
+  /** Shared evaluator's eligibility/pricing result; context gaps alone do not erase its verdict. */
+  proposalGraded?: boolean
   dataGaps: string[]
   injuryNotes: string[]
   drivers: DriverLike
@@ -66,7 +68,7 @@ export function buildTradeIntelligence(args: {
   }
 
   /** Long-term: dynasty uses composite % delta; redraft aligns with market tilt (ROS proxy). */
-  const whoWinsLongTerm: TradeIntelligence['whoWinsLongTerm'] = args.degraded ? 'unknown' : marketWho
+  const whoWinsLongTerm: TradeIntelligence['whoWinsLongTerm'] = args.proposalGraded === false ? 'unknown' : marketWho
 
   const fairnessVerdict = `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The grade uses the displayed league values, including scoring and roster-need adjustments. Asset projections describe production, not a change in starting-lineup points or win probability. Confidence ${Math.round(args.confidenceScore)}%.${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
 
@@ -152,8 +154,8 @@ export function buildTradeIntelligence(args: {
 
   let rebuilderRecommendation =
     args.strategy === 'rebuilder' || args.strategy === 'long_term'
-      ? `Rebuilder / long-term: favor picks and youth upside where data exists. Lean: ${args.drivers.verdict ?? 'see trade engine verdict'}.`
-      : `Rebuilder read (informational): ${whoWinsLongTerm === 'you' ? 'you tilt longer-term value in this framework.' : whoWinsLongTerm === 'opponent' ? 'opponent tilts longer-term in dynasty-style weighting.' : 'Long-term delta is close — use age/pick data on cards.'}`
+      ? `Rebuilder / long-term: consider picks and youth upside where data exists. Current league-value read: ${args.proposalGraded === false ? 'unavailable' : args.fairnessLabel}.`
+      : `Rebuilder read (informational): ${whoWinsLongTerm === 'you' ? 'the incoming package has more league value.' : whoWinsLongTerm === 'opponent' ? 'the outgoing package has more league value.' : whoWinsLongTerm === 'unknown' ? 'league value is unavailable.' : 'League values are close — use age/pick data on cards.'}`
 
   if (args.strategy === 'neutral') {
     contenderRecommendation = `Neutral strategy: ${contenderRecommendation}`
@@ -172,7 +174,6 @@ export function buildTradeIntelligence(args: {
     teamReasoning,
     contenderRecommendation,
     rebuilderRecommendation,
-    args.drivers.verdict ? `Engine verdict: ${args.drivers.verdict}` : null,
     alt.length > 0 ? alternateTargetsNote : null,
   ]
     .filter(Boolean)
