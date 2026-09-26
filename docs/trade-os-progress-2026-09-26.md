@@ -27,7 +27,7 @@ This closes these three mutation routes. Other acquisition, lifecycle and ledger
 
 ## Core matchup and lineup receipt accuracy
 
-Partial current-period scores no longer claim wins or losses. Completion requires an advanced saved league period, a completed season marker, or a past season. Recaps exclude explicitly partial results and do not classify ties as losses; completed cards omit predictive win odds. The weekly cache version advances to retire older payloads without completion evidence. Custom negative scores remain visible and a completed 0–0 matchup is a tie rather than a schedule placeholder.
+Partial current-period scores no longer claim wins or losses. Completion uses advanced saved league periods or completed season markers; past-season fallback applies only without same-season metadata. An active season can continue into January, and conflicting imports must agree before a result is claimed. Recaps exclude explicitly partial results and do not classify ties as losses; completed cards omit predictive win odds. The weekly cache version advances to retire older payloads without completion evidence. Custom negative scores remain visible and a completed 0–0 matchup is a tie rather than a schedule placeholder.
 
 Lineup receipts show all incoming and outgoing players from the optimizer's complete legal lineup. Independently selected names are no longer presented as a direct swap, which could imply replacing a tight end with a linebacker. Older receipt payloads use a safe single-player description.
 

@@ -99,15 +99,27 @@ export async function getWeekAll(
   const current = await resolveCurrentWeek(platformIds)
   if (!current) return empty
   const metadata = await readLeagueWeekMetadata(platformIds, 'platform')
-  const metadataByLeague = new Map(metadata.map((m) => [m.platformLeagueId, m]))
+  const metadataByLeague = new Map<string, typeof metadata>()
+  for (const meta of metadata) {
+    if (!meta.platformLeagueId) continue
+    const copies = metadataByLeague.get(meta.platformLeagueId) ?? []
+    copies.push(meta)
+    metadataByLeague.set(meta.platformLeagueId, copies)
+  }
   const completedFor = (platformId: string, season: number, week: number): boolean => {
-    const meta = metadataByLeague.get(platformId)
-    if (meta?.season != null && meta.season > season) return true
-    if (season < new Date().getUTCFullYear()) return true
-    if (meta?.season !== season) return false
-    if (String(meta.status).toLowerCase() === 'complete') return true
-    const period = leagueWeekFromSettings(meta.settings)
-    return period != null && week < period
+    const copies = metadataByLeague.get(platformId) ?? []
+    const sameSeason = copies.filter((meta) => meta.season === season)
+    if (sameSeason.length) {
+      // A season can continue into January. Its saved period outranks the clock;
+      // conflicting imports must all support completion before claiming a result.
+      return sameSeason.every((meta) => {
+        if (String(meta.status).toLowerCase() === 'complete') return true
+        const period = leagueWeekFromSettings(meta.settings)
+        return period != null && week < period
+      })
+    }
+    if (copies.some((meta) => meta.season != null && meta.season > season)) return true
+    return season < new Date().getUTCFullYear()
   }
   let latest = current
   if (opts.previous) {

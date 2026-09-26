@@ -69,6 +69,20 @@ describe('getWeekAll previous', () => {
     expect((await getWeekAll('u1', LEAGUES)).rows[0].completed).toBe(false)
   })
 
+  it('an active season remains partial after the calendar changes to January', async () => {
+    vi.setSystemTime(new Date('2027-01-02T12:00:00Z'))
+    h.current.mockResolvedValue({ seasonYear: 2026, week: 17 })
+    h.metadata.mockResolvedValue([{ platformLeagueId: 'sl-ice', season: 2026, status: 'in_season', settings: { leg: 17 } }])
+    expect((await getWeekAll('u1', LEAGUES)).rows[0].completed).toBe(false)
+    expect((await getWeekAll('u1', LEAGUES, { previous: true })).week).toBe(16)
+  })
+
+  it('conflicting imports cannot make a partial provider period look completed', async () => {
+    h.current.mockResolvedValue({ seasonYear: 2026, week: 3 })
+    h.metadata.mockResolvedValue([3, 4].map((leg) => ({ platformLeagueId: 'sl-ice', season: 2026, status: 'in_season', settings: { leg } })))
+    expect((await getWeekAll('u1', LEAGUES)).rows[0].completed).toBe(false)
+  })
+
   it('a completed season returns the last period as a recorded result', async () => {
     h.current.mockResolvedValue({ seasonYear: 2026, week: 17 })
     h.metadata.mockResolvedValue([{ platformLeagueId: 'sl-ice', season: 2026, status: 'complete', settings: { leg: 17 } }])
