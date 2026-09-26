@@ -41,7 +41,10 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         HI, ID, MT and NV are excluded from PAID leagues only. These are the same
         rules useGeoRestriction applies at runtime, so a drift here is a page that
         tells a user something different from what the product will do. Clause 7
-        below carries the statutory citations behind each one.
+        below states each rule. It deliberately does NOT cite the HI/ID/MT/NV
+        daily-fantasy statutes or call anything winnings: AllFantasy is not DFS
+        and holds no prizes, and that wording is what an A2P 10DLC carrier reviewer
+        read as "gambling-adjacent" (Twilio 30885, Sept 2026).
       */}
       <LegalCallout tone="warn" mark="§" title="Geographic restrictions">
         U.S. state laws may fully or partially restrict fantasy sports. AllFantasy is not available
@@ -164,38 +167,22 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
         <ul className="list-disc list-inside space-y-2 ml-4 mt-2">
           <li>
-            <strong>Washington State</strong> — Prohibited under RCW 9.46.240. Washington law classifies all fantasy sports as sports
-            wagering. Operating, offering, or advertising fantasy sports, including free contests, is a Class C felony under
-            Washington state law. AllFantasy.ai cannot provide any services to users located in Washington state.
+            <strong>Washington State</strong> — Fantasy sports are prohibited under RCW 9.46.240. AllFantasy.ai cannot provide any
+            services to users located in Washington state.
           </li>
         </ul>
-        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.2 Paid League Restricted States</h3>
+        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.2 States Where Paid Features Are Restricted</h3>
         <p>
-          The following states prohibit paid fantasy sports contests under state law. Residents of these states may create free
-          accounts and use free features, but are prohibited from joining paid leagues, paying entry fees, or purchasing
-          subscriptions:
+          In the following states, residents may create free accounts and use free features, but may not purchase AllFantasy
+          subscriptions or join paid leagues: <strong>Hawaii, Idaho, Montana and Nevada.</strong> We apply this restriction
+          conservatively based on each state&apos;s rules on paid fantasy sports.
         </p>
-        <ul className="list-disc list-inside space-y-2 ml-4 mt-2">
-          <li>
-            <strong>Hawaii</strong> — Paid DFS prohibited per AG Opinion 16-1 (2016).
-          </li>
-          <li>
-            <strong>Idaho</strong> — Paid DFS prohibited per Idaho Code §18-3802 and AG Opinion (May 2016).
-          </li>
-          <li>
-            <strong>Montana</strong> — Paid DFS prohibited per Montana Code §23-5-802.
-          </li>
-          <li>
-            <strong>Nevada</strong> — Paid DFS requires a sports betting license per NV Gaming Control Board ruling (2015). No DFS
-            operator currently holds such a license in Nevada.
-          </li>
-        </ul>
         <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.3 VPN and Proxy Usage</h3>
         <p>
           Using a VPN, proxy, or any other method to circumvent geographic restrictions while in a restricted state is a violation
           of these Terms of Service and may constitute a violation of applicable state law. AllFantasy.ai employs VPN and proxy
           detection technology. Accounts found to be circumventing geographic restrictions may be immediately suspended and any
-          winnings or prizes forfeited.
+          paid subscription cancelled.
         </p>
         <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.4 User Representation</h3>
         <p>
