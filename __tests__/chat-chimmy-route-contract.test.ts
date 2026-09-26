@@ -36,12 +36,15 @@ const prismaLeagueFindUniqueMock = vi.fn()
 const prismaRedraftMemberFindUniqueMock = vi.fn()
 const prismaRosterCountMock = vi.fn()
 const prismaLeagueTeamFindFirstMock = vi.fn()
+const prepareDecisionMock = vi.hoisted(() => vi.fn())
 const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
 vi.mock("@/lib/chimmy/tools/myRosterInjuriesTool", () => ({
   buildMyRosterInjuriesContext: buildMyRosterInjuriesMock,
 }))
+
+vi.mock("@/lib/chimmy/decisionAnswerService", () => ({ prepareChimmyDecisionAnswer: prepareDecisionMock }))
 
 vi.mock("next-auth", () => ({
   getServerSession: getServerSessionMock,
@@ -185,6 +188,8 @@ vi.setConfig({ testTimeout: 60000 })
 describe("POST /api/chat/chimmy contract", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // These fixtures isolate orchestration/billing. Decision-service behavior is tested below and in chimmy-decision-answer.
+    prepareDecisionMock.mockResolvedValue(null)
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
     runAiProtectionMock.mockResolvedValue(null)
     enrichChatWithDataMock.mockResolvedValue({
@@ -411,6 +416,43 @@ describe("POST /api/chat/chimmy contract", () => {
         },
       },
     })
+  })
+
+
+  it("returns an engine decision without asking a model to replace it", async () => {
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
+      status: "ready", leagueId: "league-1", answer: "Engine verdict: hold this player.", sources: ["trade_engine"] })
+    const form = new FormData()
+    form.append("message", "Should I trade this player?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.response).toBe("Engine verdict: hold this player.")
+    expect(body.meta.decision).toMatchObject({ status: "ready", authority: "explanation_only", leagueId: "league-1" })
+    expect(spendTokensForRuleMock).toHaveBeenCalled()
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+
+  it("returns a missing-evidence gap before spending tokens", async () => {
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
+      status: "needs_data", leagueId: null, answer: "Sync your roster before asking again.", sources: [], gap: { code: "roster_missing", remedy: "Sync your roster." } })
+    const form = new FormData()
+    form.append("message", "Should I trade this player?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.response).toBe("Sync your roster before asking again.")
+    expect(body.meta.tokenSpend).toBeNull()
+    expect(body.meta.decision).toMatchObject({ status: "needs_data", leagueId: null })
+    expect(body.meta.leagueGrounding).toMatchObject({ grounded: false, leagueId: null })
+    expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
 
   it("continues the Chimmy run when token preview fails", async () => {
