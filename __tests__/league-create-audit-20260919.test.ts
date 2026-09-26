@@ -104,15 +104,15 @@ describe('2026-09-19 league audit reproductions', () => {
     expect(advanced.formatResolution.modifiers).toEqual(ordinary.formatResolution.modifiers)
   })
 
-  it('reproduces accepting an invalid IANA timezone at create validation', () => {
-    expect(validateCreatePayload({ ...body, timezone: 'Not/AZone' }).ok).toBe(true)
+  it('rejects an invalid IANA timezone at create validation', () => {
+    expect(validateCreatePayload({ ...body, timezone: 'Not/AZone' }).ok).toBe(false)
   })
 
-  it('reproduces explicit no-review choice becoming commissioner review', async () => {
+  it('preserves explicit no-review as instant approval', async () => {
     const tx = txMock()
     const engine = runPresetEngine({ ...body, commissionerId: 'audit-user' })
     await createCanonicalLeagueInTransaction(tx as any, 'audit-user', { ...body, tradeReviewMode: 'none' } as any, engine)
-    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0][0].data.commissionerTradeReviewType).toBe('commissioner')
+    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0][0].data.commissionerTradeReviewType).toBe('instant')
   })
 
   it('records effective NFL draft and manager menus for every concept', () => {
