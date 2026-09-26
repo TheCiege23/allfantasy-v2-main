@@ -164,8 +164,8 @@ export async function assignLeagueSeat(
     select: { id: true, platformUserId: true, claimedByUserId: true, teamName: true },
   })
 
-  await tx.roster.update({
-    where: { id: rosterId },
+  const claimed = await tx.roster.updateMany({
+    where: { id: rosterId, leagueId, platformUserId: previousOwner },
     data: {
       platformUserId: userId,
       ...(Object.keys(foundation).length > 0
@@ -181,6 +181,9 @@ export async function assignLeagueSeat(
         : {}),
     },
   })
+
+  // Another claim may have committed after the ownership read. Never overwrite it.
+  if (claimed.count !== 1) return { ok: false, code: 'ROSTER_TAKEN', message: 'That team is already claimed.' }
 
   // A native open team takes its manager's name; an imported team keeps the name its league gave it.
   const teamName = wasOpenTeam || !team?.teamName ? `${name}'s Team` : team.teamName

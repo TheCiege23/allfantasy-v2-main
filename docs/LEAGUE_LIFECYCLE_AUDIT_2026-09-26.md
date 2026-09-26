@@ -60,3 +60,27 @@ That smoke exposed a UI/server mismatch: dynasty, keeper and Best Ball offered t
 Protected CI for the first release passed, including the check for no new TypeScript errors. The earlier full compiler baseline errors remain outside this change.
 
 The expanded real test-database smoke also passed next-season creation for all three formats. Dynasty carried all 80 active players into the next season, created a rookies-only draft and applied one traded future pick. Keeper placed one locked keeper in its next full draft. Redraft created its next standard draft. A second renewal request returned DRAFT_STILL_OPEN for each format. Cleanup explicitly verified zero tracked leagues, users and weekly-score rows. This uses a completed-season fixture and seeded keeper/future-pick records, not a full authenticated offseason UI journey.
+
+## Real pick submission and contention repair
+
+A guarded known-test-database smoke exercised the actual draft-start service and pick-submission service on a two-team, two-round snake draft. The real authority helper allowed the manager's roster and refused another manager's roster and a nonmember. Two simultaneous submissions produced exactly one first pick. Stale overall and duplicate player requests were rejected, and the last pick automatically completed the session and materialized four season roster players. Tracked synthetic leagues and users were removed.
+
+The run reproduced a Postgres lease race: both transactions observed a missing lease; the losing unique insert was classified as an infrastructure error, so draft submission entered its fail-open path. The pick unique index still prevented duplicate commits. The repair classifies competing insert/deletion errors (P2002/P2025) as lock contention, so draft callers return the ordinary retry response. The repaired real database run passed without entering the infrastructure fail-open path. Twenty-eight unit assertions passed, including genuine connection-failure fallback. This verifies service behavior with real DB writes and identity checks, not browser authentication/session cookies or a full normal-size draft.
+
+## Authenticated API verification
+
+The team-count release (#1349, b1a3ce9489d5e307b51d36f13af1b23cb6427aa5) reached Railway SUCCESS. The preceding branding/persistence release also reached SUCCESS.
+
+A real local Next server connected to the known test database passed the authenticated creation smoke: anonymous POST /api/leagues returned 401; the credentials callback established a real NextAuth cookie session; authenticated creation installed two rosters, roster configuration and a draft. A spoofed commissionerId was stripped and league ownership matched the authenticated user. Cleanup verified zero tracked synthetic leagues/users. Temporary Next/TypeScript cross-drive settings were restored and the owned server stopped.
+
+Automatic review initially rejected this test because inherited Meta credentials might send test conversions. The safer rerun restarted the server with Meta pixel/conversion, email and shared Redis credentials explicitly disabled. Server logs confirmed the Meta event was skipped because no conversion token was set. No signup endpoint was called.
+
+Remaining acceptance includes the full authenticated browser journey through joins/settings/draft picks, full-size real drafts, active-pool remote image coverage, cross-sport stats/ADP completeness and each offered specialty lifecycle.
+
+## Authenticated concurrent joins and settings
+
+Two real cookie-authenticated managers competed for the final native seat. Baseline: a concurrent finance initialization returned HTTP 500 (LeagueFinance.leagueId uniqueness), and with finance pre-created both requests returned success for one seat. The fix uses atomic finance initialization, a league-row lock before join capacity checks, and an ownership-conditional seat update that refuses a changed owner before writing team/membership mirrors.
+
+The repaired authenticated test returned one 200 and one 409 (League is full), with exactly two roster owners. It also exposed an existing-member retry incorrectly refused by the full-league check; membership is now recognized before capacity refusal. Rejoining creates no additional roster. A member PATCH of draft settings returned 403; the commissioner's PATCH returned 200 and persisted 3RR. Concurrent real finance initialization returned the same record to both callers. Synthetic leagues/users were removed, and the owned local server was stopped with temporary Next/TypeScript settings restored.
+
+Sixty targeted unit assertions passed across seat assignment, stale ownership, full-league rejoin, finance creation, entry-fee guards, imported identities and invitation contracts. The real test uses the guarded test database; no production fixtures were created.

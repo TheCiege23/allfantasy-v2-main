@@ -86,6 +86,9 @@ export async function POST(req: NextRequest) {
   }
 
   const joinResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Serialize capacity checks and seat claims for this league. Two requests must
+    // not both accept the final open seat from the same pre-claim snapshot.
+    await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${result.leagueId} FOR UPDATE`
     const existing = await tx.roster.findUnique({
       where: { leagueId_platformUserId: { leagueId: result.leagueId, platformUserId: userId } },
       select: { id: true },
