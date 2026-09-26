@@ -32,6 +32,7 @@ import { loadLeagueForTrade } from './league-loader'
 import { snapshotFromLoaded } from './quick-badges'
 import { pricedAssetToEngineAsset } from './priced-asset-to-asset'
 import { buildTradeIntelligence } from './build-trade-intelligence'
+import { presentTradeConsoleVerdict } from './verdictPresentation'
 import { enrichTradeConsolePlayerLines, sumEffectiveProjections } from './tradeProjectionEnrichment'
 import {
   formatStructuredContextForReasoning,
@@ -847,7 +848,11 @@ export async function runTradeConsoleAnalysis(
         ? 'opponent'
         : tradeIntelligence.whoWinsLongTerm === 'unknown' ? 'unavailable' : 'even'
 
-  const summaryLine = `Fairness ${Math.round(fairnessScore)}/100 · asset production ${shortLbl} · league value ${longLbl}${degraded ? ' · degraded inputs' : ''}`
+  const presentation = presentTradeConsoleVerdict({ graded: grade.graded, fairnessScore, confidenceScore,
+    fairnessLabel, sideAdvantage, confidenceLabel: confidence })
+  const summaryLine = grade.graded
+    ? `Fairness ${Math.round(fairnessScore)}/100 · asset production ${shortLbl} · league value ${longLbl}${degraded ? ' · degraded inputs' : ''}`
+    : `Proposal grade unavailable · ${grade.reason} · asset production ${shortLbl}`
 
   const dataQuality: 'full' | 'partial' | 'degraded' = degraded
     ? 'degraded'
@@ -906,8 +911,9 @@ export async function runTradeConsoleAnalysis(
     strategy: input.strategy,
     teamContext: input.teamContext,
     analysisTab: input.analysisTab,
-    fairnessScore,
-    confidenceScore,
+    fairnessScore: presentation.fairnessScore,
+    confidenceScore: presentation.confidenceScore,
+    grade,
     percentDiff,
     totals: { give: giveTotal, get: getTotal, giveMarket, getMarket },
     assets: { give: giveLines, get: getLines },
@@ -998,13 +1004,9 @@ export async function runTradeConsoleAnalysis(
     effectiveSport,
     analysisScope: leagueSnapshot ? 'league' : 'general',
     league: leagueSnapshot,
-    labels: {
-      fairnessLabel,
-      sideAdvantage,
-      confidenceLabel: confidence,
-    },
-    fairnessScore,
-    confidenceScore,
+    fairnessScore: presentation.fairnessScore,
+    confidenceScore: presentation.confidenceScore,
+    labels: presentation.labels,
     percentDiff,
     giveTotal,
     getTotal,

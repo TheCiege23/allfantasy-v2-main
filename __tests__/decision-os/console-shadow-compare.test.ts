@@ -7,6 +7,18 @@ import { compareConsoleVerdictWithCanonicalGrade } from "@/lib/decision-os/trade
 const ctx = { sport: "NFL", leagueType: "league", scoring: "PPR" }
 
 describe("compareConsoleVerdictWithCanonicalGrade", () => {
+  it("does not claim agreement or disagreement when the console withholds its verdict", () => {
+    const result = compareConsoleVerdictWithCanonicalGrade({
+      give: [{ kind: "player", name: "A", position: "WR", projection: 15, marketValue: 5000, pricedSource: "fantasycalc" }],
+      get: [{ kind: "player", name: "B", position: "WR", projection: 15, marketValue: 5000, pricedSource: "fantasycalc" }],
+      consoleAdvantage: null,
+      context: ctx,
+    })
+    expect(result.canonicalAdvantage).toBe("even")
+    expect(result.canonicalConfidenceScore).toBeGreaterThan(0)
+    expect(result.agreement).toBeNull()
+  })
+
   it("an even swap grades even and agrees with an even console verdict", () => {
     const side = [
       { kind: "player" as const, name: "A", position: "WR", projection: 15, marketValue: 5000, pricedSource: "fantasycalc" },

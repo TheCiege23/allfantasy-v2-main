@@ -204,8 +204,8 @@ type AnalyzeResult = {
   salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
   counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
-  fairnessScore?: number
-  confidenceScore?: number
+  fairnessScore?: number | null
+  confidenceScore?: number | null
   percentDiff?: number
   degraded?: boolean
   dataGaps?: string[]
@@ -1168,17 +1168,21 @@ export function TradeCenter(props: {
     new Set(
       [...(result?.players?.give ?? give), ...(result?.players?.get ?? get)]
         .map((line) => line.pricedSource?.trim())
-        .filter((source): source is string => Boolean(source)),
+        .filter((source): source is string => typeof source === 'string' && source.length > 0 && !['unknown', 'placeholder', 'unpriced'].includes(source.toLowerCase())),
     ),
   )
-  const yourIncentive = intel?.contenderRecommendation ?? intel?.why ??
+  const yourIncentive = noSignal
+    ? 'The complete proposal value is unavailable. Review the priced assets and your roster before deciding.'
+    : intel?.contenderRecommendation ?? intel?.why ??
     (balance?.diff != null && balance.diff >= 0
       ? `You receive about ${money(balance.diff)} more in current market value.`
       : 'The deal may improve your roster construction even when the raw market total is close.')
   const theirIncentive = balance?.diff != null && balance.diff <= 0
     ? `They receive about ${money(Math.abs(balance.diff))} more in current market value.`
     : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
-  const agreementBlocker = intel?.tradeWarnings?.[0] ??
+  const agreementBlocker = noSignal
+    ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'The complete proposal could not be valued.'
+    : intel?.tradeWarnings?.[0] ??
     (balance?.diff != null && balance.diff > 0
       ? `The current market baseline favors you by ${money(balance.diff)}, so they may ask for another asset.`
       : unpricedCount([...give, ...get]) > 0
@@ -1203,7 +1207,9 @@ export function TradeCenter(props: {
 
     const parts = [side('I give', give), side('I get', get)].filter(Boolean).join('. ')
     const league = props.league?.name ? ` in ${props.league.name}` : ''
-    const verdict = result?.labels?.fairnessLabel
+    const verdict = noSignal
+      ? ' The proposal grade is unavailable.'
+      : result?.labels?.fairnessLabel
       ? ` The analyzer says: ${result.labels.fairnessLabel}.`
       : ''
 
@@ -1217,7 +1223,7 @@ export function TradeCenter(props: {
         },
       }),
     )
-  }, [give, get, props.league?.name, result])
+  }, [give, get, props.league?.name, result, noSignal])
 
   if (!props.league) {
     return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
@@ -2025,16 +2031,16 @@ export function TradeCenter(props: {
             ) : null}
             <span className="af-tc-spacer" />
             <div className="af-tc-score">
-              {typeof result.fairnessScore === 'number' ? (
+              {!noSignal && typeof result.fairnessScore === 'number' ? (
                 <span className="af-tc-score-num af-num">
                   {Math.round(result.fairnessScore)}
                   <small>/100</small>
                 </span>
               ) : null}
               <strong className="af-tc-score-label">
-                {result.labels?.fairnessLabel ?? 'No verdict'}
+                {noSignal ? 'Grade unavailable' : result.labels?.fairnessLabel ?? 'No verdict'}
               </strong>
-              {result.labels?.confidenceLabel ? (
+              {!noSignal && result.labels?.confidenceLabel ? (
                 <span className="af-tc-conf">{result.labels.confidenceLabel}</span>
               ) : null}
             </div>
@@ -2047,7 +2053,7 @@ export function TradeCenter(props: {
             viewer. The dot used to sit on an unlabelled bar; a manager reading
             41 could not tell whether that was good or bad for them.
           */}
-          {typeof result.fairnessScore === 'number' ? (
+          {!noSignal && typeof result.fairnessScore === 'number' ? (
             <div className="af-tc-track-wrap">
               <div className="af-tc-track">
                 <span className="af-tc-track-mid" aria-hidden />
@@ -2072,13 +2078,11 @@ export function TradeCenter(props: {
           {noSignal ? (
             serverGrade && !serverGrade.graded ? (
               <p className="af-tc-nosignal">
-                Not graded: {serverGrade.reason} An even-looking score here means we have no signal,
-                not that the trade is fair.
+                Not graded: {serverGrade.reason}
               </p>
             ) : (
               <p className="af-tc-nosignal">
-                We could not price enough of this deal to stand behind a verdict. An even-looking
-                score here means we have no signal, not that the trade is fair.
+                We could not price enough of this deal to stand behind a verdict.
               </p>
             )
           ) : null}
@@ -2109,7 +2113,7 @@ export function TradeCenter(props: {
             </div>
           ) : null}
 
-          {(result.counterOffers ?? []).length > 0 ? (
+          {!noSignal && (result.counterOffers ?? []).length > 0 ? (
             <div className="af-tc-moves">
               <div className="af-label">Re-evaluated counteroffers</div>
               <p className="af-tc-row-sub">Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.</p>
@@ -2171,7 +2175,7 @@ export function TradeCenter(props: {
         <section className="af-tc-dos" data-mstep="review">
           <div className="af-label">Decision OS · this deal</div>
           {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
-          {intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
+          {noSignal ? <p className="af-tc-why">Proposal grade unavailable. Priced assets and roster context alone do not establish that the complete trade is fair.</p> : intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
 
           <div className="af-tc-pairs">
             <div className="af-tc-pair">
@@ -2180,7 +2184,7 @@ export function TradeCenter(props: {
             </div>
             <div className="af-tc-pair">
               <div className="af-tc-pair-label">League value lean</div>
-              <div className="af-tc-pair-value">{intel.whoWinsLongTerm === 'unknown' ? 'Unavailable' : intel.whoWinsLongTerm ?? '—'}</div>
+              <div className="af-tc-pair-value">{noSignal || intel.whoWinsLongTerm === 'unknown' ? 'Unavailable' : intel.whoWinsLongTerm ?? '—'}</div>
             </div>
           </div>
 
@@ -2206,7 +2210,7 @@ export function TradeCenter(props: {
             <div><span>Consolidation</span><strong>{give.length} assets out · {get.length} assets in{result?.scaleNotes?.[0] ? ` · ${result.scaleNotes[0]}` : ''}</strong></div>
             <div><span>Team direction</span><strong>{result?.postureNotes?.[0] ?? intel?.rebuilderRecommendation ?? 'Use the contender and rebuilder reads for your current direction.'}</strong></div>
             <div><span>Data freshness</span><strong>{valueSources.length ? `Latest available ${valueSources.join(' + ')} snapshots` : 'No priced source was returned for this deal.'}</strong></div>
-            <div><span>Source agreement</span><strong>{valueSources.length > 1 ? `Sources are shown separately because their methods can disagree; this verdict combines ${valueSources.length} available baselines.` : valueSources.length === 1 ? `One market source (${valueSources[0]}) priced the deal, so there is no cross-source consensus yet.` : 'No source comparison is possible until the assets are priced.'}</strong></div>
+            <div><span>Source agreement</span><strong>{noSignal ? 'Pricing coverage is incomplete; no source consensus or proposal verdict is available.' : valueSources.length > 1 ? `Pricing methods in this deal: ${valueSources.join(', ')}. Different methods can price different assets; this does not establish independent source agreement.` : valueSources.length === 1 ? `One market source (${valueSources[0]}) priced the deal, so there is no cross-source consensus yet.` : 'No source comparison is possible until the assets are priced.'}</strong></div>
           </div>
 
           {/*
@@ -2214,7 +2218,7 @@ export function TradeCenter(props: {
             neither. They are the two honest answers to "should I do this",
             because the right one depends on a fact only the manager knows.
           */}
-          {intel.contenderRecommendation || intel.rebuilderRecommendation ? (
+          {!noSignal && (intel.contenderRecommendation || intel.rebuilderRecommendation) ? (
             <div className="af-tc-reads">
               {intel.contenderRecommendation ? (
                 <div className="af-tc-read" data-tone="contender">
@@ -2242,7 +2246,7 @@ export function TradeCenter(props: {
             </>
           ) : null}
 
-          {(intel.rebalanceSuggestions ?? []).length > 0 ? (
+          {!noSignal && (intel.rebalanceSuggestions ?? []).length > 0 ? (
             <>
               <div className="af-label">Rebalance ideas</div>
               <ul className="af-tc-list">
