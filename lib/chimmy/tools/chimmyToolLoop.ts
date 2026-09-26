@@ -177,6 +177,8 @@ type ChimmyToolLoopArgs = {
    * everyone, and must never be cached into anyone else's prompt.
    */
   styleLine?: string | null
+  /** Membership-checked Decision OS evidence already assembled by the route. */
+  groundingLine?: string | null
   conversation?: Array<{ role: 'user' | 'assistant'; content: string }>
   context: ChimmyToolContext
   enabled: boolean
@@ -213,6 +215,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   ]
   if (args.clockLine?.trim()) system.push({ type: 'text', text: args.clockLine.trim() })
   if (args.styleLine?.trim()) system.push({ type: 'text', text: args.styleLine.trim() })
+  if (args.groundingLine?.trim()) system.push({ type: 'text', text: args.groundingLine.trim() })
 
   const messages: Anthropic.MessageParam[] = [
     ...claudeHistory(args.conversation),
@@ -320,7 +323,7 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
   const model = args.model?.trim() || DEFAULT_MODEL
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine].filter((s) => s?.trim()).join('\n\n') },
+    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine].filter((s) => s?.trim()).join('\n\n') },
     ...(args.conversation ?? []).map((t) => ({ role: t.role, content: t.content }) as const),
     { role: 'user', content: args.question },
   ]

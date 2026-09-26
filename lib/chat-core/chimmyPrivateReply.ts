@@ -5,6 +5,9 @@ import { stripChimmyMentionPrefix } from '@/lib/chat-core/mentionPrivacyFilter'
 import { loadLeagueGroundingForUser } from '@/lib/chimmy/chimmy-league-snapshot'
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
+import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
+import type { ChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
+import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
 
 /** Two newlines, kept as a constant so an editing pass cannot flatten it. */
 const NEWLINES = String.fromCharCode(10, 10)
@@ -78,11 +81,22 @@ async function buildPrivateGrounding(context: {
  */
 export async function generateChimmyPrivateReply(
   prompt: string,
-  context: { leagueId?: string | null; userId?: string | null } = {},
+  context: { leagueId?: string | null; userId?: string | null; onDecision?: (decision: ChimmyDecisionAnswer) => void } = {},
 ): Promise<string> {
   const userContent = stripChimmyMentionPrefix(prompt).slice(0, 4000)
   if (!userContent.trim()) {
     return "Hey — what would you like help with? Add your question after @chimmy."
+  }
+
+  // Consequential advice uses the same authenticated engines as the full Chimmy surface.
+  // Neither a missing engine result nor an engine verdict is handed to a model to replace.
+  const decision = await prepareChimmyDecisionAnswer({ question: userContent, leagueId: context.leagueId, userId: context.userId })
+  if (decision) {
+    if (context.userId && decision.status === 'ready' && decision.startCalls?.length) {
+      await recordChatStartSitAdvice({ userId: context.userId, calls: decision.startCalls, answer: decision.answer }).catch(() => null)
+    }
+    context.onDecision?.(decision)
+    return decision.answer
   }
 
   const grounding = await buildPrivateGrounding(context)

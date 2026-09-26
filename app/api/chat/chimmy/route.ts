@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
+import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
+import { chimmyDecisionKind, decisionAnswerMeta, decisionAnswer as createDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
 import { z } from 'zod'
 import { getServerSession } from 'next-auth'
 import OpenAI from 'openai'
@@ -125,6 +127,7 @@ import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import { judgeChimmyDelivery } from '@/lib/chimmy/chargeOnDelivery'
+import { settleUndeliveredChimmyAnswer } from '@/lib/chimmy/settleDelivery'
 import { suggestChimmyFollowUps } from '@/lib/chimmy/followUps'
 import {
   planAllowanceMeta,
@@ -1731,7 +1734,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * fallback sentence TRUE for a caller who named a league they may not read — it says a league was
    * requested without saying which, so `not_member` and `not_found` stay indistinguishable here too.
    */
-  const deterministic = await tryDeterministicAnswerDetailed(
+  const deterministic = chimmyDecisionKind(message) ? null : await tryDeterministicAnswerDetailed(
     message,
     requestLocale,
     leagueSnapshot?.id ?? null,
@@ -1867,6 +1870,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     }
 
     const deterministicAnswer = deterministic.text
+    const pricedLeague = leagueSnapshot && deterministicAnswer.includes('Settings read from your league:')
+      ? leagueSnapshot
+      : null
     return NextResponse.json({
       response: deterministicAnswer,
       result: deterministicAnswer,
@@ -1874,6 +1880,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       sessionId,
       tokenSpend: null,
       meta: {
+        // The free price path also reads league rules; expose that scope to the drawer.
+        ...(pricedLeague ? { leagueGrounding: {
+          grounded: true,
+          leagueId: pricedLeague.id,
+          leagueName: pricedLeague.name,
+          platform: pricedLeague.platform,
+          season: pricedLeague.season,
+          lastSyncedAt: pricedLeague.lastSyncedAt?.toISOString() ?? null,
+        } } : {}),
         confidencePct: 100,
         providerStatus: {
           openai: 'skipped',
@@ -2802,6 +2817,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
         leagueGrounding: tradeTargetGrounding,
         tradeTarget: { status: 'unresolved', reason: tradeTargetResult.reason },
+        decision: decisionAnswerMeta(createDecisionAnswer({ kind: 'trade', status: 'needs_data', leagueId: leagueSnapshot?.id ?? null,
+          answer: tradeTargetResult.detail, sources: [], gap: { code: tradeTargetResult.reason, remedy: 'Confirm the full player name and sync your league roster before retrying.' } })),
         dataSources: ['league_rosters'],
         responseStructure: {
           shortAnswer: tradeTargetResult.detail,
@@ -2809,6 +2826,17 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         },
       },
     })
+  }
+
+  const decisionAnswer = tradeTargetResult?.status === 'decided'
+    ? null
+    : await prepareChimmyDecisionAnswer({ question: message, leagueId: leagueSnapshot?.id, userId })
+  if (decisionAnswer?.status === 'needs_data') {
+    return NextResponse.json({ response: decisionAnswer.answer, result: decisionAnswer.answer,
+      source: 'chimmy_decision_engine', sessionId,
+      meta: { free: true, tokenSpend: null, decision: decisionAnswerMeta(decisionAnswer),
+        leagueGrounding: decisionAnswer.leagueId ? tradeTargetGrounding : { grounded: false, leagueId: null },
+        dataSources: decisionAnswer.sources } })
   }
 
   /*
@@ -2915,6 +2943,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
         leagueGrounding: tradeTargetGrounding,
         tradeTarget: { status: 'decided', verdict: v.verdict, player: tradeTargetResult.targetName },
+        decision: decisionAnswerMeta(createDecisionAnswer({ kind: 'trade', status: 'ready', leagueId: leagueSnapshot?.id ?? null,
+          answer: text, sources: ['league_rosters', 'league_scoring', 'trade_engine'] })),
         dataSources: ['league_rosters', 'league_scoring', 'weekly_projections', 'market_values', 'trade_engine'],
         responseStructure: {
           shortAnswer: `${v.headline}, because ${v.because}.`,
@@ -2924,6 +2954,20 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         },
       },
     })
+  }
+
+  if (decisionAnswer?.status === 'ready') {
+    if (decisionAnswer.startCalls?.length) {
+      await recordChatStartSitAdvice({ userId, calls: decisionAnswer.startCalls, answer: decisionAnswer.answer }).catch(() => null)
+    }
+    return NextResponse.json({ response: decisionAnswer.answer, result: decisionAnswer.answer,
+      source: 'chimmy_decision_engine', sessionId,
+      meta: { decision: decisionAnswerMeta(decisionAnswer), scenario: decisionAnswer.scenario,
+        leagueGrounding: tradeTargetGrounding, dataSources: decisionAnswer.sources,
+        ...(planMeta ? { planAllowance: planMeta } : {}),
+        tokenSpend: spendLedger && tokenPreview ? { ruleCode: tokenPreview.ruleCode, tokenCost: tokenPreview.tokenCost,
+          balanceAfter: spendLedger.balanceAfter, ledgerId: spendLedger.id } : null,
+        responseStructure: { shortAnswer: decisionAnswer.answer.split('\n')[0], caveats: ['Computed by AllFantasy engines under this league’s rules.'] } } })
   }
 
   /*
@@ -2937,9 +2981,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * exactly as before, so a failure here is invisible rather than an error the
    * reader has to interpret.
    *
-   * It is deliberately NOT given the assembled grounding: the point of the loop
-   * is that the model fetches what it needs. Handing it the push context as
-   * well would pay for both and prove nothing about whether the tools work.
+   * The Decision OS packet has already been assembled above. Give the loop its evidence
+   * and explicit gaps too; otherwise the path that answers first never sees those limits.
    */
   const chimmyToolLoopEnabled = getChimmyFeatureFlags().toolLoop
 
@@ -2969,6 +3012,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        * the instructions because it changes every minute and Claude caches the instructions.
        */
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
+      groundingLine: decisionOsGrounding && leagueSnapshot
+        ? `DECISION OS EVIDENCE for ${leagueSnapshot.name ?? leagueSnapshot.id} (${leagueSnapshot.id}). Respect its missing-data and authority limits. This snapshot applies only to this league; if you select another league, read that league's tools instead.\n${decisionOsGrounding}`
+        : null,
       clockLine: userTemporalContext.promptLine,
       /*
        * The user's saved Chimmy preferences (explanation style, risk, humor…). The fallback path has
@@ -3018,6 +3064,18 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       const loopText = loopModeRequested
         ? buildChimmyResponseForAssistantMode({ mode: selectedAssistantMode, fullResponse: loop.text })
         : loop.text
+      const loopDelivery = judgeChimmyDelivery({ modelOutputs: [{ raw: loop.text }], answer: loopText })
+      const settlement = await settleUndeliveredChimmyAnswer({
+        delivery: loopDelivery, ledgerId: spendLedger?.id, included: Boolean(planIncluded && userId),
+        refund: ({ spendLedgerId, idempotencyKey, reason }) => spendService.refundSpendByLedger({
+          userId, spendLedgerId, idempotencyKey, refundRuleCode: 'feature_execution_failed',
+          sourceType: 'chimmy_chat_refund', sourceId: spendLedgerId,
+          description: 'Auto refund: Chimmy could not deliver an answer.',
+          metadata: { conversationId, leagueId: toolContext.leagueId, reason },
+        }),
+        releaseAllowance: () => releaseChimmyPlanAllowance({ userId }),
+      })
+      if (settlement.allowanceReleased && planMeta) planMeta = { ...planMeta, used: Math.max(0, planMeta.used - 1), released: true as const }
       /*
        * 🛑 THE LOOP'S ANSWERS NEVER SAID WHICH LEAGUE THEY WERE ABOUT. The PECR path reports
        * `meta.leagueGrounding`; this return did not, so a league the route resolved — or one the model
@@ -3055,7 +3113,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        * names both players of. Awaited like the push path's advice writes; a failure never costs the
        * user the answer.
        */
-      if (userId && toolContext.startCalls.length > 0) {
+      if (loopDelivery.delivered && userId && toolContext.startCalls.length > 0) {
         await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText }).catch(() => null)
       }
       return NextResponse.json({
@@ -3067,13 +3125,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           /* The mode that shaped this answer — only when one was asked for and applied. */
           ...(loopModeRequested ? { mode: selectedAssistantMode } : {}),
           /* The spend already happened above; report what it actually cost. */
+          delivery: loopDelivery,
+          ...(settlement.refundPending ? { refundPending: true } : {}),
           tokenSpend:
             spendLedger && tokenPreview
               ? {
                   ruleCode: tokenPreview.ruleCode,
-                  tokenCost: tokenPreview.tokenCost,
-                  balanceAfter: spendLedger.balanceAfter,
+                  tokenCost: settlement.refund ? 0 : tokenPreview.tokenCost,
+                  balanceAfter: settlement.refund?.balanceAfter ?? spendLedger.balanceAfter,
                   ledgerId: spendLedger.id,
+                  ...(settlement.refund ? { refunded: true, refundReason: settlement.refund.reason } : {}),
                 }
               : undefined,
           providerStatus:
@@ -3095,7 +3156,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           /* Which lookups the model chose, so the answer's sourcing is visible. */
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
-          dataSources: loop.toolsUsed,
+          dataSources: [...loop.toolsUsed, ...(decisionOsGrounding ? ['decision_os_grounding_packet'] : [])],
           /*
            * The next questions worth asking — each one answerable by a tool, none of them sent until
            * the user taps and then sends. Deterministic: see lib/chimmy/followUps.ts.
@@ -4130,8 +4191,8 @@ ${describedTradeCtx}`
     }
     /* The same deal for an included answer: a turn nobody answered does not use one up. */
     if (!delivery.delivered && planIncluded && userId) {
-      await releaseChimmyPlanAllowance({ userId })
-      planMeta = planMeta
+      const released = await releaseChimmyPlanAllowance({ userId })
+      planMeta = released && planMeta
         ? { ...planMeta, used: Math.max(0, planMeta.used - 1), released: true as const }
         : planMeta
     }

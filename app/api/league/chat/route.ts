@@ -25,6 +25,7 @@ import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
 import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
+import { decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { resolveLeagueMentionIds } from '@/lib/chat-core/resolveMentionTargets'
@@ -397,7 +398,8 @@ export async function POST(req: NextRequest) {
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
-    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId })
+    let decision: ReturnType<typeof decisionAnswerMeta> | undefined
+    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } })
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },
@@ -408,7 +410,7 @@ export async function POST(req: NextRequest) {
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      metadata: { isSystem: true, chimmyPrivateReply: true },
+      metadata: { isSystem: true, chimmyPrivateReply: true, ...(decision ? { decision } : {}) },
     })
 
     return NextResponse.json({

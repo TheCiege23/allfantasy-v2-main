@@ -96,9 +96,9 @@ describe('takeChimmyPlanAllowance', () => {
 })
 
 describe('releaseChimmyPlanAllowance', () => {
-  it('gives one back and never throws', async () => {
+  it('reports a failed release without throwing', async () => {
     const d = deps({ giveBack: vi.fn(async () => { throw new Error('x') }) })
-    await expect(releaseChimmyPlanAllowance({ userId: 'u1' }, d)).resolves.toBeUndefined()
+    await expect(releaseChimmyPlanAllowance({ userId: 'u1' }, d)).resolves.toBe(false)
     expect(d.giveBack).toHaveBeenCalledTimes(1)
   })
 })

@@ -46,6 +46,21 @@ it('does not overwrite another account storage on account switching', () => {
  * into the prompt. Only the drawer forgot, because it kept the transcript in `sessionStorage`.
  */
 describe('server-side history hydration', () => {
+  it('retries a cancelled history load after a quick scope change', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const fetchMock = vi.fn(async () => {
+      await gate
+      return { ok: true, json: async () => ({ turns: [{ id: 'saved', role: 'chimmy', text: 'Saved answer' }] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { result, rerender } = renderHook(({ scope }) => useScopedConversation('user-a', scope), { initialProps: { scope: 'league-a' } })
+    rerender({ scope: 'league-b' })
+    rerender({ scope: 'league-a' })
+    await act(async () => { release() })
+    await waitFor(() => expect(result.current.turns[0]?.text).toBe('Saved answer'))
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
   it('🛑 fills an empty scope from the server, scoped to that league', async () => {
     const fetchMock = stubFetch([
       { id: 'hist-0', role: 'you', text: 'how is my team doing?' },

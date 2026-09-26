@@ -29,7 +29,7 @@ const COMPOSER = 'app/dashboard/components/chat/ChatComposer.tsx'
  */
 const LEAGUE = 'components/core-app/comms/LeagueConversation.tsx'
 const THREAD = 'components/core-app/comms/ThreadPanel.tsx'
-const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
+const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
 
 /** Comment-stripped, so these assertions read CODE and not the prose describing it. */
 function stripComments(src: string): string {

@@ -65,7 +65,6 @@ export function useScopedConversation<T extends { id: string; role: string; text
     if (!owner || loadedKey !== storageKey) return
     const key = `${owner}:${scope}`
     if (hydrated.current.has(key)) return
-    hydrated.current.add(key)
     let cancelled = false
     void (async () => {
       try {
@@ -87,7 +86,9 @@ export function useScopedConversation<T extends { id: string; role: string; text
                 ['you', 'chimmy'].includes(String(t.role)),
             )
           : []
-        if (cancelled || incoming.length === 0) return
+        if (cancelled) return
+        hydrated.current.add(key)
+        if (incoming.length === 0) return
         setAll((previous) => {
           const state = previous[scope] ?? { turns: [], draft: '' }
           if (state.turns.length > 0) return previous
