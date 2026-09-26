@@ -190,7 +190,28 @@ export async function createDefaultLeagueRosterConfig(
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   const settings = (league?.settings as Record<string, unknown>) ?? {}
-  const config = await service.getConfig(leagueId)
+  let config = await service.getConfig(leagueId)
+  const setup = settings.conceptSetup as Record<string, unknown> | undefined
+  if (leagueType === 'dynasty' && setup) {
+    const slots = { ...config.slots }
+    let changed = false
+    const benchSlot = 'BN' in slots ? 'BN' : 'BENCH'
+    const irSlot = 'IL' in slots ? 'IL' : 'IR'
+    for (const [choice, slot] of [['benchCount', benchSlot], ['irCount', irSlot], ['taxiSlots', 'TAXI']] as const) {
+      const value = setup[choice]
+      if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && slots[slot] !== value) {
+        slots[slot] = value
+        changed = true
+      }
+    }
+    if (changed) {
+      await service.saveConfig(leagueId, { templateKey: 'custom', slots, isCustom: true })
+      config = await service.getConfig(leagueId)
+    }
+  }
+  // saveConfig updates the sport-specific slots in League.settings. Reload before writing metadata.
+  const latestLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const latestSettings = (latestLeague?.settings as Record<string, unknown>) ?? settings
   const template = service.resolveDefaultTemplate(leagueType)
   const compare = compareRosterToTemplate(config.slots, template)
   const auditEntry: RosterAuditEntry = {
@@ -203,17 +224,18 @@ export async function createDefaultLeagueRosterConfig(
   await prisma.league.update({
     where: { id: leagueId },
     data: {
+      rosterSize: Object.values(config.slots).reduce((total, count) => total + count, 0),
       settings: toPrismaJsonInput({
-        ...settings,
+        ...latestSettings,
         roster: {
           sport,
           leagueType,
           templateKey: config.templateKey,
-          source: 'AF_DEFAULT',
+          source: config.isCustom ? 'CUSTOM' : 'AF_DEFAULT',
           version: 1,
           updatedAt: new Date().toISOString(),
           updatedBy: null,
-          isCustom: false,
+          isCustom: config.isCustom,
           matchesTemplate: compare.matchesTemplate,
           warnings: [],
           auditLog: [auditEntry],

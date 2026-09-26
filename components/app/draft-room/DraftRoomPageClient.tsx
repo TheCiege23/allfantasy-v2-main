@@ -9,6 +9,7 @@ import {
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import KeeperPanel from '@/components/app/draft-room/KeeperPanel'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
@@ -57,7 +58,6 @@ const CommissionerControlCenterModal = dynamic(
 )
 const PostDraftView = dynamic(() => import('@/components/app/draft-room/PostDraftView'), { ssr: false })
 const AuctionSpotlightPanel = dynamic(() => import('@/components/app/draft-room/AuctionSpotlightPanel'), { ssr: false })
-const KeeperPanel = dynamic(() => import('@/components/app/draft-room/KeeperPanel'), { ssr: false })
 const PreDraftWizard = dynamic(
   () => import('@/components/commissioner/PreDraftWizard').then((m) => m.PreDraftWizard),
   { ssr: false },
