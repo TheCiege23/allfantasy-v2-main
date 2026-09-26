@@ -12,7 +12,8 @@ import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { CARD_PAID_LOCK_MESSAGE, CARD_PAID_LOCK_REDIRECT } from "@/lib/geo/cardLockCopy"
 import { isTorExit, resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
-import { resolveAnonymizerByIp } from "@/lib/geo/anonymizerCache"
+import { resolveAnonymizerDetailByIp } from "@/lib/geo/anonymizerCache"
+import type { AnonymizerKind } from "@/lib/geo/geoIpParse"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
 import { INTERNAL_HOP_HEADER, verifyInternalHop } from "@/lib/http/internalHop"
 import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http/originLock"
@@ -367,12 +368,27 @@ function isAnonymousCrawler(request: NextRequest): boolean {
   return !hasSessionOrGuestCookie(request)
 }
 
-/** Tor from the edge header (free); everything else from the cached vendor verdict. */
-async function isAnonymizedClient(request: NextRequest): Promise<boolean> {
-  if (isTorExit(request.headers)) return true
+/**
+ * Why this client counts as hidden, or null when it does not. Tor from the edge
+ * header (free); everything else from the cached vendor verdict.
+ */
+async function anonymizedClientKind(request: NextRequest): Promise<AnonymizerKind | null> {
+  if (isTorExit(request.headers)) return "tor"
   const ip = clientIpFromHeaders(request.headers)
-  if (!ip) return false
-  return (await resolveAnonymizerByIp(ip)) === true
+  if (!ip) return null
+  const { verdict, kind } = await resolveAnonymizerDetailByIp(ip)
+  return verdict === true ? kind ?? "vpn" : null
+}
+
+/**
+ * Where to send a hidden client. `why=relay` makes /vpn-blocked lead with iCloud
+ * Private Relay: it is on by default for iCloud+ subscribers, and someone who
+ * has just switched a VPN app off does not know Safari has a second setting (the
+ * owner hit exactly that, 2026-09-25). Presentation only — the page never
+ * decides who gets in.
+ */
+function vpnBlockedPath(kind: AnonymizerKind): string {
+  return kind === "relay" ? "/vpn-blocked?why=relay" : "/vpn-blocked"
 }
 
 /** The owner bypass the geo gates honour. Decodes the session only when asked. */
@@ -402,10 +418,11 @@ async function apiVpnRefusal(request: NextRequest, pathname: string): Promise<Ne
   ) {
     return null
   }
-  if (!(await isAnonymizedClient(request))) return null
+  const kind = await anonymizedClientKind(request)
+  if (!kind) return null
   if (await isOwnerRequest(request)) return null
   return new NextResponse(
-    JSON.stringify({ error: "VPN_BLOCKED", message: VPN_BLOCKED_MESSAGE, redirectTo: "/vpn-blocked" }),
+    JSON.stringify({ error: "VPN_BLOCKED", message: VPN_BLOCKED_MESSAGE, redirectTo: vpnBlockedPath(kind) }),
     { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
   )
 }
@@ -419,13 +436,15 @@ async function pageVpnRedirect(
   if (isVpnPublicPage(pathname)) return null
   if (isAnonymousCrawler(request)) return null
   if (hasMachineCredential(request.headers)) return null
-  if (!(await isAnonymizedClient(request))) return null
+  const kind = await anonymizedClientKind(request)
+  if (!kind) return null
   // tokenUserId is only decoded on session-gated paths; decode it here otherwise.
   if (tokenUserId ? isMiddlewareAdmin(tokenUserId) : await isOwnerRequest(request)) return null
   const url = request.nextUrl.clone()
   url.pathname = "/vpn-blocked"
   url.search = ""
   url.searchParams.set("from", `${pathname}${request.nextUrl.search}`)
+  if (kind === "relay") url.searchParams.set("why", "relay")
   return NextResponse.redirect(url)
 }
 
