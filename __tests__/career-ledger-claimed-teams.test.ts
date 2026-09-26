@@ -253,7 +253,12 @@ describe('loadCareerLedger — claimed-team source', () => {
     })
   })
 
-  it('(4) a legacy Sleeper row wins over a team row on the same sleeper key', async () => {
+  it.each([
+    { legacyWins: 1, legacyLosses: 3, teamWins: 3, teamLosses: 1, expectedWins: 1, expectedLosses: 3 },
+    { legacyWins: 0, legacyLosses: 0, teamWins: 1, teamLosses: 1, expectedWins: 1, expectedLosses: 1 },
+    { legacyWins: 0, legacyLosses: 1, teamWins: 0, teamLosses: 2, expectedWins: 0, expectedLosses: 2 },
+    { legacyWins: 3, legacyLosses: 1, teamWins: 0, teamLosses: 0, expectedWins: 3, expectedLosses: 1 },
+  ])('(4) legacy metadata survives while a longer synced record replaces its frozen result ($legacyWins-$legacyLosses, $teamWins-$teamLosses)', async ({ legacyWins, legacyLosses, teamWins, teamLosses, expectedWins, expectedLosses }) => {
     state.links = [{ id: 'joiner', legacyUserId: 'legacy-joiner' }]
     state.legacy = [
       {
@@ -274,16 +279,17 @@ describe('loadCareerLedger — claimed-team source', () => {
         winnerRosterId: null,
         updatedAt: T0,
         rosters: [
-          { wins: 1, losses: 3, ties: 0, pointsFor: 300, isChampion: false, finalStanding: null, playoffSeed: null, updatedAt: T0 },
+          { wins: legacyWins, losses: legacyLosses, ties: 0, pointsFor: 300, isChampion: false, finalStanding: null, playoffSeed: null, updatedAt: T0 },
         ],
       },
     ]
-    state.teams = [team({ wins: 3, losses: 1 })]
+    state.teams = [team({ wins: teamWins, losses: teamLosses, pointsFor: 400 })]
 
     const rows = await loadCareerLedger(['joiner'])
 
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ source: 'legacy', refId: 'LL1', wins: 1, losses: 3 })
+    expect(rows[0]).toMatchObject({ source: 'legacy', refId: 'LL1', wins: expectedWins, losses: expectedLosses, gamesPlayed: expectedWins + expectedLosses })
+    if (teamWins + teamLosses > legacyWins + legacyLosses) expect(rows[0].pointsFor).toBe(400)
   })
 
   it('(5) a mid-season seed inside the cut is NOT a playoff berth', async () => {

@@ -22,7 +22,7 @@ import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
  *   2. `legacy`  — Sleeper history tables (`legacyLeague` / owner `legacyRoster`)
  *   3. `team`    — a `LeagueTeam` the user has CLAIMED, on any non-native league
  *   4. `native`  — finalized AllFantasy `franchise_seasons`
- * One exception to first-wins: when an `import` row and a `team` row share a key and
+ * One exception to first-wins: when an `import` or `legacy` row and a `team` row share a key and
  * the team has played MORE games, the team's W/L/T/PF replace the frozen snapshot
  * (see `refreshImportFromTeams`).
  *
@@ -200,11 +200,12 @@ export function mergeLedgerSources(...sources: CareerLedgerRow[][]): CareerLedge
 }
 
 /**
- * The one exception to first-wins: an `import` row takes a claimed team's record
+ * The one exception to first-wins: an `import` or `legacy` row takes a claimed team's record
  * when that team has played MORE games under the same key.
  *
  * ⚠ `League.import_*` IS WRITTEN ONCE, AT IMPORT, AND NEVER AGAIN, while the sync
- * crons keep `LeagueTeam` W/L/PF current. Letting the snapshot win outright would
+ * crons keep `LeagueTeam` W/L/PF current. Legacy history imports can also retain
+ * an earlier current-season snapshot. Letting either snapshot win outright would
  * freeze an owner's season at whatever week they imported in. More games is the
  * test because a record only ever grows within a season — fewer games means the
  * team row is the stale one (or unsynced), and then the snapshot keeps its place.
@@ -606,5 +607,5 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
 
   const team = await loadClaimedTeamRows(ids)
 
-  return mergeLedgerSources(refreshImportFromTeams(imported, team), legacy, team, native)
+  return mergeLedgerSources(refreshImportFromTeams(imported, team), refreshImportFromTeams(legacy, team), team, native)
 }
