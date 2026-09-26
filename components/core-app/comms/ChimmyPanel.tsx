@@ -450,6 +450,19 @@ function newAnswerId(): string {
   return `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+/**
+ * A transcript turn's id — its React key, and what "Ask in <league>" finds the refusal by.
+ *
+ * 🛑 IT WAS `you-${t.length}`, AND THE THREAD IS CAPPED AT 80. Past the cap the length stops
+ * growing, so every new question was `you-80` and every answer `chimmy-80` — the same key as the
+ * previous exchange still on screen. The server hands back up to 80 turns on open, so a regular
+ * user's thread starts AT the cap. React's own warning for duplicate keys is that children "may be
+ * duplicated and/or omitted", and the report was exactly that: the question appeared twice.
+ */
+export function newTurnId(role: 'you' | 'chimmy'): string {
+  return `${role}-${newAnswerId()}`
+}
+
 export function readAdvice(payload: ChimmyEnvelope): ChimmyAdviceRef | null {
   const a = payload.meta?.advice
   if (!a || a.type !== 'add') return null
@@ -622,7 +635,7 @@ export function ChimmyPanel({
       if (screenshotRef.current) screenshotRef.current.value = ''
       setTurns((t) => [
         ...t,
-        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}` },
+        { id: newTurnId('you'), role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}` },
       ])
 
       try {
@@ -752,7 +765,7 @@ export function ChimmyPanel({
             setTurns((t) => [
               ...t,
               {
-                id: `chimmy-${t.length}`,
+                id: newTurnId('chimmy'),
                 role: 'chimmy',
                 text: refusal,
                 isPublic: publicMode,
@@ -808,7 +821,7 @@ export function ChimmyPanel({
         setTurns((t) => [
           ...t,
           {
-            id: `chimmy-${t.length}`,
+            id: newTurnId('chimmy'),
             role: 'chimmy',
             text: answer,
             isPublic: publicMode,

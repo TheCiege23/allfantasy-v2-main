@@ -29,6 +29,32 @@ const MAX_TRADES_SHOWN = 8
 /** Read a wider window than we show, because deduping collapses both sides. */
 const TRADE_SCAN_LIMIT = 60
 
+/**
+ * What the `get_league_trade_history` tool asks for, as opposed to the push block.
+ *
+ * 🛑 EIGHT TRADES WITH NO MANAGER NAMES IS WHY CHIMMY SAID THE HISTORY "ISN'T ITEMIZED".
+ * The push block was sized to sit inside a 30k grounding budget beside twenty other
+ * blocks, and it printed "one side got [..] for [..]" — so "what did Layes23 trade
+ * away?" had no answer even when the block arrived intact. A tool result is read on
+ * its own, so it can afford the whole season and both managers' names.
+ */
+export type TradeHistoryQuery = {
+  /** Only this season's trades. */
+  season?: number | null
+  /** Only trades this manager was on either side of (Sleeper username or team name, case-insensitive). */
+  manager?: string | null
+  /** Only trades that moved a player whose name contains this (case-insensitive). */
+  player?: string | null
+  /** How many trades to list. */
+  maxShown?: number
+  /** How many stored rows to read — two per trade, one from each side. */
+  scanLimit?: number
+}
+
+/** The tool path's sizes: a season of trades in a busy league, both sides stored. */
+export const TOOL_TRADES_SHOWN = 30
+export const TOOL_TRADE_SCAN_LIMIT = 600
+
 type TradeRow = {
   transactionId: string
   week: number
@@ -38,6 +64,60 @@ type TradeRow = {
   playersReceived: unknown
   picksGiven: unknown
   picksReceived: unknown
+  partnerName?: string | null
+  partnerRosterId?: number | null
+  history?: { sleeperUsername: string | null } | null
+}
+
+function sameName(a: string | null | undefined, b: string): boolean {
+  return typeof a === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+type TeamLabel = { label: string; names: string[] }
+
+/**
+ * Who each side of a trade was, by the league's own team names.
+ *
+ * 🛑 NEITHER STORED NAME IS A NAME. Measured on the test copy 2026-09-25: all 17,033 `LeagueTrade`
+ * rows carry `partnerName = null`, and `LeagueTradeHistory.sleeperUsername` holds the Sleeper USER
+ * ID (`1208593130748645376`), not a username. So a block built from them alone printed numbers and
+ * "another manager". What the row does carry is joinable: the user id is `LeagueTeam.platformUserId`
+ * and `partnerRosterId` is the Sleeper roster id, `LeagueTeam.externalId`.
+ *
+ * ⚠ READ ACROSS EVERY `leagues` ROW FOR THIS SLEEPER LEAGUE. One Sleeper league can sit under several
+ * rows (KBFL has four), and the row a question arrives with need not be the one holding the teams.
+ * The requested row's teams win where both have one.
+ */
+async function readTeamLabels(
+  leagueId: string,
+  league: { platform: string; platformLeagueId: string },
+): Promise<{ byUser: Map<string, TeamLabel>; byRoster: Map<string, TeamLabel> }> {
+  const byUser = new Map<string, TeamLabel>()
+  const byRoster = new Map<string, TeamLabel>()
+  try {
+    const siblings = await prisma.league.findMany({
+      where: { platform: league.platform, platformLeagueId: league.platformLeagueId },
+      select: { id: true },
+    })
+    const ids = [leagueId, ...siblings.map((s) => s.id).filter((id) => id !== leagueId)]
+    const teams = await prisma.leagueTeam.findMany({
+      where: { leagueId: { in: ids } },
+      select: { leagueId: true, externalId: true, platformUserId: true, teamName: true, ownerName: true },
+    })
+    teams.sort((a, b) => ids.indexOf(a.leagueId) - ids.indexOf(b.leagueId))
+    for (const t of teams) {
+      const team = t.teamName?.trim() ?? ''
+      const owner = t.ownerName?.trim() ?? ''
+      const label = team && owner && team.toLowerCase() !== owner.toLowerCase() ? `${team} (${owner})` : team || owner
+      if (!label) continue
+      const entry = { label, names: [team, owner].filter(Boolean) }
+      if (t.platformUserId && !byUser.has(t.platformUserId)) byUser.set(t.platformUserId, entry)
+      if (t.externalId && !byRoster.has(t.externalId)) byRoster.set(t.externalId, entry)
+    }
+  } catch {
+    // No team names means the ids below fall back to plain wording — never a guess.
+  }
+  return { byUser, byRoster }
 }
 
 function idList(value: unknown): string[] {
@@ -137,8 +217,14 @@ export type TradeHistoryOutcome =
 export async function buildLeagueTradeHistoryOutcome(
   leagueId: string,
   userId: string,
+  query: TradeHistoryQuery = {},
 ): Promise<TradeHistoryOutcome> {
   if (!leagueId || !userId) return { kind: 'missing-args' }
+  const maxShown = Math.max(1, Math.min(query.maxShown ?? MAX_TRADES_SHOWN, 60))
+  const scanLimit = Math.max(2, Math.min(query.scanLimit ?? TRADE_SCAN_LIMIT, 1000))
+  const managerFilter = query.manager?.trim() ? query.manager.trim() : null
+  const playerFilter = query.player?.trim() ? query.player.trim().toLowerCase() : null
+  const seasonFilter = typeof query.season === 'number' && Number.isFinite(query.season) ? query.season : null
 
   let league: { platform: string; platformLeagueId: string; sport: string; season: number } | null
   try {
@@ -169,9 +255,12 @@ export async function buildLeagueTradeHistoryOutcome(
   let rows: TradeRow[]
   try {
     rows = (await prisma.leagueTrade.findMany({
-      where: { historyId: { in: histories.map((h) => h.id) } },
+      where: {
+        historyId: { in: histories.map((h) => h.id) },
+        ...(seasonFilter != null ? { season: seasonFilter } : {}),
+      },
       orderBy: { tradeDate: 'desc' },
-      take: TRADE_SCAN_LIMIT,
+      take: scanLimit,
       select: {
         transactionId: true,
         week: true,
@@ -181,6 +270,9 @@ export async function buildLeagueTradeHistoryOutcome(
         playersReceived: true,
         picksGiven: true,
         picksReceived: true,
+        partnerName: true,
+        partnerRosterId: true,
+        history: { select: { sleeperUsername: true } },
       },
     })) as unknown as TradeRow[]
   } catch {
@@ -188,21 +280,66 @@ export async function buildLeagueTradeHistoryOutcome(
   }
   if (rows.length === 0) return { kind: 'no-trade-rows', historyCount: histories.length }
 
+  const teams = await readTeamLabels(leagueId, league)
+  /** The manager whose history row this is — stored as a Sleeper user id on current rows. */
+  const sideA = (r: TradeRow): TeamLabel => {
+    const raw = r.history?.sleeperUsername?.trim() ?? ''
+    const team = raw ? teams.byUser.get(raw) : undefined
+    if (team) return { label: team.label, names: [raw, ...team.names] }
+    // An older row may hold a real username; a bare number is an id we could not name.
+    return { label: raw && !/^\d+$/.test(raw) ? raw : 'an unnamed manager', names: raw ? [raw] : [] }
+  }
+  /** The other side, by stored name when there is one, else by roster id. */
+  const sideB = (r: TradeRow): TeamLabel => {
+    const stored = r.partnerName?.trim() ?? ''
+    const team = r.partnerRosterId != null ? teams.byRoster.get(String(r.partnerRosterId)) : undefined
+    return { label: stored || team?.label || 'another manager', names: [stored, ...(team?.names ?? [])].filter(Boolean) }
+  }
+  /** "Tigre" finds "ElTigre164": managers are named loosely in a question. */
+  const namesMatch = (side: TeamLabel, filter: string): boolean => {
+    const f = filter.toLowerCase()
+    return side.names.some((n) => (f.length >= 3 ? n.toLowerCase().includes(f) : sameName(n, filter)))
+  }
+
   /*
    * One history row exists per MANAGER per league, so a single trade is stored
    * once from each side and would otherwise be reported twice — as two different
    * trades running in opposite directions.
+   *
+   * When the question is about one manager, keep THEIR side of the deal, so
+   * "what did X get" reads from X's perspective rather than their partner's.
    */
-  const seen = new Set<string>()
-  const unique = rows.filter((r) => {
-    if (seen.has(r.transactionId)) return false
-    seen.add(r.transactionId)
-    return true
-  })
+  const byTx = new Map<string, TradeRow>()
+  for (const r of rows) {
+    const kept = byTx.get(r.transactionId)
+    if (!kept) {
+      byTx.set(r.transactionId, r)
+    } else if (managerFilter && !namesMatch(sideA(kept), managerFilter) && namesMatch(sideA(r), managerFilter)) {
+      byTx.set(r.transactionId, r)
+    }
+  }
+  const unique = [...byTx.values()]
+  const involved = managerFilter
+    ? unique.filter((r) => namesMatch(sideA(r), managerFilter) || namesMatch(sideB(r), managerFilter))
+    : unique
 
-  const shown = unique.slice(0, MAX_TRADES_SHOWN)
-  const allIds = shown.flatMap((r) => [...idList(r.playersGiven), ...idList(r.playersReceived)])
+  /*
+   * A player filter needs names for every candidate trade, not just the ones
+   * shown — otherwise a trade past the first page could never match. Without one,
+   * only the trades shown are resolved, which is what the push block always did.
+   */
+  const nameScope = playerFilter ? involved : involved.slice(0, maxShown)
+  const allIds = nameScope.flatMap((r) => [...idList(r.playersGiven), ...idList(r.playersReceived)])
   const names = await resolveNames([...new Set(allIds)], league.sport)
+
+  const matching = playerFilter
+    ? involved.filter((r) =>
+        [...idList(r.playersGiven), ...idList(r.playersReceived)].some((id) =>
+          (names.get(id) ?? '').toLowerCase().includes(playerFilter),
+        ),
+      )
+    : involved
+  const shown = matching.slice(0, maxShown)
 
   const bySeason = new Map<number, number>()
   for (const r of unique) bySeason.set(r.season, (bySeason.get(r.season) ?? 0) + 1)
@@ -211,12 +348,37 @@ export async function buildLeagueTradeHistoryOutcome(
     .map(([s, n]) => `${s}: ${n}`)
     .join(', ')
 
+  const filters = [
+    seasonFilter != null ? `season ${seasonFilter}` : null,
+    managerFilter ? `manager "${managerFilter}"` : null,
+    playerFilter ? `player "${query.player!.trim()}"` : null,
+  ].filter((f): f is string => Boolean(f))
+
   const lines: string[] = [
     `${TRADE_HISTORY_BLOCK_MARKER} (Sleeper league ${league.platformLeagueId}).`,
     `These trades ALREADY HAPPENED. None of them is a pending offer, and nothing here is awaiting the user's response.`,
     `Trades on file in the window read: ${unique.length} (${seasonSummary}).`,
-    `Most recent ${shown.length}:`,
   ]
+  if (filters.length > 0) {
+    lines.push(`Filtered to ${filters.join(', ')}: ${matching.length} trade${matching.length === 1 ? '' : 's'}.`)
+    const unnamedInScope = playerFilter ? [...new Set(allIds)].filter((id) => !names.has(id)).length : 0
+    if (unnamedInScope > 0) {
+      lines.push(
+        `${unnamedInScope} traded player(s) in this window have no name on file, so a player match can miss a trade — say so rather than claiming the player was never traded.`,
+      )
+    }
+  }
+  // Both sides are stored, so a full scan window means older trades were not read.
+  if (rows.length >= scanLimit) {
+    lines.push('Older trades exist beyond this window; say so if the question reaches further back.')
+  }
+  lines.push(
+    shown.length === 0
+      ? 'No trade in the window read matches that filter.'
+      : shown.length < matching.length
+        ? `Most recent ${shown.length} of ${matching.length}:`
+        : `All ${shown.length}, most recent first:`,
+  )
 
   let totalUnresolved = 0
   for (const r of shown) {
@@ -224,11 +386,14 @@ export async function buildLeagueTradeHistoryOutcome(
     const give = describeSide(idList(r.playersGiven), pickList(r.picksGiven), names)
     totalUnresolved += recv.unresolved + give.unresolved
     const when = r.tradeDate ? r.tradeDate.toISOString().slice(0, 10) : `week ${r.week}`
-    lines.push(`- ${when} (${r.season} wk ${r.week}): one side got [${recv.text}] for [${give.text}].`)
+    lines.push(`- ${when} (${r.season} wk ${r.week}): ${sideA(r).label} got [${recv.text}] from ${sideB(r).label} for [${give.text}].`)
+  }
+  if (teams.byRoster.size > 0 || teams.byUser.size > 0) {
+    lines.push("Managers are named by the league's CURRENT team names; a team that has since changed hands shows its current name.")
   }
 
   lines.push(
-    'LIMITS: no trade values are stored for these — do NOT state what any of them was worth, who won, or assign a grade. Sides are recorded from one manager\'s perspective, so treat "got" and "gave" as one direction of the deal, not a judgement.',
+    'LIMITS: no trade values are stored for these — do NOT state what any of them was worth, who won, or assign a grade. Each line is one deal read from the first manager\'s side; in a two-team deal the second manager got what the first gave up (a three-team deal names only one partner).',
   )
   if (totalUnresolved > 0) {
     lines.push(

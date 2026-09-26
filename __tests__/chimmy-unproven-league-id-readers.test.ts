@@ -47,6 +47,7 @@ const requestContractToUnifiedMock = vi.fn()
 const unifiedResponseToContractMock = vi.fn()
 const validateToolRequestMock = vi.fn()
 const buildChimmyConversationIdMock = vi.fn()
+const appendChatHistoryMock = vi.fn()
 const buildAgentPromptMock = vi.fn()
 const inferAgentFromMessageMock = vi.fn()
 const getChimmyMemoryContextMock = vi.fn()
@@ -163,6 +164,7 @@ vi.mock('@/lib/chimmy/chimmy-sport-data-digest', () => ({
 }))
 vi.mock('@/lib/ai-memory/chat-history-store', () => ({
   buildChimmyConversationId: buildChimmyConversationIdMock,
+  appendChatHistory: appendChatHistoryMock,
 }))
 vi.mock('@/lib/ai-memory/ai-memory-store', () => ({
   rememberChimmyAssistantMemory: vi.fn(),
@@ -523,5 +525,50 @@ describe('the tool loop honours an answer mode only when one is asked for', () =
     const json = await answer({})
     expect(json.response).toBe(LOOP_TEXT)
     expect(json.meta).not.toHaveProperty('mode')
+  })
+})
+
+/*
+ * 🛑 THE DEFAULT ANSWER PATH NEVER SAVED THE CONVERSATION. The loop answers first and returned before
+ * the route's only `appendChatHistory`, so those exchanges were missing from the restored transcript
+ * and from the RECENT CHAT block fed back into the prompt.
+ */
+describe('a tool-loop answer is saved like any other', () => {
+  beforeEach(() => {
+    appendChatHistoryMock.mockResolvedValue(undefined)
+    prismaLeagueFindUniqueMock.mockResolvedValue({ ...PRIVATE_LEAGUE, userId: 'stranger-1' })
+    runChimmyToolLoopMock.mockResolvedValue({ text: 'Start Chase.', toolsUsed: ['get_my_roster'], turns: 2 })
+  })
+
+  it('writes the question and the answer, with the display the drawer restores', async () => {
+    const { res, body } = await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(res.status).toBe(200)
+    expect(JSON.parse(body).source).toBe('chimmy_tool_loop')
+
+    const rows = appendChatHistoryMock.mock.calls.map((c) => c[0])
+    expect(rows.map((r) => r.role)).toEqual(['user', 'assistant'])
+    expect(rows[0]).toMatchObject({ conversationId: 'conversation-1', content: VALUE_MESSAGE, userId: 'stranger-1' })
+    expect(rows[1]).toMatchObject({ content: 'Start Chase.', leagueId: PRIVATE_LEAGUE.id })
+    expect(rows[1].meta.display.grounding).toMatchObject({ grounded: true, leagueId: PRIVATE_LEAGUE.id })
+    expect(rows[1].meta.display.cost).toBe(15)
+  })
+
+  /* Both rows are stamped NOW(); written in parallel, a restored transcript could put the answer first. */
+  it('writes the answer only after the question has been saved', async () => {
+    const order: string[] = []
+    appendChatHistoryMock.mockImplementation(async (row: { role: string }) => {
+      order.push(`start:${row.role}`)
+      await new Promise((r) => setTimeout(r, 5))
+      order.push(`done:${row.role}`)
+    })
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(order).toEqual(['start:user', 'done:user', 'start:assistant', 'done:assistant'])
+  })
+
+  it('still answers when the save fails', async () => {
+    appendChatHistoryMock.mockRejectedValue(new Error('db down'))
+    const { res, body } = await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(res.status).toBe(200)
+    expect(JSON.parse(body).response).toBe('Start Chase.')
   })
 })
