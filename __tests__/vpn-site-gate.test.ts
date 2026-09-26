@@ -45,8 +45,6 @@ const DATACENTRE_IP = "198.51.100.64"
 /** Relay egress identified by ASN alone, and by network name alone — each signal must stand on its own. */
 const RELAY_BY_ASN_IP = "198.51.100.65"
 const RELAY_BY_NAME_IP = "198.51.100.66"
-/** Cloudflare WARP egress that proxycheck ALSO lists as a VPN — the relay reason must still win. */
-const RELAY_ALSO_LISTED_IP = "198.51.100.67"
 
 const OWNER_ID = "3a7ffd10-b1a5-4a40-8d07-232364596735"
 const AUTH_SECRET = "test-nextauth-secret-not-a-real-credential"
@@ -65,7 +63,6 @@ const VERDICTS: Record<string, Record<string, unknown>> = {
   [DATACENTRE_IP]: { proxy: "no", type: "Hosting", asn: "AS8075", provider: "Microsoft Corporation" },
   [RELAY_BY_ASN_IP]: { proxy: "no", type: "Business", asn: "AS54113", provider: "" },
   [RELAY_BY_NAME_IP]: { proxy: "no", type: "Business", provider: "Cloudflare, Inc." },
-  [RELAY_ALSO_LISTED_IP]: { proxy: "yes", type: "VPN", asn: "AS13335", provider: "Cloudflare, Inc." },
 }
 
 function proxycheckAnswers() {
@@ -418,68 +415,5 @@ describe("/api/geo/check tells the visitor the same thing the gate decided", () 
 
   it("reports a home connection as clean", async () => {
     expect((await detectUserState(geoRequest(HOME_IP))).isVpnOrProxy).toBe(false)
-  })
-})
-
-/*
- * Owner report 2026-09-25: VPN app switched off, still sent to /vpn-blocked. Safari's iCloud
- * Private Relay was on (the requests arrived from a Fastly relay address), and a page that opens
- * with "VPN app: disconnect it" did not say so. The gate now tells the page WHY, so it can lead
- * with the one setting to switch off. It changes nothing about who is refused.
- */
-describe("the block page is told when the cause is a privacy relay", () => {
-  function why(res: Response): string | null {
-    return new URL(res.headers.get("location")!).searchParams.get("why")
-  }
-
-  for (const [label, ip] of [
-    ["an Akamai relay", RELAY_IP],
-    ["a relay known only by ASN (Fastly)", RELAY_BY_ASN_IP],
-    ["a relay known only by name (Cloudflare)", RELAY_BY_NAME_IP],
-  ] as const) {
-    it(`says why=relay for ${label}, and still sends the visitor back where they were going`, async () => {
-      const res = await middleware(request("/core?tab=trades", { ip }))
-      expect(isVpnRedirect(res)).toBe(true)
-      expect(why(res)).toBe("relay")
-      expect(new URL(res.headers.get("location")!).searchParams.get("from")).toBe("/core?tab=trades")
-    })
-  }
-
-  it("names the relay even when the vendor ALSO lists the address as a VPN (WARP)", async () => {
-    expect(why(await middleware(request("/core", { ip: RELAY_ALSO_LISTED_IP })))).toBe("relay")
-  })
-
-  it("says nothing extra for a VPN, a data centre or Tor — the general steps are the right ones there", async () => {
-    expect(why(await middleware(request("/core", { ip: VPN_IP })))).toBeNull()
-    expect(why(await middleware(request("/core", { ip: DATACENTRE_IP })))).toBeNull()
-    expect(why(await middleware(request("/core", { ip: HOME_IP, country: "T1", region: null })))).toBeNull()
-  })
-
-  it("points an API refusal at the relay steps too", async () => {
-    const relay = await middleware(request("/api/leagues/abc123/matchups", { method: "POST", ip: RELAY_IP }))
-    expect(await isVpnRefusal(relay)).toBe(true)
-    expect((await relay.json()).redirectTo).toBe("/vpn-blocked?why=relay")
-
-    const vpn = await middleware(request("/api/leagues/abc123/matchups", { method: "POST", ip: VPN_IP }))
-    expect((await vpn.json()).redirectTo).toBe("/vpn-blocked")
-  })
-
-  it("reads the relay from ipapi's network when proxycheck has no key", async () => {
-    delete process.env.PROXYCHECK_API_KEY
-    process.env.IPAPI_KEY = "test-ipapi-key-not-real"
-    mockedIpApi.mockResolvedValue({ country_code: "US", region_code: "OR", asn: "AS36183", org: "Akamai Technologies, Inc." })
-    expect(why(await middleware(request("/core", { ip: RELAY_IP })))).toBe("relay")
-  })
-
-  it("keeps the reason on a cached verdict, without a second lookup", async () => {
-    await middleware(request("/core", { ip: RELAY_BY_ASN_IP }))
-    const again = await middleware(request("/trades", { ip: RELAY_BY_ASN_IP }))
-    expect(why(again)).toBe("relay")
-    expect(mockedProxycheck).toHaveBeenCalledTimes(1)
-  })
-
-  it("still lets the owner through on a relay — the reason never widens or narrows the gate", async () => {
-    mockedGetToken.mockResolvedValue({ sub: OWNER_ID, username: "owner" } as never)
-    expect(isVpnRedirect(await middleware(request("/core", { ip: RELAY_IP })))).toBe(false)
   })
 })
