@@ -50,8 +50,23 @@ export const RAIL_AUTO_PREFETCH_LIMIT = 12
  * Each is a FULL server render of `/core` for that league — the shell reads plus the home
  * loader. A reader sweeping the mouse down a long rail would otherwise order one render per
  * crest passed, which is the 244-HTTP shape this repo already has a note about.
+ *
+ * ⚠ WAS 6, AND PRODUCTION SHOWED WHAT 6 COSTS. One page load carried six concurrent league `home`
+ * renders at 6–8s each while the page itself waited behind them — see `speculationGate.ts`. Three,
+ * spaced by the gate and each needing a hover pause (`RAIL_WARM_DWELL_MS`), still covers "the
+ * league I am about to open" without letting a pointer order a batch.
  */
-export const MAX_RAIL_WARMS = 6
+export const MAX_RAIL_WARMS = 3
+
+/**
+ * How long the pointer (or keyboard focus) must rest on a crest before its league is warmed.
+ *
+ * ⚠ THE WARM FIRED ON `onMouseEnter`, SO CROSSING A TILE WAS AN INTENT. Moving the mouse from the
+ * top of the page to a tab below the rail crosses several crests, and each one ordered a full
+ * render. A short rest separates "pointing at this league" from "passing over it" — long enough to
+ * skip a sweep, short enough that the render still starts well before the click lands.
+ */
+export const RAIL_WARM_DWELL_MS = 200
 
 /**
  * Whether Next's automatic prefetch should stay on for a rail of this length.

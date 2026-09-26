@@ -6,6 +6,12 @@ import {
   PREWARM_KEYS,
   selectPrewarmTargets,
 } from '@/components/core-app/LeagueTabsPrewarm'
+import {
+  createSpeculationGate,
+  NAVIGATION_QUIET_MS,
+  SPECULATION_SPACING_MS,
+  type SpeculationGate,
+} from '@/components/core-app/speculationGate'
 
 /**
  * Prewarming My team and Matchup.
@@ -40,12 +46,18 @@ function installImmediateIdle() {
   vi.stubGlobal('cancelIdleCallback', vi.fn())
 }
 
+/* A fresh gate per case, on the fake clock, so no claim leaks from one case into the next. */
+let gate: SpeculationGate
+
 beforeEach(() => {
+  vi.useFakeTimers()
   prefetch.mockClear()
   installImmediateIdle()
+  gate = createSpeculationGate()
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -89,7 +101,8 @@ describe('selectPrewarmTargets', () => {
 
 describe('LeagueTabsPrewarm', () => {
   it('prefetches each target with the league carried forward', () => {
-    render(<LeagueTabsPrewarm leagueId="L/1" activeKey="standings" availableKeys={ALL} />)
+    render(<LeagueTabsPrewarm leagueId="L/1" activeKey="standings" availableKeys={ALL} gate={gate} />)
+    vi.advanceTimersByTime(SPECULATION_SPACING_MS)
 
     expect(prefetch.mock.calls.map(([url]) => url)).toEqual([
       '/core/my-team?league=L%2F1',
@@ -97,9 +110,51 @@ describe('LeagueTabsPrewarm', () => {
     ])
   })
 
+  /*
+   * 🛑 ONE FULL RENDER AT A TIME. Both targets used to fire in one loop; with the rail warming
+   * leagues at the same moment, one page load reached seven concurrent renders in production.
+   */
+  it('🛑 staggers the two targets through the shared gate instead of firing both at once', () => {
+    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
+    expect(prefetch).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(SPECULATION_SPACING_MS - 1)
+    expect(prefetch, 'the second render started inside the spacing').toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(1)
+    expect(prefetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('🛑 waits out a real navigation before warming anything', () => {
+    gate.noteNavigation()
+    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
+    expect(prefetch, 'warmed alongside the screen the manager just asked for').not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(NAVIGATION_QUIET_MS)
+    expect(prefetch).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(SPECULATION_SPACING_MS)
+    expect(prefetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('shares the gate: a rail warm a moment earlier delays the first target', () => {
+    gate.tryAcquire() // the rail just warmed a league
+    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
+    expect(prefetch).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(SPECULATION_SPACING_MS)
+    expect(prefetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaving the screen between the two targets cancels the second', () => {
+    const view = render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
+    expect(prefetch).toHaveBeenCalledTimes(1)
+    view.unmount()
+    vi.advanceTimersByTime(SPECULATION_SPACING_MS * 3)
+    expect(prefetch).toHaveBeenCalledTimes(1)
+  })
+
   it('spends nothing when the reader has asked for reduced data', () => {
     vi.stubGlobal('navigator', { ...navigator, connection: { saveData: true } })
-    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} />)
+    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
 
     expect(prefetch).not.toHaveBeenCalled()
   })
@@ -118,10 +173,12 @@ describe('LeagueTabsPrewarm', () => {
     })
     vi.stubGlobal('cancelIdleCallback', vi.fn())
 
-    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} />)
+    render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
     expect(prefetch, 'prefetched before the browser went idle').not.toHaveBeenCalled()
 
     pending.forEach((cb) => cb())
+    expect(prefetch).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(SPECULATION_SPACING_MS)
     expect(prefetch).toHaveBeenCalledTimes(2)
   })
 
@@ -133,7 +190,7 @@ describe('LeagueTabsPrewarm', () => {
     })
     vi.stubGlobal('cancelIdleCallback', vi.fn())
 
-    const view = render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} />)
+    const view = render(<LeagueTabsPrewarm leagueId="L1" activeKey="standings" availableKeys={ALL} gate={gate} />)
     view.unmount()
     pending.forEach((cb) => cb())
 
