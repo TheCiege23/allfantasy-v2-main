@@ -66,3 +66,13 @@ The expanded real test-database smoke also passed next-season creation for all t
 A guarded known-test-database smoke exercised the actual draft-start service and pick-submission service on a two-team, two-round snake draft. The real authority helper allowed the manager's roster and refused another manager's roster and a nonmember. Two simultaneous submissions produced exactly one first pick. Stale overall and duplicate player requests were rejected, and the last pick automatically completed the session and materialized four season roster players. Tracked synthetic leagues and users were removed.
 
 The run reproduced a Postgres lease race: both transactions observed a missing lease; the losing unique insert was classified as an infrastructure error, so draft submission entered its fail-open path. The pick unique index still prevented duplicate commits. The repair classifies competing insert/deletion errors (P2002/P2025) as lock contention, so draft callers return the ordinary retry response. The repaired real database run passed without entering the infrastructure fail-open path. Twenty-eight unit assertions passed, including genuine connection-failure fallback. This verifies service behavior with real DB writes and identity checks, not browser authentication/session cookies or a full normal-size draft.
+
+## Authenticated API verification
+
+The team-count release (#1349, b1a3ce9489d5e307b51d36f13af1b23cb6427aa5) reached Railway SUCCESS. The preceding branding/persistence release also reached SUCCESS.
+
+A real local Next server connected to the known test database passed the authenticated creation smoke: anonymous POST /api/leagues returned 401; the credentials callback established a real NextAuth cookie session; authenticated creation installed two rosters, roster configuration and a draft. A spoofed commissionerId was stripped and league ownership matched the authenticated user. Cleanup verified zero tracked synthetic leagues/users. Temporary Next/TypeScript cross-drive settings were restored and the owned server stopped.
+
+Automatic review initially rejected this test because inherited Meta credentials might send test conversions. The safer rerun restarted the server with Meta pixel/conversion, email and shared Redis credentials explicitly disabled. Server logs confirmed the Meta event was skipped because no conversion token was set. No signup endpoint was called.
+
+Remaining acceptance includes the full authenticated browser journey through joins/settings/draft picks, full-size real drafts, active-pool remote image coverage, cross-sport stats/ADP completeness and each offered specialty lifecycle.
