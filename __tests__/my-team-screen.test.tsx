@@ -247,8 +247,10 @@ describe('My Team — the reported problems', () => {
     expect(t).toMatch(/has not been ingested/)
   })
 
-  it('names the week the lock belongs to', () => {
-    expect(text(<MyTeam data={data()} />)).toContain('Week 1 locks')
+  it('names the week and first kickoff without claiming every player locks together', () => {
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('Week 1 · first kickoff')
+    expect(t).not.toContain('Week 1 locks')
   })
 
   it('⚠ shows the manager, whose name was imported and never rendered', () => {

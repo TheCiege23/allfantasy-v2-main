@@ -101,7 +101,10 @@ export type SourcedRow = {
   fetchedAt: Date | null
   season?: number | null
   week?: number | null
+  startTime?: Date | null
 }
+
+const SCORE_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /*
  * ⚠ SEASON + WEEK, NEVER `seasonType`. Measured on production: espn, cfbd, api_sports and
@@ -111,16 +114,19 @@ export type SourcedRow = {
  * Week labels, by contrast, agreed on every one of 606 + 79 + 32 + 23 + 22 + 15 cross-feed pairs.
  *
  * Rows missing either field share one slice, which is exactly the old whole-call behaviour — so a
- * caller that never selects them (weekly redraft scoring) is unchanged. There is deliberately no
- * date fallback: it would split callers that already group by week, and a game keyed by week in one
- * feed and by date in another would be selected twice.
+ * caller that never selects them (weekly redraft scoring) is unchanged. Weekly selection has no
+ * implicit date fallback. Daily scoreboards explicitly use the kickoff day instead: daily sports
+ * feeds can label the same slate with week 0 or no week, which otherwise selects both copies.
  */
-function sliceKey(row: SourcedRow): string {
+function sliceKey(row: SourcedRow, sliceBy: 'week' | 'day'): string {
+  if (sliceBy === 'day' && row.startTime && Number.isFinite(row.startTime.getTime())) {
+    return `day:${SCORE_DAY.format(row.startTime)}`
+  }
   return row.season != null && row.week != null ? `${row.season}:${row.week}` : ''
 }
 
 /**
- * One source per season-week — never a blend WITHIN a week.
+ * One source per season-week, or per kickoff day when explicitly requested.
  *
  * Mixing sources is what produces a scoreboard where the same fixture appears
  * two or three times with different scores: this table deliberately keeps one
@@ -135,12 +141,12 @@ function sliceKey(row: SourcedRow): string {
  *
  * Input order is preserved, because callers sort by kickoff before selecting.
  */
-export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Date.now()): T[] {
+export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Date.now(), sliceBy: 'week' | 'day' = 'week'): T[] {
   if (rows.length === 0) return rows
 
   const slices = new Map<string, T[]>()
   for (const row of rows) {
-    const key = sliceKey(row)
+    const key = sliceKey(row, sliceBy)
     const slice = slices.get(key)
     if (slice) slice.push(row)
     else slices.set(key, [row])

@@ -1488,7 +1488,7 @@ export async function getCachedLiveScoresForSport(options: {
   // Was: RI-if-present, else EVERY row from every source blended together.
   // That blend is how one fixture rendered once per feed, and how a dead feed's
   // 0-0 rows sat beside a live one's real score.
-  const useRows = pickFreshestSourceRows(cachedGames)
+  const useRows = pickFreshestSourceRows(cachedGames, Date.now(), sport === 'NFL' || sport === 'NCAAF' ? 'week' : 'day')
   const scores = await withCollegeTeamIdentity(sport, useRows.map(dbRowToLiveScore))
   const now = Date.now()
   const latestFetched =
@@ -1704,7 +1704,7 @@ export async function getLiveScoresForSport(options: {
   if (scores.length === 0) {
     // Same rule as the cached-only reader: one source, the freshest that ranks
     // highest, never a blend across feeds.
-    const useRows = pickFreshestSourceRows(cachedGames)
+    const useRows = pickFreshestSourceRows(cachedGames, Date.now(), sport === 'NFL' || sport === 'NCAAF' ? 'week' : 'day')
     scores = await withCollegeTeamIdentity(sport, useRows.map(dbRowToLiveScore))
     source = useRows[0]?.source === 'rolling_insights' ? 'db_cache_ri' : 'db_cache'
     fetchedAt = useRows[0]?.fetchedAt?.toISOString() ?? null

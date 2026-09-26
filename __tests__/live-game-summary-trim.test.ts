@@ -159,6 +159,19 @@ function rawSummary(over: { state?: 'pre' | 'in' | 'post'; current?: boolean } =
 const opts = { sport: 'NFL', gameId: '401872925', fetchedAt: '2026-09-13T20:00:00.000Z' }
 
 describe('trimEspnGameSummary', () => {
+  it('withholds invalid penalty-transition distance while retaining field position', () => {
+    const raw = rawSummary()
+    const end = raw.drives.current.plays[0].end!
+    end.down = 4
+    end.distance = -13
+    end.downDistanceText = '4th & -13 at TB 44'
+    end.shortDownDistanceText = '4th & -13'
+    expect(trimEspnGameSummary(raw, opts)?.situation).toMatchObject({
+      downDistance: null, shortDownDistance: null, distance: null,
+      possessionText: 'TB 44', ballOn: 44, offense: 'home',
+    })
+  })
+
   it('reads both teams from the header, with record, color, line score and possession', () => {
     const d = trimEspnGameSummary(rawSummary(), opts)!
     expect(d.home).toMatchObject({ abbrev: 'CIN', score: 33, record: '1-0', color: 'fb4f14', linescores: [14, 10, 3, 6], possession: true })

@@ -100,20 +100,29 @@ The user supplied the exact Railway app and environment link after initially sel
 - The Game day record ignores tied/unplayed pairings and compares the current scores instead of trusting an old win flag.
 - The rivalry summary cache version advances so the completed-period fix is not hidden behind an old cached result.
 - Follow-up regression checks passed: 77 tests across six files. Separate arithmetic, fixture and summary checks also passed.
-- The optimized release build is running locally with a dummy localhost database address. It has not accessed production league data; deployed verification remains outstanding.
+- The optimized Home revision build completed successfully with a dummy localhost database address and generated all 572 static pages. It did not access production league data; deployed verification remains outstanding.
 
 ### Score-cache follow-up
 
 - Reproduced deletion of the last weekly scores before a failed or empty provider response.
 - Refresh now fetches and validates the non-empty replacement before deleting any cached scores. A short transaction replaces one week atomically, preserving the old scores if persistence fails.
 - All 18 cache/sync regression checks passed in both the shared checkout and isolated release checkout.
-- The running optimized build compiled the earlier Home revision `49c0eed539`; this later cache change is covered by its separate regression run and the updated PR checks, not that compiled revision.
+- The completed optimized build compiled the earlier Home revision `49c0eed539`; this later cache change is covered by its separate regression run and the updated PR checks, not that compiled revision.
+
+### Daily scoreboards and live situation follow-up
+
+- Read-only production fixture counts confirmed MLB has 13 games in each of two feeds, with week `0` versus `null`. Weekly source selection treated them as separate slates and displayed 26. Daily sports now explicitly select one source per Eastern kickoff day; NFL and NCAAF retain weekly selection. Future-day coverage and actual doubleheaders remain intact.
+- The NCAAF 116-versus-65 discrepancy is a provider coverage difference, not evidence that all additional games are duplicates. Coverage parity remains open.
+- Daily-feed regressions and related live checks passed: 82 tests across five files.
+- Chrome showed an invalid college-game label, `4th & -13`. The summary mapper now withholds impossible next-snap distance while retaining possession and field position. Its related checks passed: 37 tests across three files.
+- GitHub's only newly failing unit-test file expected the removed `Week 1 locks` wording. Updated that assertion to verify `Week 1 · first kickoff`, consistent with individual player locks; all 37 My Team tests passed. Mobile smoke/auth, onboarding, retention, referral and draft-room checks passed on revision `f98347283a`.
+- The broad suite under a concurrent build passed 787 checks with one trade-history timeout; all 11 tests in that file passed on a standalone rerun.
 
 The release checkout is based on the deployed `main` commit `0b8b61eafed13ddbbfd4167e5c4a63875ddc1fb0`, on branch `codex/core-browser-audit-20260926`. Newer shell route and navigation changes were preserved. The shared development checkout's unrelated edits are not included.
 
 - Focused release checks: **85 tests passed across 10 files**, plus the rivalry regression.
 - An initial broad run hit timeouts under concurrent load. With two workers, the full Core suite passed **788 tests across 85 files**; a separate live-score/outlook run passed **97 tests across seven files**.
-- Baseline and patched typechecks both report **143 errors**, with identical file/error-code counts and none in the changed files. Some diagnostic type-member ordering differs. This is not a clean global typecheck. A production build is still outstanding.
+- Baseline and initial patched typechecks both report **143 errors**, with identical file/error-code counts and none in the changed files. Some diagnostic type-member ordering differs. This is not a clean global typecheck. The optimized Home build passed; the screen-bundle comparison build is still being checked.
 - No production deployment has been made from this audit.
 
 ## Provider basis
