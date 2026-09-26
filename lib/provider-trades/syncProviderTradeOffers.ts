@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { runWithConcurrency } from '@/lib/async-utils'
-import { sleeperGet } from '@/lib/trade-intel/sleeperTradeSync'
+import { sleeperGet, type FeedTrade } from '@/lib/trade-intel/sleeperTradeSync'
 import {
   normalizeSleeperTradeOffer,
   persistProviderTradeOffers,
@@ -214,3 +214,82 @@ export async function sweepProviderTradeOffers(args?: {
   }
   return result
 }
+
+/**
+ * The trades the notify sweep is about to alert on, written to the ledger the moment they are seen.
+ *
+ * 🛑 WHY (trade system handoff, Phase 2). The ledger was written ONLY by the rotation above — 15
+ * leagues a run, each read in full — so an offer got its first row whenever the rotation happened to
+ * reach its league. Measured 2026-09-25: 124 of 124 offers in eight days were first recorded
+ * already ACCEPTED (median 4.5–36 h after the fact), so `firstSeenAt` was the acceptance, the
+ * `pending` phase was never on the ledger at all, and "sitting for 3 days" could not be computed.
+ * The notify sweep sees every new offer within a tick (`detectAndNotifyRecent`), from a feed row
+ * already in hand; this writes that row. No extra provider request.
+ *
+ * ⚠ ONLY WHAT THE SWEEP IS ALERTING ON, not every trade in its slice. Every tick re-reading the
+ * same unchanged trades into ~2 upserts and an asset rewrite each, for every AllFantasy copy of
+ * every league, would be a steady write load for rows the rotation keeps fresh anyway. New offers
+ * and completions are exactly the moments the ledger was missing.
+ *
+ * ⚠ NEVER MARKS ANYTHING `vanished`. `feedComplete` is false by construction: a slice, or a feed
+ * read without the all-weeks proof, is not evidence of absence. Retiring stays with the rotation,
+ * which carries that proof.
+ *
+ * ⚠ ONE ROW SET PER AF LEAGUE ROW, as the rotation writes them — a Sleeper league imported by
+ * three people is three AF leagues, and each reads its own ledger.
+ *
+ * Never throws: an alert must not be lost to a ledger write.
+ */
+export async function recordSweptTradesOnLedger(args: {
+  leagues: ReadonlyArray<{ id: string; sport: string | null; season: number | null }>
+  trades: ReadonlyArray<FeedTrade>
+  now?: Date
+}): Promise<{ offersWritten: number; leaguesFailed: number }> {
+  const out = { offersWritten: 0, leaguesFailed: 0 }
+  const offers: NormalizedOffer[] = []
+  for (const t of args.trades) {
+    // The raw row when the feed kept it; otherwise the fields FeedTrade carries, with no payload
+    // rather than a reconstructed one that would read as what Sleeper sent.
+    const tx: SleeperTradeLike = t.raw
+      ? (t.raw as SleeperTradeLike)
+      : {
+          transaction_id: t.id,
+          type: 'trade',
+          status: t.status,
+          roster_ids: t.rosterIds,
+          creator: t.creator,
+          created: t.createdMs,
+          adds: t.tx.adds ?? null,
+          drops: t.tx.drops ?? null,
+          draft_picks: (t.tx.draft_picks ?? null) as SleeperTradeLike['draft_picks'],
+          waiver_budget: (t.tx.waiver_budget ?? null) as SleeperTradeLike['waiver_budget'],
+        }
+    const offer = normalizeSleeperTradeOffer(tx, { week: typeof t.week === 'number' ? t.week : null })
+    if (offer) offers.push(t.raw ? offer : { ...offer, payload: undefined })
+  }
+  if (offers.length === 0) return out
+
+  const seenAt = args.now ?? new Date()
+  for (const league of args.leagues) {
+    try {
+      const persisted = await persistProviderTradeOffers({
+        leagueId: league.id,
+        sport: String(league.sport ?? 'NFL'),
+        season: league.season ?? null,
+        provider: 'sleeper',
+        offers,
+        feedComplete: false,
+        seenAt,
+      })
+      out.offersWritten += persisted.offersWritten
+    } catch (e) {
+      out.leaguesFailed += 1
+      console.warn('[offer-ledger] swept trades not recorded', {
+        leagueId: league.id,
+        name: e instanceof Error ? e.name : typeof e,
+      })
+    }
+  }
+  return out
+}
+

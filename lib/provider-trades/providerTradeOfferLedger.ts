@@ -58,6 +58,8 @@ export type NormalizedOffer = {
   proposedAt: Date | null
   weekOrPeriod: number | null
   assets: NormalizedOfferAsset[]
+  /** The provider record as fetched — `ProviderTradeOffer.payload`. Undefined leaves the column alone. */
+  payload?: unknown
 }
 
 /** The subset of a Sleeper transaction this normaliser reads. */
@@ -226,6 +228,12 @@ export function normalizeSleeperTradeOffer(
     proposedAt: typeof tx.created === 'number' && tx.created > 0 ? new Date(tx.created) : null,
     weekOrPeriod: ctx.week,
     assets,
+    /*
+     * ⚠ THE RAW RECORD, WHICH THE COMMENT ABOVE ALWAYS PROMISED AND NOTHING WROTE. Measured
+     * 2026-09-25: every ledger row's `payload` was null, so a field this type does not model was
+     * simply lost. It is the transaction as Sleeper sent it, a kilobyte or two.
+     */
+    payload: tx,
   }
 }
 
@@ -289,6 +297,7 @@ export async function persistProviderTradeOffers(args: {
       consentedRosterIds: offer.consentedRosterIds,
       proposedAt: offer.proposedAt,
       lastSeenAt: seenAt,
+      ...(offer.payload !== undefined ? { payload: offer.payload as object } : {}),
     }
 
     const row = await prisma.providerTradeOffer.upsert({

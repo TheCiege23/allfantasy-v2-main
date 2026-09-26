@@ -14,6 +14,7 @@ import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
+import { recordSweptTradesOnLedger } from '@/lib/provider-trades/syncProviderTradeOffers'
 import {
   currentTradeIds,
   fetchLeagueRosters,
@@ -289,6 +290,7 @@ type AfLeagueRow = {
   name: string | null
   userId: string
   sport: string
+  season?: number | null
   teams: Array<{ claimedByUserId: string | null; platformUserId: string | null }>
 }
 
@@ -534,6 +536,7 @@ async function deliverPlan(args: {
       name: true,
       userId: true,
       sport: true,
+      season: true,
       teams: { select: { claimedByUserId: true, platformUserId: true } },
     },
     // Deterministic, so the fallback row below is the same one on every run.
@@ -543,6 +546,23 @@ async function deliverPlan(args: {
     // Nobody on AllFantasy to tell: nothing is owed to anyone.
     plan.owed.forEach((a) => delivered.add(owedKey(a)))
     return base
+  }
+
+  /*
+   * The offer ledger learns about it NOW, not when the rotation next reaches this league — see
+   * `recordSweptTradesOnLedger`. Only the trades this plan announces, from the feed rows in hand.
+   */
+  const announced = new Set([...plan.offers.map((o) => o.id), ...plan.completions])
+  const sweptTrades = feed.filter((t) => announced.has(t.id))
+  if (sweptTrades.length > 0) {
+    try {
+      await recordSweptTradesOnLedger({
+        leagues: afLeagues.map((l) => ({ id: l.id, sport: l.sport, season: l.season ?? null })),
+        trades: sweptTrades,
+      })
+    } catch {
+      /* The ledger catches up on the rotation; an alert is never lost to a ledger write. */
+    }
   }
   const recipients = await resolveRecipients(afLeagues)
 
