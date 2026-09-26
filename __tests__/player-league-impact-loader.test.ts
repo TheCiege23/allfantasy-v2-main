@@ -75,6 +75,10 @@ vi.mock('@/lib/core-app/currentWeek', () => ({
   resolveCurrentWeekForLeague: vi.fn(async () => ({ seasonYear: 2026, week: 2 })),
 }))
 vi.mock('@/lib/core-app/leagueHome', () => ({ leagueDisplayName: (n: string | null) => n ?? 'League' }))
+// Every league here is a Sleeper league, so the live-lineup read would otherwise reach Sleeper.
+// Null = "Sleeper could not vouch", which leaves each side on its stored roster, as these tests expect.
+const currentSleeperRoster = vi.hoisted(() => vi.fn(async (): Promise<unknown> => null))
+vi.mock('@/lib/core-app/currentSleeperRoster', () => ({ currentSleeperRoster }))
 
 const loadSideProjections = vi.fn()
 vi.mock('@/lib/core-app/matchupProjections', async (importOriginal) => ({
@@ -379,5 +383,58 @@ describe('loadMatchupSides', () => {
       opponent: null,
     })
     expect(out).toBeNull()
+  })
+})
+
+describe('loadMatchupSides — the live Sleeper lineups', () => {
+  const args = (week: number, platform = 'sleeper') => ({
+    leagueId: 'A',
+    season: 2026,
+    week,
+    userId: USER,
+    you: { platformUserId: USER, externalId: '1' },
+    opponent: { platformUserId: 'opp-A', rosterId: '2' },
+    source: { platform, platformLeagueId: 'sl-A' },
+  })
+  const live = (week: number) => ({
+    starters: ['mine-live'],
+    weekStarters: { '1': ['mine-live', '0'], '2': ['theirs-live'] },
+    verification: { checkedAt: '2026-09-25T12:00:00.000Z', source: 'Sleeper', week, slots: [] },
+  })
+
+  beforeEach(() => {
+    currentSleeperRoster.mockReset()
+    currentSleeperRoster.mockResolvedValue(null)
+    db.rosters.push({ leagueId: 'A', platformUserId: USER, playerData: { starters: ['mine-stored'] } })
+    db.rosters.push({ leagueId: 'A', platformUserId: 'opp-A', playerData: { starters: ['theirs-stored'] } })
+  })
+
+  it('🛑 hands BOTH sides’ live lineups for this week to the pricer, holes kept', async () => {
+    currentSleeperRoster.mockResolvedValue(live(2))
+    await loadMatchupSides(args(2))
+    expect(currentSleeperRoster).toHaveBeenCalledWith('sl-A', { platformUserId: USER, externalId: '1' })
+    expect(loadSideProjections).toHaveBeenCalledWith(
+      expect.objectContaining({ liveLineups: { you: ['mine-live', '0'], opponent: ['theirs-live'] } }),
+    )
+  })
+
+  it('a live lineup for ANOTHER week is not this game’s — the stored rows answer', async () => {
+    currentSleeperRoster.mockResolvedValue(live(3))
+    await loadMatchupSides(args(2))
+    expect(loadSideProjections.mock.calls[0][0]).not.toHaveProperty('liveLineups')
+  })
+
+  it('a side Sleeper cannot vouch for is left null, and falls back on its own', async () => {
+    currentSleeperRoster.mockResolvedValue({ ...live(2), weekStarters: { '1': ['mine-live'] } })
+    await loadMatchupSides(args(2))
+    expect(loadSideProjections).toHaveBeenCalledWith(
+      expect.objectContaining({ liveLineups: { you: ['mine-live'], opponent: null } }),
+    )
+  })
+
+  it('only a Sleeper league is read live', async () => {
+    await loadMatchupSides(args(2, 'espn'))
+    expect(currentSleeperRoster).not.toHaveBeenCalled()
+    expect(loadSideProjections.mock.calls[0][0]).not.toHaveProperty('liveLineups')
   })
 })

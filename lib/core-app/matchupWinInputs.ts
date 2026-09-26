@@ -1,5 +1,6 @@
 import { loadSideProjections, type LivePoints, type SideProjections } from './matchupProjections'
 import { myRosterCandidates } from './myRoster'
+import { currentSleeperRoster } from './currentSleeperRoster'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { prisma } from '@/lib/prisma'
 
@@ -23,6 +24,11 @@ export async function loadMatchupSides(args: {
   userId: string
   you: { platformUserId: string | null; externalId: string | null }
   opponent: { platformUserId: string | null; rosterId: string } | null
+  /**
+   * The league's platform and its id there, so a Sleeper league's LIVE lineups can be read. Omitted,
+   * both sides come from their stored `Roster` rows.
+   */
+  source?: { platform: string | null; platformLeagueId: string | null } | null
 }): Promise<SideProjections | null> {
   /*
    * ⚠ THE ROSTER JOIN IS RESOLVED HERE, NOT ASSUMED. `Roster.platformUserId` is
@@ -66,12 +72,15 @@ export async function loadMatchupSides(args: {
       : []),
   ]
 
-  const rosterRows = await prisma.roster
-    .findMany({
-      where: { leagueId: args.leagueId },
-      select: { id: true, platformUserId: true, playerData: true },
-    })
-    .catch(() => [])
+  const [rosterRows, liveLineups] = await Promise.all([
+    prisma.roster
+      .findMany({
+        where: { leagueId: args.leagueId },
+        select: { id: true, platformUserId: true, playerData: true },
+      })
+      .catch(() => []),
+    readLiveLineups(args),
+  ])
 
   /*
    * ⚠ THE OPPONENT MUST NOT RESOLVE TO THE ROW THE USER JUST TOOK. `externalId` and a roster id are
@@ -116,8 +125,35 @@ export async function loadMatchupSides(args: {
         week: args.week,
         yourPlatformUserId: yourRosterKey,
         opponentPlatformUserId: oppRosterKey,
+        ...(liveLineups ? { liveLineups } : {}),
       }).catch(() => null)
     : null
+}
+
+/**
+ * Both sides' Sleeper lineups for THIS week, from the same weekly read My Team makes — or null.
+ *
+ * 🛑 BOTH SIDES OF THE MATCHUP SCREEN WERE THE STORED `Roster` ROWS, whatever the last sync wrote,
+ * so the board, the projected final and the win probability all priced lineups that may no longer
+ * exist. `currentSleeperRoster` already returns every roster's weekly starters (`weekStarters`).
+ *
+ * ⚠ ONLY FOR THE WEEK SLEEPER IS ON. The screen can show a finished week, and a live lineup for a
+ * different week describes a different game; the stored rows answer for that one, as before.
+ * A side Sleeper cannot vouch for is left null and falls back the same way.
+ */
+async function readLiveLineups(args: {
+  week: number
+  you: { platformUserId: string | null; externalId: string | null }
+  opponent: { rosterId: string } | null
+  source?: { platform: string | null; platformLeagueId: string | null } | null
+}): Promise<{ you: string[] | null; opponent: string[] | null } | null> {
+  const { source } = args
+  if (!source?.platformLeagueId || String(source.platform ?? '').toLowerCase() !== 'sleeper') return null
+  const live = await currentSleeperRoster(source.platformLeagueId, args.you).catch(() => null)
+  if (!live?.weekStarters || live.verification.week !== args.week) return null
+  const lineupOf = (rosterId: string | null) =>
+    rosterId && Object.hasOwn(live.weekStarters!, rosterId) ? live.weekStarters![rosterId] : null
+  return { you: lineupOf(args.you.externalId), opponent: lineupOf(args.opponent?.rosterId ?? null) }
 }
 
 /**

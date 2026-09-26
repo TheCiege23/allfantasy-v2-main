@@ -108,7 +108,7 @@ type ClaimedTeam = { leagueId: string; platformUserId: string | null; externalId
 
 /** This week's impact in one league where he starts for you — the Matchup screen's own steps. */
 async function priceLeague(
-  league: { id: string; platformLeagueId: string | null },
+  league: { id: string; platform: string | null; platformLeagueId: string | null },
   team: ClaimedTeam,
   userId: string,
   rosterPlayerId: string,
@@ -144,6 +144,8 @@ async function priceLeague(
     userId,
     you: { platformUserId: team.platformUserId, externalId: team.externalId },
     opponent: { platformUserId: oppTeam?.platformUserId ?? null, rosterId: String(opponentRow.rosterId) },
+    // The Matchup screen's own lineups, so this win impact prices the week the screen shows.
+    source: { platform: league.platform, platformLeagueId: league.platformLeagueId },
   })
   if (!sides) {
     return { kind: 'unpriced', reason: 'we could not match both sides of this matchup to an imported roster' }

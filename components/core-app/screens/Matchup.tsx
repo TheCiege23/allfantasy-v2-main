@@ -186,11 +186,25 @@ function PlayerHalf({
         </div>
       </div>
       {/*
-        ⚠ "—" IS NOT 0.0. A player we could not price has no number; a player we
-        priced at nothing would be a claim we cannot support. The two are
-        different facts and only one of them is ever true here.
+        ⚠ "—" IS NOT 0.0. A player we could not price has no number. A 0.0 is a
+        claim, and the only projected ones we make are a starter ruled out or on
+        bye — which is why the reason sits beside the number rather than leaving
+        a bare zero to be read as a bad projection. Here, not beside the name:
+        the name truncates, and this column never does.
       */}
       <div className="af-mu-half-pts af-num" data-unpriced={value == null}>
+        {cell.unavailable ? (
+          <span
+            className="af-mu-flag"
+            title={
+              cell.unavailable === 'bye'
+                ? 'His team is not playing this week. A starter on bye is a guaranteed zero.'
+                : 'Ruled out this week. A starter who is out is a guaranteed zero.'
+            }
+          >
+            {cell.unavailable === 'bye' ? 'BYE' : 'OUT'}
+          </span>
+        ) : null}
         {value == null ? '—' : value.toFixed(1)}
       </div>
     </div>
