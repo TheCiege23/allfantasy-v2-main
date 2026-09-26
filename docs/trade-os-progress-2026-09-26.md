@@ -9,8 +9,9 @@
 - Stored, owned salary contracts validated across commitment years and recorded dead money; stable cap-growth origin and read-only future previews.
 - Commissioner-hub card button wraps within tablet columns; production Chrome checks at 390px and 768px passed.
 - Proposal cap details show both teams' recorded commitments and contract expiry. Salary-cap counteroffers must pass affordability checks.
+- Native contract settlement and reversal preserve ownership and terms, evaluate all participants' commitment years, and record contract evidence alongside rosters.
 
-## This release
+## Contract settlement release (PR #1345)
 
 Native generic (`AfLeagueTrade`) settlement moves each owned, unexpired contract with its player, preserving salary, signing year, term and status. All participants in a multi-team trade are evaluated together against recorded current/future commitments, dead money, rollover and configured floors. Contract ownership, roster changes, refreshed ledgers and contract evidence share the processing transaction. Settlement and commissioner reversal use serializable transactions with a bounded 20-second limit. Ledger reads are batched across participants and commitment years; a conflict fails safely rather than applying a partial trade.
 
@@ -18,9 +19,15 @@ Execution snapshots record contract ownership and terms before and after settlem
 
 [Reality Sports Online's documentation](https://realitysportsonline.com/Content.aspx?articleID=how-it-works) demonstrates why current and future contract commitments matter. AllFantasy uses its own stored rules, not RSO guarantees or cut penalties.
 
+## Contract ownership release
+
+Cuts, extensions and franchise tags require the current contract owner or head commissioner. League membership alone grants no write permission. The server session supplies the actor identity; native roster ownership and explicitly claimed imported teams are resolved inside the same serializable transaction as the mutation. Conditional writes include the authorized roster, status and contract version, so a stale request cannot overwrite a contract after a trade moves it. Extensions and cut events roll back as a unit if their second write fails. Invalid extension numbers and backdated cuts are rejected before any write.
+
+This closes these three mutation routes. Other acquisition, lifecycle and ledger writers still require the broader concurrency and cap-legality audit. Franchise-tag term renewal and rollover idempotency remain separate lifecycle work.
+
 ## Remaining work
 
-1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit concurrency across signing, cuts, extensions and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
+1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
 2. Complete missing NFL/IDP/college asset pricing with documented per-player inputs and provider coverage. Do not substitute identical placeholder values.
 3. Compare actual pre/post starting lineups with eligible replacements. Calibrate game/playoff forecasts before displaying percentage claims.
 4. Implement evidence-backed role, coaching, offensive/defensive scheme, and expanding-player-pool effects with timestamps and bounded weights.

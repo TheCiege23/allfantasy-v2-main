@@ -39,8 +39,8 @@ export async function POST(
     )
   }
 
-  const result = await applyExtension(leagueId, String(contractId), Number(newYears), Number(newSalary))
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
+  const result = await applyExtension(leagueId, String(contractId), Number(newYears), Number(newSalary), userId)
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 400 })
 
   const config = await getSalaryCapConfig(leagueId)
   if (config) {

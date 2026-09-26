@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
+type PermissionDb = Prisma.TransactionClient | typeof prisma
 
 /**
  * Commissioner = the league owner (`League.userId`), OR the user whose claimed team in this
@@ -18,8 +20,8 @@ import { prisma } from '@/lib/prisma'
  */
 
 /** Claimed team in this league that the source platform marked as its head commissioner. */
-async function hasClaimedCommissionerTeam(leagueId: string, userId: string): Promise<boolean> {
-  const team = await prisma.leagueTeam.findFirst({
+async function hasClaimedCommissionerTeam(leagueId: string, userId: string, db: PermissionDb = prisma): Promise<boolean> {
+  const team = await db.leagueTeam.findFirst({
     where: { leagueId, claimedByUserId: userId, isCommissioner: true, role: { not: 'viewer' } },
     select: { isCommissioner: true, role: true },
   })
@@ -28,15 +30,15 @@ async function hasClaimedCommissionerTeam(leagueId: string, userId: string): Pro
   return team?.isCommissioner === true && team.role !== 'viewer'
 }
 
-export async function isCommissioner(leagueId: string, userId: string | undefined): Promise<boolean> {
+export async function isCommissioner(leagueId: string, userId: string | undefined, db: PermissionDb = prisma): Promise<boolean> {
   if (!userId) return false
-  const league = await prisma.league.findFirst({
+  const league = await db.league.findFirst({
     where: { id: leagueId },
     select: { userId: true },
   })
   if (!league) return false
   if (league.userId === userId) return true
-  return hasClaimedCommissionerTeam(leagueId, userId)
+  return hasClaimedCommissionerTeam(leagueId, userId, db)
 }
 
 export async function getLeagueIfCommissioner(leagueId: string, userId: string | undefined) {
