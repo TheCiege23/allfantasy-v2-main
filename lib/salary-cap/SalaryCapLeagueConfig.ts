@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import type { LeagueSport } from '@prisma/client'
+import type { LeagueSport, Prisma } from '@prisma/client'
 import {
   SALARY_CAP_VARIANT,
   DEFAULT_STARTUP_CAP,
@@ -53,8 +53,11 @@ function toFutureDraftType(s: unknown): FutureDraftType {
   return 'snake'
 }
 
-export async function getSalaryCapConfig(leagueId: string): Promise<SalaryCapConfig | null> {
-  const league = await prisma.league.findUnique({
+export async function getSalaryCapConfig(
+  leagueId: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<SalaryCapConfig | null> {
+  const league = await db.league.findUnique({
     where: { id: leagueId },
     select: { id: true, sport: true, leagueVariant: true, settings: true, season: true },
   })
@@ -65,7 +68,7 @@ export async function getSalaryCapConfig(leagueId: string): Promise<SalaryCapCon
     && Number.isInteger(settings.capStartYear) && settings.capStartYear >= 1900 && settings.capStartYear <= 3000
     ? settings.capStartYear : undefined
 
-  const row = await prisma.salaryCapLeagueConfig.findUnique({
+  const row = await db.salaryCapLeagueConfig.findUnique({
     where: { leagueId },
   })
   if (row) {

@@ -19,6 +19,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { EVENT, getPlatformEvents } from '@/lib/events'
+import type { SalarySettlementEvidence } from '@/lib/salary-cap/TradeContractSettlement'
 
 /**
  * What a generic roster looked like at a point in time.
@@ -93,6 +94,7 @@ export type GenericTradeSnapshotInput = {
   assetSummary: Record<string, unknown>
   beforeState: GenericRosterStateSnapshot[]
   afterState: GenericRosterStateSnapshot[]
+  salaryEvidence?: SalarySettlementEvidence
   executedAt: Date
 }
 
@@ -133,8 +135,10 @@ export async function writeGenericTradeExecutionSnapshot(
       executedByActorRole: input.executedByActorRole,
       governance: input.governance as Prisma.InputJsonValue,
       validations: input.validations as Prisma.InputJsonValue,
-      beforeState: { rosters: input.beforeState } as unknown as Prisma.InputJsonValue,
-      afterState: { rosters: input.afterState } as unknown as Prisma.InputJsonValue,
+      beforeState: { rosters: input.beforeState,
+        ...(input.salaryEvidence && { salaryContracts: input.salaryEvidence.before }) } as unknown as Prisma.InputJsonValue,
+      afterState: { rosters: input.afterState,
+        ...(input.salaryEvidence && { salaryContracts: input.salaryEvidence.after }) } as unknown as Prisma.InputJsonValue,
       assetSummary: input.assetSummary as Prisma.InputJsonValue,
       // No IDP cap ledger on this path — the generic processor moves `playerData` and FAAB only.
       dependencies: { sourceTransactionIds: [] } as unknown as Prisma.InputJsonValue,

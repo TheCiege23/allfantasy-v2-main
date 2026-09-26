@@ -8,20 +8,24 @@
 - Active capacity excludes owned IR/taxi assignments. Picks consume no current player slots; warnings describe required cleanup rather than universal platform rejection.
 - Stored, owned salary contracts validated across commitment years and recorded dead money; stable cap-growth origin and read-only future previews.
 - Commissioner-hub card button wraps within tablet columns; production Chrome checks at 390px and 768px passed.
+- Proposal cap details show both teams' recorded commitments and contract expiry. Salary-cap counteroffers must pass affordability checks.
 
 ## This release
 
-Proposal results expose a separate salary-cap affordability result, contract salary/expiry, and both teams' post-trade cap commitments and room each year. Unknown or ambiguous ownership withholds the cap result. Counteroffers must satisfy configured cap/floor rules when the league has salary-cap rules; unverified packages are excluded. Cap facts remain visible to free users alongside the value verdict and are included in Chimmy's structured proposal payload. This does not change shared asset value grades or invent a salary-to-market multiplier.
+Native generic (`AfLeagueTrade`) settlement moves each owned, unexpired contract with its player, preserving salary, signing year, term and status. All participants in a multi-team trade are evaluated together against recorded current/future commitments, dead money, rollover and configured floors. Contract ownership, roster changes, refreshed ledgers and contract evidence share the processing transaction. Settlement and commissioner reversal use serializable transactions; a conflict fails safely rather than applying a partial trade.
+
+Execution snapshots record contract ownership and terms before and after settlement. A commissioner reversal refuses missing legacy salary evidence or subsequent contract changes, restores ownership with players, and recomputes legality under current rules. Cut contracts and their dead money stay with the original team. This applies to native roster IDs and stored contracts, not writes to imported host platforms or the separate redraft salary engine. Other contract mutation services still need a concurrency audit and unified transaction policy.
 
 [Reality Sports Online's documentation](https://realitysportsonline.com/Content.aspx?articleID=how-it-works) demonstrates why current and future contract commitments matter. AllFantasy uses its own stored rules, not RSO guarantees or cut penalties.
 
 ## Remaining work
 
-1. Integrate affordability with all proposal/email surfaces and revalidate atomically when contracts and players move on acceptance. A preview cannot guarantee settlement.
+1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit concurrency across signing, cuts, extensions and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
 2. Complete missing NFL/IDP/college asset pricing with documented per-player inputs and provider coverage. Do not substitute identical placeholder values.
 3. Compare actual pre/post starting lineups with eligible replacements. Calibrate game/playoff forecasts before displaying percentage claims.
 4. Implement evidence-backed role, coaching, offensive/defensive scheme, and expanding-player-pool effects with timestamps and bounded weights.
 5. Capture cap startup year during commissioner setup/import; clarify future floor enforcement and unsigned roster-completion requirements. Unsigned rookies and future acquisitions are not current funded commitments.
 6. Broaden Chrome walkthroughs and test physical iOS Safari keyboard, safe areas, dialogs, and scrolling. Viewport checks and CI WebKit do not establish physical-device compatibility.
+7. Reconcile the empty unified proposal timeline with the separate imported archive (44 completed trades in the audited IDP league), and explain provider freshness independently of live-score refresh.
 
 Trade previews and counteroffers remain unsent; no other manager is contacted by these checks.
