@@ -50,7 +50,7 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
     answer: `${detail}\n${remedy}`, sources: [], gap: { code, remedy } })
   if (!args.leagueId || !args.userId) return gap('league_required', 'I need your league and roster before computing this decision.', 'Select a league in Chimmy and ask again.')
   try {
-    const access = await loadLeagueGroundingForUser(args.leagueId, args.userId)
+    const access = await loadLeagueGroundingForUser(args.userId, args.leagueId)
     if (!access.ok) return gap('league_unavailable', 'I could not read an authorized league for this decision.', 'Open a league you belong to, sync it, and ask again.')
     provenLeagueId = access.snapshot.id
     const input = { message: args.question, leagueId: provenLeagueId, userId: args.userId }
