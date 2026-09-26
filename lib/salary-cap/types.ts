@@ -96,6 +96,9 @@ export interface FutureCapYear {
 
 /** Trade cap impact (both sides). */
 export interface TradeCapImpact {
+  /** Existing contract commitments only; excludes unsigned future acquisitions. */
+  years?: Array<{ capYear: number; fromCapHit: number; toCapHit: number;
+    fromCap: number; toCap: number; fromLegal: boolean; toLegal: boolean }>
   fromRosterId: string
   toRosterId: string
   fromCapHitDelta: number
