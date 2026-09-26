@@ -696,7 +696,7 @@ export async function POST(req: NextRequest) {
       userId,
       leagueId: parseResult.data.userContext.leagueId ?? undefined,
     })
-    if (planIncluded) await releaseChimmyPlanAllowance({ userId })
+    if (planIncluded) await releaseChimmyPlanAllowance({ userId, state: planIncluded })
   }
   const capTier = resolveCapTier(gate.decision.entitlement.plans)
   const capResult = planState ? null : await checkDailyCap('chimmy', userId, capTier)

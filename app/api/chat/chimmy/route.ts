@@ -3073,7 +3073,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           description: 'Auto refund: Chimmy could not deliver an answer.',
           metadata: { conversationId, leagueId: toolContext.leagueId, reason },
         }),
-        releaseAllowance: () => releaseChimmyPlanAllowance({ userId }),
+        releaseAllowance: () => planIncluded ? releaseChimmyPlanAllowance({ userId, state: planIncluded }) : Promise.resolve(false),
       })
       if (settlement.allowanceReleased && planMeta) planMeta = { ...planMeta, used: Math.max(0, planMeta.used - 1), released: true as const }
       /*
@@ -4191,7 +4191,7 @@ ${describedTradeCtx}`
     }
     /* The same deal for an included answer: a turn nobody answered does not use one up. */
     if (!delivery.delivered && planIncluded && userId) {
-      const released = await releaseChimmyPlanAllowance({ userId })
+      const released = await releaseChimmyPlanAllowance({ userId, state: planIncluded })
       planMeta = released && planMeta
         ? { ...planMeta, used: Math.max(0, planMeta.used - 1), released: true as const }
         : planMeta
@@ -4397,7 +4397,7 @@ ${describedTradeCtx}`
       }
     )
   } catch (error) {
-    if (planIncluded && userId) await releaseChimmyPlanAllowance({ userId })
+    if (planIncluded && userId) await releaseChimmyPlanAllowance({ userId, state: planIncluded })
     if (spendLedger?.id) {
       await spendService
         .refundSpendByLedger({
