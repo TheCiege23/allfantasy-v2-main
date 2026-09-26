@@ -15,7 +15,7 @@ const idx = (needle: string) => {
   return at
 }
 
-const DETERMINISTIC_AT = idx('const deterministic = await tryDeterministicAnswerDetailed(')
+const DETERMINISTIC_AT = idx('const deterministic = chimmyDecisionKind(message) ? null : await tryDeterministicAnswerDetailed(')
 const VERDICT_AT = idx('await buildTradeTargetVerdict(')
 const UNRESOLVED_RETURN_AT = idx("if (tradeTargetResult?.status === 'unresolved')")
 const MAIN_SPEND_PREVIEW_AT = idx("tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)")
@@ -49,7 +49,7 @@ describe('the trade-target verdict in the chat route', () => {
   it('an unresolved read returns FREE, before anything is charged', () => {
     expect(UNRESOLVED_RETURN_AT).toBeGreaterThan(CONFIRMATION_REFUSAL_AT)
     expect(UNRESOLVED_RETURN_AT).toBeLessThan(MAIN_SPEND_AT)
-    const block = ROUTE.slice(UNRESOLVED_RETURN_AT, ROUTE.indexOf('let spendLedger', UNRESOLVED_RETURN_AT))
+    const block = ROUTE.slice(UNRESOLVED_RETURN_AT, ROUTE.indexOf('  const decisionAnswer =', UNRESOLVED_RETURN_AT))
     expect(block).toMatch(/free:\s*true/)
     expect(block).not.toMatch(/tokenSpend/)
   })
