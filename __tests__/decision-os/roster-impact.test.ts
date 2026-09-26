@@ -23,6 +23,17 @@ const p = (playerId: string, position: string, projectedPoints: number | null): 
 const SLOTS = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN', 'BN']
 
 describe('fillLineup', () => {
+  it('fills specific defensive positions before DB/DL and IDP flex without losing players', () => {
+    const fill = fillLineup([
+      p('corner', 'CB', 12), p('safety', 'SS', 11), p('tackle', 'DT', 10),
+      p('edge', 'EDGE', 9), p('linebacker', 'LB', 8),
+    ], ['IDP_FLEX', 'DB', 'DL', 'CB', 'DT'])
+    expect(fill.unknownSlots).toEqual([])
+    expect(fill.unfilledSlots).toEqual([])
+    expect(fill.points).toBe(50)
+    expect(fill.assignments).toContainEqual({ slot: 'CB', playerId: 'corner' })
+    expect(fill.assignments).toContainEqual({ slot: 'DT', playerId: 'tackle' })
+  })
   it('fills each dedicated slot with the best player at that position', () => {
     const fill = fillLineup(
       [p('qb1', 'QB', 20), p('rb1', 'RB', 15), p('rb2', 'RB', 10), p('wr1', 'WR', 12)],

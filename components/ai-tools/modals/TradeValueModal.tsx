@@ -1007,23 +1007,23 @@ export function TradeValueModal({
           ) : null}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Who wins now</p>
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Asset production lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
                 {tradeIntelligence.whoWinsNow === 'you'
                   ? 'You (proj-first when available)'
                   : tradeIntelligence.whoWinsNow === 'opponent'
                     ? 'Opponent (proj-first when available)'
-                    : 'Even / mixed'}
+                    : tradeIntelligence.whoWinsNow === 'unknown' ? 'Unavailable' : 'Even / mixed'}
               </p>
             </div>
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Who wins long term</p>
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">League value lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
                 {tradeIntelligence.whoWinsLongTerm === 'you'
                   ? 'You (framework lean)'
                   : tradeIntelligence.whoWinsLongTerm === 'opponent'
                     ? 'Opponent (framework lean)'
-                    : 'Even / close'}
+                    : tradeIntelligence.whoWinsLongTerm === 'unknown' ? 'Unavailable' : 'Even / close'}
               </p>
             </div>
           </div>

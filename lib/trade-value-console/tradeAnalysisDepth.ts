@@ -28,6 +28,7 @@ export const TRADE_DEPTH_FIELDS = [
   'tradeIntelligence',
   'chimmyPayload',
   'opponentRosterTargets',
+  'counterOffers',
   'summaryLine',
   'secondary',
   'drivers',
@@ -63,6 +64,7 @@ export const TRADE_VERDICT_FIELDS = [
    * adjustment `lib/trade-value/leagueTradeValue.ts` exists to prevent.
    */
   'valueBasis',
+  'valuationBasis',
   /* The letter itself, and the same free verdict on every surface — see `lib/decision-os/trade/tradeGrade.ts`. */
   'grade',
   'degraded',

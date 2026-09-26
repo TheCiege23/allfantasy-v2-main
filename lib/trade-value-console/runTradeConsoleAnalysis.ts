@@ -1,7 +1,8 @@
-﻿import 'server-only'
+import 'server-only'
 
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
+import { evaluateCounterOffers } from './counterOffers'
 import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
@@ -506,7 +507,7 @@ export async function runTradeConsoleAnalysis(
       note: drivers.riskFlags[0] ?? 'Volatility differs by asset; see player injury states.',
     },
     scheduleImpact: {
-      note: 'Schedule strength is blended from available data feeds (see sport data freshness).',
+      note: 'Review the schedule and bye-week notes below. A schedule-strength adjustment is not included in the league-value grade.',
     },
     injuryImpact: {
       note: injuryImpactNote,
@@ -649,14 +650,38 @@ export async function runTradeConsoleAnalysis(
     opponentRosterTargets = rosterCtxForDrivers.theirRoster
       .filter((a) => a.type === 'PLAYER' && !receiveIds.has(a.id))
       .map((a) => ({
-        id: a.id,
+        id: a.rosterPlayerId ?? a.id,
         name: a.name ?? a.id,
         position: a.pos ?? null,
         marketValue: Math.round(a.marketValue ?? a.value ?? 0),
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
-      .slice(0, 12)
   }
+
+  const counterOffers = await evaluateCounterOffers({
+    grade: input.opponentTeamExternalId && rosterCtxForDrivers?.theirRoster?.length
+      ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
+    give: input.sideGive,
+    get: input.sideGet,
+    theirTargets: opponentRosterTargets ?? [],
+    yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
+      .filter(a => a.type === 'PLAYER')
+      .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0 })),
+    evaluate: async (counterGive, counterGet) => {
+      const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
+        dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
+      const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
+      if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
+      return (await gradePricedSides({
+        chart, giveLines: g.lines, getLines: t.lines,
+        givePriced: applyChartTePremium(chart, g.priced), getPriced: applyChartTePremium(chart, t.priced),
+        need: marketCtx && leagueRow && input.leagueId && input.userId
+          ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
+          : null,
+      })).grade
+    },
+  })
+  mark('counter_offers')
 
   let negotiationToolkit: Record<string, unknown> | null = null
   try {
@@ -735,7 +760,7 @@ export async function runTradeConsoleAnalysis(
 
   const injuryNotes = [...giveLines, ...getLines].flatMap((l) => {
     const parts: string[] = []
-    if (l.injuryStatus) parts.push(`${l.name}: ${l.injuryStatus}`)
+    if (l.injuryStatus && !['ACT', 'ACTIVE', 'HEALTHY', 'NORMAL'].includes(l.injuryStatus.trim().toUpperCase())) parts.push(`${l.name}: ${l.injuryStatus}`)
     if (l.injuryNewsSummary) parts.push(`${l.name} (aggregated news): ${l.injuryNewsSummary}`)
     return parts
   })
@@ -772,6 +797,12 @@ export async function runTradeConsoleAnalysis(
     scoringSummary: scoringSummaryLine,
   })
 
+  if (input.leagueId && input.opponentTeamExternalId) {
+    tradeIntelligence.rebalanceSuggestions = counterOffers.map(counter =>
+      `${counter.addTo === 'get' ? 'Ask for' : 'Offer'} ${counter.name}. Re-evaluating the full package gives you ${counter.grade.letter} and your partner ${counter.grade.partnerLetter}: ${Math.abs(counter.grade.percentDiff)}% apart, with ${counter.remainingGap.toLocaleString('en-US')} league value remaining. ${counter.balanced ? 'Within the even-value band.' : 'Closer in value, but still outside the even-value band.'} Re-analyze after editing the proposal.`,
+    )
+  }
+
   const validation = buildTradeConsoleValidation({
     leagueNormCtx,
     giveLines,
@@ -794,15 +825,15 @@ export async function runTradeConsoleAnalysis(
       ? 'you'
       : tradeIntelligence.whoWinsNow === 'opponent'
         ? 'opponent'
-        : 'even'
+        : tradeIntelligence.whoWinsNow === 'unknown' ? 'unavailable' : 'even'
   const longLbl =
     tradeIntelligence.whoWinsLongTerm === 'you'
       ? 'you'
       : tradeIntelligence.whoWinsLongTerm === 'opponent'
         ? 'opponent'
-        : 'even'
+        : tradeIntelligence.whoWinsLongTerm === 'unknown' ? 'unavailable' : 'even'
 
-  const summaryLine = `Fairness ${Math.round(fairnessScore)}/100 · short-term ${shortLbl} · long-term ${longLbl}${degraded ? ' · degraded inputs' : ''}`
+  const summaryLine = `Fairness ${Math.round(fairnessScore)}/100 · asset production ${shortLbl} · league value ${longLbl}${degraded ? ' · degraded inputs' : ''}`
 
   const dataQuality: 'full' | 'partial' | 'degraded' = degraded
     ? 'degraded'
@@ -977,6 +1008,7 @@ export async function runTradeConsoleAnalysis(
     evaluation,
     negotiationToolkit,
     opponentRosterTargets,
+    counterOffers,
     tradeIntelligence,
     chimmyPayload,
     timeContext: aiEnvelope?.time ?? null,

@@ -19,6 +19,7 @@ import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-
 import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
 import { loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
+import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 
 /**
  * The ONE trade grade, computed. Every surface that shows a letter for a deal that has not happened
@@ -87,6 +88,7 @@ export async function gradePricedSides(args: {
         name: l.name,
         position: isNonPlayerLine(l) ? null : l.position,
         base: gradeBaseOf(l, priced[i]),
+        injuryStatus: l.injuryStatus,
       }))
     needFactors = await loadViewerNeedFactors({
       leagueId: args.need.leagueId,
@@ -112,6 +114,7 @@ export async function gradePricedSides(args: {
   const placeholder = [...leagueGrade.giveLines, ...leagueGrade.getLines].find((l) => l.dataSource === 'placeholder')
   const withheld =
     args.withheld ??
+    proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
     (chart.marketCtx ? null : 'No league is selected — a grade is taken on a league’s own values and rules.') ??
     (placeholder ? `${placeholder.name} is priced from a placeholder, not a real value.` : null)
 

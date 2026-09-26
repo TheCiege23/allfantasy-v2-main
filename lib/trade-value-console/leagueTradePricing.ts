@@ -352,10 +352,10 @@ export async function resolveAssets(
         continue
       }
       const matched = findPlayerByName(args.fcPlayers, displayName)
-      if (!matched && row) {
-        args.dataGaps.push(`FantasyCalc match for "${displayName}" — using API sports record fallback`)
-      }
       const pa = await pricePlayer(displayName, args.nflCtx)
+      if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
+        args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
+      }
       priced.push(pa)
       const headshot = row?.headshotUrl ?? row?.headshotUrlLg ?? row?.headshotUrlSm ?? null
       const src: TradeConsolePlayerLine['pricedSource'] =
@@ -446,6 +446,7 @@ export function pprForNflFromLeagueContext(
 
 /** The chart a trade is priced on for one league, and the valuation context that reads it. */
 export type LeagueTradeChart = {
+  proposalRules?: import('./tradeEligibility').ProposalTradeRules
   leagueSize: number
   /** Null in global mode (no league): graded on the chart alone, and labelled so. */
   marketCtx: ReturnType<typeof marketContextFor> | null
@@ -563,6 +564,10 @@ export async function resolveLeagueTradeChart(args: {
 
   return {
     leagueSize,
+    proposalRules: {
+      tradesEnabled: leagueNormCtx?.lineupBehavior.bestBallSettings?.tradesEnabled ?? null,
+      draftPickTrading: leagueNormCtx?.trade.draftPickTrading ?? null,
+    },
     marketCtx,
     chartIsDynasty,
     tePremium: Boolean(tePremium),

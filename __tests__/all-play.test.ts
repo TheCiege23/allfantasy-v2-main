@@ -32,6 +32,16 @@ beforeEach(() => {
 })
 
 describe('getAllPlayBoard', () => {
+  it('excludes live scores from finalized records', async () => {
+    matchupFindMany.mockResolvedValue([
+      row('1', 1, 100, 90, 1), row('2', 1, 90, 100, 0),
+      row('1', 2, 0, 14, 0), row('2', 2, 14, 0, 1),
+    ])
+    const board = await getAllPlayBoard({ ...ARGS, throughWeek: 1 })
+    expect(board?.weeksCounted).toBe(1)
+    expect(board?.rows.find((r) => r.rosterId === '1')).toMatchObject({ wins: 1, losses: 0, pointsFor: 100 })
+    expect(await getAllPlayBoard({ ...ARGS, throughWeek: 0 })).toBeNull()
+  })
   it('⚠ finds the team that scores well and keeps losing', async () => {
     /*
      * The whole point. Roster 1 posts the second-highest score both weeks and

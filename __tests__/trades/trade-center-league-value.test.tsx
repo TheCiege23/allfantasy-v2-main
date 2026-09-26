@@ -15,6 +15,7 @@ vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal)
 })
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
+import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 
 const player = (id: string, name: string, position: string, value: number) => ({
   id, name, position, team: 'X', value, imageUrl: null, byeWeek: null, injuryStatus: null, stock: null, stockDelta: null,
@@ -92,6 +93,22 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('adds a re-evaluated counter to the right side and clears the previous verdict', async () => {
+    const counterGrade = gradeTrade({ giveValue: 5000, getValue: 5000, giveMarket: 5000, getMarket: 5000,
+      unpriced: 0, giveCount: 1, getCount: 2, basis: 'League', scoringApplied: false, needApplied: false,
+      needGap: null, lines: [], moves: [] })
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, counterOffers: [{
+        addTo: 'get', name: 'Depth Receiver', rosterPlayerId: 'sleeper-depth', position: 'WR', marketValue: 300,
+        asset: { kind: 'player', name: 'Depth Receiver' }, grade: counterGrade, remainingGap: 0, balanced: true,
+      }] }) } : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    expect(screen.getByText('Re-evaluated counteroffers')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add to proposal' }))
+    expect(container.querySelector('.af-tc-review')!.textContent).toContain('Depth Receiver')
+    expect(container.querySelector('.af-tc-verdict')).toBeNull()
+  })
   it('before analysis every row is its market value; after, the league value — with the market beside it', async () => {
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
     fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
