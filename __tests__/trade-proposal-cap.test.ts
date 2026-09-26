@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const m = vi.hoisted(() => ({ config: vi.fn(), viewer: vi.fn(), team: vi.fn(), roster: vi.fn(), contracts: vi.fn(), validate: vi.fn() }))
+const m = vi.hoisted(() => ({ config: vi.fn(), viewer: vi.fn(), team: vi.fn(), roster: vi.fn(), teamRoster: vi.fn(), contracts: vi.fn(), validate: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: { leagueTeam: { findFirst: m.team }, roster: { findFirst: m.roster }, playerContract: { findMany: m.contracts } } }))
 vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({ getSalaryCapConfig: m.config }))
 vi.mock('@/lib/salary-cap/SalaryCapTradeValidator', () => ({ validateTradeCap: m.validate }))
 vi.mock('@/lib/trade-intel/viewerLeagueRoster', () => ({ resolveViewerLeagueRoster: m.viewer }))
+vi.mock('@/lib/leagues/rosterForTeam', () => ({ findRosterForTeam: m.teamRoster }))
 import { prepareProposalCap, proposalCapNote } from '@/lib/trade-value-console/proposalCap'
 const args = { leagueId: 'league', userId: 'user', opponentTeamExternalId: '2' }
 const give = [{ kind: 'player' as const, name: 'Player One', playerId: 'other-provider-id' }]
@@ -18,10 +19,18 @@ beforeEach(() => {
     ? { id: 'team-two', externalId: '2', platformUserId: 'platform-two' }
     : { id: 'team-one', externalId: '1', platformUserId: 'platform-one' })
   m.roster.mockImplementation(async ({ where }) => ({ id: where.platformUserId === 'user' ? 'roster-one' : 'roster-two', platformUserId: where.platformUserId }))
+  m.teamRoster.mockResolvedValue({ id: 'roster-two', matchedBy: 'source_manager_id', playerData: {} })
   m.contracts.mockResolvedValue([contract])
   m.validate.mockResolvedValue(impact)
 })
 describe('proposal affordability', () => {
+  it('uses the durable opponent-roster join when that manager has linked an AllFantasy account', async () => {
+    m.teamRoster.mockResolvedValue({ id: 'linked-opponent-roster', matchedBy: 'source_manager_id', playerData: {} })
+    m.contracts.mockResolvedValue([contract, { ...contract, id: 'other-contract', rosterId: 'linked-opponent-roster', playerId: 'p2', playerName: 'Incoming Player' }])
+    expect(await (await prepareProposalCap(args))(give, [{ kind: 'player', name: 'Incoming Player' }])).toMatchObject({ status: 'evaluated', legal: true })
+    expect(m.teamRoster).toHaveBeenCalledWith('league', 'platform-two')
+    expect(m.validate.mock.calls[0][1].toRosterId).toBe('linked-opponent-roster')
+  })
   it('resolves provider IDs by an exact owned name and uses stored contract terms', async () => {
     const evaluate = await prepareProposalCap(args)
     const result = await evaluate(give, [])

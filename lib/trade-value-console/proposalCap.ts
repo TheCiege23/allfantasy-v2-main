@@ -5,6 +5,7 @@ import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { validateTradeCap } from '@/lib/salary-cap/SalaryCapTradeValidator'
 import type { TradeCapImpact } from '@/lib/salary-cap/types'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
+import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import type { TradeAssetInput } from './types'
 
 export type ProposalCapResult =
@@ -40,10 +41,8 @@ export async function prepareProposalCap(args: {
         orderBy: { updatedAt: 'desc' }, select: { id: true, platformUserId: true } }),
     ])
     if (!theirTeam || (!yourTeam && !nativeRoster && !viewer.ok)) return missing('Both teams must be linked to this league before checking cap commitments.')
-    const otherRoster = theirTeam.platformUserId ? await prisma.roster.findFirst({
-      where: { leagueId: args.leagueId, platformUserId: theirTeam.platformUserId },
-      orderBy: { updatedAt: 'desc' }, select: { id: true, platformUserId: true },
-    }) : null
+    const otherRoster = theirTeam.platformUserId
+      ? await findRosterForTeam(args.leagueId, theirTeam.platformUserId) : null
     const aliases = (values: Array<string | null | undefined>) => [...new Set(values.filter((v): v is string => !!v))]
     const yours = aliases([yourTeam?.id, yourTeam?.externalId, yourTeam?.platformUserId,
       nativeRoster?.id, nativeRoster?.platformUserId, viewer.ok ? viewer.roster.id : null])
