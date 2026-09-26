@@ -24,6 +24,19 @@ beforeEach(() => {
 })
 
 describe('league defender pricing gaps', () => {
+  it('does not guess a projection week when the latest-period read fails', async () => {
+    aggregate.mockReset().mockResolvedValueOnce({ _max: { season: 2026 } }).mockRejectedValueOnce(new Error('Unavailable'))
+    const board = await priceIdpBoard(args)
+    expect(board.projectedFor).toBeNull()
+    expect(board.unpricedReasonBySleeperId?.get('starter')?.code).toBe('feed_unavailable')
+    expect(board.valueBySleeperId.size).toBe(0)
+  })
+  it('reports an outage rather than claiming the history store contains no records', async () => {
+    aggregate.mockReset().mockRejectedValue(new Error('Unavailable'))
+    const board = await priceIdpBoard(args)
+    expect(board.unpricedReasonBySleeperId?.get('reserve')?.code).toBe('feed_unavailable')
+    expect(board.valueBySleeperId.size).toBe(0)
+  })
   it('retains distinct refusals alongside real replacement-based prices', async () => {
     const board = await priceIdpBoard(args)
     expect(board.skipped).toBeNull()

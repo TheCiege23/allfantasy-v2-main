@@ -48,8 +48,9 @@ export type UnpricedReason = { code: UnpricedReasonCode; label: string }
 
 /** Projection refusals describe this player, rather than the offence-only market feed. */
 export function idpProjectionUnpricedReason(
-  cause: 'no_history' | 'insufficient_sample' | 'no_defensive_production' | 'not_idp_position',
+  cause: 'no_history' | 'insufficient_sample' | 'no_defensive_production' | 'not_idp_position' | 'history_unavailable',
 ): UnpricedReason {
+  if (cause === 'history_unavailable') return reason('feed_unavailable', 'Defensive history could not be loaded — try again shortly')
   if (cause === 'no_history') return reason('idp_no_history', 'No defensive game history on file for this player')
   if (cause === 'insufficient_sample') return reason('idp_insufficient_sample', 'Too few recorded games to estimate a reliable defensive value')
   if (cause === 'no_defensive_production') return reason('idp_no_defensive_production', 'Recorded games contain no defensive production to project')

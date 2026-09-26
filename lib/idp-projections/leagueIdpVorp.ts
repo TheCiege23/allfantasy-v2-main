@@ -212,18 +212,23 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
    * The week to project is the one after the newest on file, resolved from the DATA rather
    * than a clock — the ingest runs on its own schedule and the offseason stalls it entirely.
    */
+  let historyUnavailable = false
   const newest = await args.prisma.playerGameStat
     .aggregate({ where: { sportType: 'NFL' }, _max: { season: true } })
-    .catch(() => null)
+    .catch(() => { historyUnavailable = true; return null })
   const season = newest?._max.season
   if (season == null) return {
     ...EMPTY('no_projection_history', { defenders: defenders.length, projected: 0, priced: 0 }),
-    unpricedReasonBySleeperId: new Map(defenders.map((d) => [d.sleeperId, idpProjectionUnpricedReason('no_history')])),
+    unpricedReasonBySleeperId: new Map(defenders.map((d) => [d.sleeperId, idpProjectionUnpricedReason(historyUnavailable ? 'history_unavailable' : 'no_history')])),
   }
 
   const newestWeek = await args.prisma.playerGameStat
     .aggregate({ where: { sportType: 'NFL', season }, _max: { weekOrRound: true } })
-    .catch(() => null)
+    .catch(() => { historyUnavailable = true; return null })
+  if (historyUnavailable) return {
+    ...EMPTY('no_projection_history', { defenders: defenders.length, projected: 0, priced: 0 }),
+    unpricedReasonBySleeperId: new Map(defenders.map((d) => [d.sleeperId, idpProjectionUnpricedReason('history_unavailable')])),
+  }
   const week = (newestWeek?._max.weekOrRound ?? 0) + 1
 
   const { bySleeperId } = await loadIdpProjections({

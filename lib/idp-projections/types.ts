@@ -112,7 +112,7 @@ export interface IdpProjectionCoverage {
  */
 export interface IdpProjectionRefusal {
   ok: false
-  reason: 'not_idp_position' | 'no_history' | 'insufficient_sample' | 'no_defensive_production'
+  reason: 'not_idp_position' | 'no_history' | 'insufficient_sample' | 'no_defensive_production' | 'history_unavailable'
   detail: string
 }
 
