@@ -201,6 +201,7 @@ type EngineLine = Line & {
 }
 
 type AnalyzeResult = {
+  salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
   counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
   fairnessScore?: number
@@ -1984,6 +1985,28 @@ export function TradeCenter(props: {
           */}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
 
+          {result.salaryCap && result.salaryCap.status !== 'not_applicable' ? (
+            <div className="af-tc-league-moves" role="status">
+              <div className="af-label">Salary-cap affordability</div>
+              {result.salaryCap.status === 'unavailable' ? (
+                <p>{result.salaryCap.reason} The value grade does not establish cap legality.</p>
+              ) : (
+                <>
+                  <p>{result.salaryCap.legal ? 'Both teams satisfy configured cap and floor rules across recorded commitment years.' : 'This package fails configured cap or floor rules. Review the years below before proposing it.'}</p>
+                  <ul>
+                    {result.salaryCap.contracts.map((c, i) => <li key={`${c.side}-${c.name}-${i}`}>{c.side === 'give' ? 'You send' : 'You receive'} {c.name}: salary {money(c.salary)} through {c.expires}</li>)}
+                  </ul>
+                  <ul>
+                    {result.salaryCap.impact.years?.map(y => <li key={y.capYear}>
+                      <strong>{y.capYear}</strong> · Your post-trade cap room {money(y.fromCap - y.fromCapHit)} · {theirLabel} {money(y.toCap - y.toCapHit)}
+                      <span className="af-tc-row-sub">Your commitments {money(y.fromCapHit)} / cap {money(y.fromCap)} · Their commitments {money(y.toCapHit)} / cap {money(y.toCap)} · {y.fromLegal && y.toLegal ? 'Passes configured rules' : 'Fails cap or floor rules'}</span>
+                    </li>)}
+                  </ul>
+                  <p className="af-tc-row-sub">Includes stored contracts and dead money. Unsigned rookie contracts and future acquisitions are not included. Revalidation is required when accepting.</p>
+                </>
+              )}
+            </div>
+          ) : null}
           <div className="af-tc-verdict-row">
             {yourGrade || theirGrade ? (
               <div className="af-tc-grade-row">

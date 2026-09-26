@@ -67,6 +67,7 @@ export const TRADE_VERDICT_FIELDS = [
   'valuationBasis',
   /* The letter itself, and the same free verdict on every surface — see `lib/decision-os/trade/tradeGrade.ts`. */
   'grade',
+  'salaryCap',
   'degraded',
   'dataGaps',
   'dataSources',
