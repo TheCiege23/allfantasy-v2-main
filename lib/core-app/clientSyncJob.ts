@@ -16,6 +16,7 @@ type SyncState = {
   refreshedCompletion: number
   listeners: Set<() => void>
   pending: SyncCheckpoint | null
+  leaving: boolean
 }
 
 function readCheckpoint(): SyncCheckpoint | null {
@@ -42,7 +43,16 @@ function saveCheckpoint(checkpoint: SyncCheckpoint | null) {
 }
 
 function newState(): SyncState {
-  return { snapshot: INITIAL, active: null, refreshedCompletion: 0, listeners: new Set(), pending: readCheckpoint() }
+  const next: SyncState = { snapshot: INITIAL, active: null, refreshedCompletion: 0, listeners: new Set(), pending: readCheckpoint(), leaving: false }
+  if (typeof window !== 'undefined') {
+    // Navigating aborts the in-flight fetch. Keep the last confirmed work list
+    // instead of treating that browser abort as an explicit failed sync.
+    const departing = () => { next.leaving = true }
+    window.addEventListener('beforeunload', departing, { once: true })
+    window.addEventListener('pagehide', departing, { once: true })
+    window.addEventListener('pageshow', () => { next.leaving = false })
+  }
+  return next
 }
 
 // Client bundles share one job in the tab. Never share user work in server globals.
@@ -92,11 +102,11 @@ function runJob(onlyKey: string | null | undefined, post: (only: string[] | null
     onProgress: message => publish({ ...state.snapshot, message }),
     onCheckpoint: saveCheckpoint,
   }).then(outcome => {
-    saveCheckpoint(null)
+    if (!state.leaving) saveCheckpoint(null)
     publish({ phase: outcome.tone === 'ok' ? 'done' : 'error', message: outcome.message, completion: state.snapshot.completion + 1 })
     return outcome
   }).catch(() => {
-    saveCheckpoint(null)
+    if (!state.leaving) saveCheckpoint(null)
     publish({ phase: 'error', message: 'Sync stopped unexpectedly. Check league status before retrying.', completion: state.snapshot.completion + 1 })
     throw new Error('Sync stopped unexpectedly')
   }).finally(() => { state.active = null })

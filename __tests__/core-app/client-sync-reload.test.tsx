@@ -60,6 +60,35 @@ describe('sync continues across client module and page reloads', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
+  it('preserves confirmed remaining work when navigation aborts the next request', async () => {
+    const first = await import('@/lib/core-app/clientSyncJob')
+    let abort!: (result: SyncPostResult) => void
+    const post = vi.fn()
+      .mockResolvedValueOnce({ httpOk: true, round: { ok: true, totalCandidates: 2, attempted: 1, synced: 1, remaining: ['sleeper:unfinished'] } })
+      .mockImplementationOnce(() => new Promise<SyncPostResult>(resolve => { abort = resolve }))
+    const job = first.startClientSync(undefined, post)
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+    window.dispatchEvent(new Event('beforeunload'))
+    abort({ httpOk: false, round: { error: 'Request interrupted' } })
+    await job
+    expect(JSON.parse(window.sessionStorage.getItem(KEY)!).checkpoint.only).toEqual(['sleeper:unfinished'])
+    Reflect.deleteProperty(window, '__afCoreSyncJobV1')
+    vi.resetModules()
+    const reloaded = await import('@/lib/core-app/clientSyncJob')
+    const resume = vi.fn(async () => ({ httpOk: true, round: { ok: true, totalCandidates: 1, attempted: 1, synced: 1, remaining: [] } }))
+    await reloaded.resumeClientSync(resume)
+    expect(resume).toHaveBeenCalledWith(['sleeper:unfinished'])
+    expect(reloaded.getClientSyncSnapshot().message).toBe('Synced 2')
+    expect(window.sessionStorage.getItem(KEY)).toBeNull()
+  })
+
+  it('clears remaining work after an ordinary transport failure without auto-retry', async () => {
+    seed()
+    const { resumeClientSync } = await import('@/lib/core-app/clientSyncJob')
+    await resumeClientSync(async () => ({ httpOk: false, round: { error: 'Network unavailable' } }))
+    expect(window.sessionStorage.getItem(KEY)).toBeNull()
+  })
+
   it('still permits a requested sync when browser storage is blocked', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
