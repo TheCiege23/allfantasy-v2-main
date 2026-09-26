@@ -76,11 +76,13 @@ describe('call-site guarantee (source-level): create branches only, exclude site
   const root = resolve(__dirname, '..')
   const read = (p: string) => readFileSync(resolve(root, p), 'utf8')
 
-  it('all three include sites call notifyOwnerOfNewSignup', () => {
+  it('both include sites call notifyOwnerOfNewSignup', () => {
+    // lib/auth.ts WAS a third include site: its Sleeper-username provider created accounts.
+    // That provider is gone (it signed callers in with a public username as the only
+    // credential), so lib/auth.ts now creates no real accounts — see the test below.
     const includes = [
       'app/api/auth/register/route.ts',
       'lib/auth/SocialAccountLinkingService.ts',
-      'lib/auth.ts',
     ]
     const missing = includes.filter((f) => !read(f).includes('notifyOwnerOfNewSignup('))
     expect(missing).toEqual([])
@@ -95,11 +97,11 @@ describe('call-site guarantee (source-level): create branches only, exclude site
     expect(offenders).toEqual([])
   })
 
-  it('lib/auth.ts INVOKES it exactly once — the Sleeper create branch, not the dev bypass or update', () => {
-    // auth.ts contains both an include (Sleeper create) and an exclude (ensureDevAuthUser dev
-    // bypass). Count invocations only — `notifyOwnerOfNewSignup(` — not bare references, so the
-    // import line (which names it twice: symbol + module path) does not skew the count.
+  it('lib/auth.ts never invokes it — its only remaining account create is the dev bypass', () => {
+    // The Sleeper-username create branch was the one include site in auth.ts; what remains is
+    // ensureDevAuthUser (non-production only), an EXCLUDE site. Count invocations only —
+    // `notifyOwnerOfNewSignup(` — so a stray import line would not change the answer.
     const invocations = read('lib/auth.ts').split('notifyOwnerOfNewSignup(').length - 1
-    expect(invocations).toBe(1)
+    expect(invocations).toBe(0)
   })
 })
