@@ -41,7 +41,7 @@ export function WaiverCompetitiveEdge({
   if (!edge.available) {
     return (
       <section className="af-card af-wv-section" data-testid="waiver-competitive-edge" aria-label="Competitive Edge · waivers">
-        <h2 className="af-label">Competitive Edge · who you&apos;re bidding against</h2>
+        <h2 className="af-label">Competitive Edge · other managers&apos; waiver activity</h2>
         <p className="af-wv-edge-note">{edge.reason}</p>
       </section>
     )
@@ -52,7 +52,7 @@ export function WaiverCompetitiveEdge({
 
   return (
     <section className="af-card af-wv-section" data-testid="waiver-competitive-edge" aria-label="Competitive Edge · waivers">
-      <h2 className="af-label">Competitive Edge · who you&apos;re bidding against</h2>
+      <h2 className="af-label">Competitive Edge · other managers&apos; waiver activity</h2>
       {access ? <FreeUntilNote access={access} /> : null}
 
       <ul className="af-wv-edge-league">

@@ -84,6 +84,7 @@ export type WaiversData = {
 const WAIVER_TYPE_LABEL: Record<string, string> = {
   faab: 'FAAB blind bidding',
   rolling: 'Rolling waiver priority',
+  reverse_standings: 'Reverse standings priority',
   fcfs: 'First come, first served',
   standard: 'Standard waiver priority',
   off: 'No waivers — free agents are instant',
@@ -175,7 +176,7 @@ async function resolveWaiverRules(leagueId: string): Promise<{
       ? { available: false, reason: 'no waivers to tie — free agents are claimed instantly' }
       : rawTiebreak
         ? { available: true, data: describeTiebreakRule(rawTiebreak) }
-        : kind === 'rolling' || kind === 'standard'
+        : kind === 'rolling' || kind === 'standard' || kind === 'reverse_standings'
           ? { available: true, data: 'Waiver priority order' }
           : { available: false, reason: 'this league’s tiebreak rule was not published' }
 
@@ -319,7 +320,9 @@ export async function getWaiversData(
   const withBudget = allRosters.filter((r) => r.faabRemaining != null)
 
   const budget: SectionState<WaiverBudget> =
-    mine.faabRemaining == null
+    rules.waiverType.available && rules.waiverType.data.kind !== 'faab'
+      ? { available: false, reason: 'This league does not use FAAB bidding.' }
+      : mine.faabRemaining == null
       ? {
           available: false,
           // Exactly the case the handoff calls out. NOT defaulted to 0 — "$0"

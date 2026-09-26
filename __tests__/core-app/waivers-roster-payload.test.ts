@@ -58,6 +58,13 @@ beforeEach(() => {
 })
 
 describe('the Waivers read stops pulling every roster blob', () => {
+  it('does not turn a provider default budget into FAAB for a rolling league', async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'rolling', faabBudget: 100 })
+    const { getWaiversData } = await import('@/lib/core-app/waivers')
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.budget).toMatchObject({ available: false, reason: 'This league does not use FAAB bidding.' })
+    expect(data?.waiverPriority).toMatchObject({ available: true, data: { priority: 3 } })
+  })
   it('does not select playerData on the league-wide read', async () => {
     const { getWaiversData } = await import('@/lib/core-app/waivers')
     await getWaiversData('L1', 'me')

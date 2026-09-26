@@ -63,6 +63,7 @@ function Tile({
 export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
   return (
     <div className="af-wv">
+      <h1 className="af-display">Waivers</h1>
       {/* ── Pricing context ─────────────────────────────────────────── */}
       <div className="af-wv-context">
         <span className="af-label">Priced for this league</span>
@@ -212,7 +213,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         null or an explicit empty rather than a fabricated bid, so mounting it
         does not weaken the honesty rule the withheld panel was protecting.
       */}
-      <WaiverIntel leagueId={data.league.id} surface="core" />
+      {data.waiverType.available && data.waiverType.data.kind === 'faab' ? (
+        <WaiverIntel leagueId={data.league.id} surface="core" />
+      ) : null}
 
       {/*
         ── Competitive Edge ─────────────────────────────────────────────

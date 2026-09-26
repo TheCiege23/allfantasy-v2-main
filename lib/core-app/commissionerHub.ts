@@ -337,6 +337,7 @@ function readSetting(settings: unknown, keys: string[]): number | null {
 const WAIVER_TYPE_LABEL: Record<string, string> = {
   faab: 'FAAB blind bidding',
   rolling: 'Rolling waiver priority',
+  reverse_standings: 'Reverse standings priority',
   fcfs: 'First come, first served',
   standard: 'Standard waiver priority',
   off: 'No waivers — free agents are instant',
@@ -942,7 +943,7 @@ export async function getCommissionerHub(input: {
             data: (() => {
               const kind = String(waiverSettings.waiverType).toLowerCase()
               const label = WAIVER_TYPE_LABEL[kind] ?? kind
-              return waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
+              return kind === 'faab' && waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
             })(),
           }
         : {

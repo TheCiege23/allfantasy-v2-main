@@ -32,14 +32,14 @@ function toBoolFromNumeric(v: unknown): boolean | undefined {
 
 /**
  * Sleeper `settings.waiver_type` int → AF vocabulary.
- *   2 → 'faab', 1 → 'rolling', 0 → 'off'.
+ *   2 → 'faab', 1 → 'reverse_standings', 0 → 'rolling'.
  * Unknown / missing returns `undefined` so downstream keeps whatever default it holds.
  */
 function mapSleeperWaiverType(v: unknown): string | undefined {
   const n = toIntOrUndef(v)
   if (n === 2) return 'faab'
-  if (n === 1) return 'rolling'
-  if (n === 0) return 'off'
+  if (n === 1) return 'reverse_standings'
+  if (n === 0) return 'rolling'
   return undefined
 }
 
