@@ -10,6 +10,7 @@ import {
   getSleeperState,
   type SleeperSportState,
 } from '@/lib/api-cache/SleeperCacheLayer'
+import { triggerAlertFromScreenRead } from '@/lib/trade-intel/screenTradeAlerts'
 
 /**
  * Pending Sleeper trades, scanned for ONE league.
@@ -305,6 +306,12 @@ export async function scanPendingSleeperTrades(args: {
   sport?: string | null
   /** Sleeper stores transactions per week; 1–18 covers a full NFL season. */
   weeks?: number[]
+  /**
+   * A SCREEN's read: when it finds a pending offer, raise the league's trade alerts now rather than
+   * at the next sweep (`screenTradeAlerts.ts`). Throttled per league per minute across everyone;
+   * never awaited, so the page never waits on it. Off for every non-screen caller.
+   */
+  alertOnNewOffers?: boolean
 }): Promise<PendingTradeScan> {
   const { platformLeagueId, ownerSleeperId } = args
   if (!platformLeagueId?.trim() || !ownerSleeperId?.trim()) {
@@ -495,6 +502,9 @@ export async function scanPendingSleeperTrades(args: {
     }
 
     completed.sort((a, b) => Date.parse(b.proposedAt ?? '') - Date.parse(a.proposedAt ?? ''))
+    if (args.alertOnNewOffers && out.length > 0) {
+      void triggerAlertFromScreenRead(platformLeagueId, [...recent])
+    }
     return {
       trades: out,
       completedTrades: completed.slice(0, 50),

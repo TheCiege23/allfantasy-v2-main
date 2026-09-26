@@ -567,6 +567,7 @@ export async function getRecentTrades(
           ownerSleeperId: live.ownerSleeperId!,
           sport: 'NFL',
           weeks,
+          alertOnNewOffers: true,
         }).catch(() => null)
       }))
     }

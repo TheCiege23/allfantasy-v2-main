@@ -1007,6 +1007,7 @@ export async function GET(req: NextRequest) {
           platformLeagueId: sleeperLeagueId,
           ownerSleeperId: viewerSleeperId,
           sport: league.sport,
+          alertOnNewOffers: true,
         })
       : Promise.resolve<PendingTradeScan>({
           trades: [],
