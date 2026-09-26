@@ -5,6 +5,7 @@ import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { getPausedSyncKeys } from './syncPreferences'
 
 /**
  * League Sync — is THIS league fresh, and what exactly did we read (38a·10).
@@ -57,6 +58,7 @@ export type SyncDataRow = {
 
 export type LeagueSyncData = {
   syncKey?: string | null
+  syncPaused?: boolean
   league: { id: string; name: string; platform: string }
   /** When this league was first connected to AllFantasy. */
   connectedSince: Date | null
@@ -66,7 +68,7 @@ export type LeagueSyncData = {
    * Overall state. `attention` covers stale auth and repeated failures — the
    * two cases where the user can actually do something.
    */
-  status: 'ok' | 'attention' | 'never'
+  status: 'ok' | 'attention' | 'never' | 'paused'
   /** AF's own last successful collection. Never presented as data freshness. */
   lastReadAt: Date | null
   lastAttemptedAt: Date | null
@@ -144,7 +146,7 @@ export async function getLeagueSync(
       ? `${String(league.platform ?? '').toLowerCase()}:${league.platformLeagueId}:${league.season}`
       : null
 
-  const [syncState, rosterLatest, matchupLatest, seasonCount, lastRun] = await Promise.all([
+  const [syncState, rosterLatest, matchupLatest, seasonCount, lastRun, pausedKeys] = await Promise.all([
     runKey
       ? prisma.leagueSyncState.findUnique({ where: { runKey } }).catch(() => null)
       : Promise.resolve(null),
@@ -182,7 +184,13 @@ export async function getLeagueSync(
         },
       })
       .catch(() => null),
+    getPausedSyncKeys(userId),
   ])
+
+  const provider = resolveProvider(String(league.platform ?? ''))
+  const sourceId = league.platformLeagueId?.trim()
+  const syncKey = provider && isImportProviderAvailable(provider) && sourceId ? `${provider}:${sourceId}` : null
+  const syncPaused = syncKey != null && pausedKeys.has(syncKey)
 
   const coarse = syncState == null
   const lastReadAt = syncState?.lastSuccessfulSyncAt ?? league.lastSyncedAt ?? null
@@ -202,7 +210,7 @@ export async function getLeagueSync(
   const isStale = ageMs != null && ageMs > STALE_AFTER_MS
 
   const status: LeagueSyncData['status'] =
-    lastReadAt == null
+    syncPaused ? 'paused' : lastReadAt == null
       ? 'never'
       : consecutiveFailures > 0 || isStale || orphanedRun != null
         ? 'attention'
@@ -280,11 +288,8 @@ export async function getLeagueSync(
 
   return {
     available: true,
-    syncKey: (() => {
-      const provider = resolveProvider(String(league.platform ?? ''))
-      return provider && isImportProviderAvailable(provider) && league.platformLeagueId
-        ? `${provider}:${league.platformLeagueId}` : null
-    })(),
+    syncKey,
+    syncPaused,
     league: {
       id: league.id,
       name: leagueName,

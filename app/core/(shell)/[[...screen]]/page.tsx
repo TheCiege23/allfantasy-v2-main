@@ -10,6 +10,7 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
 import { findPlayedAlias } from '@/lib/core-app/leagueRowAlias'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
+import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
@@ -669,12 +670,17 @@ export default async function AfCorePage({
     userId,
     email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
   }).catch(() => null)
+  const adminAccessRead = getAdminAccessState()
+  adminAccessRead.catch(() => undefined)
 
   /*
    * `rosterDetail: 'count'` — this page reads no roster off the list; every screen that needs a lineup
    * queries rosters itself. See the option's note in get-dashboard-league-list.ts for the census.
    */
-  const leagueListPayload = await getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null)
+  const [leagueListPayload, pausedSyncKeys] = await Promise.all([
+    getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null),
+    getPausedSyncKeys(userId).catch(() => null),
+  ])
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
   /*
@@ -689,9 +695,15 @@ export default async function AfCorePage({
    * out, which would tell the user they have no leagues when we only failed to
    * look at them.
    */
-  const syncEligibleCount = leagueListPayload
-    ? selectResyncCandidates(leagueListPayload.leagues).length
+  const syncEligibleCount = leagueListPayload && pausedSyncKeys
+    ? selectResyncCandidates(leagueListPayload.leagues, pausedSyncKeys).length
     : null
+  const pausedSyncLeagueIds = pausedSyncKeys ? new Set(
+    selectResyncCandidates(leagueListPayload?.leagues ?? [])
+      .filter((candidate) => pausedSyncKeys.has(candidate.key))
+      .map((candidate) => candidate.row.navigationLeagueId || candidate.row.id || '')
+      .filter(Boolean),
+  ) : null
 
   /*
    * ⚠ THE RAIL IS LEAGUES YOU PLAY, NOT YOUR IMPORT HISTORY. `hasUnifiedRecord:
@@ -898,6 +910,7 @@ export default async function AfCorePage({
    */
   const { issues: derivedIssues } = deriveOutstandingIssues({
     leagues: playedLeagues,
+    pausedSyncLeagueIds: pausedSyncLeagueIds ?? undefined,
     lastSyncByLeague: lastSyncByLeagueFrom(
       playedLeagues as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
     ),
@@ -1133,7 +1146,7 @@ export default async function AfCorePage({
    * model-admin-authorization-policy.test.ts follows. It costs no time: the reads above
    * have already started, so this waits beside them rather than in front of them.
    */
-  const isAdmin = await getAdminAccessState()
+  const isAdmin = await adminAccessRead
     .then((state) => state.status === 'admin')
     .catch(() => false)
   const modelAdminAllowed = segment === 'model-admin' && isAdmin
@@ -1420,6 +1433,7 @@ export default async function AfCorePage({
         leagueListPayload,
         leagues,
         playedLeagues,
+        pausedSyncLeagueIds,
         rail,
         tradeLeagueRow,
         tradeLeagueTypeKey,
@@ -1718,6 +1732,7 @@ type CoreScreenContext = {
   leagueListPayload: { leagues: unknown[]; sleeperUserId?: string | null } | null
   leagues: UserLeague[]
   playedLeagues: UserLeague[]
+  pausedSyncLeagueIds: ReadonlySet<string> | null
   rail: RailLeague[]
   tradeLeagueRow: UserLeague | null
   tradeLeagueTypeKey: ReturnType<typeof resolveLeagueCardTypeKey> | null
@@ -1780,6 +1795,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     leagueListPayload,
     leagues,
     playedLeagues,
+    pausedSyncLeagueIds,
     rail,
     tradeLeagueRow,
     tradeLeagueTypeKey,
@@ -2921,6 +2937,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const homeDerivedIssues = homeScoped
     ? deriveOutstandingIssues({
         leagues: homePlayed,
+        pausedSyncLeagueIds: pausedSyncLeagueIds ?? undefined,
         lastSyncByLeague: lastSyncByLeagueFrom(
           homePlayed as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
         ),
@@ -3543,6 +3560,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     ).then((summary) =>
       getUrgencyBadges({
         userId,
+        pausedSyncLeagueIds,
         leagues: playedLeagues.map((l) => ({
           id: l.id,
           platform: (l as { platform?: string | null }).platform ?? null,
