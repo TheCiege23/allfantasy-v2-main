@@ -67,6 +67,9 @@ function WaiverRow({ w }: { w: WaiverReceipt }) {
 }
 
 function LineupRow({ l }: { l: LineupReceipt }) {
+  const describe = (players: Array<{ name: string; points: number }>) => {
+    return players.map((p) => `${p.name} (${p.points.toFixed(1)})`).join(', ')
+  }
   return (
     <li className="af3a-receipt" data-kind="lineup" data-outcome={l.perfect ? 'ahead' : undefined}>
       <Link className="af3a-receipt-title" href={l.href}>
@@ -75,11 +78,15 @@ function LineupRow({ l }: { l: LineupReceipt }) {
       <span className="af3a-receipt-where af3a-mono">
         {l.leagueName} · {l.season} wk {l.week}
       </span>
-      {!l.perfect && (l.benched || l.started) ? (
+      {!l.perfect && l.lineupChanges && (l.lineupChanges.in.length > 0 || l.lineupChanges.out.length > 0) ? (
         <span className="af3a-receipt-swap">
-          {l.benched ? `Benched ${l.benched.name} (${l.benched.points.toFixed(1)})` : ''}
-          {l.benched && l.started ? ' · ' : ''}
-          {l.started ? `started ${l.started.name} (${l.started.points.toFixed(1)})` : ''}
+          Best legal lineup: {l.lineupChanges.in.length > 0 ? `starts ${describe(l.lineupChanges.in)}` : ''}
+          {l.lineupChanges.in.length > 0 && l.lineupChanges.out.length > 0 ? ' · ' : ''}
+          {l.lineupChanges.out.length > 0 ? `benches ${describe(l.lineupChanges.out)}` : ''}
+        </span>
+      ) : !l.perfect && l.benched ? (
+        <span className="af3a-receipt-swap">
+          Best legal lineup includes {l.benched.name} ({l.benched.points.toFixed(1)}).
         </span>
       ) : null}
     </li>

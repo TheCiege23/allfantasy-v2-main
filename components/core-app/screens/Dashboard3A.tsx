@@ -783,6 +783,7 @@ export function Dash3AMatchups({
     you: number
     them: number
     note: string
+    completed: boolean
   }> = [
     ...leagues
       .filter((l) => l.score)
@@ -793,6 +794,7 @@ export function Dash3AMatchups({
         you: l.score!.you,
         them: l.score!.opponent,
         note: `vs ${l.score!.opponentName}`,
+        completed: false,
       })),
     ...(week?.rows ?? [])
       .filter((r) => !liveKeys.has(r.leagueId))
@@ -802,7 +804,10 @@ export function Dash3AMatchups({
         platform: r.platform,
         you: r.pointsFor,
         them: r.pointsAgainst,
-        note: `Week ${r.week} · ${r.won ? 'you won' : 'you lost'}`,
+        note: `Week ${r.week} · ${r.completed === true
+          ? r.pointsFor === r.pointsAgainst ? 'you tied' : r.pointsFor > r.pointsAgainst ? 'you won' : 'you lost'
+          : 'scores so far'}`,
+        completed: r.completed === true,
       })),
   ]
   return (
@@ -838,7 +843,7 @@ export function Dash3AMatchups({
                          */}
                         <p>
                           {m.note}
-                          {winProb?.[m.key] != null ? (
+                          {!m.completed && winProb?.[m.key] != null ? (
                             <>
                               {' · '}
                               <b className="af3a-win">{Math.round(winProb[m.key] * 100)}% win</b>

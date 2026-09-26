@@ -2,6 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
+import { readLeagueWeekMetadata } from './leagueWeekMetadata'
+import { leagueWeekFromSettings } from './seasonTimeline'
 
 /**
  * Your week, across every league — read from WeeklyMatchup.
@@ -18,12 +20,8 @@ import { resolveCurrentWeek } from './currentWeek'
  * returns an empty set with no error. This repo has two league-id spaces and this
  * table lives in the other one.
  *
- * ⚠ WHAT IS ACTUALLY ON FILE (production, read-only count):
- *     262 rows, ALL season 2025, weeks up to 17, across 6 distinct platform
- *     leagues — of which only 2 still exist in `League`.
- * So this is real history, not a live current week. The season is carried on the
- * result and must be shown: labelling 2025 results as "your week" would be the
- * lie. Nothing here is projected or simulated.
+ * Rows may contain partial current-period scores or historical results. Carry
+ * their season and completion evidence through to every consuming view.
  */
 
 export type WeekRow = {
@@ -35,6 +33,8 @@ export type WeekRow = {
   pointsFor: number
   pointsAgainst: number
   won: boolean
+  /** Provider period advanced, league finished, or this is a past season; scores alone never prove completion. */
+  completed?: boolean
 }
 
 export type WeekAllData = {
@@ -64,10 +64,9 @@ export async function getWeekAll(
   userId: string,
   leagues: Array<{ id: string; name?: string | null; platform?: string | null; platformLeagueId?: string | null }>,
   /**
-   * `previous`: the last FULLY PLAYED week instead of the one in play — what a results review
-   * and a recap are about (weekly routine, 2026-09-14). The current week is the earliest week
-   * still carrying an unplayed row, so the week before it has none; once every week of the
-   * season is played, the current week is itself complete and is returned.
+   * `previous`: the preceding provider period for results review. The current
+   * period is eligible only when completion evidence exists for every league.
+   * Each returned row must independently pass the same completion check.
    */
   opts: { previous?: boolean } = {},
 ): Promise<WeekAllData> {
@@ -99,18 +98,34 @@ export async function getWeekAll(
    */
   const current = await resolveCurrentWeek(platformIds)
   if (!current) return empty
+  const metadata = await readLeagueWeekMetadata(platformIds, 'platform')
+  const metadataByLeague = new Map<string, typeof metadata>()
+  for (const meta of metadata) {
+    if (!meta.platformLeagueId) continue
+    const copies = metadataByLeague.get(meta.platformLeagueId) ?? []
+    copies.push(meta)
+    metadataByLeague.set(meta.platformLeagueId, copies)
+  }
+  const completedFor = (platformId: string, season: number, week: number): boolean => {
+    const copies = metadataByLeague.get(platformId) ?? []
+    const sameSeason = copies.filter((meta) => meta.season === season)
+    if (sameSeason.length) {
+      // A season can continue into January. Its saved period outranks the clock;
+      // conflicting imports must all support completion before claiming a result.
+      return sameSeason.every((meta) => {
+        if (String(meta.status).toLowerCase() === 'complete') return true
+        const period = leagueWeekFromSettings(meta.settings)
+        return period != null && week < period
+      })
+    }
+    if (copies.some((meta) => meta.season != null && meta.season > season)) return true
+    return season < new Date().getUTCFullYear()
+  }
   let latest = current
   if (opts.previous) {
-    const stillUnplayed = await prisma.weeklyMatchup.count({
-      where: {
-        leagueId: { in: platformIds },
-        seasonYear: current.seasonYear,
-        week: current.week,
-        pointsFor: { lte: 0 },
-        pointsAgainst: { lte: 0 },
-      },
-    })
-    latest = stillUnplayed > 0 ? { seasonYear: current.seasonYear, week: current.week - 1 } : current
+    // Thursday points on every roster do not turn the current period into a completed week.
+    const allCompleted = platformIds.every((id) => completedFor(id, current.seasonYear, current.week))
+    latest = allCompleted ? current : { seasonYear: current.seasonYear, week: current.week - 1 }
     if (latest.week < 1) return empty
   }
 
@@ -146,21 +161,11 @@ export async function getWeekAll(
     const meta = mine.get(`${m.leagueId}:${m.rosterId}`)
     if (!meta) continue // not the user's team in that league
 
-    /*
-     * ⚠ AN UNSCORED MATCHUP IS NOT A PLAYED ONE, AND IT WAS BEING COUNTED AS A
-     * LOSS. WeeklyMatchup holds a row as soon as the schedule exists, with
-     * pointsFor/pointsAgainst at 0 and `win` unset. Those rows were pushed
-     * unconditionally, so the dashboard rendered "L  0.00 — 0.00  +0.00" for a
-     * game nobody has played — and because `won` is `win === 1`, every one of
-     * them landed in the LOSS column. That is where "0-2 in week 2" came from on
-     * an account whose season has not started: two fabricated defeats.
-     *
-     * A real fantasy matchup that finished 0-0 does not occur; a scheduled one
-     * that has not started always looks exactly like this. Skipping them is the
-     * difference between "no results yet" and "you lost".
-     */
-    const scored = m.pointsFor > 0 || m.pointsAgainst > 0
-    if (!scored) {
+    const completed = completedFor(m.leagueId, latest.seasonYear, latest.week)
+    // Zero-zero alone is a schedule placeholder, but completion evidence can
+    // establish a real tie. Custom scoring can also yield negative points.
+    const scored = completed || m.pointsFor !== 0 || m.pointsAgainst !== 0
+    if (!scored || (opts.previous && !completed)) {
       unscored += 1
       continue
     }
@@ -174,7 +179,8 @@ export async function getWeekAll(
       week: latest.week,
       pointsFor: m.pointsFor,
       pointsAgainst: m.pointsAgainst,
-      won: m.win === 1,
+      won: completed && m.pointsFor > m.pointsAgainst,
+      completed,
     })
   }
 
@@ -187,8 +193,9 @@ export async function getWeekAll(
    * looking at.
    */
 
-  const record = rows.length
-    ? { wins: rows.filter((r) => r.won).length, losses: rows.filter((r) => !r.won).length }
+  const settled = rows.filter((r) => r.completed)
+  const record = settled.length
+    ? { wins: settled.filter((r) => r.pointsFor > r.pointsAgainst).length, losses: settled.filter((r) => r.pointsFor < r.pointsAgainst).length }
     : null
 
   return {

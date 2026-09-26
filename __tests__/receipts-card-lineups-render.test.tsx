@@ -21,6 +21,7 @@ const lineup = (over: Partial<LineupReceipt> = {}): LineupReceipt => ({
   perfect: false,
   benched: { name: 'David Montgomery', points: 20.3 },
   started: { name: 'Jameson Williams', points: 6.1 },
+  lineupChanges: { in: [{ name: 'David Montgomery', points: 20.3 }], out: [{ name: 'Jameson Williams', points: 6.1 }] },
   href: '/core/my-team?league=af-ice',
   ...over,
 })
@@ -41,7 +42,7 @@ describe('ReceiptsCard — lineups', () => {
     const link = screen.getByRole('link', { name: 'You left 14.2 pts on your bench' })
     expect(link.getAttribute('href')).toBe('/core/my-team?league=af-ice')
     expect(screen.getByText('Ice Kings · 2026 wk 5')).toBeTruthy()
-    expect(screen.getByText('Benched David Montgomery (20.3) · started Jameson Williams (6.1)')).toBeTruthy()
+    expect(screen.getByText('Best legal lineup: starts David Montgomery (20.3) · benches Jameson Williams (6.1)')).toBeTruthy()
   })
 
   it('a perfect lineup says so, with no swap line', () => {
@@ -64,5 +65,20 @@ describe('ReceiptsCard — lineups', () => {
     render(<ReceiptsCard data={data({ tooEarly: 1 })} />)
     expect(screen.getByRole('heading', { name: 'Trades' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Lineups' })).toBeTruthy()
+  })
+
+  it('an older cached receipt cannot imply that its independently selected names form a swap', () => {
+    render(<ReceiptsCard data={data({ lineups: [lineup({ lineupChanges: undefined,
+      benched: { name: 'Jack Gibbens', points: 26 }, started: { name: 'Tucker Kraft', points: 2.5 } })] })} />)
+    expect(screen.getByText('Best legal lineup includes Jack Gibbens (26.0).')).toBeTruthy()
+    expect(screen.queryByText(/Tucker Kraft/)).toBeNull()
+  })
+
+  it('shows the whole lineup difference across independent offensive and defensive slots', () => {
+    render(<ReceiptsCard data={data({ lineups: [lineup({ lineupChanges: {
+      in: [{ name: 'Jack Gibbens', points: 26 }, { name: 'Sam LaPorta', points: 9 }],
+      out: [{ name: 'Tucker Kraft', points: 2.5 }, { name: 'Other LB', points: 12 }],
+    } })] })} />)
+    expect(screen.getByText('Best legal lineup: starts Jack Gibbens (26.0), Sam LaPorta (9.0) · benches Tucker Kraft (2.5), Other LB (12.0)')).toBeTruthy()
   })
 })

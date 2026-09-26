@@ -25,6 +25,14 @@ Cuts, extensions and franchise tags require the current contract owner or head c
 
 This closes these three mutation routes. Other acquisition, lifecycle and ledger writers still require the broader concurrency and cap-legality audit. Franchise-tag term renewal and rollover idempotency remain separate lifecycle work.
 
+## Core matchup and lineup receipt accuracy
+
+Partial current-period scores no longer claim wins or losses. Completion uses advanced saved league periods or completed season markers; past-season fallback applies only without same-season metadata. An active season can continue into January, and conflicting imports must agree before a result is claimed. Recaps exclude explicitly partial results and do not classify ties as losses; completed cards omit predictive win odds. The weekly cache version advances to retire older payloads without completion evidence. Custom negative scores remain visible and a completed 0–0 matchup is a tie rather than a schedule placeholder.
+
+Lineup receipts show all incoming and outgoing players from the optimizer's complete legal lineup. Independently selected names are no longer presented as a direct swap, which could imply replacing a tight end with a linebacker. Older receipt payloads use a safe single-player description.
+
+Sleeper documents [live scoring and later stat corrections](https://support.sleeper.com/en/articles/2441282-stat-corrections) and [weekly score adjustments](https://support.sleeper.com/en/articles/3410666-adjusting-weekly-lineups-scores). These changes distinguish partial scores from recorded outcomes; they do not promise immutable results.
+
 ## Remaining work
 
 1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
