@@ -19,15 +19,17 @@ export function activeRosterCapacity(args: {
   outgoingIds: string[]
 }): { rosterSize: number | null; held: number; outgoing: number } {
   const owned = new Set(args.players)
-  const reserved = new Set(
-    [args.reserve, args.taxi].flatMap((list) => Array.isArray(list) ? list.map(String) : [])
-      .filter((id) => owned.has(id)),
-  )
+  const reserved = new Set<string>()
+  for (const list of [args.reserve, args.taxi]) {
+    if (Array.isArray(list)) for (const item of list) {
+      const id = String(item)
+      if (owned.has(id)) reserved.add(id)
+    }
+  }
   const active = new Set([...owned].filter((id) => !reserved.has(id)))
-  const slots = Array.isArray(args.slots) && args.slots.length > 0
-    && args.slots.every((slot) => typeof slot === 'string')
-    ? args.slots.filter((slot) => !['IR', 'TAXI', 'RES'].includes(slot.toUpperCase())).length
-    : null
+  const slotNames: unknown[] | null = Array.isArray(args.slots) ? args.slots : null
+  const slots = slotNames && slotNames.length > 0 && slotNames.every((slot) => typeof slot === 'string')
+    ? slotNames.filter((slot) => typeof slot === 'string' && !['IR', 'TAXI', 'RES'].includes(slot.toUpperCase())).length : null
   return {
     rosterSize: slots,
     held: active.size,
