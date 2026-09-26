@@ -23,6 +23,9 @@ export interface SalaryCapConfig {
   sport: LeagueSport
   mode: SalaryCapMode
   startupCap: number
+  /** Declared startup season, falling back to persisted configuration creation year. */
+  capStartYear?: number
+  season?: number | null
   capGrowthPercent: number
   contractMinYears: number
   contractMaxYears: number
@@ -96,6 +99,9 @@ export interface FutureCapYear {
 
 /** Trade cap impact (both sides). */
 export interface TradeCapImpact {
+  /** Existing contract commitments only; excludes unsigned future acquisitions. */
+  years?: Array<{ capYear: number; fromCapHit: number; toCapHit: number;
+    fromCap: number; toCap: number; fromLegal: boolean; toLegal: boolean }>
   fromRosterId: string
   toRosterId: string
   fromCapHitDelta: number

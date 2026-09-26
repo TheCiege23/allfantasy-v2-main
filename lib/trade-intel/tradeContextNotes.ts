@@ -56,6 +56,7 @@ import {
   assessConcentration,
   assessDeadline,
   assessRosterCrunch,
+  activeRosterCapacity,
   assessUnpriced,
 } from './rosterShape'
 import { assessContention, postureNote } from './contention'
@@ -486,11 +487,19 @@ export async function buildTradeContextNotes(args: {
     settings: league.settings,
     starters: league.starters,
     rosterIds,
+    capacity: activeRosterCapacity({
+      slots: league.starters,
+      players: rosterIds,
+      reserve: pd.reserve,
+      taxi: pd.taxi,
+      outgoingIds: players.filter((player) => give.some((line) => line.name === player.name))
+        .flatMap((player) => player.sleeperId ? [player.sleeperId] : []),
+    }),
     format: null,
     /* Needed to discount a devy asset by how far off his draft eligibility is. */
     season: league.season,
-    incoming: get.length + (args.picksToMe?.length ?? 0),
-    outgoing: give.length + (args.picksToThem?.length ?? 0),
+    incoming: get.length,
+    outgoing: give.length,
     futureLean: (args.picksToMe?.length ?? 0) - (args.picksToThem?.length ?? 0),
     pricedGive: args.pricedGive ?? [],
     pricedGet: args.pricedGet ?? [],
@@ -1048,6 +1057,7 @@ async function buildScaleNotes(args: {
   starters: unknown
   rosterIds: string[]
   format: string | null
+  capacity: ReturnType<typeof activeRosterCapacity>
   incoming: number
   outgoing: number
   futureLean: number
@@ -1067,17 +1077,9 @@ async function buildScaleNotes(args: {
     if (scale) notes.push(...scale.notes)
   }
 
-  /*
-   * Roster size is the FULL `roster_positions` list, bench and IR included —
-   * that is what the platform enforces. Using only the starting slots would
-   * report every legal roster as illegal.
-   */
-  const rosterSize = Array.isArray(args.starters) ? args.starters.length : null
   const crunch = assessRosterCrunch({
-    rosterSize,
-    held: args.rosterIds.length,
+    ...args.capacity,
     incoming: args.incoming,
-    outgoing: args.outgoing,
   })
   if (crunch.basis) notes.push(crunch.basis)
 
