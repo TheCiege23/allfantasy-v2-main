@@ -10,6 +10,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const { findFirstMock } = vi.hoisted(() => ({ findFirstMock: vi.fn() }))
+const { periodMetadata } = vi.hoisted(() => ({ periodMetadata: vi.fn(async () => [] as unknown[]) }))
+vi.mock('@/lib/core-app/leagueWeekMetadata', () => ({ readLeagueWeekMetadata: periodMetadata }))
+beforeEach(() => periodMetadata.mockResolvedValue([]))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: { weeklyMatchup: { findFirst: findFirstMock } },
@@ -26,6 +29,23 @@ function queue(...responses: unknown[]) {
 
 describe('resolveCurrentWeek', () => {
   beforeEach(() => findFirstMock.mockReset())
+
+  it('prefers the provider period to an old unscored matchup', async () => {
+    periodMetadata.mockResolvedValue([{ season: 2026, settings: { leg: 3 } }])
+    queue({ seasonYear: 2026 }, { week: 2 })
+    expect(await resolveCurrentWeek(['sleeper-1'])).toEqual({ seasonYear: 2026, week: 3 })
+    expect(findFirstMock).not.toHaveBeenCalled()
+  })
+
+  it('uses the most common provider period in the newest season for the portfolio', async () => {
+    periodMetadata.mockResolvedValue([
+      { season: 2025, settings: { leg: 18 } },
+      { season: 2026, settings: { leg: 2 } },
+      { season: 2026, settings: { leg: 3 } },
+      { season: 2026, settings: { leg: 3 } },
+    ])
+    expect(await resolveCurrentWeek(['a', 'b', 'c', 'old'])).toEqual({ seasonYear: 2026, week: 3 })
+  })
 
   it('picks week 1 on a fully bootstrapped, wholly unscored season', async () => {
     queue({ seasonYear: 2026 }, { week: 1 })

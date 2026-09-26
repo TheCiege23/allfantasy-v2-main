@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
-import { isScored, resolveCurrentWeekFrom } from './currentWeek'
+import { isScored, resolveCurrentWeekFrom, resolveStatedWeek } from './currentWeek'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
@@ -582,14 +582,12 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    * imported from vanishing entirely.
    */
   const progressByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, leagueWeekProgress(l)]))
-  const seasonByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, l.season]))
   const resolved = resolveCurrentWeekFrom(rows.length > 0 ? rows : priorRows)
-  const stated = [...progressByLeague].flatMap(([pid, progress]) => {
-    const season = seasonByLeague.get(pid)
-    return progress.currentWeek != null && season != null && rows.some((r) => r.leagueId === pid && r.seasonYear === season && r.week === progress.currentWeek)
-      ? [{ season, week: progress.currentWeek }] : []
-  }).sort((a, b) => b.season - a.season || a.week - b.week)[0]
-  const latest: { season: number; week: number } | null = stated ?? (resolved
+  const stated = resolveStatedWeek(periodMetadata.filter((league) => {
+    const progress = progressByLeague.get(league.platformLeagueId)
+    return progress?.currentWeek != null && rows.some((row) => row.leagueId === league.platformLeagueId && row.seasonYear === league.season && row.week === progress.currentWeek)
+  }))
+  const latest: { season: number; week: number } | null = stated ? { season: stated.seasonYear, week: stated.week } : (resolved
     ? { season: resolved.season, week: resolved.week }
     : null)
 

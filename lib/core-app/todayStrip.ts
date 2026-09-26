@@ -199,7 +199,9 @@ async function resolveRecord(
   let losses = 0
   for (const m of matchups) {
     if (!mine.has(`${m.leagueId}:${m.rosterId}`)) continue // someone else's roster
-    if (m.win === 1) wins += 1
+    // This band reports who is currently ahead, not a provider's historical win flag.
+    if (m.pointsFor === m.pointsAgainst) continue
+    if (m.pointsFor > m.pointsAgainst) wins += 1
     else losses += 1
   }
 
@@ -356,7 +358,7 @@ async function resolveNext24(
     .findMany({
       where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
       orderBy: { startTime: 'asc' },
-      take: 20,
+      take: 200,
       select: { sport: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
     })
     .catch(() => [])
@@ -370,8 +372,13 @@ async function resolveNext24(
    * correct arithmetic waiting on a trustworthy input.
    */
 
+  const seenFixtures = new Set<string>()
   for (const g of games) {
     if (!g.startTime) continue
+    const teamKey = (team: string | null) => String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
+    if (seenFixtures.has(key)) continue
+    seenFixtures.add(key)
     rows.push({
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,

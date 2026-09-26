@@ -93,6 +93,15 @@ The user supplied the exact Railway app and environment link after initially sel
 
 ## Isolated release verification
 
+### Home follow-up
+
+- Shared week resolution now prefers saved provider markers; the portfolio defaults to the most common period in the newest season. An old unscored matchup no longer overrides that marker. The week board uses the same selection rule.
+- Upcoming fixtures are deduplicated by sport, exact kickoff, and normalized team names. Different kickoff times remain separate, including doubleheaders. The query remains bounded to 200 rows in the next 24 hours.
+- The Game day record ignores tied/unplayed pairings and compares the current scores instead of trusting an old win flag.
+- The rivalry summary cache version advances so the completed-period fix is not hidden behind an old cached result.
+- Follow-up regression checks passed: 77 tests across six files. Separate arithmetic, fixture and summary checks also passed.
+- The optimized release build is running locally with a dummy localhost database address. It has not accessed production league data; deployed verification remains outstanding.
+
 The release checkout is based on the deployed `main` commit `0b8b61eafed13ddbbfd4167e5c4a63875ddc1fb0`, on branch `codex/core-browser-audit-20260926`. Newer shell route and navigation changes were preserved. The shared development checkout's unrelated edits are not included.
 
 - Focused release checks: **85 tests passed across 10 files**, plus the rivalry regression.
