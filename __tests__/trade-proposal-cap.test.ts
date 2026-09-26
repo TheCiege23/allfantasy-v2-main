@@ -24,7 +24,9 @@ beforeEach(() => {
 describe('proposal affordability', () => {
   it('resolves provider IDs by an exact owned name and uses stored contract terms', async () => {
     const evaluate = await prepareProposalCap(args)
-    expect(await evaluate(give, [])).toMatchObject({ status: 'evaluated', legal: true, contracts: [{ salary: 30, expires: 2027 }] })
+    const result = await evaluate(give, [])
+    expect(result).toMatchObject({ status: 'evaluated', legal: true, contracts: [{ salary: 30, expires: 2027 }] })
+    expect(proposalCapNote(result)).toBeNull()
     expect(m.validate).toHaveBeenCalledWith('league', { fromRosterId: 'roster-one', toRosterId: 'roster-two',
       movingToReceiver: [{ contractId: 'contract', playerId: 'stored-player', salary: 30 }], movingToSender: [] })
   })

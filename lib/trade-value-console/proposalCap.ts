@@ -99,6 +99,6 @@ export function proposalCapNote(result: ProposalCapResult): string | null {
   if (result.status === 'unavailable') return `Salary-cap check unavailable: ${result.reason}`
   const failed = result.impact.years?.find(y => !y.fromLegal || !y.toLegal)
   return result.legal
-    ? 'Both teams satisfy configured cap and floor rules across the recorded commitment years. Unsigned future acquisitions are not funded by this check.'
+    ? null
     : `This package fails configured cap or floor rules${failed ? ` in ${failed.capYear} for ${!failed.fromLegal && !failed.toLegal ? 'both teams' : !failed.fromLegal ? 'your team' : 'the other team'}` : ''}. Value balance does not establish affordability.`
 }
