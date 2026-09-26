@@ -29,7 +29,7 @@ Full TypeScript checking reported 143 errors outside edited source files. A focu
 
 ## Authorized production observations
 
-The user explicitly authorized read-only production checks. Every query ran within BEGIN READ ONLY. No migration, backfill, league creation, deployment, or production mutation was performed.
+The user explicitly authorized read-only production checks. Every query ran within BEGIN READ ONLY. No migration, backfill, league creation or data mutation was performed by the read-only audit. Code deployment was subsequently authorized separately.
 
 - The partial draft_sessions_leagueId_open_key index is present and permits one open draft per league. The old whole-league and league/season uniqueness constraints are absent from the index census. Zero leagues have multiple open drafts. The migration described in the handoff has already been applied.
 - The ADP table has 2025/2026 NFL rows only. Other sports have no measured vendor ADP coverage in that table.
@@ -47,4 +47,14 @@ The reproducible aggregate audit is scripts/audit-league-lifecycle-readonly.cjs.
 2. Verify active draft-pool image URLs, identity matching, logos, stats and ADP for each supported sport. Fix ingestion and mappings where real coverage is missing; do not invent ADP or disguise logos as headshots.
 3. Run a complete dynasty and keeper year-two scenario with carried rosters, traded rookie picks and locked keeper picks.
 4. Verify every offered specialty concept through its real lifecycle. Automation unit coverage alone is not complete product acceptance.
-5. Review and release the code fixes, then verify the deployed paths. Production writes require separate explicit authorization.
+5. Verify released code paths after Railway reports a successful deployment. The user has authorized code releases; production test-data writes have not been performed.
+
+## Follow-up verification and release
+
+PR #1347 merged as 50b6f5047a9efb3ed549b50a7017f58f8c931e5a, with the supplied branding and lifecycle fixes. The user explicitly authorized production releases. Railway deployment verification is tracked separately from merge status.
+
+A real known-test-database service smoke passed for redraft (2 teams), dynasty (8 teams) and keeper (8 teams). It installed roster and scoring configuration, assigned synthetic owners, finalized completed draft fixtures twice, generated schedules, calculated weekly passing-TD scores and median standings twice, and verified full-PPR receptions. Finalization added no duplicate players. Dynasty used the selected 12 regular weeks plus one playoff week. The fixtures contained 30, 80 and 128 roster players respectively. All tracked synthetic leagues, owners and weekly scores were deleted. These checks use completed pick fixtures; they do not certify authenticated pick submission or real provider assets.
+
+That smoke exposed a UI/server mismatch: dynasty, keeper and Best Ball offered team counts the server rejects. The follow-up uses the canonical sport/concept catalog for limits and steps, and resets an incompatible selection when changing concepts. Four rendered UI regression tests pass, including server acceptance of every offered specialized count.
+
+Protected CI for the first release passed, including the check for no new TypeScript errors. The earlier full compiler baseline errors remain outside this change.
