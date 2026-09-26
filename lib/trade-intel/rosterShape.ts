@@ -26,14 +26,14 @@ export function activeRosterCapacity(args: {
       if (owned.has(id)) reserved.add(id)
     }
   }
-  const active = new Set([...owned].filter((id) => !reserved.has(id)))
+  const active = new Set(Array.from(owned).filter((id) => !reserved.has(id)))
   const slotNames: unknown[] | null = Array.isArray(args.slots) ? args.slots : null
   const slots = slotNames && slotNames.length > 0 && slotNames.every((slot) => typeof slot === 'string')
     ? slotNames.filter((slot) => typeof slot === 'string' && !['IR', 'TAXI', 'RES'].includes(slot.toUpperCase())).length : null
   return {
     rosterSize: slots,
     held: active.size,
-    outgoing: [...new Set(args.outgoingIds)].filter((id) => active.has(id)).length,
+    outgoing: Array.from(new Set(args.outgoingIds)).filter((id) => active.has(id)).length,
   }
 }
 
@@ -75,7 +75,7 @@ export function assessRosterCrunch(args: {
     netChange,
     forcedDrops,
     basis:
-      forcedDrops > 0
+      forcedDrops > 0 && rosterSize != null
         ? `this deal leaves you ${after} active players against ${rosterSize} active spots — you need to free ${forcedDrops} spots through drops or eligible reserve assignments${held > rosterSize ? ` (your roster already exceeds active capacity by ${held - rosterSize})` : ''}`
         : rosterSize != null && netChange > 0 && after >= rosterSize
           ? `this fills your last roster spot — you have no room to absorb anything else`
