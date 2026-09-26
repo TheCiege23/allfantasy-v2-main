@@ -47,6 +47,7 @@ const MY_PLAYER_DATA = { players: ['p1', 'p2', 'p3', '0'], starters: ['p1', 'p2'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  LEAGUE.platform = 'sleeper'
   prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue(null)
   prismaMock.waiverClaim.count.mockResolvedValue(0)
   prismaMock.roster.findMany.mockResolvedValue([
@@ -58,6 +59,23 @@ beforeEach(() => {
 })
 
 describe('the Waivers read stops pulling every roster blob', () => {
+  it('does not publish bootstrap schedules or FAAB tiebreaks as Sleeper rolling rules', async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'rolling', faabBudget: 100, processingDayOfWeek: 1, processingTimeUtc: '12:00', tiebreakRule: 'highest_bid' })
+    const { getWaiversData } = await import('@/lib/core-app/waivers')
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toMatchObject({ available: false, reason: expect.stringContaining('not imported') })
+    expect(data?.tiebreak).toEqual({ available: true, data: 'Waiver priority order' })
+  })
+
+  it('retains the configured schedule and bid tiebreak for a native FAAB league', async () => {
+    LEAGUE.platform = 'manual'
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', faabBudget: 100, processingDayOfWeek: 1, processingTimeUtc: '12:00', tiebreakRule: 'highest_bid' })
+    const { getWaiversData } = await import('@/lib/core-app/waivers')
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toMatchObject({ available: true, data: { dayOfWeek: 1, timeUtc: '12:00' } })
+    expect(data?.tiebreak).toMatchObject({ available: true })
+  })
+
   it('does not turn a provider default budget into FAAB for a rolling league', async () => {
     prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'rolling', faabBudget: 100 })
     const { getWaiversData } = await import('@/lib/core-app/waivers')

@@ -746,8 +746,10 @@ export async function getCommissionerHub(input: {
     waivers: waiverSettings
       ? {
           type: waiverSettings.waiverType ?? null,
-          dayOfWeek: waiverSettings.processingDayOfWeek ?? null,
-          timeUtc: waiverSettings.processingTimeUtc ?? null,
+          // Sleeper's daily schedule is not mapped; mirror defaults are not a
+          // provider deadline and must not create a calendar reminder.
+          dayOfWeek: platform === 'sleeper' ? null : waiverSettings.processingDayOfWeek ?? null,
+          timeUtc: platform === 'sleeper' ? null : waiverSettings.processingTimeUtc ?? null,
         }
       : null,
     tradeDeadlineWeek: noTradeDeadline ? null : tradeDeadline,

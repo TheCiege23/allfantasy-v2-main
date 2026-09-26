@@ -277,7 +277,8 @@ export async function getCommissionerWaiverOversight(input: {
     }
   }
 
-  const next = settings
+  // Sleeper runs its own daily waivers. Its mirror schedule is not imported.
+  const next = settings && platform !== 'sleeper'
     ? computeNextWaiverRunAtUtc(now, {
         processingDayOfWeek: settings.processingDayOfWeek,
         processingTimeUtc: settings.processingTimeUtc,
