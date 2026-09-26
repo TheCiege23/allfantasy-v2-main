@@ -41,6 +41,10 @@ The tested behavior covers both missing pricing and unrelated context gaps: a fu
 
 ## Remaining work
 
+The next coverage release preserves individual defensive projection refusals through the league board, player-name join, roster API and trade review: missing history, insufficient sample, no recorded defensive production, unavailable replacement level, and scoring gaps. These diagnostics remain available even when no defender can be priced. Identity collisions still refuse a name-based assignment. Existing replacement-derived player prices remain unchanged. The review explains that an unpriced asset withholds the whole trade grade.
+
+Read-only production inspection found different underlying inputs for two missing linebackers: one had recorded games with no defensive production, while the other had only two recorded games. This release exposes those limitations; it does not invent prices for either player. Sleeper documents [tackle calculation](https://support.sleeper.com/en/articles/4056297-how-are-tackles-calculated) and [stacking scoring categories](https://support.sleeper.com/en/articles/3186339-what-stacks); defender estimates must continue to use the league's actual scoring rules.
+
 1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
 2. Complete missing NFL/IDP/college asset pricing with documented per-player inputs and provider coverage. Do not substitute identical placeholder values.
 3. Compare actual pre/post starting lineups with eligible replacements. Calibrate game/playoff forecasts before displaying percentage claims.

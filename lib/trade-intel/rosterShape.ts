@@ -175,7 +175,7 @@ export function assessUnpriced(args: {
     getUnpriced,
     giveTotal,
     getTotal,
-    basis: `${side} carry no market price at all — our value feed covers offence and picks only. Treat the verdict as covering the rest of the deal, not this part.`,
+    basis: `${side} have no usable asset value. The trade grade is unavailable until every asset can be priced; the displayed values describe only the priced assets.`,
   }
 }
 

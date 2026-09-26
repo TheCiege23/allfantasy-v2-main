@@ -774,11 +774,15 @@ export async function GET(
       p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
       p.unpricedReason =
         p.value == null
-          ? playerUnpricedReason({
+          ? (resolvedForLeague.has(p.id)
+              ? leagueValues?.unpricedReasonBySleeperId?.get(p.id)
+                ?? leagueValues?.unpricedReasonByNameLower?.get(p.name.trim().toLowerCase())
+              : null) ?? playerUnpricedReason({
               identified: resolvedForLeague.has(p.id),
               position: p.position,
               sport,
               marketLoaded,
+              leagueDerived: true,
             })
           : null
     }

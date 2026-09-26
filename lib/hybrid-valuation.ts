@@ -6,8 +6,10 @@ import { computePlayerVorp as computePlayerVorpEngine, computePickVorp as comput
 import { IDP_CEILING_UNCERTAINTY_BAND, isIdpPosition, isKickerPosition } from './idp-kicker-values';
 import { isUserParty } from './user-matching';
 import { getPlayerAnalytics, type PlayerAnalytics } from './player-analytics';
+import type { UnpricedReason } from './trade-value/unpricedReason';
 
 export interface ValuationContext {
+  leagueUnpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>;
   asOfDate: string;
   isSuperFlex: boolean;
   fantasyCalcPlayers?: FantasyCalcPlayer[];

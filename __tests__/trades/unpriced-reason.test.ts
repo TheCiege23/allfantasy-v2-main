@@ -16,6 +16,13 @@ const nfl = (position: string | null, marketLoaded = true) =>
   playerUnpricedReason({ identified: true, position, sport: 'NFL', marketLoaded }).code
 
 describe('playerUnpricedReason', () => {
+  it('describes the attempted league board without claiming all defenders are unsupported', () => {
+    const args = { identified: true, position: 'LB', sport: 'NFL', marketLoaded: true, leagueDerived: true }
+    expect(playerUnpricedReason(args).label).toBe('No league-derived defensive value available for this player')
+    expect(analysisUnpricedReason(args)).toEqual(playerUnpricedReason(args))
+    expect(playerUnpricedReason({ ...args, identified: false }).code).toBe('unidentified')
+    expect(playerUnpricedReason({ ...args, sport: 'NCAAF' }).code).toBe('no_feed_for_sport')
+  })
   it('names each position the value feed never covers', () => {
     expect(nfl('LB')).toBe('defender')
     expect(nfl('DB')).toBe('defender')

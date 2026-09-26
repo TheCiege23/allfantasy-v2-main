@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
-import { analysisUnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { analysisUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import type { LoadedTradeLeague } from './league-loader'
 import { sportsRecordToPricedAsset } from './sports-db-valuation'
@@ -122,7 +122,7 @@ async function resolveEnrichmentPlayerId(
 export function lineFromPriced(
   pa: PricedAsset,
   meta: Partial<TradeConsolePlayerLine>,
-  opts?: { reasonPosition?: string | null },
+  opts?: { reasonPosition?: string | null; unpricedReason?: UnpricedReason | null },
 ): TradeConsolePlayerLine {
   return {
     name: pa.name,
@@ -141,7 +141,7 @@ export function lineFromPriced(
     ...(pa.unpriced
       ? {
           unpriced: true,
-          unpricedReason: analysisUnpricedReason({
+          unpricedReason: opts?.unpricedReason ?? analysisUnpricedReason({
             position: opts?.reasonPosition ?? pa.position ?? meta.position,
             sport: meta.sport ?? 'NFL',
           }),
@@ -353,7 +353,11 @@ export async function resolveAssets(
       }
       const matched = findPlayerByName(args.fcPlayers, displayName)
       const pa = await pricePlayer(displayName, args.nflCtx)
-      if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
+      const unpricedReason = pa.unpriced
+        ? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
+        : null
+      if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
+      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
@@ -379,7 +383,7 @@ export async function resolveAssets(
           pricedSource: src,
           dataSource: row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
-        }, { reasonPosition: row?.position ?? null }),
+        }, { reasonPosition: row?.position ?? null, unpricedReason }),
       )
       continue
     }
@@ -560,6 +564,7 @@ export async function resolveLeagueTradeChart(args: {
     fantasyCalcPlayers: fcPlayers,
     numTeams: leagueSize,
     ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
+    leagueUnpricedReasonByNameLower: leagueValues?.unpricedReasonByNameLower,
   }
 
   return {
