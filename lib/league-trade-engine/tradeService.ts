@@ -955,7 +955,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       tradeId: trade.id,
       afterState: { status: 'processed' },
     })
-  }, { isolationLevel: 'Serializable' })
+  }, { isolationLevel: 'Serializable', timeout: 20_000 })
 
   // Trade Learning Phase 8 live capture — outside the transaction per the
   // ADR's behavior-preservation strategy (a capture failure must never roll

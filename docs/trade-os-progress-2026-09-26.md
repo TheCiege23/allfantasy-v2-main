@@ -12,7 +12,7 @@
 
 ## This release
 
-Native generic (`AfLeagueTrade`) settlement moves each owned, unexpired contract with its player, preserving salary, signing year, term and status. All participants in a multi-team trade are evaluated together against recorded current/future commitments, dead money, rollover and configured floors. Contract ownership, roster changes, refreshed ledgers and contract evidence share the processing transaction. Settlement and commissioner reversal use serializable transactions; a conflict fails safely rather than applying a partial trade.
+Native generic (`AfLeagueTrade`) settlement moves each owned, unexpired contract with its player, preserving salary, signing year, term and status. All participants in a multi-team trade are evaluated together against recorded current/future commitments, dead money, rollover and configured floors. Contract ownership, roster changes, refreshed ledgers and contract evidence share the processing transaction. Settlement and commissioner reversal use serializable transactions with a bounded 20-second limit. Ledger reads are batched across participants and commitment years; a conflict fails safely rather than applying a partial trade.
 
 Execution snapshots record contract ownership and terms before and after settlement. A commissioner reversal refuses missing legacy salary evidence or subsequent contract changes, restores ownership with players, and recomputes legality under current rules. Cut contracts and their dead money stay with the original team. This applies to native roster IDs and stored contracts, not writes to imported host platforms or the separate redraft salary engine. Other contract mutation services still need a concurrency audit and unified transaction policy.
 

@@ -57,6 +57,12 @@ async function validateAndRefreshLedgers(
   const lastYear = Math.max(capYear, ...contracts.filter(c => c.status !== 'cut')
     .map(c => c.yearSigned + c.yearsTotal - 1), ...deadYears)
   if (lastYear - capYear > 50) throw new SalaryCapSettlementRefused('Contract horizon is invalid; trade cannot be processed')
+  const ledgers = await tx.salaryCapTeamLedger.findMany({
+    where: { configId: config.configId, rosterId: { in: rosterIds }, capYear: { gte: capYear, lte: lastYear } },
+    select: { leagueId: true, rosterId: true, capYear: true, rolloverUsed: true },
+  })
+  if (ledgers.some(l => l.leagueId !== config.leagueId)) throw new SalaryCapSettlementRefused('Salary ledger league mismatch')
+  const rolloverByYear = new Map(ledgers.map(l => [`${l.rosterId}:${l.capYear}`, l.rolloverUsed]))
   const rows = []
   for (let year = capYear; year <= lastYear; year++) {
     for (const rosterId of rosterIds) {
@@ -68,8 +74,7 @@ async function validateAndRefreshLedgers(
         return sum + (money?.[String(year)] ?? 0)
       }, 0)
       const where = { configId_rosterId_capYear: { configId: config.configId, rosterId, capYear: year } }
-      const existing = await tx.salaryCapTeamLedger.findUnique({ where, select: { rolloverUsed: true } })
-      const rolloverUsed = existing?.rolloverUsed ?? 0
+      const rolloverUsed = rolloverByYear.get(`${rosterId}:${year}`) ?? 0
       if (!Number.isSafeInteger(rolloverUsed) || rolloverUsed < 0) throw new SalaryCapSettlementRefused('Stored rollover is invalid')
       const cap = getEffectiveCap(config, year, rolloverUsed)
       const total = totalCapHit + deadMoneyHit

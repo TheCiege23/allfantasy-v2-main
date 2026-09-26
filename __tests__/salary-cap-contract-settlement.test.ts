@@ -33,7 +33,7 @@ function world(rows = [contract('p', 'a', 30), contract('q', 'b', 50)]) {
       }),
     },
     salaryCapTeamLedger: {
-      findUnique: vi.fn(async () => null as { rolloverUsed: number } | null),
+      findMany: vi.fn(async () => [] as Array<{ leagueId: string; rosterId: string; capYear: number; rolloverUsed: number }>),
       upsert: vi.fn(async ({ create }) => { state.ledgers.push(create); return create }),
     },
     roster: {
@@ -45,7 +45,7 @@ function world(rows = [contract('p', 'a', 30), contract('q', 'b', 50)]) {
     tradeExecutionSnapshot: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
     tradeReversal: { findUnique: vi.fn(async () => null), create: vi.fn(async () => ({ id: 'rev' })) },
     // Rollback harness verifies that errors propagate out of the shared transaction, with no partial state.
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _options?: { isolationLevel: string }) => {
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _options?: { isolationLevel: string; timeout: number }) => {
       const before = structuredClone(state)
       try { return await fn(db) } catch (error) { Object.assign(state, before); throw error }
     }),
@@ -86,6 +86,7 @@ describe('native salary contract settlement', () => {
     expect(state.contracts.map(c => c.rosterId)).toEqual(['b', 'c', 'a'])
     expect(state.ledgers).toHaveLength(6)
     expect(state.ledgers.every(l => l.totalCapHit === 80)).toBe(true)
+    expect(db.salaryCapTeamLedger.findMany).toHaveBeenCalledTimes(1)
   })
 
   it('retains dead money on its original team and stops salary after expiry', async () => {
@@ -113,9 +114,18 @@ describe('native salary contract settlement', () => {
 
   it('preserves recorded rollover in refreshed ledgers', async () => {
     const { db, state } = world([contract('p', 'a', 30), contract('q', 'b', 80)])
-    db.salaryCapTeamLedger.findUnique.mockResolvedValue({ rolloverUsed: 20 })
+    db.salaryCapTeamLedger.findMany.mockResolvedValue(['a', 'b'].flatMap(rosterId => [2026, 2027]
+      .map(capYear => ({ leagueId: 'L', rosterId, capYear, rolloverUsed: 20 }))))
     await settleTradeContracts(db as never, 'L', ['a', 'b'], moves)
     expect(state.ledgers.find(l => l.rosterId === 'b')).toMatchObject({ rolloverUsed: 20, capSpace: 10 })
+  })
+
+  it('refuses an inconsistent ledger instead of reusing another league’s rollover', async () => {
+    const { db } = world()
+    db.salaryCapTeamLedger.findMany.mockResolvedValue([{ leagueId: 'other', rosterId: 'b', capYear: 2026, rolloverUsed: 50 }])
+    await expect(settleTradeContracts(db as never, 'L', ['a', 'b'], moves)).rejects.toThrow('ledger league mismatch')
+    expect(db.playerContract.updateMany).not.toHaveBeenCalled()
+    expect(db.salaryCapTeamLedger.upsert).not.toHaveBeenCalled()
   })
 
   it.each(['missing', 'expired', 'wrong owner', 'duplicate elsewhere', 'repeated player'])('rejects %s contracts', async kind => {
@@ -196,7 +206,7 @@ describe('salary contract reversal', () => {
     expect(state.contracts[0].rosterId).toBe('a')
     expect(state.rosters[0].playerData.players).toEqual(['p'])
     expect(state.ledgers.at(-1)).toMatchObject({ rosterId: 'b', totalCapHit: 50 })
-    expect(db.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: 'Serializable' })
+    expect(db.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: 'Serializable', timeout: 20_000 })
   })
 
   it('refuses a later extension despite unchanged roster membership', async () => {

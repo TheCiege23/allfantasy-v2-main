@@ -8,7 +8,7 @@ import { applyTradeAssetsInTransaction, type LeagueTradeTx } from '@/lib/league-
 export async function runAfTradeProcessingTransaction<T>(
   fn: (tx: LeagueTradeTx) => Promise<T>,
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => fn(tx), { isolationLevel: 'Serializable' })
+  return prisma.$transaction(async (tx) => fn(tx), { isolationLevel: 'Serializable', timeout: 20_000 })
 }
 
 export async function sampleProcessAfTradeInTransaction(tradeId: string): Promise<void> {
@@ -31,5 +31,5 @@ export async function sampleProcessAfTradeInTransaction(tradeId: string): Promis
       receiverRosterId: trade.receiverRosterId,
       assets,
     })
-  }, { isolationLevel: 'Serializable' })
+  }, { isolationLevel: 'Serializable', timeout: 20_000 })
 }

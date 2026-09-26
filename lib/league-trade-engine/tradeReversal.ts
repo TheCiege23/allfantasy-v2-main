@@ -320,7 +320,7 @@ export async function reverseGenericTrade(
         rostersRestored: before.length,
         noticeKey,
       }
-    }, { isolationLevel: 'Serializable' })
+    }, { isolationLevel: 'Serializable', timeout: 20_000 })
   } catch (e) {
     if (e instanceof ReversalRefused) return { ok: false, readiness: e.readiness }
     throw e
