@@ -150,3 +150,5 @@ Sleeper distinguishes `week`, `display_week` and league `leg`; a nonzero score i
 - Draft HQ retains its page heading when no upcoming draft exists.
 - These final regressions passed: 39 tests across three files. The current-week matchup-cache follow-up passed 33 checks across four files.
 - All GitHub checks on 4b7c60d9ad passed, including four unit shards, the TypeScript regression guard, mobile smoke/auth, draft room, onboarding, retention and referral checks. The final follow-up revision requires fresh CI and Railway build verification.
+- Populated-player audit found a second-model market-value explanation that contradicted the package's displayed prices and an internal lineup diagnostic. The card now keeps package prices authoritative, retains non-price explanations, and withholds internal diagnostic strings. All 28 trade-visual checks passed across two files.
+- Final local typecheck completed with the existing 143 diagnostics and no diagnostics in the final chart, notification, or Draft HQ changes.
