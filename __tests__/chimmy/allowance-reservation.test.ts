@@ -78,11 +78,15 @@ describe('allowance reservation cleanup', () => {
 
   it('does not retry an ambiguous failed decrement and refund twice', async () => {
     const h = harness(), taken = (await h.reserve())!
-    vi.mocked(h.d.giveBack).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(h.d.giveBack).mockImplementationOnce(async (_, w) => {
+      const key = w.windowStart.toISOString()
+      h.counts.set(key, h.counts.get(key)! - 1)
+      throw new Error('connection lost after commit')
+    })
     const args = { userId: 'u1', state: taken }
     expect(await releaseChimmyPlanAllowance(args, h.d)).toBe(false)
     expect(await releaseChimmyPlanAllowance(args, h.d)).toBe(false)
     expect(h.d.giveBack).toHaveBeenCalledTimes(1)
-    expect([...h.counts.values()]).toEqual([4])
+    expect([...h.counts.values()]).toEqual([3])
   })
 })
