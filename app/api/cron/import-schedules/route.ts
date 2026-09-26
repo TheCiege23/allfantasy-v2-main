@@ -28,6 +28,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
+import { selectRiProfileSports } from "@/lib/cron/riProfileSports"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
@@ -473,10 +474,16 @@ async function handle(req: NextRequest) {
        * `resolveSports` above only knows NFL/NCAAF (it drives the schedule blocks), so this reads
        * the raw param against the profile list instead of reusing it.
        */
-      const explicitProfileSport = url.searchParams.get("sport")?.trim().toUpperCase()
-      const profileSports = (RI_PROFILE_SPORTS as readonly string[]).includes(explicitProfileSport ?? "")
-        ? [explicitProfileSport as IngestSport]
-        : rotateForFairness(RI_PROFILE_SPORTS, 24 * 60 * 60 * 1000)
+      /*
+       * ⚠ NCAAF RUNS ON ITS OWN FIRE. It is more players than the other six together, and whenever
+       * the rotation reached it every sport behind it was deferred — MLB went a week between
+       * refreshes. The one cron entry now fires at 03:10 and 09:10 UTC; the fire's hour picks the
+       * half. See lib/cron/riProfileSports.ts for the measurements.
+       */
+      const profileSports = selectRiProfileSports({
+        allSports: RI_PROFILE_SPORTS,
+        explicitSport: url.searchParams.get("sport"),
+      })
 
       /*
        * ⚠ A HEARTBEAT, FOR EXACTLY THE REASON `?rosters=1` ABOVE HAS ONE.
@@ -572,6 +579,12 @@ async function handle(req: NextRequest) {
           errors: Object.entries(acc)
             .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
             .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+          /*
+           * ⚠ PARTIAL WHEN A SPORT WAS DEFERRED, the same rule the schedules block above applies.
+           * This read `success` on 2026-09-25 with six of seven sports deferred, which is how a week
+           * of MLB starvation stayed invisible. The heartbeat still proves the job woke up.
+           */
+          ...(deferred.length > 0 ? { status: "partial" as const } : {}),
           metadata: { deferredSports: deferred },
         }),
       )
