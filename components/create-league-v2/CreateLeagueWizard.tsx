@@ -18,6 +18,8 @@ import {
 } from '@/lib/create-league-v2/state'
 import {
   getDraftTypeOptions,
+  getDefaultTeamCount,
+  getTeamCountOptions,
   getScoringPresetOptionsForSelection,
   isSportAllowedForType,
   resolveValidScoringPresetIdForSelection,
@@ -27,7 +29,6 @@ import {
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
   PREMIUM_ADVANCED_CREATE_LABELS,
-  UNIVERSAL_CREATE_TEAM_COUNTS,
   getEnabledPremiumAdvancedSettings,
   type ImportProviderOption,
   type PremiumAdvancedCreateKey,
@@ -106,7 +107,8 @@ function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): P
     // choice that changes nothing.
     soccerPipeline: sport === 'SOCCER' ? (state.soccerPipeline ?? 'euro') : null,
     scoringPresetId,
-    teamCount: UNIVERSAL_CREATE_TEAM_COUNTS.includes(state.teamCount) ? state.teamCount : 12,
+    teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+      ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
     dynasty: getDefaultDynastySetup(sport, state.draftType),
     keeper: getDefaultKeeperSetup(),
     bestBall: getDefaultBestBallSetup(sport, 'standard', state.draftType),
@@ -129,7 +131,8 @@ function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTy
     idpSelected: false,
     scoringPresetId,
     draftType,
-    teamCount: UNIVERSAL_CREATE_TEAM_COUNTS.includes(state.teamCount) ? state.teamCount : 12,
+    teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+      ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
     dynasty: getDefaultDynastySetup(state.sport, draftType),
     keeper: getDefaultKeeperSetup(),
     bestBall: getDefaultBestBallSetup(state.sport, 'standard', draftType),
@@ -365,6 +368,8 @@ export function LeagueBasicsStep({
 }: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors'>) {
   const { t } = useLanguage()
   // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
+  const teamCountOptions = getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline)
+  const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
   const typeOptions = SIMPLE_LEAGUE_TYPES.filter((leagueType) => isSportAllowedForType(state.sport, leagueType))
 
   return (
@@ -408,13 +413,18 @@ export function LeagueBasicsStep({
           </span>
           <input
             type="number"
-            min={2}
-            max={32}
+            min={teamCountOptions[0] ?? 2}
+            max={teamCountOptions.at(-1) ?? 32}
+            step={teamCountStep}
+            aria-describedby="g30-team-count-options"
             value={state.teamCount}
             onChange={(event) => onChange({ teamCount: Number(event.target.value) })}
             className={fieldClass(Boolean(fieldErrors?.teamCount))}
             data-testid="g30-team-count"
           />
+          <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
+            {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
+          </span>
         </label>
       </div>
 
