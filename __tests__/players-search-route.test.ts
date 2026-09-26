@@ -91,9 +91,9 @@ describe('GET /api/players/search', () => {
   it('returns one result per person when several providers hold the same sleeperId', async () => {
     // Measured on production 2026-09-26: "Caleb Williams" rendered three times.
     sportsPlayerFindManyMock.mockResolvedValue([
-      { id: 'a', externalId: 'sleeper:11560', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: 'https://r2.thesportsdb.com/x.png', sleeperId: '11560', age: 24, number: null, college: 'USC' },
+      { id: 'a', externalId: 'sleeper:11560', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: 'https://cdn.example.com/caleb.png', sleeperId: '11560', age: 24, number: null, college: 'USC' },
       { id: 'b', externalId: '8390', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: null, sleeperId: '11560', age: 25, number: 18, college: 'USC' },
-      { id: 'c', externalId: 'tsdb_34249077', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: 'https://r2.thesportsdb.com/x.png', sleeperId: '11560', age: 25, number: null, college: null },
+      { id: 'c', externalId: 'tsdb_34249077', name: 'Caleb Williams', sport: 'NFL', position: 'QB', team: 'Chicago Bears', imageUrl: 'https://cdn.example.com/caleb.png', sleeperId: '11560', age: 25, number: null, college: null },
     ])
     const { GET } = await import('@/app/api/players/search/route')
     const body = await (await GET(new Request('http://localhost/api/players/search?q=caleb'))).json()
