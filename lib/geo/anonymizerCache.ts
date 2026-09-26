@@ -27,13 +27,7 @@
 
 import { fetchIpApi, fetchProxycheck } from "./geoIpFetch"
 import { isPublicIp } from "./geoIpCache"
-import {
-  anonymizerKindOf,
-  combineAnonymizerSignals,
-  parseIpApiPayload,
-  parseProxycheckPayload,
-  type AnonymizerKind,
-} from "./geoIpParse"
+import { combineAnonymizerSignals, parseIpApiPayload, parseProxycheckPayload } from "./geoIpParse"
 
 /**
  * A verdict about an address changes rarely. Kept at geoIpCache's TTL so the
@@ -53,20 +47,13 @@ const LOOKUP_TIMEOUT_MS = 1_200
 const BREAKER_THRESHOLD = 5
 const BREAKER_COOLDOWN_MS = 60 * 1000
 
-/** The verdict, and when it is `true`, why — so /vpn-blocked can name the one thing to switch off. */
-export interface AnonymizerDetail {
+interface Entry {
   verdict: boolean | null
-  kind: AnonymizerKind | null
-}
-
-interface Entry extends AnonymizerDetail {
   expiresAt: number
 }
 
-const UNKNOWN: AnonymizerDetail = { verdict: null, kind: null }
-
 const cache = new Map<string, Entry>()
-const inFlight = new Map<string, Promise<AnonymizerDetail>>()
+const inFlight = new Map<string, Promise<boolean | null>>()
 
 let consecutiveUnknown = 0
 let breakerOpenUntil = 0
@@ -95,7 +82,7 @@ function vendorKeys(): { proxycheckKey: string | undefined; ipapiKey: string | u
   return { proxycheckKey: process.env.PROXYCHECK_API_KEY?.trim() || undefined, ipapiKey: process.env.IPAPI_KEY?.trim() || undefined }
 }
 
-async function lookupUncached(ip: string): Promise<AnonymizerDetail> {
+async function lookupUncached(ip: string): Promise<boolean | null> {
   const { proxycheckKey, ipapiKey } = vendorKeys()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS)
@@ -108,8 +95,7 @@ async function lookupUncached(ip: string): Promise<AnonymizerDetail> {
       : null
     const ipapi =
       ipapiKey && !proxycheck?.anonymized ? parseIpApiPayload(await fetchIpApi(ip, ipapiKey, controller.signal)) : null
-    const signals = { tor: false, proxycheck, ipapi }
-    return { verdict: combineAnonymizerSignals(signals), kind: anonymizerKindOf(signals) }
+    return combineAnonymizerSignals({ tor: false, proxycheck, ipapi })
   } finally {
     clearTimeout(timer)
   }
@@ -120,12 +106,7 @@ async function lookupUncached(ip: string): Promise<AnonymizerDetail> {
  * nobody could tell. The middleware refuses only on `true`.
  */
 export async function resolveAnonymizerByIp(ip: string): Promise<boolean | null> {
-  return (await resolveAnonymizerDetailByIp(ip)).verdict
-}
-
-/** resolveAnonymizerByIp plus the reason. One cache and one vendor call serve both. */
-export async function resolveAnonymizerDetailByIp(ip: string): Promise<AnonymizerDetail> {
-  if (!isPublicIp(ip)) return UNKNOWN
+  if (!isPublicIp(ip)) return null
 
   // Checked before the cache and the breaker: with no key there is nothing to
   // ask, and counting that as a vendor failure would trip the breaker forever.
@@ -138,20 +119,19 @@ export async function resolveAnonymizerDetailByIp(ip: string): Promise<Anonymize
           "refuse Tor. VPNs, proxies and privacy relays pass. This is logged once per process.",
       )
     }
-    return UNKNOWN
+    return null
   }
 
   const now = Date.now()
   const hit = cache.get(ip)
-  if (hit && hit.expiresAt > now) return { verdict: hit.verdict, kind: hit.kind }
+  if (hit && hit.expiresAt > now) return hit.verdict
 
-  if (now < breakerOpenUntil) return UNKNOWN
+  if (now < breakerOpenUntil) return null
 
   const existing = inFlight.get(ip)
   if (existing) return existing
 
-  const settle = (detail: AnonymizerDetail): AnonymizerDetail => {
-    const { verdict } = detail
+  const settle = (verdict: boolean | null): boolean | null => {
     if (verdict === null) {
       consecutiveUnknown += 1
       if (consecutiveUnknown >= BREAKER_THRESHOLD) {
@@ -166,12 +146,12 @@ export async function resolveAnonymizerDetailByIp(ip: string): Promise<Anonymize
       consecutiveUnknown = 0
     }
     evictIfFull()
-    cache.set(ip, { ...detail, expiresAt: Date.now() + (verdict === null ? UNKNOWN_TTL_MS : ANSWERED_TTL_MS) })
-    return detail
+    cache.set(ip, { verdict, expiresAt: Date.now() + (verdict === null ? UNKNOWN_TTL_MS : ANSWERED_TTL_MS) })
+    return verdict
   }
 
   const pending = lookupUncached(ip)
-    .then(settle, () => settle(UNKNOWN))
+    .then(settle, () => settle(null))
     .finally(() => {
       inFlight.delete(ip)
     })
