@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const emitInTxMock = vi.fn()
 
 const db = {
+  league: { findUnique: vi.fn().mockResolvedValue({ sport: 'NFL', leagueVariant: null }) },
+  salaryCapLeagueConfig: { findUnique: vi.fn().mockResolvedValue(null) },
   afLeagueTrade: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
   tradeExecutionSnapshot: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
   tradeReversal: { findUnique: vi.fn(), create: vi.fn() },

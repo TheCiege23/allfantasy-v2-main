@@ -906,7 +906,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
     // `playerData` and `faabRemaining` on both rosters, so inside this transaction these rows stop
     // being "before" the moment it runs. After the claim, so only the race winner captures.
     const beforeState = await captureGenericRosterState(tx, participantRosterIds)
-    await applyTradeAssetsInTransaction(tx, {
+    const salaryEvidence = await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
       proposerRosterId: trade.proposerRosterId,
       receiverRosterId: trade.receiverRosterId,
@@ -936,6 +936,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       validations: { rosterTransactionGate: 'ok' },
       assetSummary: { items: assets.length, assets },
       beforeState,
+      salaryEvidence,
       afterState: await captureGenericRosterState(tx, participantRosterIds),
       executedAt: new Date(),
     })
@@ -954,7 +955,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       tradeId: trade.id,
       afterState: { status: 'processed' },
     })
-  })
+  }, { isolationLevel: 'Serializable', timeout: 20_000 })
 
   // Trade Learning Phase 8 live capture — outside the transaction per the
   // ADR's behavior-preservation strategy (a capture failure must never roll

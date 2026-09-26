@@ -50,6 +50,7 @@ function fakeDb(opts: {
   const inSeason = (w: { pickSeason?: number | { in: number[] } }, r: Row) =>
     w.pickSeason == null || (typeof w.pickSeason === 'number' ? r.pickSeason === w.pickSeason : w.pickSeason.in.includes(r.pickSeason))
   const db = {
+    salaryCapLeagueConfig: { findUnique: vi.fn(async () => null) },
     league: {
       findUnique: vi.fn(async () => ({
         platform: opts.platform ?? 'manual',

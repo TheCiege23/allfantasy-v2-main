@@ -40,6 +40,12 @@ const BLOCKER_COPY: Record<string, string> = {
     'One of these rosters has changed since the trade went through. Reversing it now would also undo those later moves.',
   PICK_CHANGED_SINCE_EXECUTION:
     'A draft pick in this trade has been traded again, or its draft has already been set up, so it cannot be put back.',
+  CONTRACT_SNAPSHOT_MISSING:
+    'This trade does not have complete salary-contract evidence, so its contracts cannot be restored safely.',
+  CONTRACT_CHANGED_SINCE_EXECUTION:
+    'A salary contract has changed since this trade. Reversing it would also undo those later contract changes.',
+  CONTRACT_RESTORATION_ILLEGAL:
+    'These contracts cannot be restored under the current salary-cap rules. No players or contracts have been restored.',
   ALREADY_REVERSED: 'This trade has already been reversed.',
   TRADE_NOT_PROCESSED: 'This trade has not been processed yet, so there is nothing to reverse.',
   PROPOSAL_NOT_ACCEPTED: 'This trade has not been accepted, so there is nothing to reverse.',

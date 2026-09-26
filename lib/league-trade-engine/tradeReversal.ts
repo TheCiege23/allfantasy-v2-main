@@ -27,6 +27,9 @@ import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import type { GenericRosterStateSnapshot } from '@/lib/league-trade-engine/tradeExecutionSnapshot'
+import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
+import { contractStateFingerprint, readTradeContracts, settleTradeContracts, SalaryCapSettlementRefused,
+  type TradeContractState } from '@/lib/salary-cap/TradeContractSettlement'
 import {
   loadNativeFuturePicks,
   parseInventoryPickId,
@@ -42,6 +45,9 @@ export type ReversalBlocker =
   | 'ROSTER_MISSING'
   | 'ROSTER_CHANGED_SINCE_EXECUTION'
   | 'PICK_CHANGED_SINCE_EXECUTION'
+  | 'CONTRACT_SNAPSHOT_MISSING'
+  | 'CONTRACT_CHANGED_SINCE_EXECUTION'
+  | 'CONTRACT_RESTORATION_ILLEGAL'
 
 type TradeItemRef = { itemReference: string | null; fromRosterId: string; toRosterId: string }
 
@@ -144,6 +150,18 @@ export async function evaluateGenericTradeReversalReadiness(
   // a commissioner edit all make the recorded "before" the wrong thing to write back — restoring it
   // would silently undo whatever came after.
   const after = readRosters(snapshot.afterState)
+  const savedContracts = (snapshot.afterState as { salaryContracts?: TradeContractState[] } | null)?.salaryContracts
+  const config = await getSalaryCapConfig(trade.leagueId, db)
+  if (config || savedContracts !== undefined) {
+    if (!config?.configId || !Array.isArray(savedContracts)) {
+      blockers.push('CONTRACT_SNAPSHOT_MISSING')
+    } else {
+      const current = await readTradeContracts(db, trade.leagueId, config.configId, after.map(r => r.rosterId))
+      if (contractStateFingerprint(current) !== contractStateFingerprint(savedContracts)) {
+        blockers.push('CONTRACT_CHANGED_SINCE_EXECUTION')
+      }
+    }
+  }
   for (const expected of after) {
     const current = await db.roster.findUnique({
       where: { id: expected.rosterId },
@@ -202,10 +220,32 @@ export async function reverseGenericTrade(
       })
       const snapshot = await tx.tradeExecutionSnapshot.findUniqueOrThrow({
         where: { tradeId: input.tradeId },
-        select: { id: true, beforeState: true },
+        select: { id: true, beforeState: true, afterState: true },
       })
 
       const before = readRosters(snapshot.beforeState)
+      const beforeContracts = (snapshot.beforeState as { salaryContracts?: TradeContractState[] } | null)?.salaryContracts
+      const afterContracts = (snapshot.afterState as { salaryContracts?: TradeContractState[] } | null)?.salaryContracts
+      if (Array.isArray(afterContracts)) {
+        if (!Array.isArray(beforeContracts) || beforeContracts.length !== afterContracts.length) {
+          throw new ReversalRefused({ ok: false, blockers: ['CONTRACT_SNAPSHOT_MISSING'], drift: [] })
+        }
+        const moves = beforeContracts.flatMap(c => {
+          const current = afterContracts.find(a => a.id === c.id)
+          if (!current) throw new ReversalRefused({ ok: false, blockers: ['CONTRACT_SNAPSHOT_MISSING'], drift: [] })
+          return current.rosterId === c.rosterId ? []
+            : [{ playerId: c.playerId, fromRosterId: current.rosterId, toRosterId: c.rosterId }]
+        })
+        // Recompute under today's league rules. Invalid restoration rolls back contracts and ledgers.
+        try {
+          await settleTradeContracts(tx, trade.leagueId, before.map(r => r.rosterId), moves)
+        } catch (error) {
+          if (error instanceof SalaryCapSettlementRefused) {
+            throw new ReversalRefused({ ok: false, blockers: ['CONTRACT_RESTORATION_ILLEGAL'], drift: [] })
+          }
+          throw error
+        }
+      }
       for (const state of before) {
         await tx.roster.update({
           where: { id: state.rosterId },
@@ -264,7 +304,8 @@ export async function reverseGenericTrade(
           reason: input.reason,
           idempotencyKey: `af-league-trade-reversal:${trade.id}`,
           readiness: readiness as unknown as Prisma.InputJsonValue,
-          restoredState: { rosters: before } as unknown as Prisma.InputJsonValue,
+          restoredState: { rosters: before,
+            ...(beforeContracts && { salaryContracts: beforeContracts }) } as unknown as Prisma.InputJsonValue,
           eventId: event.eventId,
           noticeKey,
           reversedAt: new Date(),
@@ -279,7 +320,7 @@ export async function reverseGenericTrade(
         rostersRestored: before.length,
         noticeKey,
       }
-    })
+    }, { isolationLevel: 'Serializable', timeout: 20_000 })
   } catch (e) {
     if (e instanceof ReversalRefused) return { ok: false, readiness: e.readiness }
     throw e
