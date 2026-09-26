@@ -41,7 +41,8 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('gives the included answer back when nothing was delivered, and when the request throws', () => {
-    expect(ROUTE).toMatch(/if \(!delivery\.delivered && planIncluded && userId\) \{\s*\n\s*await releaseChimmyPlanAllowance\(\{ userId \}\)/)
+    expect(ROUTE).toMatch(/if \(!delivery\.delivered && planIncluded && userId\) \{\s*\n\s*const released = await releaseChimmyPlanAllowance\(\{ userId \}\)/)
+    expect(ROUTE).toContain('planMeta = released && planMeta')
     expect(ROUTE).toMatch(/\} catch \(error\) \{\s*\n\s*if \(planIncluded && userId\) await releaseChimmyPlanAllowance\(\{ userId \}\)/)
   })
 
@@ -64,7 +65,7 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('reports the allowance on every paid answer shape', () => {
-    expect(ROUTE.match(/\.\.\.\(planMeta \? \{ planAllowance: planMeta \} : \{\}\)/g)?.length).toBe(3)
+    expect(ROUTE.match(/\.\.\.\(planMeta \? \{ planAllowance: planMeta \} : \{\}\)/g)?.length).toBe(4)
     expect(ROUTE).toMatch(/\.\.\.\(searchPlanMeta \? \{ planAllowance: searchPlanMeta \} : \{\}\)/)
   })
 

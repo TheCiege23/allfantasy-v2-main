@@ -5,9 +5,13 @@ const h = vi.hoisted(() => ({
   loadLeagueGroundingForUser: vi.fn(),
   buildLeagueStandingsContext: vi.fn(),
   buildHeadToHeadGrounding: vi.fn(),
+  prepareChimmyDecisionAnswer: vi.fn(),
+  recordChatStartSitAdvice: vi.fn(),
 }))
 
 vi.mock('@/lib/openai-client', () => ({ openaiChatText: h.openaiChatText }))
+vi.mock('@/lib/chimmy/decisionAnswerService', () => ({ prepareChimmyDecisionAnswer: h.prepareChimmyDecisionAnswer }))
+vi.mock('@/lib/chimmy-advice/chatStartSitAdvice', () => ({ recordChatStartSitAdvice: h.recordChatStartSitAdvice }))
 vi.mock('@/lib/chimmy/chimmy-league-snapshot', () => ({
   loadLeagueGroundingForUser: h.loadLeagueGroundingForUser,
 }))
@@ -30,6 +34,8 @@ function systemPrompt() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.prepareChimmyDecisionAnswer.mockResolvedValue(null)
+  h.recordChatStartSitAdvice.mockResolvedValue(null)
   h.openaiChatText.mockResolvedValue({ ok: true, text: 'Start Kelce.' })
   h.loadLeagueGroundingForUser.mockResolvedValue({ ok: true, snapshot: { id: 'l1' } })
   h.buildLeagueStandingsContext.mockResolvedValue('STANDINGS: Casey 5-1')
@@ -37,6 +43,27 @@ beforeEach(() => {
 })
 
 describe('generateChimmyPrivateReply grounding', () => {
+  it.each(['ready', 'needs_data'])('returns the shared %s decision without a model rewriting it', async status => {
+    h.prepareChimmyDecisionAnswer.mockResolvedValue({ status, answer: 'Engine answer or actionable gap.' })
+    expect(await generateChimmyPrivateReply('@chimmy should I trade Chase for Jefferson?', { leagueId: 'l1', userId: 'u1' })).toBe('Engine answer or actionable gap.')
+    expect(h.prepareChimmyDecisionAnswer).toHaveBeenCalledWith({ question: 'should I trade Chase for Jefferson?', leagueId: 'l1', userId: 'u1' })
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+    expect(h.buildLeagueStandingsContext).not.toHaveBeenCalled()
+  })
+  it('reports the same decision evidence for storage on a private reply', async () => {
+    const decision = { status: 'needs_data', answer: 'Select a league.', leagueId: null }
+    h.prepareChimmyDecisionAnswer.mockResolvedValue(decision)
+    const onDecision = vi.fn()
+    await generateChimmyPrivateReply('@chimmy who should I start?', { userId: 'u1', onDecision })
+    expect(onDecision).toHaveBeenCalledWith(decision)
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+  })
+  it('records a delivered engine start call for the same signed-in user', async () => {
+    const calls = [{ leagueId: 'l1', rec: { key: 'a', name: 'Chase' } }]
+    h.prepareChimmyDecisionAnswer.mockResolvedValue({ status: 'ready', answer: 'Start Chase.', startCalls: calls })
+    await generateChimmyPrivateReply('@chimmy who should I start?', { leagueId: 'l1', userId: 'u1' })
+    expect(h.recordChatStartSitAdvice).toHaveBeenCalledWith({ userId: 'u1', calls, answer: 'Start Chase.' })
+  })
   /*
    * The leagueId argument was named `_leagueId` and never read, so this ran
    * against a model told "never invent league stats" and given no league.

@@ -126,6 +126,8 @@ export function useMentionAutocomplete({
   useEffect(() => {
     if (active?.trigger !== '#') return
     const query = active.query
+    let cancelled = false
+    const controller = new AbortController()
 
     setTrigger('#')
     setAtQuery(query)
@@ -145,10 +147,11 @@ export function useMentionAutocomplete({
       const base = leagueMatches(query)
       void fetch(
         `/api/players/search?q=${encodeURIComponent(query)}&limit=6${sport ? `&sport=${encodeURIComponent(sport)}` : ''}`,
-        { cache: 'no-store' },
+        { cache: 'no-store', signal: controller.signal },
       )
         .then((r) => (r.ok ? r.json() : null))
         .then((data: unknown) => {
+          if (cancelled) return
           const rows = Array.isArray(data)
             ? data
             : Array.isArray((data as { players?: unknown } | null)?.players)
@@ -175,10 +178,10 @@ export function useMentionAutocomplete({
           setSuggestions([...base, ...playerSug])
         })
         /* A rate-limited or failed search leaves the league matches standing. */
-        .catch(() => setSuggestions(base))
+        .catch(() => { if (!cancelled) setSuggestions(base) })
     }, 300)
 
-    return () => window.clearTimeout(handle)
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(handle) }
   }, [active, leagueMatches, sport])
 
   useEffect(() => {
@@ -193,6 +196,8 @@ export function useMentionAutocomplete({
     }
     setTrigger('@')
     setAtQuery(staticPart)
+    let cancelled = false
+    const controller = new AbortController()
 
     const handle = window.setTimeout(() => {
       const base = buildStatic(staticPart)
@@ -203,10 +208,11 @@ export function useMentionAutocomplete({
 
       void fetch(
         `/api/leagues/${encodeURIComponent(leagueId)}/members/autocomplete?q=${encodeURIComponent(staticPart)}`,
-        { cache: 'no-store' }
+        { cache: 'no-store', signal: controller.signal }
       )
         .then((r) => (r.ok ? r.json() : []))
         .then((list: { username: string; displayName: string; avatarUrl?: string }[]) => {
+          if (cancelled) return
           const memberSug: MentionSuggestion[] = Array.isArray(list)
             ? list.map((m) => ({
                 type: '@username' as MentionType,
@@ -218,10 +224,10 @@ export function useMentionAutocomplete({
             : []
           setSuggestions([...base, ...memberSug])
         })
-        .catch(() => setSuggestions(base))
+        .catch(() => { if (!cancelled) setSuggestions(base) })
     }, 200)
 
-    return () => window.clearTimeout(handle)
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(handle) }
   }, [staticPart, leagueId, chatType, buildStatic, active])
 
   return { suggestions, atQuery, trigger }

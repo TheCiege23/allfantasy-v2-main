@@ -896,8 +896,8 @@ export async function buildFantasyCalcValueAnswer(
 
   // With no resolvable league we still price the player, but on an explicitly GENERIC basis that
   // the answer names as generic. What we must never do is call it theirs.
-  const isDynasty = fmt?.format === 'DYNASTY'
-  const numQbs = fmt?.qbFormat === 'SUPERFLEX' ? 2 : 1
+  const isDynasty = fmt ? fmt.format === 'DYNASTY' : /\bdynasty\b/i.test(message)
+  const numQbs = fmt ? (fmt.qbFormat === 'SUPERFLEX' ? 2 : 1) : /\b(?:superflex|2qb|2\s*qb)\b/i.test(message) ? 2 : 1
 
   try {
     const values = await getFantasyCalcValuesDbFirst({
@@ -924,9 +924,10 @@ export async function buildFantasyCalcValueAnswer(
      * basis was used and why, which is the honest version of the same information.
      */
     if (!fmt) {
+      const market = `standard ${numQbs === 2 ? 'superflex' : '1QB'} ${isDynasty ? 'dynasty' : 'redraft'} market`
       const why = leagueRequested
-        ? `I could not read that league's settings, so this is the standard 1QB redraft market`
-        : `You did not name a league, so this is the standard 1QB redraft market`
+        ? `I could not read that league's settings, so this is the ${market}`
+        : `You did not name a league, so this is the ${market}`
       return `${head} ${why}, not your league's. Source: FantasyCalc current values.`
     }
     const parts = [fmt.qbFormat === 'SUPERFLEX' ? 'superflex' : '1QB']
@@ -1260,6 +1261,11 @@ export async function tryDeterministicAnswerDetailed(
   const classify = (text: string): DeterministicResult =>
     isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
+  // A result or schedule is evidence for analysis, never a probability or a recommendation.
+  // Yield before ANY shortcut so incidental "live", "tonight", or "worth" cannot hijack it.
+  if (/\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
+    return null
+  }
   /*
    * 🛑 FIRST, AND DELIBERATELY AHEAD OF EVERY OTHER BUILDER. A live-game question must never
    * reach `buildUpcomingGamesAnswer` — that path asks a forward-only window and so answers

@@ -197,6 +197,20 @@ export function ChatComposer({
   const [bbSuggest, setBbSuggest] = useState<{ type: string; options: string[] } | null>(null)
   const [globalModalOpen, setGlobalModalOpen] = useState(false)
   const [cursorPos, setCursorPos] = useState(0)
+  const composerScope = JSON.stringify([leagueId, threadId, chatType, currentUserId])
+  const currentScopeRef = useRef(composerScope)
+  currentScopeRef.current = composerScope
+  // Media and polls belong to the conversation where they were selected.
+  // A reused composer must never carry a private attachment into another chat.
+  useEffect(() => {
+    setAttachments([])
+    setPendingGif(null)
+    setPollDraft(null)
+    setActivePicker(null)
+    setIsRecording(false)
+    setGlobalModalOpen(false)
+    setCursorPos(0)
+  }, [leagueId, threadId, chatType, currentUserId])
 
   const { suggestions: hookSuggestions, trigger: mentionTrigger } = useMentionAutocomplete({
     text,
@@ -566,6 +580,11 @@ export function ChatComposer({
       }
       await onSend(payload)
     } catch (err) {
+      if (currentScopeRef.current !== composerScope) {
+        // A late failure belongs to the old conversation, never the newly opened one.
+        toast.error('Message not sent in the previous conversation. Reopen it and re-enter your message; reselect any media.')
+        return
+      }
       /*
        * 🛑 PUT THE MESSAGE BACK. The clear above is optimistic and happens BEFORE the send,
        * so without this a failure destroys what the user typed — silently, because there was
@@ -593,7 +612,7 @@ export function ChatComposer({
     } finally {
       setSending(false)
     }
-  }, [attachments, autoResize, canSend, onSend, onTypingChange, pendingGif, pollDraft, sending, text])
+  }, [attachments, autoResize, canSend, composerScope, onSend, onTypingChange, pendingGif, pollDraft, sending, text])
 
   /*
    * `auto` placement: measure BEFORE paint (a layout effect), so the picker never flashes

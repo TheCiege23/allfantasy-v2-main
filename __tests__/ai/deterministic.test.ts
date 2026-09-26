@@ -94,6 +94,20 @@ beforeEach(() => {
 
 // ── detectScheduleQuestion ────────────────────────────────────────────────────
 
+describe('analysis questions cannot be intercepted by factual shortcuts', () => {
+  it.each([
+    "What's the probability the Yankees win the World Series this year?",
+    'What are the odds the Yankees win tonight?',
+    'Should I trade for Bijan, what is his value?',
+    'Rashee Rice is on the trade block, is he worth it?',
+  ])('yields %s before any data lookup', async message => {
+    vi.clearAllMocks()
+    expect(await tryDeterministicAnswerDetailed(message)).toBeNull()
+    expect(mockSportsGameFindMany).not.toHaveBeenCalled()
+    expect(fetchFantasyCalcValuesMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('detectScheduleQuestion', () => {
   const shouldMatch = [
     'What sports games are being played today?',

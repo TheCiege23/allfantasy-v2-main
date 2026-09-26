@@ -119,6 +119,14 @@ describe('chimmyToolsForClaude', () => {
 })
 
 describe('runChimmyToolLoop on Claude', () => {
+  it('gives the main answer path Decision OS evidence outside the shared cached prompt', async () => {
+    h.anthropicCreate.mockResolvedValue(answer('Projections are unavailable.'))
+    await runChimmyToolLoop({ ...base, groundingLine: 'DECISION OS: lineup decision blocked; projections missing.' })
+    const params = h.anthropicCreate.mock.calls[0][0]
+    const evidence = params.system.find((block: { text: string }) => block.text.includes('lineup decision blocked'))
+    expect(evidence).toEqual({ type: 'text', text: 'DECISION OS: lineup decision blocked; projections missing.' })
+    expect(params.system[0].text).not.toContain('projections missing')
+  })
   it('answers on Claude, never touching Grok', async () => {
     h.anthropicCreate.mockResolvedValue(answer('You have three games left.'))
 

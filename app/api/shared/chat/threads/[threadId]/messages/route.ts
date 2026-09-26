@@ -6,6 +6,7 @@ import {
   getPlatformThreadMessages,
 } from '@/lib/platform/chat-service'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
+import { decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import {
   isLeagueVirtualRoom,
@@ -552,9 +553,11 @@ export async function POST(
      * told so rather than left to guess, because a model that does not know it
      * is missing the data is the one that fills the gap in confidently.
      */
+    let decision: ReturnType<typeof decisionAnswerMeta> | undefined
     const replyText = await generateChimmyPrivateReply(message, {
       leagueId: draftIntelThread.leagueId ?? null,
       userId: user.appUserId,
+      onDecision: result => { decision = decisionAnswerMeta(result) },
     }).catch(
       () =>
         "I could not reach the AI just now. Try again in a moment, or open the Chimmy panel on a league page.",
@@ -564,7 +567,7 @@ export async function POST(
       threadId,
       'text',
       replyText,
-      { chimmyResponse: true, chimmyPrivateReply: true, privateReplyToMessageId: created.id },
+      { chimmyResponse: true, chimmyPrivateReply: true, privateReplyToMessageId: created.id, ...(decision ? { decision } : {}) },
       { visibleToUserId: user.appUserId, messageSubtype: 'chimmy_private' },
     )
 

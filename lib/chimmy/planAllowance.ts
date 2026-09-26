@@ -185,12 +185,17 @@ export async function takeChimmyPlanAllowance(
   return { ...args.state, used, remaining: Math.max(0, args.state.limit - used) }
 }
 
-/** Give back an included answer that was never delivered. Never throws. */
+/** Give back an included answer that was never delivered. Report failure without throwing. */
 export async function releaseChimmyPlanAllowance(
   args: { userId: string },
   deps: PlanAllowanceDeps = defaultDeps,
-): Promise<void> {
-  await deps.giveBack(endpointFor(args.userId), utcDayWindow(deps.now())).catch(() => {})
+): Promise<boolean> {
+  try {
+    await deps.giveBack(endpointFor(args.userId), utcDayWindow(deps.now()))
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** The shape the route reports in `meta.planAllowance` — defined once, in the client-safe view module. */
