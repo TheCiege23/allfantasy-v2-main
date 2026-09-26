@@ -315,7 +315,7 @@ describe('Guillotine full regression matrix', () => {
       )
 
     prismaMock.roster.findMany.mockResolvedValue([
-      { id: 'r1', playerData: { starters: ['p1'], players: ['p1', 'p2'] } },
+      { id: 'r1', playerData: { starters: ['p1'], players: ['p1', 'p2'], bench: ['p2'], ir: ['p3'], taxi: ['p4'], devy: ['p5'], lineup_sections: { starters: ['p1'], bench: ['p2'], ir: ['p3'], taxi: ['p4'], devy: ['p5'] }, teamName: 'Survivor' } },
     ])
 
     await releaseChoppedRostersActual({
@@ -326,7 +326,7 @@ describe('Guillotine full regression matrix', () => {
 
     expect(prismaMock.roster.update).toHaveBeenCalledWith({
       where: { id: 'r1' },
-      data: { playerData: { starters: ['p1'], players: [] } },
+      data: { playerData: { starters: [], players: [], bench: [], ir: [], taxi: [], devy: [], lineup_sections: { starters: [], bench: [], ir: [], taxi: [], devy: [] }, teamName: 'Survivor' } },
     })
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'roster_released', expect.objectContaining({ rosterIds: ['r1'] }))
   })
