@@ -445,7 +445,23 @@ async function readListSettings(ids: string[]): Promise<Map<string, unknown>> {
 
 export async function getDashboardLeagueListForUser(
   userId: string,
-  opts?: { collapseSeries?: boolean },
+  opts?: {
+    collapseSeries?: boolean
+    /**
+     * `'full'` (the default) returns every roster of every league with its `playerData`; `'count'`
+     * returns roster ids only — enough for the team-count fallback below, and the shape stays an
+     * array.
+     *
+     * ⚠ OPT-IN, AND ONLY FOR A CALLER WHOSE WHOLE READ PATH WAS CENSUSED. The /core page is the one
+     * that asks: nothing it hands these rows to reads `rosters` (every loader that needs a lineup —
+     * dash34, portfolio insights, the waivers board — queries rosters itself), and the list is the
+     * FIRST serial read of every /core render. For the heaviest test account `rosters` was ~1.1 MB of
+     * the list's 2.1 MB after `identity_mappings` went (2026-09-26). Eleven other callers DO read
+     * `rosters` off this list (live scores, Chimmy grounding, the dashboard strips, `/api/league/list`
+     * …), which is why the default is unchanged.
+     */
+    rosterDetail?: 'full' | 'count'
+  },
 ): Promise<DashboardLeagueListPayload> {
   const [profile, appUser] = await Promise.all([
     prisma.userProfile
@@ -559,14 +575,17 @@ export async function getDashboardLeagueListForUser(
             where: { claimedByUserId: userId },
             select: { isCommissioner: true, isCoCommissioner: true, role: true },
           },
-          rosters: {
-            select: {
-              id: true,
-              platformUserId: true,
-              playerData: true,
-              faabRemaining: true,
-            },
-          },
+          rosters:
+            opts?.rosterDetail === 'count'
+              ? { select: { id: true } }
+              : {
+                  select: {
+                    id: true,
+                    platformUserId: true,
+                    playerData: true,
+                    faabRemaining: true,
+                  },
+                },
         },
       })
       .catch((err: unknown) => {
