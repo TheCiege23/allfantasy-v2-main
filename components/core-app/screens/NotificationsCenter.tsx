@@ -192,7 +192,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
     const response = await fetch('/api/user/notifications', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: payload }),
+      body: JSON.stringify({ ids: payload, ...(data.leagueId ? { leagueId: data.leagueId } : {}) }),
     }).catch(() => null)
     if (!response?.ok) {
       setReadError('Could not mark notifications read. Please try again.')
@@ -207,7 +207,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
       return next
     })
     setMarking(false)
-  }, [data.rest])
+  }, [data.rest, data.leagueId])
 
   /*
    * 🛑 THE TRUE COUNT, FROM THE LOADER - DO NOT RECOMPUTE IT FROM `rest`.
