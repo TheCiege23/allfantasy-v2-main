@@ -11,7 +11,7 @@ import type { CapLegalityResult, TeamLedgerRow } from './types'
 export function getEffectiveCap(config: SalaryCapConfig, capYear: number, rolloverUsed: number): number {
   const baseCap = config.startupCap
   const growth = config.capGrowthPercent / 100
-  const yearsFromStart = Math.max(0, capYear - new Date().getFullYear())
+  const yearsFromStart = Math.max(0, capYear - (config.capStartYear ?? new Date().getFullYear()))
   const cap = Math.floor(baseCap * Math.pow(1 + growth, yearsFromStart))
   return cap + rolloverUsed
 }
