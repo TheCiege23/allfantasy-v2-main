@@ -231,6 +231,8 @@ export interface NormalizedDraftPick {
 
 /** Normalized transaction (waiver/trade). */
 export interface NormalizedTransaction {
+  /** Provider completion time, separate from proposal creation. */
+  completed_at?: string
   source_transaction_id: string
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string

@@ -1,6 +1,9 @@
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
+import { lineupActionability } from './lineupActionability'
+import { getByeWeeks } from './byeWeeks'
+import { isRuledOut } from './injuryStatus'
 
 import { unstable_cache } from 'next/cache'
 
@@ -150,19 +153,9 @@ const HEALTHY = new Set(['active', 'healthy', 'available', 'playing', 'none', 'n
 
 /** Cannot enter a lineup at all, as opposed to "might be limited". Mirrors playerImpact.ts. */
 function isUnavailable(status: string): boolean {
-  const s = status.trim().toLowerCase()
-  return (
-    s.startsWith('out') ||
-    s.startsWith('doubt') ||
-    s.startsWith('susp') ||
-    s.startsWith('sidelined') ||
-    s.includes('i.l') ||
-    s === 'ir' ||
-    s.includes('inj res') ||
-    s.includes('pup') ||
-    s.includes('nfi')
-  )
+  return isRuledOut(status)
 }
+
 
 /**
  * Designations that hold for a season, not a news cycle. IR, PUP, NFI and a
@@ -639,6 +632,7 @@ export async function getDash34Data(
         where: { claimedByUserId: userId, leagueId: { in: activeIds } },
         select: {
           leagueId: true,
+          id: true,
           teamName: true,
           ownerName: true,
           platformUserId: true,
@@ -657,6 +651,16 @@ export async function getDash34Data(
   ])
 
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
+  const formatRows = await prisma.league.findMany({ where: { id: { in: activeIds } },
+    select: { id: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true } }).catch(() => [])
+  const formatByLeague = new Map(formatRows.map(l => [l.id, l]))
+  const chopped = await prisma.guillotineRosterState.findMany({ where: { leagueId: { in: activeIds }, choppedAt: { not: null } },
+    select: { leagueId: true, rosterId: true } }).catch(() => [])
+  const choppedTeams = new Set(chopped.map(r => `${r.leagueId}:${r.rosterId}`))
+  const eliminatedRows = await prisma.guillotineElimination.findMany({
+    where: { leagueId: { in: activeIds }, eliminatedOwnerId: { in: [userId, ...teams.map(t => t.platformUserId).filter((id): id is string => Boolean(id))] } },
+    select: { leagueId: true, season: { select: { season: true } } },
+  }).catch(() => [])
 
   /*
    * ⚠ ROSTERS ARE MATCHED PER LEAGUE, NOT AGAINST ONE GLOBAL CANDIDATE LIST.
@@ -680,7 +684,7 @@ export async function getDash34Data(
     ? await prisma.roster
         .findMany({
           where: { OR: rosterOr },
-          select: { leagueId: true, playerData: true },
+          select: { id: true, leagueId: true, playerData: true },
         })
         .catch(fellBack(options, 'rosters', []))
     : []
@@ -722,6 +726,10 @@ export async function getDash34Data(
       emptyStarters: number
       orderedStarters: string[]
       verification: LineupVerification | null
+      leagueStatus?: string
+      bestBall: boolean
+      waiversEnabled: boolean | null
+      eliminated: boolean
     }
   >()
   const everyPlayerId = new Set<string>()
@@ -742,6 +750,10 @@ export async function getDash34Data(
         emptyStarters: countEmptySlots(pd.starters),
         orderedStarters: Array.isArray(pd.starters) ? pd.starters.map(String) : [],
         verification: (pd.verification as LineupVerification | undefined) ?? null,
+        leagueStatus: typeof pd.leagueStatus === 'string' ? pd.leagueStatus : undefined,
+        bestBall: pd.bestBall === true,
+        waiversEnabled: typeof pd.waiversEnabled === 'boolean' ? pd.waiversEnabled : null,
+        eliminated: pd.eliminated === true,
       })
     }
     for (const id of all) everyPlayerId.add(id)
@@ -1128,12 +1140,35 @@ export async function getDash34Data(
     startingUnavailableKickoff: null,
   }
 
+  const currentWeek = [...rosterByLeague.values()].find(r => r.verification?.week != null)?.verification?.week
+  const byeInfo = currentWeek ? await getByeWeeks({ sport: 'NFL', season: Number(active.find(l => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')?.season ?? now.getUTCFullYear()),
+    fromWeek: currentWeek, horizon: 0, playerTeams: new Map([...playerById].map(([id, p]) => [id, p.team])) }).catch(() => null) : null
+  const byePlayers = new Set(currentWeek ? byeInfo?.byWeek.get(currentWeek) ?? [] : [])
+
   /* ── The league list ───────────────────────────────────────────────────── */
 
   const leagues: Dash34League[] = active.map((row) => {
     const team = teamByLeague.get(row.id) ?? null
     const hurt = hurtByLeague.get(row.id) ?? NO_HURT
-    const stage = stageOf(row)
+    const roster = rosterByLeague.get(row.id)
+    const stage = roster?.leagueStatus ?? stageOf(row)
+    const format = formatByLeague.get(row.id)
+    const bestBall = roster?.bestBall || format?.bestBallMode === true || format?.leagueVariant === 'best_ball'
+    if (roster) roster.bestBall = Boolean(bestBall)
+    const storedRosterId = storedRosters.find(r => r.leagueId === row.id)?.id
+    const eliminated = roster?.eliminated || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
+      || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
+    const eliminationRosterEmpty = (format?.guillotineMode === true || String(row.leagueType).toLowerCase() === 'guillotine' || format?.leagueVariant === 'guillotine') && roster != null && roster.all.length === 0
+    const eligibility = lineupActionability({
+      stage: stage ?? 'unknown', eliminated: eliminated || eliminationRosterEmpty, bestBall,
+      waiversEnabled: roster?.waiversEnabled, slots: roster?.verification?.slots,
+      players: (roster?.all ?? []).map(id => ({ id, position: playerById.get(id)?.position ?? null,
+        unavailable: Boolean(designationOf(id) && isUnavailable(designationOf(id)!.status)),
+        inactive: roster!.reserve.has(id) || roster!.taxi.has(id), bye: byePlayers.has(id) })),
+      emptyStarters: roster?.emptyStarters ?? 0, hurtStarters: hurt.startingUnavailable,
+    })
+    hurt.startingUnavailable = eligibility.hurtStarters
+    if (bestBall || eliminated || eliminationRosterEmpty || eligibility.emptyStarters === 0 && eligibility.hurtStarters === 0 && stage !== 'in_season') hurt.starting = 0
     const platform = String(row.platform ?? 'manual').toLowerCase()
     const commish = Boolean(row.isCommissioner || team?.isCommissioner || team?.isCoCommissioner)
 
@@ -1145,9 +1180,12 @@ export async function getDash34Data(
     else if (stage === 'pre_draft' || stage === 'setup') chips.push({ label: 'PRE DRAFT', tone: 'warn' })
     else if (stage === 'complete' || stage === 'completed') chips.push({ label: 'SEASON OVER' })
     if (commish) chips.push({ label: 'YOU COMMISH', tone: 'good' })
-    if (hurt.startingUnavailable > 0) {
+    if (bestBall) chips.push({ label: eligibility.bestBallMissing.length ? 'BEST BALL · COVERAGE GAP' : 'BEST BALL · AUTO LINEUP', tone: eligibility.needsWaivers ? 'warn' : undefined })
+    if (eliminated) chips.push({ label: 'ELIMINATED' })
+    else if (eliminationRosterEmpty) chips.push({ label: 'NO ACTIVE ROSTER · CHECK ELIMINATION' })
+    if (eligibility.hurtStarters > 0) {
       chips.push({
-        label: `${hurt.startingUnavailable} STARTER${hurt.startingUnavailable === 1 ? '' : 'S'} OUT`,
+        label: `${eligibility.hurtStarters} STARTER${eligibility.hurtStarters === 1 ? '' : 'S'} OUT`,
         tone: 'bad',
       })
     } else if (hurt.starting > 0) {
@@ -1171,16 +1209,16 @@ export async function getDash34Data(
      * zero, already decided. Both are 'urgent', and the brief names the empty
      * slots first for the same reason.
      */
-    const emptyStarters = rosterByLeague.get(row.id)?.emptyStarters ?? 0
+    const emptyStarters = eligibility.emptyStarters
     const priority: Dash34League['priority'] =
-      emptyStarters > 0 || hurt.startingUnavailable > 0
+      emptyStarters > 0 || eligibility.hurtStarters > 0 || eligibility.needsWaivers
         ? 'urgent'
         : stage === 'drafting'
           ? 'draft'
           : null
 
     const action =
-      hurt.total > 0
+      eligibility.needsWaivers ? { label: 'Review waivers', href: `/core/waivers?league=${encodeURIComponent(row.id)}` } : hurt.total > 0
         ? { label: 'See who is flagged', href: `/core/my-team?league=${encodeURIComponent(row.id)}` }
         : stage === 'drafting' || stage === 'pre_draft'
           ? { label: 'Draft HQ', href: `/core/draft-hq?league=${encodeURIComponent(row.id)}` }
@@ -1193,7 +1231,9 @@ export async function getDash34Data(
       imageUrl: imageOf(row),
       formatLabel: formatLabelOf(row),
       emptyStarters,
-      hurtStarters: hurt.startingUnavailable,
+      hurtStarters: eligibility.hurtStarters,
+      bestBallMissing: eligibility.bestBallMissing,
+      needsWaivers: eligibility.needsWaivers,
       lineupVerification: rosterByLeague.get(row.id)?.verification ?? null,
       flaggedStarters: (rosterByLeague.get(row.id)?.orderedStarters ?? []).flatMap((pid, index) => {
         const d = designationOf(pid)
@@ -1525,7 +1565,7 @@ export async function getDash34Data(
                    * card whose whole job is picking out the decisions.
                    */
                   bench:
-                    b.slotByLeague.get(id) === 'starter'
+                    !rosterByLeague.get(id)?.bestBall && b.slotByLeague.get(id) === 'starter'
                       ? benchAlternativesFor(id, b.sleeperId, b.position)
                       : [],
                 }
@@ -1701,12 +1741,12 @@ export async function getDash34Data(
    * Empty starting slots, stated before anything else in the brief. Everything
    * else here is a risk to weigh; this is points already lost.
    */
-  const leaguesWithEmptySlots = active.filter(
-    (row) => (rosterByLeague.get(row.id)?.emptyStarters ?? 0) > 0,
+  const leaguesWithEmptySlots = leagues.filter(
+    (row) => (row.emptyStarters ?? 0) > 0,
   )
   if (leaguesWithEmptySlots.length > 0) {
     const totalEmpty = leaguesWithEmptySlots.reduce(
-      (sum, row) => sum + (rosterByLeague.get(row.id)?.emptyStarters ?? 0),
+      (sum, row) => sum + (row.emptyStarters ?? 0),
       0,
     )
     briefLines.unshift({
@@ -1754,7 +1794,7 @@ export async function getDash34Data(
    */
   const briefHeadline =
     urgentLeagues.length > 0
-      ? `${urgentLeagues.length} ${urgentLeagues.length === 1 ? 'lineup needs' : 'lineups need'} a change`
+      ? `${urgentLeagues.length} ${urgentLeagues.length === 1 ? 'roster needs' : 'rosters need'} attention`
       : draftingLeagues.length > 0
         ? `${draftingLeagues.length} ${draftingLeagues.length === 1 ? 'draft is' : 'drafts are'} running`
         : flaggedLeagues.length > 0

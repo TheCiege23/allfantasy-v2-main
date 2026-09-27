@@ -422,6 +422,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         clean; putting it in the same sentence as "nothing needs you there" is
         the claim this whole loader refuses to make.
       */}
+      {(pulse.notChecked.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? <p className="af-bd-note">{pulse.notChecked.automatic ?? 0} Best Ball teams use automatic lineups. {pulse.notChecked.inactive ?? 0} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.</p> : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>

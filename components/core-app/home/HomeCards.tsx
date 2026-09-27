@@ -1,3 +1,4 @@
+import CoreTradeRefresh from '@/components/core-app/CoreTradeRefresh'
 import Link from 'next/link'
 import { Suspense, type ComponentProps, type ReactNode } from 'react'
 import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
@@ -210,7 +211,7 @@ function leagueDataStamp(
   const excluded = input.paused ? ` · ${input.paused} paused ${input.paused === 1 ? 'connection' : 'connections'} excluded` : ''
   const source = `${unread}${input.syncable > 1 ? `Oldest ${scope}` : `${scope[0].toUpperCase()}${scope.slice(1)}`}${excluded}`
   const stamp = freshnessStamp(source, input.oldestAt, now, {
-    staleRule: 'roster',
+    staleRule: 'fantasy_league',
     missing: input.syncable === 0 ? 'none-yet' : 'never-read',
   })
   return unread ? { ...stamp, stale: true } : stamp
@@ -345,7 +346,7 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
 }
 
 async function TradeBandCard({ trades, now }: { trades: HomeLoads['trades']; now: Date }) {
-  return <DashTradeBand trades={await trades} now={now} />
+  return <><CoreTradeRefresh /><DashTradeBand trades={await trades} now={now} /></>
 }
 
 async function CarryoverCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {

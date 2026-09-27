@@ -423,7 +423,7 @@ describe('getRecentTrades', () => {
         cacheFindMany.mockRejectedValueOnce(new Error('pool timeout'))
         const onIncomplete = vi.fn()
         const out = await getRecentTrades(
-          [{ id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'espn' }], NOW, 3,
+          [{ id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'sleeper' }], NOW, 3,
           { ownerSleeperId: null, currentWeek: 2, onIncomplete },
         )
         expect(out).toEqual([])

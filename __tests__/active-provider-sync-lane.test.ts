@@ -77,3 +77,12 @@ describe('active provider sync lane', () => {
     }))
   })
 })
+
+it('does not let a recently viewed league starve an overdue refresh', async () => {
+  const now = new Date('2026-09-13T18:00:00Z')
+  h.enumerate.mockImplementation(async ([provider]) => provider === 'sleeper' ? ['busy', 'overdue'].map(id => ({ runKey: 'sleeper:' + id + ':2026', provider, externalLeagueId: id, season: 2026, sport: 'NFL' })) : [])
+  h.stateFind.mockResolvedValue([{ runKey: 'sleeper:busy:2026:active', lastAttemptedSyncAt: new Date(now.getTime()-5*60_000) }, { runKey: 'sleeper:overdue:2026:active', lastAttemptedSyncAt: new Date(now.getTime()-50*60_000) }])
+  h.leagueFind.mockResolvedValue([{ platform: 'sleeper', platformLeagueId: 'busy', season: 2026, lastViewedAt: now }])
+  const result = await selectActiveSyncConnections({ now, limitPerProvider: 1 })
+  expect(result.connections[0].externalLeagueId).toBe('overdue')
+})

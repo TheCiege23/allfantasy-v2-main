@@ -582,8 +582,12 @@ function SlotRow({
   leagueId,
   sourceLink,
   anchor,
+  automatic,
+  sourceHref,
 }: {
   slot: LineupSlot
+  automatic?: boolean
+  sourceHref?: string
   anchor?: string
   platform: string
   leagueId: string
@@ -624,8 +628,9 @@ function SlotRow({
               <div className="af-mt-player-meta">Nobody is starting in this slot</div>
             </div>
           </div>
-          {sourceLink ? <SourceActionLink link={sourceLink} className="af-btn af-mt-fix" /> :
-            <span className="af-mt-player-meta">Choose a player in your league's lineup manager.</span>}
+          {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
+            Fix in {platform}
+          </Link> : null}
         </>
       )}
 
@@ -756,9 +761,10 @@ export function MyTeam({ data }: MyTeamProps) {
     <div className="af-mt">
       {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
       {/* ── Lock banner ─────────────────────────────────────────────── */}
-      {data.league.bestBall ? (
-        <div className="af-mt-lock"><span className="af-label">Best Ball · automatic lineup</span><span className="af-mt-lock-note">Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.</span></div>
-      ) : data.lock.available ? (
+      {data.bestBall ? <div className="af-mt-lock" data-urgent={false}>
+        <span className="af-label af-mt-lock-label">Best Ball</span>
+        <span className="af-mt-lock-note">Your highest-scoring eligible lineup is selected automatically. Review roster depth and waiver coverage, rather than changing starters.</span>
+      </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
             ⚠ A LOCK MORE THAN A WEEK OUT IS A COVERAGE GAP, NOT A DEADLINE, and
@@ -828,7 +834,7 @@ export function MyTeam({ data }: MyTeamProps) {
               this the advice has nowhere to go. Resolved server-side through the
               one hardened resolver, and absent entirely for a native league.
             */}
-            {data.league.sourceLink ? (
+            {data.league.sourceLink && !data.bestBall ? (
               <SourceActionLink
                 link={data.league.sourceLink}
                 className="af-btn af-mt-source"
@@ -1043,7 +1049,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <header className="af-mt-section-head">
           <h2 className="af-label">Starters</h2>
           <span className="af-mt-section-note">
-            {data.league.bestBall ? `Scoring lineup snapshot from ${platform}. Your provider selects the lineup automatically.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
+            {data.bestBall ? `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
           </span>
           <ProjHeader />
         </header>
@@ -1055,6 +1061,8 @@ export function MyTeam({ data }: MyTeamProps) {
                 key={`${slot.slotLabel}-${i}`}
                 anchor={slot.player ? `lineup-player-${slot.player.sleeperId}` : `lineup-slot-${i}`}
                 slot={slot}
+                automatic={data.bestBall}
+                sourceHref={data.league.sourceLink?.href}
                 platform={platform}
                 leagueId={data.league.id}
                 sourceLink={data.league.sourceLink}

@@ -1,4 +1,5 @@
 import 'server-only'
+import { persistedRecentTrades } from './persistedRecentTrades'
 
 import { prisma } from '@/lib/prisma'
 import type { TradeGradesPayload, GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
@@ -446,15 +447,18 @@ function gradeOf(trade: GradedTrade, grade: TradeGradeView | null): RecentTradeV
 export async function getRecentTrades(
   leagues: RecentTradesLeague[],
   now: Date = new Date(),
-  limit = 3,
+  limit = 20,
   live?: RecentTradesLiveOptions,
 ): Promise<RecentTrade[]> {
   const byPlatformId = new Map<string, RecentTradesLeague>()
   for (const l of leagues) {
-    if (l.platformLeagueId) byPlatformId.set(l.platformLeagueId, l)
+    if (l.platformLeagueId && (!l.platform || String(l.platform).toLowerCase() === 'sleeper')) byPlatformId.set(l.platformLeagueId, l)
   }
   const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
-  const nativeRecent = await loadNativeRecentTrades(leagues, new Date(cutoff), live?.viewerUserId)
+  const [nativeRecent, persisted] = await Promise.all([
+    loadNativeRecentTrades(leagues, new Date(cutoff), live?.viewerUserId),
+    persistedRecentTrades(leagues, new Date(cutoff)).catch(() => { reportIncomplete(live, 'league-scan-unanswered'); return [] }),
+  ])
 
   const keys = [...byPlatformId.keys()].map((id) => `${CACHE_PREFIX}${id}`)
   /*
@@ -483,6 +487,7 @@ export async function getRecentTrades(
         result: await getReconciledTradeGrades(id).catch(() => null),
       })))
       for (const item of settled) {
+        if (!item.result || item.result.incomplete) reportIncomplete(live, 'league-scan-unanswered')
         if (item.result?.grades) liveRows.push({ cacheKey: `${CACHE_PREFIX}${item.id}`, data: item.result.grades })
       }
     }
@@ -638,6 +643,12 @@ export async function getRecentTrades(
     }
   }
 
+  const eventKey = (t: RecentTrade) => `${t.platformLeagueId}:${t.id.split(':').pop()}`
+  for (const trade of persisted) {
+    const existing = out.find(t => eventKey(t) === eventKey(trade))
+    if (existing) { if (Date.parse(trade.acceptedAt) > Date.parse(existing.acceptedAt)) existing.acceptedAt = trade.acceptedAt }
+    else out.push(trade)
+  }
   out.sort((a, b) => new Date(b.acceptedAt).getTime() - new Date(a.acceptedAt).getTime())
   const visible = out.slice(0, limit)
 
