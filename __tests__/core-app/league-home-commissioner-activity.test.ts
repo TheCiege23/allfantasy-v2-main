@@ -19,6 +19,7 @@ const reads = vi.hoisted(() => ({
   managerHealth: vi.fn(),
   managerActivity: vi.fn(),
   activityWindow: vi.fn(),
+  recentTrades: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => {
@@ -50,6 +51,7 @@ vi.mock('@/lib/prisma', () => {
 })
 
 vi.mock('@/lib/commissioner-hub/managerHealth', () => ({ getLeagueManagerHealth: reads.managerHealth }))
+vi.mock('@/lib/core-app/recentTrades', () => ({ getRecentTrades: reads.recentTrades }))
 vi.mock('@/lib/league-history/leagueWarehouseReads', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   readManagerActivity: reads.managerActivity,
@@ -128,6 +130,7 @@ function load(opts: { platform: string; lastSyncedAt: Date | null }): Promise<Ca
 beforeEach(() => {
   db.answers = {}
   vi.clearAllMocks()
+  reads.recentTrades.mockResolvedValue([])
   // What the roster clock says on an imported league: every team fresh, one leftover row idle.
   reads.managerHealth.mockResolvedValue({
     leagueId: L,
@@ -149,6 +152,34 @@ beforeEach(() => {
 })
 
 describe('overview waiver balances', () => {
+  it('starts the small draft summary without waiting for the trade feed', async () => {
+    let release!: (rows: never[]) => void
+    reads.recentTrades.mockReturnValue(new Promise<never[]>(resolve => { release = resolve }))
+    const draftRead = vi.fn(() => [])
+    db.answers['draftFact.groupBy'] = draftRead
+    const pending = loadHome({ platform: 'sleeper', lastSyncedAt: new Date(), results: true })
+    await vi.waitFor(() => expect(reads.recentTrades).toHaveBeenCalled())
+    expect(draftRead).toHaveBeenCalledOnce()
+    release([])
+    await pending
+  })
+  it('shows the latest stored imported draft instead of claiming its board was not captured', async () => {
+    db.answers['draftFact.groupBy'] = (args) => {
+      expect(args).toMatchObject({ where: { leagueId: L, season: { not: null } }, take: 1, orderBy: { season: 'desc' } })
+      return [{ season: 2026, _count: { _all: 64 }, _max: { round: 4 } }]
+    }
+    const home = await loadHome({ platform: 'sleeper', lastSyncedAt: new Date(), results: true })
+    expect(home?.draftHq).toEqual({ available: true, data: {
+      headline: '2026 imported draft', detail: '64 picks on file · 4 rounds',
+      href: '/core/draft-hq?league=league-1', linkLabel: 'Open the draft board',
+    } })
+  })
+
+  it('does not invent an imported draft when the summary read fails', async () => {
+    db.answers['draftFact.groupBy'] = () => { throw new Error('database unavailable') }
+    const home = await loadHome({ platform: 'sleeper', lastSyncedAt: new Date(), results: true })
+    expect(home?.draftHq.available && home.draftHq.data.headline).not.toContain('imported draft')
+  })
   it.each(['rolling', 'reverse_standings', 'faab'])('only publishes balances for confirmed FAAB (%s)', async waiverType => {
     db.answers['leagueWaiverSettings.findUnique'] = () => ({ waiverType })
     db.answers['roster.findMany'] = () => [{ platformUserId: 'p-Ada', faabRemaining: 100 }]

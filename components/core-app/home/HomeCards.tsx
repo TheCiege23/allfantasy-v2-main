@@ -193,9 +193,12 @@ function injuriesAt(data: Dash34Result | null): string | null {
  * counted.
  */
 function leagueDataStamp(
-  input: { oldestAt: string | null; neverSynced: number; syncable: number },
+  input: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number },
   now: Date,
 ): CardFreshnessStamp {
+  if (input.syncable === 0 && input.paused) {
+    return { source: 'Account sync paused', asOf: null, label: null, stale: false, missingLabel: 'history retained' }
+  }
   /*
    * The warning has to say WHY. "⚠ Oldest league data updated 7 min ago" is a contradiction on its
    * face when the reason is a league that has never been read — so that case names the count.
@@ -203,7 +206,9 @@ function leagueDataStamp(
   const unread = input.neverSynced > 0 && input.oldestAt
     ? `${input.neverSynced} ${input.neverSynced === 1 ? 'league' : 'leagues'} never read · `
     : ''
-  const source = `${unread}${input.syncable > 1 ? 'Oldest league data' : 'League data'}`
+  const scope = input.paused ? 'active league data' : 'league data'
+  const excluded = input.paused ? ` · ${input.paused} paused ${input.paused === 1 ? 'connection' : 'connections'} excluded` : ''
+  const source = `${unread}${input.syncable > 1 ? `Oldest ${scope}` : `${scope[0].toUpperCase()}${scope.slice(1)}`}${excluded}`
   const stamp = freshnessStamp(source, input.oldestAt, now, {
     staleRule: 'roster',
     missing: input.syncable === 0 ? 'none-yet' : 'never-read',
@@ -485,7 +490,7 @@ export function CoreHomeCards({
    * The "League data" stamp's inputs, over the syncable leagues in scope: the OLDEST sync, and how
    * many have never synced at all. See `leagueDataStamp`.
    */
-  leagueData: { oldestAt: string | null; neverSynced: number; syncable: number }
+  leagueData: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number }
   /** Per-viewer card order — lib/core-app/homeCardOrder.ts. */
   order: HomeCardOrder
   /** What the prewarm needs beyond the queue itself. */

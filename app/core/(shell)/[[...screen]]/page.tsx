@@ -4546,7 +4546,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               total: playedLeagues.length,
             }}
             leagueData={leagueDataFreshness(
-              homePlayed as unknown as Array<{ platform?: string | null; lastSyncedAt?: Date | string | null }>,
+              homePlayed as unknown as Array<{ id: string; platform?: string | null; lastSyncedAt?: Date | string | null }>,
+              pausedSyncLeagueIds,
             )}
             order={orderHomeCards({
               usage: parseCardUsage(cookies().get(CARD_USE_COOKIE)?.value),
