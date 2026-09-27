@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
+import type { TradeRecord } from '@/lib/core-app/trades'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
@@ -507,6 +509,7 @@ export function TradeCenter(props: {
    * trailing every step.
    */
   history?: ReactNode
+  completedHistory?: readonly TradeRecord[]
   /**
    * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
    * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
@@ -527,6 +530,10 @@ export function TradeCenter(props: {
    */
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
+  // Offers poll independently. Rebuilding the full route while editing can remount
+  // this form and discard an unsaved proposal or its in-flight analysis.
+  const editingProposal = busy || giveAssets.length > 0 || getAssets.length > 0
+  useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   const [draftNote, setDraftNote] = useState<string | null>(null)
   /*
@@ -1450,6 +1457,7 @@ export function TradeCenter(props: {
           onLoad={loadOffer}
           onCounter={startCounter}
           reloadToken={inboxReloadToken}
+          importedHistory={props.completedHistory}
           onNeedsYouCount={setNeedsYou}
         />
       </div>
@@ -2127,7 +2135,8 @@ export function TradeCenter(props: {
                       You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
                     </span>
                     <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
-                      playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? null : null,
+                      playerId: counter.asset.kind === 'player'
+                        ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
                       providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
                       position: counter.position, team: null, value: counter.marketValue })}>
                       Add to proposal

@@ -3882,6 +3882,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
               history={<Trades data={trades} />}
+              completedHistory={trades.league.platform === 'sleeper' && trades.history.available ? trades.history.data : []}
               edgeAccess={corePaywall?.competitive_edge ?? null}
             />
           </>

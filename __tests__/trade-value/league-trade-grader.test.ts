@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   chart: [] as Array<{ player: { name: string; position: string }; value: number }>,
   needCalls: 0,
   pricePickCalls: 0,
+  leagueType: 'dynasty',
 }))
 
 vi.mock('server-only', () => ({}))
@@ -20,7 +21,7 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
     sport: 'NFL',
     leagueSize: 12,
     isDynasty: true,
-    leagueType: 'dynasty',
+    leagueType: h.leagueType,
     scoring: 'ppr',
     settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'] },
     waiverBudget: 100,
@@ -68,6 +69,7 @@ vi.mock('@/lib/hybrid-valuation', () => {
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 
 beforeEach(() => {
+  h.leagueType = 'dynasty'
   h.prices = new Map([
     ['Puka Nacua', 6000],
     ['Drake London', 4000],
@@ -88,6 +90,18 @@ const graded = <T extends { graded: boolean }>(v: T) => {
 }
 
 describe('createLeagueTradeGrader', () => {
+  it('shares specialty coverage limits and rejects a prohibited format through the real grade path', async () => {
+    const deal = { give: [{ kind: 'player' as const, name: 'Drake London' }], get: [{ kind: 'player' as const, name: 'Puka Nacua' }], viewerSide: false }
+    h.leagueType = 'keeper'
+    const keeper = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const read = graded(await keeper.grade(deal))
+    expect(read.basis).toContain('Keeper costs and future keeper surplus are not included')
+    h.leagueType = 'survivor_guillotine'
+    const prohibited = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const result = await prohibited.grade(deal)
+    expect(result.graded).toBe(false)
+    if (!result.graded) expect(result.reason).toContain('trades are not permitted')
+  })
   it('grades a 1.5x deal A for the receiver and F for the sender, on the league chart', async () => {
     const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
     const v = graded(

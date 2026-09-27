@@ -22,6 +22,8 @@ export async function evaluateCounterOffers(input: {
   get: TradeAssetInput[]
   yourTargets: TradeConsoleOpponentRosterTarget[]
   theirTargets: TradeConsoleOpponentRosterTarget[]
+  /** Canonical provider IDs resolved by the grader, in selection order. */
+  selectedProviderIds?: Array<{ provider: string; id: string } | null>
   evaluate: (give: TradeAssetInput[], get: TradeAssetInput[]) => Promise<TradeGradeView>
   canRecommend?: (give: TradeAssetInput[], get: TradeAssetInput[]) => Promise<boolean>
 }): Promise<EvaluatedCounterOffer[]> {
@@ -31,8 +33,12 @@ export async function evaluateCounterOffers(input: {
   const selected = [...input.give, ...input.get]
   const identity = (a: { playerId?: string; providerIdentity?: { provider: string; id: string } }) =>
     a.providerIdentity ? `${a.providerIdentity.provider}:${a.providerIdentity.id}` : a.playerId ? `record:${a.playerId}` : null
-  const ids = new Set(selected.flatMap(a => a.kind === 'player' && identity(a) ? [identity(a)!] : []))
-  const names = new Set(selected.flatMap(a => a.kind === 'player' && !identity(a) && a.name ? [a.name.trim().toLowerCase()] : []))
+  const selectedKeys = selected.map((a, i) => {
+    const verified = input.selectedProviderIds?.[i]
+    return a.kind === 'player' ? verified ? `${verified.provider}:${verified.id}` : identity(a) : null
+  })
+  const ids = new Set(selectedKeys.filter((key): key is string => key !== null))
+  const names = new Set(selected.flatMap((a, i) => a.kind === 'player' && !selectedKeys[i] && a.name ? [a.name.trim().toLowerCase()] : []))
   const seen = new Set<string>()
   const candidates = (addTo === 'get' ? input.theirTargets : input.yourTargets)
     .filter(a => {

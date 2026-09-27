@@ -112,6 +112,9 @@ export async function gradePricedSides(args: {
   })
 
   const placeholder = [...leagueGrade.giveLines, ...leagueGrade.getLines].find((l) => l.dataSource === 'placeholder')
+  if (chart.valuationGaps?.length) {
+    leagueGrade.valueBasis.label += ` — scope: chart, scoring and roster values only. ${chart.valuationGaps.join(' ')}`
+  }
   const withheld =
     args.withheld ??
     proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
