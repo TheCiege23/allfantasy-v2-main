@@ -1,5 +1,6 @@
 import "server-only"
 
+import { draftAdvisorRosterNeeds, type DraftAdvisorStarterSlot } from '@/lib/sports-reporting/draftAdvisorRosterNeeds'
 import { prisma } from "@/lib/prisma"
 import {
   getFantasyValueSnapshot,
@@ -19,9 +20,11 @@ export type DraftAdvisorCandidateInput = {
 }
 
 export type DraftAdvisorContextRequest = {
+  season?: number
   sport: string
   candidates: DraftAdvisorCandidateInput[]
   /** Current roster — used to compute positional needs */
+  starterSlots?: DraftAdvisorStarterSlot[]
   currentRoster?: Array<{ position: string; team?: string | null }>
   leagueFormat?: string | null
   scoringFormat?: string | null
@@ -119,15 +122,8 @@ const SCARCITY_MEDIUM: Record<string, number> = {
   OL: 6,
 }
 
-/** Standard starting lineup requirements per position for need computation */
-const STANDARD_STARTS: Record<string, number> = {
-  QB: 1,
-  RB: 2,
-  WR: 2,
-  TE: 1,
-  K: 1,
-  DEF: 1,
-}
+
+
 
 // ─── Normalisation helpers ────────────────────────────────────────────────────
 
@@ -166,7 +162,7 @@ function currentSeasonYear(): number {
 async function loadByeWeekMap(sport: string): Promise<Record<string, number>> {
   const byeMap: Record<string, number> = {}
   try {
-    const season = currentSeasonYear()
+    const season = request.season ?? currentSeasonYear()
     const games = await prisma.sportsGame.findMany({
       where: {
         sport,
@@ -241,30 +237,6 @@ function computePositionalScarcity(
 
 // ─── Roster needs ─────────────────────────────────────────────────────────────
 
-function computeRosterNeeds(
-  currentRoster: Array<{ position: string; team?: string | null }> | undefined
-): string[] {
-  if (!currentRoster || currentRoster.length === 0) {
-    return Object.entries(STANDARD_STARTS)
-      .sort(([, a], [, b]) => b - a)
-      .map(([pos]) => pos)
-  }
-  const rosterCounts: Record<string, number> = {}
-  for (const slot of currentRoster) {
-    const pos = slot.position.toUpperCase()
-    rosterCounts[pos] = (rosterCounts[pos] ?? 0) + 1
-  }
-  const needs: Array<{ pos: string; deficit: number }> = []
-  for (const [pos, required] of Object.entries(STANDARD_STARTS)) {
-    const have = rosterCounts[pos] ?? 0
-    const deficit = required - have
-    if (deficit > 0) needs.push({ pos, deficit })
-  }
-  return needs.sort((a, b) => b.deficit - a.deficit).map((n) => n.pos)
-}
-
-// ─── Bye week conflicts ───────────────────────────────────────────────────────
-
 function computeByeWeekConflicts(
   currentRoster: Array<{ position: string; team?: string | null }> | undefined,
   byeWeekMap: Record<string, number>
@@ -319,7 +291,7 @@ export async function getDraftAdvisorContext(
   const sport = normalizeSport(request.sport)
   const leagueFormat = normalizeLeagueFormat(request.leagueFormat)
   const scoringFormat = normalizeScoring(request.scoringFormat)
-  const season = currentSeasonYear()
+  const season = request.season ?? currentSeasonYear()
 
   // Resolve snapshots + bye week map in parallel
   const [byeWeekMap, snapshots] = await Promise.all([
@@ -328,6 +300,7 @@ export async function getDraftAdvisorContext(
       request.candidates.map((c) =>
         snapshotLoader({
           sport,
+          season,
           playerId: c.playerId ?? null,
           playerName: c.playerName,
           leagueFormat,
@@ -371,7 +344,7 @@ export async function getDraftAdvisorContext(
   })
 
   const positionalScarcity = computePositionalScarcity(enrichedCandidates, request.totalTeams ?? null)
-  const rosterNeeds = computeRosterNeeds(request.currentRoster)
+  const rosterNeeds = draftAdvisorRosterNeeds(sport, request.currentRoster, request.starterSlots)
   const byeWeekConflicts = computeByeWeekConflicts(request.currentRoster, byeWeekMap)
 
   // Aggregate confidence and missing data

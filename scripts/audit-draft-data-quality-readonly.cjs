@@ -30,9 +30,27 @@ async function main() {
     const identityAssets = (await db.query(`SELECT sport, count(*)::int AS identities,
       count(*) FILTER (WHERE NULLIF("imageUrl",'') IS NOT NULL)::int AS image_candidates
       FROM "SportsPlayer" WHERE sport = ANY($1::text[]) GROUP BY sport ORDER BY sport`, [sports])).rows
+    const teamAssets = (await db.query(`SELECT sport, count(*)::int AS teams,
+      count(*) FILTER (WHERE NULLIF(logo_url,'') IS NOT NULL)::int AS logo_candidates,
+      max(last_updated) AS updated FROM team_assets WHERE sport = ANY($1::text[]) GROUP BY sport ORDER BY sport`, [sports])).rows
+    const gameLogs = (await db.query(`SELECT sport, season, count(*)::int AS players,
+      count(*) FILTER (WHERE expires_at > now())::int AS unexpired,
+      max(synced_at) AS synced FROM player_game_log_cache WHERE sport = ANY($1::text[])
+      GROUP BY sport,season ORDER BY sport,season`, [sports])).rows
+    const mediaHosts = (await db.query(`SELECT sport, source,
+      substring("imageUrl" from '^https?://([^/]+)') AS host,
+      count(*)::int AS candidates, count(*) FILTER (WHERE "expiresAt" > now())::int AS unexpired
+      FROM "SportsPlayer" WHERE sport = ANY($1::text[]) AND NULLIF("imageUrl",'') IS NOT NULL
+      GROUP BY sport,source,host ORDER BY sport,source,host`, [sports])).rows
+    const observedSeasonStats = (await db.query(`SELECT sport,season,count(*)::int AS records,
+      count(*) FILTER (WHERE "gamesPlayed">0)::int AS played_games,
+      count(*) FILTER (WHERE "fantasyPoints" IS NOT NULL)::int AS fantasy_scored,
+      count(*) FILTER (WHERE "expiresAt">now())::int AS unexpired,
+      max("fetchedAt") AS observed FROM player_season_stats WHERE sport=ANY($1::text[])
+      GROUP BY sport,season ORDER BY sport,season`,[sports])).rows
     await db.query('ROLLBACK')
     console.log(JSON.stringify({ asOf: new Date().toISOString(), transactionReadOnly: true,
-      scope: 'Stored cache inventory only. Counts are not a deduplicated active draft pool, verified identity, reachable media, observed current-season stats, or live browser acceptance.', sports, boards, storedPlayers, identityAssets }, null, 2))
+      scope: 'Stored cache inventory only. Counts are not a deduplicated active draft pool, verified identity, reachable media, observed current-season stats, or live browser acceptance.', sports, boards, storedPlayers, identityAssets, teamAssets, gameLogs, mediaHosts, observedSeasonStats }, null, 2))
   } finally { await db.end() }
 }
 main().catch(error => { console.error('Read-only draft inventory failed:', error.code ?? error.name); process.exitCode = 1 })
