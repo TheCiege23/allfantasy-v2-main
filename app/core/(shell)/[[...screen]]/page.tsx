@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
