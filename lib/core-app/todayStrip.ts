@@ -1,3 +1,4 @@
+import { normalizeTeamAbbrev, getTeamInfo } from '@/lib/team-abbrev'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -382,7 +383,7 @@ async function resolveNext24(
   const seenFixtures = new Set<string>()
   for (const g of games) {
     if (!g.startTime) continue
-    const teamKey = (team: string | null) => String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const teamKey = (team: string | null) => g.sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
     const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
     if (seenFixtures.has(key)) continue
     seenFixtures.add(key)
@@ -393,12 +394,12 @@ async function resolveNext24(
       time: g.startTime.toISOString(),
       tone: 'accent',
       game: (() => {
-        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && String(peer.homeTeam).toLowerCase() === String(g.homeTeam).toLowerCase() && String(peer.awayTeam).toLowerCase() === String(g.awayTeam).toLowerCase())
+        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && teamKey(peer.homeTeam) === teamKey(g.homeTeam) && teamKey(peer.awayTeam) === teamKey(g.awayTeam))
         const market = odds.find(o => peers.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
-        return { home: g.homeTeam, away: g.awayTeam,
-          homeLogo: getTeamLogoUrl(g.homeTeam, g.sport), awayLogo: getTeamLogoUrl(g.awayTeam, g.sport),
+        return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
+          homeLogo: getTeamLogoUrl(teamKey(g.homeTeam), g.sport), awayLogo: getTeamLogoUrl(teamKey(g.awayTeam), g.sport),
           href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
           odds: [favorite, market?.totalPoints != null ? `O/U ${market.totalPoints}` : null].filter(Boolean).join(' · ') || 'Odds unavailable',
           oddsAt: market?.fetchedAt.toISOString() ?? null }

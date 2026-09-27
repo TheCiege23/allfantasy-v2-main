@@ -13,3 +13,14 @@ it('joins fresh markets by provider identity and links the ESPN game without hid
   h.odds.mockResolvedValue([])
   expect((await load()).next24[0].game?.odds).toBe('Odds unavailable')
 })
+
+it('merges full-name and abbreviation fixtures and retains their provider odds', async () => {
+  const startTime = new Date('2026-09-27T17:00:00Z')
+  h.games.mockResolvedValue([{ sport: 'NFL', source: 'espn', externalId: 'espn-id', startTime, homeTeam: 'Indianapolis Colts', awayTeam: 'Houston Texans' }, { sport: 'NFL', source: 'api-sports', externalId: 'api-id', startTime, homeTeam: 'IND', awayTeam: 'HOU' }])
+  h.odds.mockResolvedValue([{ sport: 'NFL', source: 'api-sports', gameExternalId: 'api-id', spreadHome: 2.5, totalPoints: 45, fetchedAt: new Date('2026-09-27T12:00:00Z') }])
+  const rows = (await getTodayStrip('u', [{ id: 'l', sport: 'NFL' }], new Date('2026-09-27T12:15:00Z'))).next24
+  expect(rows).toHaveLength(1)
+  expect(rows[0].game?.homeLogo).toMatch(/ind\.png$/)
+  expect(rows[0].game?.awayLogo).toMatch(/hou\.png$/)
+  expect(rows[0].game?.odds).toContain('O/U 45')
+})
