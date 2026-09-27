@@ -54,8 +54,8 @@ import type {
  * mistake absence for a number.
  */
 
-/** A league the size anyone plays; bounds the one name read. */
-const MAX_LEAGUE_PLAYER_IDS = 800
+/** Covers large 32-team IDP leagues without dropping the later teams' assets. */
+const MAX_LEAGUE_PLAYER_IDS = 4096
 
 export type {
   ReadyTradeScenario,
