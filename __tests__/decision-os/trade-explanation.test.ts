@@ -419,3 +419,76 @@ describe('explainTrade', () => {
     expect(parseVerdictJson('I think this trade is fair.')).toBeNull()
   })
 })
+
+// ─── Commissioner review mode (design step 6) ────────────────────────────────
+
+describe('commissioner mode — the AI explains the code-computed review and changes nothing', () => {
+  const review = {
+    model: 'trade-review-v1' as const,
+    recommendation: 'consider_veto' as const,
+    flags: [{ code: 'heavily_lopsided' as const, severity: 'high' as const, explanation: 'Team B receives 81% more league value.' }],
+    checks: [
+      { code: 'heavily_lopsided' as const, severity: 'high' as const, status: 'raised' as const, explanation: 'Team B receives 81% more league value.' },
+      { code: 'eliminated_team_dumping' as const, severity: 'medium' as const, status: 'not_computed' as const, explanation: 'No season forecast has been run for this league.' },
+    ],
+  }
+  const p = buildExplanationPacket(GOLDEN['star RB for a bench WR (heavily lopsided)']!, { commissionerReview: review })
+  const violationsOf = (v: unknown, packet: ExplanationPacket = p) => {
+    const r = validateVerdict(v, packet)
+    return r.ok ? [] : r.violations
+  }
+
+  it('the packet carries the review fixed, and names what could not be checked', () => {
+    expect(p.commissioner).toEqual({
+      recommendation: 'consider_veto',
+      flags: [{ code: 'heavily_lopsided', severity: 'high', explanation: 'Team B receives 81% more league value.' }],
+      notComputed: [{ code: 'eliminated_team_dumping', reason: 'No season forecast has been run for this league.' }],
+    })
+    expect(buildExplanationPacket(GOLDEN['star RB for a bench WR (heavily lopsided)']!).commissioner).toBeNull()
+  })
+
+  it('the template copies the review and passes the same validator', () => {
+    const v = templateVerdict(p)
+    expect(v.commissioner).toMatchObject({ recommendation: 'consider_veto', flags: [{ code: 'heavily_lopsided', severity: 'high' }] })
+    expect(v.commissioner?.noteToLeague).toMatch(/heavily lopsided/)
+    expect(violationsOf(v)).toEqual([])
+  })
+
+  it('rejects an answer that drops, softens or adds to the review', () => {
+    const good = templateVerdict(p)
+    expect(violationsOf({ ...good, commissioner: undefined }).join()).toMatch(/commissioner: required/)
+    expect(violationsOf({ ...good, commissioner: { ...good.commissioner!, recommendation: 'approve' } }).join()).toMatch(/recommendation must be "consider_veto"/)
+    expect(violationsOf({ ...good, commissioner: { ...good.commissioner!, flags: [] } }).join()).toMatch(/commissioner\.flags must be exactly/)
+    expect(violationsOf({ ...good, commissioner: { ...good.commissioner!, flags: [...good.commissioner!.flags, { code: 'tanking_signal', severity: 'high' }] } }).join()).toMatch(/commissioner\.flags/)
+  })
+
+  it('holds the note to the same rules: packet numbers only, no betting language', () => {
+    const good = templateVerdict(p)
+    expect(violationsOf({ ...good, commissioner: { ...good.commissioner!, noteToLeague: 'Team B gains 95% here.' } }).join()).toMatch(/number 95 is not in the packet/)
+    expect(violationsOf({ ...good, commissioner: { ...good.commissioner!, noteToLeague: 'Team B gains 81% here.' } })).toEqual([])
+    expect(violationsOf({ ...good, commissioner: { ...good.commissioner!, noteToLeague: 'This is a lock to be vetoed.' } }).join()).toMatch(/betting/)
+  })
+
+  it('the note advises: it never announces the outcome or accuses anyone', () => {
+    const good = templateVerdict(p)
+    const note = (noteToLeague: string) => violationsOf({ ...good, commissioner: { ...good.commissioner!, noteToLeague } }).join()
+    for (const bad of [
+      'This trade will be vetoed.',
+      'The deal is going to be reversed by the commissioner.',
+      'This looks like collusion between the two teams.',
+      'Bravo is colluding with Alpha.',
+      'Someone is cheating here.',
+    ]) {
+      expect(note(bad), bad).toMatch(/advises only/)
+    }
+    // Naming the recommendation is the point, and is allowed.
+    expect(note('The commissioner may want to consider a veto after talking to both managers.')).toBe('')
+    expect(note(good.commissioner!.noteToLeague!)).toBe('')
+  })
+
+  it('a manager’s explanation may not carry a commissioner block', () => {
+    const manager = buildExplanationPacket(GOLDEN['star RB for a bench WR (heavily lopsided)']!)
+    const v = { ...templateVerdict(manager), commissioner: { recommendation: 'approve', flags: [] } }
+    expect(violationsOf(v, manager).join()).toMatch(/commissioner: not allowed/)
+  })
+})

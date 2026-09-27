@@ -823,7 +823,12 @@ export async function acceptAfLeagueTrade(input: {
   return { status: 'processed' }
 }
 
-export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; actorUserId: string }): Promise<void> {
+export async function finalizeAfLeagueTradeProcessing(input: {
+  tradeId: string
+  actorUserId: string
+  /** Recorded on this processing's status-history rows — e.g. the commissioner review that was shown. */
+  auditMetadata?: Record<string, unknown>
+}): Promise<void> {
   const trade = await prisma.afLeagueTrade.findUniqueOrThrow({
     where: { id: input.tradeId },
     include: { items: true },
@@ -874,6 +879,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       toStatus: 'scheduled',
       actorUserId: input.actorUserId,
       reason: 'delayed_processing',
+      ...(input.auditMetadata ? { metadata: input.auditMetadata } : {}),
     })
     await appendAfTradeProcessingEvent({
       tradeId: trade.id,
@@ -955,6 +961,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       toStatus: 'processed',
       actorUserId: input.actorUserId,
       reason: 'processed',
+      ...(input.auditMetadata ? { metadata: input.auditMetadata } : {}),
     })
     await appendAfTradeProcessingEvent({ tradeId: trade.id, eventType: 'trade_processed', payload: {} })
     await logAfTradeAudit({
@@ -991,7 +998,13 @@ export async function commissionerAfTradeDecision(input: {
   leagueId: string
   userId: string
   decision: 'approve' | 'reject'
+  /**
+   * The commissioner review they were shown (`GET …/trades/{id}/review` → `reviewId`), logged with the
+   * decision (design step 6: "decision logged"). Null when there was none, or it was not saved yet.
+   */
+  reviewId?: string | null
 }): Promise<void> {
+  const auditMetadata = { commissionerDecision: input.decision, reviewId: input.reviewId ?? null }
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
   if (!elevated) throw new Error('Commissioner only')
 
@@ -1012,6 +1025,7 @@ export async function commissionerAfTradeDecision(input: {
       toStatus: 'rejected',
       actorUserId: input.userId,
       reason: 'commissioner_reject',
+      metadata: auditMetadata,
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
     await notifyProposerOfDecision({
@@ -1026,7 +1040,7 @@ export async function commissionerAfTradeDecision(input: {
     return
   }
 
-  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId })
+  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata })
 }
 
 export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {

@@ -73,7 +73,8 @@ Rules:
 5. Name at least one risk. packet.riskCandidates lists the risks the data shows; say them in plain words.
 6. Include "counter" only when packet.counter.allowed is true (a gap of ${COUNTER_MIN_GAP_PCT}% or more), naming only assets from packet.counter.assetNames.
 7. Advisory voice. No odds, locks, guarantees, bets, wagers, parlays or other betting or certainty language.
-8. Write for Team A, called by the name in packet.teams.teamA. No markdown.`
+8. Write for Team A, called by the name in packet.teams.teamA. No markdown.
+9. When packet.commissioner is not null, this is a COMMISSIONER'S review: add "commissioner": {"recommendation": <copy>, "flags": [{"code","severity"} copied from packet.commissioner.flags], "noteToLeague": string} — a neutral note to the league, ${HEADLINE_MAX_CHARS} characters or fewer, that explains the flags without accusing anyone and never says a trade will be vetoed. When packet.commissioner is null, omit the key.`
 
 function userPrompt(packet: ExplanationPacket): string {
   return `PACKET:\n${JSON.stringify(packet)}`

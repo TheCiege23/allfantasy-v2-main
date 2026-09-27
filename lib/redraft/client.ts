@@ -646,6 +646,8 @@ export async function submitTradeVote(payload: {
     | 'vote_approve'
     | 'vote_veto'
   reason?: string
+  /** The commissioner review this decision was made with — logged on the decision. */
+  reviewId?: string | null
 }) {
   const res = await fetch('/api/redraft/trade-votes', {
     method: 'POST',
@@ -656,7 +658,7 @@ export async function submitTradeVote(payload: {
   return parseJson<{ proposal: RedraftTradeProposal; resolved: boolean }>(res)
 }
 
-export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string }) {
+export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string; reviewId?: string | null }) {
   const res = await fetch('/api/redraft/trades/veto', {
     method: 'POST',
     credentials: 'include',

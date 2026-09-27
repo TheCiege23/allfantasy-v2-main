@@ -22,6 +22,8 @@ import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 import {
   groupTradeTimelineBySeason,
@@ -707,6 +709,8 @@ function ManagerBlock({
 
 export function PendingTradeCard(props: {
   trade: LeagueTradeHistoryItem
+  /** The AllFantasy league id — set where a commissioner may review the trade (design step 6). */
+  leagueId?: string
   offer: BuilderOffer | null
   verdict: PendingVerdict | undefined
   sport: string
@@ -919,6 +923,12 @@ export function PendingTradeCard(props: {
           </>
         ) : props.canAct && review ? (
           <>
+            {/* The commissioner review — flags computed in code, advice only; the buttons log what it said. */}
+            {t.viewerIsCommissioner && props.leagueId ? (
+              <div className="basis-full">
+                <TradeReviewPanel leagueId={props.leagueId} tradeId={t.id} kind="af" />
+              </div>
+            ) : null}
             <button type="button" disabled={props.busy} onClick={props.onApprove} className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50" data-testid="trade-action-commissioner-approve">
               Approve
             </button>
@@ -1112,7 +1122,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/commissioner`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision }),
+          // The review the commissioner was shown, logged with the decision. Null when there was none.
+          body: JSON.stringify({ decision, reviewId: reviewIdFor(tradeId) }),
         })
         await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -1358,6 +1369,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 offer={offerById.get(t.id) ?? null}
                 verdict={verdictFor(t)}
                 sport={sport}
+                leagueId={league.id}
                 tradeCenterHref={tradeCenterHref}
                 providerUrl={providerUrl}
                 canAct={nflRedraftTradesShell}
@@ -1500,6 +1512,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     offer={offerById.get(t.id) ?? null}
                     verdict={verdictFor(t)}
                     sport={sport}
+                    leagueId={league.id}
                     tradeCenterHref={tradeCenterHref}
                     providerUrl={providerUrl}
                     canAct={nflRedraftTradesShell}

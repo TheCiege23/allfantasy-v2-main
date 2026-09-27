@@ -1,5 +1,6 @@
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { TradeEvaluationReceipt } from './evaluateTrade'
+import type { TradeReview } from './tradeReview'
 
 /**
  * THE PACKET — the only thing the AI explanation layer is allowed to see (design, "AI explanation
@@ -95,6 +96,17 @@ export type ExplanationPacket = {
   /** Counters are allowed only at a gap of COUNTER_MIN_GAP_PCT or more, with these names only. */
   counter: { allowed: boolean; assetNames: string[] }
   stale: { rostersStale: boolean; rostersSyncedAt: string | null } | null
+  /**
+   * Commissioner review mode (design step 6), when this explanation is for a commissioner. The flags and
+   * the recommendation are FIXED here, computed in code (`./tradeReview.ts`); the model copies them and
+   * writes only `noteToLeague`. Null for a manager's explanation.
+   */
+  commissioner: {
+    recommendation: TradeReview['recommendation']
+    flags: TradeReview['flags']
+    /** Checks that could not be run, and why — so the note never implies a clean bill it does not have. */
+    notComputed: Array<{ code: string; reason: string }>
+  } | null
 }
 
 /** Design rule 5: suggest a counter only when the gap is 10% or more. The same band as a C. */
@@ -195,6 +207,8 @@ export type BuildPacketOptions = {
   teamNames?: { teamA?: string | null; teamB?: string | null }
   /** Other players on each roster, by name, for counter suggestions. Trade assets are always allowed. */
   rosterNames?: { teamA?: readonly string[]; teamB?: readonly string[] }
+  /** Set for a commissioner's explanation: the code-computed review the model explains. */
+  commissionerReview?: TradeReview | null
 }
 
 export function buildExplanationPacket(receipt: TradeEvaluationReceipt, opts: BuildPacketOptions = {}): ExplanationPacket {
@@ -257,6 +271,15 @@ export function buildExplanationPacket(receipt: TradeEvaluationReceipt, opts: Bu
       ],
     },
     stale: receipt.stored ? { rostersStale: receipt.stored.rostersStale, rostersSyncedAt: receipt.stored.rostersSyncedAt } : null,
+    commissioner: opts.commissionerReview
+      ? {
+          recommendation: opts.commissionerReview.recommendation,
+          flags: opts.commissionerReview.flags.map((f) => ({ ...f })),
+          notComputed: opts.commissionerReview.checks
+            .filter((c) => c.status === 'not_computed')
+            .map((c) => ({ code: c.code, reason: c.explanation })),
+        }
+      : null,
   }
   const withRisks = { ...base, riskCandidates: riskCandidatesOf(base) }
   return {

@@ -52,6 +52,32 @@ function topAsset(p: ExplanationPacket): TradeVerdict['reasons'][number] | null 
   }
 }
 
+const FLAG_WORDS: Record<string, string> = {
+  heavily_lopsided: 'a heavily lopsided value gap',
+  tanking_signal: 'a possible tanking signal',
+  repeat_partners: 'repeat trading partners leaning one way',
+  inactive_manager: 'an inactive manager',
+  eliminated_team_dumping: 'an eliminated team sending starters to a contender',
+  deadline_rush: 'a lopsided trade rushed in before the deadline',
+}
+
+/** The commissioner block, copied from the code's review, with a plain note that names no number. */
+function commissionerBlock(p: ExplanationPacket): TradeVerdict['commissioner'] {
+  const c = p.commissioner
+  if (!c) return undefined
+  const noted = c.flags.map((f) => FLAG_WORDS[f.code] ?? f.code)
+  const note =
+    noted.length === 0
+      ? 'No review flags were raised for this trade.'
+      : `Flagged for the commissioner: ${noted.join('; ')}.`
+  const gaps = c.notComputed.length ? ' Some checks could not be run and are listed in the review.' : ''
+  return {
+    recommendation: c.recommendation,
+    flags: c.flags.map((f) => ({ code: f.code, severity: f.severity })),
+    noteToLeague: `${note}${gaps}`,
+  }
+}
+
 export function templateVerdict(p: ExplanationPacket): TradeVerdict {
   const risks = p.riskCandidates.slice(0, 2).map((r) => {
     const i = r.indexOf(': ')
@@ -73,6 +99,7 @@ export function templateVerdict(p: ExplanationPacket): TradeVerdict {
       reasons,
       risks,
       confidence: p.fixed.confidence,
+      ...(p.commissioner ? { commissioner: commissionerBlock(p) } : {}),
     }
   }
 
@@ -101,5 +128,6 @@ export function templateVerdict(p: ExplanationPacket): TradeVerdict {
     reasons: reasons.slice(0, 4),
     risks,
     confidence: p.fixed.confidence,
+    ...(p.commissioner ? { commissioner: commissionerBlock(p) } : {}),
   }
 }

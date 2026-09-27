@@ -269,3 +269,49 @@ describe('Trade OS — every screen records its grade as a receipt', () => {
     expect(code(file)).toMatch(shape)
   })
 })
+
+/*
+ * 🛑 COMMISSIONER REVIEW MODE (design build-order step 6, 2026-09-27): the review advises and the
+ * commissioner decides. These shapes keep it that way — the review path never writes a trade's status,
+ * the flags stay pure code, and every commissioner decision logs the review it was made with.
+ */
+describe('Commissioner review mode — advice, never an action', () => {
+  /* A write to a trade's status, or a call into a decision path. Shapes, not words. */
+  const DECIDES = /commissionerAfTradeDecision\(|finalizeAfLeagueTradeProcessing\(|vetoRedraftTradeProposal\(|(?:afLeagueTrade|redraftTradeProposal)\.update\(/
+
+  it.each([
+    'app/api/leagues/[leagueId]/trades/[tradeId]/review/route.ts',
+    'lib/decision-os/trade/tradeReviewContext.ts',
+    'lib/decision-os/trade/tradeReview.ts',
+    'components/trade-review/TradeReviewPanel.tsx',
+  ])('%s decides nothing', (file) => {
+    expect(DECIDES.test(code(file))).toBe(false)
+  })
+
+  it('the flags are pure code — the review module imports nothing', () => {
+    expect(code('lib/decision-os/trade/tradeReview.ts')).not.toMatch(/^import /m)
+  })
+
+  it('the redraft panel shows the one review, not the old snapshot review', () => {
+    const src = code('app/league/[leagueId]/tabs/redraft/CommissionerReviewPanel.tsx')
+    expect(src).toMatch(/<TradeReviewPanel /)
+    expect(src).not.toMatch(/fetchCommissionerTradeReview\(/)
+  })
+
+  it.each([
+    ['the native decision route', 'app/api/leagues/[leagueId]/trades/[tradeId]/commissioner/route.ts', /reviewId:\s*reviewIdFrom\(body\.reviewId\)/],
+    ['a native reject', 'lib/league-trade-engine/tradeService.ts', /reason: 'commissioner_reject',\s*metadata: auditMetadata,/],
+    ['a native approve', 'lib/league-trade-engine/tradeService.ts', /finalizeAfLeagueTradeProcessing\(\{ tradeId: trade\.id, actorUserId: input\.userId, auditMetadata \}\)/],
+    ['a redraft approve', 'app/api/redraft/trade-votes/route.ts', /noteCommissionerReview\(proposal\.id, \{ commissionerDecision: 'approve', reviewId: reviewIdFrom\(body\.reviewId\) \}\)/],
+    ['a redraft veto (votes route)', 'app/api/redraft/trade-votes/route.ts', /upsertDecision\(proposal\.id, 'vetoed', userId, body\.reason, \{ commissionerDecision: 'veto', reviewId: reviewIdFrom\(body\.reviewId\) \}\)/],
+    ['a redraft veto (veto route)', 'app/api/redraft/trades/veto/route.ts', /snapshot: \{ reviewId \}/],
+  ])('%s logs the review it was made with', (_what, file, shape) => {
+    expect(code(file)).toMatch(shape)
+  })
+
+  it('positive control: the decision shape matches the calls it exists to catch', () => {
+    expect(DECIDES.test('await commissionerAfTradeDecision({ tradeId, leagueId, userId, decision })')).toBe(true)
+    expect(DECIDES.test('await prisma.redraftTradeProposal.update({ where: { id } })')).toBe(true)
+    expect(DECIDES.test('const r = await reviewStoredTrade({ leagueId, ref, userId })')).toBe(false)
+  })
+})

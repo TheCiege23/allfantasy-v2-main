@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TradeCenterModal } from './TradeCenterModal'
 import { CommissionerReviewPanel } from './CommissionerReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { TradeDiscoveryPanel } from './TradeDiscoveryPanel'
 import { TradeBlockPanel } from './TradeBlockPanel'
 import { MarketSnapshotPanel } from './MarketSnapshotPanel'
@@ -132,7 +133,9 @@ export function TradeCenter({
     setBusyProposalId(proposalId)
     setError(null)
     try {
-      await submitTradeVote({ proposalId, action })
+      // A commissioner's decision carries the review it was made with (design step 6: decision logged).
+      const commissionerAction = action === 'commissioner_approve' || action === 'commissioner_veto'
+      await submitTradeVote({ proposalId, action, ...(commissionerAction ? { reviewId: reviewIdFor(proposalId) } : {}) })
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${action}`)
@@ -145,7 +148,7 @@ export function TradeCenter({
     setBusyProposalId(proposalId)
     setError(null)
     try {
-      await vetoRedraftTradeProposal({ proposalId })
+      await vetoRedraftTradeProposal({ proposalId, reviewId: reviewIdFor(proposalId) })
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to veto proposal')
@@ -332,7 +335,7 @@ export function TradeCenter({
                     onReversed={() => void refresh()}
                   />
                 ) : null}
-                {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel proposalId={p.id} /> : null}
+                {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel leagueId={leagueId} proposalId={p.id} /> : null}
               </div>
             )
           })

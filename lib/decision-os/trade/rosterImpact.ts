@@ -187,6 +187,13 @@ export type RosterImpact = {
   unpricedExcluded: number
   depth: DepthRow[]
   replacement: ReplacementRow[]
+  /**
+   * Who starts, by player id, before and after — the optimal lineup `fillLineup` already chose.
+   * Commissioner review mode (`./tradeReview.ts`) reads them to tell starter value from bench value.
+   * Absent on a refusal, and on impacts recorded before 2026-09-27.
+   */
+  startersBefore?: string[]
+  startersAfter?: string[]
 }
 
 const EMPTY = (blockedReason: string, unpricedExcluded = 0): RosterImpact => ({
@@ -308,5 +315,7 @@ export function computeRosterImpact(args: {
     unpricedExcluded,
     depth,
     replacement,
+    startersBefore: [...fillBefore.starterIds],
+    startersAfter: [...fillAfter.starterIds],
   }
 }

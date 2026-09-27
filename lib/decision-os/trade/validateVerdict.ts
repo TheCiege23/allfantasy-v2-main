@@ -55,12 +55,24 @@ const LETTER_IN_TEXT = [
 
 const LINEUP_PATH = /^(?:lineup\.teamA|seasonOutlook\.teamA)\b/
 
+/**
+ * Rule 9. The note to the league advises; it never states an outcome the app does not decide, and it
+ * never accuses anyone. "Consider a veto" is the recommendation; "this trade will be vetoed" is not.
+ */
+const NOTE_OVERREACH: Array<{ re: RegExp; term: string }> = [
+  { re: /\b(?:will|shall|must|is going to|has been|was)\s+(?:be\s+)?(?:vetoed|reversed|overturned|blocked)\b/i, term: 'states the outcome' },
+  { re: /\bcollu(?:de[sd]?|ding|sion|sive)\b/i, term: 'collusion' },
+  { re: /\bcheat(?:s|ed|ing|er)?\b/i, term: 'cheating' },
+  { re: /\brigged\b/i, term: 'rigged' },
+]
+
 function textsOf(v: TradeVerdict): Array<{ where: string; text: string }> {
   return [
     { where: 'headline', text: v.headline },
     ...v.reasons.map((r, i) => ({ where: `reasons[${i}]`, text: r.text })),
     ...v.risks.map((r, i) => ({ where: `risks[${i}]`, text: r })),
     ...(v.counter ? [{ where: 'counter.why', text: v.counter.why }] : []),
+    ...(v.commissioner?.noteToLeague ? [{ where: 'commissioner.noteToLeague', text: v.commissioner.noteToLeague }] : []),
   ]
 }
 
@@ -123,6 +135,33 @@ export function validateVerdict(raw: unknown, packet: ExplanationPacket): Verdic
     for (const n of names) {
       if (!known.has(n.trim().toLowerCase())) violations.push(`counter: "${n}" is not an asset on either roster`)
     }
+  }
+
+  // Commissioner review: the code's flags and recommendation, copied exactly.
+  if (packet.commissioner) {
+    const c = v.commissioner
+    if (!c) {
+      violations.push('commissioner: required — copy the recommendation and flags from packet.commissioner')
+    } else {
+      if (c.recommendation !== packet.commissioner.recommendation) {
+        violations.push(`commissioner.recommendation must be "${packet.commissioner.recommendation}"; got "${c.recommendation}"`)
+      }
+      const want = packet.commissioner.flags.map((f) => `${f.code}:${f.severity}`).sort()
+      const got = c.flags.map((f) => `${f.code}:${f.severity}`).sort()
+      if (JSON.stringify(want) !== JSON.stringify(got)) {
+        violations.push(`commissioner.flags must be exactly ${JSON.stringify(want)}; got ${JSON.stringify(got)}`)
+      }
+      if (c.noteToLeague && c.noteToLeague.length > HEADLINE_MAX_CHARS) {
+        violations.push(`commissioner.noteToLeague: ${c.noteToLeague.length} characters; the limit is ${HEADLINE_MAX_CHARS}`)
+      }
+      for (const { re, term } of NOTE_OVERREACH) {
+        if (c.noteToLeague && re.test(c.noteToLeague)) {
+          violations.push(`commissioner.noteToLeague: advises only — no verdict or accusation ("${term}")`)
+        }
+      }
+    }
+  } else if (v.commissioner) {
+    violations.push('commissioner: not allowed — this is not a commissioner review')
   }
 
   // Every number, every letter, every word.

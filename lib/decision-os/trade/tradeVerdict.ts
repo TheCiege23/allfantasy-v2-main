@@ -8,7 +8,8 @@ import { z } from 'zod'
  * Two deliberate differences from the design's interface, both about a WITHHELD grade:
  *   - `grades` is empty and `verdict` is null when the engine gave no letter. The design's enum has no
  *     "not graded", and forcing one of its four values would state a judgement nobody made.
- *   - `commissioner` is absent: commissioner review is build-order step 6, not this one.
+ *   - `commissioner` carries codes and severities only — the flag explanations are code-written
+ *     (`./tradeReview.ts`); the model adds a `noteToLeague` and nothing else.
  */
 
 const GradeLetterSchema = z.enum(['A', 'B', 'C', 'D', 'F'])
@@ -25,6 +26,22 @@ export const TradeVerdictSchema = z
       .strict()
       .optional(),
     confidence: z.enum(['high', 'medium', 'low']),
+    /** Commissioner review mode only: the code's flags and recommendation, copied, plus the model's note. */
+    commissioner: z
+      .object({
+        recommendation: z.enum(['approve', 'review_with_managers', 'consider_veto']),
+        flags: z.array(
+          z
+            .object({
+              code: z.enum(['heavily_lopsided', 'tanking_signal', 'repeat_partners', 'inactive_manager', 'eliminated_team_dumping', 'deadline_rush']),
+              severity: z.enum(['low', 'medium', 'high']),
+            })
+            .strict(),
+        ),
+        noteToLeague: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
 

@@ -40,6 +40,8 @@ export type EvaluateStoredTradeResult =
       /** The side the grade is from. */
       perspectiveTeamId: string
       viewerInTrade: boolean
+      /** The league world the evaluation used, for callers that need more of it (commissioner review). */
+      world?: CanonicalWorld | null
     }
   | { ok: false; refusal: TradeRefusal }
 
@@ -221,5 +223,5 @@ export async function evaluateStoredTrade(
     },
     world ? { evaluateCanonical: (a) => evaluateCanonicalTrade(a, { resolveWorld: async () => world }) } : {},
   )
-  return { ok: true, trade, receipt, perspectiveTeamId: me.teamId, viewerInTrade }
+  return { ok: true, trade, receipt, perspectiveTeamId: me.teamId, viewerInTrade, world }
 }
