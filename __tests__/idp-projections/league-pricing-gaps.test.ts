@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const load = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/idp-projections/loadIdpProjections', () => ({ loadIdpProjections: load }))
-import { priceIdpBoard } from '@/lib/idp-projections/leagueIdpVorp'
+import { priceIdpBoard, loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 
 const ids = ['starter', 'replacement', 'rookie', 'reserve', 'unknown']
 const aggregate = vi.fn()
@@ -24,6 +24,17 @@ beforeEach(() => {
 })
 
 describe('league defender pricing gaps', () => {
+  it('keeps the imported league week after an early game instead of advancing the board', async () => {
+    aggregate.mockReset().mockRejectedValue(new Error('Must not infer period from newest played game'))
+    const scopedDb = { ...prisma as object, league: { findUnique: async () => ({ id: 'league',
+      settings: { season: '2026', current_week: 3, scoring_settings: args.scoring } }) } } as never
+    const board = await loadLeagueIdpVorp({ prisma: scopedDb, leagueId: 'league',
+      rosterPlayerIds: ids, rosterPositions: ['LB'], numTeams: 1 })
+    expect(board.projectedFor).toEqual({ season: 2026, week: 3 })
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ season: 2026, week: 3 }))
+    expect(aggregate).not.toHaveBeenCalled()
+    expect(board.valueBySleeperId.get('starter')).toBeGreaterThan(0)
+  })
   it('does not guess a projection week when the latest-period read fails', async () => {
     aggregate.mockReset().mockResolvedValueOnce({ _max: { season: 2026 } }).mockRejectedValueOnce(new Error('Unavailable'))
     const board = await priceIdpBoard(args)

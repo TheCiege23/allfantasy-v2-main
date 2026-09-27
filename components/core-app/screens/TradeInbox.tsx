@@ -1,4 +1,6 @@
 'use client'
+import type { TradeRecord } from '@/lib/core-app/trades'
+import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 
 import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
@@ -83,6 +85,10 @@ type Offer = {
  * without a type error the moment the counter row tried to count them.
  */
 type NativeRow = {
+  sideALabel?: string
+  sideBLabel?: string
+  realizedGrade?: string | null
+  realizedNote?: string | null
   id: string
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
@@ -332,6 +338,7 @@ export function TradeInbox(props: {
    * cached response predates.
    */
   reloadToken?: number
+  importedHistory?: readonly TradeRecord[]
   /**
    * How many offers are waiting on this manager — Sleeper offers they received plus AllFantasy
    * proposals addressed to them. Null until the panel has loaded. The phone step bar badges the
@@ -486,7 +493,7 @@ export function TradeInbox(props: {
   const nativeIncoming = nativeOpen.filter((t) => t.direction === 'incoming')
 
   const timeline = (() => {
-    const rows = [...(data?.activeTrades ?? []), ...(data?.historyTrades ?? [])]
+    const rows: NativeRow[] = [...importedTradeTimelineRows(props.importedHistory ?? []), ...(data?.activeTrades ?? []), ...(data?.historyTrades ?? [])]
     const unique = Array.from(new Map(rows.map((row) => [row.id, row])).values())
     return unique
       .filter((row) => {
@@ -703,10 +710,11 @@ export function TradeInbox(props: {
                       <time>{whenLabel(trade.executedAt ?? trade.timestamp ?? null) ?? 'date unavailable'}</time>
                     </div>
                     <div className="af-tc-timeline-assets">
-                      <div><span>{trade.proposerName ? `${trade.proposerName} sent` : trade.direction === 'complete' ? 'Side A sent' : 'You send'}</span><b>{trade.sent.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
-                      <div><span>{trade.receiverName ? `${trade.receiverName} sent` : trade.direction === 'complete' ? 'Side B sent' : 'You receive'}</span><b>{trade.received.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
+                      <div><span>{trade.sideALabel ?? (trade.proposerName ? `${trade.proposerName} sent` : trade.direction === 'complete' ? 'Side A sent' : 'You send')}</span><b>{trade.sent.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
+                      <div><span>{trade.sideBLabel ?? (trade.receiverName ? `${trade.receiverName} sent` : trade.direction === 'complete' ? 'Side B sent' : 'You receive')}</span><b>{trade.received.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
                     </div>
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
+                    {trade.realizedGrade ? <p className="af-tc-timeline-advice">Realized outcome: {trade.realizedGrade}. {trade.realizedNote}</p> : null}
                     {lineupLine ? (
                       <p className="af-tc-timeline-lineup" data-direction={lineupImpactDirection(trade.rosterImpact)}>
                         {lineupLine}

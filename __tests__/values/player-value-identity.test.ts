@@ -5,9 +5,10 @@ import type { ValuationContext } from '@/lib/hybrid-valuation'
 const historical = vi.hoisted(() => vi.fn())
 const analytics = vi.hoisted(() => vi.fn())
 const playerRows = vi.hoisted(() => new Map<string, Record<string, unknown>>())
+const searchRows = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 const identityResolve = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
-vi.mock('@/lib/data/players', () => ({ getPlayer: async (id: string) => playerRows.get(id) ?? null, searchPlayers: async () => [] }))
+vi.mock('@/lib/data/players', () => ({ getPlayer: async (id: string) => playerRows.get(id) ?? null, searchPlayers: async () => searchRows }))
 vi.mock('@/lib/shared-services/player-identity/PlayerIdentityResolver', () => ({ resolvePlayer: identityResolve }))
 vi.mock('@/lib/historical-values', () => ({ getHistoricalPlayerValue: historical, getHistoricalPickValueWeighted: vi.fn() }))
 vi.mock('@/lib/player-analytics', () => ({ getPlayerAnalytics: analytics }))
@@ -29,9 +30,17 @@ const ctx = (): ValuationContext => ({
   leagueValueBySleeperId: new Map([['lb', { value: 1200, position: 'LB', basis: 'idp-vorp' }]]),
   leagueUnpricedReasonByNameLower: new Map([['justin jefferson', ambiguous]]),
 })
-beforeEach(() => { playerRows.clear(); identityResolve.mockReset(); identityResolve.mockResolvedValue({ confidence: 'none' }); historical.mockReturnValue({ value: 8000, snapshotDate: '2026-09-26' }); analytics.mockResolvedValue(null) })
+beforeEach(() => { playerRows.clear(); searchRows.length = 0; identityResolve.mockReset(); identityResolve.mockResolvedValue({ confidence: 'none' }); historical.mockReturnValue({ value: 8000, snapshotDate: '2026-09-26' }); analytics.mockResolvedValue(null) })
 
 describe('identity-safe player trade pricing', () => {
+  it('refuses ambiguous college names and never replaces a missing selected ID with a name hit', async () => {
+    searchRows.push(...['college-1', 'college-2'].map(id => ({ id, sport: 'NCAAF', name: 'Same College Name',
+      position: 'QB', team: 'College', dynastyValue: 10, projections: {} })))
+    const opts = { effectiveSport: 'NCAAF' as const, nflCtx: ctx(), fcPlayers: [receiver], waiverBudget: 100, dataGaps: [] }
+    expect((await resolveAssets([{ kind: 'player', name: 'Same College Name' }], opts)).unresolved).toEqual(['Same College Name'])
+    searchRows.pop()
+    expect((await resolveAssets([{ kind: 'player', name: 'Same College Name', playerId: 'missing-id' }], opts)).unresolved).toEqual(['Same College Name'])
+  })
   it('prices a verified Yahoo cross-provider match and rejects a position conflict', async () => {
     identityResolve.mockResolvedValue({ confidence: 'name_match_confident', player: {
       sport: 'NFL', canonicalName: 'Justin Jefferson', position: 'LB', team: 'CLE', providerIds: { sleeper: 'lb' },

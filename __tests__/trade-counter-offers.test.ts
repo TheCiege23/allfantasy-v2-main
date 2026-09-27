@@ -8,6 +8,17 @@ const grade = (give: number, get: number) => gradeTrade({ giveValue: give, getVa
 const target = (name: string, marketValue: number) => ({ id: name, name, position: 'WR', marketValue })
 
 describe('counteroffer package evaluation', () => {
+  it('excludes an already selected canonical player across record and provider namespaces', async () => {
+    const evaluate = vi.fn(async () => grade(1000, 980))
+    const offers = await evaluateCounterOffers({ grade: grade(1000, 700),
+      give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Same Name', playerId: 'NFL:42' }],
+      selectedProviderIds: [null, { provider: 'sleeper', id: '42' }], yourTargets: [],
+      theirTargets: ['42', '43'].map(id => ({ id, name: 'Same Name', position: 'LB', marketValue: 300,
+        providerIdentity: { provider: 'sleeper' as const, id } })), evaluate })
+    expect(evaluate).toHaveBeenCalledTimes(1)
+    expect(offers.map(o => o.rosterPlayerId)).toEqual(['43'])
+  })
   it('retains verified IDs for same-name roster candidates and reads the added line value', async () => {
     const current = grade(1000, 700)
     const evaluate = vi.fn(async (_give, get) => {
