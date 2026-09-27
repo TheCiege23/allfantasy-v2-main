@@ -255,6 +255,7 @@ export async function runTradeConsoleAnalysis(
     },
     mark,
   })
+  dataGaps.push(...(chart.valuationGaps ?? []))
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
   const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
 

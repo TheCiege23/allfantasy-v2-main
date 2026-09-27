@@ -16,6 +16,7 @@ import { analysisUnpricedReason, type UnpricedReason } from '@/lib/trade-value/u
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import type { LoadedTradeLeague } from './league-loader'
 import { sportsRecordToPricedAsset } from './sports-db-valuation'
+import { tradeFormatCoverage } from './formatCoverage'
 import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLine } from './types'
 
 /**
@@ -426,12 +427,10 @@ export async function resolveAssets(
       continue
     }
 
-    if (!row && displayName.length >= 2) {
+    if (!row && !raw.playerId && !raw.providerIdentity && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
-      row = (found[0] ?? null) as SportsPlayerRecord | null
-    }
-    if (!row && raw.playerId) {
-      row = (await getPlayer(raw.playerId.trim(), { sport: args.effectiveSport })) as SportsPlayerRecord | null
+      const exact = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      row = (exact.length === 1 ? exact[0] : null) as SportsPlayerRecord | null
     }
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')
@@ -500,6 +499,7 @@ export type LeagueTradeChart = {
   pprNfl: 0 | 0.5 | 1
   fcPlayers: FantasyCalcPlayer[]
   nflCtx: ValuationContext
+  valuationGaps?: string[]
 }
 
 /**
@@ -514,6 +514,7 @@ export async function resolveLeagueTradeChart(args: {
   mark?: (name: string) => void
 }): Promise<LeagueTradeChart> {
   const { leagueRow, leagueSnapshot, leagueNormCtx } = args
+  const coverage = leagueRow ? tradeFormatCoverage(leagueRow) : { gaps: [], prohibitedReason: null }
   const input = args.overrides ?? {}
   const leagueSize =
     input.leagueSize ??
@@ -612,6 +613,7 @@ export async function resolveLeagueTradeChart(args: {
     proposalRules: {
       tradesEnabled: leagueNormCtx?.lineupBehavior.bestBallSettings?.tradesEnabled ?? null,
       draftPickTrading: leagueNormCtx?.trade.draftPickTrading ?? null,
+      formatProhibition: coverage.prohibitedReason,
     },
     marketCtx,
     chartIsDynasty,
@@ -621,6 +623,7 @@ export async function resolveLeagueTradeChart(args: {
     pprNfl,
     fcPlayers,
     nflCtx,
+    valuationGaps: coverage.gaps,
   }
 }
 
