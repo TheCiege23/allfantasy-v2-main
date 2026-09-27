@@ -10,6 +10,7 @@ import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifie
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
+import { selectKickoffLeague } from './kickoffContext'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -1279,11 +1280,11 @@ export async function getDash34Data(
    * The band's CTA. The handoff opens the source platform, which is the right
    * action when the band names one league — but this countdown is a league-wide
    * kickoff, so it points at the roster screen for the league at the top of the
-   * list, which is by construction the one most likely to need a decision. With no
-   * leagues it falls back to Player Finder rather than rendering a dead button.
+   * list for that game's sport. Quiet leagues in the same sport remain valid
+   * targets; without a matching league it falls back to Player Finder.
    */
-  const topLeague = needs[0] ?? null
   const nextGame = nextGames[0] ?? null
+  const kickoffLeague = selectKickoffLeague(nextGame?.sport, [...needs, ...leagues])
 
   /*
    * Which slate the countdown's game belongs to. Production stores the same
@@ -1304,7 +1305,7 @@ export async function getDash34Data(
   const sameGameRows =
     nextGame && nextStart
       ? nextGames.filter(
-          (g) => g.startTime?.getTime() === nextStart.getTime() && clubPair(g) === clubPair(nextGame),
+          (g) => g.sport === nextGame.sport && g.startTime?.getTime() === nextStart.getTime() && clubPair(g) === clubPair(nextGame),
         )
       : []
   const statedSlates = [...new Set(sameGameRows.map((g) => g.seasonType).filter((s): s is string => Boolean(s)))]
@@ -1358,10 +1359,10 @@ export async function getDash34Data(
         // No lineup reader exists, so there are no slot chips to show. An empty
         // array renders nothing rather than inventing "FLEX empty".
         slots: [],
-        openHref: topLeague
-          ? `/core/my-team?league=${encodeURIComponent(topLeague.id)}`
+        openHref: kickoffLeague
+          ? `/core/my-team?league=${encodeURIComponent(kickoffLeague.id)}`
           : '/core/players',
-        openLabel: topLeague ? `Check ${topLeague.name}` : 'Open Player Finder',
+        openLabel: kickoffLeague ? `Check ${kickoffLeague.name}` : 'Open Player Finder',
       }
     : null
 

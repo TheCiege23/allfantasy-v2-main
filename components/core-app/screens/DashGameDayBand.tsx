@@ -104,9 +104,9 @@ export function DashGameDayBand({
         <span className="af-label af-gd-kicker">Game day</span>
         {record ? (
           <span className="af-gd-record af-num">
-            <b>{record.wins}</b>
-            <span className="af-gd-sep">–</span>
-            <i>{record.losses}</i>
+            <b>{record.wins} ahead</b>
+            <span className="af-gd-sep">·</span>
+            <i>{record.losses} behind</i>
             <span className="af-gd-recmeta">
               {' '}
               right now · week {record.week}

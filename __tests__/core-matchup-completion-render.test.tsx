@@ -12,6 +12,18 @@ const data = (completed: boolean | undefined, pointsFor = 74.2, pointsAgainst = 
 })
 
 describe('matchup completion evidence', () => {
+  it('uses the displayed league period instead of the next game’s sport and week', () => {
+    render(<Dash3AMatchups leagues={[]} week={data(false)} winProb={null} weekLabel="NCAAF WK 4" />)
+    expect(screen.getByText('2026 · Week 3')).toBeTruthy()
+    expect(screen.queryByText('NCAAF WK 4')).toBeNull()
+  })
+  it('does not claim a single period when displayed leagues disagree', () => {
+    const week = data(false)
+    week.rows.push({ ...week.rows[0], leagueId: 'l2', leagueName: 'Other league', week: 4 })
+    render(<Dash3AMatchups leagues={[]} week={week} winProb={null} weekLabel="NCAAF WK 4" />)
+    expect(screen.getByText('League periods')).toBeTruthy()
+    expect(screen.queryByText('NCAAF WK 4')).toBeNull()
+  })
   it.each([false, undefined])('partial or legacy scores (%s) cannot claim a result', (completed) => {
     const week = data(completed)
     render(<Dash3AMatchups leagues={[]} week={week} winProb={{ l1: 0.15 }} weekLabel="NFL WK 3" />)

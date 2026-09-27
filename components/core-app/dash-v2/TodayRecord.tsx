@@ -23,7 +23,7 @@ export function TodayRecord({ state }: { state: SectionState<TodayRecordData> })
 
   return (
     <div className="af-d2-card af-d2-stat">
-      <p className="af-d2-stat-label">Today&rsquo;s record</p>
+      <p className="af-d2-stat-label">Live matchup leads</p>
       <p className="af-d2-stat-value af-num">
         <b>{wins}</b>
         <span className="af-d2-stat-sep">–</span>
@@ -36,7 +36,7 @@ export function TodayRecord({ state }: { state: SectionState<TodayRecordData> })
         double-checks the date on.
       */}
       <p className="af-d2-stat-sub">
-        Week {week} · {season}
+        Ahead / Behind · Week {week} · {season}
       </p>
     </div>
   )
