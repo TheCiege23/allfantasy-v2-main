@@ -13,7 +13,7 @@ vi.mock('@/components/core-app/screens/tradesPanelFetch', () => ({
   fetchTradesPanel: (...args: unknown[]) => fetchTradesPanel(...args),
 }))
 
-import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
+import { TradeInbox, toPickedAssets } from '@/components/core-app/screens/TradeInbox'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 
 const imported = {
@@ -63,6 +63,33 @@ function panel(activeTrades: unknown[], historyTrades: unknown[] = []) {
 }
 
 describe('TradeInbox — lineup effect line', () => {
+  it('keeps provider-qualified player IDs when an offer is loaded into the builder', async () => {
+    const asset = { playerId: '42', name: 'Same Name', position: 'DB', team: 'SEA', isPick: false, pickYear: null, pickRound: null, faabAmount: null }
+    expect(toPickedAssets([asset], 'yahoo').picked[0]).toMatchObject({ playerId: null, providerIdentity: { provider: 'yahoo', id: '42', position: 'DB' } })
+    expect(toPickedAssets([asset]).picked[0]).not.toHaveProperty('providerIdentity')
+    const response = panel([])
+    response.data.pendingOffers = [{ provider: 'sleeper', transactionId: 'offer', direction: 'incoming', partnerName: 'Partner', proposedAt: null, give: [asset], get: [] }] as never
+    fetchTradesPanel.mockResolvedValue(response)
+    const onLoad = vi.fn()
+    render(<TradeInbox leagueId="L" onLoad={onLoad} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Load into builder/ }))
+    expect(onLoad.mock.calls[0][0][0]).toMatchObject({ providerIdentity: { provider: 'sleeper', id: '42' } })
+  })
+  it('keeps a long completed history compact and allows browsing and collapsing it', async () => {
+    fetchTradesPanel.mockResolvedValue(panel([], Array.from({ length: 12 }, (_, i) => row({ id: `old-${i}`, status: 'completed_on_sleeper', partnerName: `History ${i}`, timestamp: new Date(Date.UTC(2026, 8, 26 - i)).toISOString() }))))
+    const { container } = render(<TradeInbox leagueId="L" onLoad={() => {}} />)
+    await screen.findByText('History 0')
+    expect(screen.queryByText('History 11')).toBeNull()
+    expect(container.querySelectorAll('.af-tc-timeline-row')).toHaveLength(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Show more trades' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show more trades' }))
+    expect(screen.getByText('History 11')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show fewer trades' }))
+    expect(screen.queryByText('History 11')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show more trades' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Completed', exact: true }))
+    expect(container.querySelectorAll('.af-tc-timeline-row')).toHaveLength(5)
+  })
   it('renders archived completed trades with the correct sides and separates realized results from decision grades', async () => {
     fetchTradesPanel.mockResolvedValue(panel([]))
     const { container } = render(<TradeInbox leagueId="L" onLoad={() => {}} importedHistory={[imported]} />)

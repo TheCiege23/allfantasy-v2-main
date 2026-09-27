@@ -65,6 +65,7 @@ type OfferAsset = {
 }
 
 type Offer = {
+  provider?: 'sleeper' | 'yahoo'
   transactionId: string
   direction: 'incoming' | 'outgoing'
   partnerName: string
@@ -138,7 +139,7 @@ type PanelResponse = {
  * silently shortened offer analyses as a different deal — one side lighter than
  * what the manager was actually sent.
  */
-export function toPickedAssets(assets: OfferAsset[]): {
+export function toPickedAssets(assets: OfferAsset[], provider?: 'sleeper' | 'yahoo'): {
   picked: PickedAsset[]
   dropped: string[]
 } {
@@ -166,14 +167,13 @@ export function toPickedAssets(assets: OfferAsset[]): {
     }
     picked.push({
       kind: 'player',
-      /*
-       * ⚠ NAME, NOT THE PROVIDER'S ID. `playerId` here is a SLEEPER id, and the
-       * analyzer's `playerId` means an id in our own space. Passing one for the
-       * other would either miss or, worse, resolve to a different player. Name
-       * resolution is the same path the search picker uses for every
-       * FantasyCalc result, which carries no id either.
-       */
+      // The provider ID is qualified separately from the application's player ID.
       playerId: null,
+      ...(provider && a.playerId ? { providerIdentity: {
+        provider, id: a.playerId,
+        ...(a.position ? { position: a.position } : {}),
+        ...(a.team ? { team: a.team } : {}),
+      } } : {}),
       name: a.name,
       position: a.position,
       team: a.team,
@@ -350,8 +350,10 @@ export function TradeInbox(props: {
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const [countering, setCountering] = useState<{ id: string; state: 'loading' | 'failed' } | null>(null)
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
+  const [timelineLimit, setTimelineLimit] = useState(5)
 
   const { leagueId, onLoad, onCounter, reloadToken = 0 } = props
+  useEffect(() => { setTimelineLimit(5) }, [leagueId, timelineFilter])
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
     if (!leagueId) return
@@ -413,8 +415,8 @@ export function TradeInbox(props: {
 
   const loadOffer = useCallback(
     (o: Offer) => {
-      const g = toPickedAssets(o.give)
-      const k = toPickedAssets(o.get)
+      const g = toPickedAssets(o.give, o.provider)
+      const k = toPickedAssets(o.get, o.provider)
       const dropped = [...g.dropped, ...k.dropped]
       onLoad(
         g.picked,
@@ -687,7 +689,7 @@ export function TradeInbox(props: {
           <p className="af-tc-timeline-empty">No trades match this view yet.</p>
         ) : (
           <div className="af-tc-timeline-list">
-            {timeline.map((trade) => {
+            {timeline.slice(0, timelineLimit).map((trade) => {
               const proposedNet = valueNet(trade.proposalValueGiven, trade.proposalValueReceived)
               const currentNet = valueNet(trade.currentValueGiven, trade.currentValueReceived)
               const isCompleted = isCompleteStatus(trade.status)
@@ -732,6 +734,11 @@ export function TradeInbox(props: {
                 </article>
               )
             })}
+            <div className="af-tc-timeline-controls">
+              <p className="af-tc-row-sub" aria-live="polite">Showing {Math.min(timelineLimit, timeline.length)} of {timeline.length} trades</p>
+              {timelineLimit < timeline.length ? <button type="button" className="af-btn af-btn--ghost" onClick={() => setTimelineLimit((limit) => limit + 5)}>Show more trades</button> : null}
+              {timelineLimit > 5 ? <button type="button" className="af-btn af-btn--ghost" onClick={() => setTimelineLimit(5)}>Show fewer trades</button> : null}
+            </div>
           </div>
         )}
       </section>
