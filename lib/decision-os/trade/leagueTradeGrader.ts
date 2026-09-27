@@ -288,8 +288,7 @@ export async function loadNativePlayerNames(
         .filter((i) => {
           const type = String(i.itemType ?? 'player').toLowerCase()
           if (type.includes('pick') || type.includes('faab')) return false
-          const m = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? (i.metadata as Record<string, unknown>) : {}
-          return !(typeof m.playerName === 'string' && m.playerName.trim()) && !(typeof m.name === 'string' && m.name.trim())
+          return true
         })
         .map((i) => i.itemReference)
         .filter((id): id is string => typeof id === 'string' && id.length > 0),

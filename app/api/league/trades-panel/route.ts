@@ -95,8 +95,8 @@ async function gradeProviderOffers(
   const g = await grader()
   await Promise.all(trades.map(async (t) => {
     out.set(t.transactionId, await gradeDeal(g, {
-      give: gradeInputsFromPending(t.assetsGiven),
-      get: gradeInputsFromPending(t.assetsReceived),
+      give: gradeInputsFromPending(t.assetsGiven, t.provider ?? 'sleeper'),
+      get: gradeInputsFromPending(t.assetsReceived, t.provider ?? 'sleeper'),
       viewerSide: !opts.completed,
     }))
   }))

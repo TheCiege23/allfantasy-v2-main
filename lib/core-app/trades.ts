@@ -573,8 +573,8 @@ async function resolvePendingOffers(
   const grades = new Map<string, TradeGradeView>()
   await Promise.all(scan.trades.map(async (t) => {
     grades.set(t.transactionId, await gradeDeal(grader, {
-      give: gradeInputsFromPending(t.assetsGiven),
-      get: gradeInputsFromPending(t.assetsReceived),
+      give: gradeInputsFromPending(t.assetsGiven, t.provider ?? 'sleeper'),
+      get: gradeInputsFromPending(t.assetsReceived, t.provider ?? 'sleeper'),
       viewerSide: true,
     }))
   }))

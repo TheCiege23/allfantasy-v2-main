@@ -24,6 +24,7 @@ export type PickedAsset =
   | {
       kind: 'player'
       playerId: string | null
+      providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
       name: string
       position: string | null
       team: string | null

@@ -8,6 +8,23 @@ const grade = (give: number, get: number) => gradeTrade({ giveValue: give, getVa
 const target = (name: string, marketValue: number) => ({ id: name, name, position: 'WR', marketValue })
 
 describe('counteroffer package evaluation', () => {
+  it('retains verified IDs for same-name roster candidates and reads the added line value', async () => {
+    const current = grade(1000, 700)
+    const evaluate = vi.fn(async (_give, get) => {
+      expect(get.at(-1)).toMatchObject({ providerIdentity: { provider: 'sleeper', id: 'lb', position: 'LB' } })
+      return { ...grade(1000, 980), lines: [
+        { side: 'get' as const, name: 'Same Name', leagueValue: 700 },
+        { side: 'get' as const, name: 'Same Name', leagueValue: 280 },
+      ] } as ReturnType<typeof grade>
+    })
+    const offers = await evaluateCounterOffers({ grade: current,
+      give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Same Name', providerIdentity: { provider: 'sleeper', id: 'wr', position: 'WR' } }],
+      yourTargets: [], theirTargets: [{ id: 'lb', name: 'Same Name', position: 'LB', marketValue: 300,
+        providerIdentity: { provider: 'sleeper', id: 'lb', position: 'LB' } }], evaluate })
+    expect(offers).toHaveLength(1)
+    expect(offers[0].assetLeagueValue).toBe(280)
+  })
   it('excludes a value-balanced package when affordability fails or cannot be verified', async () => {
     const evaluate = vi.fn(async () => grade(1000, 1000))
     const canRecommend = vi.fn(async (_give, get) => get.at(-1)?.name === 'Affordable')

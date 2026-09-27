@@ -656,6 +656,8 @@ export async function runTradeConsoleAnalysis(
         name: a.name ?? a.id,
         position: a.pos ?? null,
         marketValue: Math.round(a.marketValue ?? a.value ?? 0),
+        providerIdentity: a.valuationIdentity,
+        playerId: a.valuationPlayerId,
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
   }
@@ -680,7 +682,8 @@ export async function runTradeConsoleAnalysis(
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')
-      .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0 })),
+      .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0,
+        providerIdentity: a.valuationIdentity, playerId: a.valuationPlayerId })),
     evaluate: async (counterGive, counterGet) => {
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
@@ -790,6 +793,7 @@ export async function runTradeConsoleAnalysis(
     giveTotal,
     getTotal,
     confidenceScore,
+    confidenceLabel: confidence,
     degraded,
     dataGaps,
     injuryNotes: capNote ? [capNote, ...injuryNotes] : injuryNotes,

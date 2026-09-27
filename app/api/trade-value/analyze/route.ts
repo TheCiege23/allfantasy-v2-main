@@ -59,6 +59,12 @@ const assetSchema = z.discriminatedUnion('kind', [
     playerId: z.string().optional(),
     name: z.string().optional(),
     sportHint: z.string().optional(),
+    providerIdentity: z.object({
+      provider: z.enum(['sleeper', 'yahoo']),
+      id: z.string().trim().min(1).max(128),
+      position: z.string().max(32).optional(),
+      team: z.string().max(64).optional(),
+    }).optional(),
   }),
   z.object({
     kind: z.literal('pick'),

@@ -854,8 +854,8 @@ async function notifyOffers(args: {
            */
           const grader = await createLeagueTradeGrader({ leagueId: row.id, userId: recipient.id }).catch(() => null)
           const grade = await gradeDeal(grader, {
-            give: gradeInputsFromPending(assetsGiven),
-            get: gradeInputsFromPending(assetsReceived),
+            give: gradeInputsFromPending(assetsGiven, 'sleeper'),
+            get: gradeInputsFromPending(assetsReceived, 'sleeper'),
             viewerSide: true,
           }).catch(() => null)
           return buildPendingTradeOfferEmail({

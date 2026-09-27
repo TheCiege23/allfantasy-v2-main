@@ -295,7 +295,7 @@ function LeagueMove({ line }: { line: Line }) {
   return (
     <span className="af-tc-league-move" data-dir={league > market ? 'up' : 'down'}>
       {pctOf(league / market)}
-      <small>mkt {money(market)}</small>
+      <small>base {money(market)}</small>
     </span>
   )
 }
@@ -464,6 +464,7 @@ function toInput(a: PickedAsset) {
     return {
       kind: 'player' as const,
       ...(a.playerId ? { playerId: a.playerId } : {}),
+      ...(a.providerIdentity ? { providerIdentity: a.providerIdentity } : {}),
       name: a.name,
       ...(a.sportHint ? { sportHint: a.sportHint } : {}),
     }
@@ -1175,16 +1176,16 @@ export function TradeCenter(props: {
     ? 'The complete proposal value is unavailable. Review the priced assets and your roster before deciding.'
     : intel?.contenderRecommendation ?? intel?.why ??
     (balance?.diff != null && balance.diff >= 0
-      ? `You receive about ${money(balance.diff)} more in current market value.`
+      ? `You receive about ${money(balance.diff)} more in current league value.`
       : 'The deal may improve your roster construction even when the raw market total is close.')
   const theirIncentive = balance?.diff != null && balance.diff <= 0
-    ? `They receive about ${money(Math.abs(balance.diff))} more in current market value.`
+    ? `They receive about ${money(Math.abs(balance.diff))} more in current league value.`
     : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
   const agreementBlocker = noSignal
     ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'The complete proposal could not be valued.'
     : intel?.tradeWarnings?.[0] ??
     (balance?.diff != null && balance.diff > 0
-      ? `The current market baseline favors you by ${money(balance.diff)}, so they may ask for another asset.`
+      ? `The displayed league value favors you by ${money(balance.diff)}, so they may ask for another asset.`
       : unpricedCount([...give, ...get]) > 0
         ? 'One or more assets are unpriced, which lowers confidence until fresh data is available.'
         : 'Manager preference, roster limits, and each team’s competitive window can still prevent agreement.')
@@ -1976,7 +1977,7 @@ export function TradeCenter(props: {
 
           {/*
             What the grade is priced in, always, so a letter never appears without its rules.
-            "League value" is the market price on this league's chart, moved by its scoring and your
+            "League value" is the base asset value (market or league-derived) on this league's chart, moved by its scoring and your
             roster; the moves are listed below with their reasons.
           */}
           {result.valueBasis ? (
@@ -2119,13 +2120,16 @@ export function TradeCenter(props: {
               <p className="af-tc-row-sub">Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.</p>
               <ul>
                 {result.counterOffers!.map(counter => (
-                  <li key={`${counter.addTo}-${counter.name}`}>
+                  <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
                     <strong>{counter.addTo === 'get' ? 'Ask for' : 'Offer'} {counter.name}</strong>
-                    <span className="af-tc-row-sub">Market {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
+                    <span className="af-tc-row-sub">Base value {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
                       You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
                     </span>
-                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name, playerId: counter.rosterPlayerId, position: counter.position, team: null, value: counter.marketValue })}>
+                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
+                      playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? null : null,
+                      providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
+                      position: counter.position, team: null, value: counter.marketValue })}>
                       Add to proposal
                     </button>
                   </li>

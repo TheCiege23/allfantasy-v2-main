@@ -340,9 +340,34 @@ export async function resolveAssets(
 
     let row: SportsPlayerRecord | null = null
     let displayName = raw.name?.trim() ?? ''
+    let providerSleeperId: string | null = null
+    let providerPosition = raw.providerIdentity?.position ?? null
+    let providerTeam = raw.providerIdentity?.team ?? null
 
-    if (raw.playerId?.trim()) {
-      row = (await getPlayer(raw.playerId.trim(), { sport: args.effectiveSport })) as SportsPlayerRecord | null
+    if (raw.providerIdentity?.provider === 'sleeper') {
+      providerSleeperId = raw.providerIdentity.id.trim() || null
+    } else if (raw.providerIdentity?.provider === 'yahoo') {
+      const identity = await resolvePlayer({ provider: 'yahoo', sourceId: raw.providerIdentity.id,
+        nameHint: displayName, positionHint: providerPosition, teamHint: providerTeam, sport: args.effectiveSport,
+      }).catch(() => null)
+      if (!identity?.player || !['direct', 'name_match_confident'].includes(identity.confidence)
+        || identity.player.sport !== args.effectiveSport
+        || !valuePositionsAgree(providerPosition, identity.player.position)
+        || !identity.player.providerIds.sleeper) {
+        unresolved.push(displayName || 'a Yahoo player without a verified cross-provider identity')
+        continue
+      }
+      providerSleeperId = identity.player.providerIds.sleeper
+      displayName = identity.player.canonicalName
+      providerPosition = identity.player.position
+      providerTeam = identity.player.team
+    }
+
+    const lookupId = providerSleeperId ?? raw.playerId?.trim()
+    if (lookupId) {
+      row = (await getPlayer(lookupId, { sport: args.effectiveSport })) as SportsPlayerRecord | null
+      if (row && providerSleeperId && (!valuePositionsAgree(providerPosition, row.position)
+        || (row.dataSource === 'sleeper' && row.id !== `${args.effectiveSport}:${providerSleeperId}`))) row = null
       if (row) displayName = row.name
     }
 
@@ -354,16 +379,17 @@ export async function resolveAssets(
       }
       const rawId = raw.playerId?.trim()
       const rowSleeperId = row?.dataSource === 'sleeper' && row.id.startsWith('NFL:') ? row.id.slice(4) : null
-      const knownSleeperId = rowSleeperId ?? (rawId && (
+      const knownSleeperId = providerSleeperId ?? rowSleeperId ?? (rawId && (
         args.nflCtx.leagueValueBySleeperId?.has(rawId) || args.nflCtx.leagueUnpricedReasonBySleeperId?.has(rawId)
         || args.fcPlayers.some(p => p.player.sleeperId === rawId)
       ) ? rawId : null)
       const candidate = knownSleeperId ? args.fcPlayers.find(p => p.player.sleeperId === knownSleeperId) : findPlayerByName(args.fcPlayers, displayName)
-      const matched = candidate && valuePositionsAgree(row?.position, candidate.player.position) ? candidate : null
+      const position = providerPosition ?? row?.position
+      const matched = candidate && valuePositionsAgree(position, candidate.player.position) ? candidate : null
       if (!row && knownSleeperId) {
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
-      const pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position: row?.position })
+      const pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
       const unpricedReason = pa.unpriced
         ? pa.unpricedReason ?? (knownSleeperId ? args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId) : null)
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
@@ -388,14 +414,14 @@ export async function resolveAssets(
               ? null
               : knownSleeperId ?? await resolveEnrichmentPlayerId(displayName, 'NFL', pa.position ?? row?.position ?? null),
           sport: 'NFL',
-          team: row?.team ?? matched?.player.maybeTeam ?? '—',
+          team: row?.team ?? providerTeam ?? matched?.player.maybeTeam ?? '—',
           headshotUrl: headshot,
           logoUrl: row?.logoUrl ?? null,
           injuryStatus: row?.injuryStatus ?? null,
           pricedSource: src,
           dataSource: row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
-        }, { reasonPosition: row?.position ?? null, unpricedReason }),
+        }, { reasonPosition: position ?? null, unpricedReason }),
       )
       continue
     }
