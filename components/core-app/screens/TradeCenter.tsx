@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
@@ -47,6 +47,7 @@ import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-a
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -221,6 +222,7 @@ function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines
 }
 
 type AnalyzeResult = {
+  evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
   counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
@@ -1391,12 +1393,13 @@ export function TradeCenter(props: {
 
   return (
     <div className="af-tc" data-mobile-step={mobileStep}>
+      <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       <header className="af-tc-head">
         <div className="af-label">Core · Trades</div>
         <h1>Trade Center</h1>
         <p className="af-tc-lede">
           Build a deal across any league you&rsquo;re in and any asset class it allows. Context
-          explains the league scoring and roster needs used in the grade. Schedule and
+          explains the league scoring used in the grade. Roster fit, schedule and
           strategy notes help you judge the deal alongside that value.
         </p>
         {/*
@@ -2066,6 +2069,8 @@ export function TradeCenter(props: {
               Roster fit does not change the letter. Refreshed market values can change a later evaluation.
             </p>
           ) : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>Open this saved evaluation</Link> · Original values preserved at {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString()}.</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">This evaluation could not be saved. Keep a copy before relying on it later.</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
               <div className="af-label">Your roster fit · separate from the trade-value grade</div>
