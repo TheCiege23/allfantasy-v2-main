@@ -3403,3 +3403,106 @@
     min-height: 44px;
   }
 }
+
+/* ── Phase 3: the start/sit call, league by league (2026-09-27) ── */
+/* ⚠ A top-level block with its own media query at the end — never inserted inside another query. */
+.af-core .af-pf-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+.af-core .af-pf-calls h3 {
+  margin: 0;
+}
+.af-core .af-pf-calls-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.af-core .af-pf-call {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0 10px 10px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-call:first-child {
+  border-top: 0;
+}
+.af-core .af-pf-call[data-tone='bad'] {
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+.af-core .af-pf-call[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.af-core .af-pf-call[data-tone='good'] {
+  box-shadow: inset 3px 0 0 var(--good);
+}
+.af-core .af-pf-call-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-call-league {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-call-chip {
+  font-size: 10px;
+}
+.af-core .af-pf-call-chip[data-tone='bad'] {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.af-core .af-pf-call-chip[data-tone='warn'] {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.af-core .af-pf-call-chip[data-tone='good'] {
+  color: var(--good);
+  border-color: var(--good);
+}
+.af-core .af-pf-call-why {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-core .af-pf-call-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.af-core .af-pf-call-ask {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-call-ask:hover,
+.af-core .af-pf-call-ask:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-calls-foot {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-call-ask {
+    min-height: 44px;
+  }
+}

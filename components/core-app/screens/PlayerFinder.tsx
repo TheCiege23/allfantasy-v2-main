@@ -46,6 +46,8 @@ import type { PlayerShares } from '@/lib/core-app/playerShares'
 import type { LeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { PlayerSharesBoard } from '@/components/core-app/player-finder/PlayerSharesBoard'
 import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
+import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
+import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
 import { PlayerNextGames } from '@/components/core-app/player-finder/PlayerNextGames'
 import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
@@ -1207,6 +1209,27 @@ export function PlayerFinder({
               impact={impactRows}
               moves={moves}
               scope={leagueMode ? 'league' : 'all'}
+            />
+          ) : null}
+          {/*
+            One computed call per league (Phase 3): sit / start / hold / locked, the reason it rests on,
+            "Swap now" in an AllFantasy league, and Ask Chimmy scoped to that league. Best-ball leagues
+            have no lineup decision and are left out.
+          */}
+          {impactRows.length > 0 && detail.player.sleeperId ? (
+            <LeagueCalls
+              playerName={detail.player.name}
+              calls={impactRows
+                .filter((i) => !leagueRows.some((r) => r.slot.leagueId === i.leagueId && r.slot.bestBall))
+                .map((i) =>
+                  leagueCall({
+                    impact: i,
+                    player: { sleeperId: detail.player.sleeperId!, name: detail.player.name, team: detail.player.team },
+                    readinessTone: ready?.tone ?? null,
+                    kickoffs: detail.kickoffs ?? {},
+                    nowIso,
+                  }),
+                )}
             />
           ) : null}
           {/*
