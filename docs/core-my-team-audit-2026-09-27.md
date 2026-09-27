@@ -26,3 +26,5 @@ Targeted tests cover per-player deadlines, 65-team batched reads, paused invento
 Release checks and authenticated production evidence will be appended after deployment.
 
 Local targeted validation: 111 tests passed across 11 files. git diff --check passed.
+
+The player card opened from My team used an exact injury name and contradicted its own IR news. It now uses the same suffix variants and club guard. An additional 22 player-card tests passed across two files (133 targeted tests total).
