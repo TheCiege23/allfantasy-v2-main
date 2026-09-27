@@ -108,7 +108,7 @@ export async function selectActiveSyncConnections(input?: {
       .sort((a, b) => {
         // Hard freshness deadline outranks recently viewed accounts. Otherwise
         // a busy account can occupy every slot and starve the rest indefinitely.
-        const overdue = (at: number | null) => at === null || now.getTime() - at >= 45 * 60_000
+        const overdue = (at: number | null) => at === null || now.getTime() - at >= ACTIVE_SYNC_CADENCE_MINUTES * 60_000
         const aOverdue = overdue(a.attemptedAt)
         const bOverdue = overdue(b.attemptedAt)
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
