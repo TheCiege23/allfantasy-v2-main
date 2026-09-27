@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { validateObservedMarketAdpBoard, type ObservedMarketAdpBoard } from '@/lib/adp/observedMarketAdpBoard'
 
@@ -9,6 +9,8 @@ const BUTTON = 'rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabl
 type Preview = { board: ObservedMarketAdpBoard; accepted: number }
 
 export default function AdpImportClient() {
+  const [interactive, setInteractive] = useState(false)
+  useEffect(() => setInteractive(true), [])
   const [sport, setSport] = useState('NFL')
   const [season, setSeason] = useState(String(new Date().getFullYear()))
   const [format, setFormat] = useState<'redraft' | 'dynasty'>('redraft')
@@ -36,7 +38,7 @@ export default function AdpImportClient() {
       if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Export rejected.')
       if (result.dryRun !== dryRun || !Number.isInteger(result.accepted) || result.accepted !== board.players.length) throw new Error('Unexpected import response. Validate the export again.')
       setPreview(dryRun ? { board, accepted: result.accepted } : null)
-      setMessage(dryRun ? 'Validation passed. No data has been written.' : `Imported ${result.accepted} player observations.`)
+      setMessage(dryRun ? 'Validation passed. No data has been written.' : `Imported ${result.accepted} player observation${result.accepted === 1 ? '' : 's'}.`)
     } catch (failure) {
       setPreview(null)
       setError(failure instanceof Error && failure.name === 'AbortError' ? 'Request timed out. Check import status before retrying.' : failure instanceof Error ? failure.message : 'Unable to process export.')
@@ -53,7 +55,7 @@ export default function AdpImportClient() {
   }
 
   return <section className="mt-6 rounded-2xl border border-white/15 bg-white/5 p-5">
-    <fieldset disabled={busy} className="space-y-4">
+    <fieldset disabled={busy || !interactive} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label>Sport<select className={INPUT} value={sport} onChange={e => { invalidate(); setSport(e.target.value) }}>{SUPPORTED_SPORTS.map(value => <option key={value}>{value}</option>)}</select></label>
         <label>Season<input className={INPUT} type="number" min="2000" max="2200" value={season} onChange={e => { invalidate(); setSeason(e.target.value) }} /></label>

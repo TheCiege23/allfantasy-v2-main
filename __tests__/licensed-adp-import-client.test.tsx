@@ -38,7 +38,7 @@ it.each(['Sport', 'Season', 'Draft format', 'Scoring context', 'Export JSON'])('
   fillExport()
   fireEvent.click(screen.getByRole('button', { name: 'Validate export' }))
   await screen.findByRole('button', { name: 'Import validated export' })
-  const values: Record<string, string> = { Sport: 'NBA', Season: '2027', 'Draft format': 'dynasty', 'Scoring context': 'points', 'Export JSON': '{}' }
+  const values: Record<string, string> = { Sport: 'NBA', Season: String(new Date().getFullYear() + 1), 'Draft format': 'dynasty', 'Scoring context': 'points', 'Export JSON': '{}' }
   fireEvent.change(screen.getByLabelText(label), { target: { value: values[label] } })
   expect(screen.queryByRole('button', { name: 'Import validated export' })).toBeNull()
   expect(fetchMock).toHaveBeenCalledTimes(1)
