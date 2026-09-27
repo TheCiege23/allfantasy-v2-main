@@ -16,6 +16,11 @@ function getSlotForOverall(overall: number, teamCount: number): { round: number;
 }
 
 async function mockDraftAssetApis(page: Page, leagueId: string) {
+  let failedHeadshotRequests = 0
+  await page.route('https://draft-assets.example.invalid/broken.png', async route => {
+    failedHeadshotRequests++
+    await route.fulfill({ status: 403, body: 'Image unavailable' })
+  })
   const slotOrder = [
     { slot: 1, rosterId: 'roster-1', displayName: 'Alpha' },
     { slot: 2, rosterId: 'roster-2', displayName: 'Beta' },
@@ -51,7 +56,7 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
         displayName: 'Broken Image Back',
         sport: 'NFL',
         assets: {
-          headshotUrl: null,
+          headshotUrl: 'https://draft-assets.example.invalid/broken.png',
           teamLogoUrl: null,
         },
         team: {
@@ -330,6 +335,7 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
       body: JSON.stringify({ ok: true }),
     })
   })
+  return () => failedHeadshotRequests
 }
 
 async function openDraftRoomHarness(page: Page) {
@@ -368,7 +374,7 @@ test.describe('@draft-asset-pipeline click audit', () => {
       console.log('[draft-asset-pipeline][console.error]', msg.text())
     })
 
-    await mockDraftAssetApis(page, leagueId)
+    const failedHeadshots = await mockDraftAssetApis(page, leagueId)
 
     await page.goto(`/e2e/draft-room?leagueId=${leagueId}&sport=NFL`)
     await openDraftRoomHarness(page)
@@ -444,6 +450,7 @@ test.describe('@draft-asset-pipeline click audit', () => {
     ).toContainText('Broken Image Back')
 
     await expect(desktop.getByTestId('draft-player-card-0-headshot-fallback')).toBeVisible({ timeout: 15_000 })
+    await expect.poll(failedHeadshots).toBeGreaterThan(0)
     /*
      * ⚠ THE TEAM LOGO RESOLVES; IT DOES NOT FALL BACK. This asserted the initials badge
      * and could never pass, because a null team logo with a KNOWN abbreviation is

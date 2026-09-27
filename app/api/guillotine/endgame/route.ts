@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
   }
 
   const championRosterId = await determineFinalChampion(body.seasonId)
+  if (!championRosterId) return NextResponse.json({ error: 'Final scores are incomplete or tied; no champion resolved' }, { status: 409 })
   await prisma.guillotineSeason.update({
     where: { id: body.seasonId },
     data: { status: 'complete' },

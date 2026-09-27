@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
     maxEntriesPerUser?: number | null
     scoringPeriod?: string
     cumulativeScoring?: boolean
+    resetBetweenRounds?: boolean
   }
   try {
     body = (await req.json()) as typeof body
@@ -75,23 +76,42 @@ export async function POST(req: NextRequest) {
   const name = body.name?.trim()
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 })
 
-  const contest = await prisma.bestBallContest.create({
-    data: {
-      name,
-      sport: body.sport ?? 'NFL',
-      variant: body.variant ?? 'tournament',
-      podSize: body.podSize ?? 12,
-      rosterSize: body.rosterSize ?? 18,
-      rounds: body.rounds ?? 1,
-      advancersPerPod: body.advancersPerPod ?? 1,
-      draftType: body.draftType ?? 'snake',
-      draftSpeed: body.draftSpeed ?? 'slow',
-      entryType: body.entryType ?? 'single',
-      maxEntriesPerUser: body.maxEntriesPerUser ?? null,
-      scoringPeriod: body.scoringPeriod ?? 'weekly',
-      cumulativeScoring: body.cumulativeScoring ?? true,
-    },
-  })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
+  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  if (body.sport && body.sport !== league.sport) return NextResponse.json({ error: 'Contest sport must match the league' }, { status: 400 })
+
+  const podSize = body.podSize ?? 12
+  const rounds = body.rounds ?? 1
+  const advancers = body.advancersPerPod ?? 1
+  if (![podSize, rounds, advancers, body.rosterSize ?? 18].every(value => Number.isInteger(value) && value > 0) || advancers > podSize) return NextResponse.json({ error: 'Choose positive whole-number contest settings; advancers cannot exceed pod size' }, { status: 400 })
+  let contest
+  try {
+    contest = await prisma.$transaction(async tx => {
+      const created = await tx.bestBallContest.create({
+        data: {
+          name,
+          sport: league.sport,
+          variant: body.variant ?? 'tournament',
+          podSize: body.podSize ?? 12,
+          rosterSize: body.rosterSize ?? 18,
+          rounds: body.rounds ?? 1,
+          advancersPerPod: body.advancersPerPod ?? 1,
+          draftType: body.draftType ?? 'snake',
+          draftSpeed: body.draftSpeed ?? 'slow',
+          entryType: body.entryType ?? 'single',
+          maxEntriesPerUser: body.maxEntriesPerUser ?? null,
+          scoringPeriod: body.scoringPeriod ?? 'weekly',
+          cumulativeScoring: body.cumulativeScoring ?? true,
+          resetBetweenRounds: body.resetBetweenRounds ?? false,
+        },
+      })
+      const linked = await tx.league.updateMany({ where: { id: leagueId, bbContestId: null }, data: { bbContestId: created.id } })
+      if (linked.count !== 1) throw new Error('League is already linked to a contest')
+      return created
+    })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Contest creation failed' }, { status: 409 })
+  }
 
   return NextResponse.json({ contest })
 }
