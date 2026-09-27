@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { injuryNameKey, injuryNameVariants } from './injuryNames'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 /**
  * A player's current injury designation, by Sleeper id — the input to `isRuledOut`.
@@ -38,55 +40,40 @@ export function namesBySleeperId(
 export async function readInjuryStatusById(
   sport: string,
   namesById: ReadonlyMap<string, readonly string[]>,
+  teamsById?: ReadonlyMap<string, string | null>,
 ): Promise<Map<string, string>> {
-  const allNames = [...new Set([...namesById.values()].flat())]
+  const allNames = [...new Set([...namesById.values()].flatMap((names) => names.flatMap(injuryNameVariants)))]
   if (allNames.length === 0) return new Map()
 
   const injuries = await prisma.sportsInjury
     .findMany({
       // Every vendor spelling, deliberately — see `namesBySleeperId`. A superset costs one `IN`
       // list and is the only way the 39 divergent names both match.
-      where: { sport, playerName: { in: allNames } },
+      where: { sport, playerName: { in: allNames, mode: 'insensitive' } },
       orderBy: { fetchedAt: 'desc' },
-      select: { playerName: true, status: true },
+      select: { playerName: true, status: true, team: true },
     })
     .catch(() => [])
 
-  /*
-   * ⚠ FIRST WINS, NOT LAST, AND THE `orderBy` ABOVE IS WHY. `new Map(pairs)` resolves a
-   * duplicate key to the LAST pair, so feeding it rows sorted `fetchedAt: desc` kept the
-   * OLDEST status for anyone with more than one row — the exact opposite of what the sort
-   * asks for. Measured on production 2026-08-28: `sportsInjury` holds 6,426 NFL rows and
-   * 989 players have more than one, one of them 133. Every one of those was reading stale.
-   *
-   * Building the map explicitly and skipping a key already present keeps the newest row,
-   * matching `injByPlayer` in `runInjuryImpactDashboard.ts`, which had this right already.
-   */
-  const injuryByName = new Map<string, string | null>()
-  for (const i of injuries) {
-    const k = i.playerName.toLowerCase()
-    if (!injuryByName.has(k)) injuryByName.set(k, i.status)
+  /* Keep newest-first alias history so each player can select the latest matching club. */
+  const injuryByName = new Map<string, Array<{ status: string | null; team?: string | null; order: number }>>()
+  for (const [order, i] of injuries.entries()) {
+    const k = injuryNameKey(i.playerName)
+    const list = injuryByName.get(k) ?? []
+    list.push({ ...i, order })
+    injuryByName.set(k, list)
   }
 
-  /*
-   * ⚠ RESOLVED PER PLAYER, ACROSS EVERY SPELLING HE IS STORED UNDER. The lookup used to run
-   * against whichever vendor row the loop was on, so for the 39 ids whose vendors disagree about
-   * the name it was a coin toss whether a status was found at all — and a missed status is not
-   * cosmetic: `ruledOut` turns a projection into a hard 0.0.
-   *
-   * A hit on ANY spelling counts. Two spellings both matching is possible in principle; the first
-   * wins, and `injuryByName` above has already kept the newest row per name, so neither candidate
-   * is stale.
-   */
+  /* Resolve aliases per player; the newest club-compatible report wins, including a cleared status. */
   const injuryById = new Map<string, string>()
   for (const [id, names] of namesById) {
+    const club = normalizeTeamAbbrev(teamsById?.get(id))
+    let freshest: { status: string | null; order: number } | undefined
     for (const n of names) {
-      const status = injuryByName.get(n.trim().toLowerCase())
-      if (status) {
-        injuryById.set(id, status)
-        break
-      }
+      const match = injuryByName.get(injuryNameKey(n))?.find((row) => !club || !row.team || normalizeTeamAbbrev(row.team) === club)
+      if (match && (!freshest || match.order < freshest.order)) freshest = match
     }
+    if (freshest?.status) injuryById.set(id, freshest.status)
   }
   return injuryById
 }

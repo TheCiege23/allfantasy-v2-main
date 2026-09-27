@@ -753,3 +753,11 @@ it('reveals a player after the roster mounts and does not jump on routine refres
     HTMLElement.prototype.scrollIntoView = previous
   }
 })
+it('shows automatic lineup guidance for a confirmed Best Ball league',()=>{
+ const d=data()
+ const view=render(<MyTeam data={data({league:{...d.league,bestBall:true}})} />)
+ expect(view.container.textContent).toContain('Best Ball · automatic lineup')
+ expect(view.container.textContent).not.toContain('first kickoff')
+ expect(view.container.textContent).toContain('manual start/sit swaps are not needed')
+ view.unmount()
+})

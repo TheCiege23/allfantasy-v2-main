@@ -1411,3 +1411,16 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
 }
 
 .af-mt-row:target, .af-mt-row[data-lineup-target="true"] { outline: 2px solid var(--af-accent, #22d3ee); outline-offset: 3px; scroll-margin-top: 110px; }
+
+.af-core .af-mt-bench-ask {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--accent);
+  padding: 8px 12px;
+  text-align: left;
+}
+.af-core .af-mt-bench-caveat { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.af-core .af-mt-bench-check { flex-wrap: wrap; }
+.af-core .af-mt-bench-caveat { flex-basis: 100%; }

@@ -36,7 +36,7 @@ export async function currentSleeperRoster(
 }) | null> {
   const [rows, league] = await Promise.all([
     readRosters(leagueId).catch(() => null),
-    sleeperGet<{ status: string; roster_positions?: string[]; settings?: { leg?: number } }>(
+    sleeperGet<{ status: string; roster_positions?: string[]; settings?: { leg?: number; best_ball?: number } }>(
       `/league/${encodeURIComponent(leagueId)}`,
     ).catch(() => null),
   ])
@@ -76,7 +76,7 @@ export async function currentSleeperRoster(
       if (weekly && startersAreActive(other, weekly)) weekStarters[String(other.roster_id)] = normalizeStarters(weekly)
     }
   }
-  return { players: row.players ?? [], starters, reserve: row.reserve ?? [], taxi: row.taxi ?? [], weekStarters, verification: {
+  return { players: row.players ?? [], starters, reserve: row.reserve ?? [], taxi: row.taxi ?? [], weekStarters, bestBall: league.settings?.best_ball === 1, verification: {
     checkedAt: new Date().toISOString(), source: 'Sleeper',
     week: league.status === 'in_season' ? league.settings!.leg! : null,
     slots: (league.roster_positions ?? []).filter((s) => !['BN', 'IR', 'TAXI'].includes(s)),
