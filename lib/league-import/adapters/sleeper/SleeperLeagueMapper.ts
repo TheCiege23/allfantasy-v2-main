@@ -111,6 +111,7 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       rosterSize,
       scoring: scoring || null,
       isDynasty,
+      best_ball: toBoolFromNumeric(settings.best_ball),
       // Sleeper's real league.status ('pre_draft' | 'drafting' | 'in_season' | 'complete').
       // Never omit this: `League.status` has no DB default, so a missing value here
       // leaves the row `status: null`, which `leagueListFilter.ts` reads as an

@@ -71,7 +71,7 @@ describe('active provider sync lane', () => {
     await runActiveSyncLane({ now: new Date('2026-09-13T18:00:00Z'), limitPerProvider: 1 })
     expect(h.runDue).toHaveBeenCalledWith(expect.objectContaining({
       cadenceMinutesOverride: ACTIVE_SYNC_CADENCE_MINUTES,
-      scopes: ['transactions', 'teams_rosters'],
+      scopes: ['league_state', 'transactions', 'teams_rosters'],
       matchupStaleThresholdMs: 5 * 60_000,
       runTimeoutMs: ACTIVE_SYNC_LEAGUE_TIMEOUT_MS,
     }))

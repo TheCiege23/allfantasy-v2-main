@@ -48,6 +48,8 @@ export interface NormalizedLeagueSettings {
   rosterSize: number | null
   scoring: string | null
   isDynasty: boolean
+  /** Provider-reported automatic lineup mode; absent leaves existing settings intact. */
+  best_ball?: boolean
   /** Phase OS-C5: the provider's own real league status (e.g. Sleeper's `pre_draft`/`drafting`/
    * `in_season`/`complete`), when the provider's API supplies one. `null`/absent when the provider
    * genuinely doesn't report a status — never a fabricated default. See

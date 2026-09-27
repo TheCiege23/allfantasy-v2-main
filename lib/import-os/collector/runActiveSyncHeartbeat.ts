@@ -36,7 +36,7 @@ export async function runActiveSyncHeartbeat(limitPerProvider = 50) {
       metadata: {
         enabled: true,
         cadenceMinutes: 5,
-        scopes: ['transactions', 'teams_rosters'],
+        scopes: ['league_state', 'transactions', 'teams_rosters'],
         eligible: summary.eligible,
         selected: summary.selected,
         recentlyViewedSelected: summary.recentlyViewedSelected,

@@ -6,7 +6,7 @@ import { runDueLeagues, type RunDueResult } from './runDueSleeperLeagues'
 import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
 
 export const ACTIVE_SYNC_CADENCE_MINUTES = 5
-export const ACTIVE_SYNC_SCOPES = ['transactions', 'teams_rosters'] as const
+export const ACTIVE_SYNC_SCOPES = ['league_state', 'transactions', 'teams_rosters'] as const
 /**
  * Per-league work budget for the active lane.
  *
