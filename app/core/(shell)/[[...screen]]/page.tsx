@@ -670,8 +670,6 @@ export default async function AfCorePage({
     userId,
     email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
   }).catch(() => null)
-  const adminAccessRead = getAdminAccessState()
-  adminAccessRead.catch(() => undefined)
 
   /*
    * `rosterDetail: 'count'` — this page reads no roster off the list; every screen that needs a lineup
@@ -1147,7 +1145,7 @@ export default async function AfCorePage({
    * model-admin-authorization-policy.test.ts follows. It costs no time: the reads above
    * have already started, so this waits beside them rather than in front of them.
    */
-  const isAdmin = await adminAccessRead
+  const isAdmin = await getAdminAccessState()
     .then((state) => state.status === 'admin')
     .catch(() => false)
   const modelAdminAllowed = segment === 'model-admin' && isAdmin
