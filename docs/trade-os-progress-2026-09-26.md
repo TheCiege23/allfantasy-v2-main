@@ -45,11 +45,13 @@ A college kickoff could open an urgent NFL league because the countdown action u
 
 The matchup card derives its period label from the displayed score rows rather than the next scheduled game. Mixed or unknown league periods use a general label instead of claiming a common week. The scores retain their existing completion evidence and odds rules.
 
-Validation: 42 focused tests across four files, including mixed NFL/college accounts, no matching league, mixed matchup periods, cached summaries and completed/partial results.
+Game-day and legacy dashboard counts now explicitly describe live matchup leads, with ahead/behind labels. They no longer look like a completed win/loss record.
+
+Validation: 60 focused tests across seven files, including mixed NFL/college accounts, no matching league, mixed matchup periods, cached summaries, live-lead labels and completed/partial results.
 
 ## Defender pricing diagnostics release
 
-The coverage release preserves individual defensive projection refusals through the league board, player-name join, roster API and trade review: missing history, insufficient sample, no recorded defensive production, unavailable replacement level, and scoring gaps. These diagnostics remain available even when no defender can be priced. Temporary history-read failures remain retryable outages rather than missing-history claims. Identity collisions still refuse a name-based assignment. Existing replacement-derived player prices remain unchanged. The review explains that an unpriced asset withholds the whole trade grade. Validation: 145 focused tests across 11 files.
+The coverage release preserves individual defensive projection refusals through the league board, player-name join, roster API and trade review: missing history, insufficient sample, no recorded defensive production, unavailable replacement level, and scoring gaps. These diagnostics remain available even when no defender can be priced. Temporary history-read failures remain retryable outages rather than missing-history claims. Identity collisions still refuse a name-based assignment. Existing replacement-derived player prices remain unchanged. The review explains that an unpriced asset withholds the whole trade grade. Validation: 193 focused tests across 12 files.
 
 Read-only production inspection found different underlying inputs for two missing linebackers: one had recorded games with no defensive production, while the other had only two recorded games. This release exposes those limitations; it does not invent prices for either player. Sleeper documents [tackle calculation](https://support.sleeper.com/en/articles/4056297-how-are-tackles-calculated) and [stacking scoring categories](https://support.sleeper.com/en/articles/3186339-what-stacks); defender estimates must continue to use the league's actual scoring rules.
 
