@@ -292,7 +292,7 @@ export async function getMyTeamPulse(
             avatarUrl: true,
             platformLeagueId: true,
             season: true,
-            status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true,
+            status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true,
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
@@ -371,10 +371,8 @@ export async function getMyTeamPulse(
     if (pausedLeagueIds?.has(c.leagueId)) continue
     const l = c.league!
     const state = String(l.status ?? l.lifecycleState ?? '').toLowerCase()
-    const settings = l.settings && typeof l.settings === 'object' && !Array.isArray(l.settings) ? l.settings as Record<string, unknown> : {}
-    const rawSettings = settings.settings && typeof settings.settings === 'object' && !Array.isArray(settings.settings) ? settings.settings as Record<string, unknown> : settings
     if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || ['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(state)) { notChecked.inactive++; continue }
-    if (l.bestBallMode || l.leagueVariant === 'best_ball' || rawSettings.best_ball === 1 || rawSettings.best_ball === true) { notChecked.automatic++; continue }
+    const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
     const candidates = myRosterCandidates(c, userId)
     const pool: RosterRow[] = rostersByLeague.get(c.leagueId) ?? []
     /* First candidate that matches wins — the order in `myRosterCandidates` is
@@ -400,7 +398,7 @@ export async function getMyTeamPulse(
     const platform = String(l.platform ?? 'manual').toLowerCase()
 
     pending.push({
-      bestBall: isBestBallSettings(l.settings),
+      bestBall,
       leagueId: l.id,
       leagueName,
       platform,
