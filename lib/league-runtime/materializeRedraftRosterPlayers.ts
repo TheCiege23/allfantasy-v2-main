@@ -15,6 +15,8 @@ import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerDa
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { reconcileRosterRedraftLinks } from './reconcileRosterRedraftLinks'
+// The projection rule, shared with the lineup engine's save-path sync so the two cannot disagree.
+import { idsOnAnyRosterList, slotTypeFor } from './redraftSlotType'
 
 
 /**
@@ -81,84 +83,6 @@ const EMPTY: MaterializeResult = {
 /** What a row needs from a resolved player, whichever platform's resolver answered. */
 type RosterPlayerMetadata = Pick<ResolvedSleeperPlayer, 'name' | 'position' | 'team' | 'sport'>
 
-function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
-
-function idOf(entry: unknown): string {
-  if (typeof entry === 'string') return entry
-  const r = asRecord(entry)
-  return String(r.id ?? r.player_id ?? '')
-}
-
-/**
- * Which slot a player occupies, in the vocabulary already stored in this table.
- *
- * ⚠ A STARTER'S SLOT IS THEIR POSITION, NOT THE WORD "starter" — that is the existing convention,
- * confirmed against production where `WR`, `RB`, `QB`, `TE`, `DEF` and `K` all appear as slot types
- * alongside `bench`, `taxi` and `ir`. `normalizeSlotType` in `finalizeDraftToRedraftSeason` does the
- * same thing, and writing a different vocabulary here would split one column between two meanings.
- *
- * ⚠ NOT SHARED WITH THAT FUNCTION, DELIBERATELY. It matches a DRAFT PICK, which may carry no id and
- * so has to fuzzy-match on name; this matches a roster entry, which always has one. Same output
- * vocabulary, genuinely different matcher — sharing would mean giving the id-based case a name
- * fallback it does not need and cannot exercise.
- */
-/**
- * Every player id the roster names anywhere — the flat list, starters, IR, taxi and every lineup
- * section. A player is only gone when he appears on NONE of them.
- */
-function idsOnAnyRosterList(playerData: unknown): Set<string> {
-  const data = asRecord(playerData)
-  const ids = new Set<string>()
-  const add = (list: unknown) => {
-    if (!Array.isArray(list)) return
-    for (const entry of list) {
-      const id = idOf(entry)
-      if (id) ids.add(id)
-    }
-  }
-  add(data.players)
-  add(data.starters)
-  add(data.reserve)
-  add(data.taxi)
-  for (const section of Object.values(asRecord(data.lineup_sections ?? data.lineupSections))) add(section)
-  return ids
-}
-
-function slotTypeFor(playerData: unknown, playerId: string, position: string | null): string {
-  const data = asRecord(playerData)
-
-  const starters = data.starters
-  if (Array.isArray(starters) && starters.some((e) => idOf(e) === playerId)) {
-    return position || 'starter'
-  }
-
-  const sections = asRecord(data.lineup_sections ?? data.lineupSections)
-  for (const [name, value] of Object.entries(sections)) {
-    if (!Array.isArray(value)) continue
-    if (!value.some((e) => idOf(e) === playerId)) continue
-    const s = name.trim().toLowerCase()
-    if (s === 'starters' || s === 'starter' || s === 'lineup') return position || 'starter'
-    if (s === 'bench' || s === 'bn' || s === 'reserve') return 'bench'
-    if (s === 'taxi') return 'taxi'
-    if (s === 'ir') return 'ir'
-    if (s === 'devy') return 'devy'
-    return s
-  }
-
-  /*
-   * The top-level `reserve` array is IR on every provider that writes it — the same reading
-   * `lib/league-import` applies. Checked after `lineup_sections` so an explicit section wins.
-   */
-  const reserve = data.reserve
-  if (Array.isArray(reserve) && reserve.some((e) => idOf(e) === playerId)) return 'ir'
-  const taxi = data.taxi
-  if (Array.isArray(taxi) && taxi.some((e) => idOf(e) === playerId)) return 'taxi'
-
-  return 'bench'
-}
-
 /**
  * Project `Roster.playerData` into `RedraftRosterPlayer` for one league. Idempotent.
  *
@@ -167,6 +91,9 @@ function slotTypeFor(playerData: unknown, playerId: string, position: string | n
  * the source for a roster that has NEVER been populated; once the redraft engines own it, they own
  * it. That asymmetry is deliberate — a two-way sync between two roster stores is the bug this
  * codebase already has twice.
+ *
+ * The one field that DOES follow `playerData` after creation is `slotType`, and only on a native
+ * lineup save: `lib/roster-lineup-engine/redraftSlotSync.ts`, one-way, same rule as here.
  */
 export async function materializeRedraftRosterPlayersForLeague(
   leagueId: string,

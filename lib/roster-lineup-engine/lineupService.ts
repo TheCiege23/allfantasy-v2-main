@@ -7,6 +7,8 @@ import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterSe
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
 import { validateCanonicalRosterPayload } from './rosterValidationService'
 import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
+import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
 import type { LineupValidationContext } from './types'
@@ -125,6 +127,16 @@ export async function persistRosterLineupWithEngine(
 
   const before = roster.playerData as Prisma.InputJsonValue
 
+  /*
+   * 🛑 NATIVE SCORING READS `RedraftRosterPlayer.slotType`, NOT THIS LINEUP. Without the sync below
+   * a native manager could bench a ruled-out starter, see "Lineup saved", and still be scored on
+   * him — live and at the week's seal. NATIVE only: an imported league is a SHADOW twin
+   * (lib/league/write-authority.ts) and must never reach redraft tables. A roster with no linked
+   * `RedraftRoster` has no scoring projection to keep.
+   */
+  const redraftRosterId =
+    resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
+
   await prisma.$transaction(async (tx) => {
     await tx.roster.update({
       where: { id: input.rosterId },
@@ -140,6 +152,9 @@ export async function persistRosterLineupWithEngine(
       },
       tx,
     )
+    if (redraftRosterId) {
+      await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
+    }
   })
 
   await recordAfRosterMoveHistory({
