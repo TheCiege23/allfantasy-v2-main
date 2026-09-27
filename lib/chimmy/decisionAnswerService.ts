@@ -76,7 +76,14 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
     const scenario = kind === 'trade' ? await buildTradeScenario(input)
       : kind === 'waiver' ? await buildWaiverScenario({ ...input, engineClaims: null })
       : await buildStartSitScenario(input)
-    if (scenario?.status === 'unresolved') return gap(scenario.reason, scenario.detail, 'Sync league settings and rosters, then confirm the player names and ask again.')
+    if (scenario?.status === 'unresolved') {
+      const remedy = scenario.reason === 'unavailable_player'
+        ? 'Choose an available player whose game has not started. Ask for a full lineup check to compare eligible replacements, then confirm the slot and AutoSubs on your platform.'
+        : scenario.reason === 'players_locked'
+          ? 'Keep already-started players in place. Compare players with future kickoffs and confirm individual locks and AutoSubs on your platform.'
+          : 'Sync league settings and rosters, then confirm the player names and ask again.'
+      return gap(scenario.reason, scenario.detail, remedy)
+    }
     if (scenario?.status === 'ready') {
       // A resolved trade with no grade and no impact is still a missing answer, never a paid verdict.
       if ('value' in scenario && !scenario.value.grade && !scenario.lineup) return gap('valuation_missing', scenario.value.withheld ?? 'This trade could not be priced.', 'Sync league values and projections, then retry.')

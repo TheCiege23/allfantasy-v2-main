@@ -323,7 +323,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   }
 
   const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup
-  const hidden = Math.max(0, total - rows.length)
+  const hidden = Math.max(0, activeTotal - rows.length)
 
   return (
     <div className="af-bd">
@@ -425,8 +425,8 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
-            {unreadable} of your {total.toLocaleString()} claimed{' '}
-            {total === 1 ? 'team' : 'teams'} could not be checked.
+            {unreadable} of your {activeTotal.toLocaleString()} {pulse.paused ? 'active ' : ''}claimed{' '}
+            {activeTotal === 1 ? 'team' : 'teams'} could not be checked.
           </strong>{' '}
           {/* Singular counts read as broken copy on a screen full of real numbers. */}
           {pulse.notChecked.noRoster > 0
@@ -457,6 +457,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         hidden={hidden}
         total={total}
         href={allHref}
+        emptyText={pulse.paused ? 'Every active league is on this board.' : undefined}
         quiet={
           unreadable > 0
             ? 'are either set or could not be read — the line above says which.'

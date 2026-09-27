@@ -46,6 +46,18 @@ describe('shared consequential-answer contract', () => {
     expect(h.trade).toHaveBeenCalledWith({ message: 'Is this trade fair?', leagueId: 'authorized-league', userId: 'u1' })
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'sides_unclear' } })
   })
+  it.each([
+    ['unavailable_player', 'Choose an available player'],
+    ['players_locked', 'Keep already-started players in place'],
+  ])('gives eligibility guidance rather than a sync loop for %s', async (reason, guidance) => {
+    h.start.mockResolvedValue({ kind: 'start_sit', status: 'unresolved', reason, detail: 'These players cannot be compared for a new lineup move.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I start Chase or Jefferson?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', leagueId: 'authorized-league', gap: { code: reason } })
+    expect(out?.answer).toContain(guidance)
+    expect(out?.gap?.remedy).toContain('AutoSubs')
+    expect(out?.gap?.remedy).not.toContain('Sync')
+    expect(h.lineup).not.toHaveBeenCalled()
+  })
   it('keeps engine picks and projections in the answer, without a model verdict', async () => {
     h.start.mockResolvedValue({ kind: 'start_sit', status: 'ready', week: { week: 4, season: '2026' }, contested: true,
       startPlayerId: 'a', options: [{ playerId: 'a', name: 'Chase', points: 20, lineupIfStarted: 120, inBestLineup: true },

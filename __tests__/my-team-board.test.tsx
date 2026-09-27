@@ -58,6 +58,28 @@ function pulse(over: Partial<MyTeamPulse> = {}): MyTeamPulse {
   }
 }
 
+describe('paused league accounting', () => {
+  it('excludes paused inventory from unreadable and hidden active-team counts', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 65, paused: 1, checked: 57,
+      set: [row(), row({ leagueId: 'l2' })], setTotal: 57,
+      notChecked: { noRoster: 0, noLineup: 7 },
+    })} now={NOW} allHref={ALL_HREF} />)
+    const text = container.textContent?.replace(/\s+/g, ' ')
+    expect(text).toContain('57 of 64 active teams read')
+    expect(text).toContain('7 of your 64 active claimed teams could not be checked')
+    expect(text).toContain('62 more leagues are either set or could not be read')
+    expect(within(container).getByRole('link', { name: 'View all 65 →' }).getAttribute('href')).toBe(ALL_HREF)
+  })
+  it('does not claim paused leagues are visible when all active leagues are shown', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 2, paused: 1, set: [row()], setTotal: 1,
+    })} now={NOW} allHref={ALL_HREF} />)
+    expect(container.textContent).toContain('Every active league is on this board.')
+    expect(container.textContent).not.toContain('Every league you hold is on this board.')
+  })
+})
+
 /*
  * ⚠ THIS BLOCK EXISTS BECAUSE THE FIRST DRAFT SHIPPED THE BUG IT ASSERTS
  * AGAINST. Treating "any non-empty status" as a designation flagged NINE
