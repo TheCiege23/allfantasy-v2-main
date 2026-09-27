@@ -5,7 +5,7 @@
  * ⚠ RENDERED, NOT GREPPED. Every other TradeInbox suite asserts on the component's SOURCE text,
  * which would stay green if the line were computed and never mounted.
  */
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchTradesPanel = vi.fn()
@@ -14,6 +14,16 @@ vi.mock('@/components/core-app/screens/tradesPanelFetch', () => ({
 }))
 
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
+import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
+
+const imported = {
+  transactionId: 'league:old-trade', at: new Date('2023-09-10T12:00:00Z'), rosterIds: ['1', '2'],
+  players: [
+    { isYou: true, manager: 'Your team', received: [{ sleeperId: 'p1', name: 'Incoming Receiver', position: 'WR' }],
+      picks: ['2024 round 2'], grade: 'B', gradeBasis: 'Realized', gradeNote: 'Net 120 league points while held.' },
+    { isYou: false, manager: 'Other team', received: [{ sleeperId: 'p2', name: 'Outgoing Runner', position: 'RB' }], picks: [] },
+  ],
+} as never
 
 const IMPACT = {
   unit: 'league_points_week',
@@ -53,6 +63,28 @@ function panel(activeTrades: unknown[], historyTrades: unknown[] = []) {
 }
 
 describe('TradeInbox — lineup effect line', () => {
+  it('renders archived completed trades with the correct sides and separates realized results from decision grades', async () => {
+    fetchTradesPanel.mockResolvedValue(panel([]))
+    const { container } = render(<TradeInbox leagueId="L" onLoad={() => {}} importedHistory={[imported]} />)
+    const outcome = await screen.findByText(/Realized outcome: B/)
+    expect(outcome.textContent).toContain('Net 120 league points while held.')
+    const row = container.querySelector('.af-tc-timeline-row')!
+    expect(row.textContent).toContain('Your team sentOutgoing Runner')
+    expect(row.textContent).toContain('Other team sentIncoming Receiver, 2024 round 2')
+    expect(row.querySelectorAll('.af-tc-timeline-grades strong')[0].textContent).toBe('—')
+    expect(row.querySelectorAll('.af-tc-timeline-grades strong')[1].textContent).toBe('—')
+    fireEvent.click(screen.getByRole('button', { name: 'Completed', exact: true }))
+    expect(container.querySelectorAll('.af-tc-timeline-row')).toHaveLength(1)
+  })
+  it('does not infer send direction from multi-party received arrays', () => {
+    expect(importedTradeTimelineRows([{ ...imported as object, rosterIds: ['1', '2', '3'] } as never])).toEqual([])
+  })
+  it('prefers the live provider timeline row when the archive has the same transaction', async () => {
+    fetchTradesPanel.mockResolvedValue(panel([], [row({ id: 'sleeper:old-trade', status: 'completed_on_sleeper', partnerName: 'Current row' })]))
+    const { container } = render(<TradeInbox leagueId="L" onLoad={() => {}} importedHistory={[imported]} />)
+    await screen.findByText('Current row')
+    expect(container.querySelectorAll('.af-tc-timeline-row')).toHaveLength(1)
+  })
   beforeEach(() => {
     fetchTradesPanel.mockReset()
   })

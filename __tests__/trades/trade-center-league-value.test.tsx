@@ -17,6 +17,7 @@ vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal)
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 
 const player = (id: string, name: string, position: string, value: number) => ({
   id, name, position, team: 'X', value, imageUrl: null, byeWeek: null, injuryStatus: null, stock: null, stockDelta: null,
@@ -94,6 +95,17 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('pauses whole-route polling while a proposal is being edited and releases on unmount', () => {
+    expect(routeRefreshClaimed()).toBe(false)
+    const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    expect(routeRefreshClaimed()).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true }))
+    expect(routeRefreshClaimed()).toBe(false)
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    view.unmount()
+    expect(routeRefreshClaimed()).toBe(false)
+  })
   it('a withheld shared grade suppresses legacy scores, confidence, meters and balancing advice', async () => {
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, fairnessScore: 100,
