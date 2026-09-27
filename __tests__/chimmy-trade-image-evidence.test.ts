@@ -5,7 +5,7 @@ import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
 
 describe('trade screenshot evidence', () => {
   it('preserves IDP players, kicker and future pick from the reported offer', () => {
-    expect(screenshotTradeQuestion('Trade team: TheCiege24\nTrade gives: Quincy Williams and Carson Schwesinger\nTrade receives: Tyrone Tracy and Ryan Fitzgerald and 2027 1st')).toEqual({ question: 'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?', clarification: null })
+    expect(screenshotTradeQuestion('Trade team: TheCiege24\nTrade gives: Quincy Williams and Carson Schwesinger\nTrade receives: Tyrone Tracy and Ryan Fitzgerald and 2027 1st')).toEqual({ question: 'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?', clarification: null, assetCount: 5 })
   })
   it('requires clarification for a missing side or uncertain extraction', () => {
     expect(screenshotTradeQuestion('Trade gives: Quincy Williams').question).toBeNull()
