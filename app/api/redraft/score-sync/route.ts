@@ -160,7 +160,14 @@ async function runLegacyAutomationBridge() {
 async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
     // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
-    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
+    where: {
+      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }), {
+        OR: [
+          { status: { in: [...SCORING_SEASON_STATUSES] } },
+          { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },
+        ],
+      }],
+    },
     select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
     orderBy: { id: 'asc' },
   })
@@ -183,6 +190,14 @@ async function runRedraftReconciliation() {
   const playoffOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
+    // A finished contest needs no provider fetch or live-season calendar to repair its archive.
+    if (season.status === 'complete' && isNativeTournamentLeague(season.league)) {
+      try {
+        const outcome = await runNativeTournamentWeek(season.id, 1)
+        tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
+      } catch { tournamentFailed += 1 }
+      continue
+    }
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
     if (!resolved.ok || resolved.phase === 'preseason') {
       skippedUnresolvedWeek += 1
