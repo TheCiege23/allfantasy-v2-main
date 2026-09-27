@@ -50,6 +50,8 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         const created = await createdPromise
         expect(created.status(), await created.text()).toBeLessThan(400)
         leagueId = (await created.json()).league.id
+        // Stop the league dashboard's unrelated polling while arranging draft fixtures.
+        await page.goto('about:blank')
       } else {
       const created = await page.request.post('/api/leagues', { data: { concept: 'redraft', sport, ...(sport === 'SOCCER' ? { soccerPipeline: 'euro' } : {}), scoringPreset: getScoringPresetOptionsForSelection({ leagueType: 'redraft', sport, idpSelected: false })[0]!.id, teamCount: 4, draftType: 'snake', leagueName: marker, timezone: 'America/Chicago' } })
       expect(created.status(), await created.text()).toBeLessThan(400)
@@ -89,11 +91,17 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         const chatPanel = desktop.getByTestId('draft-right-dock-panel-chat')
         await chatPanel.getByTestId('draft-chat-view-draft').click()
         await chatPanel.getByTestId('draft-chat-input').fill(marker + ' chat')
+        const sentPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/chat` && response.request().method() === 'POST', { timeout: 300000 })
         await chatPanel.getByTestId('draft-chat-send').click()
+        const sent = await sentPromise
+        expect(sent.status(), await sent.text()).toBeLessThan(400)
         await expect.poll(() => prisma.leagueChatMessage.count({ where: { leagueId, userId } }), { timeout: 30000 }).toBeGreaterThan(0)
         await desktop.getByTestId('draft-pool-view-cards').click()
         await desktop.getByTestId('draft-player-search-input').fill('Fixture Player 1')
+        const pickedPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/pick` && response.request().method() === 'POST', { timeout: 300000 })
         await desktop.getByTestId('draft-pick-request-0').click()
+        const picked = await pickedPromise
+        expect(picked.status(), await picked.text()).toBeLessThan(400)
         await expect.poll(() => prisma.draftPick.count({ where: { sessionId: draft.id } }), { timeout: 30000 }).toBe(1)
       } else {
         const chat = await page.request.post(`/api/leagues/${leagueId}/draft/chat`, { data: { text: marker + ' chat' } })
