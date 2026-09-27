@@ -381,27 +381,40 @@ export async function loadLatestAveragedAdpRowsFromDb(
   sport: LeagueSport,
   format: 'redraft' | 'dynasty',
   twoQuarterbacks = false,
+  context?: { season: number; scoring: string | null },
 ): Promise<AveragedAdpRow[]> {
   if (twoQuarterbacks) {
-    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS })
+    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS }, context?.season)
     // No 2QB board for this format is better answered by the 1QB board than by nothing.
     if (qbHeavy.length > 0) return qbHeavy
   }
-  return loadLatestAveragedAdpRowsForScorings(sport, format, { notIn: QB_HEAVY_ADP_SCORINGS })
+  const token = context?.scoring?.trim().toLowerCase().replace(/[-_\s]/g, '')
+  const aliases = token === 'ppr' || token === 'fbppr' || token === 'ncaafppr' ? ['ppr']
+    : ['halfppr', 'fbhalfppr', 'ncaafhalfppr'].includes(token ?? '') ? ['halfPPR', 'half-ppr', 'half_ppr', 'halfppr']
+    : ['standard', 'nonppr', 'fbstandard', 'ncaafstandard'].includes(token ?? '') ? ['standard', 'non-ppr', 'nonppr']
+    : context?.scoring ? [context.scoring] : null
+  return loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
 }
 
 async function loadLatestAveragedAdpRowsForScorings(
   sport: LeagueSport,
   format: 'redraft' | 'dynasty',
   scoring: { in: string[] } | { notIn: string[] },
+  season?: number,
 ): Promise<AveragedAdpRow[]> {
+  const sourceExclusions = sport === 'NFL' && season != null && !('in' in scoring && scoring.in.some(value => QB_HEAVY_ADP_SCORINGS.includes(value)))
+    ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
+    : ADP_IMPORT_SOURCES_EXCLUDED
+  const observedSince = season != null ? new Date(Date.now() - 7 * 86400000) : null
   const findLatest = () =>
     prisma.adpDataRecord.findFirst({
       where: {
         sport,
         format,
+        ...(season != null ? { season } : {}),
+        ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
         scoring,
-        source: { notIn: ADP_IMPORT_SOURCES_EXCLUDED },
+        source: { notIn: sourceExclusions },
       },
       orderBy: [{ season: 'desc' }, { week: 'desc' }, { createdAt: 'desc' }],
       select: { season: true, week: true },
@@ -432,7 +445,8 @@ async function loadLatestAveragedAdpRowsForScorings(
       scoring,
       season: latest.season,
       week: latest.week,
-      source: { notIn: ADP_IMPORT_SOURCES_EXCLUDED },
+      ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
+      source: { notIn: sourceExclusions },
     },
     select: {
       playerName: true,
@@ -448,7 +462,7 @@ async function loadLatestAveragedAdpRowsForScorings(
   for (const row of rows) {
     const name = String(row.playerName ?? '').trim()
     const position = String(row.position ?? '').trim().toUpperCase()
-    if (!name || !position || !Number.isFinite(Number(row.adp))) continue
+    if (!name || !position || typeof row.adp !== 'number' || !Number.isFinite(row.adp) || row.adp <= 0) continue
     const team = row.team ? String(row.team).trim().toUpperCase() : null
     const key = adpLookupKey(name, position, team)
     if (!perPlayerSource.has(key)) {
@@ -966,7 +980,7 @@ export async function getResolvedDraftPoolForLeague(
       : 'redraft'
   const perfAdpRows = perfStart('4. loadLatestAveragedAdpRowsFromDb')
   const twoQuarterbacks = sport === 'NFL' ? await leagueStartsTwoQuarterbacks(leagueId) : false
-  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks).catch(
+  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks, league ? { season: league.season, scoring: league.scoring } : undefined).catch(
     () => [] as AveragedAdpRow[],
   )
   perfAdpRows()

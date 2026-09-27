@@ -955,6 +955,22 @@ export function LeagueHome({
                         {b.bid != null ? <span className="af-buzz-bid">${b.bid}</span> : null}
                       </span>
                       {/*
+                        A trade's grade: one letter per team, from THE grade (the Trade Center's
+                        letter for the same deal), and who it favours. A withheld grade shows its
+                        reason and no letter.
+                      */}
+                      {b.grades && b.grades.length > 0 ? (
+                        <span className="af-buzz-grades" aria-label="Trade grade for each team">
+                          {b.grades.map((g) => (
+                            <span key={g.team} className="af-buzz-grade" data-letter={g.letter}>
+                              <span className="af-buzz-grade-team">{g.team}</span>
+                              <b>{g.letter}</b>
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
+                      {b.gradeLine ? <span className="af-buzz-grade-line">{b.gradeLine}</span> : null}
+                      {/*
                         Faces for who moved. The sentence above already names
                         them; this is so a claim is recognisable before it is
                         read. Capped at five so a twelve-player trade does not
