@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Flag } from 'lucide-react'
 import type { ActivityFeedItem } from '@/lib/activity/types'
+import { TRADE_LETTER_COLOR, tradeGradeLabel } from '@/lib/activity/tradeGradeLabel'
 
 /**
  * One row of the 10c feed.
@@ -59,6 +60,29 @@ export function relativeTime(iso: string): string {
   return new Date(then).toLocaleDateString()
 }
 
+/**
+ * A trade's grade, one chip per team, with the moment it was graded (2026-09-27). A withheld grade
+ * says why and draws no letter; no grade on the item draws nothing.
+ */
+function TradeGradeLine({ item }: { item: ActivityFeedItem }) {
+  const label = item.type === 'trade' ? tradeGradeLabel(item.tradeGrade) : null
+  if (!label) return null
+  if (label.kind === 'withheld') {
+    return <span className="mt-1 block text-xs text-white/40" data-testid="feed-trade-grade-withheld">{label.line}</span>
+  }
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="feed-trade-grade" aria-label="Trade grade for each team">
+      {label.chips.map((c) => (
+        <span key={c.name} className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-0.5 text-xs text-white/60">
+          {c.name}
+          <b className="font-black" style={{ color: TRADE_LETTER_COLOR[c.letter] }}>{c.letter}</b>
+        </span>
+      ))}
+      <span className="text-[11px] text-white/35">{label.basis}</span>
+    </span>
+  )
+}
+
 export default function FeedEvent({ item }: { item: ActivityFeedItem }) {
   const isBroadcast = item.type === 'announcement'
 
@@ -95,6 +119,7 @@ export default function FeedEvent({ item }: { item: ActivityFeedItem }) {
         <span className="mt-0.5 block text-sm leading-relaxed text-white/70">
           {item.description}
         </span>
+        <TradeGradeLine item={item} />
       </span>
 
       <span className="shrink-0 font-mono text-[11px] text-white/35">

@@ -364,3 +364,55 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     )
   })
 })
+
+
+describe('pick quote recovery parity', () => {
+  const league = { id: 'pick-parity', name: 'L', format: 'Dynasty', teamCount: 12 }
+  function savedProposal() {
+    window.localStorage.setItem(tradeDeviceDraftKey('account-a', league.id, true)!, JSON.stringify({
+      give: [{ kind: 'pick', year: 2027, round: 2, label: '2027 second', value: 456 }],
+      get: [{ kind: 'player', playerId: 'dk', name: 'DK Metcalf', position: 'WR', team: 'PIT', value: 1801 }],
+      partnerRosterId: 'r2',
+    }))
+  }
+  it('replaces a recovered 456 quote with 1,585 before analysis and preserves the totals after analysis', async () => {
+    savedProposal()
+    rosterData.current = { ...(rosterData.current as object),
+      pickPreviewBook: { leagueId: league.id, values: { '2027:2': 1585 } } }
+    const grade = gradeTrade({ giveValue: 1585, getValue: 1801, giveCount: 1, getCount: 1,
+      unpriced: 0, basis: 'Dynasty', scoringApplied: false, needApplied: false,
+      lines: [{ side: 'give', name: '2027 Round 2', marketValue: 1585, leagueValue: 1585 },
+        { side: 'get', name: 'DK Metcalf', marketValue: 1801, leagueValue: 1801 }] })
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, grade, giveTotal: 1585, getTotal: 1801,
+          players: { give: [{ name: '2027 Round 2', position: 'PICK', marketValue: 1585, leagueValue: 1585, pricedSource: 'pick' }],
+            get: [{ name: 'DK Metcalf', position: 'WR', marketValue: 1801, leagueValue: 1801, pricedSource: 'fantasycalc' }] } }) }
+      : { ok: false, status: 500, json: async () => ({}) })
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    const totals = view.container.querySelector('.af-tc-stepbar-totals')!
+    expect(totals.textContent).toContain('Send 1,585')
+    expect(totals.textContent).toContain('Get 1,801')
+    expect(totals.textContent).not.toContain('456')
+    await act(async () => fireEvent.click(view.container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!))
+    expect(totals.textContent).toContain('Send 1,585')
+    expect(totals.textContent).toContain('Get 1,801')
+    expect([...view.container.querySelectorAll('.af-tc-grade-letter')].map(el => el.textContent)).toEqual(['B', 'D'])
+  })
+  it('refreshes a recovered pick when the server quote changes', () => {
+    savedProposal()
+    rosterData.current = { ...(rosterData.current as object), pickPreviewBook: { leagueId: league.id, values: { '2027:2': 1585 } } }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    rosterData.current = { ...(rosterData.current as object), pickPreviewBook: { leagueId: league.id, values: { '2027:2': 1620 } } }
+    view.rerender(<TradeCenter league={league} viewerId="account-a" />)
+    expect(view.container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Send 1,620')
+  })
+  it('ignores an old league book instead of trusting the saved 456 quote', () => {
+    savedProposal()
+    rosterData.current = { ...(rosterData.current as object), pickPreviewBook: { leagueId: 'another-league', values: { '2027:2': 1585 } } }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    const totals = view.container.querySelector('.af-tc-stepbar-totals')!.textContent!
+    expect(totals).not.toContain('456')
+    expect(totals).not.toContain('1,585')
+    expect(totals).toContain('Send —')
+  })
+})
