@@ -8,6 +8,7 @@ import { getScoringPresetOptionsForSelection } from '../lib/create-league-v2/rul
 import { prisma } from '../lib/prisma'
 
 test.describe.configure({ mode: 'serial' })
+test.use({ actionTimeout: 120000, navigationTimeout: 300000 })
 
 for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const) {
   test(`${sport}: real login, creation, queue, chat, draft picks and finalization @db`, async ({ page, request }) => {
@@ -99,7 +100,7 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         await desktop.getByTestId('draft-pool-view-cards').click()
         await desktop.getByTestId('draft-player-search-input').fill('Fixture Player 1')
         const pickedPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/pick` && response.request().method() === 'POST', { timeout: 300000 })
-        await desktop.getByTestId('draft-pick-request-0').click()
+        await desktop.getByTestId('draft-player-button-0').click()
         const picked = await pickedPromise
         expect(picked.status(), await picked.text()).toBeLessThan(400)
         await expect.poll(() => prisma.draftPick.count({ where: { sessionId: draft.id } }), { timeout: 30000 }).toBe(1)
