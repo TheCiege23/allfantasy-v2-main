@@ -39,13 +39,17 @@ export async function persistedRecentTrades(leagues: RecentTradesLeague[], cutof
     const received: RecentTradeAsset[] = (Array.isArray(row.playersReceived) ? row.playersReceived : []).map(raw => {
       const id = String(raw), nflSleeper = row.platform === 'sleeper' && String(row.sport).toLowerCase() === 'nfl', player = nflSleeper ? named.get(id) : null, image = nflSleeper ? media.get(id) : null
       return { kind: 'player', playerId: nflSleeper ? id : null, name: player?.name ?? `Player ${id}`, position: player?.position ?? null,
-        team: image?.teamAbbr ?? null, headshotUrl: image?.media.headshotUrl ?? null, teamLogoUrl: image?.media.teamLogoUrl ?? null }
+        team: image?.teamAbbr ?? null, headshotUrl: image?.media.headshotUrl ?? null, teamLogoUrl: image?.media.teamLogoUrl ?? null,
+        // Graded by the REAL name only: "Player 123" is a placeholder, and pricing it would price nobody.
+        gradeAs: player?.name ? { kind: 'player', name: player.name } : null }
     })
     for (const raw of Array.isArray(row.picksReceived) ? row.picksReceived : []) {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
       const pick = raw as { season?: unknown; round?: unknown }
+      const season = Number(pick.season), round = Number(pick.round)
       received.push({ kind: 'pick', playerId: null, name: `${pick.season ?? 'Future'} round ${pick.round ?? '?'}`,
-        position: null, team: null, headshotUrl: null, teamLogoUrl: null })
+        position: null, team: null, headshotUrl: null, teamLogoUrl: null,
+        gradeAs: Number.isInteger(season) && Number.isInteger(round) && round > 0 ? { kind: 'pick', season, round } : null })
     }
     trade.sides.push({ rosterId, managerName: team?.ownerName ?? 'Manager', teamName: team?.teamName ?? null,
       avatarUrl: team?.avatarUrl ?? null, received, grade: null, gradeBasis: null, gradeReason: 'Trade received. Grade pending.' })
