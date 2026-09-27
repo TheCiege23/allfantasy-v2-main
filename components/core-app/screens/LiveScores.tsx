@@ -60,6 +60,15 @@ import '@/components/core-app/af-live.css'
  *  the server-side engine uses. Polling every 20s on a Tuesday burns requests
  *  re-fetching a slate that cannot change. */
 const LIVE_POLL_MS = 20_000
+function upNextTime(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return 'Start time unavailable'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  }).format(date)
+}
 const IDLE_POLL_MS = 120_000
 
 /**
@@ -534,7 +543,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                   count reads 0 for most of the day and made the badge look broken. */}
               <span
                 className="af-live-sport-count af-num"
-                aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} today`}
+                aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} in slate`}
               >
                 {c.slateCount}
               </span>
@@ -757,7 +766,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                     <span className="af-live-next-label">
                       {u.playerName} · {u.matchup}
                     </span>
-                    <span className="af-live-next-time af-num">{u.startTime}</span>
+                    <span className="af-live-next-time af-num">{upNextTime(u.startTime)}</span>
                   </li>
                 ))}
               </ul>
