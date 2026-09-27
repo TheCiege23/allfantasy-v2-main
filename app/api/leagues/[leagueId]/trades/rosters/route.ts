@@ -11,6 +11,7 @@ import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
+import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
@@ -765,8 +766,15 @@ export async function GET(
       }
       // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
       // which the picker renders differently from a low value.
-      p.value = leagueValues?.byNameLower.get(p.name.trim().toLowerCase())?.value
-        ?? values.get(p.name.toLowerCase())?.value ?? null
+      const identified = resolvedForLeague.has(p.id)
+      const leagueValue = identified ? leagueValueForPlayer({ name: p.name,
+        identity: { sleeperId: p.id, position: p.position },
+        bySleeperId: leagueValues?.bySleeperId, byNameLower: leagueValues?.byNameLower,
+      }) : null
+      const market = values.get(p.name.toLowerCase())
+      const marketMatches = identified && market && valuePositionsAgree(p.position, market.position)
+        && (!(String(league?.platform).toLowerCase() === 'sleeper' && market.sleeperId) || market.sleeperId === p.id)
+      p.value = leagueValue?.value ?? (marketMatches ? market.value : null)
       const projection = projections.get(p.id)
       const leagueProjection = projection?.componentStats
         ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
