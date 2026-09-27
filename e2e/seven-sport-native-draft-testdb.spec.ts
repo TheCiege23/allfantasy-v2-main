@@ -73,17 +73,32 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
       expect((await (await page.request.get(`/api/leagues/${leagueId}/draft/queue`)).json()).queue).toHaveLength(2)
       expect((await page.request.post(`/api/leagues/${leagueId}/draft/session`, { data: { action: 'start' } })).status()).toBeLessThan(400)
       if (uiJourney) {
+        const pool = await page.request.get(`/api/leagues/${leagueId}/draft/pool`)
+        expect(pool.status(), await pool.text()).toBe(200)
+        const loadedPool = await pool.json()
+        expect(loadedPool.entries.length).toBeGreaterThanOrEqual(totalPicks)
+        expect(loadedPool.entries[0]).toMatchObject({ name: 'Fixture Player 1', display: { sport } })
         await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort())
         const introStatusPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/${draft.id}/intro-status` && response.request().method() === 'GET', { timeout: 300000 })
+        const introSeenPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/${draft.id}/intro-seen` && response.request().method() === 'POST', { timeout: 300000 }).catch(() => null)
         await page.goto('/drafts/' + draft.id, { waitUntil: 'domcontentloaded' })
         const introStatus = await introStatusPromise
         expect(introStatus.status()).toBe(200)
         const intro = await introStatus.json()
         if (intro.seen === false && intro.videoUrl) {
-          // Playback can end or fail before the skip button is clicked.
-          await page.getByTestId('draft-intro-skip').click({ timeout: 10000 }).catch(async error => {
-            if (await page.getByTestId('draft-intro-overlay').isVisible()) throw error
-          })
+          // The HTTP response can precede React opening the overlay.
+          const dismissed = await Promise.race([
+            page.getByTestId('draft-intro-skip').waitFor({ state: 'visible', timeout: 120000 }).then(() => 'skip' as const),
+            introSeenPromise.then(response => {
+              if (!response) throw new Error('INTRO_DISMISSAL_RESPONSE_REQUIRED')
+              expect(response.status()).toBeLessThan(400)
+              return 'automatic' as const
+            }),
+          ])
+          if (dismissed === 'skip') await page.getByTestId('draft-intro-skip').click()
+          const seen = await introSeenPromise
+          expect(seen, 'Intro dismissal must persist').not.toBeNull()
+          expect(seen!.status()).toBeLessThan(400)
           await expect(page.getByTestId('draft-intro-overlay')).toBeHidden()
         }
         const desktop = page.getByTestId('draft-desktop-layout')
@@ -109,9 +124,11 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         expect(chat.status()).toBeLessThan(400)
         expect(await prisma.leagueChatMessage.count({ where: { leagueId, userId } })).toBeGreaterThan(0)
       }
+      if (uiJourney) await page.goto('about:blank')
       for (let overall = uiJourney ? 2 : 1; overall <= totalPicks; overall++) {
         const player = seed.entries[overall - 1]!
-        expect((await page.request.post(`/api/leagues/${leagueId}/draft/pick`, { data: { playerName: player.name, position: player.position, playerId: player.playerId, team: player.team, source: 'commissioner', expectedOverall: overall } })).status()).toBeLessThan(400)
+        const picked = await page.request.post(`/api/leagues/${leagueId}/draft/pick`, { timeout: 300000, data: { playerName: player.name, position: player.position, playerId: player.playerId, team: player.team, source: 'commissioner', expectedOverall: overall } })
+        expect(picked.status(), await picked.text()).toBeLessThan(400)
       }
       await expect.poll(async () => (await prisma.draftSession.findUniqueOrThrow({ where: { id: draft.id } })).status, { timeout: 30000 }).toBe('completed')
       expect(await prisma.redraftRoster.count({ where: { leagueId } })).toBe(4)
