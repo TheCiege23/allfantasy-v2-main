@@ -163,13 +163,13 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   }
 
   const minPoints = Math.min(...evalResult.scores.map((s) => s.periodPoints))
-  const tiedCandidates = evalResult.scores.filter((s) => s.periodPoints === minPoints)
+  const chopCount = Math.min(teamsPerChop, evalResult.activeRosterIds.length - 1)
   const draftSlotByRoster = await getDraftSlotByRoster(input.leagueId)
 
   const { choppedRosterIds, stepUsed, reason } = resolveTiebreak({
-    candidates: tiedCandidates,
+    candidates: evalResult.scores,
     tiebreakerOrder: config.tiebreakerOrder,
-    teamsPerChop,
+    teamsPerChop: chopCount,
     weekOrPeriod: input.weekOrPeriod,
     draftSlotByRoster,
     commissionerChoppedRosterIds: input.commissionerChoppedRosterIds?.length

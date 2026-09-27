@@ -51,25 +51,32 @@ async function main(){
     results.push({concept,teams:4,rosterPlayers:picks.length,completeLineupWeeks:lineupWeeks,benchQbSelections})
    }else{
     const shell=await ensureGuillotineSeason({leagueId,redraftSeasonId:season.id});if(!shell.ok)throw new Error(shell.reason)
-    await prisma.guillotineLeagueConfig.update({where:{leagueId},data:{eliminationStartWeek:1,eliminationEndWeek:3,correctionWindow:'immediate',rosterReleaseTiming:'immediate',teamsPerChop:1}})
+    const teamsPerChop = process.argv.includes('--double-chop') ? 2 : 1
+    const periods = teamsPerChop === 2 ? 2 : 3
+    let survivors = 4
+    await prisma.guillotineLeagueConfig.update({where:{leagueId},data:{eliminationStartWeek:1,eliminationEndWeek:3,correctionWindow:'immediate',rosterReleaseTiming:'immediate',teamsPerChop}})
     for(let i=0;i<4;i++)await prisma.roster.update({where:{id:generic[i].id},data:{playerData:{players:picks.filter(p=>p.rosterId===generic[i].id).map(p=>p.playerId),starters:[picks.find(p=>p.rosterId===generic[i].id)!.playerId],lineup_sections:{starters:[picks.find(p=>p.rosterId===generic[i].id)!.playerId]}}}})
-    for(let week=1;week<=3;week++){
+    for(let week=1;week<=periods;week++){
+     const expectedChops = Math.min(teamsPerChop, survivors - 1)
      await prisma.guillotinePeriodScore.createMany({data:generic.map((r,i)=>({leagueId,rosterId:r.id,weekOrPeriod:week,season:season.season,periodPoints:10*(i+1)+week,seasonPointsCumul:(10*(i+1)+week)*week}))})
      const input={leagueId,weekOrPeriod:week,season:season.season,periodEndedAt:new Date(0),skipChat:true}
      const attempts=week===1?await Promise.all([runElimination(input),runElimination(input)]):[await runElimination(input)]
-     if(week===1)check(attempts.filter(r=>r?.choppedRosterIds.length===1).length===1,'CONCURRENT_CHOP_EXACTLY_ONCE')
-     const chop=attempts.find(r=>r?.choppedRosterIds.length===1)
-     check(chop?.choppedRosterIds.length===1&&chop.audit?.recorded,'CHOP_'+week)
-     const released=await prisma.roster.findUniqueOrThrow({where:{id:chop!.choppedRosterIds[0]}}),data=released.playerData as any
+     if(week===1)check(attempts.filter(r=>r?.choppedRosterIds.length===expectedChops).length===1,'CONCURRENT_CHOP_EXACTLY_ONCE')
+     const chop=attempts.find(r=>r?.choppedRosterIds.length===expectedChops)
+     check(chop?.choppedRosterIds.length===expectedChops&&chop.audit?.recorded,'CHOP_'+week)
+     for (const rosterId of chop!.choppedRosterIds) {
+     const released=await prisma.roster.findUniqueOrThrow({where:{id:rosterId}}),data=released.playerData as any
      check(data.players.length===0&&data.starters.length===0&&data.lineup_sections.starters.length===0,'RELEASE_'+week)
-     const active=await prisma.redraftRoster.count({where:{seasonId:season.id,isEliminated:false}});check(active===4-week,'SURVIVORS_'+week)
+     }
+     survivors -= expectedChops
+     const active=await prisma.redraftRoster.count({where:{seasonId:season.id,isEliminated:false}});check(active===survivors,'SURVIVORS_'+week)
      console.log('Guillotine period '+week+' verified')
     }
     const winner=await determineFinalChampion(shell.seasonId);check(winner,'GUILLOTINE_CHAMPION')
     const before=await prisma.guillotineRosterState.count({where:{leagueId,choppedAt:{not:null}}})
-    const repeated=await runElimination({leagueId,weekOrPeriod:3,season:season.season,periodEndedAt:new Date(0),skipChat:true})
+    const repeated=await runElimination({leagueId,weekOrPeriod:periods,season:season.season,periodEndedAt:new Date(0),skipChat:true})
     check(repeated?.choppedRosterIds.length===0&&await prisma.guillotineRosterState.count({where:{leagueId,choppedAt:{not:null}}})===before,'REPEATED_CHOP_MUST_NOT_ELIMINATE_CHAMPION')
-    results.push({concept,teams:4,periods:3,survivors:1,championResolved:true,repeatedChopSafe:true,concurrentChopExactlyOnce:true})
+    results.push({concept,teams:4,teamsPerChop,periods,survivors:1,championResolved:true,repeatedChopSafe:true,concurrentChopExactlyOnce:true})
    }
   }
  }finally{
