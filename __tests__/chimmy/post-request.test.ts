@@ -2,9 +2,10 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 afterEach(() => vi.useRealTimers())
-it('reuses the identity when a response is lost', async () => {
+it('reuses the identity when the user retries a lost response', async () => {
   const form = new FormData(); form.set('message','Trade question')
   const fetcher = vi.fn().mockRejectedValueOnce(new Error('connection lost')).mockResolvedValueOnce(new Response('{}'))
+  await expect(postChimmyRequest(form,fetcher)).rejects.toThrow('connection lost')
   await postChimmyRequest(form,fetcher)
   expect(fetcher).toHaveBeenCalledTimes(2)
   expect(form.get('requestId')).toBeTruthy()
