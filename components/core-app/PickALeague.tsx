@@ -151,6 +151,7 @@ export function PickALeague({
                 key={l.id}
                 className="af-pl-league"
                 href={`/core/${tabKey}?league=${encodeURIComponent(l.id)}`}
+                prefetch={false}
               >
                 {/*
                   The crest, with the rail's own letter mark as the fallback —
