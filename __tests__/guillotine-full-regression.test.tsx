@@ -14,7 +14,7 @@ import { GuillotineHome } from '@/components/guillotine/GuillotineHome'
 import { createCanonicalLeagueInTransaction } from '@/lib/league-creation/canonical/createCanonicalLeagueInTransaction'
 
 const prismaMock = vi.hoisted(() => ({
-  guillotineSeason: { findFirst: vi.fn() },
+  guillotineSeason: { findFirst: vi.fn(), findUnique: vi.fn() },
   guillotineElimination: { findFirst: vi.fn() },
   guillotineRosterState: {
     findMany: vi.fn(),
@@ -118,6 +118,7 @@ describe('Guillotine full regression matrix', () => {
     acquireEliminationLockMock.mockResolvedValue({ ok: true, backend: 'postgres' })
     releaseEliminationLockMock.mockResolvedValue(undefined)
     prismaMock.guillotineSeason.findFirst.mockResolvedValue(null)
+    prismaMock.guillotineSeason.findUnique.mockResolvedValue({ createdAt: new Date('2026-01-01') })
     prismaMock.guillotineElimination.findFirst.mockResolvedValue(null)
     prismaMock.guillotineRosterState.findMany.mockResolvedValue([])
     prismaMock.roster.update.mockResolvedValue({ id: 'ok' })
@@ -189,6 +190,17 @@ describe('Guillotine full regression matrix', () => {
     expect(evaluateWeekMock).not.toHaveBeenCalled()
     expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
     expect(releaseChoppedRostersMock).not.toHaveBeenCalled()
+  })
+
+  it('does not chop another survivor after state was written but audit failed', async () => {
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18 })
+    prismaMock.guillotineSeason.findFirst.mockResolvedValue({ id: 'season-2026' })
+    prismaMock.guillotineRosterState.findMany.mockResolvedValue([{ rosterId: 'already-chopped' }])
+    const result = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026 })
+    expect(result?.reason).toContain('audit recovery required')
+    expect(evaluateWeekMock).not.toHaveBeenCalled()
+    expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
+    expect(releaseEliminationLockMock).toHaveBeenCalled()
   })
 
   it('protects a completed legacy period without a season shell', async () => {

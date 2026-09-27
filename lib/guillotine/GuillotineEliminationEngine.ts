@@ -120,14 +120,21 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   // Check BEFORE filtering active teams or writing eliminations: an audited retry must not
   // turn the next-lowest survivor into a second chop for the same scoring period.
   const seasonId = await findGuillotineSeasonId(input.leagueId, input.season)
-  const alreadyProcessed = seasonId
-    ? await isPeriodAlreadyRecorded(seasonId, input.weekOrPeriod)
-    : (await prisma.guillotineRosterState.findMany({
-        where: { leagueId: input.leagueId, choppedInPeriod: input.weekOrPeriod, choppedAt: { not: null } },
-        select: { rosterId: true },
-      })).length > 0
-  if (alreadyProcessed) {
+  if (seasonId && await isPeriodAlreadyRecorded(seasonId, input.weekOrPeriod)) {
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already processed' }
+  }
+  // A failure after state writes but before the audit must fail closed on retry too.
+  // Bound states to this season's creation time so a previous year's chop is not reused.
+  const seasonRow = seasonId ? await prisma.guillotineSeason.findUnique({ where: { id: seasonId }, select: { createdAt: true } }) : null
+  const started = await prisma.guillotineRosterState.findMany({
+    where: {
+      leagueId: input.leagueId, choppedInPeriod: input.weekOrPeriod,
+      choppedAt: { not: null, ...(seasonRow ? { gte: seasonRow.createdAt } : {}) },
+    },
+    select: { rosterId: true },
+  })
+  if (started.length > 0) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already started; audit recovery required' }
   }
 
   const evalResult = await evaluateWeek({
