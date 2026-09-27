@@ -912,6 +912,13 @@ describe('injury short-circuit', () => {
   })
 
   describe("yields a question about the asker's own roster", () => {
+    it('does not parse a scoped league name as a player during a roster review', async () => {
+      const question = 'Review my BB Dynasty League 26! Best Ball roster using Decision OS. Focus on current injuries, roster depth and missing data.'
+      const result = await tryDeterministicAnswerDetailed(question, 'en', 'authorized-league', true)
+      expect(result).toBeNull()
+      expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
+      expect(getEnrichedNewsFeedMock).not.toHaveBeenCalled()
+    })
     it.each([
       "who's out in my leagues",
       'any injuries on my team?',

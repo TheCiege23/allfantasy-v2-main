@@ -14,6 +14,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { isScopedRosterReviewQuestion } from '@/lib/chimmy/rosterReviewIntent'
 import { resolveChimmyIntentRoute } from '@/lib/ai/chimmyIntentRouter'
 import { DEFAULT_WORLD_CUP_SCORING } from '@/lib/world-cup/worldCupBracketBuilder'
 import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
@@ -1261,6 +1262,7 @@ export async function tryDeterministicAnswerDetailed(
   const classify = (text: string): DeterministicResult =>
     isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
+  if (isScopedRosterReviewQuestion(message, leagueRequested)) return null
   // A result or schedule is evidence for analysis, never a probability or a recommendation.
   // Yield before ANY shortcut so incidental "live", "tonight", or "worth" cannot hijack it.
   if (/\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {

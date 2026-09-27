@@ -724,7 +724,7 @@ export default function PlayerCardSheet({
                     */}
                     <p className="af-pc-basis">
                       {data.schedule.data.projectedWeek != null
-                        ? `Projections are published for week ${data.schedule.data.projectedWeek} only; later weeks show the fixture.`
+                        ? `Published baseline projections cover week ${data.schedule.data.projectedWeek} only; later weeks show the fixture. Your lineup view applies league scoring and current injury availability.`
                         : 'No projected week is published yet; these are fixtures.'}
                     </p>
                   </>

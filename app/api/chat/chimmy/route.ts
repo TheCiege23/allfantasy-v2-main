@@ -155,6 +155,7 @@ import { buildChimmyAnswerContract } from '@/lib/chimmy-chat/response-contract'
 import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-events'
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
 import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE, isOwnRosterInjuryQuestion } from '@/lib/ai/deterministic'
+import { isScopedRosterReviewQuestion } from '@/lib/chimmy/rosterReviewIntent'
 import { grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
 
 /** Provenance for an answer that came from the web, not from our rows. */
@@ -2289,10 +2290,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * ⚠ Own race, for the reason given on `portfolioPlayerGroundingTask`: a timeout costs this
    * section, never the answer.
    */
+  const rosterReviewLeagueId = leagueSnapshot && isScopedRosterReviewQuestion(message, true) ? leagueSnapshot.id : null
   const myRosterInjuriesTask: Promise<string | null> =
-    userId && isOwnRosterInjuryQuestion(message)
+    userId && (isOwnRosterInjuryQuestion(message) || rosterReviewLeagueId)
       ? Promise.race([
-          buildMyRosterInjuriesContext({ userId }).catch(() => null),
+          buildMyRosterInjuriesContext({ userId, ...(rosterReviewLeagueId ? { leagueId: rosterReviewLeagueId } : {}) }).catch(() => null),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
         ])
       : Promise.resolve(null)
@@ -2430,7 +2432,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     portfolioPlayerGrounding
       ? `## CROSS-LEAGUE PLAYER LOOKUP\n${portfolioPlayerGrounding}`
       : undefined,
-    myRosterInjuries ? `## MY ROSTER INJURIES (ALL LEAGUES)\n${myRosterInjuries}` : undefined,
+    myRosterInjuries ? `## MY ROSTER INJURIES (${rosterReviewLeagueId ? 'SELECTED LEAGUE' : 'ALL LEAGUES'})\n${myRosterInjuries}` : undefined,
     leagueSportsGrounding
       ? `## NFL/NCAAF LEAGUE SPORTS GROUNDING\n${leagueSportsGrounding.serialized}`
       : undefined,

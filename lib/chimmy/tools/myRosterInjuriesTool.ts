@@ -8,6 +8,7 @@ import { resolveInjuryFacts, type InjuryFact, type InjuryLookup } from '@/lib/in
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
+import { isBestBallSettings } from '@/lib/core-app/lineupMode'
 
 /**
  * WHO IS HURT ON THE USER'S OWN ROSTERS, ACROSS EVERY LEAGUE THEY ARE IN.
@@ -38,6 +39,7 @@ const ROSTER_CONCURRENCY = 6
 type Slot = 'starter' | 'bench' | 'IR' | 'taxi'
 
 type RosterEntry = {
+  automatic?: boolean
   leagueName: string
   slot: Slot
   name: string | null
@@ -81,6 +83,8 @@ function refsWithSlot(refs: AiRosterPlayerRef[], slot: Slot, leagueName: string)
 
 export interface MyRosterInjuriesInput {
   userId: string
+  /** Filter to an authorized current-season league; omitted keeps the cross-league scan. */
+  leagueId?: string | null
   /** Limit to one sport (e.g. 'NFL'). Omitted: every sport the user has a current league in. */
   sport?: string | null
 }
@@ -88,7 +92,7 @@ export interface MyRosterInjuriesInput {
 type LeagueRead =
   | { state: 'unreadable'; leagueName: string }
   | { state: 'empty'; leagueName: string }
-  | { state: 'read'; leagueName: string; sport: string; entries: RosterEntry[]; unnamed: number }
+  | { state: 'read'; leagueName: string; sport: string; entries: RosterEntry[]; unnamed: number; bestBall: boolean }
 
 type Finding = {
   name: string
@@ -99,7 +103,7 @@ type Finding = {
   /** Null when the only evidence is the undated Sleeper feed status. */
   reportedAt: Date | null
   stale: boolean
-  appearances: Array<{ leagueName: string; slot: Slot }>
+  appearances: Array<{ leagueName: string; slot: Slot; automatic: boolean }>
 }
 
 /**
@@ -134,14 +138,16 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
     const s = String(l.sport).toUpperCase()
     newestBySport.set(s, Math.max(newestBySport.get(s) ?? l.season, l.season))
   }
-  const current = leagues.filter((l) => newestBySport.get(String(l.sport).toUpperCase()) === l.season)
+  const current = leagues.filter((l) => newestBySport.get(String(l.sport).toUpperCase()) === l.season && (!input.leagueId || l.id === input.leagueId))
+  if (input.leagueId && current.length === 0) return 'No authorized current-season roster is available for the selected league. Do not describe that roster as healthy or invent its players.'
   const scanned = current.slice(0, MAX_LEAGUES_SCANNED)
   const truncated = current.length - scanned.length
 
   const platformRows = await prisma.league
-    .findMany({ where: { id: { in: scanned.map((l) => l.id) } }, select: { id: true, platform: true } })
-    .catch(() => [] as Array<{ id: string; platform: string }>)
+    .findMany({ where: { id: { in: scanned.map((l) => l.id) } }, select: { id: true, platform: true, settings: true, leagueType: true } })
+    .catch(() => [] as Array<{ id: string; platform: string; settings?: unknown; leagueType?: string | null }>)
   const platformOf = new Map(platformRows.map((r) => [r.id, r.platform]))
+  const automaticOf = new Map(platformRows.map((r) => [r.id, isBestBallSettings(r.settings) || String(r.leagueType ?? '').includes('best_ball')]))
 
   const reads: LeagueRead[] = await runWithConcurrency(scanned, ROSTER_CONCURRENCY, async (league) => {
     const sport = String(league.sport).toUpperCase()
@@ -186,8 +192,9 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
     return {
       state: 'read',
       leagueName: league.name,
+      bestBall: automaticOf.get(league.id) ?? false,
       sport,
-      entries: entries.map(({ playerId: _id, ...rest }) => rest),
+      entries: entries.map(({ playerId: _id, ...rest }) => ({ ...rest, automatic: automaticOf.get(league.id) ?? false })),
       unnamed: entries.filter((e) => !e.name).length,
     }
   })
@@ -269,7 +276,7 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
         }
         if (finding) byKey.set(key, finding)
       }
-      finding?.appearances.push({ leagueName: e.leagueName, slot: e.slot })
+      finding?.appearances.push({ leagueName: e.leagueName, slot: e.slot, automatic: e.automatic ?? false })
     }
     findings.push(...byKey.values())
   }
@@ -279,7 +286,7 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
   const unnamedTotal = readLeagues.reduce((n, r) => n + r.unnamed, 0)
   const scope = sportFilter ? `${sportFilter} ` : ''
   const lines: string[] = [
-    `CROSS-LEAGUE INJURY CHECK of the user's OWN ${scope}rosters, current season, ${readLeagues.length} league(s) read, ${playersChecked} distinct player(s) checked.`,
+    `${input.leagueId ? 'SELECTED-LEAGUE' : 'CROSS-LEAGUE'} INJURY CHECK of the user's OWN ${scope}rosters, current season, ${readLeagues.length} league(s) read, ${playersChecked} distinct player(s) checked.`,
   ]
 
   if (findings.length === 0) {
@@ -294,21 +301,23 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
         ? `reported ${isoDay(f.reportedAt)}${f.stale ? ', MAY BE OUT OF DATE' : ''}`
         : 'Sleeper player feed, undated'
       const where = f.appearances
-        .map((a) => `${a.leagueName} (${a.slot === 'starter' ? 'STARTING' : a.slot})`)
+        .map((a) => `${a.leagueName} (${a.slot === 'starter' ? a.automatic ? 'AUTOMATIC BEST BALL LINEUP' : 'STARTING' : a.slot})`)
         .join('; ')
       lines.push(`- ${who}: ${f.status}${f.detail ? ` — ${f.detail}` : ''} [${when}] — on: ${where}`)
     }
     const startingHurt = findings.filter(
-      (f) => severityOf(f.status) <= 1 && f.appearances.some((a) => a.slot === 'starter'),
+      (f) => severityOf(f.status) <= 1 && f.appearances.some((a) => a.slot === 'starter' && !a.automatic),
     )
     if (startingHurt.length > 0) {
       lines.push(
         `⚠ ACTION: ${startingHurt.length} player(s) listed Out/IR are in a STARTING lineup: ${startingHurt
-          .map((f) => `${f.name} (${f.appearances.filter((a) => a.slot === 'starter').map((a) => a.leagueName).join(', ')})`)
+          .map((f) => `${f.name} (${f.appearances.filter((a) => a.slot === 'starter' && !a.automatic).map((a) => a.leagueName).join(', ')})`)
           .join('; ')}. Lead with these.`,
       )
     }
   }
+
+  if (readLeagues.some((l) => l.bestBall)) lines.push('Best Ball scoring lineups are selected automatically by the provider. Treat injuries in those leagues as roster availability and depth concerns, not requests for manual starter swaps.')
 
   /* Each gap can only HIDE an injury, never invent one — so each says the true list can only be LONGER. */
   const gaps: string[] = []
