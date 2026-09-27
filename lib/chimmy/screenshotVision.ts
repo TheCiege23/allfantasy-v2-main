@@ -11,6 +11,15 @@ export async function parseScreenshotWithVision(imageFile: File, userQuestion: s
   const data = Buffer.from(await imageFile.arrayBuffer()).toString('base64')
   const mime = imageFile.type as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
   const question = userQuestion || 'Read the visible fantasy context.'
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 15_000 })
+      const response = await client.messages.create({ model: resolveChimmyClaudeModel(), max_tokens: 1400, system: SCREENSHOT_EXTRACTION_PROMPT,
+        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data } }, { type: 'text', text: question }] }] })
+      const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
+      if (text && response.stop_reason !== 'max_tokens') return text
+    } catch (error) { reportFailure('anthropic', error) }
+  }
   const candidates: Array<{ key: string; baseURL: string }> = []
   // Never pair one provider's credential with another provider's endpoint.
   if (process.env.AI_INTEGRATIONS_OPENAI_API_KEY) candidates.push({ key: process.env.AI_INTEGRATIONS_OPENAI_API_KEY, baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || 'https://api.openai.com/v1' })
@@ -26,15 +35,6 @@ export async function parseScreenshotWithVision(imageFile: File, userQuestion: s
       const text = response.choices[0]?.message?.content?.trim()
       if (text && response.choices[0]?.finish_reason !== 'length') return text
     } catch (error) { reportFailure('openai', error) }
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 15_000 })
-      const response = await client.messages.create({ model: resolveChimmyClaudeModel(), max_tokens: 1400, system: SCREENSHOT_EXTRACTION_PROMPT,
-        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data } }, { type: 'text', text: question }] }] })
-      const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
-      if (text && response.stop_reason !== 'max_tokens') return text
-    } catch (error) { reportFailure('anthropic', error) }
   }
   return 'Image uploaded; vision service unavailable. No image contents were extracted.'
 }
