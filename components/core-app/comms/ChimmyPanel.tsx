@@ -7,6 +7,7 @@ import { useScopedConversation } from './useScopedConversation'
 import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Sparkles, X } from 'lucide-react'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyRichText } from './ChimmyRichText'
+import { ChimmyScreenshot } from './ChimmyScreenshot'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
@@ -1035,7 +1036,7 @@ export function ChimmyPanel({
               {t.role === 'chimmy' ? (
                 <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
               ) : (
-                <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <a href={t.imagePreview} target="_blank" rel="noopener noreferrer" aria-label="Enlarge attached screenshot"><img src={t.imagePreview} alt={`Screenshot: ${t.imageName ?? 'attachment'}`} style={{ maxWidth: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12 }} /></a> : null}</div>
+                <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <ChimmyScreenshot src={t.imagePreview} name={t.imageName} /> : null}</div>
               )}
 
               {t.role === 'chimmy' && t.choices?.length && t.retryQuestion ? (
@@ -1197,7 +1198,7 @@ export function ChimmyPanel({
             </div>
           ))
         )}
-        {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">Chimmy is checking your question and available evidence…</p></div> : null}
+        {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">{turns[turns.length - 1]?.imageName ? 'Chimmy is reading your screenshot and checking available league evidence…' : 'Chimmy is checking your question and available evidence…'}</p></div> : null}
         {/*
           * ⚠ "Nothing was charged." USED TO BE APPENDED TO EVERY ERROR, and it is
           * not always true: route.ts:2848 returns a 500 AFTER the spend at 1883,
