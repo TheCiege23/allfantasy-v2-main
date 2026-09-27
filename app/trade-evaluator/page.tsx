@@ -227,8 +227,11 @@ interface ApiTradeResponse {
     withHindsight?: { percentDiff?: number; grade?: string }
     comparison?: string
   }
+  /** Which provider wrote the explanation of the grade (one call, Phase 4), keyed by provider name. */
   aiProviders?: {
     openai?: string
+    anthropic?: string
+    xai?: string
     deepseek?: string
     grok?: string
   }
@@ -471,8 +474,9 @@ function providerList(payload: ApiTradeResponse) {
 
   const labels: string[] = []
   if (providers.openai === "ok") labels.push("OpenAI")
+  if (providers.anthropic === "ok") labels.push("Anthropic")
+  if (providers.xai === "ok" || providers.grok === "ok") labels.push("Grok")
   if (providers.deepseek === "ok") labels.push("DeepSeek")
-  if (providers.grok === "ok") labels.push("Grok")
   return labels.length > 0 ? labels : ["AI"]
 }
 

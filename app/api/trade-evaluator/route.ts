@@ -4,18 +4,11 @@ import { z } from 'zod'
 import { getServerSession } from 'next-auth'
 import { runPECR } from '@/lib/ai/pecr'
 import {
-  STRUCTURED_TRADE_EVAL_SYSTEM_PROMPT,
-  StructuredTradeEvalResponseSchema,
-  NEGOTIATION_USER_INSTRUCTION,
-} from '@/lib/trade-evaluator-prompt'
-import {
   buildFaabSteps,
   buildScarcityNotes,
   clampNegotiationToAllowed,
 } from '@/lib/trade-finder/negotiation-helpers'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { xaiChatJson, parseTextFromXaiChatCompletion } from '@/lib/xai-client'
-import { deepseekQuantAnalysis } from '@/lib/deepseek-client'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
@@ -30,7 +23,6 @@ import { resolveSuperflex } from '@/lib/trade-value/superflexResolution'
 import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
-import { buildGptInputContract, buildGptUserPrompt, validateGptNarrativeOutput, shouldSkipGpt, AI_OUTPUT_INVALID_FALLBACK, GPT_NARRATIVE_SYSTEM_PROMPT } from '@/lib/trade-engine/gpt-input-contract'
 import type { Asset } from '@/lib/trade-engine/types'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
 import { parsePickLabel } from '@/lib/parsePickLabel'
@@ -51,19 +43,18 @@ import { isToolTradeAnalyzerEnabled } from '@/lib/feature-toggle'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league-access'
 import { prisma } from '@/lib/prisma'
-import { buildLeagueContext } from '@/lib/league/buildLeagueContext'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
 import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
-import { receiptGradeFields, receiptPromptBlock } from '@/lib/decision-os/trade/receiptViews'
+import { receiptGradeFields, structuredEvaluationFromExplanation } from '@/lib/decision-os/trade/receiptViews'
+import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
   buildNormalizedTradeContext,
-  buildNormalizedTradeEvidencePrompt,
   type BuildNormalizedTradeContextResult,
 } from '@/lib/trades/buildNormalizedTradeContext'
 
@@ -225,71 +216,6 @@ function triangulateConfidence(
   auditLog.push(`Triangulated confidence: ${finalScore} (drift: ${maxDrift.toFixed(1)} pts, models: ${scores.length})`)
 
   return { finalScore, overrideApplied: false, auditLog }
-}
-
-const DEEPSEEK_TRADE_SYSTEM = `You are a quantitative fantasy sports trade analysis engine.
-Analyze trade fairness using statistical modeling.
-Always respond in valid JSON only. No markdown outside JSON.
-
-Output format:
-{
-  "fairnessScore": 0-100,
-  "netValueDelta": number,
-  "projectionDeltaA": number,
-  "projectionDeltaB": number,
-  "expectedWeeklyGainA": number,
-  "expectedWeeklyGainB": number,
-  "playoffImpactA": 0-100,
-  "playoffImpactB": 0-100,
-  "riskGradeA": "A|B|C|D|F",
-  "riskGradeB": "A|B|C|D|F",
-  "ceilingA": number,
-  "floorA": number,
-  "ceilingB": number,
-  "floorB": number,
-  "varianceScore": 0-100,
-  "confidencePct": 0-100,
-  "winnerSide": "A|B|even",
-  "quantReasoning": "Brief statistical explanation"
-}`
-
-const GROK_TRADE_SYSTEM = `You are a real-time fantasy sports intelligence engine.
-Analyze trade assets for breaking news, injury risk, and momentum signals.
-Always respond in valid JSON only.
-
-Output format:
-{
-  "playerSignals": [
-    {
-      "playerName": string,
-      "signal": "injury|breakout|decline|depth_change|contract|rumor|none",
-      "severity": "critical|moderate|low",
-      "note": string
-    }
-  ],
-  "overallRiskFlag": "high|moderate|low|none",
-  "trendingPlayers": string[],
-  "injuryAlerts": string[],
-  "momentumShifts": string[],
-  "marketSentiment": "bullish|bearish|neutral",
-  "rawInsight": string
-}`
-
-function parseJsonSafe(raw: string): Record<string, any> | null {
-  try {
-    const cleaned = raw
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim()
-    return JSON.parse(cleaned)
-  } catch {
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (match) {
-      try { return JSON.parse(match[0]) } catch {}
-    }
-    return null
-  }
 }
 
 type TradeEvaluatorQualityGate = {
@@ -1345,26 +1271,6 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       console.warn('[TradeEval] League decision context build failed (non-blocking):', (ldcErr as Error)?.message)
     }
 
-    let leagueHistoryContext = ''
-    try {
-      if (data.league_id && userId) {
-        const afLeague = await prisma.league.findFirst({
-          where: {
-            userId,
-            platform: 'sleeper',
-            platformLeagueId: String(data.league_id),
-          },
-          orderBy: { season: 'desc' },
-          select: { id: true },
-        })
-        if (afLeague) {
-          leagueHistoryContext = await buildLeagueContext(afLeague.id, data.sender.manager_name)
-        }
-      }
-    } catch (histErr) {
-      console.warn('[TradeEval] League history context failed (non-blocking):', (histErr as Error)?.message)
-    }
-
     const tierImpactA = teamAGives.map(a => `${a.name}: ${a.tier}`).join(', ')
     const tierImpactB = teamAReceives.map(a => `${a.name}: ${a.tier}`).join(', ')
 
@@ -1441,7 +1347,6 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         timeContext: data.asOfDate ? 'AS_OF_DATE' : 'CURRENT',
         ...(data.asOfDate && { asOfDate: data.asOfDate }),
       },
-      ...(leagueHistoryContext && { leagueHistoryContext }),
       ...(normalizedTradeBundle && {
         providerEvidence: {
           summary: {
@@ -1770,246 +1675,50 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
 
     structuredPayload.negotiationInput = negotiationInput
 
-    const gptContract = tradeDriverData
-      ? buildGptInputContract('TRADE_EVALUATOR', tradeDriverData)
-      : null
-
-    const skipGpt = gptContract ? shouldSkipGpt(gptContract) : 'INCOMPLETE_DRIVER_SET'
-
-    let parsed: Record<string, any> | null = null
-    let narrativeValid = false
-    let deepseekQuantResult: Record<string, any> | null = null
-    let grokTrendResult: Record<string, any> | null = null
-    const aiProviders: { openai: string; deepseek: string; grok: string } = {
-      openai: 'skipped',
-      deepseek: 'skipped',
-      grok: 'skipped',
-    }
-
-    const normalizedEvidencePrompt =
-      normalizedTradeBundle &&
-      (normalizedTradeBundle.players.length > 0 || normalizedTradeBundle.unresolvedPlayers.length > 0)
-        ? buildNormalizedTradeEvidencePrompt(normalizedTradeBundle)
-        : ''
-    const providerMissingNote =
-      normalizedTradeBundle &&
-      (normalizedTradeBundle.summary.unresolvedPlayers > 0 ||
-        normalizedTradeBundle.summary.missingDomains.length > 0)
-        ? '\nNote: Some player data was unavailable from imported provider cache.'
-        : ''
-
     /*
-     * 🛑 THE MODELS ARE GIVEN THE RECEIPT, NOT THE COMPOSITE (2026-09-27). The page shows the one
-     * engine's letter and its totals; a narrative reasoning from this route's composite totals and
-     * fairness score could argue the opposite of the letter printed beside it. Team A is the sender,
-     * which is the receipt's graded (`give`) side.
+     * 🛑 ONE AI CALL, AND IT EXPLAINS THE RECEIPT (Phase 4, 2026-09-27). This used to be three: DeepSeek
+     * returned its own fairness score, A-F risk grades and winner; Grok ran a web search and appended
+     * "injury alerts" nobody checked; OpenAI synthesised both into a verdict, a confidence and
+     * "better alternatives" with invented fit scores — and a narrative check whose result was never
+     * read. Each could contradict the letter printed beside it. Now `explainTrade` sends the receipt
+     * and nothing else, validates the answer against it (numbers, citations, grades, betting language),
+     * retries once, and otherwise answers from the deterministic template.
      */
     const receiptForAI = await evaluationReceiptPromise
-    const gradeBlockForAI = receiptPromptBlock(receiptForAI)
-    const tradeContextForAI = `
-TRADE DETAILS:
-Team A (${data.sender.manager_name}) gives: ${senderPlayerNames.join(', ')}${senderPicksData.length ? ', ' + senderPicksData.map(p => p.label).join(', ') : ''}
-Team B (${data.receiver.manager_name}) gives: ${receiverPlayerNames.join(', ')}${receiverPicksData.length ? ', ' + receiverPicksData.map(p => p.label).join(', ') : ''}
-
-LEAGUE: ${data.league?.format || 'dynasty'} | ${isSF ? 'Superflex' : '1QB'} (${qbFormatBasis})
-${gradeBlockForAI}
-${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — the trade grade above is authoritative):\n${normalizedEvidencePrompt}${providerMissingNote}` : ''}
-    `.trim()
-
-    const [dsResult, grokResult] = await Promise.allSettled([
-      deepseekQuantAnalysis(
-        `${DEEPSEEK_TRADE_SYSTEM}\n\nAnalyze this trade:\n${tradeContextForAI}`
-      ).catch((e: any) => {
-        console.warn('[TradeEval] DeepSeek failed:', e?.message)
-        return { json: null, raw: '', error: e?.message }
-      }),
-
-      xaiChatJson({
-        messages: [
-          { role: 'system', content: GROK_TRADE_SYSTEM },
-          { role: 'user', content: `Analyze player signals for this trade:\n${tradeContextForAI}` },
-        ],
-        tools: [{ type: 'web_search', user_location_country: 'US' }],
-        temperature: 0.3,
-        maxTokens: 400,
-      }).catch((e: any) => {
-        console.warn('[TradeEval] Grok failed:', e?.message)
-        return null
-      }),
-    ])
-
-    if (dsResult.status === 'fulfilled' && dsResult.value?.json) {
-      deepseekQuantResult = dsResult.value.json
-      aiProviders.deepseek = 'ok'
+    const rosterNamesOf = (roster: unknown): string[] =>
+      Array.isArray(roster)
+        ? roster
+            .map((r) => (typeof r === 'string' ? r : r && typeof r === 'object' ? (r as { name?: unknown }).name : null))
+            .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+        : []
+    const explanation = await explainTrade({
+      receipt: receiptForAI,
+      teamNames: { teamA: data.sender.manager_name, teamB: data.receiver.manager_name },
+      rosterNames: { teamA: rosterNamesOf(data.sender.roster), teamB: rosterNamesOf(data.receiver.roster) },
+    })
+    const aiProviders: Record<string, 'ok' | 'error'> = explanation.provider
+      ? { [explanation.provider]: explanation.source === 'ai' ? 'ok' : 'error' }
+      : {}
+    if (explanation.source === 'ai') {
       await logAiOutput({
-        provider: 'deepseek',
-        role: 'quantitative',
+        provider: explanation.provider ?? 'unknown',
+        role: 'narrative',
         taskType: 'trade_eval',
         targetType: 'league',
         targetId: data.league_id || undefined,
-        model: 'deepseek',
-        contentJson: deepseekQuantResult,
+        contentJson: explanation.verdict,
       })
-    } else {
-      aiProviders.deepseek = 'error'
-      const reason = dsResult.status === 'rejected' ? dsResult.reason : (dsResult.status === 'fulfilled' ? dsResult.value?.error : undefined)
-      if (reason) console.warn('[TradeEval] DeepSeek result:', reason)
+    } else if (explanation.violations.length > 0) {
+      console.warn('[trade-evaluator] explanation answered by the template:', explanation.templateReason, explanation.violations.slice(0, 5))
     }
-
-    if (grokResult.status === 'fulfilled' && grokResult.value) {
-      const gVal = grokResult.value
-      if (gVal.ok) {
-        const grokText = parseTextFromXaiChatCompletion(gVal.json) ?? ''
-        const grokParsed = parseJsonSafe(grokText)
-        if (grokParsed) {
-          grokTrendResult = grokParsed
-          aiProviders.grok = 'ok'
-          await logAiOutput({
-            provider: 'grok',
-            role: 'realtime',
-            taskType: 'trade_eval',
-            targetType: 'league',
-            targetId: data.league_id || undefined,
-            model: 'grok',
-            contentJson: grokTrendResult,
-          })
-        } else {
-          aiProviders.grok = 'error'
-        }
-      } else {
-        aiProviders.grok = 'error'
-      }
-    } else {
-      aiProviders.grok = 'error'
+    const evalData: Record<string, any> = structuredEvaluationFromExplanation(explanation, receiptForAI.grade, computedConfidenceScore)
+    const tradeExplanation = {
+      verdict: explanation.verdict,
+      source: explanation.source,
+      templateReason: explanation.templateReason,
+      provider: explanation.provider,
+      receiptId: explanation.receiptId,
     }
-
-    const gptPayload: Record<string, any> = {
-      trade: structuredPayload.trade,
-      vetoStatus: structuredPayload.vetoStatus,
-      leagueSettings: structuredPayload.leagueSettings,
-      analysisMode: structuredPayload.analysisMode,
-      negotiationInput,
-      ...(structuredPayload.leagueDecisionContext && {
-        leagueDecisionContext: structuredPayload.leagueDecisionContext,
-      }),
-      ...(structuredPayload.confidenceInputs && {
-        confidenceInputs: structuredPayload.confidenceInputs,
-      }),
-      ...(structuredPayload.historicalContext && {
-        historicalContext: structuredPayload.historicalContext,
-      }),
-    }
-
-    if (skipGpt !== 'ok') {
-      console.warn(`[trade-evaluator] Skipping GPT: ${skipGpt}`)
-    } else {
-      const systemPrompt =
-        STRUCTURED_TRADE_EVAL_SYSTEM_PROMPT +
-        '\n\n' +
-        GPT_NARRATIVE_SYSTEM_PROMPT +
-        (leagueHistoryContext
-          ? `\n\nLEAGUE HISTORY & MANAGER TIERS (use for negotiation leverage — do not contradict deterministic values):\n${leagueHistoryContext}`
-          : '')
-      const narrativePrompt = gptContract ? buildGptUserPrompt(gptContract) : ''
-
-      // The grade block leads, so the narrative explains the receipt's letter rather than the composite totals in the payload.
-      const enrichedPayloadStr = `${gradeBlockForAI}\n\n${narrativePrompt}\n\n${JSON.stringify(gptPayload)}\n\n` +
-        (normalizedEvidencePrompt
-          ? `NORMALIZED PROVIDER EVIDENCE (supplemental — not trade value):\n${normalizedEvidencePrompt}${providerMissingNote}\n\n`
-          : '') +
-        `QUANTITATIVE ANALYSIS (DeepSeek):\n${deepseekQuantResult ? JSON.stringify(deepseekQuantResult, null, 2) : 'Unavailable'}\n\n` +
-        `REAL-TIME SIGNALS (Grok):\n${grokTrendResult ? JSON.stringify(grokTrendResult, null, 2) : 'Unavailable'}\n\n` +
-        `Synthesize all data into Chimmy's trade recommendation.\n\n${NEGOTIATION_USER_INSTRUCTION}`
-
-      const result = await openaiChatJson({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: enrichedPayloadStr },
-        ],
-        temperature: 0.2,
-        maxTokens: 6000,
-      })
-
-      if (result.ok === false) {
-        console.error('Trade evaluator OpenAI error:', {
-          status: result.status,
-          details: result.details?.slice(0, 500),
-        })
-        aiProviders.openai = 'error'
-      } else {
-        aiProviders.openai = 'ok'
-        parsed = parseJsonContentFromChatCompletion(result.json)
-        await logAiOutput({
-          provider: 'openai',
-          role: 'narrative',
-          taskType: 'trade_eval',
-          targetType: 'league',
-          targetId: data.league_id || undefined,
-          model: (result as any)?.json?.model ?? undefined,
-          contentJson: parsed ?? null,
-        })
-
-        if (parsed && gptContract) {
-          const driverIds = gptContract.drivers.map(d => d.id)
-          const confDriverIds = gptContract.confidenceDrivers.map(d => d.id)
-          const narrativeProxy = {
-            bullets: [
-              parsed.explanation?.summary ? { text: parsed.explanation.summary, driverId: driverIds[0] || '' } : null,
-              parsed.explanation?.teamAReasoning ? { text: parsed.explanation.teamAReasoning, driverId: driverIds[1] || driverIds[0] || '' } : null,
-              parsed.explanation?.teamBReasoning ? { text: parsed.explanation.teamBReasoning, driverId: driverIds[2] || driverIds[0] || '' } : null,
-            ].filter(Boolean),
-            sensitivity: {
-              text: parsed.explanation?.leagueContextNotes?.[0] || '',
-              driverId: confDriverIds[0] || '',
-            },
-          }
-          const validation = validateGptNarrativeOutput(narrativeProxy, gptContract)
-          logNarrativeValidation({ mode: 'STRUCTURED', contractType: 'narrative', valid: validation.valid, violations: validation.violations }).catch(() => {})
-          if (validation.violations.length > 0) {
-            console.warn('[trade-evaluator] GPT narrative violations:', validation.violations)
-          }
-          narrativeValid = validation.valid
-          if (!narrativeValid) {
-            console.warn('[trade-evaluator] GPT narrative rejected — fail-closed')
-          }
-        }
-      }
-    }
-
-    if (parsed && grokTrendResult?.injuryAlerts?.length) {
-      parsed.riskFlags = [
-        ...(parsed.riskFlags ?? []),
-        ...grokTrendResult.injuryAlerts.slice(0, 2),
-      ]
-    }
-    if (parsed && deepseekQuantResult?.quantReasoning && !parsed.keyInsight) {
-      parsed.keyInsight = deepseekQuantResult.quantReasoning
-    }
-    if (parsed && grokTrendResult?.playerSignals?.length) {
-      parsed.playerSignals = grokTrendResult.playerSignals
-    }
-
-    if (!parsed) {
-      parsed = {
-        verdict: { overall: 'FAIR', teamA: 'NEUTRAL', teamB: 'NEUTRAL' },
-        explanation: {
-          summary: AI_OUTPUT_INVALID_FALLBACK.fallback,
-          teamAReasoning: AI_OUTPUT_INVALID_FALLBACK.fallback,
-          teamBReasoning: AI_OUTPUT_INVALID_FALLBACK.fallback,
-          leagueContextNotes: [],
-        },
-        confidence: {
-          rating: tradeDriverData?.confidenceRating ?? 'LEARNING',
-          score: computedConfidenceScore,
-          drivers: [],
-        },
-        betterAlternatives: [],
-        riskFlags: tradeDriverData?.riskFlags ?? [],
-        _aiOutputInvalid: true,
-      }
-    }
-
-    const structuredValidation = StructuredTradeEvalResponseSchema.safeParse(parsed)
 
     const tradeInsights = {
       fairnessScore,
@@ -2043,75 +1752,6 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — t
       sensitivitySentence: tradeDriverData.sensitivitySentence,
     } : null
 
-    if (!structuredValidation.success) {
-      console.error('Structured AI response validation failed:', structuredValidation.error.errors)
-      let partialCanonicalMeta: Record<string, any> | undefined
-      if (canonicalContext) {
-        const coverage = computeDataCoverageTier(
-          canonicalContext.dataQuality,
-          canonicalContext.missingData,
-          canonicalContext.sourceFreshness,
-        )
-        partialCanonicalMeta = {
-          contextId: canonicalContext.contextId,
-          dataFreshness: canonicalContext.sourceFreshness ? {
-            compositeGrade: canonicalContext.sourceFreshness.compositeGrade,
-            compositeScore: canonicalContext.sourceFreshness.compositeScore,
-            warnings: canonicalContext.sourceFreshness.warnings,
-          } : null,
-          dataCoverage: { tier: coverage.tier, score: coverage.score, badge: coverage.badge },
-        }
-      }
-
-      const partialPayload = {
-        success: true,
-        evaluation: parsed,
-        schemaValid: false,
-        warning: 'Response partially validated — AI output did not match strict schema',
-        ...(await oneGradePayload()),
-        rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
-        tokenSpend: gate.tokenSpend
-          ? {
-              ruleCode: gate.tokenPreview?.ruleCode ?? 'ai_trade_analyzer_full_review',
-              tokenCost: gate.tokenPreview?.tokenCost ?? null,
-              balanceAfter: gate.tokenSpend.balanceAfter,
-              ledgerId: gate.tokenSpend.id,
-            }
-          : null,
-        ...(structuredPayload.providerEvidence && {
-          providerEvidence: structuredPayload.providerEvidence,
-        }),
-        ...(confidenceInfo && { historicalAnalysis: confidenceInfo }),
-        ...(dualModeGrades && { dualModeGrades }),
-        tradeInsights,
-        valuationReport: structuredPayload.valuationReport,
-        serverConfidence: {
-          score: computedConfidenceScore,
-          factors: confidenceInputs,
-          triangulated: triangulateConfidence(
-            computedConfidenceScore,
-            parsed?.confidence?.score ?? null,
-            deepseekQuantResult?.confidencePct ?? null
-          ),
-        },
-        acceptProbability: acceptProbData,
-        ...(partialCanonicalMeta && { canonicalContext: partialCanonicalMeta }),
-        ...(deepseekQuantResult && { quantAnalysis: deepseekQuantResult }),
-        ...(grokTrendResult && { trendIntelligence: grokTrendResult }),
-        aiProviders,
-      }
-
-      return NextResponse.json(
-        await runTradeEvaluatorPECR({
-          payload: partialPayload,
-          recommendation: resolveTradeRecommendation(parsed),
-          valueDelta: teamANetValue,
-          qualityGate: extractTradeQualityGate(parsed),
-        })
-      )
-    }
-
-    const evalData = structuredValidation.data
 
     let negotiationToolkit: import('@/lib/trade-engine/types').NegotiationToolkit | null = null
     if (tradeDriverData) {
@@ -2223,9 +1863,8 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — t
       evalData.negotiation = safeNegotiation ?? { dmMessages: [], counters: [], sweeteners: [], redLines: [] }
     }
 
-    const gptConfidence = evalData.confidence?.score ?? null
-    const quantConfidence = deepseekQuantResult?.confidencePct ?? null
-    const triangulated = triangulateConfidence(computedConfidenceScore, gptConfidence, quantConfidence)
+    // The server's score is the only one left: no model now returns a confidence of its own.
+    const triangulated = triangulateConfidence(computedConfidenceScore, null, null)
     if (!evalData.confidence) {
       evalData.confidence = { score: triangulated.finalScore, rating: 'LEARNING', drivers: [] }
     }
@@ -2340,8 +1979,7 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — t
       acceptProbability: acceptProbData,
       ...(negotiationToolkit && { negotiationToolkit }),
       ...(canonicalContextMeta && { canonicalContext: canonicalContextMeta }),
-      ...(deepseekQuantResult && { quantAnalysis: deepseekQuantResult }),
-      ...(grokTrendResult && { trendIntelligence: grokTrendResult }),
+      tradeExplanation,
       aiProviders,
     }
     const tradeRecommendation = resolveTradeRecommendation(evalData) ?? ''

@@ -202,3 +202,63 @@ export function gradeInputsFromLegacyAssets(
   }
   return out
 }
+
+/**
+ * The `/api/trade-evaluator` page's `evaluation` block, drawn from the explanation of the receipt
+ * (Phase 4). Before this, that block was the model's own JSON — its verdict, its confidence, its
+ * "better alternatives" with invented fit scores. Now every field is either the engine's or the
+ * validated explanation's.
+ *
+ * `verdict` restates the ONE grade from Team A's (the sender's) side: A/B win, C even, D/F lose.
+ * `UNFAIR_TEAM_X` reads "unfair to team X". A withheld grade maps to the neutral row because the
+ * enum has no "not graded"; the live page never reads `verdict` (it shows `tradeGrade`, which says
+ * withheld) — only the historical-mode fallback does, and that mode is a listed follow-up.
+ *
+ * `betterAlternatives` is always empty: it was model-invented partners with model-invented fit
+ * scores. `riskFlags` are the explanation's risks, which were checked against the packet.
+ */
+export type ExplanationLike = {
+  verdict: {
+    headline: string
+    reasons: Array<{ text: string }>
+    risks: string[]
+    confidence: 'high' | 'medium' | 'low'
+  }
+}
+
+export function structuredEvaluationFromExplanation(
+  explanation: ExplanationLike,
+  grade: TradeGradeView,
+  confidenceScore: number,
+): {
+  verdict: { overall: 'FAIR' | 'FAIR_UPSIDE_SKEWED' | 'UNFAIR_TEAM_A' | 'UNFAIR_TEAM_B'; teamA: 'WIN' | 'NEUTRAL' | 'LOSS'; teamB: 'WIN' | 'NEUTRAL' | 'LOSS' }
+  explanation: { summary: string; teamAReasoning: string; teamBReasoning: string; leagueContextNotes: string[] }
+  confidence: { rating: 'HIGH' | 'MEDIUM' | 'LEARNING'; score: number; drivers: string[] }
+  betterAlternatives: never[]
+  riskFlags: string[]
+} {
+  const v = explanation.verdict
+  const letter = grade.graded ? grade.letter : null
+  const verdict =
+    letter === 'A' || letter === 'B'
+      ? { overall: 'UNFAIR_TEAM_B' as const, teamA: 'WIN' as const, teamB: 'LOSS' as const }
+      : letter === 'D' || letter === 'F'
+        ? { overall: 'UNFAIR_TEAM_A' as const, teamA: 'LOSS' as const, teamB: 'WIN' as const }
+        : { overall: 'FAIR' as const, teamA: 'NEUTRAL' as const, teamB: 'NEUTRAL' as const }
+  return {
+    verdict,
+    explanation: {
+      summary: v.headline,
+      teamAReasoning: v.reasons[0]?.text ?? '',
+      teamBReasoning: '',
+      leagueContextNotes: v.reasons.map((r) => r.text),
+    },
+    confidence: {
+      rating: v.confidence === 'high' ? 'HIGH' : v.confidence === 'medium' ? 'MEDIUM' : 'LEARNING',
+      score: Math.max(0, Math.min(100, Math.round(confidenceScore))),
+      drivers: [],
+    },
+    betterAlternatives: [],
+    riskFlags: [...v.risks],
+  }
+}

@@ -97,37 +97,12 @@ vi.mock('@/lib/sleeper-client', () => ({
   getPlayersBySport: vi.fn().mockResolvedValue({}),
 }))
 
-vi.mock('@/lib/deepseek-client', () => ({
-  deepseekQuantAnalysis: vi.fn().mockResolvedValue({
-    json: {
-      fairnessScore: 55,
-      netValueDelta: 0,
-      projectionDeltaA: 0,
-      projectionDeltaB: 0,
-      expectedWeeklyGainA: 0,
-      expectedWeeklyGainB: 0,
-      playoffImpactA: 50,
-      playoffImpactB: 50,
-      riskGradeA: 'B',
-      riskGradeB: 'B',
-      ceilingA: 0,
-      floorA: 0,
-      ceilingB: 0,
-      floorB: 0,
-      varianceScore: 50,
-      confidencePct: 60,
-      winnerSide: 'even',
-      quantReasoning: 'ok',
-    },
-    raw: '',
-    error: null,
-  }),
-}))
-
-vi.mock('@/lib/xai-client', () => ({
-  xaiChatJson: vi.fn().mockResolvedValue({ ok: false }),
-  parseTextFromXaiChatCompletion: vi.fn(),
-}))
+/*
+ * The route's one AI call goes through the provider router (Phase 4). Mocked so this suite can never
+ * reach a real provider — a checkout whose .env holds a key would otherwise spend on every run.
+ */
+const { routeTextCallMock } = vi.hoisted(() => ({ routeTextCallMock: vi.fn() }))
+vi.mock('@/lib/ai/providerRouter', () => ({ routeTextCall: routeTextCallMock }))
 
 vi.mock('@/lib/openai-client', () => ({
   openaiChatJson: vi.fn().mockResolvedValue({ ok: false }),
@@ -180,6 +155,7 @@ function baseBody() {
 describe('POST /api/trade-evaluator normalized provider context', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeTextCallMock.mockResolvedValue({ ok: false })
     isToolTradeAnalyzerEnabledMock.mockResolvedValue(true)
     getAiActionConfigMock.mockReturnValue({
       maxRequests: 50,
@@ -243,7 +219,16 @@ describe('POST /api/trade-evaluator normalized provider context', () => {
       }),
     })
     expect(buildNormalizedTradeContextMock).toHaveBeenCalled()
-    expect(buildNormalizedTradeEvidencePromptMock).toHaveBeenCalled()
+    // Provider evidence is still summarised for the client, but it is no longer a prompt: the model
+    // sees the receipt and nothing else (Phase 4).
+    expect(buildNormalizedTradeEvidencePromptMock).not.toHaveBeenCalled()
+
+    // One explanation of the receipt, and none of the removed second opinions.
+    expect(body.tradeExplanation).toMatchObject({ source: 'template' })
+    expect(body.evaluation.explanation.summary).toBe(body.tradeExplanation.verdict.headline)
+    expect(body.evaluation.betterAlternatives).toEqual([])
+    expect(body).not.toHaveProperty('quantAnalysis')
+    expect(body).not.toHaveProperty('trendIntelligence')
   })
 
   it('omits providerEvidence when no players resolve for normalized fetch', async () => {
