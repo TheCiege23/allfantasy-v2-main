@@ -5,8 +5,10 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { designationOnset, type InjuryRowLike } from './designationOnset'
 import { triageRows, type GameDayTriage, type TriageInjury, type TriageStarter } from './gameDayTriage'
 import type { SectionState } from './leagueHome'
+import { isBestBallLeagueRow } from './leagueBestBall'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { unresolvedClubNames, weekKickoffs } from './playerGame'
+import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import { resolveSportsWeek } from './sportsWeek'
 
 /**
@@ -29,11 +31,22 @@ import { resolveSportsWeek } from './sportsWeek'
  * starter's club, and a row with no club is accepted as the feed's word.
  */
 
-const MAX_LEAGUES = 40
+/*
+ * ⚠ THIS WAS 40, AND IT SILENTLY DROPPED THE LEAGUES A MULTI-LEAGUE MANAGER HAS
+ * MOST. The caller passes `playedLeagues`, sorted by NAME, so leagues 41+ were
+ * whichever came last alphabetically — never read, never named. Measured on
+ * production 2026-09-27: the largest account holds 64 NFL leagues for 2026 and six
+ * accounts hold 20+; the finder read "40 of 65 lineups" for exactly the user this
+ * screen is for. Every read below is one `IN (…)` query whatever the count, so the
+ * bound exists only to stop a pathological account, and reaching it is said on
+ * screen (`leaguesNotRead`) rather than swallowed.
+ */
+const MAX_LEAGUES = 250
 
 export async function loadGameDayTriage(userId: string | null | undefined, leagueIds: string[], nowIso: string = new Date().toISOString()): Promise<SectionState<GameDayTriage>> {
   if (!userId) return { available: false, reason: 'sign in to see your flagged starters' }
   const ids = leagueIds.slice(0, MAX_LEAGUES)
+  const leaguesNotRead = Math.max(0, leagueIds.length - ids.length)
   if (ids.length === 0) return { available: false, reason: 'connect a league to see your starters here' }
 
   const teams = await prisma.leagueTeam
@@ -45,32 +58,79 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     for (const c of [t.platformUserId, t.externalId, userId]) if (c) set.add(c)
     candidatesByLeague.set(t.leagueId, set)
   }
+  // Your team's platform id per league — the ESPN teamId / Yahoo team number a lineup deep link needs (as playerFinder.resolveLeagueSlots).
+  const teamIdByLeague = new Map<string, string>()
+  for (const t of teams) if (t.externalId && !teamIdByLeague.has(t.leagueId)) teamIdByLeague.set(t.leagueId, t.externalId)
   const claimedLeagueIds = [...candidatesByLeague.keys()]
   const allCandidates = [...new Set([...candidatesByLeague.values()].flatMap((s) => [...s]))]
   if (claimedLeagueIds.length === 0) return { available: false, reason: 'none of your leagues has a claimed team, so there is no starting lineup to read' }
 
-  const [leagues, rosters] = await Promise.all([
+  type LeagueRow = {
+    id: string
+    name: string | null
+    platform: string | null
+    platformLeagueId: string | null
+    season: number | null
+    bestBallMode: boolean | null
+    leagueVariant: string | null
+    leagueType: string | null
+    settings: unknown
+  }
+  const [leagues, rawRosters] = await Promise.all([
     prisma.league
-      .findMany({ where: { id: { in: claimedLeagueIds } }, select: { id: true, name: true, platform: true } })
-      .catch(() => [] as Array<{ id: string; name: string; platform: string | null }>),
+      .findMany({
+        where: { id: { in: claimedLeagueIds } },
+        select: { id: true, name: true, platform: true, platformLeagueId: true, season: true, bestBallMode: true, leagueVariant: true, leagueType: true, settings: true },
+      })
+      .catch(() => [] as LeagueRow[]),
     prisma.roster
       .findMany({ where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } }, select: { leagueId: true, platformUserId: true, playerData: true } })
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
   ])
-  const leagueById = new Map(leagues.map((l) => [l.id, l]))
+  const leagueById = new Map<string, LeagueRow>(leagues.map((l) => [l.id, l]))
+
+  /*
+   * ⚠ BEST BALL HAS NO LINEUP TO SET. The platform starts the best scorers after the
+   * fact, so a hurt player in its `starters` is not a decision — and listing him put an
+   * "Open lineup" button on a screen with nothing to change (Jaxson Dart, IR, "starting
+   * in Dynasty BestBall League!"). Those leagues are left out and counted instead.
+   */
+  const bestBall = new Set(leagues.filter((l) => isBestBallLeagueRow(l)).map((l) => l.id))
+
+  /*
+   * ⚠ ONLY SLEEPER-ID ROSTERS ARE READ AS THEY ARE. Everything below looks players up by
+   * Sleeper id, so a roster speaking another vocabulary must be translated or left out:
+   *
+   *   - ESPN rosters hold ESPN ids. The card translated them since 2026-09-07
+   *     (rosterIdSpace.ts); this list did not, so every ESPN starter dropped out without a
+   *     word. They are translated now — and an id WITHOUT a link is dropped, not kept:
+   *     looked up raw, ESPN 4046 would be read as whoever is Sleeper 4046, a different
+   *     person, and his injury would flag your lineup.
+   *   - Yahoo / MFL / Fantrax / Fleaflicker ids have no link on PlayerIdentityMap yet. The
+   *     same collision applies, so those leagues are counted, not read.
+   */
+  const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
+  const readable = rawRosters.filter((r) => !bestBall.has(r.leagueId) && rosterIdSpaceOf(platformOf.get(r.leagueId)) !== 'other')
+  const espnMap = await loadEspnToSleeperMap(
+    collectRosterIds(readable.filter((r) => rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn').map((r) => r.playerData)),
+  )
+  const otherLeagues = new Set(leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
 
   // One roster per league — the first that matches your candidates — and its starters.
   const startersByLeague = new Map<string, string[]>()
-  for (const r of rosters) {
+  for (const r of readable) {
     if (startersByLeague.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
     const pd = (r.playerData ?? {}) as Record<string, unknown>
-    const starters = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== '0') : []
+    const raw = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== '0') : []
+    const isEspn = rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn'
+    const starters = isEspn ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
     startersByLeague.set(r.leagueId, starters)
   }
+  const coverage = { leaguesNotRead, bestBallLeagues: bestBall.size, unsupportedLeagues: otherLeagues.size }
   const allIds = [...new Set([...startersByLeague.values()].flat())]
   if (allIds.length === 0) {
-    return { available: true, data: { rows: [], week: null, leaguesRead: startersByLeague.size, startersRead: 0 } }
+    return { available: true, data: { rows: [], week: null, leaguesRead: startersByLeague.size, startersRead: 0, ...coverage } }
   }
 
   const players = await prisma.sportsPlayer
@@ -149,6 +209,9 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
         leagueId,
         leagueName: league?.name ?? 'League',
         platform: String(league?.platform ?? 'manual').toLowerCase(),
+        platformLeagueId: league?.platformLeagueId ?? null,
+        season: league?.season ?? null,
+        teamId: teamIdByLeague.get(leagueId) ?? null,
       })
     }
   }
@@ -160,6 +223,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       week: sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null,
       leaguesRead: startersByLeague.size,
       startersRead: starters.length,
+      ...coverage,
     },
   }
 }

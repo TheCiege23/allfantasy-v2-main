@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { triageRows, type TriageInjury, type TriageStarter } from '@/lib/core-app/gameDayTriage'
+import { chipDetail, triageRows, type TriageInjury, type TriageStarter } from '@/lib/core-app/gameDayTriage'
 
 /*
  * The finder's game-day home: your flagged starters, soonest lock first.
@@ -86,5 +86,34 @@ describe('triageRows', () => {
       ['out guy', inj('Out')],
     ])
     expect(triageRows({ starters: same, injuries: map, kickoffs: KICKOFFS, nowIso: NOW }).map((r) => r.player.name)).toEqual(['Out Guy', 'Abe Questionable', 'Zed Questionable'])
+  })
+})
+
+describe('triage league links', () => {
+  it('carries each league’s platform id, season and YOUR team id onto the row, so the row can open that lineup', () => {
+    const s = (leagueId: string, platform: string, teamId: string | null): TriageStarter => ({
+      sleeperId: '1', sport: 'NFL', externalId: 'ri-1', name: 'Dalton Kincaid', position: 'TE', team: 'BUF', imageUrl: null,
+      leagueId, leagueName: leagueId, platform, platformLeagueId: `p-${leagueId}`, season: 2026, teamId,
+    })
+    const rows = triageRows({ starters: [s('A', 'sleeper', '3'), s('B', 'espn', '7')], injuries: new Map([['dalton kincaid', inj('Out')]]), kickoffs: KICKOFFS, nowIso: NOW })
+    expect(rows[0].leagues).toEqual([
+      { leagueId: 'A', leagueName: 'A', platform: 'sleeper', platformLeagueId: 'p-A', season: 2026, teamId: '3' },
+      { leagueId: 'B', leagueName: 'B', platform: 'espn', platformLeagueId: 'p-B', season: 2026, teamId: '7' },
+    ])
+  })
+})
+
+describe('chipDetail', () => {
+  it('drops a description that only restates the designation', () => {
+    // "IR · IR. INJURED RESERVE" on Jaxson Dart, 2026-09-27.
+    expect(chipDetail('IR', 'IR. Injured Reserve')).toBeNull()
+    expect(chipDetail('IR', 'Injured Reserve')).toBeNull()
+    expect(chipDetail('Out', 'Out')).toBeNull()
+  })
+  it('keeps a real detail, and drops one too long for a chip', () => {
+    expect(chipDetail('Out', 'Ankle')).toBe('Ankle')
+    expect(chipDetail('Questionable', 'Hamstring')).toBe('Hamstring')
+    expect(chipDetail('Out', 'Placed on injured reserve with a torn ACL')).toBeNull()
+    expect(chipDetail('Out', null)).toBeNull()
   })
 })

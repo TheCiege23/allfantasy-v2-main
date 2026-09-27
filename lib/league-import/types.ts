@@ -95,6 +95,16 @@ export interface NormalizedLeagueSettings {
    * only thing that can, and it is otherwise discarded at import.
    */
   is_keeper?: boolean
+  /**
+   * The provider's own best-ball flag (Sleeper `settings.best_ball`). The Sleeper mapper writes
+   * 1 or 0 (#1371); read it with `lineupMode.isBestBallSettings`, never by truthiness of a name.
+   *
+   * ⚠ DROPPED AT IMPORT UNTIL 2026-09-27: 0 of 344 Sleeper 2026 NFL leagues carried it while
+   * 43 NFL leagues were named best ball, so every lineup surface treated them as set-your-own
+   * lineups. Persisted into `League.settings.best_ball` by the settings spread and onto
+   * `League.bestBallMode` by `buildTier0LeagueColumnPatch`.
+   */
+  best_ball?: 0 | 1 | boolean
   reserve_allow_cov?: boolean
   reserve_allow_sus?: boolean
   reserve_allow_out?: boolean
