@@ -170,7 +170,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
 
     const review = container.querySelector('.af-tc-review')!.textContent ?? ''
     expect(review).toContain('5,928')
-    expect(review).toContain('mkt 4,500')
+    expect(review).toContain('base 4,500')
     // The totals add up to the grade's totals, not to the market prices.
     expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,928')
   })

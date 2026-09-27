@@ -134,7 +134,9 @@ async function rosterIdsToAssets(args: {
       const name = player?.name.trim() || id
       try {
         const pa = await pricePlayer(name, args.nflCtx, player ? { sleeperId: id, position: player.position } : undefined)
-        out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id })
+        out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id,
+          ...(player ? { valuationIdentity: { provider: 'sleeper' as const, id,
+            ...(player.position ? { position: player.position } : {}) } } : {}) })
       } catch {
         args.dataGaps.push(`Could not price roster player "${name}"`)
       }
@@ -148,7 +150,7 @@ async function rosterIdsToAssets(args: {
       if (row) {
         const pa = sportsRecordToPricedAsset(row)
         if (pa) {
-          out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id })
+          out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id, valuationPlayerId: row.id })
         } else {
           // Honesty pass: no dynasty value and no projection for this player.
           // Previously a hardcoded 1200 stood in here, which made unpriceable

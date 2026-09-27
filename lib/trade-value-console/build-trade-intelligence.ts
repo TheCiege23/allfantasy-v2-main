@@ -25,6 +25,7 @@ export function buildTradeIntelligence(args: {
   giveTotal: number
   getTotal: number
   confidenceScore: number
+  confidenceLabel?: 'HIGH' | 'MEDIUM' | 'LOW'
   degraded: boolean
   /** Shared evaluator's eligibility/pricing result; context gaps alone do not erase its verdict. */
   proposalGraded?: boolean
@@ -72,7 +73,7 @@ export function buildTradeIntelligence(args: {
   const whoWinsLongTerm: TradeIntelligence['whoWinsLongTerm'] = args.proposalGraded === false ? 'unknown' : marketWho
 
   const fairnessVerdict = proposalGraded
-    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The grade uses the displayed league values, including scoring and roster-need adjustments. Asset projections describe production, not a change in starting-lineup points or win probability. Confidence ${Math.round(args.confidenceScore)}%.${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
+    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The grade uses the displayed league values, including scoring and roster-need adjustments. Asset projections describe production, not a change in starting-lineup points or win probability. Data confidence: ${args.confidenceLabel ?? 'MEDIUM'} (quality score ${Math.round(args.confidenceScore)}/100).${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
     : 'Proposal grade unavailable. The shared evaluator withheld this grade; priced assets and roster context alone do not establish that the complete trade is fair.'
 
   const tradeWarnings: string[] = []
@@ -85,7 +86,7 @@ export function buildTradeIntelligence(args: {
   for (const g of args.dataGaps.slice(0, 5)) {
     if (g && !tradeWarnings.includes(`Data gap: ${g}`)) tradeWarnings.push(`Data gap: ${g}`)
   }
-  if (args.degraded) tradeWarnings.push('Some assets used fallback pricing — confidence is reduced.')
+  if (args.degraded) tradeWarnings.push('Some valuation or roster context is unavailable — data confidence is reduced. Review the specific data gaps above.')
 
   const rebalanceSuggestions: string[] = []
   const tk = args.negotiationToolkit
@@ -117,7 +118,7 @@ export function buildTradeIntelligence(args: {
       const residual = Math.abs(deficit - target.marketValue)
       if (residual >= deficit) continue
       rebalanceSuggestions.unshift(
-        `Ask for ${target.name} from their roster (market value ${target.marketValue.toLocaleString('en-US')}) in addition to this offer. Your league-value shortfall is ${Math.round(deficit).toLocaleString('en-US')}; before re-pricing roster fit, that leaves about ${Math.round(residual).toLocaleString('en-US')} apart. Analyze the counter to confirm its grade and lineup fit.`,
+        `Ask for ${target.name} from their roster (base value ${target.marketValue.toLocaleString('en-US')}) in addition to this offer. Your league-value shortfall is ${Math.round(deficit).toLocaleString('en-US')}; before re-pricing roster fit, that leaves about ${Math.round(residual).toLocaleString('en-US')} apart. Analyze the counter to confirm its grade and lineup fit.`,
       )
     }
   }
@@ -128,7 +129,7 @@ export function buildTradeIntelligence(args: {
   }))
   const alternateTargetsNote =
     alt.length > 0
-      ? `Available opponent roster targets${deficit > 0 ? ', closest to your value shortfall first' : ''}: ${alt.map((t) => `${t.name} (${t.marketValue})`).join(' · ')}. Re-analyze additions under this league's rules; these market prices alone do not guarantee a fair counter.`
+      ? `Available opponent roster targets${deficit > 0 ? ', closest to your value shortfall first' : ''}: ${alt.map((t) => `${t.name} (${t.marketValue})`).join(' · ')}. Re-analyze additions under this league's rules; these base values alone do not guarantee a fair counter.`
       : 'Select a league and opponent team to surface alternate counter targets from their roster.'
 
   const badges = args.league?.quickModeBadges?.length
