@@ -93,10 +93,12 @@ interface TradeResult {
   /**
    * 🛑 LIVE MODE SHOWS ONLY THE RECEIPT'S NUMBERS. The route's composite fairness, value delta,
    * confidence, acceptance drivers and signal chips are priced differently from the one grade and
-   * could contradict the letter beside them, so live mode carries `receiptTotals` and hides them.
-   * Historical (`asOfDate`) mode still shows the old tiles — a known follow-up.
+   * could contradict the letter beside them, so the page carries `receiptTotals` and hides them.
+   * Historical (`asOfDate`) mode shows the same one grade since 2026-09-27; its old letters are gone.
    */
   live: boolean
+  /** In `asOfDate` mode: what the grade is on, and the as-of-date gap as a labelled number. */
+  historicalNote: string | null
   receiptTotals: { send: number; get: number; gapPct: number } | null
   fairnessScore: number | null
   fairnessMethod: string | null
@@ -222,10 +224,10 @@ interface ApiTradeResponse {
     recommendation: string | null
     evaluationReceiptId: string | null
   }
+  /** The as-of-date value comparison — numbers only; the route sends no letter for it. */
   dualModeGrades?: {
-    atTheTime?: { percentDiff?: number; grade?: string }
-    withHindsight?: { percentDiff?: number; grade?: string }
-    comparison?: string
+    atTheTime?: { percentDiff?: number }
+    withHindsight?: { percentDiff?: number }
   }
   /** Which provider wrote the explanation of the grade (one call, Phase 4), keyed by provider name. */
   aiProviders?: {
@@ -343,12 +345,6 @@ function emptySide(name: string, firstPlayerName = ""): TradeSide {
   }
 }
 
-function clampScore(value: unknown, fallback = 50) {
-  const score = Number(value)
-  if (!Number.isFinite(score)) return fallback
-  return Math.max(0, Math.min(100, Math.round(score)))
-}
-
 type LinkedLeague = {
   id: string
   sleeperLeagueId?: string | null
@@ -378,95 +374,8 @@ function scoringFromLinkedLeague(league: LinkedLeague): ScoringFormat | null {
   return null
 }
 
-function humanizeKey(value: string) {
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
 
-function driverDirection(value: string | undefined): TradeDriver["direction"] {
-  if (value === "UP") return "positive"
-  if (value === "DOWN") return "negative"
-  return "neutral"
-}
 
-function driverStrength(value: string | undefined): TradeDriver["strength"] {
-  if (value === "STRONG") return "strong"
-  if (value === "MEDIUM") return "moderate"
-  return "weak"
-}
-
-function driverDetail(driver: ApiDriver) {
-  const evidence = driver.evidence
-  if (!evidence) return "Deterministic trade engine signal."
-
-  const pieces = [
-    evidence.metric ? humanizeKey(evidence.metric) : null,
-    typeof evidence.raw === "number" ? `${evidence.raw}${evidence.unit ? ` ${evidence.unit}` : ""}` : null,
-    evidence.note ?? null,
-  ].filter(Boolean)
-
-  return pieces.length > 0 ? pieces.join(" · ") : "Deterministic trade engine signal."
-}
-
-/*
- * ⚠ HISTORICAL MODE ONLY. A live evaluation's letter is the server's one grade (`payload.tradeGrade`);
- * this client scale survives only for an `asOfDate` evaluation's receiver side, beside the server's
- * own historical letter — a known second scale left for a later phase.
- */
-function gradeFromPercentDiff(percentDiff: number): string {
-  if (percentDiff > 20) return "A+"
-  if (percentDiff > 10) return "A"
-  if (percentDiff > 5) return "B+"
-  if (percentDiff > -5) return "B"
-  if (percentDiff > -10) return "C+"
-  if (percentDiff > -20) return "C"
-  return "D"
-}
-
-function pickPercentDiff(payload: ApiTradeResponse, asOfDate: string) {
-  if (payload.dualModeGrades) {
-    const preferred = asOfDate ? payload.dualModeGrades.atTheTime : payload.dualModeGrades.withHindsight
-    if (typeof preferred?.percentDiff === "number") return preferred.percentDiff
-    if (typeof payload.dualModeGrades.withHindsight?.percentDiff === "number") return payload.dualModeGrades.withHindsight.percentDiff
-    if (typeof payload.dualModeGrades.atTheTime?.percentDiff === "number") return payload.dualModeGrades.atTheTime.percentDiff
-  }
-
-  const received = Number(payload.valuationReport?.teamA?.totalReceived ?? 0)
-  const given = Number(payload.valuationReport?.teamA?.totalGiven ?? 0)
-  const total = received + given
-  const diff = Number(payload.valuationReport?.teamA?.netValue ?? 0)
-  if (total <= 0) return 0
-  return (diff / total) * 100
-}
-
-function verdictFromPayload(payload: ApiTradeResponse, fairnessScore: number, valueDelta: number): VerdictKey {
-  if (payload.tradeInsights?.veto) return "SMASH DECLINE"
-
-  const engineVerdict = payload.acceptProbability?.verdict
-  const lean = payload.acceptProbability?.lean
-  if (engineVerdict === "Elite Asset Theft") return lean === "Them" ? "SMASH DECLINE" : "SMASH ACCEPT"
-  if (engineVerdict === "Strong Win") return lean === "Them" ? "DECLINE" : "ACCEPT"
-  if (engineVerdict === "Slight Win") return lean === "Them" ? "LEAN DECLINE" : "LEAN ACCEPT"
-  if (engineVerdict === "Fair") return "FAIR"
-  if (engineVerdict === "Overpay Risk") return fairnessScore < 40 || valueDelta < 0 ? "DECLINE" : "LEAN DECLINE"
-  if (engineVerdict === "Major Overpay") return "SMASH DECLINE"
-
-  const overall = payload.evaluation?.verdict?.overall
-  if (overall === "FAIR") {
-    if (fairnessScore >= 55 || valueDelta > 0) return "LEAN ACCEPT"
-    if (fairnessScore <= 45 || valueDelta < 0) return "LEAN DECLINE"
-    return "FAIR"
-  }
-  if (overall === "FAIR_UPSIDE_SKEWED") return valueDelta >= 0 ? "LEAN ACCEPT" : "LEAN DECLINE"
-  if (overall === "UNFAIR_TEAM_A") return valueDelta >= 0 ? "ACCEPT" : "DECLINE"
-  if (overall === "UNFAIR_TEAM_B") return valueDelta >= 0 ? "DECLINE" : "ACCEPT"
-
-  if (fairnessScore >= 60 || valueDelta > 0) return "ACCEPT"
-  if (fairnessScore <= 35 || valueDelta < -1000) return "SMASH DECLINE"
-  if (fairnessScore <= 45 || valueDelta < 0) return "DECLINE"
-  return "FAIR"
-}
 
 function providerList(payload: ApiTradeResponse) {
   const providers = payload.aiProviders
@@ -518,18 +427,27 @@ function buildWarnings(payload: ApiTradeResponse) {
   ].filter((value): value is string => Boolean(value && value.trim()))
 }
 
+/**
+ * `asOfDate` mode (2026-09-27). The one grader has no as-of-date pricing, so the letter is today's —
+ * and this says so, beside the gap on the requested date as a NUMBER. That old gap used to become a
+ * letter of its own (`computeDualModeGrades`, `gradeFromPercentDiff`), a second scale on one screen.
+ */
+function historicalNoteFor(payload: ApiTradeResponse, asOfDate: string): string | null {
+  if (!asOfDate) return null
+  const base = `Graded on today's league values — grades have no as-of-date pricing yet, so this is not a grade for ${asOfDate}.`
+  const then = payload.dualModeGrades?.atTheTime?.percentDiff
+  if (typeof then !== "number" || !Number.isFinite(then)) return base
+  const pct = Math.round(Math.abs(then))
+  if (pct === 0) return `${base} On ${asOfDate}'s values the two sides were even.`
+  return `${base} On ${asOfDate}'s values the sender ${then > 0 ? "received" : "gave up"} about ${pct}% more value — a value comparison, not a grade.`
+}
+
 function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: string): TradeResult {
-  const fairnessScore = clampScore(
-    payload.tradeInsights?.fairnessScore ?? payload.valuationReport?.teamA?.fairnessScore ?? 50,
-    50
-  )
-  const valueDelta = Number(payload.valuationReport?.teamA?.netValue ?? 0)
   /*
    * 🛑 THE LETTER IS THE SERVER'S ONE GRADE, NOT ONE MADE HERE. This used to be
    * `gradeFromPercentDiff` over the route's composite totals — a third scale, computed in the
    * browser. A withheld grade shows no letter and the reason, never a fallback letter.
    */
-  const historical = Boolean(asOfDate)
   const pecrIterations = headers.get("x-pecr-iterations")
   const pecrPassed = headers.get("x-pecr-passed")
   const shared = {
@@ -541,86 +459,33 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
   }
   const warningChips: TradeLabelChip[] = (payload.tradeInsights?.warnings ?? []).map((label) => ({ ...label, kind: "warning" as const }))
 
-  if (!historical) {
-    /*
-     * 🛑 LIVE: EVERY NUMBER IS THE RECEIPT'S (2026-09-27). The verdict badge, the totals and the
-     * headline all read off the one grade; the composite fairness, value delta, confidence,
-     * acceptance drivers/bullets, positive signal chips and the IDP fairness-range caveat are hidden,
-     * because they are priced differently and could contradict the letter. The AI summary stays, as
-     * supporting text under the grade — its prompt now leads with the receipt.
-     */
-    const panel = liveGradePanel(payload.tradeGrade)
-    return {
-      ...shared,
-      live: true,
-      receiptTotals: panel.totals,
-      verdict: verdictFromGradeLabel(panel.gradeLabel),
-      fairnessScore: null,
-      fairnessMethod: null,
-      senderGrade: panel.senderGrade,
-      receiverGrade: panel.receiverGrade,
-      gradeWithheld: panel.gradeWithheld,
-      valueDelta: panel.totals ? panel.totals.get - panel.totals.send : null,
-      confidencePct: null,
-      recommendation: panel.headline,
-      aiSummary: payload.evaluation?.explanation?.summary ?? null,
-      analysisBullets: (payload.evaluation?.explanation?.leagueContextNotes ?? []).filter(Boolean),
-      drivers: [],
-      labels: warningChips,
-      idpCeilingCaveat: null,
-      counterOffer: buildCounterOffer(payload),
-      negotiationSteps: buildNegotiationSteps(payload),
-      betterAlternatives: payload.evaluation?.betterAlternatives ?? [],
-      rawPayload: payload,
-    }
-  }
-
-  // Historical (`asOfDate`) mode: the old composite view and its own letters — a known follow-up.
-  const historicalPercentDiff = pickPercentDiff(payload, asOfDate)
-  const senderGrade = payload.dualModeGrades?.atTheTime?.grade ?? gradeFromPercentDiff(historicalPercentDiff)
-  const receiverGrade = gradeFromPercentDiff(-historicalPercentDiff)
-  const analysisBullets = [
-    ...(payload.acceptProbability?.acceptBullets ?? []),
-    ...(payload.evaluation?.explanation?.leagueContextNotes ?? []),
-  ].filter(Boolean)
-  const labels: TradeLabelChip[] = [
-    ...(payload.tradeInsights?.labels ?? []).map((label) => ({ ...label, kind: "positive" as const })),
-    ...warningChips,
-  ]
-  const drivers = (payload.acceptProbability?.drivers ?? []).map((driver) => ({
-    id: driver.id,
-    direction: driverDirection(driver.direction),
-    strength: driverStrength(driver.strength),
-    label: driver.name ?? humanizeKey(driver.id),
-    detail: driverDetail(driver),
-  }))
-
+  /*
+   * 🛑 LIVE: EVERY NUMBER IS THE RECEIPT'S (2026-09-27). The verdict badge, the totals and the
+   * headline all read off the one grade; the composite fairness, value delta, confidence,
+   * acceptance drivers/bullets, positive signal chips and the IDP fairness-range caveat are hidden,
+   * because they are priced differently and could contradict the letter. The AI summary stays, as
+   * supporting text under the grade — its prompt now leads with the receipt.
+   */
+  const panel = liveGradePanel(payload.tradeGrade)
   return {
     ...shared,
-    live: false,
-    receiptTotals: null,
-    verdict: verdictFromPayload(payload, fairnessScore, valueDelta),
-    fairnessScore,
-    fairnessMethod: payload.tradeInsights?.fairnessMethod ?? null,
-    senderGrade,
-    receiverGrade,
-    gradeWithheld: null,
-    valueDelta,
-    confidencePct: clampScore(
-      payload.serverConfidence?.score ??
-        payload.evaluation?.confidence?.score ??
-        (typeof payload.acceptProbability?.probability === "number" ? payload.acceptProbability.probability * 100 : 70),
-      70
-    ),
-    recommendation:
-      payload.evaluation?.explanation?.summary ??
-      payload.acceptProbability?.sensitivitySentence ??
-      "Trade analysis complete.",
-    aiSummary: null,
-    analysisBullets,
-    drivers,
-    labels,
-    idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null,
+    live: true,
+    historicalNote: historicalNoteFor(payload, asOfDate),
+    receiptTotals: panel.totals,
+    verdict: verdictFromGradeLabel(panel.gradeLabel),
+    fairnessScore: null,
+    fairnessMethod: null,
+    senderGrade: panel.senderGrade,
+    receiverGrade: panel.receiverGrade,
+    gradeWithheld: panel.gradeWithheld,
+    valueDelta: panel.totals ? panel.totals.get - panel.totals.send : null,
+    confidencePct: null,
+    recommendation: panel.headline,
+    aiSummary: payload.evaluation?.explanation?.summary ?? null,
+    analysisBullets: (payload.evaluation?.explanation?.leagueContextNotes ?? []).filter(Boolean),
+    drivers: [],
+    labels: warningChips,
+    idpCeilingCaveat: null,
     counterOffer: buildCounterOffer(payload),
     negotiationSteps: buildNegotiationSteps(payload),
     betterAlternatives: payload.evaluation?.betterAlternatives ?? [],
@@ -1384,6 +1249,12 @@ function TradeHubInner() {
                       <span>fairness range across a defensible ceiling</span>
                     </div>
                   </div>
+                ) : null}
+
+                {result.historicalNote ? (
+                  <p data-testid="historical-note" className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-[12px] text-amber-100/80">
+                    {result.historicalNote}
+                  </p>
                 ) : null}
 
                 {result.live ? (

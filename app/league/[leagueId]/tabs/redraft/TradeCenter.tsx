@@ -253,13 +253,14 @@ export function TradeCenter({
                     {rosterNameById.get(p.receiverRosterId) ?? 'Team B'}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    {p.valueSnapshot ? (
+                    {/* The one grade, from the proposer's side — not the proposal-time snapshot's own scale. */}
+                    {p.tradeGrade?.grade ? (
                       <span
                         className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
-                        title={`Original grade at proposal time · fairness ${p.valueSnapshot.fairnessScore}/100`}
+                        title={`Grade for ${rosterNameById.get(p.proposerRosterId) ?? 'the proposer'} on this league's values`}
                         data-testid="trade-proposal-grade"
                       >
-                        {p.valueSnapshot.grade}
+                        {p.tradeGrade.grade}
                       </span>
                     ) : null}
                     <span className={`rounded border px-2 py-0.5 text-[10px] uppercase ${tone}`}>{p.status}</span>

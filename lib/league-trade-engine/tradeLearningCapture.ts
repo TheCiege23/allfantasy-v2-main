@@ -24,7 +24,8 @@ import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } fro
 import type { Asset } from '@/lib/trade-engine/types'
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
-import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { gradeInputsFromNativeItems, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
  * Conservative flat fallback for any asset whose real value can't be
@@ -107,6 +108,12 @@ export interface CurrentTradeMarketSnapshot {
   pricedAt: string
   fullyPriced: boolean
   unresolvedAssets: string[]
+  /**
+   * The full grade and the inputs it was taken on, so a caller can record it as a receipt
+   * (`lib/decision-os/trade/recordTradeGrade.ts`) without pricing the deal a second time. Absent when
+   * the deal was never put to the grader (a consumed pick).
+   */
+  graded?: { view: TradeGradeView; give: GradeInputs; get: GradeInputs }
 }
 
 interface ResolvedAssetValue {
@@ -239,6 +246,7 @@ export async function priceTradesAtCurrentMarket(
             pricedAt,
             fullyPriced: true,
             unresolvedAssets: [],
+            graded: { view: grade, give, get },
           }
         : {
             grade: null,
@@ -248,6 +256,7 @@ export async function priceTradesAtCurrentMarket(
             fullyPriced: false,
             // Named assets when we know which ones; otherwise the "Now" tile simply reads "—".
             unresolvedAssets: [...new Set([...give.unpriceable, ...get.unpriceable])],
+            graded: { view: grade, give, get },
           })
     }
   } catch (err) {

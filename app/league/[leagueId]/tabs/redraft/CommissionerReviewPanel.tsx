@@ -54,9 +54,19 @@ export function CommissionerReviewPanel({ proposalId }: { proposalId: string }) 
           ) : data ? (
             <>
               <div className="flex flex-wrap gap-2 text-[10px] text-white/70">
-                <span className="rounded border border-white/15 px-2 py-0.5">Grade {data.review.summary.grade ?? '—'}</span>
-                <span className="rounded border border-white/15 px-2 py-0.5">Fairness {data.review.summary.fairnessScore}/100</span>
-                <span className="rounded border border-white/15 px-2 py-0.5">Confidence {data.review.summary.confidenceScore}/100</span>
+                {/*
+                  The one grade, from the proposer's side. The snapshot's fairness and confidence are
+                  priced on another scale and could contradict this letter, so they are not shown.
+                */}
+                {data.tradeGrade?.grade ? (
+                  <span className="rounded border border-white/15 px-2 py-0.5" data-testid="commissioner-review-grade">
+                    Proposer {data.tradeGrade.grade}{data.tradeGrade.partnerGrade ? ` · Receiver ${data.tradeGrade.partnerGrade}` : ''}
+                  </span>
+                ) : (
+                  <span className="rounded border border-white/15 px-2 py-0.5" data-testid="commissioner-review-grade">
+                    Not graded{data.tradeGrade?.gradeWithheld ? `: ${data.tradeGrade.gradeWithheld}` : ''}
+                  </span>
+                )}
                 <span
                   className={`rounded border px-2 py-0.5 ${data.review.summary.reviewRecommended ? 'border-amber-400/40 text-amber-200' : 'border-emerald-400/30 text-emerald-200'}`}
                   data-testid="commissioner-review-recommended"

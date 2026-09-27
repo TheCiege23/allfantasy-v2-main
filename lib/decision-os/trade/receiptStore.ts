@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { createHash } from 'node:crypto'
+
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -83,6 +85,7 @@ export function adHocSnapshotData(receipt: TradeEvaluationReceipt) {
       source: 'evaluateTrade',
       surface: receipt.surface,
       inputHash: receipt.inputHash,
+      contentHash: receiptContentHash(receipt),
       // A re-evaluation of an existing trade names it: the trade's own proposal-time row keeps its
       // `tradeId` (unique), so this row is found through the reference instead, never by rewriting that one.
       storedTrade: receipt.stored ? { ref: receipt.stored.ref, tradeId: receipt.stored.tradeId, source: receipt.stored.source } : null,
@@ -94,16 +97,67 @@ export function adHocSnapshotData(receipt: TradeEvaluationReceipt) {
   }
 }
 
-type SnapshotCreate = { create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }> }
+/**
+ * A fingerprint of everything the receipt SAYS — grade, assets, lineup, team benefit — and none of its
+ * bookkeeping (id, save status, timestamp). Two evaluations with the same fingerprint told the manager
+ * exactly the same thing.
+ */
+export function receiptContentHash(receipt: TradeEvaluationReceipt): string {
+  const { receiptId: _id, persisted: _p, persistError: _e, evaluatedAt: _at, ...content } = receipt
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex')
+}
+
+/**
+ * How long an identical receipt is reused rather than written again. List screens (the inbox, the
+ * trades board, emails) grade every row on every view; without reuse each page load would add a row
+ * per trade. Within this window, a view that says nothing new points at the receipt that already said it.
+ */
+export const RECEIPT_REUSE_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/**
+ * ⚠ THE ONE READ OF THIS TABLE THAT IS NOT `PUBLIC_RECEIPT_SELECT`, AND IT IS SAFE FOR A NAMED REASON.
+ * It needs the row id, which the public set leaves out, and nothing else: the fingerprint lives in
+ * `evidence`, a column every database already has. It FILTERS on migration columns (`inputHash`,
+ * `surface`), so it runs only after `receiptColumnsReady()` — the same gate as the write it saves.
+ * `__tests__/decision-os/snapshot-column-guard.test.ts` holds this select to exactly these columns.
+ */
+export const RECEIPT_REUSE_SELECT = { id: true, evidence: true } as const
+
+type SnapshotStore = {
+  create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }>
+  findFirst?(args: Record<string, unknown>): Promise<{ id: string; evidence: unknown } | null>
+}
 
 /** Save an ad-hoc evaluation's receipt. Throws when it cannot — `evaluateTrade` turns that into `persisted: false`. */
 export async function saveAdHocReceipt(
   receipt: TradeEvaluationReceipt,
-  opts: { ready?: () => Promise<boolean>; store?: () => SnapshotCreate | undefined } = {},
+  opts: { ready?: () => Promise<boolean>; store?: () => SnapshotStore | undefined; now?: () => number } = {},
 ): Promise<{ id: string }> {
   if (!(await (opts.ready ?? receiptColumnsReady)())) throw new Error('trade_decision_snapshots is not migrated for receipts yet')
-  const store = (opts.store ?? (() => (prisma as unknown as { tradeDecisionSnapshot?: SnapshotCreate }).tradeDecisionSnapshot))()
+  const store = (opts.store ?? (() => (prisma as unknown as { tradeDecisionSnapshot?: SnapshotStore }).tradeDecisionSnapshot))()
   if (!store || typeof store.create !== 'function') throw new Error('tradeDecisionSnapshot is not in the generated client')
+  // Reuse an identical receipt from the same surface, viewer and league. A failed lookup just writes.
+  const contentHash = receiptContentHash(receipt)
+  try {
+    const since = new Date((opts.now ?? Date.now)() - RECEIPT_REUSE_WINDOW_MS)
+    // A plain `store.findFirst(` call, not `?.(`: the column guard finds reads by that spelling.
+    const prior = typeof store.findFirst !== 'function' ? null : await store.findFirst({
+      where: {
+        inputHash: receipt.inputHash,
+        surface: receipt.surface.slice(0, 48),
+        proposedByUserId: receipt.userId,
+        leagueId: receipt.leagueId,
+        tradeId: null,
+        capturedAt: { gte: since },
+      },
+      orderBy: { capturedAt: 'desc' },
+      select: RECEIPT_REUSE_SELECT,
+    })
+    const priorHash = (prior?.evidence as { contentHash?: unknown } | null | undefined)?.contentHash
+    if (prior && priorHash === contentHash) return { id: prior.id }
+  } catch {
+    // fall through to a fresh row
+  }
   // `select: { id }` so the insert never RETURNs a column this database might not have.
   return store.create({ data: adHocSnapshotData(receipt), select: { id: true } })
 }

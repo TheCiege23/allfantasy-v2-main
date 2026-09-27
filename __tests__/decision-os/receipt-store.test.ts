@@ -10,7 +10,9 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import {
   adHocSnapshotData,
+  RECEIPT_REUSE_WINDOW_MS,
   receiptColumns,
+  receiptContentHash,
   receiptColumnsReady,
   resetReceiptColumnsCache,
   saveAdHocReceipt,
@@ -97,6 +99,50 @@ describe('an evaluation that is not a trade', () => {
     expect(await saveAdHocReceipt(RECEIPT, { ready: async () => true, store: () => ({ create }) })).toEqual({ id: 'snap_1' })
     expect(create).toHaveBeenCalledTimes(1)
     expect(create.mock.calls[0]![0]).toMatchObject({ select: { id: true }, data: { tradeId: null, surface: 'trade-evaluator' } })
+  })
+})
+
+describe('an identical evaluation reuses its receipt instead of writing a new row', () => {
+  // List screens grade every row on every view; without reuse each page load adds a row per trade.
+  const NOW = Date.parse('2026-09-27T12:00:00.000Z')
+  const ready = async () => true
+  const later = { ...RECEIPT, evaluatedAt: '2026-09-27T11:00:00.000Z' } as TradeEvaluationReceipt
+
+  it('the fingerprint ignores bookkeeping (id, save status, time) and nothing else', () => {
+    expect(receiptContentHash(later)).toBe(receiptContentHash(RECEIPT))
+    expect(receiptContentHash({ ...RECEIPT, receiptId: 'x', persisted: true } as TradeEvaluationReceipt)).toBe(receiptContentHash(RECEIPT))
+    expect(receiptContentHash({ ...RECEIPT, userId: 'u2' } as TradeEvaluationReceipt)).not.toBe(receiptContentHash(RECEIPT))
+    expect(adHocSnapshotData(RECEIPT).evidence.contentHash).toBe(receiptContentHash(RECEIPT))
+  })
+
+  it('same surface, viewer, league, inputs and content within the window: the old id, no write', async () => {
+    const create = vi.fn()
+    const findFirst = vi.fn(async () => ({ id: 'snap_old', evidence: { contentHash: receiptContentHash(RECEIPT) } }))
+    expect(await saveAdHocReceipt(later, { ready, store: () => ({ create, findFirst }), now: () => NOW })).toEqual({ id: 'snap_old' })
+    expect(create).not.toHaveBeenCalled()
+    const args = findFirst.mock.calls[0]![0] as { where: Record<string, unknown>; select: unknown }
+    expect(args.where).toMatchObject({ inputHash: RECEIPT.inputHash, surface: 'trade-evaluator', proposedByUserId: 'u1', leagueId: 'l1', tradeId: null })
+    expect(args.where.capturedAt).toEqual({ gte: new Date(NOW - RECEIPT_REUSE_WINDOW_MS) })
+    expect(args.select).toEqual({ id: true, evidence: true })
+  })
+
+  it('different content (a grade that moved): a new row', async () => {
+    const create = vi.fn(async () => ({ id: 'snap_new' }))
+    const findFirst = vi.fn(async () => ({ id: 'snap_old', evidence: { contentHash: 'something else' } }))
+    expect(await saveAdHocReceipt(later, { ready, store: () => ({ create, findFirst }), now: () => NOW })).toEqual({ id: 'snap_new' })
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('a lookup that fails still writes — reuse is an optimisation, never a reason to lose the receipt', async () => {
+    const create = vi.fn(async () => ({ id: 'snap_new' }))
+    const findFirst = vi.fn(async () => { throw new Error('boom') })
+    expect(await saveAdHocReceipt(later, { ready, store: () => ({ create, findFirst }), now: () => NOW })).toEqual({ id: 'snap_new' })
+  })
+
+  it('no lookup at all while unmigrated', async () => {
+    const findFirst = vi.fn()
+    await expect(saveAdHocReceipt(RECEIPT, { ready: async () => false, store: () => ({ create: vi.fn(), findFirst }) })).rejects.toThrow(/not migrated/)
+    expect(findFirst).not.toHaveBeenCalled()
   })
 })
 

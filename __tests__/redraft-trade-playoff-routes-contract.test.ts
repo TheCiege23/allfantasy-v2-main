@@ -181,7 +181,13 @@ describe('Redraft trade proposals route contract', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.proposals).toEqual([{ id: 'p-1', status: 'pending' }])
+    // Trade OS: each proposal carries the one grade. A proposal with no assets on record is withheld,
+    // without building a grader; the receipt id is null until the receipts migration is applied.
+    expect(body.proposals).toEqual([{
+      id: 'p-1',
+      status: 'pending',
+      tradeGrade: { grade: null, partnerGrade: null, gradeWithheld: 'This proposal has no assets on record.', receiptId: null },
+    }])
   })
 
   it('creates a normalized proposal with assets', async () => {

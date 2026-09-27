@@ -15,6 +15,7 @@ import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { PUBLIC_RECEIPT_SELECT } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { RECEIPT_REUSE_SELECT } from '@/lib/decision-os/trade/receiptStore'
 
 const ROOT = process.cwd()
 const MIGRATION = 'prisma/migrations/20260927000000_trade_decision_snapshot_evaluation_receipts/migration.sql'
@@ -84,12 +85,29 @@ describe('trade_decision_snapshots calls name their columns', () => {
     ]) expect(files, f).toContain(f)
   })
 
-  it.each(calls.filter((c) => READS.includes(c.op)).map((c) => [`${c.file} ${c.op}`, c.args] as const))(
+  /*
+   * ONE named exception: the receipt store's reuse lookup (`receiptStore.ts`) needs the row id, which the
+   * public set leaves out, and runs only after `receiptColumnsReady()`. It is held to a select of its own
+   * that carries no migration column — asserted below, so widening it fails here.
+   */
+  const REUSE_READER = 'lib/decision-os/trade/receiptStore.ts'
+
+  it.each(calls.filter((c) => READS.includes(c.op)).map((c) => [`${c.file} ${c.op}`, c.file, c.args] as const))(
     'read %s selects PUBLIC_RECEIPT_SELECT',
-    (_where, args) => {
-      expect(args).toMatch(/select:\s*PUBLIC_RECEIPT_SELECT\b/)
+    (_where, file, args) => {
+      if (file === REUSE_READER) expect(args).toMatch(/select:\s*RECEIPT_REUSE_SELECT\b/)
+      else expect(args).toMatch(/select:\s*PUBLIC_RECEIPT_SELECT\b/)
     },
   )
+
+  it('the reuse select reads only the row id and evidence — no migration column', () => {
+    expect(Object.keys(RECEIPT_REUSE_SELECT).sort()).toEqual(['evidence', 'id'])
+    expect(Object.keys(RECEIPT_REUSE_SELECT).filter((c) => ADDED.includes(c))).toEqual([])
+  })
+
+  it('the receipt store reuse read is seen by the scanner (a census that missed it would exempt nothing)', () => {
+    expect(calls.some((c) => c.file === REUSE_READER && c.op === 'findFirst')).toBe(true)
+  })
 
   it.each(calls.filter((c) => WRITES.includes(c.op)).map((c) => [`${c.file} ${c.op}`, c.args] as const))(
     'write %s returns only its id',

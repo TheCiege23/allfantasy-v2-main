@@ -10,7 +10,8 @@ import {
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
-import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, gradeArchivedTradeWithInputs } from '@/lib/decision-os/trade/completedTradeGrade'
+import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
 import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
@@ -136,6 +137,8 @@ export type GradedTrade = {
   sharePct: number | null
   /** Why no letter — shown INSTEAD of a grade, never alongside one. */
   withheldReason: string | null
+  /** The saved receipt for this letter (Trade OS). Null until the receipts migration is applied. */
+  receiptId?: string | null
   playersIn: number
   playersOut: number
   /**
@@ -178,6 +181,8 @@ async function resolveGrades(
   leagueId: string,
   platformLeagueId: string | null,
   viewerPlatformUserId: string | null,
+  /** The viewer, recorded on each grade's receipt. */
+  userId: string | null = null,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -323,12 +328,22 @@ async function resolveGrades(
     )
     const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
     const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
-    const g = await gradeArchivedTrade(grader, {
+    const { grade: g, give: gradedGive, get: gradedGet } = await gradeArchivedTradeWithInputs(grader, {
       received: recv.map(nameOf),
       gave: gave.map(nameOf),
       picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
       picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
       currentSeason,
+    })
+    // The receipt for this letter (Trade OS). No stored link: a completed `LeagueTrade` has no loader yet.
+    const receiptId = await receiptIdForGrade({
+      surface: 'core-trades',
+      leagueId,
+      userId,
+      give: gradedGive,
+      get: gradedGet,
+      viewerSide: false,
+      grade: g,
     })
 
     /*
@@ -348,6 +363,7 @@ async function resolveGrades(
       // The received side's share of the league value that changed hands — the same totals as the letter.
       sharePct: g.graded ? Math.round((g.getValue / Math.max(1, g.getValue + g.giveValue)) * 1000) / 10 : null,
       withheldReason: g.graded ? null : g.reason,
+      receiptId,
       playersIn: recv.length,
       playersOut: gave.length,
       picksIn: picksIn.length,
@@ -444,6 +460,8 @@ export type PendingOffer = {
    * share-of-traded-value letter (65/55/45/35) that graded a 1.5x deal B while the builder said A.
    */
   evaluation: TradeGradeView
+  /** The saved receipt for `evaluation` (Trade OS). Null until the receipts migration is applied. */
+  receiptId?: string | null
 }
 
 export type TradeDeadline = {
@@ -571,11 +589,26 @@ async function resolvePendingOffers(
     ? await createLeagueTradeGrader({ leagueId: league.id, userId }).catch(() => null)
     : null
   const grades = new Map<string, TradeGradeView>()
+  const receiptIds = new Map<string, string | null>()
   await Promise.all(scan.trades.map(async (t) => {
-    grades.set(t.transactionId, await gradeDeal(grader, {
-      give: gradeInputsFromPending(t.assetsGiven),
-      get: gradeInputsFromPending(t.assetsReceived),
+    const give = gradeInputsFromPending(t.assetsGiven)
+    const get = gradeInputsFromPending(t.assetsReceived)
+    const grade = await gradeDeal(grader, { give, get, viewerSide: true })
+    grades.set(t.transactionId, grade)
+    // The receipt for this letter (Trade OS), linked to the Sleeper offer it grades.
+    receiptIds.set(t.transactionId, await receiptIdForGrade({
+      surface: 'core-trades',
+      leagueId: league.id,
+      userId,
+      give,
+      get,
       viewerSide: true,
+      grade,
+      stored: storedTradeLink({ kind: 'provider', provider: 'sleeper', providerTradeId: t.transactionId }, {
+        source: 'provider',
+        platform: 'sleeper',
+        status: t.lifecycleStatus ?? 'pending',
+      }),
     }))
   }))
 
@@ -588,6 +621,7 @@ async function resolvePendingOffers(
     give: t.assetsGiven.map(offerLine),
     get: t.assetsReceived.map(offerLine),
     evaluation: grades.get(t.transactionId) ?? { graded: false, reason: 'This offer could not be graded.', basis: null },
+    receiptId: receiptIds.get(t.transactionId) ?? null,
   })
 
   return {
@@ -616,6 +650,7 @@ export async function getTradesData(
     league.id,
     league.platformLeagueId ?? null,
     myTeam?.platformUserId?.trim() || null,
+    userId,
   )
 
   const base = {

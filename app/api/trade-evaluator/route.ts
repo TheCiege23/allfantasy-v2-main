@@ -1968,7 +1968,17 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         providerEvidence: structuredPayload.providerEvidence,
       }),
       ...(confidenceInfo && { historicalAnalysis: confidenceInfo }),
-      ...(dualModeGrades && { dualModeGrades }),
+      /*
+       * The as-of-date VALUE comparison only (Trade OS, 2026-09-27). `computeDualModeGrades` also returns
+       * its own A+..D letter and verdict per date — a scale of its own — which are not sent. The page
+       * shows the one grade (today's league values) and this gap as a labelled number.
+       */
+      ...(dualModeGrades && {
+        dualModeGrades: {
+          atTheTime: { percentDiff: dualModeGrades.atTheTime.percentDiff, sideATotal: dualModeGrades.atTheTime.sideATotal, sideBTotal: dualModeGrades.atTheTime.sideBTotal },
+          withHindsight: { percentDiff: dualModeGrades.withHindsight.percentDiff, sideATotal: dualModeGrades.withHindsight.sideATotal, sideBTotal: dualModeGrades.withHindsight.sideBTotal },
+        },
+      }),
       tradeInsights,
       valuationReport: structuredPayload.valuationReport,
       serverConfidence: {

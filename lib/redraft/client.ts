@@ -151,6 +151,16 @@ export type RedraftTradeProposal = {
     valueDifference: number
     createdAt: string
   } | null
+  /**
+   * The one trade engine's grade for this proposal, from the PROPOSER's side (Trade OS). This is the
+   * letter to show; `valueSnapshot.grade` is the proposal-time snapshot's own scale.
+   */
+  tradeGrade?: {
+    grade: string | null
+    partnerGrade: string | null
+    gradeWithheld: string | null
+    receiptId: string | null
+  }
 }
 
 export type RedraftTradeAssetInput = {
@@ -205,6 +215,14 @@ export type CommissionerTradeReview = {
   }
   eventTrail: Array<{ eventType: string; createdAt: string }>
   settings: { vetoMode: string; vetoThreshold: number | null; reviewHours: number | null; tradeDeadlineWeek: number | null; draftPickTrading: boolean }
+  /** The one trade engine's grade, from the proposer's side (`receiptGradeFields`). */
+  tradeGrade?: {
+    grade: string | null
+    partnerGrade: string | null
+    gradeLabel: string | null
+    gradeWithheld: string | null
+    evaluationReceiptId: string | null
+  }
 }
 
 export async function fetchCommissionerTradeReview(proposalId: string): Promise<CommissionerTradeReview> {

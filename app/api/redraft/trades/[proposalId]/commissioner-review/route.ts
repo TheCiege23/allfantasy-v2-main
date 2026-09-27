@@ -7,6 +7,8 @@ import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamProfile } from '@/lib/trade-value/types'
 import { summarizeMarketContext, type MarketEventLite } from '@/lib/trade-review/marketContext'
 import { buildCommissionerTradeReview, type ReviewAsset } from '@/lib/trade-review/redraftCommissionerTradeReview'
+import { evaluateStoredTrade } from '@/lib/decision-os/trade/evaluateStoredTrade'
+import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +106,26 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ proposalId
 
   const marketContext = summarizeMarketContext(leagueEvents as MarketEventLite[])
 
+  /*
+   * 🛑 THE LETTER IS THE ONE GRADE, FROM THE PROPOSER'S SIDE (Trade OS, 2026-09-27). This panel used to
+   * print the proposal-time `TradeValueSnapshot` letter (`canonicalFairnessGrade`, its own A+..F scale)
+   * beside that snapshot's fairness and confidence. The review's FLAGS still read the snapshot — they
+   * are commissioner review mode, design step 6 — but the letter a commissioner is shown is now the one
+   * every other trade screen shows. A commissioner who is not a party sees the proposer's side.
+   */
+  const stored = await evaluateStoredTrade({
+    leagueId: proposal.leagueId,
+    ref: { kind: 'redraft', proposalId },
+    userId,
+    surface: 'redraft-commissioner-review',
+  }).catch(() => null)
+  const tradeGrade = stored?.ok
+    ? receiptGradeFields(stored.receipt)
+    : {
+        ...receiptGradeFields({ receiptId: null, assets: [], grade: { graded: false, reason: '', basis: null } }),
+        gradeWithheld: stored ? stored.refusal.reason : 'This trade could not be graded just now.',
+      }
+
   const review = buildCommissionerTradeReview({
     proposerRosterId: proposal.proposerRosterId,
     receiverRosterId: proposal.receiverRosterId,
@@ -126,9 +148,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ proposalId
   })
 
   return NextResponse.json({
-    review,
+    // The letter shown is the one grade's; the snapshot's own letter is not sent at all.
+    review: { ...review, summary: { ...review.summary, grade: tradeGrade.grade } },
+    tradeGrade,
     snapshotSummary: snapshot
-      ? { grade: snapshot.grade, fairnessScore: snapshot.fairnessScore, confidenceScore: snapshot.confidenceScore, valueDifference: snapshot.valueDifference, sideTotals: snapshot.sideTotals }
+      ? { fairnessScore: snapshot.fairnessScore, confidenceScore: snapshot.confidenceScore, valueDifference: snapshot.valueDifference, sideTotals: snapshot.sideTotals }
       : null,
     eventTrail: proposalEvents.map((e) => ({ eventType: e.eventType, createdAt: e.createdAt })),
     settings: {

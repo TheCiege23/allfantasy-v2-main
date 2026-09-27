@@ -30,7 +30,6 @@ import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
@@ -997,32 +996,15 @@ export function TradeCenter(props: {
   }, [result, isPhone])
 
   /*
-   * ⚠ A LETTER PER SIDE, OR NO LETTER AT ALL. `projectedLetterFor` returns null
-   * without signal rather than leaving that judgement to this component, so an
-   * unpriced deal shows no badge instead of a C that reads as "even".
-   *
-   * `percentDiff` is signed from the viewer's side, so the opponent's grade is
-   * the mirror of it.
-   */
-  /*
-   * 🛑 THE LETTERS COME FROM THE SERVER'S GRADE (2026-09-24), the one object the league page, the
-   * inbox, /core Trades and Chimmy show for the same deal. Computing them here from `percentDiff`
-   * was the same arithmetic, but a second copy is how a surface drifts; the fallback stays only for
-   * a response that predates the field.
+   * 🛑 THE LETTERS COME FROM THE SERVER'S GRADE, OR THERE ARE NONE (2026-09-24; fallback removed
+   * 2026-09-27). This is the one object the league page, the inbox, /core Trades and Chimmy show for
+   * the same deal. A response without it used to fall back to `projectedLetterFor(percentDiff)` —
+   * a second copy of the arithmetic, run in the browser, which is how a surface drifts onto its own
+   * scale. No grade on the response means no badge: the analyze route always sends one now.
    */
   const serverGrade = result?.grade ?? null
-  const yourGrade = serverGrade
-    ? serverGrade.graded ? serverGrade.letter : null
-    : projectedLetterFor({
-        percentDiff: result?.percentDiff ?? null,
-        hasSignal: Boolean(result) && !noSignal,
-      })
-  const theirGrade = serverGrade
-    ? serverGrade.graded ? serverGrade.partnerLetter : null
-    : projectedLetterFor({
-        percentDiff: result?.percentDiff != null ? -result.percentDiff : null,
-        hasSignal: Boolean(result) && !noSignal,
-      })
+  const yourGrade = serverGrade?.graded ? serverGrade.letter : null
+  const theirGrade = serverGrade?.graded ? serverGrade.partnerLetter : null
 
   /*
    * ── Draft persistence ──────────────────────────────────────────

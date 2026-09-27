@@ -90,7 +90,9 @@ vi.mock('@/lib/trade-intel/sleeperTradeSync', async (importOriginal) => {
 vi.mock('@/lib/trade-intel/sleeperTradeGradeService', () => ({ getTradeGrades: h.getTradeGrades }))
 // The one grade. Mocked to answer DIFFERENTLY per league row, which is the whole point: the email
 // must carry the grade of the reader's own copy of the league, not one row's grade for everyone.
-vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({
+vi.mock('@/lib/decision-os/trade/completedTradeGrade', async (importOriginal) => ({
+  // The real `completedTradeInputs` (pure) — the service records each emailed grade as a receipt.
+  ...(await importOriginal<typeof import('@/lib/decision-os/trade/completedTradeGrade')>()),
   completedTradeGraderFor: h.completedGrader,
   oneGradeForCompletedTrade: h.oneGrade,
 }))

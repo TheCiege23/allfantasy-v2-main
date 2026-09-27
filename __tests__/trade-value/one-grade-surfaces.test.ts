@@ -30,7 +30,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/league-trade-engine/tradeLearningCapture.ts', entry: /gradeDeal\(/, what: 'native history "Now"' },
   { file: 'lib/trade-intel/tradeExpectationLoader.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the letter before points arrive (email, history, dashboard)' },
   { file: 'lib/core-app/recentTrades.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the dashboard trade band verdict' },
-  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTrade\(/, what: 'the /core Trades grade list' },
+  /* `gradeArchivedTradeWithInputs` is the same grade, returning its inputs too so the screen can record a receipt. */
+  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTrade(?:WithInputs)?\(/, what: 'the /core Trades grade list' },
   { file: 'lib/core-app/tradesBoard.ts', entry: /gradeArchivedTrade\(/, what: 'the cross-league trades board' },
   /* The one trade engine, Phase 1 (2026-09-26): these call `evaluateTrade()` and show its receipt's letter. */
   { file: 'lib/league-trade-engine/serverTradeDecision.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the proposal-time receipt, through the engine' },
@@ -156,19 +157,20 @@ describe('no flat default value for an unknown player', () => {
 })
 
 /*
- * /trade-evaluator, live mode (2026-09-27): every number beside the letter is the receipt's. The
- * composite fairness, confidence, acceptance drivers and the IDP fairness range are priced differently
- * and could contradict the letter, so the live branch must blank them.
+ * /trade-evaluator (2026-09-27): every number beside the letter is the receipt's, in live AND
+ * historical mode. Historical (`asOfDate`) mode used to keep its own letters — `computeDualModeGrades`
+ * and `gradeFromPercentDiff` — and since Trade OS it shows the same one grade with a labelled note.
  */
 describe('the /trade-evaluator page shows only the receipt beside its letter', () => {
   const src = code('app/trade-evaluator/page.tsx')
-  const live = src.slice(src.indexOf('if (!historical) {'), src.indexOf('const historicalPercentDiff'))
+  const map = src.slice(src.indexOf('function mapApiResponse('), src.indexOf('function ResultBadge('))
 
-  it('the live branch exists and reads the receipt panel', () => {
-    expect(src.indexOf('if (!historical) {')).toBeGreaterThan(0)
-    expect(src.indexOf('const historicalPercentDiff')).toBeGreaterThan(src.indexOf('if (!historical) {'))
-    expect(live).toMatch(/liveGradePanel\(payload\.tradeGrade\)/)
-    expect(live).toMatch(/verdict:\s*verdictFromGradeLabel\(/)
+  it('maps every response through the receipt panel, with one return', () => {
+    expect(src.indexOf('function mapApiResponse(')).toBeGreaterThan(0)
+    expect(src.indexOf('function ResultBadge(')).toBeGreaterThan(src.indexOf('function mapApiResponse('))
+    expect(map).toMatch(/liveGradePanel\(payload\.tradeGrade\)/)
+    expect(map).toMatch(/verdict:\s*verdictFromGradeLabel\(/)
+    expect(map.match(/\breturn \{/g)?.length).toBe(1)
   })
 
   it.each([
@@ -177,11 +179,93 @@ describe('the /trade-evaluator page shows only the receipt beside its letter', (
     ['acceptance drivers', /drivers:\s*\[\],/],
     ['the IDP fairness range', /idpCeilingCaveat:\s*null,/],
   ])('blanks %s', (_what, shape) => {
-    expect(live).toMatch(shape)
+    expect(map).toMatch(shape)
   })
 
-  it('never derives the live verdict from acceptance odds', () => {
-    expect(live).not.toMatch(/verdictFromPayload\(/)
-    expect(live).not.toMatch(/acceptProbability/)
+  it('never derives a verdict from acceptance odds, and keeps no historical letter scale', () => {
+    expect(map).not.toMatch(/verdictFromPayload\(/)
+    expect(map).not.toMatch(/acceptProbability/)
+    expect(src).not.toMatch(/function gradeFromPercentDiff\(/)
+    expect(src).not.toMatch(/dualModeGrades\?\.atTheTime\?\.grade/)
+  })
+
+  it('the route sends the as-of-date comparison without its letters', () => {
+    const route = code('app/api/trade-evaluator/route.ts')
+    expect(route).not.toMatch(/\.\.\.\(dualModeGrades && \{ dualModeGrades \}\)/)
+    expect(route).toMatch(/atTheTime:\s*\{\s*percentDiff:/)
+  })
+})
+
+/*
+ * 🛑 TRADE OS (design build-order step 5, 2026-09-27): every trade screen shows the one grade — and
+ * records it as a receipt — and none keeps a letter of its own. These are the screens that still had one.
+ */
+describe('Trade OS — no screen keeps a private letter', () => {
+  it('the Trade Center has no browser-side fallback letter', () => {
+    expect(PRIVATE_LETTERS[2]!.shape.test(code('components/core-app/screens/TradeCenter.tsx'))).toBe(false)
+  })
+
+  it('the AI Tools trade modal prints the one grade, not the canonical memo second opinion', () => {
+    const src = code('components/ai-tools/modals/TradeValueModal.tsx')
+    expect(src).not.toMatch(/describeTradeCanonicalOpinion\(/)
+    expect(src).not.toMatch(/\bdecisionOs\b/)
+    expect(src).toMatch(/proposalGrade\.letter/)
+  })
+
+  // `\??` on every hop: an optional-chained read (`valueSnapshot?.grade`) is the same letter.
+  const SNAPSHOT_LETTER = /valueSnapshot\??\.grade\b|valuePreview\??\.grade\??\.grade|\bsnapshot\??\.grade\b/
+
+  it.each([
+    'app/league/[leagueId]/tabs/redraft/TradeCenter.tsx',
+    'app/league/[leagueId]/tabs/redraft/TradeCenterModal.tsx',
+    'app/league/[leagueId]/tabs/redraft/CommissionerReviewPanel.tsx',
+  ])('%s shows no proposal-snapshot letter', (file) => {
+    expect(SNAPSHOT_LETTER.test(code(file))).toBe(false)
+  })
+
+  it('the commissioner review sends the one grade and no snapshot letter', () => {
+    const src = code('app/api/redraft/trades/[proposalId]/commissioner-review/route.ts')
+    expect(src).toMatch(/evaluateStoredTrade\(/)
+    expect(src).toMatch(/summary:\s*\{\s*\.\.\.review\.summary,\s*grade:\s*tradeGrade\.grade\s*\}/)
+    expect(src).not.toMatch(/snapshotSummary:[\s\S]{0,80}grade:\s*snapshot\.grade/)
+  })
+
+  it("the inbox's provider rows take nothing from the canonical evaluation but coverage and lineup", () => {
+    expect(code('app/api/league/trades-panel/route.ts')).not.toMatch(
+      /evaluations\.get\([^)]*\)\?\.(grade|valueGiven|valueReceived|action|recommendation)\b/,
+    )
+  })
+
+  it('the share card states a result, never a letter', () => {
+    const src = code('app/api/share/trade-card/route.tsx')
+    expect(src).not.toMatch(/realizedGradeDisplay\(/)
+    expect(src).not.toMatch(/currentGrade|initialGrade/)
+    expect(src).toMatch(/resultMark\(/)
+  })
+
+  it('positive controls: each shape matches the code it replaced', () => {
+    expect(SNAPSHOT_LETTER.test('{p.valueSnapshot.grade}')).toBe(true)
+    expect(SNAPSHOT_LETTER.test('{valuePreview.grade.grade}')).toBe(true)
+    expect(SNAPSHOT_LETTER.test('{p.valueSnapshot?.grade}')).toBe(true)
+    expect(SNAPSHOT_LETTER.test('snapshot?.grade ?? null')).toBe(true)
+    expect(/evaluations\.get\([^)]*\)\?\.(grade|valueGiven|valueReceived|action|recommendation)\b/.test(
+      'proposalGrade: evaluations.get(trade.transactionId)?.grade ?? null,',
+    )).toBe(true)
+    expect(/realizedGradeDisplay\(/.test('const display = realizedGradeDisplay({')).toBe(true)
+  })
+})
+
+describe('Trade OS — every screen records its grade as a receipt', () => {
+  it.each([
+    ['app/api/trade-value/analyze/route.ts', /receiptIdForGrade\(\{\s*surface:\s*'trade-center'/],
+    ['app/api/league/trades-panel/route.ts', /receiptIdForGrade\(\{\s*surface:\s*'trades-panel'/],
+    ['lib/core-app/trades.ts', /receiptIdForGrade\(\{\s*surface:\s*'core-trades'/],
+    ['lib/core-app/recentTrades.ts', /receiptIdForGrade\(\{\s*surface:\s*'dashboard-trades'/],
+    ['lib/trade-intel/tradeNotifyService.ts', /receiptIdForGrade\(\{\s*surface:\s*'trade-email'/],
+    ['app/api/redraft/trade-proposals/route.ts', /receiptIdForGrade\(\{\s*surface:\s*'redraft-trade-list'/],
+    ['app/api/redraft/trade-value-preview/route.ts', /evaluateTrade\(\{\s*surface:\s*'redraft-trade-preview'/],
+    ['app/api/redraft/trades/[proposalId]/commissioner-review/route.ts', /surface:\s*'redraft-commissioner-review'/],
+  ])('%s', (file, shape) => {
+    expect(code(file)).toMatch(shape)
   })
 })

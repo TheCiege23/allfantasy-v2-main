@@ -173,6 +173,11 @@ export type LeagueTradeAsset = {
 
 export type LeagueTradeHistoryItem = {
   id: string
+  /**
+   * The saved `evaluateTrade()` receipt for the letter this row shows NOW (Trade OS, design step 5). Null
+   * until the receipts migration is applied, and whenever a save fails — the letter is still shown.
+   */
+  receiptId?: string | null
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
   partnerAvatarUrl?: string | null

@@ -37,7 +37,14 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/provider-trades/scanPendingSleeperTrades', () => ({ scanPendingSleeperTrades }))
 
 const { oneGradeForCompletedTrade } = vi.hoisted(() => ({ oneGradeForCompletedTrade: vi.fn() }))
-vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({ oneGradeForCompletedTrade }))
+/*
+ * The loader also takes `completedTradeInputs` (to record each grade as a receipt, Trade OS) — the real
+ * one, a pure function over the trade. Only the grade itself is stubbed.
+ */
+vi.mock('@/lib/decision-os/trade/completedTradeGrade', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/decision-os/trade/completedTradeGrade')>()),
+  oneGradeForCompletedTrade,
+}))
 
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
