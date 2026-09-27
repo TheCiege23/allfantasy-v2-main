@@ -32,7 +32,9 @@ export function tradeSeasonOutlook(snapshot: ChimmyLeagueSnapshot, userId: strin
         const age = matches.length === 1 ? matches[0].age : null
         return age != null && Number.isFinite(age) && age >= 18 && age <= 60 ? [{ name: asset.name, age, side }] : []
       }))
-      return { ...scenario, playerAges, playoffOdds: tradeSeasonEstimate(scenario, model, outlook.assumptions.computedAt) }
+      const playoffOdds = tradeSeasonEstimate(scenario, model, outlook.assumptions.computedAt)
+      if (playoffOdds.available) playoffOdds.reason += ` Scoring history fitted from seasons ${outlook.assumptions.seasonsFitted.join(', ')}. ${outlook.assumptions.missing.join(' ')}`
+      return { ...scenario, playerAges, playoffOdds }
     } catch { return no('The season model could not be loaded. No post-trade playoff probability was computed.') }
   }
 }
