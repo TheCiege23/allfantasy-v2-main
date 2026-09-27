@@ -28,6 +28,10 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
       if (uiJourney) {
         await page.goto('/create-league', { waitUntil: 'domcontentloaded' })
         await expect(page.getByTestId('g30-create-league-wizard')).toBeVisible({ timeout: 120000 })
+        const confirmation = page.getByRole('dialog', { name: 'Quick confirmation' })
+        await expect(confirmation).toBeVisible({ timeout: 120000 })
+        await confirmation.getByRole('button', { name: 'I' + String.fromCharCode(39) + 'm 18+ and agree', exact: true }).click()
+        await expect(confirmation).toBeHidden({ timeout: 120000 })
         await page.getByTestId('g30-sport-' + sport).click()
         await page.getByTestId('g30-step-basics').click()
         await page.getByTestId('g30-league-type-redraft').click()
