@@ -519,7 +519,7 @@ async function loadComps(
  * week with no fixtures for ANYBODY is skipped rather than reported as a bye.
  * `buildNextGameMap` does the four-rows-per-fixture reconciliation.
  */
-async function loadSchedule(
+export async function loadSchedule(
   team: string | null,
   season: number,
   fromWeek: number,
@@ -542,7 +542,9 @@ async function loadSchedule(
         sport: SCHEDULE_SPORT,
         season,
         week: { gte: fromWeek, lte: lastWeek },
-        OR: [{ seasonType: 'regular' }, { seasonType: null }],
+        // An untyped preseason game can share the regular-season week number.
+        // Only confirmed regular fixtures can establish an opponent or a bye.
+        seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season', 'regularseason'] },
       },
       select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true, week: true },
     })
