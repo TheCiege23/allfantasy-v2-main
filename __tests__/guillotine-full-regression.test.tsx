@@ -14,8 +14,10 @@ import { GuillotineHome } from '@/components/guillotine/GuillotineHome'
 import { createCanonicalLeagueInTransaction } from '@/lib/league-creation/canonical/createCanonicalLeagueInTransaction'
 
 const prismaMock = vi.hoisted(() => ({
+  league: { findUnique: vi.fn() },
   guillotineSeason: { findFirst: vi.fn(), findUnique: vi.fn() },
-  guillotineElimination: { findFirst: vi.fn() },
+  guillotineElimination: { findFirst: vi.fn(), findMany: vi.fn() },
+  guillotinePeriodScore: { findMany: vi.fn() },
   guillotineRosterState: {
     findMany: vi.fn(),
     upsert: vi.fn(),
@@ -38,6 +40,7 @@ const prismaMock = vi.hoisted(() => ({
    * that the engine's `.catch` could not convert, because the property access happens before any
    * promise exists.
    */
+  redraftRosterPlayer: { updateMany: vi.fn() },
   redraftRoster: {
     findMany: vi.fn(),
     update: vi.fn(),
@@ -81,6 +84,7 @@ vi.mock('@/lib/guillotine/GuillotineTiebreakResolver', () => ({
 vi.mock('@/lib/guillotine/GuillotineWeekEvaluator', () => ({
   evaluateWeek: evaluateWeekMock,
   getDraftSlotByRoster: getDraftSlotByRosterMock,
+  savePeriodScores: vi.fn(),
 }))
 vi.mock('@/lib/guillotine/GuillotineRosterReleaseEngine', async () => {
   const actual = await vi.importActual<typeof import('@/lib/guillotine/GuillotineRosterReleaseEngine')>('@/lib/guillotine/GuillotineRosterReleaseEngine')
@@ -115,11 +119,15 @@ vi.mock('@/components/guillotine/GuillotineAIPanel', () => ({
 describe('Guillotine full regression matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.guillotinePeriodScore.findMany.mockResolvedValue([])
+    prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing' })
     acquireEliminationLockMock.mockResolvedValue({ ok: true, backend: 'postgres' })
     releaseEliminationLockMock.mockResolvedValue(undefined)
     prismaMock.guillotineSeason.findFirst.mockResolvedValue(null)
     prismaMock.guillotineSeason.findUnique.mockResolvedValue({ createdAt: new Date('2026-01-01') })
     prismaMock.guillotineElimination.findFirst.mockResolvedValue(null)
+    prismaMock.guillotineElimination.findMany.mockResolvedValue([])
+    prismaMock.redraftRosterPlayer.updateMany.mockResolvedValue({ count: 0 })
     prismaMock.guillotineRosterState.findMany.mockResolvedValue([])
     prismaMock.roster.update.mockResolvedValue({ id: 'ok' })
     prismaMock.leagueTeam.updateMany.mockResolvedValue({ count: 1 })
@@ -192,6 +200,20 @@ describe('Guillotine full regression matrix', () => {
     expect(releaseChoppedRostersMock).not.toHaveBeenCalled()
   })
 
+  it('resumes an audited chop release without selecting another survivor', async () => {
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18 })
+    prismaMock.guillotineSeason.findFirst.mockResolvedValue({ id: 'gs1' })
+    prismaMock.guillotineElimination.findFirst.mockResolvedValue({ id: 'completed-audit' })
+    prismaMock.guillotineElimination.findMany.mockResolvedValue([{ eliminatedRosterId: 'rr-low' }])
+    prismaMock.roster.findMany.mockResolvedValue([{ id: 'r-low', playerData: { players: ['p-low'] } }])
+    const result = await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026 })
+    expect(result?.reason).toBe('period already processed')
+    expect(releaseChoppedRostersMock).toHaveBeenCalledWith({ leagueId: 'league-1', rosterIds: ['r-low'], releaseTiming: 'immediate' })
+    expect(prismaMock.redraftRosterPlayer.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { rosterId: { in: ['rr-low'] }, droppedAt: null } }))
+    expect(evaluateWeekMock).not.toHaveBeenCalled()
+    expect(resolveTiebreakMock).not.toHaveBeenCalled()
+  })
+
   it('does not chop another survivor after state was written but audit failed', async () => {
     getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18 })
     prismaMock.guillotineSeason.findFirst.mockResolvedValue({ id: 'season-2026' })
@@ -212,6 +234,26 @@ describe('Guillotine full regression matrix', () => {
     expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
   })
 
+  it('refuses automatic recovery without a season audit shell', async () => {
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1, tiebreakerOrder: ['season_points'], rosterReleaseTiming: 'immediate' })
+    prismaMock.guillotineSeason.findFirst.mockResolvedValue(null)
+    // Recovery without a season audit shell must remain refused.
+    prismaMock.guillotineRosterState.findMany.mockResolvedValue([{ rosterId: 'a' }])
+    prismaMock.guillotinePeriodScore.findMany.mockResolvedValue(['a','b','c','d'].map((rosterId,index) => ({ rosterId, periodPoints: 10 + index, seasonPointsCumul: 10 + index })))
+    const result = await runElimination({ leagueId: 'league-1', weekOrPeriod: 1 })
+    expect(result?.reason).toContain('audit recovery required')
+    expect(resolveTiebreakMock).not.toHaveBeenCalled()
+    expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
+  })
+
+  it('refuses a chop when an active roster has no score', async () => {
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 1 })
+    evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: ['a','b'], scores: [{ rosterId: 'a', periodPoints: 10 }] })
+    const result = await runElimination({ leagueId: 'league-1', weekOrPeriod: 1 })
+    expect(result?.reason).toBe('period scoring is incomplete')
+    expect(resolveTiebreakMock).not.toHaveBeenCalled()
+  })
+
   it('never chops the last surviving team', async () => {
     getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18 })
     evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: ['champion'], scores: [{ rosterId: 'champion', periodPoints: 100 }] })
@@ -229,6 +271,17 @@ describe('Guillotine full regression matrix', () => {
     await runElimination({ leagueId: 'league-1', weekOrPeriod: 2, skipChat: true })
     expect(resolveTiebreakMock).toHaveBeenCalledWith(expect.objectContaining({ candidates: scores, teamsPerChop: Math.min(2, teamCount - 1) }))
   })
+  it('caps a double chop at four survivors for a Final Four endgame', async () => {
+    prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'final_four' })
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 2, tiebreakerOrder: ['season_points'] })
+    const scores = ['a','b','c','d','e'].map((rosterId,index) => ({ rosterId, periodPoints: index + 10, seasonPointsCumul: index + 10 }))
+    evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: scores.map(row => row.rosterId), scores })
+    getDraftSlotByRosterMock.mockResolvedValue(new Map())
+    resolveTiebreakMock.mockReturnValue({ choppedRosterIds: [], stepUsed: null, reason: 'resolver boundary' })
+    await runElimination({ leagueId: 'league-1', weekOrPeriod: 2 })
+    expect(resolveTiebreakMock).toHaveBeenCalledWith(expect.objectContaining({ teamsPerChop: 1 }))
+  })
+
   it('eliminates lowest score, marks roster eliminated, releases players to waivers, and emits events', async () => {
     getGuillotineConfigMock.mockResolvedValue({
       eliminationStartWeek: 1,

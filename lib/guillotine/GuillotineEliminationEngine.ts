@@ -2,6 +2,10 @@
  * Run elimination: determine lowest N, apply tiebreaker, mark chopped, trigger release and events.
  */
 
+import { resumeAuditedRosterRelease } from './resumeAuditedRosterRelease'
+import { resolveGuillotineEndgame } from './endgameRules'
+import { transitionToFinalStage, determineFinalChampion } from './endgameEngine'
+import { savePeriodScores } from './GuillotineWeekEvaluator'
 import { randomUUID } from 'node:crypto'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { prisma } from '@/lib/prisma'
@@ -121,11 +125,14 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   // turn the next-lowest survivor into a second chop for the same scoring period.
   const seasonId = await findGuillotineSeasonId(input.leagueId, input.season)
   if (seasonId && await isPeriodAlreadyRecorded(seasonId, input.weekOrPeriod)) {
+    if (!input.skipRosterRelease) await resumeAuditedRosterRelease(input.leagueId, seasonId, input.weekOrPeriod)
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already processed' }
   }
   // A failure after state writes but before the audit must fail closed on retry too.
   // Bound states to this season's creation time so a previous year's chop is not reused.
   const seasonRow = seasonId ? await prisma.guillotineSeason.findUnique({ where: { id: seasonId }, select: { createdAt: true } }) : null
+  const endgameLeague = await prisma.league.findUnique({ where: { id: input.leagueId }, select: { settings: true, guillotineEndgame: true } })
+  const endgame = resolveGuillotineEndgame(endgameLeague ?? {})
   const started = await prisma.guillotineRosterState.findMany({
     where: {
       leagueId: input.leagueId, choppedInPeriod: input.weekOrPeriod,
@@ -133,17 +140,22 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     },
     select: { rosterId: true },
   })
+  let recoveryScores: PeriodScoreRow[] | null = null
   if (started.length > 0) {
-    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already started; audit recovery required' }
+    const saved = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, ...(input.season != null ? { season: input.season } : {}) }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
+    const expected = Math.min(teamsPerChop, saved.length - endgame.threshold)
+    if (seasonId && expected > 0 && started.length === expected && started.every(row => saved.some(score => score.rosterId === row.rosterId))) recoveryScores = saved
+    else return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already started; audit recovery required' }
   }
 
-  const evalResult = await evaluateWeek({
+  const evaluated = await evaluateWeek({
     leagueId: input.leagueId,
     weekOrPeriod: input.weekOrPeriod,
     season: input.season,
     periodScores: input.periodScores,
     periodEndedAt: input.periodEndedAt,
   })
+  const evalResult = evaluated && recoveryScores ? { ...evaluated, scores: recoveryScores, activeRosterIds: recoveryScores.map(row => row.rosterId) } : evaluated
   if (!evalResult) return null
   if (!evalResult.pastCutoff) {
     return {
@@ -158,15 +170,37 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'no active scores' }
   }
 
-  if (evalResult.activeRosterIds.length <= 1) {
+  if (new Set(evalResult.scores.map(row => row.rosterId)).size !== evalResult.activeRosterIds.length || evalResult.activeRosterIds.some(id => !evalResult.scores.some(row => row.rosterId === id))) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period scoring is incomplete' }
+  }
+
+  if (evalResult.activeRosterIds.length <= 1 && endgame.format === 'last_team_standing') {
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'last team standing' }
   }
 
+  if (endgame.format !== 'last_team_standing' && evalResult.activeRosterIds.length <= endgame.threshold) {
+    if (!seasonId) throw new Error('Final stage requires a guillotine season')
+    if (evalResult.scores.length !== evalResult.activeRosterIds.length) throw new Error('Final-stage scoring is incomplete')
+    const finalSeason = await prisma.guillotineSeason.findUniqueOrThrow({ where: { id: seasonId } })
+    if (finalSeason.status === 'complete') return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'season complete' }
+    if (!finalSeason.isInFinalStage) await transitionToFinalStage(seasonId, input.weekOrPeriod)
+    await savePeriodScores({ leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, season: input.season ?? finalSeason.season, scores: evalResult.scores })
+    await prisma.guillotineSeason.update({ where: { id: seasonId }, data: { currentScoringPeriod: Math.max(input.weekOrPeriod, finalSeason.currentScoringPeriod) } })
+    const champion = await determineFinalChampion(seasonId)
+    if (champion) {
+      await prisma.guillotineSeason.update({ where: { id: seasonId }, data: { status: 'complete' } })
+      if (finalSeason.redraftSeasonId) await prisma.redraftSeason.update({ where: { id: finalSeason.redraftSeasonId }, data: { status: 'complete' } })
+    }
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: champion ? 'final stage complete' : 'final stage scored' }
+  }
+
   const minPoints = Math.min(...evalResult.scores.map((s) => s.periodPoints))
-  const chopCount = Math.min(teamsPerChop, evalResult.activeRosterIds.length - 1)
+  const chopCount = Math.min(teamsPerChop, evalResult.activeRosterIds.length - endgame.threshold)
   const draftSlotByRoster = await getDraftSlotByRoster(input.leagueId)
 
-  const { choppedRosterIds, stepUsed, reason } = resolveTiebreak({
+  const { choppedRosterIds, stepUsed, reason } = recoveryScores
+    ? { choppedRosterIds: started.map(row => row.rosterId), stepUsed: null, reason: 'Recovered previously selected chop; no new elimination' }
+    : resolveTiebreak({
     candidates: evalResult.scores,
     tiebreakerOrder: config.tiebreakerOrder,
     teamsPerChop: chopCount,
@@ -187,6 +221,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     }
   }
 
+  // Save the original field before any elimination so audit recovery never reselects survivors.
+  if (!recoveryScores) await savePeriodScores({ leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, season: input.season ?? null, scores: evalResult.scores })
   const now = new Date()
   for (const rosterId of choppedRosterIds) {
     await prisma.guillotineRosterState.upsert({

@@ -13,7 +13,7 @@ const db = vi.hoisted(() => ({
   redraftRosterPlayer: { updateMany: vi.fn() },
   guillotineRosterState: { findFirst: vi.fn(), findMany: vi.fn() },
   guillotinePeriodScore: { findMany: vi.fn() },
-  guillotineSeason: { updateMany: vi.fn() },
+  guillotineSeason: { updateMany: vi.fn(), findUnique: vi.fn() },
   roster: { findMany: vi.fn() },
   league: { findUnique: vi.fn() },
 }))
@@ -23,12 +23,16 @@ const m = vi.hoisted(() => ({
   savePeriodScores: vi.fn(),
   runElimination: vi.fn(),
   ensureGuillotineSeason: vi.fn(),
+  finalChampion: vi.fn(),
+  resumeRelease: vi.fn(),
   finalizeRedraftWeek: vi.fn(),
   readWeekSlate: vi.fn(),
   scoreRosterForWeek: vi.fn(),
   acquire: vi.fn(),
   release: vi.fn(),
 }))
+vi.mock('@/lib/guillotine/resumeAuditedRosterRelease', () => ({ resumeAuditedRosterRelease: m.resumeRelease }))
+vi.mock('@/lib/guillotine/endgameEngine', () => ({ determineFinalChampion: m.finalChampion }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({
   isGuillotineLeague: m.isGuillotineLeague,
@@ -83,11 +87,13 @@ function arrange(overrides: { lastChopWeek?: number | null; active?: typeof SEAS
   db.redraftSeason.findFirst.mockResolvedValue({
     id: 's1', leagueId: 'L1', sport: 'NFL', season: 2026, status: 'active', currentWeek: 1, totalWeeks: 17,
   })
+  m.finalChampion.mockResolvedValue(null)
   db.redraftSeason.update.mockResolvedValue({})
   db.redraftSeason.updateMany.mockResolvedValue({ count: 1 })
   m.ensureGuillotineSeason.mockResolvedValue({ ok: true, created: false, seasonId: 'g1' })
   db.redraftRoster.findMany.mockResolvedValue(overrides.active ?? SEASON_ROSTERS)
   const last = overrides.lastChopWeek === undefined ? 2 : overrides.lastChopWeek
+  db.guillotineSeason.findUnique.mockResolvedValue({ currentScoringPeriod: last ?? 0, status: 'active' })
   db.guillotineRosterState.findFirst.mockImplementation(async ({ where }: { where: { choppedInPeriod: unknown } }) => {
     if (typeof where.choppedInPeriod === 'number') return null // "already chopped this week?"
     return last == null ? null : { choppedInPeriod: last }
@@ -217,6 +223,34 @@ describe('runNativeGuillotineWeek', () => {
     m.acquire.mockResolvedValue({ ok: false, reason: 'Lock held (postgres)' })
     expect((await run()).outcome).toBe('locked')
     expect(m.scoreRosterForWeek).not.toHaveBeenCalled()
+  })
+
+  it('recovers completion after the final scores were saved, without needing another week', async () => {
+    arrange()
+    db.guillotineSeason.findUnique.mockResolvedValue({ currentScoringPeriod: 17, status: 'final_stage' })
+    m.finalChampion.mockResolvedValue('rr-c')
+    expect((await run()).outcome).toBe('season_complete')
+    expect(m.finalizeRedraftWeek).not.toHaveBeenCalled()
+    expect(m.runElimination).not.toHaveBeenCalled()
+  })
+
+  it('moves to the next final scoring period without a new chop', async () => {
+    arrange()
+    db.guillotineSeason.findUnique.mockResolvedValue({ currentScoringPeriod: 3, status: 'final_stage' })
+    m.runElimination.mockResolvedValue({ choppedRosterIds: [], reason: 'final stage scored' })
+    const result = await runNativeGuillotineWeek({ seasonId: 's1', currentFantasyWeek: 5 }, { now: () => NOW })
+    expect(result).toMatchObject({ outcome: 'final_stage_scored', week: 4 })
+    expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('repairs an interrupted previous chop before advancing to the next week', async () => {
+    arrange()
+    db.guillotineSeason.findUnique.mockResolvedValue({ currentScoringPeriod: 1, status: 'active' })
+    db.guillotineRosterState.findFirst.mockResolvedValue({ choppedInPeriod: 2, rosterId: 'R-b' })
+    const result = await run()
+    expect(result).toMatchObject({ outcome: 'chopped', week: 2, reason: 'recovered previously selected chop' })
+    expect(m.scoreRosterForWeek).not.toHaveBeenCalled()
+    expect(m.runElimination).toHaveBeenCalledWith(expect.objectContaining({ weekOrPeriod: 2, skipChat: true }))
   })
 
   it('completes the season when one team is left', async () => {
