@@ -116,7 +116,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
       ) : null}
 
       {data.syncPaused && lastError ? <details className="af-sy-alert">
-        <summary>Last sync error before pausing</summary><p>{lastError}</p>
+        <summary>Latest recorded sync error</summary><p>{lastError}</p>
       </details> : null}
 
       {/* ── Connection ──────────────────────────────────────────────── */}

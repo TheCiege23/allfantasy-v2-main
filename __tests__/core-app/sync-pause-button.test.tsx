@@ -39,7 +39,7 @@ describe('sync pause control', () => {
     expect(screen.getByRole('button', { name: 'Resume account sync' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Reconnect this platform' })).toBeNull()
-    expect(screen.getByText('Last sync error before pausing')).toBeTruthy()
+    expect(screen.getByText('Latest recorded sync error')).toBeTruthy()
     expect(screen.getByText('League not found')).toBeTruthy()
   })
 })
