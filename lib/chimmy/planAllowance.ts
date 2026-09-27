@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDisplayPlanName } from '@/lib/subscription/feature-access'
 import { CHIMMY_PLAN_DAILY_INCLUDED, type ChimmyPlanAllowanceView } from './planAllowanceView'
-import { takeReceiptAllowance, releaseReceiptAllowance, type ReceiptContext } from './requestReceipts'
+import type { ReceiptContext } from './requestReceipts'
 
 /**
  * Chimmy answers INCLUDED in a subscription, before tokens apply.
@@ -195,7 +195,7 @@ export async function takeChimmyPlanAllowance(
   let used: number | null
   try {
     used = args.requestReceipt
-      ? await takeReceiptAllowance(args.requestReceipt, endpointFor(args.userId), window, args.state.limit)
+      ? await (await import('./requestReceipts')).takeReceiptAllowance(args.requestReceipt, endpointFor(args.userId), window, args.state.limit)
       : await deps.take(endpointFor(args.userId), window, args.state.limit)
   } catch (error) {
     if (args.requestReceipt) throw error
@@ -218,7 +218,7 @@ export async function releaseChimmyPlanAllowance(
   const reservation = reservations.get(args.state)
   if (!reservation || reservation.userId !== args.userId || !reservation.counted) return false
   if (reservation.durable) {
-    try { return await releaseReceiptAllowance(reservation.durable) } catch { return false }
+    try { return await (await import('./requestReceipts')).releaseReceiptAllowance(reservation.durable) } catch { return false }
   }
   if (reservation.release) return reservation.release
   const release = Promise.resolve().then(async () => {
