@@ -2,6 +2,7 @@
 
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
+import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
 import { useScopedConversation } from './useScopedConversation'
 import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Sparkles, X } from 'lucide-react'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
@@ -126,6 +127,8 @@ function platformHandoffHref(league: CommsLeague): string {
 type ChatTurn = {
   id: string
   role: 'you' | 'chimmy'
+  imagePreview?: string | null
+  imageName?: string
   text: string
   /** League-tab answers are public and must say so. */
   isPublic?: boolean
@@ -573,6 +576,13 @@ export function ChimmyPanel({
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setPendingImagePreview(null)
+    if (screenshot) void readScreenshotPreview(screenshot).then(preview => { if (!cancelled) setPendingImagePreview(preview) })
+    return () => { cancelled = true }
+  }, [screenshot])
   const activeScope = useRef(scopeId)
   activeScope.current = scopeId
 
@@ -619,10 +629,12 @@ export function ChimmyPanel({
       setOutOfAnswers(null)
       setBusy(true)
       setScreenshot(null)
+      const imagePreview = attached ? await readScreenshotPreview(attached) : null
+      if (activeScope.current !== scopeId) { setBusy(false); return }
       if (screenshotRef.current) screenshotRef.current.value = ''
       setTurns((t) => [
         ...t,
-        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}` },
+        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}`, imagePreview, imageName: attached?.name },
       ])
 
       try {
@@ -1009,7 +1021,7 @@ export function ChimmyPanel({
               {t.role === 'chimmy' ? (
                 <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
               ) : (
-                <p className="af-cm-turn-text">{t.text}</p>
+                <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <img src={t.imagePreview} alt={`Screenshot: ${t.imageName ?? 'attachment'}`} style={{ maxWidth: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12 }} /> : null}</div>
               )}
 
               {t.role === 'chimmy' && t.choices?.length && t.retryQuestion ? (
@@ -1227,7 +1239,7 @@ export function ChimmyPanel({
       {screenshot ? (
         <div className="af-cm-replybar">
           <span className="af-cm-replybar-label">Screenshot</span>
-          <span className="af-cm-replybar-text">{screenshot.name}</span>
+          <span className="af-cm-replybar-text">{pendingImagePreview ? <img src={pendingImagePreview} alt="Attached screenshot preview" style={{ maxWidth: 160, maxHeight: 120, objectFit: 'contain' }} /> : null}{screenshot.name}</span>
           <button
             type="button"
             className="af-cm-replybar-x"
