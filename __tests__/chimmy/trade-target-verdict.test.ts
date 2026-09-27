@@ -207,13 +207,15 @@ describe('the verdict is built from this league', () => {
     expect(r.verdict.reasons[0]).toBe("Lineup: not computed — Rashee Rice has no week 3 projection under this league's scoring.")
   })
 
-  it('a package player with no projection is named in the lineup line', async () => {
+  it('names a missing package projection and withholds the gain when the original lineup cannot be priced', async () => {
     loadWeekLines.mockImplementation(async ({ playerIds }: { playerIds: string[] }) =>
       new Map(playerIds.filter((id) => LINES[id] && id !== 'p-wr2').map((id) => [id, LINES[id]!])),
     )
     const r = await run('Rashee Rice')
     if (r.status !== 'decided') throw new Error('expected a verdict')
-    expect(r.verdict.reasons[0]).toMatch(/The lineup after paying for him could not be priced: Jaylen Waddle has no week 3 projection\./)
+    expect(r.verdict.reasons[0]).toMatch(/Lineup: not computed.*before-trade lineup cannot fill WR/)
+    expect(r.verdict.reasons[0]).toContain('no week 3 projection for Jaylen Waddle')
+    expect(r.verdict.reasons[0]).not.toContain('projected) would start')
   })
 
   it('reads the record from the league: 3-1, 2nd of 3', async () => {

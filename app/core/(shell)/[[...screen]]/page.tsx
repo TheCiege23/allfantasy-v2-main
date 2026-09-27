@@ -3862,6 +3862,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               works is lost while the new surface settles.
             */}
             <TradeCenter
+              viewerId={userId}
               league={{
                 id: trades.league.id,
                 name: trades.league.name,
