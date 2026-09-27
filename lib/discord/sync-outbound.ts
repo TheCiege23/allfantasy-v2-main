@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { createHash } from 'node:crypto'
 import { postLeagueChatEmbed, isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
@@ -107,6 +108,15 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
    */
   const chimmy = isChimmyAuthored(msg.metadata)
 
+  return prisma.$transaction(async tx => {
+  // Serialize retries from separate application instances before checking saved delivery.
+  const deliveryKey = `${row.channelId}:${input.messageId}`
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${deliveryKey}, 0))`
+  const previous = await tx.discordMessageLink.findFirst({
+    where: { leagueMessageId: input.messageId, channelId: row.channelId, direction: 'to_discord' },
+    select: { discordMessageId: true },
+  })
+  if (previous) return { synced: true, discordMessageId: previous.discordMessageId }
   const discordMessageId = await postLeagueChatEmbed(row.channelId, {
     authorName: chimmy ? CHIMMY_DISPLAY_NAME : input.authorName,
     authorAvatar: chimmy ? undefined : (input.authorAvatarUrl ?? undefined),
@@ -114,9 +124,10 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
     gifUrl: input.gifUrl ?? undefined,
     leagueName,
     leagueId: input.leagueId,
+    nonce: createHash('sha256').update(deliveryKey).digest('hex').slice(0, 25),
   })
 
-  await prisma.discordMessageLink.create({
+  await tx.discordMessageLink.create({
     data: {
       leagueMessageId: input.messageId,
       discordMessageId,
@@ -127,6 +138,7 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
   })
 
   return { synced: true, discordMessageId }
+  }, { timeout: 40_000, maxWait: 5_000 })
 }
 
 /** Fire-and-forget friendly URL for logs / admin (not stored on message by default). */

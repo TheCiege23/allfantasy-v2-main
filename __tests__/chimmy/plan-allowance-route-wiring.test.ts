@@ -33,11 +33,11 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
   })
 
   it('never charges tokens for a turn the plan included', () => {
-    expect(ROUTE).toMatch(/^\s*if \(!planIncluded && !tokenPreviewFailed\) \{\s*\n\s*try \{\s*\n\s*const ledger = await spendService\.spendTokensForRule\(/m)
+    expect(ROUTE).toMatch(/^\s*if \(!planIncluded && !tokenPreviewFailed\) \{\s*\n\s*try \{[\s\S]{0,400}?const ledger = await spendService\.spendTokensForRule\(/m)
   })
 
   it('falls back to the token preflight when the last included answer went elsewhere', () => {
-    expect(ROUTE).toMatch(/planIncluded = await takeChimmyPlanAllowance\(\{ userId, state: planState \}\)\s*\n\s*if \(!planIncluded\) \{\s*\n\s*const blocked = await runTokenGate\(exhaustedPlanMeta\)/)
+    expect(ROUTE).toMatch(/planIncluded = await takeChimmyPlanAllowance\(\{ userId, state: planState, requestReceipt \}\)\s*\n\s*if \(!planIncluded\) \{\s*\n\s*const blocked = await runTokenGate\(exhaustedPlanMeta\)/)
   })
 
   it('gives the included answer back when nothing was delivered, and when the request throws', () => {
@@ -48,7 +48,7 @@ describe('the AF Pro allowance in /api/chat/chimmy', () => {
 
   it('covers the live-search answer too, taken only once a sourced answer exists', () => {
     const searched = at(/^\s*const searched = await answerSportsQuestionFromSearch\(/m)
-    const take = at(/^\s*\? await takeChimmyPlanAllowance\(\{ userId, state: searchPlan \}\)/m)
+    const take = at(/^\s*\? await takeChimmyPlanAllowance\(\{ userId, state: searchPlan, requestReceipt \}\)/m)
     expect(searched).toBeGreaterThan(-1)
     expect(take).toBeGreaterThan(searched)
     expect(ROUTE).toMatch(/const ledger = searchIncluded \|\| !mayCharge\s*\n\s*\? null/)

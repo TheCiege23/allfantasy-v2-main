@@ -642,6 +642,7 @@ export function ChimmyPanel({
       const question = text.trim()
       /* Captured once: the retry after a consent prompt must send the same file. */
       const attached = screenshot
+      const requestId = crypto.randomUUID()
       if ((!question && !attached) || busy) return
       setDraft('')
       setError(null)
@@ -665,6 +666,7 @@ export function ChimmyPanel({
          */
         const buildForm = (confirmed: boolean) => {
           const form = new FormData()
+          form.append('requestId', requestId)
           form.append('message', question)
           if (confirmed) form.append('confirmTokenSpend', 'true')
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
@@ -699,7 +701,7 @@ export function ChimmyPanel({
 
         /* Only the request itself failing means the connection — a bug further down is not a network error. */
         const post = (confirmed: boolean) =>
-          fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(confirmed) }).catch(() => {
+          import('@/lib/chimmy/postRequest').then(({ postChimmyRequest }) => postChimmyRequest(buildForm(confirmed))).catch(() => {
             throw new ChimmyAskError(describeChimmyFailure(null, null))
           })
         let res = await post(false)
