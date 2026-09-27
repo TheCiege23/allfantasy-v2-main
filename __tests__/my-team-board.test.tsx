@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { render, within } from '@testing-library/react'
 
 import { MyTeamBoard } from '@/components/core-app/MyTeamBoard'
+import { PickALeague } from '@/components/core-app/PickALeague'
 import { isAtRisk, isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
@@ -59,6 +60,13 @@ function pulse(over: Partial<MyTeamPulse> = {}): MyTeamPulse {
 }
 
 describe('paused league accounting', () => {
+  it('does not turn an inventory-only picker into a healthy lineup verdict', () => {
+    const { container } = render(<PickALeague tabKey="my-team" title="My team" blurb="Choose a league" issues={[]} leagues={[{ id: 'l1', name: 'My league' }]} showQueue={false} />)
+    expect(container.textContent).not.toContain('Nothing in your leagues is waiting')
+    expect(container.textContent).not.toContain('Needs you first')
+    expect(within(container).getByRole('heading', { name: 'Pick a league' })).toBeTruthy()
+    expect(within(container).getByRole('link', { name: 'My league' }).getAttribute('href')).toBe('/core/my-team?league=l1')
+  })
   it('excludes paused inventory from unreadable and hidden active-team counts', () => {
     const { container } = render(<MyTeamBoard pulse={pulse({
       considered: 65, paused: 1, checked: 57,
