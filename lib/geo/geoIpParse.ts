@@ -14,6 +14,8 @@ export interface ParsedIpGeo {
   country: string | null
   regionCode: string | null
   vpnHint: boolean
+  /** Part of `vpnHint`: the address is on a privacy-relay network (see isPrivacyRelayNetwork). */
+  relayHint?: boolean
   /** The call returned a payload but carried no field we could read a country from. */
   shapeUnrecognised: boolean
 }
@@ -96,11 +98,8 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
   if (data.error) return UNREADABLE_IP_GEO
 
   const org = String(data.org ?? "").toLowerCase()
-  const vpnHint =
-    org.includes("vpn") ||
-    org.includes("proxy") ||
-    org.includes("hosting") ||
-    isPrivacyRelayNetwork(data.asn, data.org)
+  const relayHint = isPrivacyRelayNetwork(data.asn, data.org)
+  const vpnHint = org.includes("vpn") || org.includes("proxy") || org.includes("hosting") || relayHint
 
   const country = asCountryCode(data.country_code) ?? asCountryCode(data.country)
   // `region` is the full name ("Washington") in most vendors' payloads and is
@@ -110,10 +109,10 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
 
   if (!country) {
     warnShapeOnce(Object.keys(data))
-    return { country: null, regionCode: null, vpnHint, shapeUnrecognised: true }
+    return { country: null, regionCode: null, vpnHint, relayHint, shapeUnrecognised: true }
   }
 
-  return { country, regionCode, vpnHint, shapeUnrecognised: false }
+  return { country, regionCode, vpnHint, relayHint, shapeUnrecognised: false }
 }
 
 /**
@@ -147,6 +146,8 @@ export interface ProxycheckVerdict {
   /** The vendor answered about this IP. False on a denial, an error or an unreadable payload. */
   answered: boolean
   anonymized: boolean
+  /** Part of `anonymized`: the address is on a privacy-relay network (see isPrivacyRelayNetwork). */
+  relay?: boolean
   /** Top-level `status: "denied"` — quota exhausted or key refused. Every answer is "unknown" while it holds. */
   denied: boolean
 }
@@ -203,11 +204,9 @@ export function parseProxycheckPayload(data: Record<string, unknown> | null, ip:
 
   const proxy = String(entry.proxy ?? "").toLowerCase()
   const type = String(entry.type ?? "").toUpperCase()
-  const anonymized =
-    proxy === "yes" ||
-    ANONYMIZING_TYPES.some((t) => type.includes(t)) ||
-    isPrivacyRelayNetwork(entry.asn, entry.provider ?? entry.organisation)
-  return { answered: true, anonymized, denied: false }
+  const relay = isPrivacyRelayNetwork(entry.asn, entry.provider ?? entry.organisation)
+  const anonymized = proxy === "yes" || ANONYMIZING_TYPES.some((t) => type.includes(t)) || relay
+  return { answered: true, anonymized, relay, denied: false }
 }
 
 /**
@@ -230,4 +229,31 @@ export function combineAnonymizerSignals(s: {
   if (s.proxycheck?.answered) return false
   if (s.ipapi && (s.ipapi.country !== null || s.ipapi.shapeUnrecognised)) return false
   return null
+}
+
+/** Why an address counts as hidden — only ever asked of a `true` from combineAnonymizerSignals. */
+export type AnonymizerKind = "tor" | "relay" | "vpn"
+
+/**
+ * The reason behind a `true` from combineAnonymizerSignals, so the block page can
+ * name the one thing to switch off.
+ *
+ * ⚠ WHY "relay" WINS OVER A VPN FLAG. iCloud Private Relay is on by default for
+ * iCloud+ subscribers, and a person who has just switched their VPN app off does
+ * not know Safari has a second, separate privacy setting. The owner hit exactly
+ * that on 2026-09-25: VPN off, still blocked, from a Fastly relay address. A relay
+ * network is the more specific and more actionable answer, so it is reported
+ * even when a vendor also lists the address as a VPN.
+ *
+ * Presentation only: the gate still refuses on combineAnonymizerSignals alone.
+ */
+export function anonymizerKindOf(s: {
+  tor: boolean
+  proxycheck: ProxycheckVerdict | null
+  ipapi: ParsedIpGeo | null
+}): AnonymizerKind | null {
+  if (combineAnonymizerSignals(s) !== true) return null
+  if (s.tor) return "tor"
+  if (s.proxycheck?.relay || s.ipapi?.relayHint) return "relay"
+  return "vpn"
 }
