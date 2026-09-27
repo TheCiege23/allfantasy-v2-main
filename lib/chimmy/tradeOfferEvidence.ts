@@ -14,7 +14,7 @@ export function screenshotTradeQuestion(raw?: string | null): { question: string
   const uncertain = screenshotNeedsClarification(evidence)
   if (!give || !get || uncertain.needed || evidence.imperatives.length) return {
     question: null, clarification: uncertain.question ?? 'I received the trade screenshot, but could not reliably read both sides. Confirm what you send and receive.' }
-  const ordinal = (round: string) => ({ '1': '1st', '2': '2nd', '3': '3rd', '4': '4th' }[round] ?? round)
+  const ordinal = (round: string) => round === '1' ? '1st' : round === '2' ? '2nd' : round === '3' ? '3rd' : '4th'
   // Vision readers may spell the same visible pick as “2027 Round 1”. Preserve year and round.
   const normalizePicks = (side: string) => side
     .replace(/\b((?:19|20)\d{2})\s+(?:round|rd)\s*([1-4])\b/gi, (_, year: string, round: string) => year + ' ' + ordinal(round) + '-round pick')
