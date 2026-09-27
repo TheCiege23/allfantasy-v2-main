@@ -18,7 +18,7 @@
  *             own mode, for the same budget reason as `rosters`.
  *   odds    — "1" runs ONLY the API-Sports betting-market sync into `game_odds`. Exclusive for
  *             the same reason as the two above, and for one more: it is the only block here on a
- *             6-HOURLY schedule, while the schedule blocks are weekly. Sharing a fire would
+ *             HOURLY schedule, while the schedule blocks are weekly. Sharing a fire would
  *             either drag a weekly sweep along four times a day or hold odds back to weekly, and
  *             a weekly spread is worse than no spread. See `syncAPISportsGameOddsToDb` for why
  *             the run is bounded to a handful of calls.
@@ -186,7 +186,7 @@ async function handle(req: NextRequest) {
     }
 
     /*
-     * API-SPORTS BETTING MARKETS — `?odds=1`, every 6h.
+     * API-SPORTS BETTING MARKETS — `?odds=1`, every hour.
      *
      * Writes `game_odds`, which nothing else in the repo fills; there is no other odds provider
      * and no other writer. The read side is lib/odds/gameOddsReads.ts, which never calls a

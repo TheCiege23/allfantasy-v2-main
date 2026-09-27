@@ -63,7 +63,8 @@ on:
     # f94e3085c but absent here, so NOTHING FIRED IT. `cron-budget-check` said
     # so on every push for ~12 hours and five commits; the check is advisory
     # under `enforce_admins: false`, so main stayed red and shipped anyway.
-    - cron: "25 */6 * * *"
+    # Match Core's one-hour quote freshness ceiling.
+    - cron: "25 * * * *"
     - cron: "30 */6 * * *"
     - cron: "30 7 * * *"
     - cron: "40 6 * * *"
