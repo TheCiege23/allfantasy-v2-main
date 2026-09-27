@@ -21,8 +21,11 @@ function model(name: string, rows: unknown[] = []) {
 }
 
 vi.mock('next/cache', () => ({ unstable_cache: (fn: unknown) => fn }))
+vi.mock('@/lib/injuries/injurySyncState', () => ({ readInjurySyncFreshness: async () => null }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    guillotineRosterState: model('guillotineRosterState'),
+    guillotineElimination: model('guillotineElimination'),
     leagueTeam: model('leagueTeam', [
       { leagueId: 'L1', teamName: 'Mine', ownerName: 'me', platformUserId: 'p1', externalId: '1', isCommissioner: false, isCoCommissioner: false },
     ]),

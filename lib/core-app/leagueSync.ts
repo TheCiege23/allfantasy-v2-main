@@ -71,6 +71,13 @@ export type LeagueSyncData = {
   status: 'ok' | 'attention' | 'never' | 'paused'
   /** AF's own last successful collection. Never presented as data freshness. */
   lastReadAt: Date | null
+  /**
+   * When the five-minute lane last read this league's rosters and transactions — a separate,
+   * narrower collection with its own state row (`<runKey>:active`). Null when it has never
+   * completed here, which is the honest answer for a league outside the lane (offseason,
+   * an older season).
+   */
+  rostersReadAt: Date | null
   lastAttemptedAt: Date | null
   consecutiveFailures: number
   lastError: string | null
@@ -94,7 +101,7 @@ export type LeagueSyncResult =
   | { available: false; leagueName: string; reason: string }
 
 /** Older than this and a league is stale enough to say so. */
-const STALE_AFTER_MS = 6 * 60 * 60 * 1000
+const STALE_AFTER_MS = 60 * 60 * 1000
 
 function describeAge(from: Date | null, now: Date): string {
   if (!from) return 'never'
@@ -146,9 +153,21 @@ export async function getLeagueSync(
       ? `${String(league.platform ?? '').toLowerCase()}:${league.platformLeagueId}:${league.season}`
       : null
 
-  const [syncState, rosterLatest, matchupLatest, seasonCount, lastRun, pausedKeys] = await Promise.all([
+  const [syncState, activeState, rosterLatest, matchupLatest, seasonCount, lastRun, pausedKeys] = await Promise.all([
     runKey
       ? prisma.leagueSyncState.findUnique({ where: { runKey } }).catch(() => null)
+      : Promise.resolve(null),
+    /*
+     * ⚠ THE FIVE-MINUTE LANE KEEPS ITS OWN ROW, AND READING ONLY THE FULL ONE HID IT. Rosters and
+     * transactions are refreshed far more often than the full league-state pass (every league
+     * within 20 minutes on a game day), under `<runKey>:active` so the two cadences never postpone
+     * each other. This screen read only the full row, so it showed "rosters last changed 7h ago"
+     * for a roster we had checked minutes earlier and found unchanged.
+     */
+    runKey
+      ? prisma.leagueSyncState
+          .findUnique({ where: { runKey: `${runKey}:active` }, select: { lastSuccessfulSyncAt: true } })
+          .catch(() => null)
       : Promise.resolve(null),
     prisma.roster
       .findFirst({ where: { leagueId }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } })
@@ -196,6 +215,11 @@ export async function getLeagueSync(
   const lastReadAt = syncState?.lastSuccessfulSyncAt ?? league.lastSyncedAt ?? null
   const lastAttemptedAt = syncState?.lastAttemptedSyncAt ?? league.lastSyncedAt ?? null
   const consecutiveFailures = syncState?.consecutiveFailures ?? 0
+  /*
+   * `lastSuccessfulSyncAt` advances only on a run that completed every scope it was given
+   * (runner-enforced), so a value here means rosters AND transactions were both read then.
+   */
+  const rostersReadAt = activeState?.lastSuccessfulSyncAt ?? null
 
   const orphanedRun =
     lastRun &&
@@ -231,9 +255,27 @@ export async function getLeagueSync(
   const rowState = (
     scope: string | null,
     ownTimestamp: Date | null,
+    /**
+     * A later, successful read of this scope by the five-minute lane. It wins over the table's
+     * own timestamp when newer: `Roster.updatedAt` says when a roster last CHANGED, and a roster
+     * that has not changed since Tuesday is not stale if we looked at it a minute ago.
+     */
+    laneReadAt: Date | null = null,
   ): SyncDataRow['state'] => {
-    if (scope && incompleteScopes.has(scope)) {
+    /*
+     * The full pass's "did not complete" is about ITS run. A lane read that finished after that
+     * run started has since collected this scope, so the incomplete marker no longer describes it.
+     */
+    const laneSupersedesFull =
+      laneReadAt != null && (lastAttemptedAt == null || laneReadAt.getTime() > lastAttemptedAt.getTime())
+    if (scope && incompleteScopes.has(scope) && !laneSupersedesFull) {
       return { kind: 'stale', detail: 'did not complete on the last run' }
+    }
+    if (laneReadAt && (ownTimestamp == null || laneReadAt.getTime() > ownTimestamp.getTime())) {
+      const age = now.getTime() - laneReadAt.getTime()
+      return age > STALE_AFTER_MS
+        ? { kind: 'stale', detail: `last checked ${describeAge(laneReadAt, now)}` }
+        : { kind: 'fresh', detail: `checked ${describeAge(laneReadAt, now)}` }
     }
     if (ownTimestamp) {
       const age = now.getTime() - ownTimestamp.getTime()
@@ -252,13 +294,13 @@ export async function getLeagueSync(
       key: 'rosters',
       label: 'Rosters',
       note: 'Every roster, bench and IR or taxi slot',
-      state: rowState('teams_rosters', rosterLatest?.updatedAt ?? null),
+      state: rowState('teams_rosters', rosterLatest?.updatedAt ?? null, rostersReadAt),
     },
     {
       key: 'transactions',
       label: 'Transactions',
       note: 'Trades, waiver claims and free-agent moves',
-      state: rowState('transactions', null),
+      state: rowState('transactions', null, rostersReadAt),
     },
     {
       key: 'scores',
@@ -305,6 +347,7 @@ export async function getLeagueSync(
           },
     status,
     lastReadAt,
+    rostersReadAt,
     lastAttemptedAt,
     consecutiveFailures,
     lastError: syncState?.lastError ?? null,

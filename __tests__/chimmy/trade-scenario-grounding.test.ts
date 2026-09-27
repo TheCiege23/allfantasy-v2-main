@@ -404,3 +404,23 @@ describe('draft picks in a dynasty league', () => {
     expect(evaluate).not.toHaveBeenCalled()
   })
 })
+
+describe('reported KBFL screenshot package', () => {
+  it.each([
+    'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?',
+    'Should I trade Tyrone Tracy and Ryan Fitzgerald and 2027 1st for Quincy Williams and Carson Schwesinger?',
+  ])('preserves IDP, kicker and future pick, oriented by actual ownership: %s', async message => {
+    resolveWorld.mockResolvedValue({ ...WORLD, league: { ...WORLD.league, isDynasty: true }, rosters: [roster('r1', 't1', ['qw', 'cs']), roster('r2', 't2', ['tt', 'rf'])] })
+    loadPlayerNames.mockResolvedValue(new Map([
+      ['qw', { name: 'Quincy Williams', position: 'LB' }], ['cs', { name: 'Carson Schwesinger', position: 'LB' }],
+      ['tt', { name: 'Tyrone Tracy Jr.', position: 'RB' }], ['rf', { name: 'Ryan Fitzgerald', position: 'K' }],
+    ]))
+    const out = await run(message)
+    expect(out?.status).toBe('ready')
+    if (out?.status !== 'ready') return
+    expect(out.give.map(p => p.playerId)).toEqual(['qw', 'cs'])
+    expect(out.get.map(p => p.name)).toEqual(['Tyrone Tracy Jr.', 'Ryan Fitzgerald', '2027 1st-round pick'])
+    expect(grade.mock.calls[0][0].get.assets).toContainEqual({ kind: 'pick', year: 2027, round: 1 })
+    expect(evaluate.mock.calls[0][0].assets).toHaveLength(5)
+  })
+})

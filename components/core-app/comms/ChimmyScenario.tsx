@@ -123,7 +123,7 @@ function TradeScenarioCard({ scenario }: { scenario: ReadyTradeScenario }) {
             </td>
           </tr>
           <LineupRow lineup={scenario.lineup} unavailable={scenario.lineupUnavailable} unit={unit} />
-          <PlayoffRow reason={scenario.playoffOdds.reason} what="trade" />
+          {scenario.playoffOdds.available ? <tr><th>Playoff scenario estimate</th><td colSpan={3} title={scenario.playoffOdds.reason}>{scenario.playoffOdds.before.toFixed(1)}% before → {scenario.playoffOdds.after.toFixed(1)}% after. {scenario.playoffOdds.reason}</td></tr> : <PlayoffRow reason={scenario.playoffOdds.reason} what="trade" />}
         </tbody>
       </table>
 

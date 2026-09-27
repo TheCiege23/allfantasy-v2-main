@@ -51,6 +51,7 @@ export const LEAGUE_CONTEXT_SELECT = {
   status: true,
   lifecycleState: true,
   guillotineMode: true,
+  bestBallMode: true,
   logoUrl: true,
   avatarUrl: true,
   syncStatus: true,

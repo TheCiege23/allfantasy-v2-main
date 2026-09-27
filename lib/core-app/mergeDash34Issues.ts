@@ -115,6 +115,13 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
       }
     }
 
+    if (l.needsWaivers && l.bestBallMissing?.length) {
+      synthesized.push({ id: `${l.id}:best-ball-coverage`, severity: 'warn', glyph: '⚑',
+        title: `Best Ball roster coverage — ${l.name}`,
+        meta: `Eligible roster cannot cover ${l.bestBallMissing.join(', ')}. Review waiver replacements; your lineup is selected automatically.`,
+        leagueId: l.id, leagueName: l.name, platform: l.platform, deadline: null,
+        action: { label: 'Review waivers', href: `/core/waivers?league=${encodeURIComponent(l.id)}`, external: false } })
+    }
     if (l.priority === 'urgent') {
       const id = `${l.id}:starter-out`
       /*

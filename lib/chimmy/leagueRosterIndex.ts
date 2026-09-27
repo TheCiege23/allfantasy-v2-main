@@ -1,4 +1,5 @@
 import type { CanonicalWorld, RosterFacts } from '@/lib/decision-os/world/facts'
+import { suffixlessCanonicalName } from '@/lib/draft-room/player-canonical-identity'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 
 /**
@@ -51,7 +52,7 @@ export function indexRosterNames(world: CanonicalWorld, names: PlayerNames): Map
  */
 export function nameVariants(candidate: string): string[] {
   const words = candidate.split(/\s+/)
-  if (words.length !== 3) return [candidate]
+  if (words.length !== 3 || normalizePlayerName(candidate) !== suffixlessCanonicalName(candidate)) return [candidate]
   return [candidate, words.slice(1).join(' '), words.slice(0, 2).join(' ')]
 }
 
@@ -63,6 +64,15 @@ export function findRosteredByName(
   for (const variant of nameVariants(raw)) {
     const found = byName.get(normalizePlayerName(variant)) ?? []
     if (found.length > 0) return { candidate: variant, hits: found }
+  }
+  // Screenshot display names often omit Jr./Sr. Bridge only an omitted suffix and only
+  // when exactly one player identity in this league has that base name.
+  for (const variant of nameVariants(raw)) {
+    const strict = normalizePlayerName(variant)
+    const base = suffixlessCanonicalName(variant)
+    if (!base || base !== strict) continue
+    const hits = [...byName.entries()].filter(([name]) => suffixlessCanonicalName(name) === base).flatMap(([, players]) => players)
+    if (new Set(hits.map(p => p.playerId)).size === 1) return { candidate: variant, hits }
   }
   return { candidate: raw, hits: [] }
 }
