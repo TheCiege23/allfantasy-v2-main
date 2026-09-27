@@ -122,11 +122,12 @@ async function importChannel(row: Row, botId: string): Promise<number> {
 
   for (const m of sorted) {
     maxId = m.id
-    if (!m.author?.id || m.author.id === botId) continue
+    const author = m.author
+    if (!author?.id || author.id === botId) continue
     const text = (m.content ?? '').trim()
     if (!text) continue
 
-    const authorName = m.author.global_name ?? m.author.username ?? 'Discord user'
+    const authorName = author.global_name ?? author.username ?? 'Discord user'
     // Serialize this Discord message across overlapping cron invocations. The chat row
     // and its dedup link commit together, so a crash cannot leave a visible duplicate
     // without its link. The advisory lock is transaction-scoped and auto-released.
@@ -153,7 +154,7 @@ async function importChannel(row: Row, botId: string): Promise<number> {
           discordMessageId: m.id,
           metadata: {
             discordAuthorName: authorName,
-            discordAuthorAvatarUrl: discordAvatarUrl(m.author.id, m.author.avatar ?? null),
+            discordAuthorAvatarUrl: discordAvatarUrl(author.id, author.avatar ?? null),
             discordInbound: true,
           },
         },
