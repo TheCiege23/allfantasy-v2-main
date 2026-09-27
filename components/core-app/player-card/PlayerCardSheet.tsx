@@ -122,6 +122,25 @@ function TradeRows({ trades, subject }: { trades: PlayerCardTrade[]; subject: st
             {got.length > 0 ? (
               <div className="af-pc-trade-b af-pc-faint">Moved with {got.join(', ')}</div>
             ) : null}
+            {/*
+              THE grade (2026-09-27): the side that got him, then the side that paid — the /core
+              Trades letter for the same trade. A withheld grade says why, with no letter.
+            */}
+            {t.grade?.graded ? (
+              <div className="af-pc-trade-grade" aria-label="Trade grade for each side">
+                <span className="af-pc-trade-letter" data-letter={t.grade.acquirerLetter}>
+                  Got him <b>{t.grade.acquirerLetter}</b>
+                </span>
+                <span className="af-pc-trade-letter" data-letter={t.grade.senderLetter}>
+                  Paid <b>{t.grade.senderLetter}</b>
+                </span>
+                <span className="af-pc-faint">
+                  {t.grade.got.toLocaleString()} for {t.grade.gave.toLocaleString()} on the league&rsquo;s values today
+                </span>
+              </div>
+            ) : t.grade && !t.grade.graded ? (
+              <div className="af-pc-trade-b af-pc-faint">Not graded: {t.grade.withheld}</div>
+            ) : null}
           </div>
         )
       })}
