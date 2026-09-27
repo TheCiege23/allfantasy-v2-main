@@ -199,3 +199,13 @@ describe('Tier 0 end-to-end — persisted League row payload matches Sleeper', (
     expect(barePatch.draftPickTrading).toBeUndefined()
   })
 })
+
+ it('persists the provider Best Ball flag and preserves unknown mode', () => {
+  const make = (best_ball) => ({ ...AUDIT_LEAGUE_PAYLOAD, league: { ...AUDIT_LEAGUE_PAYLOAD.league, settings: { ...AUDIT_LEAGUE_PAYLOAD.league.settings, best_ball } } })
+  for (const [raw, expected] of [[1, true], [0, false]]) {
+    const league = SleeperLeagueMapper.map(make(raw))!
+    expect(buildTier0LeagueColumnPatch({ league } as NormalizedImportResult).bestBallMode).toBe(expected)
+  }
+  const league = SleeperLeagueMapper.map(make(undefined))!
+  expect(buildTier0LeagueColumnPatch({ league } as NormalizedImportResult)).not.toHaveProperty('bestBallMode')
+})

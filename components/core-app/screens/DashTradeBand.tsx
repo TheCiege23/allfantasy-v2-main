@@ -90,7 +90,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
       <div className="af-trade-head">
         <span className="af-label af-trade-kicker">Latest league trades</span>
         <span className="af-trade-count af-num">
-          {trades.length === 1 ? '1 in the last 2 weeks' : `${trades.length} in the last 2 weeks`}
+          {`${trades.length} latest · past 2 weeks`}
         </span>
       </div>
 

@@ -5,7 +5,7 @@ import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJo
 export const ACTIVE_SYNC_JOB = 'cron-fantasy-os-active-sync'
 
 /** Shared by the manual route and the existing five-minute notification heartbeat. */
-export async function runActiveSyncHeartbeat(limitPerProvider = 4) {
+export async function runActiveSyncHeartbeat(limitPerProvider = 50) {
   if (process.env.FANTASY_OS_EXEC_SYNC_LIVE !== 'true') {
     await recordSyncJobRun(
       { jobName: ACTIVE_SYNC_JOB, provider: 'multi', trigger: 'cron' },
@@ -43,7 +43,7 @@ export async function runActiveSyncHeartbeat(limitPerProvider = 4) {
          */
         gameDay: summary.gameDay,
         deferred: summary.deferred,
-        scopes: ['transactions', 'teams_rosters'],
+        scopes: ['league_state', 'transactions', 'teams_rosters'],
         eligible: summary.eligible,
         selected: summary.selected,
         recentlyViewedSelected: summary.recentlyViewedSelected,

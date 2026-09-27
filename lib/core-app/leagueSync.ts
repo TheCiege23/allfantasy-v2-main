@@ -101,7 +101,7 @@ export type LeagueSyncResult =
   | { available: false; leagueName: string; reason: string }
 
 /** Older than this and a league is stale enough to say so. */
-const STALE_AFTER_MS = 6 * 60 * 60 * 1000
+const STALE_AFTER_MS = 60 * 60 * 1000
 
 function describeAge(from: Date | null, now: Date): string {
   if (!from) return 'never'

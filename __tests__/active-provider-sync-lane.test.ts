@@ -80,7 +80,7 @@ describe('active provider sync lane', () => {
     await runActiveSyncLane({ now: new Date('2026-09-13T18:00:00Z'), limitPerProvider: 1 })
     expect(h.runDue).toHaveBeenCalledWith(expect.objectContaining({
       cadenceMinutesOverride: ACTIVE_SYNC_CADENCE_MINUTES,
-      scopes: ['transactions', 'teams_rosters'],
+      scopes: ['league_state', 'transactions', 'teams_rosters'],
       matchupStaleThresholdMs: 5 * 60_000,
       runTimeoutMs: ACTIVE_SYNC_LEAGUE_TIMEOUT_MS,
     }))
@@ -151,4 +151,13 @@ describe('game-day sizing', () => {
     // An explicit override skips the schedule read.
     expect(h.gameDay).not.toHaveBeenCalled()
   })
+})
+
+it('does not let a recently viewed league starve an overdue refresh', async () => {
+  const now = new Date('2026-09-13T18:00:00Z')
+  h.enumerate.mockImplementation(async ([provider]) => provider === 'sleeper' ? ['busy', 'overdue'].map(id => ({ runKey: 'sleeper:' + id + ':2026', provider, externalLeagueId: id, season: 2026, sport: 'NFL' })) : [])
+  h.stateFind.mockResolvedValue([{ runKey: 'sleeper:busy:2026:active', lastAttemptedSyncAt: new Date(now.getTime()-5*60_000) }, { runKey: 'sleeper:overdue:2026:active', lastAttemptedSyncAt: new Date(now.getTime()-50*60_000) }])
+  h.leagueFind.mockResolvedValue([{ platform: 'sleeper', platformLeagueId: 'busy', season: 2026, lastViewedAt: now }])
+  const result = await selectActiveSyncConnections({ now, limitPerProvider: 1 })
+  expect(result.connections[0].externalLeagueId).toBe('overdue')
 })

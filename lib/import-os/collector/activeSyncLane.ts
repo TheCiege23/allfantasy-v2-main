@@ -7,7 +7,7 @@ import { runDueLeagues, type RunDueResult } from './runDueSleeperLeagues'
 import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
 
 export const ACTIVE_SYNC_CADENCE_MINUTES = 5
-export const ACTIVE_SYNC_SCOPES = ['transactions', 'teams_rosters'] as const
+export const ACTIVE_SYNC_SCOPES = ['league_state', 'transactions', 'teams_rosters'] as const
 /**
  * Per-league work budget for the active lane.
  *
@@ -92,7 +92,7 @@ export async function selectActiveSyncConnections(input?: {
   gameDay?: boolean
 }): Promise<{ connections: LeagueSyncConnection[]; eligible: number; recentlyViewedSelected: number }> {
   const now = input?.now ?? new Date()
-  const limitPerProvider = Math.max(1, Math.min(input?.limitPerProvider ?? 4, 50))
+  const limitPerProvider = Math.max(1, Math.min(input?.limitPerProvider ?? 50, 50))
   const season = activeSeasonYear(now)
 
   const perProvider = await Promise.all(
@@ -161,6 +161,13 @@ export async function selectActiveSyncConnections(input?: {
         viewedAt: viewedAt.get(connection.runKey) ?? 0,
       }))
       .sort((a, b) => {
+        // Hard freshness deadline outranks recently viewed accounts. Otherwise
+        // a busy account can occupy every slot and starve the rest indefinitely.
+        const overdue = (at: number | null) => at === null || now.getTime() - at >= ACTIVE_SYNC_CADENCE_MINUTES * 60_000
+        const aOverdue = overdue(a.attemptedAt)
+        const bOverdue = overdue(b.attemptedAt)
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
+        if (aOverdue && bOverdue && a.attemptedAt !== b.attemptedAt) return (a.attemptedAt ?? 0) - (b.attemptedAt ?? 0)
         const aRecent = now.getTime() - a.viewedAt <= RECENT_VIEW_WINDOW_MS
         const bRecent = now.getTime() - b.viewedAt <= RECENT_VIEW_WINDOW_MS
         if (aRecent !== bRecent) return aRecent ? -1 : 1
