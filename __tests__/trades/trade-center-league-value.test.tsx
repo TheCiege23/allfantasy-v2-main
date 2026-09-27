@@ -95,6 +95,26 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('keeps same-name players on opposite sides on their own analyzed values', async () => {
+    rosterData.current = {
+      rosters: [roster('r1', 'You', [player('d1', 'Same Name', 'DL', 134)]),
+        roster('r2', 'Matt Jones', [player('b1', 'Same Name', 'DB', 500)])],
+      viewerRosterId: 'r1', viewerTeamRosterId: 'r1',
+    }
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, players: {
+        give: [{ name: 'Same Name', playerId: 'd1', position: 'DL', marketValue: 134, leagueValue: 129 }],
+        get: [{ name: 'Same Name', playerId: 'b1', position: 'DB', marketValue: 500, leagueValue: 550 }],
+      } }) } : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty IDP', teamCount: 16 }} />)
+    fireEvent.click(screen.getAllByLabelText('Add Same Name')[0])
+    fireEvent.click([...document.querySelectorAll<HTMLButtonElement>('.af-tc-partner-chip')].find(b => b.textContent === 'Matt Jones')!)
+    fireEvent.click(screen.getAllByLabelText('Add Same Name')[0])
+    await act(async () => fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!))
+    const rows = [...container.querySelectorAll<HTMLElement>('.af-tc-row')].filter(row => row.querySelector('.af-tc-remove'))
+    expect(rows.find(row => row.querySelector('.af-tc-pos')?.textContent === 'DL')?.querySelector('.af-tc-row-value')?.textContent).toContain('129')
+    expect(rows.find(row => row.querySelector('.af-tc-pos')?.textContent === 'DB')?.querySelector('.af-tc-row-value')?.textContent).toContain('550')
+  })
   it('pauses whole-route polling while a proposal is being edited and releases on unmount', () => {
     expect(routeRefreshClaimed()).toBe(false)
     const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)

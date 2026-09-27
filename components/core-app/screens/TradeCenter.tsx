@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
@@ -197,9 +198,26 @@ type ValueAdjustment = { kind: 'scoring' | 'need'; factor: number; reason: strin
  * so a team defense read "0" after Analyze — and was not counted as unpriced.
  */
 type EngineLine = Line & {
+  playerId?: string | null
+  enrichmentPlayerId?: string | null
   unpriced?: boolean
   sport?: string | null
   valueAdjustments?: ValueAdjustment[]
+}
+
+function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines: EngineLine[]) {
+  const compatible = lines.filter(line => valuePositionsAgree(asset.position, line.position))
+  const sleeperId = asset.providerIdentity?.provider === 'sleeper' ? asset.providerIdentity.id : null
+  const exact = compatible.filter(line =>
+    (asset.playerId && line.playerId === asset.playerId) ||
+    (sleeperId && line.enrichmentPlayerId === sleeperId),
+  )
+  if (exact.length) return exact.length === 1 ? exact[0] : undefined
+  // Older responses have no IDs. A unique compatible name on this side is safe;
+  // a conflicting verified provider ID must never fall through to a name.
+  const named = compatible.filter(line => line.name.toLowerCase() === asset.name.toLowerCase() &&
+    !(sleeperId && line.enrichmentPlayerId && line.enrichmentPlayerId !== sleeperId))
+  return named.length === 1 ? named[0] : undefined
 }
 
 type AnalyzeResult = {
@@ -596,11 +614,11 @@ export function TradeCenter(props: {
    */
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
 
-  /** The engine's lines, keyed by name, merged onto what was added. */
+  /** FAAB labels are identical on both sides; players resolve by identity per side. */
   const pricedBy = useMemo(() => {
     const m = new Map<string, EngineLine>()
     for (const l of [...(result?.players?.give ?? []), ...(result?.players?.get ?? [])]) {
-      m.set(l.name.toLowerCase(), l)
+      if (l.position === 'FAAB' || l.name.toLowerCase().startsWith('faab $')) m.set(l.name.toLowerCase(), l)
     }
     return m
   }, [result])
@@ -620,7 +638,7 @@ export function TradeCenter(props: {
       return assets.map((a) => {
         const engineAt = valuedByVerdict(a) ? engineLines?.[valuedIndex++] : undefined
         if (a.kind === 'player') {
-          const engine = pricedBy.get(a.name.toLowerCase())
+          const engine = playerEngineLine(a, engineLines ?? [])
           /*
            * Engine price wins; the list value is the fallback. An engine line flagged `unpriced`
            * wins too — as "no price": its 0 is a placeholder, and the verdict was computed without
