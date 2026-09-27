@@ -11,6 +11,14 @@ const input: Parameters<typeof buildTradeIntelligence>[0] = {
 }
 
 describe('trade commentary and counter targets', () => {
+  it('describes confidence as data quality and does not claim fallback prices for a context gap', () => {
+    const result = buildTradeIntelligence({ ...input, confidenceLabel: 'MEDIUM', confidenceScore: 85,
+      degraded: true, dataGaps: ['Missing roster context'] })
+    expect(result.fairnessVerdict).toContain('MEDIUM (quality score 85/100)')
+    expect(result.fairnessVerdict).not.toContain('Confidence 85%')
+    expect(result.tradeWarnings.join(' ')).not.toContain('fallback pricing')
+    expect(result.tradeWarnings.join(' ')).toContain('Missing roster context')
+  })
   it('withholds fairness, confidence and balancing advice even when legacy drivers claim a strong win', () => {
     const result = buildTradeIntelligence({ ...input, proposalGraded: false, strategy: 'contender',
       drivers: { lean: 'Strong Win' }, negotiationToolkit: { counters: [{ description: 'Ask for a star to make it fair' }] },

@@ -199,7 +199,7 @@ function PlayerHalf({
             title={
               cell.unavailable === 'bye'
                 ? 'His team is not playing this week. A starter on bye is a guaranteed zero.'
-                : 'Ruled out this week. A starter who is out is a guaranteed zero.'
+                : 'Unavailable this week. In Best Ball, another eligible roster player can replace this player automatically.'
             }
           >
             {cell.unavailable === 'bye' ? 'BYE' : 'OUT'}
@@ -261,6 +261,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
           ? `Live points as ${data.playerScoring.data.source} scored them — ${data.playerScoring.data.playersScored} players on file.`
           : data.playerScoring.reason}
       </p>
+      {data.league.bestBall ? <p className="af-mu-note">Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.</p> : null}
 
       <div className="af-mu-board" role="table" aria-label="Head to head, slot by slot">
         <div className="af-mu-board-head" role="row">
@@ -287,7 +288,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
 
         <div className="af-mu-board-foot" role="row">
           <span className="af-mu-foot-total af-num">{yours.total.toFixed(1)}</span>
-          <span className="af-mu-foot-label af-label">{live ? 'total' : 'projected'}</span>
+          <span className="af-mu-foot-label af-label">{data.league.bestBall ? 'listed total' : live ? 'total' : 'projected'}</span>
           <span className="af-mu-foot-total af-mu-foot-total--right af-num">
             {theirs.total.toFixed(1)}
           </span>

@@ -70,6 +70,7 @@ type WireUser = {
 type WireRoster = { roster_id: number; owner_id: string | null }
 type WireBracketNode = { t1?: number | null; t2?: number | null }
 type WireTransaction = {
+  status_updated?: number
   transaction_id: string
   type: string
   status: string
@@ -704,7 +705,7 @@ async function buildTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPay
       id,
       season: seasonData.season,
       week: Math.min(Math.max(t.leg || 1, 1), MAX_WEEKS),
-      createdIso: new Date(t.created).toISOString(),
+      createdIso: new Date(t.status_updated && t.status_updated > 0 ? t.status_updated : t.created).toISOString(),
       multiTeam: (t.roster_ids ?? []).length > 2,
       tie: maxAbs <= TIE_BAND,
       sides: gradedSides,

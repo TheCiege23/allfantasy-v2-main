@@ -72,6 +72,7 @@ export interface SleeperMatchupRaw {
 }
 
 export interface SleeperTransactionRaw {
+  status_updated?: number
   transaction_id: string
   type: string
   status: string

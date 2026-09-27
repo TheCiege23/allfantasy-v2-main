@@ -109,7 +109,8 @@ describe('projection coverage', () => {
   it('never claims college projections do not exist', () => {
     // 10,188 computed NCAAF rows existed when this was written. Copy that denies them is false.
     const reason = projectionCoverageFor('NCAAF').reason!.toLowerCase()
-    expect(reason).toContain('season-long')
+    expect(reason).toContain('per-game baseline')
+    expect(reason).toContain('not season totals')
     expect(reason).not.toMatch(/no projections (exist|are available)/)
   })
 

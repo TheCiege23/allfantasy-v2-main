@@ -33,7 +33,10 @@ import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligib
  *   - `createLeagueTradeGrader` — for everyone else: loads the league and its chart ONCE, then
  *     prices and grades as many deals as the caller has (a panel of pending offers) on that chart.
  *
- * 🛑 ROSTER NEED IS THE VIEWER'S, AND ONLY WHEN THE VIEWER IS THE `give` SIDE. The need model asks
+ * Roster fit is separate from the shared trade-value letter. Completed trades cannot reconstruct
+ * the pre-trade roster, so changing the letter with current need made calculator C/C become email
+ * D/B. Every letter now uses chart + league scoring; personal utility remains explicit below it.
+ * ROSTER NEED IS THE VIEWER'S, AND ONLY WHEN THE VIEWER IS THE `give` SIDE. The need model asks
  * what each asset is worth to the viewer's own roster (`loadViewerNeedFactors`), so it is priced
  * only when the caller says the deal is seen from the viewer's side. A commissioner looking at two
  * other managers' offer gets the league's chart and scoring, no need, and `needGap` says why.
@@ -73,7 +76,7 @@ export async function gradePricedSides(args: {
   /** Already through `applyChartTePremium`. Index-aligned with the lines. */
   givePriced: PricedAsset[]
   getPriced: PricedAsset[]
-  /** Price roster need for the viewer, who is the `give` side. Null = not the viewer's deal. */
+  /** Estimate separate roster utility for the viewer, who is the `give` side. */
   need: NeedScope | null
   /** Why this deal cannot be graded at all, when the caller already knows (e.g. no league). */
   withheld?: string | null
@@ -108,10 +111,26 @@ export async function gradePricedSides(args: {
     getPriced: args.getPriced,
     league: chart.marketCtx ? { scoringSettings: chart.marketCtx.scoring.settings } : null,
     chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
-    needFactors,
+    needFactors: null,
   })
 
+  const rosterFitGrade = needFactors && !needFactors.gap
+    ? gradeOnLeagueValue({
+        giveLines: args.giveLines,
+        getLines: args.getLines,
+        givePriced: args.givePriced,
+        getPriced: args.getPriced,
+        league: chart.marketCtx ? { scoringSettings: chart.marketCtx.scoring.settings } : null,
+        chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
+        needFactors,
+      })
+    : null
+
   const placeholder = [...leagueGrade.giveLines, ...leagueGrade.getLines].find((l) => l.dataSource === 'placeholder')
+  leagueGrade.valueBasis.needGap = args.need ? needFactors?.gap ?? null : null
+  if (chart.valuationGaps?.length) {
+    leagueGrade.valueBasis.label += ` — scope: chart and league scoring only. ${chart.valuationGaps.join(' ')}`
+  }
   const withheld =
     args.withheld ??
     proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
@@ -130,12 +149,26 @@ export async function gradePricedSides(args: {
     basis: leagueGrade.valueBasis.label,
     scoringApplied: leagueGrade.valueBasis.scoringAdjusted,
     needApplied: leagueGrade.valueBasis.needAdjusted,
-    needGap: args.need ? leagueGrade.valueBasis.needGap : null,
+    needGap: args.need ? needFactors?.gap ?? null : null,
     lines: linesOf(leagueGrade),
     moves: movesOf(leagueGrade),
     withheld,
   })
-  return { leagueGrade, grade, needFactors }
+  return {
+    leagueGrade,
+    grade: grade.graded ? {
+      ...grade,
+      rosterFit: rosterFitGrade && rosterFitGrade.totals.unpriced === 0 ? {
+        giveValue: rosterFitGrade.totals.giveLeague,
+        getValue: rosterFitGrade.totals.getLeague,
+        percentDiff: rosterFitGrade.totals.percentDiff,
+        moves: movesOf(rosterFitGrade).filter((move) =>
+          rosterFitGrade[move.side === 'give' ? 'giveLines' : 'getLines'].some((line) =>
+            line.name === move.name && line.valueAdjustments?.some((adjustment) => adjustment.kind === 'need'))),
+      } : null,
+    } : grade,
+    needFactors,
+  }
 }
 
 export type LeagueTradeGrader = {
@@ -145,7 +178,7 @@ export type LeagueTradeGrader = {
   leagueType: LeagueTypeBasis
   /**
    * Price and grade one deal on this league's chart. `give` is what the graded side sends.
-   * `viewerSide: true` says that side is the viewer's roster, which is what lets roster need count.
+   * `viewerSide: true` adds personal roster utility separately; it does not change the letter.
    */
   grade(args: { give: TradeAssetInput[]; get: TradeAssetInput[]; viewerSide: boolean }): Promise<TradeGradeView>
 }
@@ -288,8 +321,7 @@ export async function loadNativePlayerNames(
         .filter((i) => {
           const type = String(i.itemType ?? 'player').toLowerCase()
           if (type.includes('pick') || type.includes('faab')) return false
-          const m = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? (i.metadata as Record<string, unknown>) : {}
-          return !(typeof m.playerName === 'string' && m.playerName.trim()) && !(typeof m.name === 'string' && m.name.trim())
+          return true
         })
         .map((i) => i.itemReference)
         .filter((id): id is string => typeof id === 'string' && id.length > 0),

@@ -6,10 +6,19 @@ import {
 } from '@/lib/decision-os/trade/tradeGradeInputs'
 
 describe('pending-offer assets → the one grader', () => {
-  it('prices players by NAME — a Sleeper id handed to getPlayer queues a whole-sport import', () => {
+  it('keeps a name-only input when no provider identity was supplied', () => {
     const r = gradeInputsFromPending([{ playerName: 'Puka Nacua', isPick: false }])
     expect(r.assets).toEqual([{ kind: 'player', name: 'Puka Nacua' }])
     expect(JSON.stringify(r.assets)).not.toContain('playerId')
+  })
+
+  it('retains distinct provider namespaces and position hints', () => {
+    const asset = { playerName: 'Justin Jefferson', playerId: '42', position: 'LB', team: 'CLE' }
+    expect(gradeInputsFromPending([asset], 'sleeper').assets).toEqual([
+      { kind: 'player', name: 'Justin Jefferson', providerIdentity: { provider: 'sleeper', id: '42', position: 'LB', team: 'CLE' } },
+    ])
+    expect(gradeInputsFromPending([asset], 'yahoo').assets[0]).toMatchObject({ providerIdentity: { provider: 'yahoo', id: '42' } })
+    expect(gradeInputsFromPending([asset]).assets[0]).not.toHaveProperty('providerIdentity')
   })
 
   it('a pick with its year and round is a pick; one without is named, not dropped', () => {
@@ -61,7 +70,13 @@ describe('native trade items → the one grader', () => {
       [{ itemType: 'player', itemReference: '4984', metadata: null }],
       (id) => (id === '4984' ? 'Josh Allen' : null),
     )
-    expect(r.assets).toEqual([{ kind: 'player', name: 'Josh Allen' }])
+    expect(r.assets).toEqual([{ kind: 'player', name: 'Josh Allen', providerIdentity: { provider: 'sleeper', id: '4984' } }])
+  })
+
+  it('prefers the verified native identity over stale metadata and preserves its ID', () => {
+    const r = gradeInputsFromNativeItems([{ itemType: 'player', itemReference: '42', metadata: { playerName: 'Wrong Name' } }],
+      () => 'Real Defender')
+    expect(r.assets[0]).toEqual({ kind: 'player', name: 'Real Defender', providerIdentity: { provider: 'sleeper', id: '42' } })
   })
 
   it('reads the season and round a future-pick reference carries', () => {

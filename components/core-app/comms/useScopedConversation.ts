@@ -23,7 +23,7 @@ export function useScopedConversation<T extends { id: string; role: string; text
     setLoadedKey(storageKey)
   }, [storageKey])
   useEffect(() => {
-    if (loadedKey === storageKey && storageKey) { try { sessionStorage.setItem(storageKey, JSON.stringify(all)) } catch { /* Private mode or storage quota: keep the in-memory conversation. */ } }
+    if (loadedKey === storageKey && storageKey) { try { sessionStorage.setItem(storageKey, JSON.stringify(all, (key, value) => key === 'imagePreview' && typeof value === 'string' && !value.startsWith('/api/chat/chimmy?attachment=') ? undefined : value)) } catch { /* Private mode or storage quota: keep the in-memory conversation. */ } }
   }, [all, loadedKey, storageKey])
 
   /*
@@ -131,6 +131,7 @@ export function useScopedConversation<T extends { id: string; role: string; text
     return { ...previous, [target]: { ...state, turns: [...state.turns, ...added].slice(-80) } }
   }), [scope])
   return {
+    ready: loadedKey === storageKey,
     turns: loadedKey === storageKey ? all[scope]?.turns ?? [] : [],
     draft: loadedKey === storageKey ? all[scope]?.draft ?? '' : '',
     setTurns,

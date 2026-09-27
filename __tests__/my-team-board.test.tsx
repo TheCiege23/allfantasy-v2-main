@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { render, within } from '@testing-library/react'
 
 import { MyTeamBoard } from '@/components/core-app/MyTeamBoard'
+import { PickALeague } from '@/components/core-app/PickALeague'
 import { isAtRisk, isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
@@ -57,6 +58,41 @@ function pulse(over: Partial<MyTeamPulse> = {}): MyTeamPulse {
     ...over,
   }
 }
+
+describe('paused league accounting', () => {
+  it('reports checked automatic teams separately from excluded inactive teams', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({ considered: 12, checked: 3, automatic: 2, notChecked: { noRoster: 0, noLineup: 0, automatic: 0, inactive: 9 } })} now={NOW} allHref={ALL_HREF} />)
+    expect(container.textContent).toContain('2 Best Ball teams use automatic lineups')
+    expect(container.textContent).not.toContain('0 Best Ball teams')
+    expect(container.textContent).not.toContain('12 teams read')
+  })
+  it('does not turn an inventory-only picker into a healthy lineup verdict', () => {
+    const { container } = render(<PickALeague tabKey="my-team" title="My team" blurb="Choose a league" issues={[]} leagues={[{ id: 'l1', name: 'My league' }]} showQueue={false} />)
+    expect(container.textContent).not.toContain('Nothing in your leagues is waiting')
+    expect(container.textContent).not.toContain('Needs you first')
+    expect(within(container).getByRole('heading', { name: 'Pick a league' })).toBeTruthy()
+    expect(within(container).getByRole('link', { name: 'My league' }).getAttribute('href')).toBe('/core/my-team?league=l1')
+  })
+  it('excludes paused inventory from unreadable and hidden active-team counts', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 65, paused: 1, checked: 57,
+      set: [row(), row({ leagueId: 'l2' })], setTotal: 57,
+      notChecked: { noRoster: 0, noLineup: 7 },
+    })} now={NOW} allHref={ALL_HREF} />)
+    const text = container.textContent?.replace(/\s+/g, ' ')
+    expect(text).toContain('57 of 64 active teams read')
+    expect(text).toContain('7 of your 64 active claimed teams could not be checked')
+    expect(text).toContain('62 more leagues are either set or could not be read')
+    expect(within(container).getByRole('link', { name: 'View all 65 →' }).getAttribute('href')).toBe(ALL_HREF)
+  })
+  it('does not claim paused leagues are visible when all active leagues are shown', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 2, paused: 1, set: [row()], setTotal: 1,
+    })} now={NOW} allHref={ALL_HREF} />)
+    expect(container.textContent).toContain('Every active league is on this board.')
+    expect(container.textContent).not.toContain('Every league you hold is on this board.')
+  })
+})
 
 /*
  * ⚠ THIS BLOCK EXISTS BECAUSE THE FIRST DRAFT SHIPPED THE BUG IT ASSERTS
@@ -324,7 +360,7 @@ describe('MyTeamBoard', () => {
     expect(cta?.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('says Locked once the first kickoff has passed', () => {
+  it('asks for individual player locks after a displayed deadline passes, without locking the whole lineup', () => {
     const { container } = render(
       <MyTeamBoard
         allHref={ALL_HREF}
@@ -335,7 +371,8 @@ describe('MyTeamBoard', () => {
         })}
       />,
     )
-    expect(container.textContent ?? '').toContain('Locked')
+    expect(container.textContent ?? '').toContain('Check player locks')
+    expect(container.textContent ?? '').not.toContain('Locked')
   })
 
   it('renders an em dash, not a zero, when no kickoff could be read', () => {
@@ -463,4 +500,10 @@ describe('the board ranks only what it actually ordered', () => {
     )
     expect(ranksOf(container)).toEqual(['01', '02'])
   })
+})
+
+it('does not call additional urgent teams set when the top-ten payload is truncated', () => {
+  const { container } = render(<MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: Array.from({ length: 10 }, (_, i) => row({ leagueId: `urgent-${i}`, empty: 1, severity: 1 })), needsTotal: 12, considered: 65, checked: 65 })} />)
+  expect(container.textContent).toContain('55 more leagues include 2 more teams needing lineup review')
+  expect(container.textContent).not.toContain('55 more leagues are set')
 })

@@ -15,13 +15,8 @@
  * to bother, and every reader downstream had no way to find out. This module is the shared
  * definition site so the writer and the readers cannot disagree.
  *
- * ⚠ "NO WEEKLY FEED" IS NOT "NO PROJECTIONS". Read `seasonLongAvailable` before writing any
- * copy. Measured 2026-08-30 in production, `AFProjectionSnapshot` holds 10,188 NCAAF rows
- * computed that morning — MORE than the NFL's 1,576 — because that table is COMPUTED from
- * `fantasy_stat_lines` (NCAAF has 13,433) rather than imported from a vendor. They are
- * season-long (`week` is null for every row, in both sports), so they cannot answer "what
- * will he do this Saturday", but they are real and they are current. Telling a college
- * manager "no projections exist" would be false.
+ * Computed baseline rows are available for college. afProjection is points PER GAME;
+ * rosProjection is a separate total. A null week must never be interpreted as season-total units.
  */
 
 /** The shape both callers and tests destructure. */
@@ -53,9 +48,8 @@ const SEASON_LONG_SPORTS = new Set(['NFL', 'NCAAF', 'NCAAB', 'NBA', 'NHL', 'MLB'
 
 const NO_WEEKLY_FEED_REASON: Record<string, string> = {
   NCAAF:
-    'No weekly college projection feed exists — every provider we carry fails for college ' +
-    'projections and CollegeFootballData returns 404. Season-long AllFantasy projections are ' +
-    'computed from real college stat lines and are shown instead.',
+    'No weekly college vendor projection feed is connected. AllFantasy per-game baseline projections ' +
+    'are computed from college stat lines and shown instead; these are not season totals or opponent-specific weekly forecasts.',
 }
 
 const GENERIC_NO_WEEKLY_FEED =

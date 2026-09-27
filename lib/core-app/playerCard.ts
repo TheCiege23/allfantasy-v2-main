@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { memberLeaguePlatformIdsFor } from '@/lib/league-access'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { injuryNameVariants } from './injuryNames'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -11,9 +12,12 @@ import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
+import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
 import type { CoreDepthAccess } from './coreDepthAccess'
+import { gradeArchivedTradeRows, type ArchivedTradeGrade } from './archivedTradeGrade'
+import { mirrorTradeGrade, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 /**
  * The player card pop-up — STATE 6 / STATE 7 of the 2026-09-07 design handoff
@@ -116,6 +120,16 @@ export type PlayerCardTrade = {
   acquired: string[]
   sent: string[]
   picks: string[]
+  /**
+   * THE grade (2026-09-27), from the side that ACQUIRED this player — the same letter the /core
+   * Trades list shows for this trade (both read `archivedTradeGrade.ts`). `acquirerLetter` is theirs,
+   * `senderLetter` the other side's (the exact mirror). Absent when no AF league row was in hand to
+   * grade on; `withheld` carries the reason instead of a letter.
+   */
+  grade?:
+    | { graded: true; acquirerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; senderLetter: 'A' | 'B' | 'C' | 'D' | 'F'; got: number; gave: number }
+    | { graded: false; withheld: string }
+    | null
 }
 
 export type PlayerCardComp = {
@@ -518,7 +532,7 @@ async function loadComps(
  * week with no fixtures for ANYBODY is skipped rather than reported as a bye.
  * `buildNextGameMap` does the four-rows-per-fixture reconciliation.
  */
-async function loadSchedule(
+export async function loadSchedule(
   team: string | null,
   season: number,
   fromWeek: number,
@@ -541,7 +555,9 @@ async function loadSchedule(
         sport: SCHEDULE_SPORT,
         season,
         week: { gte: fromWeek, lte: lastWeek },
-        OR: [{ seasonType: 'regular' }, { seasonType: null }],
+        // An untyped preseason game can share the regular-season week number.
+        // Only confirmed regular fixtures can establish an opponent or a bye.
+        seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season', 'regularseason'] },
       },
       select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true, week: true },
     })
@@ -569,6 +585,18 @@ async function loadSchedule(
         projection: projectedWeek === w ? projection : null,
       })
     } else {
+      // Match the roster's coverage gate; a partial week is not proof of a bye.
+      const playing = new Set<string>()
+      const fixtures = new Set<string>()
+      for (const row of inWeek) {
+        const home = normalizeTeamAbbrev(row.homeTeam)
+        const away = normalizeTeamAbbrev(row.awayTeam)
+        if (!home || !away) continue
+        playing.add(home)
+        playing.add(away)
+        fixtures.add([home, away].sort().join('@'))
+      }
+      if (playing.has(club) || fixtures.size < MIN_PLAUSIBLE_SLATE) continue
       if (bye == null) bye = w
       weeks.push({ week: w, opponent: null, home: false, bye: true, projection: null })
     }
@@ -607,7 +635,11 @@ async function loadSchedule(
  * ⚠ AN EMPTY OR ABSENT VIEWER SET RETURNS BEFORE QUERYING. `{ in: [] }` would also match nothing,
  * but a guard that holds only by that semantic is one refactor away from an unscoped read.
  */
-export type TradeScope = { leagueId: string } | { viewerLeagueIds: string[] | null }
+export type TradeScope =
+  /** `afLeagueId`: the AllFantasy row to GRADE on (its chart and scoring). Absent: listed, not graded. */
+  | { leagueId: string; afLeagueId?: string | null }
+  /** `viewerUserId`: whose own AF copy of each league the trades are graded on. */
+  | { viewerLeagueIds: string[] | null; viewerUserId?: string | null }
 
 export async function loadTrades(sleeperId: string | null, scope: TradeScope): Promise<SectionState<PlayerCardTrade[]>> {
   if (!sleeperId) return unavailable('No Sleeper id on file, so trades cannot be matched to this player.')
@@ -642,6 +674,8 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
         playersReceived: true,
         picksGiven: true,
         picksReceived: true,
+        // For the drafted-pick match the grade makes — see `archivedTradeGrade.ts`.
+        partnerRosterId: true,
         history: { select: { sleeperLeagueId: true } },
       },
     })
@@ -703,7 +737,55 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
         })
       : []
 
-  const out: PlayerCardTrade[] = folded.slice(0, TRADE_COUNT).map((r) => {
+  /*
+   * 🛑 THE GRADE (2026-09-27). The card listed who got whom and never said whether it was a good
+   * deal. Each visible trade is graded by `archivedTradeGrade.ts` — the SAME function as the /core
+   * Trades list, so a trade reads one letter on both — on the AF row we are entitled to use:
+   *   { leagueId }        the row the route already membership-checked (`afLeagueId`)
+   *   { viewerLeagueIds } the VIEWER's own copy of each league — one Sleeper league is one AF row per
+   *                       importer, each with its own settings, and grading another importer's row can
+   *                       read another letter. No viewer, no row, no grade: listed, never guessed.
+   * A grading failure costs the letter, never the list.
+   */
+  const visible = folded.slice(0, TRADE_COUNT)
+  const afRowFor = new Map<string, string>()
+  if ('leagueId' in scope) {
+    if (scope.afLeagueId) afRowFor.set(scope.leagueId, scope.afLeagueId)
+  } else if (scope.viewerUserId && leagueIds.length > 0) {
+    const own = await prisma.league
+      .findMany({
+        where: {
+          platformLeagueId: { in: leagueIds },
+          // The SAME four paths `memberLeaguePlatformIdsFor` lists the viewer's leagues by — a league
+          // the card lists must be one it can grade.
+          OR: [
+            { userId: scope.viewerUserId },
+            { redraftMembers: { some: { userId: scope.viewerUserId } } },
+            { rosters: { some: { platformUserId: scope.viewerUserId } } },
+            { teams: { some: { claimedByUserId: scope.viewerUserId } } },
+          ],
+        },
+        select: { id: true, platformLeagueId: true },
+      })
+      .catch(() => [] as Array<{ id: string; platformLeagueId: string | null }>)
+    for (const l of own) if (l.platformLeagueId && !afRowFor.has(l.platformLeagueId)) afRowFor.set(l.platformLeagueId, l.id)
+  }
+  const gradeByTx = new Map<string, TradeGradeView>()
+  await Promise.all(
+    [...afRowFor].map(async ([platformLeagueId, afLeagueId]) => {
+      const rowsHere = visible.filter((r) => r.history?.sleeperLeagueId === platformLeagueId)
+      if (rowsHere.length === 0) return
+      const graded = await gradeArchivedTradeRows({
+        afLeagueId,
+        platformLeagueId,
+        rows: rowsHere,
+        nameOf: (id) => nameOf.get(id)?.trim() || null,
+      }).catch(() => new Map<string, ArchivedTradeGrade>())
+      for (const [tx, g] of graded) gradeByTx.set(tx, g.grade)
+    }),
+  )
+
+  const out: PlayerCardTrade[] = visible.map((r) => {
     /*
      * Orient the row so it reads from the perspective of the side that GOT him.
      *
@@ -722,6 +804,13 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
     const gotHim = ids(r.playersReceived).includes(sleeperId)
     const acquiredIds = gotHim ? ids(r.playersReceived) : gave
     const sentIds = gotHim ? gave : ids(r.playersReceived)
+    /*
+     * The grade is taken from the ROW's point of view; the card reads from the side that got him.
+     * Same orientation rule as above — when the surviving row is the other mirror, mirror the grade
+     * (exact: `mirrorTradeGrade`), so the dedupe's non-determinism cannot flip a letter.
+     */
+    const rowGrade = gradeByTx.get(r.transactionId)
+    const view = rowGrade ? (gotHim ? rowGrade : mirrorTradeGrade(rowGrade)) : null
 
     return {
       transactionId: r.transactionId,
@@ -731,6 +820,11 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
       acquired: acquiredIds.flatMap((id) => (nameOf.has(id) ? [nameOf.get(id)!] : [])),
       sent: sentIds.flatMap((id) => (nameOf.has(id) ? [nameOf.get(id)!] : [])),
       picks: [...pickLabels(r.picksGiven), ...pickLabels(r.picksReceived)],
+      grade: !view
+        ? null
+        : view.graded
+          ? { graded: true, acquirerLetter: view.letter, senderLetter: view.partnerLetter, got: view.getValue, gave: view.giveValue }
+          : { graded: false, withheld: view.reason },
     }
   })
 
@@ -773,7 +867,8 @@ const NON_DESIGNATIONS = new Set(['active', 'na', 'healthy', ''])
 export async function loadInjury(
   sleeperId: string | null,
   name: string,
-  sport: string
+  sport: string,
+  team?: string | null,
 ): Promise<SectionState<PlayerCardInjury>> {
   const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
 
@@ -794,7 +889,7 @@ export async function loadInjury(
              */
             OR: [
               ...(sleeperId ? [{ playerId: sleeperId }] : []),
-              { playerName: { equals: name, mode: 'insensitive' as const } },
+              { playerName: { in: injuryNameVariants(name), mode: 'insensitive' as const } },
             ],
           },
           {
@@ -805,11 +900,13 @@ export async function loadInjury(
       },
       orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
       take: 5,
-      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true },
+      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true, team: true },
     })
     .catch(() => [])
 
-  const hit = rows.find((r) => r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
+  const club = normalizeTeamAbbrev(team)
+  const hit = rows.find((r) => (!club || !r.team || normalizeTeamAbbrev(r.team) === club)
+    && r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
   if (!hit || !hit.status) {
     return unavailable(
       `No injury designation reported in the last ${INJURY_WINDOW_DAYS} days.`
@@ -1232,7 +1329,7 @@ async function loadLeague(
     }
   }
 
-  const leagueTrades = league.platformLeagueId ? await loadTrades(sleeperId, { leagueId: league.platformLeagueId }) : null
+  const leagueTrades = league.platformLeagueId ? await loadTrades(sleeperId, { leagueId: league.platformLeagueId, afLeagueId: league.id }) : null
 
   /*
    * The playoff window, from THIS league's settings rather than the design's
@@ -1413,7 +1510,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       : Promise.resolve(new Map()),
     loadNews(player.name, player.sport),
     loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
-    loadInjury(player.sleeperId, player.name, player.sport),
+    loadInjury(player.sleeperId, player.name, player.sport, player.team),
     /*
      * ⚠ NOT INSIDE `loadInjury`. The stamp annotates the injury slot in BOTH
      * states, including the unavailable one — and `SectionState`'s unavailable
@@ -1424,7 +1521,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     // The viewer's own leagues only — the route does not require a session.
     memberLeaguePlatformIdsFor(req.userId ?? null)
       .catch(() => [] as string[])
-      .then((viewerLeagueIds) => loadTrades(player.sleeperId, { viewerLeagueIds })),
+      .then((viewerLeagueIds) => loadTrades(player.sleeperId, { viewerLeagueIds, viewerUserId: req.userId ?? null })),
     req.leagueId
       ? loadLeague(
           req.leagueId,

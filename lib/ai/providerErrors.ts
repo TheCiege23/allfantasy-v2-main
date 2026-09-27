@@ -4,6 +4,8 @@
  * next provider, or halt (e.g. content policy refusal).
  */
 
+import { isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
+
 export type ProviderErrorCategory =
   | 'billing'        // credits exhausted, payment required
   | 'rate_limit'     // 429 / quota exceeded
@@ -12,6 +14,7 @@ export type ProviderErrorCategory =
   | 'unavailable'    // no API key, client not configured
   | 'timeout'        // network / connection timeout
   | 'content_filter' // safety / policy refusal — NOT fallback eligible
+  | 'spend_disabled' // AI_FEATURES_ENABLED kill switch — NOT fallback eligible
   | 'auth'           // invalid API key (provider-level)
   | 'unknown'
 
@@ -41,6 +44,14 @@ export function normalizeProviderError(error: unknown): NormalizedProviderError 
   const message = getMessage(error)
   const lower = message.toLowerCase()
   const code = String((error as Record<string, unknown>)?.code ?? '').toLowerCase()
+
+  // The AI spend kill switch — NOT fallback eligible. It is one global switch, so every other provider
+  // is off too; falling through would only reach a provider whose own guard was missing (the router's
+  // inline Anthropic adapter was exactly that until 2026-09-27). Checked first: the refusal carries no
+  // HTTP status, so left to the rules below it lands in `unknown`, which falls back.
+  if (isAiSpendDisabledError(error)) {
+    return { category: 'spend_disabled', status, message, fallbackEligible: false }
+  }
 
   // Content filter / safety — NOT fallback eligible (other providers would also refuse)
   if (

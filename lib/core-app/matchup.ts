@@ -18,6 +18,8 @@ import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { isBestBallSettings } from './lineupMode'
+import { starterGameStates } from './matchupGameState'
 
 /**
  * A crest we can actually render, or null.
@@ -167,6 +169,7 @@ export type MatchupData = {
     id: string
     name: string
     platform: string
+    bestBall?: boolean
     /** The league crest, when the platform published one. */
     logoUrl: string | null
     /**
@@ -264,6 +267,7 @@ export async function getMatchupData(
       id: league.id,
       name: leagueDisplayName(league.name),
       platform,
+      bestBall: league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings),
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
       sourceLink: resolveSourceLink({
         platform: league.platform,
@@ -312,7 +316,7 @@ export async function getMatchupData(
     },
     yetToPlay: {
       available: false as const,
-      reason: 'requires per-player game state, which is not ingested for imported leagues',
+        reason: 'Starter game states are unavailable until both lineups can be read.',
     },
   }
 
@@ -334,7 +338,7 @@ export async function getMatchupData(
    * but offering "your lineup" for a league where we cannot find your team would still
    * be a guess. Verified-only: no league-page fallback under a lineup label.
    */
-  base.league.lineupLink = myTeam?.externalId
+  base.league.lineupLink = myTeam?.externalId && !(league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings))
     ? verifiedHandoff(
         {
           id: league.id,
@@ -543,6 +547,29 @@ export async function getMatchupData(
     if (row) identityBy.set(rosterId, row)
   }
   const actualBy = new Map(scoreRows.map((r) => [r.playerId, r.points]))
+  const games = await prisma.sportsGame.findMany({
+    where: { sport: sport ?? 'NFL', season: latest.seasonYear, week: latest.week, OR: [{ seasonType: 'regular' }, { seasonType: null }] },
+    select: { homeTeam: true, awayTeam: true, status: true, startTime: true, fetchedAt: true, seasonType: true },
+    take: 400,
+  }).catch(() => [])
+  const states = starterGameStates(identityBy, games)
+  const counts = { upcoming: 0, live: 0, final: 0, unknown: 0 }
+  for (const side of sideProjections ? [sideProjections.you, sideProjections.opponent] : []) {
+    for (const slot of side.lineup) {
+      if (slot.playerId === EMPTY_SLOT) continue
+      const state = slot.unavailable ? 'final' : states.get(slot.playerId) ?? 'unknown'
+      counts[state]++
+      const player = side.starters.find((p) => p.playerId === slot.playerId)
+      if (player) player.isFinal = state === 'final'
+    }
+  }
+  if (sideProjections) base.yetToPlay.reason = `${counts.upcoming} yet to start · ${counts.live} in progress · ${counts.final} finished or unavailable${counts.unknown ? ` · ${counts.unknown} game states unavailable` : ''}`
+  const bestBall = league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)
+  const forecastReason = bestBall
+    ? 'Best Ball selects eligible bench players automatically. Forecasts cannot be calculated from the listed starters alone.'
+    : counts.unknown > 0
+      ? 'Some starter game states are unavailable, so remaining points and win probability cannot be verified.'
+      : null
 
   /*
    * ── Projected final and win probability, from what is on the board ─────
@@ -558,7 +585,7 @@ export async function getMatchupData(
    */
   const live = matchupLivePoints(mine, opponentRow, scoreRows.length ? actualBy : null)
 
-  const projectedFinal: MatchupData['projectedFinal'] = !anyProjected
+  const projectedFinal: MatchupData['projectedFinal'] = forecastReason ? { available: false, reason: forecastReason } : !anyProjected
     ? {
         available: false,
         reason: sideProjections
@@ -583,8 +610,12 @@ export async function getMatchupData(
         }
       })()
 
-  const winProbability: MatchupData['winProbability'] = sideProjections
-    ? winProbabilityFor(sideProjections, live)
+  const winProbability: MatchupData['winProbability'] = forecastReason ? { available: false, reason: forecastReason } : sideProjections
+    ? (() => {
+        const result = winProbabilityFor(sideProjections, live)
+        if (result.available) result.data.detail = `${base.yetToPlay.reason} · ${result.data.detail.replace(/starters? still to play/, 'starters with scoring remaining')}`
+        return result
+      })()
     : {
         available: false,
         reason: 'we could not match both sides of this matchup to an imported roster',

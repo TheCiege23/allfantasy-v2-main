@@ -1,0 +1,90 @@
+import 'server-only'
+
+import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
+import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
+import { pickAssets, type TradeAsset } from './tradePicks'
+
+/**
+ * THE grade for archived `LeagueTrade` rows — shared by the /core Trades grade list and the player
+ * card (2026-09-27), so one trade cannot read one letter in the list and another on the card.
+ *
+ * Extracted from `lib/core-app/trades.ts` rather than copied: this repo has already paid for two
+ * implementations of one grading rule once. Behaviour is unchanged from that list:
+ *
+ *  - graded from the ROW's point of view (what it received against what it gave), on this league's
+ *    own chart, TODAY, without roster need — the trade has happened;
+ *  - 🛑 a USED pick is graded as the player drafted with it (Guap's ruling, 2026-09-25), named from
+ *    the league's graded ledger (`archivedPickOutcomes.ts`), one read for the rows that moved a pick;
+ *  - any asset that cannot be priced withholds the letter. Nothing is priced as zero.
+ */
+
+/** The `LeagueTrade` columns this reads. */
+export type ArchivedTradeRow = {
+  transactionId: string
+  playersGiven: unknown
+  playersReceived: unknown
+  picksGiven: unknown
+  picksReceived: unknown
+  /** Which side of the graded ledger is the OTHER one — see `draftedPickNamesForRow`. */
+  partnerRosterId?: number | null
+}
+
+/** A printable pick with the drafted player attached where the ledger knows it. */
+export type ArchivedPick = TradeAsset & { drafted: string | null }
+
+export type ArchivedTradeGrade = {
+  grade: TradeGradeView
+  picksIn: ArchivedPick[]
+  picksOut: ArchivedPick[]
+}
+
+const idsOf = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
+
+export async function gradeArchivedTradeRows(args: {
+  /** The AllFantasy league row the chart and scoring are read through — the viewer's own copy. */
+  afLeagueId: string
+  /** The provider's league id, which keys the graded ledger. */
+  platformLeagueId: string
+  rows: ReadonlyArray<ArchivedTradeRow>
+  /** A Sleeper id to a display name, or null — an unnamed player withholds the letter. */
+  nameOf: (sleeperId: string) => string | null
+  currentSeason?: number
+}): Promise<Map<string, ArchivedTradeGrade>> {
+  const out = new Map<string, ArchivedTradeGrade>()
+  if (args.rows.length === 0) return out
+  const currentSeason = args.currentSeason ?? new Date().getUTCFullYear()
+  const grader = await completedTradeGraderFor(args.afLeagueId)
+
+  const ledgerSides = await loadLedgerSidesForTrades(
+    args.rows
+      .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
+      .map((t) => ({ sleeperLeagueId: args.platformLeagueId, transactionId: t.transactionId })),
+  )
+
+  await Promise.all(
+    args.rows.map(async (t) => {
+      const pickRef = (p: { pickSeason?: string; pickRound?: number }) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null })
+      const drafted = draftedPickNamesForRow(
+        {
+          picksIn: pickAssets(t.picksReceived).map(pickRef),
+          picksOut: pickAssets(t.picksGiven).map(pickRef),
+          partnerRosterId: t.partnerRosterId ?? null,
+        },
+        ledgerSides.get(ledgerKey(args.platformLeagueId, t.transactionId)),
+      )
+      const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
+      const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
+      const grade = await gradeArchivedTrade(grader, {
+        received: idsOf(t.playersReceived).map(args.nameOf),
+        gave: idsOf(t.playersGiven).map(args.nameOf),
+        picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
+        picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
+        currentSeason,
+      })
+      out.set(t.transactionId, { grade, picksIn, picksOut })
+    }),
+  )
+  return out
+}
