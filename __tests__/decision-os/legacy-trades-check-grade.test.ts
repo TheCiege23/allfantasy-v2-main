@@ -158,10 +158,18 @@ describe('shownTradeGrade', () => {
 })
 
 describe("Chimmy's auto trade evaluation", () => {
+  /*
+   * ⚠ A FRESH TRANSACTION ID PER POLL. The poller remembers processed offers in `localStorage`, which
+   * persists between tests under jsdom (CI's environment for this file) — a second poll of the same id
+   * is correctly silent, and reading `events[0]` then threw. Node has no `window`, so it passed locally.
+   */
+  let seq = 0
   const poll = async (row: Record<string, unknown>) => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ trades: [{ isNew: true, tradeDirection: 'incoming', transactionId: 'tx', leagueName: 'Home', ...row }] }))))
+    const transactionId = `tx-${++seq}`
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ trades: [{ isNew: true, tradeDirection: 'incoming', transactionId, leagueName: 'Home', ...row }] }))))
     const events = await pollIncomingTradeEvalEvents('guap')
     vi.unstubAllGlobals()
+    expect(events).toHaveLength(1)
     return events[0]!.message
   }
 
