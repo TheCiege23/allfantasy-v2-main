@@ -1,14 +1,20 @@
 'use client'
 
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from '@/components/core-app/comms/commsEvents'
+import { SwapNow } from '@/components/core-app/player-finder/SwapNow'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { chimmyAsk, type LeagueCall } from '@/lib/core-app/leagueCall'
 
 /**
  * "Your call, league by league" — one computed start/sit call per league you have him in
  * (lib/core-app/leagueCall.ts), each with the reason it rests on.
  *
- * - The change itself is made on the league's platform — the league table's "Open lineup" goes
- *   there (AllFantasy leagues: the league's lineup editor).
+ * - In an AllFantasy league a sit/start call carries "Swap now" (SwapNow.tsx: a confirm card, then
+ *   your tap). NOT on a "have X ready" hold — the call there is to keep him in. Imported leagues are
+ *   changed on their platform: the league table's "Open lineup" goes there.
+ * - ⚠ NATIVE MEANS THE NATIVE SPELLINGS ONLY. `isNativePlatform('')` is false (lib/dashboard/
+ *   platform-label.ts), and the action scope refuses an empty platform too; the empty-string guard
+ *   below keeps the button from promising what the server will refuse.
  * - "Ask Chimmy" opens the Chimmy drawer scoped to THAT league with the question typed in. It
  *   does not send: a send is the paid step, and it is yours to take.
  */
@@ -30,6 +36,7 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
       </h3>
       <ul className="af-pf-calls-list">
         {sorted.map((c) => {
+          const native = isNativePlatform(c.platform) && c.platform.trim() !== ''
           return (
             <li key={c.leagueId} className="af-pf-call" data-kind={c.kind} data-tone={c.tone}>
               <div className="af-pf-call-head">
@@ -40,6 +47,9 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
               </div>
               <p className="af-pf-call-why">{c.why}</p>
               <div className="af-pf-call-actions">
+                {native && c.swap && (c.kind === 'sit' || c.kind === 'start') ? (
+                  <SwapNow leagueId={c.leagueId} startId={c.swap.startId} benchId={c.swap.benchId} />
+                ) : null}
                 <button
                   type="button"
                   className="af-pf-call-ask"
@@ -54,7 +64,8 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
       </ul>
       <p className="af-pf-calls-foot">
         Each call compares projections under that league&apos;s own scoring, his injury designation and the week&apos;s kickoffs — nothing
-        else. Make the change where the league lives — its &ldquo;Open lineup&rdquo; button in the table above.
+        else. In an AllFantasy league, &ldquo;Swap now&rdquo; makes the change after you confirm; other platforms change on their own site —
+        the &ldquo;Open lineup&rdquo; buttons above go there.
       </p>
     </section>
   )

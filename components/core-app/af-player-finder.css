@@ -3506,3 +3506,92 @@
     min-height: 44px;
   }
 }
+
+/* ── Phase 3b: "Swap now" in an AllFantasy league (2026-09-27) ── */
+/* ⚠ A top-level block with its own media query at the end — never inserted inside another query. */
+.af-core .af-pf-swapnow-btn,
+.af-core .af-pf-swapnow-cancel,
+.af-core .af-pf-swapnow-retry {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-swapnow-btn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-swapnow-confirm {
+  min-height: 34px;
+  padding: 4px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.af-core .af-pf-swapnow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface2, transparent);
+}
+.af-core .af-pf-swapnow-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-swapnow-moves,
+.af-core .af-pf-swapnow-warnings {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.af-core .af-pf-swapnow-moves li[data-move='in'] strong {
+  color: var(--good);
+}
+.af-core .af-pf-swapnow-warnings {
+  color: var(--warn);
+}
+.af-core .af-pf-swapnow-actions {
+  display: flex;
+  gap: 6px;
+}
+.af-core .af-pf-swapnow-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-swapnow-result {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--good);
+}
+.af-core .af-pf-swapnow-result[data-kind='error'] {
+  color: var(--warn);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-swapnow-btn,
+  .af-core .af-pf-swapnow-confirm,
+  .af-core .af-pf-swapnow-cancel {
+    min-height: 44px;
+  }
+}
