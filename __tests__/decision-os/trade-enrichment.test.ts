@@ -438,7 +438,8 @@ describe('E.5 (9) — no writes occur', () => {
    * upsert hidden one function call away.
    */
   it('the ADP path stays read-only, through whatever it delegates to', () => {
-    const WRITES = /\.(create|createMany|update|updateMany|upsert|delete|deleteMany|executeRaw)\(/
+    // Match database mutations, not in-memory Map.delete cache eviction.
+    const WRITES = /\bprisma\s*\.\s*(?:[A-Za-z_$][\w$]*\s*\.\s*(?:create|createMany|update|updateMany|upsert|delete|deleteMany)|\$?executeRaw(?:Unsafe)?)\s*\(/
 
     const loader = readFileSync(resolve(process.cwd(), 'lib/decision-os/trade/loader.ts'), 'utf8')
     const adpFn = loader.slice(loader.indexOf('export async function loadAdpRecords'))

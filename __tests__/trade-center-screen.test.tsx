@@ -8,6 +8,7 @@ import React from 'react'
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { StockMark } from '@/components/core-app/screens/TradeAssetPicker'
+import { tradeDeviceDraftKey } from '@/components/core-app/screens/tradeDeviceDraft'
 
 const SRC = readFileSync(
   resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
@@ -334,9 +335,10 @@ describe('phase 2 — mobile and drafts', () => {
     expect(SRC).toContain('analyse it again to get a verdict')
   })
 
-  it('scopes the draft key per league', () => {
-    // One draft per league, not one global draft that leaks across them.
-    expect(SRC).toContain('`af-trade-draft:${props.league.id}`')
+  it('isolates device drafts between accounts as well as leagues', () => {
+    expect(tradeDeviceDraftKey('account-a', 'league-a')).not.toBe(tradeDeviceDraftKey('account-b', 'league-a'))
+    expect(tradeDeviceDraftKey('account-a', 'league-a')).not.toBe(tradeDeviceDraftKey('account-a', 'league-b'))
+    expect(tradeDeviceDraftKey(null, 'league-a')).toBeNull()
   })
 })
 

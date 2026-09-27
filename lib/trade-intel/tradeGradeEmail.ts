@@ -272,6 +272,17 @@ function card(inner: string, accent: string | null = null): string {
   )
 }
 
+function rosterFitCard(grade: TradeGradeView | null): string {
+  if (!grade?.graded || !grade.rosterFit) return ''
+  const fit = grade.rosterFit
+  const moves = fit.moves.map(move =>
+    `${move.name}: ${fmtValue(move.base)} base → ${fmtValue(move.leagueValue)} personal utility. ${move.reasons.join('; ')}.`)
+  return card(eyebrow('Your roster fit · separate from the trade-value grade') +
+    `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">` +
+    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received. This estimate does not change the headline letter or predict your chances of winning.`) +
+    moves.map(move => `<div style="margin-top:6px">${escapeHtml(move)}</div>`).join('') + '</div>')
+}
+
 /**
  * The league type the grade was priced under, and — unless someone confirmed it — the ask to.
  *
@@ -449,8 +460,8 @@ export function buildTradeGradeEmail(params: {
 
   const hasPicks = trade.sides.some((s) => s.picksIn.length > 0)
   const how = graded
-    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values as of today — the same grade AllFantasy shows for this trade. Roster fit is not counted: both teams already hold the result.` +
-      (hasPicks ? ' Picks are valued on where they are expected to land, so a bad season by the team that owes one moves this grade.' : '')
+    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values at email time. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
+      (hasPicks ? ' Unresolved future picks use the chart’s season-and-round value; a specific early, mid or late tier is used only when supplied to the evaluator.' : '')
     : `${withheldReason} No letter is shown rather than one drawn from part of the deal.`
 
   const rows =
@@ -559,7 +570,7 @@ export function buildPendingTradeOfferEmail(params: {
     eyebrow: 'Trade offer · waiting on you',
     title: leagueName,
     sub: `${who} sent you an offer on Sleeper.`,
-    rows: verdict + swap + leagueTypeCard(leagueType, params.confirmUrl ?? null) + cta(params.reviewUrl, 'See our read on this offer', sleeperNote),
+    rows: verdict + swap + rosterFitCard(params.grade ?? null) + leagueTypeCard(leagueType, params.confirmUrl ?? null) + cta(params.reviewUrl, 'See our read on this offer', sleeperNote),
     footer: emailFooter({ baseUrl: params.baseUrl, leagueName, leagueId: params.leagueId ?? null, unsubscribeUrl: params.unsubscribeUrl ?? null }),
   })
   return { subject, html }

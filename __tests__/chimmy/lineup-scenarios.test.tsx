@@ -466,7 +466,12 @@ describe('the cards', () => {
     render(<ChimmyScenarioCard scenario={s} />)
     expect(screen.getByTestId('chimmy-scenario').textContent).toContain('Tank Bigsby (RB)')
     expect(screen.queryByTestId('chimmy-scenario-room')).toBeNull()
-    expect(screen.getByTestId('chimmy-scenario-unfilled').textContent).toContain('Totals leave out DEF')
+    expect(s.lineup).toBeNull()
+    expect(s.lineupUnavailable).toContain('after-trade lineup cannot fill DEF')
+    expect(screen.getByTestId('chimmy-scenario').textContent).toContain(s.lineupUnavailable!)
+    expect(screen.queryByTestId('chimmy-scenario-unfilled')).toBeNull()
+    expect(renderWaiverScenarioBlock(s)).toContain('Starting lineup: not computed')
+    expect(renderWaiverScenarioBlock(s)).not.toContain('Every total leaves out')
   })
 })
 

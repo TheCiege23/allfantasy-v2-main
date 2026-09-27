@@ -81,16 +81,21 @@ export function normalizeNflTeamDefenseWeeklyStats(raw: unknown): Record<string,
 
   const out: Record<string, number> = {}
 
-  setIfNumber(out, 'def_sack', firstNumber(source, ['def_sack', 'sack', 'sacks', 'def_sacks']))
-  setIfNumber(out, 'def_int', firstNumber(source, ['def_int', 'interceptions', 'int', 'def_interceptions']))
+  setIfNumber(out, 'def_sack', firstNumber(source, ['def_sack', 'dst_sack', 'sack', 'sacks', 'def_sacks']))
+  setIfNumber(out, 'def_int', firstNumber(source, ['def_int', 'dst_interception', 'interceptions', 'int', 'def_interceptions']))
   setIfNumber(out, 'def_fr', firstNumber(source, ['def_fr', 'fum_rec', 'fumble_recovery', 'fumbles_recovered']))
   setIfNumber(out, 'def_safety', firstNumber(source, ['def_safety', 'def_safe', 'safe', 'safety', 'safeties']))
   setIfNumber(out, 'def_blk_kick', firstNumber(source, ['def_blk_kick', 'blk_kick', 'blocked_kick', 'blocked_kicks']))
-  setIfNumber(out, 'def_td', firstNumber(source, ['def_td', 'defensive_td', 'def_tds']))
+  // Stored team rows share this unambiguous touchdown key with IDP rows. A bare `td`
+  // on a team row describes opponent offensive touchdowns, so it must never be used here.
+  setIfNumber(out, 'def_td', firstNumber(source, ['def_td', 'idp_defensive_touchdown', 'defensive_td', 'def_tds']))
   setIfNumber(
     out,
     'def_st_td',
-    sumNumbers(source, ['def_st_td', 'st_td', 'special_teams_td', 'ret_td', 'kr_td', 'pr_td']),
+    // A supplied total already includes its kick/punt-return components. Prefer the
+    // total (including an explicit zero); add components only when no total exists.
+    firstNumber(source, ['def_st_td', 'st_td', 'special_teams_td', 'ret_td']) ??
+      sumNumbers(source, ['kr_td', 'pr_td']),
   )
   setIfNumber(
     out,
