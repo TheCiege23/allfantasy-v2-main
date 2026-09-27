@@ -4107,7 +4107,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             */
             blurb={
               gamePlan?.available
-                ? 'Every decision still open across all your leagues, soonest deadline first. Scouting a room is per-league — pick one below for that.'
+                ? 'Flagged starters in active manual lineups, soonest deadline first; locked players follow. Scouting a room is per-league — pick one below for that.'
                 : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
             }
             issues={issues}

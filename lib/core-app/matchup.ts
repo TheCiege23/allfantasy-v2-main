@@ -20,6 +20,7 @@ import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
 import { starterGameStates } from './matchupGameState'
+import { bestBallProjectedFinal } from './bestBallForecast'
 
 /**
  * A crest we can actually render, or null.
@@ -237,6 +238,7 @@ export type MatchupData = {
   projectedFinal: SectionState<{
     you: number
     opponent: number
+    model?: 'best_ball_full_roster'
     /**
      * ⚠ TRAVELS WITH THE NUMBER SO A FRAGMENT CANNOT POSE AS A FINAL. A projected
      * final built from 7 of 10 starters always reads LOW, and both sides can be
@@ -471,6 +473,11 @@ export async function getMatchupData(
         ...sideProjections.opponent.lineup.map((s) => s.playerId),
       ].filter((id) => id !== EMPTY_SLOT && !id.startsWith('name:'))
     : []
+  const scoreIds = [...new Set([
+    ...lineupIds,
+    ...(sideProjections?.bestBall?.you.map((p) => p.playerId) ?? []),
+    ...(sideProjections?.bestBall?.opponent.map((p) => p.playerId) ?? []),
+  ])]
 
   /*
    * ── Foreign roster ids, translated before the join ──────────────────────
@@ -493,18 +500,18 @@ export async function getMatchupData(
    * is written with the platform's own ids too. Translating anything but this
    * one lookup would silently break the score join.
    */
-  const sleeperIdByRosterId = lineupIds.length
-    ? await crosswalkToSleeperIds(league.platform, sport, [...new Set(lineupIds)]).catch(
+  const sleeperIdByRosterId = scoreIds.length
+    ? await crosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
         () => new Map<string, string>(),
       )
     : new Map<string, string>()
 
   const lookupIds = [
-    ...new Set(lineupIds.map((id) => sleeperIdByRosterId.get(id) ?? id)),
+    ...new Set(scoreIds.map((id) => sleeperIdByRosterId.get(id) ?? id)),
   ]
 
   const [identityRows, scoreRows] = await Promise.all([
-    lineupIds.length
+    scoreIds.length
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: lookupIds } },
@@ -514,14 +521,14 @@ export async function getMatchupData(
           })
           .catch(() => [])
       : Promise.resolve([]),
-    lineupIds.length
+    scoreIds.length
       ? prisma.leaguePlayerWeeklyScore
           .findMany({
             where: {
               leagueId: platformLeagueId,
               seasonYear: latest.seasonYear,
               week: latest.week,
-              playerId: { in: [...new Set(lineupIds)] },
+              playerId: { in: scoreIds },
             },
             select: { playerId: true, points: true, source: true },
           })
@@ -542,7 +549,7 @@ export async function getMatchupData(
    * Sleeper league maps id-to-itself and this is a no-op for it.
    */
   const identityBy = new Map<string, ComposedPlayerIdentity>()
-  for (const rosterId of new Set(lineupIds)) {
+  for (const rosterId of scoreIds) {
     const row = bySleeperId.get(sleeperIdByRosterId.get(rosterId) ?? rosterId)
     if (row) identityBy.set(rosterId, row)
   }
@@ -565,9 +572,7 @@ export async function getMatchupData(
   }
   if (sideProjections) base.yetToPlay.reason = `${counts.upcoming} yet to start · ${counts.live} in progress · ${counts.final} finished or unavailable${counts.unknown ? ` · ${counts.unknown} game states unavailable` : ''}`
   const bestBall = league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)
-  const forecastReason = bestBall
-    ? 'Best Ball selects eligible bench players automatically. Forecasts cannot be calculated from the listed starters alone.'
-    : counts.unknown > 0
+  const forecastReason = !bestBall && counts.unknown > 0
       ? 'Some starter game states are unavailable, so remaining points and win probability cannot be verified.'
       : null
 
@@ -585,7 +590,20 @@ export async function getMatchupData(
    */
   const live = matchupLivePoints(mine, opponentRow, scoreRows.length ? actualBy : null)
 
-  const projectedFinal: MatchupData['projectedFinal'] = forecastReason ? { available: false, reason: forecastReason } : !anyProjected
+  const bestBallFinal = bestBall && sideProjections?.bestBall
+    ? (() => {
+        const full = sideProjections.bestBall!
+        const you = bestBallProjectedFinal({ slots: full.slots, candidates: full.you, actualBy: scoreRows.length ? actualBy : null, stateBy: states, scoreboard: live.team.you })
+        const opponent = bestBallProjectedFinal({ slots: full.slots, candidates: full.opponent, actualBy: scoreRows.length ? actualBy : null, stateBy: states, scoreboard: live.team.opponent })
+        return you.available && opponent.available
+          ? { available: true as const, data: { you: you.total, opponent: opponent.total, unprojected: { you: 0, opponent: 0 }, model: 'best_ball_full_roster' as const } }
+          : { available: false as const, reason: !you.available ? `Your roster: ${you.reason}` : !opponent.available ? `Opponent roster: ${opponent.reason}` : 'full rosters cannot be projected' }
+      })()
+    : null
+
+  const projectedFinal: MatchupData['projectedFinal'] = bestBall
+    ? bestBallFinal ?? { available: false, reason: 'both full rosters could not be verified' }
+    : forecastReason ? { available: false, reason: forecastReason } : !anyProjected
     ? {
         available: false,
         reason: sideProjections
@@ -610,7 +628,9 @@ export async function getMatchupData(
         }
       })()
 
-  const winProbability: MatchupData['winProbability'] = forecastReason ? { available: false, reason: forecastReason } : sideProjections
+  const winProbability: MatchupData['winProbability'] = bestBall
+    ? { available: false, reason: 'Best Ball win probability needs a full-roster outcome model; a probability from one projected optimal lineup would overstate certainty.' }
+    : forecastReason ? { available: false, reason: forecastReason } : sideProjections
     ? (() => {
         const result = winProbabilityFor(sideProjections, live)
         if (result.available) result.data.detail = `${base.yetToPlay.reason} · ${result.data.detail.replace(/starters? still to play/, 'starters with scoring remaining')}`
