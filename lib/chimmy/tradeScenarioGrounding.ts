@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
-import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/describedTradeEvaluator'
+import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { extractPickMentions, pickLabel, type PickMention } from './tradePickMentions'

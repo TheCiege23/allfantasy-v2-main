@@ -120,4 +120,23 @@ describe('pending and screenshot offer resolution', () => {
     await prepareChimmyDecisionAnswer({ question: 'Should I accept this pending trade of Quincy Williams for Tyrone Tracy?', leagueId: 'l1', userId: 'u1' })
     expect(h.pending).not.toHaveBeenCalled()
   })
+  it('does not bill a screenshot verdict when an asset disappeared during resolution', async () => {
+    h.trade.mockResolvedValue({ ...scenario, get: scenario.get.slice(0, 2) })
+    const out = await prepareChimmyDecisionAnswer({ question: '', leagueId: 'l1', userId: 'u1', screenshotEvidence: 'Trade gives: Quincy Williams and Carson Schwesinger\nTrade receives: Tyrone Tracy and Ryan Fitzgerald and 2027 1st' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'screenshot_assets_unresolved' } })
+  })
+  it('does not grade a pending package after dropping one of its assets', async () => {
+    h.pending.mockResolvedValue({ offers: [{ id: 'offer', question: 'Should I trade Quincy Williams for Tyrone Tracy?', assetCount: 6 }], gap: null })
+    h.trade.mockResolvedValueOnce(null).mockResolvedValueOnce(scenario)
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I accept my pending trades?', leagueId: 'l1', userId: 'u1' })
+    expect(out?.status).toBe('needs_data')
+    expect(out?.answer).toContain('Not every offer asset resolved')
+  })
+  it('keeps partial value-only analysis free when the lineup cannot be computed', async () => {
+    h.trade.mockResolvedValue({ ...scenario, lineup: null, lineupUnavailable: 'Weekly projections missing.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Grade this trade: Quincy Williams for Tyrone Tracy', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'trade_impact_incomplete' } })
+    expect(out?.answer).toContain('Trade Center grade: C')
+    expect(out?.answer).toContain('partial analysis')
+  })
 })

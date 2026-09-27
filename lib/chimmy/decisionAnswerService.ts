@@ -70,8 +70,8 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
       if (!pending.offers.length) return gap('pending_offer_unavailable', pending.gap ?? 'The pending offer could not be read.', 'Attach the trade screenshot or identify the offer.')
       const results = await Promise.all(pending.offers.map(async offer => ({ offer,
         scenario: await buildTradeScenario({ ...input, message: offer.question }) })))
-      const ready = results.filter(r => r.scenario?.status === 'ready' && (r.scenario.value.grade || r.scenario.lineup))
-      const answer = results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready' ? renderDecisionScenario(r.scenario) : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
+      const ready = results.filter(r => r.scenario?.status === 'ready' && (r.offer.assetCount == null || r.offer.assetCount === r.scenario.give.length + r.scenario.get.length) && r.scenario.value.grade && r.scenario.lineup && !r.scenario.unpricedExcluded)
+      const answer = results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready' ? (r.offer.assetCount != null && r.offer.assetCount !== r.scenario.give.length + r.scenario.get.length ? 'Not every offer asset resolved; no verdict was computed for this package.' : renderDecisionScenario(r.scenario)) : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
       if (!ready.length) return gap('pending_offer_evaluation_missing', answer, 'Sync league rosters, scoring and values before deciding.')
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer,
         sources: ['provider_pending_offers', 'league_rosters', 'league_scoring', 'trade_engine'] })
@@ -100,8 +100,10 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
       : await buildStartSitScenario(input)
     if (scenario?.status === 'unresolved') return gap(scenario.reason, scenario.detail, 'Sync league settings and rosters, then confirm the player names and ask again.')
     if (scenario?.status === 'ready') {
+      if ('value' in scenario && imageTrade.assetCount != null && imageTrade.assetCount !== scenario.give.length + scenario.get.length) return gap('screenshot_assets_unresolved', 'I received the screenshot, but not every asset resolved against the league roster. No complete-package verdict was computed.', 'Confirm every player and pick on both sides before deciding.')
       // A resolved trade with no grade and no impact is still a missing answer, never a paid verdict.
       if ('value' in scenario && !scenario.value.grade && !scenario.lineup) return gap('valuation_missing', scenario.value.withheld ?? 'This trade could not be priced.', 'Sync league values and projections, then retry.')
+      if ('value' in scenario && (!scenario.value.grade || !scenario.lineup || scenario.unpricedExcluded)) return gap('trade_impact_incomplete', renderDecisionScenario(scenario), 'This is a partial analysis. Sync league values and complete weekly projections before treating it as an acceptance decision.')
       if (scenario.kind === 'waiver' && !scenario.lineup && scenario.add.points == null && scenario.drop?.points == null) return gap('projections_missing', 'The move was identified, but its players and lineup impact could not be projected.', 'Sync your league and retry when weekly projections are available.')
       const startCalls: ChatStartCall[] = []
       if (scenario.kind === 'start_sit' && scenario.contested) {

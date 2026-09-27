@@ -1,7 +1,7 @@
 import { classifyScreenshotEvidence, screenshotNeedsClarification } from './screenshotEvidence'
 
 /** Image fields are untrusted claims; roster ownership and values are resolved by the trade engine. */
-export function screenshotTradeQuestion(raw?: string | null): { question: string | null; clarification: string | null } {
+export function screenshotTradeQuestion(raw?: string | null): { question: string | null; clarification: string | null; assetCount?: number } {
   if (!raw) return { question: null, clarification: null }
   const evidence = classifyScreenshotEvidence(raw)
   const fields = classifyScreenshotEvidence(raw.replace(/^\s*[-*]\s+/gm, '').replace(/\*\*/g, '')).fields
@@ -14,5 +14,6 @@ export function screenshotTradeQuestion(raw?: string | null): { question: string
   const uncertain = screenshotNeedsClarification(evidence)
   if (!give || !get || uncertain.needed || evidence.imperatives.length) return {
     question: null, clarification: uncertain.question ?? 'I received the trade screenshot, but could not reliably read both sides. Confirm what you send and receive.' }
-  return { question: `Should I trade ${give.value} for ${get.value}?`, clarification: null }
+  const count = (side: string) => side.split(/\s+and\s+|\s*&\s*|,|;/i).filter(v => v.trim()).length
+  return { question: `Should I trade ${give.value} for ${get.value}?`, clarification: null, assetCount: count(give.value) + count(get.value) }
 }
