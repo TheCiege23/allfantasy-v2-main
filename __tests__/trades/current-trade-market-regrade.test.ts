@@ -69,8 +69,8 @@ describe('historical trade "Now" regrade is the one grade', () => {
     // 1000 out, 1500 in: +33% of the larger side — an A, the Trade Center's letter for the same deal.
     expect(result.get('trade-1')).toMatchObject({ grade: 'A', valueGiven: 1000, valueReceived: 1500, fullyPriced: true, unresolvedAssets: [] })
     expect(calls[0]).toEqual({
-      give: [{ kind: 'player', name: 'Player One' }],
-      get: [{ kind: 'player', name: 'Player Two' }],
+      give: [{ kind: 'player', name: 'Player One', providerIdentity: { provider: 'sleeper', id: 'p1' } }],
+      get: [{ kind: 'player', name: 'Player Two', providerIdentity: { provider: 'sleeper', id: 'p2' } }],
       viewerSide: false,
     })
   })
