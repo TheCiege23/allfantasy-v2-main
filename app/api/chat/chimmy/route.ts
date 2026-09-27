@@ -1104,6 +1104,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const url = new URL(req.url)
+  const requestId = url.searchParams.get('requestId')
+  if (requestId) return (await import('@/lib/chimmy/requestDelivery')).getChimmyRequestResponse(userId, requestId)
   const attachment = url.searchParams.get('attachment')
   if (attachment) {
     try {
@@ -1201,14 +1203,17 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
  * fills in what only it knows as it learns it.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const question = newQuestionTelemetry()
-  const started = Date.now()
-  const res = await handleChimmyPost(req, question)
-  void recordChimmyQuestion(question, res, Date.now() - started)
-  return res
+  const { withChimmyRequestReceipt } = await import('@/lib/chimmy/requestDelivery')
+  return withChimmyRequestReceipt(req, async requestReceipt => {
+    const question = newQuestionTelemetry()
+    const started = Date.now()
+    const res = await handleChimmyPost(req, question, requestReceipt)
+    void recordChimmyQuestion(question, res, Date.now() - started)
+    return res
+  }, userId => runAiProtection(req, { action:'chimmy', getUserId:async () => userId }))
 }
 
-async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTelemetry): Promise<NextResponse> {
+async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTelemetry, requestReceipt?: import('@/lib/chimmy/requestReceipts').ReceiptContext): Promise<NextResponse> {
   const startMs = Date.now()
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string; email?: string | null }
@@ -1229,7 +1234,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       ? readChimmyPlanAllowance({ userId, email: userEmail }).catch(() => null)
       : Promise.resolve(null))
 
-  const limitRes = await runAiProtection(req, {
+  const limitRes = requestReceipt ? null : await runAiProtection(req, {
     action: 'chimmy',
     getUserId: async () => userId,
   })
@@ -1758,11 +1763,14 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
          */
         const searchIncluded =
           planCoversSearch && searchPlan && userId
-            ? await takeChimmyPlanAllowance({ userId, state: searchPlan })
+            ? await takeChimmyPlanAllowance({ userId, state: searchPlan, requestReceipt })
             : null
         const ledger = searchIncluded || !mayCharge
           ? null
-          : await spendService
+          : await (async () => {
+              const receipts = requestReceipt ? await import('@/lib/chimmy/requestReceipts') : null
+              if (receipts && requestReceipt) await receipts.recordReceiptTokenIntent(requestReceipt)
+              return spendService
               .spendTokensForRule({
                 userId: userId as string,
                 ruleCode: 'ai_chimmy_chat_message',
@@ -1772,8 +1780,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                 description: 'Chimmy live web search answer',
                 metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
                 userEmail,
+                ...(receipts && requestReceipt ? {
+                  idempotencyKey: receipts.receiptSpendKey(requestReceipt.id),
+                  assertWithinTransaction: async tx => receipts.assertReceiptTokenSpend(tx, requestReceipt),
+                } : {}),
               })
               .catch(() => null)
+            })()
         const searchPlanMeta: ChimmyPlanAllowanceMeta | null = searchIncluded
           ? planAllowanceMeta(searchIncluded, true)
           : searchPlan
@@ -2820,7 +2833,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    */
   let planIncluded: ChimmyPlanAllowanceState | null = null
   if (planCovers && planState && userId) {
-    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
+    planIncluded = await takeChimmyPlanAllowance({ userId, state: planState, requestReceipt })
     if (!planIncluded) {
       const blocked = await runTokenGate(exhaustedPlanMeta)
       if (blocked) return blocked
@@ -2835,6 +2848,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   let spendLedger: { id: string; balanceAfter: number } | null = null
   if (!planIncluded && !tokenPreviewFailed) {
     try {
+      const receipts = requestReceipt ? await import('@/lib/chimmy/requestReceipts') : null
+      if (receipts && requestReceipt) await receipts.recordReceiptTokenIntent(requestReceipt)
       const ledger = await spendService.spendTokensForRule({
         userId,
         ruleCode: 'ai_chimmy_chat_message',
@@ -2849,6 +2864,10 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           source: source ?? null,
         },
         userEmail,
+        ...(receipts && requestReceipt ? {
+          idempotencyKey: receipts.receiptSpendKey(requestReceipt.id),
+          assertWithinTransaction: async tx => receipts.assertReceiptTokenSpend(tx, requestReceipt),
+        } : {}),
       })
       spendLedger = {
         id: ledger.id,
@@ -4180,6 +4199,7 @@ ${describedTradeCtx}`
 
     const meta = {
       assistant: 'Chimmy',
+      delivery,
       conversationId,
       players: playerCards.length > 0 ? playerCards : undefined,
       /** The before/after the drawer renders; present only when the scenario resolved. */

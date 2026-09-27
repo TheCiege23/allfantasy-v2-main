@@ -249,17 +249,21 @@ export function privateChannelOverwrites(guildId: string, botId: string, memberI
 export async function postMessage(
   channelId: string,
   content: string,
-  embeds?: DiscordEmbed[]
+  embeds?: DiscordEmbed[],
+  nonce?: string
 ): Promise<string> {
   const payload: Record<string, unknown> = {}
   if (content) payload.content = content
   else if (embeds?.length) payload.content = '\u200b'
   else payload.content = ''
   payload.embeds = embeds?.length ? embeds : []
+  payload.allowed_mentions = { parse: [] }
+  if (nonce) { payload.nonce = nonce; payload.enforce_nonce = true }
   const res = await sendOnceWithRetry(`${DISCORD_BASE}/channels/${channelId}/messages`, {
     method: 'POST',
     headers: botHeaders(),
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!res.ok) {
     const t = await res.text().catch(() => '')
@@ -278,6 +282,7 @@ export async function postLeagueChatEmbed(
     gifUrl?: string
     leagueName: string
     leagueId: string
+    nonce?: string
   }
 ): Promise<string> {
   const embed: DiscordEmbed = {
@@ -291,7 +296,7 @@ export async function postLeagueChatEmbed(
     timestamp: new Date().toISOString(),
     ...(opts.gifUrl ? { image: { url: opts.gifUrl } } : {}),
   }
-  return postMessage(channelId, '', [embed])
+  return postMessage(channelId, '', [embed], opts.nonce)
 }
 
 export async function postNotificationEmbed(
