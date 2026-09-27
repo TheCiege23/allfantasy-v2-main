@@ -152,8 +152,6 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
 export function RosterPlayerRow(props: {
   player: RosterPlayer
   sport?: string | null
-  /** Uses the same league chart as the roster and analyzer. */
-  leagueId?: string | null
   onAdd: () => void
   /** Already in the deal — shown, but not addable twice. */
   added?: boolean
@@ -248,6 +246,8 @@ export function TradeAssetPicker(props: {
   onClose: () => void
   /** Restricts search when the league is single-sport. */
   sport?: string | null
+  /** Uses the same league chart as the roster and analyzer. */
+  leagueId?: string | null
   /**
    * The picks actually held by the roster this side is sending from, when we
    * know whose roster it is. Empty means we do not know — which is a different
