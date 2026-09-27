@@ -18,6 +18,7 @@ import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
+import { decodeTradeDraft, tradeDeviceDraftKey } from '@/components/core-app/screens/tradeDeviceDraft'
 
 const player = (id: string, name: string, position: string, value: number) => ({
   id, name, position, team: 'X', value, imageUrl: null, byeWeek: null, injuryStatus: null, stock: null, stockDelta: null,
@@ -62,6 +63,7 @@ const ANALYSIS = {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   rosterData.current = {
     rosters: [
       roster('r1', 'You', [player('p1', 'Kenneth Walker', 'RB', 5000)]),
@@ -95,6 +97,85 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('recovers a proposal and counterparty after remount, without recovering its grade', async () => {
+    const league = { id: 'recovery-league', name: 'L', format: 'Dynasty', teamCount: 12 }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    await analyze(view.container)
+    expect(view.container.querySelector('.af-tc-verdict')).not.toBeNull()
+    const stored = decodeTradeDraft(JSON.parse(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)!))
+    expect(stored?.give[0]).toMatchObject({ kind: 'player', playerId: 'p1', name: 'Kenneth Walker' })
+    expect(stored?.get[0]).toMatchObject({ playerId: 'p9', name: 'Trey McBride' })
+    expect(stored?.partnerRosterId).toBe('r2')
+    view.unmount()
+    const recovered = render(<TradeCenter league={league} viewerId="account-a" />)
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove Trey McBride', exact: true })).toBeTruthy()
+    expect(screen.getByText(/Recovered this device’s in-progress proposal/)).toBeTruthy()
+    expect(recovered.container.querySelector('.af-tc-verdict')).toBeNull()
+    await act(async () => fireEvent.click(recovered.container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!))
+    const calls = fetchMock.mock.calls.filter(([url]) => url === '/api/trade-value/analyze')
+    expect(JSON.parse(calls.at(-1)![1].body).opponentTeamExternalId).toBe('t-r2')
+  })
+  it('clears a previous account or league proposal without overwriting its recovery copy', async () => {
+    const league = { id: 'isolation-league', name: 'L', format: 'Dynasty', teamCount: 12 }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    const original = window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)
+    await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-b" />))
+    expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
+    expect(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)).toBe(original)
+    await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-a" />))
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    await act(async () => view.rerender(<TradeCenter league={{ ...league, id: 'other-league' }} viewerId="account-a" />))
+    expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
+    expect(decodeTradeDraft(JSON.parse(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)!))).toEqual(decodeTradeDraft(JSON.parse(original!)))
+  })
+  it('never restores a legacy league-only device draft to a different account', async () => {
+    const league = { id: 'legacy-league', name: 'L', format: 'Dynasty', teamCount: 12 }
+    window.localStorage.setItem(`af-trade-draft:${league.id}`, JSON.stringify({ give: [{ kind: 'faab', amount: 10 }], get: [] }))
+    render(<TradeCenter league={league} viewerId="account-b" />)
+    await act(async () => fireEvent.click(screen.getByText('Restore draft')))
+    expect(screen.getByText(/No saved draft for this league/)).toBeTruthy()
+    expect(decodeTradeDraft({ give: [{ kind: 'faab', amount: null }], get: [] })).toBeNull()
+  })
+  it('does not apply an in-flight analysis to a changed proposal', async () => {
+    let complete!: (value: unknown) => void
+    fetchMock.mockImplementation(async (url: string) => url === '/api/trade-value/analyze'
+      ? new Promise(resolve => { complete = resolve }) : { ok: false, status: 500, json: async () => ({}) })
+    const view = render(<TradeCenter league={{ id: 'pending-analysis', name: 'L', format: 'Dynasty', teamCount: 12 }} viewerId="account-a" />)
+    await analyze(view.container)
+    expect(view.container.querySelector('[aria-busy="true"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true }))
+    await act(async () => { complete({ ok: true, status: 200, json: async () => ANALYSIS }) })
+    expect(view.container.querySelector('.af-tc-verdict')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove Trey McBride', exact: true })).toBeTruthy()
+  })
+  it('discloses device recovery failure without reporting a successful save', async () => {
+    const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable') })
+    try {
+      render(<TradeCenter league={{ id: 'private-device', name: 'L', format: 'Dynasty', teamCount: 12 }} viewerId="account-a" />)
+      fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+      expect(screen.getByText(/Device recovery is unavailable/)).toBeTruthy()
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save draft', exact: true })))
+      expect(screen.getByText(/Nothing could store this draft/)).toBeTruthy()
+    } finally { storage.mockRestore() }
+  })
+  it('discards a delayed account draft after the manager changes account and starts another proposal', async () => {
+    const league = { id: 'stale-restore', name: 'L', format: 'Dynasty', teamCount: 12 }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    let complete!: (value: unknown) => void
+    fetchMock.mockImplementation(async (url: string) => String(url).startsWith('/api/league/trades-panel')
+      ? new Promise(resolve => { complete = resolve }) : { ok: false, status: 500, json: async () => ({}) })
+    await act(async () => fireEvent.click(screen.getByText('Restore draft')))
+    expect(typeof complete).toBe('function')
+    await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-b" />))
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    const payload = { give: [{ kind: 'faab', amount: 10 }], get: [{ kind: 'faab', amount: 20 }] }
+    expect(decodeTradeDraft(payload)).not.toBeNull()
+    await act(async () => { complete({ ok: true, json: async () => ({ draft: { payload } }) }) })
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    expect(screen.queryByText(/Draft restored from your account/)).toBeNull()
+  })
   it('keeps same-name players on opposite sides on their own analyzed values', async () => {
     rosterData.current = {
       rosters: [roster('r1', 'You', [player('d1', 'Same Name', 'DL', 134)]),

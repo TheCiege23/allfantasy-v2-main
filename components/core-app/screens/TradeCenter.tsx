@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
@@ -496,6 +497,8 @@ function toInput(a: PickedAsset) {
 }
 
 export function TradeCenter(props: {
+  /** Authenticated account identity, supplied by the server for device draft isolation. */
+  viewerId?: string | null
   league: { id: string; name: string; format: string | null; teamCount: number | null } | null
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
@@ -613,6 +616,10 @@ export function TradeCenter(props: {
    * pick proposable rather than only priceable.
    */
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
+  const proposalFingerprint = JSON.stringify([props.viewerId, props.league?.id, giveAssets, getAssets, partnerRosterId])
+  const proposalFingerprintRef = useRef(proposalFingerprint)
+  proposalFingerprintRef.current = proposalFingerprint
+  useEffect(() => setBusy(false), [proposalFingerprint])
 
   /** FAAB labels are identical on both sides; players resolve by identity per side. */
   const pricedBy = useMemo(() => {
@@ -946,6 +953,7 @@ export function TradeCenter(props: {
   }, [result, give, get])
 
   const analyze = useCallback(async () => {
+    const analyzedProposal = proposalFingerprintRef.current
     const sendGive = giveAssets.filter(valuedByVerdict)
     const sendGet = getAssets.filter(valuedByVerdict)
     /*
@@ -995,6 +1003,7 @@ export function TradeCenter(props: {
         }),
       })
       const j = (await r.json().catch(() => ({}))) as AnalyzeResult & { error?: string }
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       if (!r.ok) {
         setError(j.error ?? 'Analysis failed.')
         setResult(null)
@@ -1002,10 +1011,11 @@ export function TradeCenter(props: {
       }
       setResult(j)
     } catch {
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       setError('Network error.')
       setResult(null)
     } finally {
-      setBusy(false)
+      if (proposalFingerprintRef.current === analyzedProposal) setBusy(false)
     }
   }, [props.league?.id, giveAssets, getAssets, partnerRoster?.teamExternalId])
 
@@ -1065,19 +1075,57 @@ export function TradeCenter(props: {
    * mean a manager who saved while offline and then came back online silently
    * loses the newer copy to a stale server row.
    */
-  const draftKey = props.league?.id ? `af-trade-draft:${props.league.id}` : null
+  const draftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id)
+  const workingDraftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id, true)
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null)
+  const [deviceDraftAvailable, setDeviceDraftAvailable] = useState<boolean | null>(null)
+  const draftContext = JSON.stringify([props.viewerId, props.league?.id])
+  const draftContextRef = useRef(draftContext)
+  draftContextRef.current = draftContext
+
+  useEffect(() => {
+    let recovered: ReturnType<typeof decodeTradeDraft> = null
+    if (workingDraftKey) {
+      try {
+        const raw = window.localStorage.getItem(workingDraftKey)
+        recovered = raw ? decodeTradeDraft(JSON.parse(raw)) : null
+      } catch { /* Storage can be unavailable on a private device. */ }
+    }
+    setGiveAssets(recovered?.give ?? [])
+    setGetAssets(recovered?.get ?? [])
+    setPartnerRosterId(recovered?.partnerRosterId ?? null)
+    setCountering(null)
+    setResult(null)
+    setError(null)
+    setDraftNote(recovered && (recovered.give.length || recovered.get.length)
+      ? 'Recovered this device’s in-progress proposal — analyse it again to get a verdict.' : null)
+    setDeviceDraftAvailable(null)
+    setHydratedDraftKey(workingDraftKey)
+  }, [workingDraftKey, props.league?.id, props.viewerId])
+
+  useEffect(() => {
+    // Do not overwrite recovery data with the initial empty render, or an old
+    // account/league's assets while the new context is being restored.
+    if (!workingDraftKey || hydratedDraftKey !== workingDraftKey) return
+    try {
+      if (!giveAssets.length && !getAssets.length) window.localStorage.removeItem(workingDraftKey)
+      else window.localStorage.setItem(workingDraftKey, JSON.stringify({ give: giveAssets, get: getAssets, partnerRosterId, at: Date.now() }))
+      setDeviceDraftAvailable(true)
+    } catch { setDeviceDraftAvailable(false) }
+  }, [workingDraftKey, hydratedDraftKey, giveAssets, getAssets, partnerRosterId])
 
   const saveDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const savingContext = draftContextRef.current
 
     let local = false
     try {
-      window.localStorage.setItem(
+      if (draftKey) window.localStorage.setItem(
         draftKey,
         JSON.stringify({ give: giveAssets, get: getAssets, at: Date.now() }),
       )
-      local = true
+      local = Boolean(draftKey)
     } catch {
       /* Private browsing and full quotas both throw. */
     }
@@ -1097,6 +1145,7 @@ export function TradeCenter(props: {
       /* Offline is a fallback, not a failure. */
     }
 
+    if (draftContextRef.current !== savingContext) return
     setDraftNote(
       remote
         ? 'Saved to your account — it will be here on your other devices.'
@@ -1111,12 +1160,16 @@ export function TradeCenter(props: {
     setGetAssets(Array.isArray(get) ? (get as PickedAsset[]) : [])
     /* A restored deal is not an analysed one. */
     setResult(null)
+    setCountering(null)
+    setPartnerRosterId(null)
     setDraftNote(note)
   }, [])
 
   const restoreDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const restoringContext = draftContextRef.current
+    const restoringProposal = proposalFingerprintRef.current
 
     /*
      * ⚠ THE ACCOUNT WINS WHEN BOTH EXIST, and that is a choice rather than an
@@ -1129,8 +1182,9 @@ export function TradeCenter(props: {
       const j = (await r.json().catch(() => ({}))) as {
         draft?: { payload?: { give?: unknown; get?: unknown } } | null
       }
-      const payload = j?.draft?.payload
-      if (payload && (Array.isArray(payload.give) || Array.isArray(payload.get))) {
+      if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
+      const payload = decodeTradeDraft(j?.draft?.payload)
+      if (r.ok && payload) {
         applyDraft(
           payload.give,
           payload.get,
@@ -1142,13 +1196,15 @@ export function TradeCenter(props: {
       /* Fall through to the browser copy. */
     }
 
+    if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
     try {
-      const raw = window.localStorage.getItem(draftKey)
+      const raw = draftKey ? window.localStorage.getItem(draftKey) : null
       if (!raw) {
         setDraftNote('No saved draft for this league, on your account or in this browser.')
         return
       }
-      const parsed = JSON.parse(raw) as { give?: PickedAsset[]; get?: PickedAsset[] }
+      const parsed = decodeTradeDraft(JSON.parse(raw))
+      if (!parsed) { setDraftNote('That saved draft could not be read.'); return }
       applyDraft(
         parsed.give,
         parsed.get,
@@ -1454,9 +1510,12 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {draftKey ? (
+      {props.league?.id ? (
         <div className="af-tc-draft" data-mstep="offers review">
           <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
+          {workingDraftKey ? <span className="af-tc-row-sub">{deviceDraftAvailable === false
+            ? 'Device recovery is unavailable. Use Save draft to save to your account.'
+            : 'In-progress proposals recover on this device. Use Save draft to sync across devices.'}</span> : null}
           <span className="af-tc-spacer" />
           <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
             Restore draft
@@ -2381,7 +2440,7 @@ export function TradeCenter(props: {
           type="button"
           className="af-btn af-btn--ghost"
           onClick={() => void saveDraft()}
-          disabled={!draftKey || (giveAssets.length === 0 && getAssets.length === 0)}
+          disabled={!props.league?.id || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           Save draft
         </button>
