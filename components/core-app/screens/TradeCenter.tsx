@@ -2058,14 +2058,14 @@ export function TradeCenter(props: {
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
-              proposal value today &mdash; realized production is tracked separately after completion
+              trade value today &mdash; roster fit and realized production are separate
             </span>
           </div>
 
           {/*
             What the grade is priced in, always, so a letter never appears without its rules.
-            "League value" is the base asset value (market or league-derived) on this league's chart, moved by its scoring and your
-            roster; the moves are listed below with their reasons.
+            The shared trade-value letter uses this league's chart and scoring. Personal roster
+            utility is shown separately, so completion cannot remove a factor from the headline grade.
           */}
           {result.valueBasis ? (
             <p className="af-tc-basis">
@@ -2078,6 +2078,24 @@ export function TradeCenter(props: {
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
+          {serverGrade?.graded ? (
+            <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
+              This trade-value grade uses the same league scoring and asset-price rules as trade history and email.
+              Roster fit does not change the letter. Refreshed market values can change a later evaluation.
+            </p>
+          ) : null}
+          {serverGrade?.graded && serverGrade.rosterFit ? (
+            <div className="af-tc-cap-check" data-testid="trade-roster-fit">
+              <div className="af-label">Your roster fit · separate from the trade-value grade</div>
+              <p>Personal utility: {money(serverGrade.rosterFit.giveValue)} given, {money(serverGrade.rosterFit.getValue)} received.
+                {' '}This is a roster-fit estimate, not a win probability or the grade sent by email.</p>
+              {serverGrade.rosterFit.moves.map((move, index) => (
+                <p key={`${move.side}:${move.name}:${index}`}>
+                  {move.name}: {money(move.base)} base → {money(move.leagueValue)} personal utility. {move.reasons.join('; ')}.
+                </p>
+              ))}
+            </div>
+          ) : null}
 
           {result.salaryCap && result.salaryCap.status !== 'not_applicable' ? (
             <div className="af-tc-cap-check" role="status">

@@ -97,6 +97,32 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('keeps the headline letter and asset totals separate from personal roster utility', async () => {
+    const grade = gradeTrade({ giveValue: 5000, getValue: 5153, giveMarket: 5000, getMarket: 4500,
+      unpriced: 0, giveCount: 1, getCount: 1, basis: ANALYSIS.valueBasis.label,
+      scoringApplied: true, needApplied: false, needGap: null,
+      lines: [{ side: 'give', name: 'Kenneth Walker', marketValue: 5000, leagueValue: 5000 },
+        { side: 'get', name: 'Trey McBride', marketValue: 4500, leagueValue: 5153 }], moves: [] })
+    if (!grade.graded) throw new Error('expected the complete trade to be graded')
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS,
+          percentDiff: grade.percentDiff, getTotal: 5153,
+          grade: { ...grade, rosterFit: { giveValue: 5000, getValue: 5928, percentDiff: 16,
+            moves: [{ side: 'get', name: 'Trey McBride', base: 4500, leagueValue: 5928,
+              reasons: ['you cannot fill 1 TE slot and there is no TE available on waivers'] }] } },
+          valueBasis: { ...ANALYSIS.valueBasis, needAdjusted: false },
+          players: { ...ANALYSIS.players, get: [{ ...ANALYSIS.players.get[0], leagueValue: 5153,
+            valueAdjustments: [ANALYSIS.players.get[0].valueAdjustments[0]] }] },
+        }) }
+      : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: 'grade-fit-separation', name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    expect([...container.querySelectorAll('.af-tc-grade-letter')].map(el => el.textContent)).toEqual(['C', 'C'])
+    expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,153')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('5,928')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
+    expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Roster fit does not change the letter')
+  })
   it('recovers a proposal and counterparty after remount, without recovering its grade', async () => {
     const league = { id: 'recovery-league', name: 'L', format: 'Dynasty', teamCount: 12 }
     const view = render(<TradeCenter league={league} viewerId="account-a" />)

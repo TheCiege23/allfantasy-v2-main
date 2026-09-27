@@ -326,8 +326,8 @@ export async function runTradeConsoleAnalysis(
    * graded in another, and a manager checking the arithmetic could never make it add up.
    *
    * Now each line starts from its market value on THIS league's chart, is moved by this league's
-   * scoring and the viewer's roster need (each factor carried with its reason, see
-   * `lib/trade-value/leagueTradeValue.ts`), and the grade is the difference of those totals. The
+   * scoring, and the grade is the difference of those totals. The viewer's roster need is
+   * a separate personal-utility estimate so a completed email cannot drop a grading factor. The
    * composite survives only where it always belonged: the driver model below (accept probability,
    * lineup simulation), which is secondary and labelled as such.
    */
