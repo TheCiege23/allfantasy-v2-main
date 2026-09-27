@@ -41,6 +41,10 @@ import type { ManagerPresence } from '@/lib/core-app/managerPresence'
 import type { PitchPackage } from '@/lib/core-app/tradePitch'
 import type { RecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import type { PlayerDepth } from '@/lib/core-app/playerDepth'
+import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
+import { PlayerNextGames } from '@/components/core-app/player-finder/PlayerNextGames'
+import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
 
 /**
  * Screen 3 — Player Finder.
@@ -152,6 +156,12 @@ export type PlayerFinderProps = {
    */
   depthAccess?: CoreDepthAccess | null
   /**
+   * The deeper card (Phase 1, lib/core-app/playerDepth.ts): this season against the projection,
+   * next games with the market's read, news, and per-league value (`leagueValues` is null for a
+   * viewer without AF Pro). Null renders the card exactly as before.
+   */
+  depth?: PlayerDepth | null
+  /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
    */
@@ -180,6 +190,15 @@ function Unavailable({ reason }: { reason: string }) {
  * missing image AND for one the CDN 404s. The failed src is remembered rather
  * than a boolean so a different player's image gets a fresh attempt.
  */
+/**
+ * The Sleeper CDN headshot, when the catalog row carries no image. Every NFL player with a Sleeper id
+ * has one there; a miss falls through to the letter tile via `onError`, never a broken image.
+ */
+function headshotFor(player: { imageUrl: string | null; sleeperId?: string | null; sport: string }): string | null {
+  if (player.imageUrl) return player.imageUrl
+  return player.sport === 'NFL' && player.sleeperId ? `https://sleepercdn.com/content/nfl/players/thumb/${player.sleeperId}.jpg` : null
+}
+
 function Headshot({ src, name }: { src: string | null; name: string }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   if (!src || src === failedSrc) {
@@ -330,6 +349,7 @@ export function PlayerFinder({
   compare = null,
   compareRequested = false,
   depthAccess = null,
+  depth = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -409,6 +429,8 @@ export function PlayerFinder({
   const ready = inactive && readyBase ? { tone: 'bad' as const, label: 'Inactive' } : readyBase
   const last = detail ? (detail.player.name.trim().split(/\s+/).slice(-1)[0] ?? detail.player.name) : ''
 
+  // Per-league value (AF Pro): null for a locked viewer, which drops the column entirely.
+  const leagueValues = depth?.leagueValues ?? null
   const leagueRows: LeagueRow[] = (detail?.leagues.available ? detail.leagues.data : [])
     .filter((slot) => inScope(slot.leagueId))
     .map((slot) => ({
@@ -673,7 +695,7 @@ export function PlayerFinder({
         ) : detail ? (
           <section className="af-card af-pf-detail">
             <header className="af-pf-detail-head">
-              <Headshot src={detail.player.imageUrl} name={detail.player.name} />
+              <Headshot src={headshotFor(detail.player)} name={detail.player.name} />
 
               <div className="af-pf-identity">
                 <div className="af-pf-name-row">
@@ -920,6 +942,10 @@ export function PlayerFinder({
               )}
             </section>
 
+            {/* ── Next game + news (Phase 1): every width — the late news IS the game-day story ── */}
+            {depth ? <PlayerNextGames next={depth.nextGame} upcoming={depth.upcoming} /> : null}
+            {depth ? <PlayerNews state={depth.news} nowIso={nowIso} /> : null}
+
             {/* ── Every platform, every league ──────────────────────── */}
             {/*
               ⚠ THIS IS THE DECISION TABLE, NOT A REFERENCE LIST. Slot truth beats
@@ -977,6 +1003,11 @@ export function PlayerFinder({
                         <th className="af-label">Slot</th>
                         <th className="af-label af-pf-col-status">Status</th>
                         <th className="af-label af-pf-col-proj">Proj</th>
+                        {leagueValues ? (
+                          <th className="af-label af-pf-col-value" title="What this league’s format and scoring make him worth">
+                            Value
+                          </th>
+                        ) : null}
                         <th className="af-label" />
                       </tr>
                     </thead>
@@ -1003,6 +1034,10 @@ export function PlayerFinder({
                                   </span>
                                 ) : null}
                                 {r.held ? <span className="af-pf-impact-held af-label">This league</span> : null}
+                                {/* The phone table has no room for a Value column; the number rides in the league cell there. */}
+                                {leagueValues?.[l.leagueId] ? (
+                                  <span className="af-pf-value-inline af-num">value {leagueValues[l.leagueId]!.value.toLocaleString('en-US')}</span>
+                                ) : null}
                               </span>
                             </td>
                             <td className="af-pf-col-slot">
@@ -1041,6 +1076,18 @@ export function PlayerFinder({
                                 </span>
                               )}
                             </td>
+                            {leagueValues ? (
+                              <td className="af-pf-col-value">
+                                {leagueValues[l.leagueId] ? (
+                                  <span className="af-pf-value af-num" title={leagueValues[l.leagueId]!.fitNote ?? `${leagueValues[l.leagueId]!.mode} · ${leagueValues[l.leagueId]!.numQbs === 2 ? 'superflex' : '1QB'}`}>
+                                    {leagueValues[l.leagueId]!.value.toLocaleString('en-US')}
+                                    {leagueValues[l.leagueId]!.value !== leagueValues[l.leagueId]!.base ? <span className="af-pf-value-fit" aria-label="adjusted for this league’s scoring">*</span> : null}
+                                  </span>
+                                ) : (
+                                  <span className="af-pf-nothing">—</span>
+                                )}
+                              </td>
+                            ) : null}
                             <td className="af-pf-table-action">{rowAction(r, last)}</td>
                           </tr>
                         )
@@ -1067,6 +1114,9 @@ export function PlayerFinder({
                 </p>
               ) : null}
             </section>
+
+            {/* ── This season: projected against scored, week by week (Phase 1) ── */}
+            {depth ? <PlayerSeasonCard state={depth.season} name={detail.player.name} /> : null}
 
             {/* ── Recommended moves ─────────────────────────────────── */}
             {signedIn ? (

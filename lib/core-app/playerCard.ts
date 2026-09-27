@@ -519,7 +519,7 @@ async function loadComps(
  * week with no fixtures for ANYBODY is skipped rather than reported as a bye.
  * `buildNextGameMap` does the four-rows-per-fixture reconciliation.
  */
-async function loadSchedule(
+export async function loadSchedule(
   team: string | null,
   season: number,
   fromWeek: number,
@@ -848,7 +848,7 @@ export async function loadInjury(
 
 /* ── news ────────────────────────────────────────────────────────────────── */
 
-async function loadNews(name: string, sport: string): Promise<SectionState<PlayerCardNews[]>> {
+export async function loadNews(name: string, sport: string): Promise<SectionState<PlayerCardNews[]>> {
   const rows = await prisma.sportsNews
     .findMany({
       where: {
