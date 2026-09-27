@@ -32,10 +32,17 @@ export async function runActiveSyncHeartbeat(limitPerProvider = 4) {
       status: summary.failed > 0 || summary.errored > 0 ? 'partial' : 'success',
       rowsRead: summary.selected,
       rowsWritten: summary.completed,
-      rowsSkipped: summary.notDue + summary.locked + summary.skipped,
+      rowsSkipped: summary.notDue + summary.locked + summary.skipped + summary.deferred,
       metadata: {
         enabled: true,
         cadenceMinutes: 5,
+        /*
+         * Recorded so "did game-day sizing fire, and did it keep up" is a query, not an inference:
+         * `gameDay` true with `deferred` above zero means the slice outran the start budget and
+         * the 20-minute promise is not being met.
+         */
+        gameDay: summary.gameDay,
+        deferred: summary.deferred,
         scopes: ['transactions', 'teams_rosters'],
         eligible: summary.eligible,
         selected: summary.selected,
