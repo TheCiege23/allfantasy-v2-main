@@ -1,11 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 import { screenshotTradeQuestion } from '@/lib/chimmy/tradeOfferEvidence'
+import { extractPickMentions } from '@/lib/chimmy/tradePickMentions'
 import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
 
 describe('trade screenshot evidence', () => {
   it('preserves IDP players, kicker and future pick from the reported offer', () => {
     expect(screenshotTradeQuestion('Trade team: TheCiege24\nTrade gives: Quincy Williams and Carson Schwesinger\nTrade receives: Tyrone Tracy and Ryan Fitzgerald and 2027 1st')).toEqual({ question: 'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?', clarification: null, assetCount: 5 })
+  })
+  it('normalizes the actual vision-reader pick wording into an engine-readable asset', () => {
+    const result = screenshotTradeQuestion('Trade gives: Quincy Williams, Carson Schwesinger\nTrade receives: Tyrone Tracy, Ryan Fitzgerald, 2027 Round 1')
+    expect(result.assetCount).toBe(5)
+    expect(result.question).toContain('2027 1st-round pick')
+    expect(extractPickMentions(result.question!.split(' for ')[1]!).picks).toEqual([{season:2027,round:1,text:'2027 1st-round pick'}])
   })
   it('requires clarification for a missing side or uncertain extraction', () => {
     expect(screenshotTradeQuestion('Trade gives: Quincy Williams').question).toBeNull()
