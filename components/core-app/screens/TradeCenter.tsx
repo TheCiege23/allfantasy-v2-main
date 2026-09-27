@@ -1250,6 +1250,7 @@ export function TradeCenter(props: {
     return (
       <TradeAssetPicker
         sport={null}
+        leagueId={props.league?.id}
         onClose={() => setPicking(null)}
         onPick={(a) => addAsset(side, a)}
         /*

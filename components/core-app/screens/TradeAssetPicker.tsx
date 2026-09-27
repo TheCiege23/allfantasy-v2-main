@@ -93,6 +93,7 @@ type SearchRow = {
   kind: 'player'
   sport: string
   playerId: string | null
+  providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
   name: string
   position: string | null
   team: string | null
@@ -151,6 +152,8 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
 export function RosterPlayerRow(props: {
   player: RosterPlayer
   sport?: string | null
+  /** Uses the same league chart as the roster and analyzer. */
+  leagueId?: string | null
   onAdd: () => void
   /** Already in the deal — shown, but not addable twice. */
   added?: boolean
@@ -302,6 +305,7 @@ export function TradeAssetPicker(props: {
   const [faab, setFaab] = useState(10)
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchVersion = useRef(0)
 
   const roster = props.rosterPlayers ?? []
 
@@ -342,33 +346,37 @@ export function TradeAssetPicker(props: {
 
   const search = useCallback(
     async (q: string) => {
+      const version = ++searchVersion.current
       if (q.trim().length < MIN_QUERY) {
         setRows([])
+        setSearching(false)
         return
       }
       setSearching(true)
       try {
         const sport = props.sport ? props.sport.toUpperCase() : 'ALL'
         const r = await fetch(
-          `/api/trade-value/player-search?q=${encodeURIComponent(q)}&sport=${encodeURIComponent(sport)}`,
+          `/api/trade-value/player-search?q=${encodeURIComponent(q)}&sport=${encodeURIComponent(sport)}${props.leagueId ? `&leagueId=${encodeURIComponent(props.leagueId)}` : ''}`,
         )
         const j = (await r.json().catch(() => [])) as SearchRow[]
-        setRows(Array.isArray(j) ? j : [])
+        if (version === searchVersion.current) setRows(Array.isArray(j) ? j : [])
       } catch {
         /* A failed search shows nothing rather than a stale list. */
-        setRows([])
+        if (version === searchVersion.current) setRows([])
       } finally {
-        setSearching(false)
+        if (version === searchVersion.current) setSearching(false)
       }
     },
-    [props.sport],
+    [props.sport, props.leagueId],
   )
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
+    setRows([])
     timer.current = setTimeout(() => void search(query), DEBOUNCE_MS)
     return () => {
       if (timer.current) clearTimeout(timer.current)
+      searchVersion.current++
     }
   }, [query, search])
 
@@ -505,6 +513,7 @@ export function TradeAssetPicker(props: {
                 props.onPick({
                   kind: 'player',
                   playerId: r.playerId,
+                  providerIdentity: r.providerIdentity,
                   name: r.name,
                   position: r.position,
                   team: r.team,
