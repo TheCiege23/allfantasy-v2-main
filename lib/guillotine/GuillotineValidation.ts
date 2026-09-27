@@ -17,8 +17,8 @@ export type GuillotineRosterMode = (typeof GUILLOTINE_ALLOWED_ROSTER_MODES)[numb
 /** Draft types allowed for Guillotine (snake, linear, auction; 3RR only for snake). */
 export const GUILLOTINE_DRAFT_TYPES = ['snake', 'linear', 'auction'] as const
 
-/** NFL: fixed 8–32 teams, 18-week season; final week highest scorer wins. */
-const NFL_GUILLOTINE_TEAM_MIN = 8
+/** NFL: fixed 4–32 teams, 18-week season; final week highest scorer wins. */
+const NFL_GUILLOTINE_TEAM_MIN = 4
 const NFL_GUILLOTINE_TEAM_MAX = 32
 
 /** Minimum teams for any sport. */
@@ -35,7 +35,7 @@ export interface ValidTeamCountRange {
 
 /**
  * Get valid Guillotine team count range for a sport.
- * NFL: 8–32. Others: derived from schedule template regularSeasonWeeks (one winner by final week).
+ * NFL: 4–32. Others: derived from schedule template regularSeasonWeeks (one winner by final week).
  */
 export async function getValidGuillotineTeamCountRange(
   sport: LeagueSport | string

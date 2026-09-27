@@ -17,13 +17,27 @@ describe('simple creation team choices agree with the server', () => {
     expect(next.teamCount).toBe(12)
     view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
     const count = screen.getByTestId('g30-team-count')
-    expect(count).toHaveAttribute('min', '8')
+    expect(count).toHaveAttribute('min', '4')
     expect(count).toHaveAttribute('max', '16')
     expect(count).toHaveAttribute('step', '2')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('8, 10, 12, 14, 16')
-    for (const teamCount of [8, 10, 12, 14, 16]) {
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4, 6, 8, 10, 12, 14, 16')
+    for (const teamCount of [4, 6, 8, 10, 12, 14, 16]) {
       const validation = validateCreatePayload({ concept, sport: next.sport, teamCount, draftType: next.draftType, scoringPreset: next.scoringPresetId, leagueName: 'Accepted choices' })
       expect(validation.ok, JSON.stringify(validation)).toBe(true)
+    }
+  })
+  it.each(['dynasty', 'best_ball'] as const)('fits playoff defaults when reducing a %s to four teams', (concept) => {
+    const onChange = vi.fn()
+    const state = { ...DEFAULT_V2_STATE, leagueType: concept, teamCount: 12, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    fireEvent.change(screen.getByTestId('g30-team-count'), { target: { value: '4' } })
+    const patch = onChange.mock.calls[0][0]
+    expect(patch.teamCount).toBe(4)
+    if (concept === 'dynasty') {
+      expect(patch.dynasty.playoffTeamCount).toBe(4)
+      expect(patch.dynasty.playoffByeCount).toBe(0)
+    } else {
+      expect(patch.bestBall.playoffTeams).toBe(4)
     }
   })
   it('preserves the full redraft range and a valid existing selection', () => {

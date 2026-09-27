@@ -312,6 +312,7 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       }
     }
     const bestBall = normalizeBestBallSettings({
+          teamCount: data.teamCount,
       sport,
       conceptSetup: (data.conceptSetup ?? null) as Record<string, unknown> | null,
       draftType: data.draftType,

@@ -109,10 +109,20 @@ function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): P
     scoringPresetId,
     teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
-    dynasty: getDefaultDynastySetup(sport, state.draftType),
+    dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(sport, state.draftType), getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
-    bestBall: getDefaultBestBallSetup(sport, 'standard', state.draftType),
+    bestBall: bestBallSetupForTeamCount(sport, state.draftType, getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
   }
+}
+
+function fitDynastySetupToTeamCount(setup: CreateLeagueV2State['dynasty'], teamCount: number) {
+  const playoffTeamCount = Math.min(setup.playoffTeamCount, Math.max(2, teamCount))
+  return { ...setup, playoffTeamCount, playoffByeCount: 2 ** Math.ceil(Math.log2(playoffTeamCount)) - playoffTeamCount }
+}
+
+function bestBallSetupForTeamCount(sport: CreateLeagueV2State['sport'], draftType: WizardDraftType, teamCount: number) {
+  const setup = getDefaultBestBallSetup(sport, 'standard', draftType)
+  return { ...setup, playoffTeams: Math.min(setup.playoffTeams, teamCount) }
 }
 
 function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTypeId): Partial<CreateLeagueV2State> {
@@ -133,9 +143,9 @@ function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTy
     draftType,
     teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
-    dynasty: getDefaultDynastySetup(state.sport, draftType),
+    dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(state.sport, draftType), getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
-    bestBall: getDefaultBestBallSetup(state.sport, 'standard', draftType),
+    bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
   }
 }
 
@@ -418,7 +428,10 @@ export function LeagueBasicsStep({
             step={teamCountStep}
             aria-describedby="g30-team-count-options"
             value={state.teamCount}
-            onChange={(event) => onChange({ teamCount: Number(event.target.value) })}
+            onChange={(event) => {
+              const teamCount = Number(event.target.value)
+              onChange({ teamCount, ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}), ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
+            }}
             className={fieldClass(Boolean(fieldErrors?.teamCount))}
             data-testid="g30-team-count"
           />
