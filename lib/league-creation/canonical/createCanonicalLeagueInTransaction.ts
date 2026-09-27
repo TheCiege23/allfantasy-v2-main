@@ -165,6 +165,7 @@ export async function createCanonicalLeagueInTransaction(
   const bestBallSettings =
     formatId === 'best_ball'
       ? normalizeBestBallSettings({
+          teamCount: body.teamCount,
           sport,
           conceptSetup: (body.conceptSetup ?? null) as Record<string, unknown> | null,
           draftType: body.draftType,

@@ -385,6 +385,7 @@ export function getDefaultBestBallSettings(
 }
 
 export function normalizeBestBallSettings(input: {
+  teamCount?: number
   sport: LeagueSport | string
   conceptSetup?: Record<string, unknown> | null
   draftType?: string | null
@@ -435,7 +436,7 @@ export function normalizeBestBallSettings(input: {
     lineupTemplateId: asString(nested.lineupTemplateId, defaults.lineupTemplateId),
     rosterTemplateId: asString(nested.rosterTemplateId, defaults.rosterTemplateId),
     regularSeasonLength: asInt(nested.regularSeasonLength, defaults.regularSeasonLength, 1, 60),
-    playoffTeams: asInt(nested.playoffTeams, defaults.playoffTeams, 0, 16),
+    playoffTeams: asInt(nested.playoffTeams, Math.min(defaults.playoffTeams, input.teamCount ?? defaults.playoffTeams), 0, 16),
     scoringPeriod: isOneOf(nested.scoringPeriod, ['weekly', 'daily'] as const)
       ? nested.scoringPeriod
       : defaults.scoringPeriod,

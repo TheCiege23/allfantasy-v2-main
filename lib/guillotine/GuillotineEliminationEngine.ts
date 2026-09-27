@@ -2,6 +2,8 @@
  * Run elimination: determine lowest N, apply tiebreaker, mark chopped, trigger release and events.
  */
 
+import { randomUUID } from 'node:crypto'
+import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveTiebreak } from './GuillotineTiebreakResolver'
@@ -10,7 +12,7 @@ import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
 import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
 import { resolveRedraftRosterId, resolveRedraftRosterIds } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
-import { recordChopAudit } from './guillotineChopAudit'
+import { recordChopAudit, findGuillotineSeasonId, isPeriodAlreadyRecorded } from './guillotineChopAudit'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
@@ -90,6 +92,20 @@ export async function markRedraftRostersEliminated(
 }
 
 export async function runElimination(input: RunEliminationInput): Promise<GuillotineChopResult | null> {
+  const key = `guillotine-elimination:${input.leagueId}:${input.weekOrPeriod}`
+  const owner = randomUUID()
+  const lock = await acquireAutomationLock(key, { owner, ttlMs: 300_000 })
+  if (!lock.ok) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: lock.reason }
+  }
+  try {
+    return await runEliminationLocked(input)
+  } finally {
+    await releaseAutomationLock(key, owner)
+  }
+}
+
+async function runEliminationLocked(input: RunEliminationInput): Promise<GuillotineChopResult | null> {
   const config = await getGuillotineConfig(input.leagueId)
   if (!config) return null
 
@@ -99,6 +115,19 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
   }
   if (eliminationEndWeek != null && input.weekOrPeriod > eliminationEndWeek) {
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'past elimination end' }
+  }
+
+  // Check BEFORE filtering active teams or writing eliminations: an audited retry must not
+  // turn the next-lowest survivor into a second chop for the same scoring period.
+  const seasonId = await findGuillotineSeasonId(input.leagueId, input.season)
+  const alreadyProcessed = seasonId
+    ? await isPeriodAlreadyRecorded(seasonId, input.weekOrPeriod)
+    : (await prisma.guillotineRosterState.findMany({
+        where: { leagueId: input.leagueId, choppedInPeriod: input.weekOrPeriod, choppedAt: { not: null } },
+        select: { rosterId: true },
+      })).length > 0
+  if (alreadyProcessed) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already processed' }
   }
 
   const evalResult = await evaluateWeek({
@@ -120,6 +149,10 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
   }
   if (evalResult.scores.length === 0) {
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'no active scores' }
+  }
+
+  if (evalResult.activeRosterIds.length <= 1) {
+    return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'last team standing' }
   }
 
   const minPoints = Math.min(...evalResult.scores.map((s) => s.periodPoints))

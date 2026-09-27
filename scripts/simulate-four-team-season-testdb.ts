@@ -123,7 +123,3 @@ async function main() {
   }
 }
 main().catch(e=>{console.error('Four-team simulation failed:',e.code??e.message);process.exitCode=1})
-
-
-
-
