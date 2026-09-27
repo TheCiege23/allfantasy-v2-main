@@ -82,3 +82,14 @@ describe('reading two quarterbacks off the lineup', () => {
     expect(await leagueStartsTwoQuarterbacks('L')).toBe(expected)
   })
 })
+
+describe('seven-sport draft ADP values', () => {
+  it.each(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])('excludes invalid imported values before averaging for %s', async sport => {
+    state.rows = [
+      { playerName: 'Valid Player', position: 'QB', team: 'TEST', source: 'one', adp: 20, scoring: 'standard' },
+      { playerName: 'Valid Player', position: 'QB', team: 'TEST', source: 'two', adp: 0, scoring: 'standard' },
+      ...[0, -10, NaN, Infinity].map((adp, index) => ({ playerName: `Invalid ${index}`, position: 'QB', team: 'TEST', source: 'one', adp, scoring: 'standard' })),
+    ]
+    expect(await loadLatestAveragedAdpRowsFromDb(sport as never, 'redraft')).toEqual([{ name: 'Valid Player', position: 'QB', team: 'TEST', adp: 20 }])
+  })
+})

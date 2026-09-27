@@ -448,7 +448,7 @@ async function loadLatestAveragedAdpRowsForScorings(
   for (const row of rows) {
     const name = String(row.playerName ?? '').trim()
     const position = String(row.position ?? '').trim().toUpperCase()
-    if (!name || !position || !Number.isFinite(Number(row.adp))) continue
+    if (!name || !position || typeof row.adp !== 'number' || !Number.isFinite(row.adp) || row.adp <= 0) continue
     const team = row.team ? String(row.team).trim().toUpperCase() : null
     const key = adpLookupKey(name, position, team)
     if (!perPlayerSource.has(key)) {
