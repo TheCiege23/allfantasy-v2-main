@@ -2930,9 +2930,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     if (decisionAnswer.startCalls?.length) {
       await recordChatStartSitAdvice({ userId, calls: decisionAnswer.startCalls, answer: decisionAnswer.answer }).catch(() => null)
     }
+    const screenshotAttachment = userId && imageFile ? await storeChimmyScreenshot(userId, imageFile) : null
+    if (userId) await Promise.allSettled([
+      appendChatHistory({ conversationId, role: 'user', content: message || '[image-only request]', userId, leagueId: decisionAnswer.leagueId,
+        meta: screenshotAttachment ? { display: { imagePreview: screenshotAttachment.url, imageName: screenshotAttachment.name } } : undefined }),
+      appendChatHistory({ conversationId, role: 'assistant', content: decisionAnswer.answer, userId, leagueId: decisionAnswer.leagueId,
+        meta: { display: { grounding: tradeTargetGrounding, cost: spendLedger && tokenPreview ? tokenPreview.tokenCost : planMeta ? null : 0, mode: selectedAssistantMode } } }),
+    ])
     return NextResponse.json({ response: decisionAnswer.answer, result: decisionAnswer.answer,
       source: 'chimmy_decision_engine', sessionId,
-      meta: { decision: decisionAnswerMeta(decisionAnswer), scenario: decisionAnswer.scenario,
+      meta: { decision: decisionAnswerMeta(decisionAnswer), scenario: decisionAnswer.scenario, screenshotAttachment, mode: selectedAssistantMode,
         leagueGrounding: tradeTargetGrounding, dataSources: decisionAnswer.sources,
         ...(planMeta ? { planAllowance: planMeta } : {}),
         tokenSpend: spendLedger && tokenPreview ? { ruleCode: tokenPreview.ruleCode, tokenCost: tokenPreview.tokenCost,
