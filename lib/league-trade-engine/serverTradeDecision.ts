@@ -1,5 +1,5 @@
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
-import { evaluateTrade, type EvaluateTradeDeps } from '@/lib/decision-os/trade/evaluateTrade'
+import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -34,8 +34,11 @@ export type ServerTradeDecisionResult = {
   evaluatorSupported: boolean
   reason: string | null
   participants: ServerTradeParticipantDecision[]
-  /** The `trade_evaluation_receipts` row this decision was read from. Null when it could not be saved. */
-  evaluationReceiptId?: string | null
+  /**
+   * The engine's full receipt. NOT saved here: `tradeService` writes it into this trade's own
+   * `trade_decision_snapshots` row, in the proposal's transaction — one receipt per trade, one table.
+   */
+  evaluationReceipt?: TradeEvaluationReceipt | null
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -153,6 +156,8 @@ export async function evaluateServerTradeDecision(input: {
         includeRosterImpact: true,
       },
       evaluatedAt: capturedAt,
+      // Saved in the trade's own snapshot row, not as a second receipt.
+      persist: false,
     },
     {
       ...input.engineDeps,
@@ -171,7 +176,7 @@ export async function evaluateServerTradeDecision(input: {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: true,
       reason: receipt.canonicalError ?? 'Server trade evaluation unavailable.',
       participants: [],
-      evaluationReceiptId: receipt.receiptId,
+      evaluationReceipt: receipt,
     }
   }
   return {
@@ -180,7 +185,7 @@ export async function evaluateServerTradeDecision(input: {
     scope: 'market',
     evaluatorSupported: true,
     reason: null,
-    evaluationReceiptId: receipt.receiptId,
+    evaluationReceipt: receipt,
     participants: receipt.canonical.participants.map((evaluation) => {
       const rosterId = evaluation.rosterId
       // The receiver's letter is the proposer's grade seen from the other side — the exact mirror.

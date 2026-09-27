@@ -32,6 +32,7 @@ import {
 } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
+import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -498,6 +499,13 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
   }).tradeManagerStrategy
 
+  // The engine's receipt rides in this trade's own snapshot row — asked BEFORE the transaction,
+  // because writing a column an unmigrated database lacks would abort the trade with it.
+  const engineReceipt =
+    serverDecisionResult?.evaluationReceipt && decisionStore && (await receiptColumnsReady())
+      ? receiptColumns(serverDecisionResult.evaluationReceipt)
+      : null
+
   // Production uses one transaction so a trade can never exist without its
   // proposal-time receipt. Reduced test clients without the new delegate keep
   // exercising the legacy creation path until their generated client updates.
@@ -535,6 +543,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
           leagueId: input.leagueId,
           proposedByUserId: input.proposedByUserId,
           snapshot,
+          receipt: engineReceipt,
         })
         return created
       })

@@ -58,7 +58,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
 import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
-import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
+import { receiptGradeFields, receiptPromptBlock } from '@/lib/decision-os/trade/receiptViews'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
@@ -1798,17 +1798,22 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         ? '\nNote: Some player data was unavailable from imported provider cache.'
         : ''
 
+    /*
+     * 🛑 THE MODELS ARE GIVEN THE RECEIPT, NOT THE COMPOSITE (2026-09-27). The page shows the one
+     * engine's letter and its totals; a narrative reasoning from this route's composite totals and
+     * fairness score could argue the opposite of the letter printed beside it. Team A is the sender,
+     * which is the receipt's graded (`give`) side.
+     */
+    const receiptForAI = await evaluationReceiptPromise
+    const gradeBlockForAI = receiptPromptBlock(receiptForAI)
     const tradeContextForAI = `
 TRADE DETAILS:
 Team A (${data.sender.manager_name}) gives: ${senderPlayerNames.join(', ')}${senderPicksData.length ? ', ' + senderPicksData.map(p => p.label).join(', ') : ''}
 Team B (${data.receiver.manager_name}) gives: ${receiverPlayerNames.join(', ')}${receiverPicksData.length ? ', ' + receiverPicksData.map(p => p.label).join(', ') : ''}
 
 LEAGUE: ${data.league?.format || 'dynasty'} | ${isSF ? 'Superflex' : '1QB'} (${qbFormatBasis})
-Team A total value: ${senderGivenComposite}
-Team B total value: ${senderReceivedComposite}
-Net delta: ${teamANetValue}
-Fairness score: ${fairnessScore}/100
-${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — internal trade values above remain authoritative for fairness):\n${normalizedEvidencePrompt}${providerMissingNote}` : ''}
+${gradeBlockForAI}
+${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — the trade grade above is authoritative):\n${normalizedEvidencePrompt}${providerMissingNote}` : ''}
     `.trim()
 
     const [dsResult, grokResult] = await Promise.allSettled([
@@ -1907,7 +1912,8 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
           : '')
       const narrativePrompt = gptContract ? buildGptUserPrompt(gptContract) : ''
 
-      const enrichedPayloadStr = `${narrativePrompt}\n\n${JSON.stringify(gptPayload)}\n\n` +
+      // The grade block leads, so the narrative explains the receipt's letter rather than the composite totals in the payload.
+      const enrichedPayloadStr = `${gradeBlockForAI}\n\n${narrativePrompt}\n\n${JSON.stringify(gptPayload)}\n\n` +
         (normalizedEvidencePrompt
           ? `NORMALIZED PROVIDER EVIDENCE (supplemental — not trade value):\n${normalizedEvidencePrompt}${providerMissingNote}\n\n`
           : '') +

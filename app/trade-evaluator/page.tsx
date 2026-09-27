@@ -12,6 +12,7 @@ import { InContextMonetizationCard } from "@/components/monetization/InContextMo
 import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui"
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
 import type { NegotiationToolkit } from "@/lib/trade-engine/types"
+import { liveGradePanel } from "@/lib/decision-os/trade/receiptViews"
 
 type LeagueFormat = "dynasty" | "keeper" | "redraft"
 type QBFormat = "sf" | "1qb"
@@ -45,6 +46,7 @@ type VerdictKey =
   | "LEAN DECLINE"
   | "DECLINE"
   | "SMASH DECLINE"
+  | "NOT GRADED"
 
 interface TradePlayer {
   id: string
@@ -88,15 +90,25 @@ interface TradeLabelChip {
 
 interface TradeResult {
   verdict: VerdictKey
-  fairnessScore: number
+  /**
+   * 🛑 LIVE MODE SHOWS ONLY THE RECEIPT'S NUMBERS. The route's composite fairness, value delta,
+   * confidence, acceptance drivers and signal chips are priced differently from the one grade and
+   * could contradict the letter beside them, so live mode carries `receiptTotals` and hides them.
+   * Historical (`asOfDate`) mode still shows the old tiles — a known follow-up.
+   */
+  live: boolean
+  receiptTotals: { send: number; get: number; gapPct: number } | null
+  fairnessScore: number | null
   fairnessMethod: string | null
   /** Null when the grade was withheld — `gradeWithheld` says why. */
   senderGrade: string | null
   receiverGrade: string | null
   gradeWithheld: string | null
-  valueDelta: number
-  confidencePct: number
+  valueDelta: number | null
+  confidencePct: number | null
   recommendation: string
+  /** The AI's own summary, shown under the grade's recommendation in live mode. */
+  aiSummary: string | null
   analysisBullets: string[]
   providers: string[]
   pECRIterations?: number
@@ -205,6 +217,9 @@ interface ApiTradeResponse {
     gradeLabel: string | null
     gradeWithheld: string | null
     percentDiff: number | null
+    giveValue: number | null
+    getValue: number | null
+    recommendation: string | null
     evaluationReceiptId: string | null
   }
   dualModeGrades?: {
@@ -266,6 +281,25 @@ const VERDICT_CONFIG: Record<VerdictKey, { color: string; glow: string; emoji: s
   "LEAN DECLINE": { color: "#fb923c", glow: "rgba(251,146,60,0.28)", emoji: "📉" },
   DECLINE: { color: "#f87171", glow: "rgba(248,113,113,0.30)", emoji: "❌" },
   "SMASH DECLINE": { color: "#ef4444", glow: "rgba(239,68,68,0.35)", emoji: "🚫" },
+  "NOT GRADED": { color: "#94a3b8", glow: "rgba(148,163,184,0.22)", emoji: "⏸️" },
+}
+
+/** The one grade's label as this page's verdict — the badge reads off the same number as the letter. */
+function verdictFromGradeLabel(label: string | null | undefined): VerdictKey {
+  switch (label) {
+    case "Major win (you)":
+      return "SMASH ACCEPT"
+    case "Slightly favors you":
+      return "LEAN ACCEPT"
+    case "Even":
+      return "FAIR"
+    case "Slightly favors opponent":
+      return "LEAN DECLINE"
+    case "Major overpay":
+      return "SMASH DECLINE"
+    default:
+      return "NOT GRADED"
+  }
 }
 
 const POSITION_OPTIONS = ["", "QB", "RB", "WR", "TE", "K", "DEF", "PG", "SG", "SF", "PF", "C", "SP", "RP", "OF", "SS", "2B", "3B", "1B", "LW", "RW", "D", "G", "UTIL", "FLEX", "IDP"]
@@ -492,23 +526,62 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
    * browser. A withheld grade shows no letter and the reason, never a fallback letter.
    */
   const historical = Boolean(asOfDate)
-  const historicalPercentDiff = historical ? pickPercentDiff(payload, asOfDate) : null
-  const senderGrade = historical
-    ? payload.dualModeGrades?.atTheTime?.grade ?? gradeFromPercentDiff(historicalPercentDiff ?? 0)
-    : payload.tradeGrade?.grade ?? null
-  const receiverGrade = historical
-    ? gradeFromPercentDiff(-(historicalPercentDiff ?? 0))
-    : payload.tradeGrade?.partnerGrade ?? null
-  const gradeWithheld = historical
-    ? null
-    : payload.tradeGrade?.gradeWithheld ?? (payload.tradeGrade ? null : 'The grade could not be computed for this trade.')
+  const pecrIterations = headers.get("x-pecr-iterations")
+  const pecrPassed = headers.get("x-pecr-passed")
+  const shared = {
+    providers: providerList(payload),
+    pECRIterations: pecrIterations ? Number(pecrIterations) : undefined,
+    pECRPassed: pecrPassed ? pecrPassed === "true" : undefined,
+    warnings: buildWarnings(payload),
+    idpLineupWarning: payload.tradeInsights?.idpLineupWarning ?? null,
+  }
+  const warningChips: TradeLabelChip[] = (payload.tradeInsights?.warnings ?? []).map((label) => ({ ...label, kind: "warning" as const }))
+
+  if (!historical) {
+    /*
+     * 🛑 LIVE: EVERY NUMBER IS THE RECEIPT'S (2026-09-27). The verdict badge, the totals and the
+     * headline all read off the one grade; the composite fairness, value delta, confidence,
+     * acceptance drivers/bullets, positive signal chips and the IDP fairness-range caveat are hidden,
+     * because they are priced differently and could contradict the letter. The AI summary stays, as
+     * supporting text under the grade — its prompt now leads with the receipt.
+     */
+    const panel = liveGradePanel(payload.tradeGrade)
+    return {
+      ...shared,
+      live: true,
+      receiptTotals: panel.totals,
+      verdict: verdictFromGradeLabel(panel.gradeLabel),
+      fairnessScore: null,
+      fairnessMethod: null,
+      senderGrade: panel.senderGrade,
+      receiverGrade: panel.receiverGrade,
+      gradeWithheld: panel.gradeWithheld,
+      valueDelta: panel.totals ? panel.totals.get - panel.totals.send : null,
+      confidencePct: null,
+      recommendation: panel.headline,
+      aiSummary: payload.evaluation?.explanation?.summary ?? null,
+      analysisBullets: (payload.evaluation?.explanation?.leagueContextNotes ?? []).filter(Boolean),
+      drivers: [],
+      labels: warningChips,
+      idpCeilingCaveat: null,
+      counterOffer: buildCounterOffer(payload),
+      negotiationSteps: buildNegotiationSteps(payload),
+      betterAlternatives: payload.evaluation?.betterAlternatives ?? [],
+      rawPayload: payload,
+    }
+  }
+
+  // Historical (`asOfDate`) mode: the old composite view and its own letters — a known follow-up.
+  const historicalPercentDiff = pickPercentDiff(payload, asOfDate)
+  const senderGrade = payload.dualModeGrades?.atTheTime?.grade ?? gradeFromPercentDiff(historicalPercentDiff)
+  const receiverGrade = gradeFromPercentDiff(-historicalPercentDiff)
   const analysisBullets = [
     ...(payload.acceptProbability?.acceptBullets ?? []),
     ...(payload.evaluation?.explanation?.leagueContextNotes ?? []),
   ].filter(Boolean)
   const labels: TradeLabelChip[] = [
     ...(payload.tradeInsights?.labels ?? []).map((label) => ({ ...label, kind: "positive" as const })),
-    ...(payload.tradeInsights?.warnings ?? []).map((label) => ({ ...label, kind: "warning" as const })),
+    ...warningChips,
   ]
   const drivers = (payload.acceptProbability?.drivers ?? []).map((driver) => ({
     id: driver.id,
@@ -518,16 +591,16 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     detail: driverDetail(driver),
   }))
 
-  const pecrIterations = headers.get("x-pecr-iterations")
-  const pecrPassed = headers.get("x-pecr-passed")
-
   return {
+    ...shared,
+    live: false,
+    receiptTotals: null,
     verdict: verdictFromPayload(payload, fairnessScore, valueDelta),
     fairnessScore,
     fairnessMethod: payload.tradeInsights?.fairnessMethod ?? null,
     senderGrade,
     receiverGrade,
-    gradeWithheld,
+    gradeWithheld: null,
     valueDelta,
     confidencePct: clampScore(
       payload.serverConfidence?.score ??
@@ -539,14 +612,10 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
       payload.evaluation?.explanation?.summary ??
       payload.acceptProbability?.sensitivitySentence ??
       "Trade analysis complete.",
+    aiSummary: null,
     analysisBullets,
-    providers: providerList(payload),
-    pECRIterations: pecrIterations ? Number(pecrIterations) : undefined,
-    pECRPassed: pecrPassed ? pecrPassed === "true" : undefined,
     drivers,
     labels,
-    warnings: buildWarnings(payload),
-    idpLineupWarning: payload.tradeInsights?.idpLineupWarning ?? null,
     idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null,
     counterOffer: buildCounterOffer(payload),
     negotiationSteps: buildNegotiationSteps(payload),
@@ -1313,26 +1382,51 @@ function TradeHubInner() {
                   </div>
                 ) : null}
 
-                <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Score Cards</div>
-                  <div className="mt-4 grid grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
-                      <div className="text-2xl font-black text-white">{result.fairnessScore}</div>
-                      <div className="mt-1 text-[10px] text-white/35">Fairness</div>
-                    </div>
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
-                      <div className={`text-2xl font-black ${result.valueDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                        {result.valueDelta > 0 ? "+" : ""}
-                        {Math.round(result.valueDelta)}
+                {result.live ? (
+                  result.receiptTotals ? (
+                    <div data-testid="receipt-totals" className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">League value</div>
+                      <div className="mt-4 grid grid-cols-3 gap-3">
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                          <div className="text-2xl font-black text-white">{result.receiptTotals.send.toLocaleString()}</div>
+                          <div className="mt-1 text-[10px] text-white/35">Sender gives</div>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                          <div className="text-2xl font-black text-white">{result.receiptTotals.get.toLocaleString()}</div>
+                          <div className="mt-1 text-[10px] text-white/35">Sender gets</div>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                          <div className={`text-2xl font-black ${result.receiptTotals.gapPct >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                            {result.receiptTotals.gapPct > 0 ? "+" : ""}
+                            {result.receiptTotals.gapPct}%
+                          </div>
+                          <div className="mt-1 text-[10px] text-white/35">Gap</div>
+                        </div>
                       </div>
-                      <div className="mt-1 text-[10px] text-white/35">Value Delta</div>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
-                      <div className="text-2xl font-black text-white">{result.confidencePct}%</div>
-                      <div className="mt-1 text-[10px] text-white/35">Confidence</div>
+                  ) : null
+                ) : (
+                  <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Score Cards</div>
+                    <div className="mt-4 grid grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                        <div className="text-2xl font-black text-white">{result.fairnessScore ?? "—"}</div>
+                        <div className="mt-1 text-[10px] text-white/35">Fairness</div>
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                        <div className={`text-2xl font-black ${(result.valueDelta ?? 0) >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                          {(result.valueDelta ?? 0) > 0 ? "+" : ""}
+                          {result.valueDelta == null ? "—" : Math.round(result.valueDelta)}
+                        </div>
+                        <div className="mt-1 text-[10px] text-white/35">Value Delta</div>
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                        <div className="text-2xl font-black text-white">{result.confidencePct == null ? "—" : `${result.confidencePct}%`}</div>
+                        <div className="mt-1 text-[10px] text-white/35">Confidence</div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Grades</div>
@@ -1383,6 +1477,7 @@ function TradeHubInner() {
                     ) : null}
                   </div>
                   <p className="mt-4 text-base leading-7 text-white/80">{result.recommendation}</p>
+                  {result.aiSummary ? <p className="mt-3 text-sm leading-6 text-white/60">{result.aiSummary}</p> : null}
                   {result.analysisBullets.length > 0 ? (
                     <ul className="mt-4 space-y-2">
                       {result.analysisBullets.map((bullet, index) => (

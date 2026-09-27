@@ -80,6 +80,10 @@ export function receiptGradeFields(receipt: ReceiptLike): {
   gradeLabel: string | null
   gradeWithheld: string | null
   percentDiff: number | null
+  /** League value the graded side sends / receives — the totals the letter was taken on. */
+  giveValue: number | null
+  getValue: number | null
+  recommendation: string | null
   gradeSource: 'one_trade_engine'
   evaluationReceiptId: string | null
 } {
@@ -90,8 +94,53 @@ export function receiptGradeFields(receipt: ReceiptLike): {
     gradeLabel: g.graded ? g.label : null,
     gradeWithheld: g.graded ? null : g.reason,
     percentDiff: g.graded ? g.percentDiff : null,
+    giveValue: g.graded ? g.giveValue : null,
+    getValue: g.graded ? g.getValue : null,
+    recommendation: g.graded ? g.recommendation : null,
     gradeSource: 'one_trade_engine',
     evaluationReceiptId: receipt.receiptId,
+  }
+}
+
+/**
+ * Everything a page may show beside the letter, from the receipt's grade fields ALONE. Nothing here
+ * can disagree with the letter: the totals are the ones it was taken on, and the headline is its own
+ * recommendation. A missing or withheld grade yields no totals at all — never zeros, which would read
+ * as "worthless".
+ */
+export function liveGradePanel(fields: {
+  grade: string | null
+  partnerGrade: string | null
+  gradeLabel: string | null
+  gradeWithheld: string | null
+  percentDiff: number | null
+  giveValue: number | null
+  getValue: number | null
+  recommendation: string | null
+} | null | undefined): {
+  senderGrade: string | null
+  receiverGrade: string | null
+  gradeLabel: string | null
+  gradeWithheld: string | null
+  totals: { send: number; get: number; gapPct: number } | null
+  headline: string
+} {
+  if (!fields) {
+    const why = 'The grade could not be computed for this trade.'
+    return { senderGrade: null, receiverGrade: null, gradeLabel: null, gradeWithheld: why, totals: null, headline: `Not graded. ${why}` }
+  }
+  const graded = fields.grade != null && fields.giveValue != null && fields.getValue != null && fields.percentDiff != null
+  if (!graded) {
+    const why = fields.gradeWithheld ?? 'The grade could not be computed for this trade.'
+    return { senderGrade: null, receiverGrade: null, gradeLabel: null, gradeWithheld: why, totals: null, headline: `Not graded. ${why}` }
+  }
+  return {
+    senderGrade: fields.grade,
+    receiverGrade: fields.partnerGrade,
+    gradeLabel: fields.gradeLabel,
+    gradeWithheld: null,
+    totals: { send: fields.giveValue!, get: fields.getValue!, gapPct: fields.percentDiff! },
+    headline: fields.recommendation ?? fields.gradeLabel ?? '',
   }
 }
 

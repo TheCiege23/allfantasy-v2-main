@@ -2,11 +2,11 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 
-import { prisma } from '@/lib/prisma'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation } from './canonicalEvaluator'
 import type { TradeAssetSummary } from './dco'
 import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from './leagueTradeGrader'
+import { saveAdHocReceipt } from './receiptStore'
 import { mirrorTradeGrade, type TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 
@@ -26,10 +26,13 @@ import type { GradeInputs } from './tradeGradeInputs'
  * nobody could find — the flat 200 that `calculateTradeBalance` used to hand an unknown player is
  * exactly what this replaced. The receipt says which assets, by name.
  *
- * ⚠ THE RECEIPT IS APPEND-ONLY. A new evaluation is a new row in `trade_evaluation_receipts`; an old
- * receipt is never rewritten with today's data. Persisting is best-effort and CONTAINED: a missing
- * table or a write failure comes back as `persisted: false` with the grade intact, because losing a
- * grade to a bookkeeping error is worse than an unsaved receipt.
+ * ⚠ THE RECEIPT IS APPEND-ONLY, AND THERE IS ONE RECEIPT TABLE: `trade_decision_snapshots` (see
+ * `./receiptStore.ts`). A proposal's receipt is written into its own trade row, in the proposal's
+ * transaction (callers pass `persist: false` and hand the receipt to that writer); any other
+ * evaluation gets a new row with no trade. An old receipt is never rewritten with today's data.
+ * Persisting is best-effort and CONTAINED: an unmigrated table or a write failure comes back as
+ * `persisted: false` with the grade intact, because losing a grade to a bookkeeping error is worse
+ * than an unsaved receipt.
  *
  * ⚠ THE CALLER HAS ALREADY PROVEN MEMBERSHIP, as for `createLeagueTradeGrader` — the grader reads
  * the viewer's roster in the league it is handed.
@@ -121,21 +124,8 @@ export type EvaluateTradeDeps = {
   /** Produce the one grade. Default: load the league's grader and `gradeDeal`. */
   grade: (input: EvaluateTradeInput) => Promise<TradeGradeView>
   evaluateCanonical: typeof evaluateCanonicalTrade
-  saveReceipt: (row: TradeEvaluationReceiptRow) => Promise<{ id: string }>
-}
-
-export type TradeEvaluationReceiptRow = {
-  surface: string
-  modelVersion: string
-  leagueId: string | null
-  userId: string | null
-  graded: boolean
-  letter: string | null
-  percentDiff: number | null
-  withheldReason: string | null
-  inputHash: string
-  receipt: TradeEvaluationReceipt
-  evaluatedAt: Date
+  /** Save a receipt that is NOT a trade. Default: a `trade_decision_snapshots` row with no `tradeId`. */
+  saveReceipt: (receipt: TradeEvaluationReceipt) => Promise<{ id: string }>
 }
 
 export const NO_LEAGUE_REASON = 'No league is selected — a grade is taken on a league’s own values and rules.'
@@ -149,55 +139,10 @@ async function defaultGrade(input: EvaluateTradeInput): Promise<TradeGradeView> 
   return gradeDeal(grader, { give: input.give, get: input.get, viewerSide: input.viewerSide })
 }
 
-type ReceiptDelegate = { create(args: { data: Record<string, unknown>; select: { id: true } }): Promise<{ id: string }> }
-
-/*
- * ⚠ THE DELEGATE IS LOOKED UP, NOT ASSUMED. The generated client in a checkout can predate the
- * `TradeEvaluationReceipt` model, and production can run this code before its migration is applied —
- * the second raises P2021 on write. Both must end as `persisted: false`, never as a lost grade.
- */
-export function createReceiptSaver(opts: {
-  store: () => ReceiptDelegate | undefined
-  now?: () => number
-  /** How long to stop trying after the table is reported missing. */
-  backoffMs?: number
-}): (row: TradeEvaluationReceiptRow) => Promise<{ id: string }> {
-  const now = opts.now ?? Date.now
-  const backoffMs = opts.backoffMs ?? 10 * 60_000
-  let skipUntil = 0
-  return async (row) => {
-    /*
-     * ⚠ BACK OFF WHILE THE TABLE IS MISSING. Until the migration is applied every write raises P2021,
-     * and the production Prisma client logs every error — one log line per trade evaluated. After a
-     * P2021 this stops asking for `backoffMs`, then tries again, so applying the migration takes
-     * effect without a deploy.
-     */
-    if (now() < skipUntil) throw new Error('trade_evaluation_receipts is missing; backing off')
-    const store = opts.store()
-    if (!store || typeof store.create !== 'function') throw new Error('trade_evaluation_receipts is not in the generated client')
-    try {
-      return await store.create({
-        data: {
-          ...row,
-          receipt: JSON.parse(JSON.stringify(row.receipt)) as Record<string, unknown>,
-        },
-        select: { id: true },
-      })
-    } catch (error) {
-      if ((error as { code?: unknown } | null)?.code === 'P2021') skipUntil = now() + backoffMs
-      throw error
-    }
-  }
-}
-
-const defaultSaveReceipt = createReceiptSaver({
-  store: () => (prisma as unknown as { tradeEvaluationReceipt?: ReceiptDelegate }).tradeEvaluationReceipt,
-})
-
 export const defaultEvaluateTradeDeps: EvaluateTradeDeps = {
   grade: defaultGrade,
   evaluateCanonical: evaluateCanonicalTrade,
-  saveReceipt: defaultSaveReceipt,
+  saveReceipt: (receipt) => saveAdHocReceipt(receipt),
 }
 
 function assetName(a: TradeAssetInput): string {
@@ -337,19 +282,7 @@ export async function evaluateTrade(
 
   if (input.persist === false) return receipt
   try {
-    const row = await d.saveReceipt({
-      surface: input.surface,
-      modelVersion: TRADE_EVALUATION_MODEL_VERSION,
-      leagueId: receipt.leagueId,
-      userId: receipt.userId,
-      graded: grade.graded,
-      letter: grade.graded ? grade.letter : null,
-      percentDiff: grade.graded ? grade.percentDiff : null,
-      withheldReason: grade.graded ? null : grade.reason,
-      inputHash,
-      receipt,
-      evaluatedAt: new Date(evaluatedAt),
-    })
+    const row = await d.saveReceipt(receipt)
     return { ...receipt, receiptId: row.id, persisted: true }
   } catch {
     /*

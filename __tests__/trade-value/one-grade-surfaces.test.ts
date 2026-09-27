@@ -151,3 +151,34 @@ describe('no flat default value for an unknown player', () => {
     expect(FLAT_DEFAULT.test('return NextResponse.json(body, { status: 200 })')).toBe(false)
   })
 })
+
+/*
+ * /trade-evaluator, live mode (2026-09-27): every number beside the letter is the receipt's. The
+ * composite fairness, confidence, acceptance drivers and the IDP fairness range are priced differently
+ * and could contradict the letter, so the live branch must blank them.
+ */
+describe('the /trade-evaluator page shows only the receipt beside its letter', () => {
+  const src = code('app/trade-evaluator/page.tsx')
+  const live = src.slice(src.indexOf('if (!historical) {'), src.indexOf('const historicalPercentDiff'))
+
+  it('the live branch exists and reads the receipt panel', () => {
+    expect(src.indexOf('if (!historical) {')).toBeGreaterThan(0)
+    expect(src.indexOf('const historicalPercentDiff')).toBeGreaterThan(src.indexOf('if (!historical) {'))
+    expect(live).toMatch(/liveGradePanel\(payload\.tradeGrade\)/)
+    expect(live).toMatch(/verdict:\s*verdictFromGradeLabel\(/)
+  })
+
+  it.each([
+    ['composite fairness', /fairnessScore:\s*null,/],
+    ['composite confidence', /confidencePct:\s*null,/],
+    ['acceptance drivers', /drivers:\s*\[\],/],
+    ['the IDP fairness range', /idpCeilingCaveat:\s*null,/],
+  ])('blanks %s', (_what, shape) => {
+    expect(live).toMatch(shape)
+  })
+
+  it('never derives the live verdict from acceptance odds', () => {
+    expect(live).not.toMatch(/verdictFromPayload\(/)
+    expect(live).not.toMatch(/acceptProbability/)
+  })
+})

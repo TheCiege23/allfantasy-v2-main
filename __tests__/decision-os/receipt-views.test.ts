@@ -13,6 +13,7 @@ import {
   gradeInputsFromLegacyAssets,
   legacyBalanceFromReceipt,
   legacyVerdictFromGrade,
+  liveGradePanel,
   receiptGradeFields,
   receiptPromptBlock,
 } from '@/lib/decision-os/trade/receiptViews'
@@ -192,3 +193,33 @@ function base() {
     moves: [],
   }
 }
+
+describe('liveGradePanel — what the evaluator page may show beside the letter', () => {
+  it('graded: the letter, its mirror, and the totals the letter was taken on', () => {
+    const p = liveGradePanel(receiptGradeFields(receiptOf(A_GRADE)))
+    expect(p).toMatchObject({ senderGrade: 'A', receiverGrade: 'F', gradeWithheld: null, totals: { send: 4000, get: 6000, gapPct: 33 } })
+    expect(p.headline).toBe(A_GRADE.graded ? A_GRADE.recommendation : '')
+  })
+
+  it('withheld: no letter, no totals (never zeros), and the reason as the headline', () => {
+    const p = liveGradePanel(receiptGradeFields(receiptOf(WITHHELD)))
+    expect(p).toMatchObject({ senderGrade: null, receiverGrade: null, totals: null, gradeWithheld: 'Nobody Special could not be found.' })
+    expect(p.headline).toBe('Not graded. Nobody Special could not be found.')
+  })
+
+  it('a response with no grade at all is withheld, not a blank letter', () => {
+    expect(liveGradePanel(undefined)).toMatchObject({ senderGrade: null, totals: null, gradeWithheld: expect.any(String) })
+  })
+
+  it('the totals always agree with the letter: a positive gap never sits beside a losing letter', () => {
+    for (const [give, get] of [[5000, 9000], [5000, 5200], [9000, 5000], [5000, 4600]] as const) {
+      const g = gradeTrade({ ...base(), giveValue: give, getValue: get })
+      const p = liveGradePanel(receiptGradeFields(receiptOf(g)))
+      const winning = p.senderGrade === 'A' || p.senderGrade === 'B'
+      const losing = p.senderGrade === 'D' || p.senderGrade === 'F'
+      if (winning) expect(p.totals!.gapPct).toBeGreaterThan(0)
+      if (losing) expect(p.totals!.gapPct).toBeLessThan(0)
+      expect(p.totals!.get - p.totals!.send > 0).toBe(p.totals!.gapPct > 0)
+    }
+  })
+})

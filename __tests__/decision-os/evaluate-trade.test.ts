@@ -10,7 +10,6 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import {
-  createReceiptSaver,
   evaluateTrade,
   NO_LEAGUE_REASON,
   tradeInputHash,
@@ -74,22 +73,14 @@ describe('evaluateTrade — the receipt', () => {
     expect(r).toMatchObject({ modelVersion: 'trade-eval-v1', surface: 'test', leagueId: 'l1', userId: 'u1', canonical: null, canonicalError: null })
   })
 
-  it('saves an append-only row keyed by the input hash, and returns its id', async () => {
+  it('saves the receipt and returns the row id', async () => {
     const saveReceipt = vi.fn(async () => ({ id: 'rcpt_9' }))
     const r = await evaluateTrade(base(), deps({ saveReceipt }))
     expect(r).toMatchObject({ persisted: true, receiptId: 'rcpt_9', persistError: null })
     expect(saveReceipt).toHaveBeenCalledTimes(1)
+    // The receipt that is saved is the one returned, before its id was known.
     expect(saveReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        surface: 'test',
-        leagueId: 'l1',
-        graded: true,
-        letter: 'B',
-        percentDiff: 17,
-        withheldReason: null,
-        inputHash: r.inputHash,
-        evaluatedAt: new Date('2026-09-26T12:00:00.000Z'),
-      }),
+      expect.objectContaining({ surface: 'test', leagueId: 'l1', inputHash: r.inputHash, receiptId: null, persisted: false }),
     )
   })
 
@@ -250,34 +241,5 @@ describe('tradeInputHash', () => {
     const a = tradeInputHash({ leagueId: 'l1', give: g(['Alpha']), get: g(['Bravo']), viewerSide: true })
     const b = tradeInputHash({ leagueId: 'l1', give: g(['Bravo']), get: g(['Alpha']), viewerSide: true })
     expect(a).not.toBe(b)
-  })
-})
-
-describe('createReceiptSaver — a missing table backs off instead of failing every evaluation', () => {
-  const row = { surface: 's', modelVersion: 'v', leagueId: null, userId: null, graded: false, letter: null, percentDiff: null, withheldReason: 'x', inputHash: 'h', receipt: {} as never, evaluatedAt: new Date(0) }
-
-  it('after a P2021 it stops calling the database for the back-off window, then tries again', async () => {
-    let t = 1_000
-    const create = vi.fn(async () => {
-      throw Object.assign(new Error('table does not exist'), { code: 'P2021' })
-    })
-    const save = createReceiptSaver({ store: () => ({ create }), now: () => t, backoffMs: 60_000 })
-    await expect(save(row)).rejects.toThrow()
-    await expect(save(row)).rejects.toThrow(/backing off/)
-    expect(create).toHaveBeenCalledTimes(1)
-    t += 60_001
-    create.mockImplementationOnce(async () => ({ id: 'r1' }))
-    await expect(save(row)).resolves.toEqual({ id: 'r1' })
-    expect(create).toHaveBeenCalledTimes(2)
-  })
-
-  it('any other error does not back off — the next evaluation tries again', async () => {
-    const create = vi.fn(async () => {
-      throw Object.assign(new Error('timeout'), { code: 'P1008' })
-    })
-    const save = createReceiptSaver({ store: () => ({ create }), now: () => 5 })
-    await expect(save(row)).rejects.toThrow('timeout')
-    await expect(save(row)).rejects.toThrow('timeout')
-    expect(create).toHaveBeenCalledTimes(2)
   })
 })
