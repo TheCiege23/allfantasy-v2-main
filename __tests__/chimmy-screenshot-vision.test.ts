@@ -11,7 +11,15 @@ describe('screenshot provider recovery', () => {
  it('uses Chimmy’s primary provider without losing IDP, kicker or pick assets', async () => {
   mocks.openai.mockRejectedValue({status: 401}); mocks.claude.mockResolvedValue({content:[{type:'text',text:facts}],stop_reason:'end_turn'});
   const evidence = await parseScreenshotWithVision(image, 'Should I accept?'); expect(screenshotTradeQuestion(evidence).assetCount).toBe(5);
-  expect(mocks.openai).not.toHaveBeenCalled();
+ expect(mocks.openai).not.toHaveBeenCalled();
+ });
+ it('keeps roster and playoff analysis requests out of the extraction task', async () => {
+  mocks.claude.mockResolvedValue({content:[{type:'text',text:facts}],stop_reason:'end_turn'});
+  await parseScreenshotWithVision(image, 'Analyze my roster, scoring, playoff chances and future years. Say which data is missing.');
+  const request = mocks.claude.mock.calls[0][0];
+  expect(request.messages[0].content[1].text).toContain('Read only the visible facts');
+  expect(request.messages[0].content[1].text).not.toContain('playoff chances');
+  expect(request.messages[0].content[1].text).toContain('Do not analyze');
  });
  it('recovers a primary outage with correctly paired OpenAI credentials', async () => {
   mocks.claude.mockRejectedValue({status:503}); mocks.openai.mockRejectedValueOnce({status:401}).mockResolvedValueOnce({choices:[{message:{content:facts},finish_reason:'stop'}]});
