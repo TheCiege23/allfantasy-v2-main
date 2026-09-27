@@ -15,7 +15,7 @@ import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from '
 import { designationOnset } from './designationOnset'
 import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
-import { translateRostersByLeague } from './rosterIdSpace'
+import { rosterIdSpaceOf, translateRostersByLeague } from './rosterIdSpace'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -518,7 +518,8 @@ export async function suggestCatalog(
  */
 type UnmatchedLeague = { leagueId: string; leagueName: string; platform: string }
 
-async function resolveLeagueSlots(
+/** Exported for tests only (`__tests__/player-finder-foreign-roster-ids.test.ts`); the card calls it through getPlayerDetail. */
+export async function resolveLeagueSlots(
   sleeperId: string,
   leagueIds: string[],
   userId: string | null | undefined
@@ -557,6 +558,19 @@ async function resolveLeagueSlots(
   const byId = new Map(leagues.map((l) => [l.id, l]))
   // ESPN rosters -> Sleeper ids through the identity chain before any scan below (rosterIdSpace.ts).
   const platformByLeague = new Map(leagues.map((l) => [l.id, l.platform]))
+  /*
+   * 🛑 A ROSTER IN ANOTHER PLATFORM'S ID SPACE IS NEVER SCANNED FOR A SLEEPER ID.
+   *
+   * Only ESPN has a bridge to Sleeper ids (rosterIdSpace.ts). Fleaflicker, MFL, Fantrax and
+   * Yahoo rosters arrive under the provider's own ids and `translateRostersByLeague` passes them
+   * through untouched — and those ids are NUMBERS in the same range as Sleeper's. Measured on
+   * production 2026-09-27: 44 of the 248 ids on the one Fleaflicker league's rosters are also real
+   * Sleeper ids, so a raw `includes(sleeperId)` told a manager he rosters a player he does not (or
+   * that a rival does). The coverage guard below could not catch it: it only looks at leagues with
+   * NO hit, and a collision IS a hit. So these leagues are named as unchecked instead of scanned —
+   * the same stance the game-day triage and the shares board already take ("counted, not read").
+   */
+  const foreignLeagueIds = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
 
   const rosters = await translateRostersByLeague(
     claimedLeagueIds.length > 0 && allCandidates.length > 0
@@ -573,7 +587,7 @@ async function resolveLeagueSlots(
   const claimed = new Set<string>()
 
   for (const r of rosters) {
-    if (claimed.has(r.leagueId)) continue
+    if (claimed.has(r.leagueId) || foreignLeagueIds.has(r.leagueId)) continue
     // The candidate union spans every claimed team; accept only a roster whose
     // platformUserId belongs to THIS league's own candidate set.
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
@@ -638,7 +652,7 @@ async function resolveLeagueSlots(
 
     const held = new Map<string, { platformUserId: string; slot: string }>()
     for (const r of everyRoster) {
-      if (held.has(r.leagueId)) continue
+      if (held.has(r.leagueId) || foreignLeagueIds.has(r.leagueId)) continue
       const pd = (r.playerData ?? {}) as Record<string, unknown>
       for (const key of SLOT_ORDER) {
         const arr = pd[key]
@@ -662,7 +676,7 @@ async function resolveLeagueSlots(
     if (missed.length > 0) {
       const byLeague = new Map<string, unknown[]>()
       for (const r of everyRoster) {
-        if (held.has(r.leagueId)) continue
+        if (held.has(r.leagueId) || foreignLeagueIds.has(r.leagueId)) continue
         const arr = byLeague.get(r.leagueId) ?? []
         arr.push(r.playerData)
         byLeague.set(r.leagueId, arr)
@@ -678,6 +692,18 @@ async function resolveLeagueSlots(
           : []
       const known = new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))
       for (const id of missed) {
+        // Another platform's ids: unchecked by definition, no sample needed — but only when
+        // something was imported (no rosters at all is a different gap, as below).
+        if (foreignLeagueIds.has(id)) {
+          if (!everyRoster.some((r) => r.leagueId === id)) continue
+          const league = byId.get(id)
+          unmatched.push({
+            leagueId: id,
+            leagueName: league?.name ?? 'League',
+            platform: String(league?.platform ?? 'manual').toLowerCase(),
+          })
+          continue
+        }
         const sample = samples.get(id) ?? []
         // No rosters at all is a different gap (nothing imported); only a
         // vocabulary mismatch is reported here.
