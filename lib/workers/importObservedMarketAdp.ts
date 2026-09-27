@@ -25,5 +25,5 @@ export async function importObservedMarketAdpBoard(input: unknown, expected: Par
     // Preserve observation provenance without changing the numeric provider breakdown contract.
     await tx.adpRefreshRun.create({ data: { status:'completed',trigger:'licensed_market_export',finishedAt:new Date(),sportsProcessed:[board.sport],rawRowsRead:board.players.length,rawRowsInserted:inserted.count,qualitySummary:{ evidenceType:board.evidenceType,licensedForUse:true,source:board.source,season:board.season,format:board.format,scoring:board.scoring,asOf:board.asOf,players:board.players.map(player => ({ canonicalPlayerId:player.canonicalPlayerId,providerPlayerId:player.providerPlayerId,draftSampleSize:player.draftSampleSize })) } } })
     return { dryRun:false, accepted:inserted.count,sport:board.sport,source:board.source,asOf:board.asOf }
-  }, { timeout:60000 })
+  }, { timeout:60000, isolationLevel:'Serializable' })
 }
