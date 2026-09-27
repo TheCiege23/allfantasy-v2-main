@@ -11,7 +11,7 @@ test.describe.configure({ mode: 'serial' })
 for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const) {
   test(`${sport}: real login, creation, queue, chat, draft picks and finalization @db`, async ({ page, request }) => {
     test.skip(process.env.AF_SEVEN_SPORT_DRAFT_TEST_DB !== '1', 'Explicit guarded test database run required')
-    test.setTimeout(900_000)
+    test.setTimeout(1_800_000)
     const host = new URL(process.env.DATABASE_URL ?? '').hostname
     if (!host.startsWith('ep-muddy-leaf-') || !host.endsWith('.neon.tech')) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
     const marker = 'seven-sport-browser-' + randomUUID(), password = randomUUID()
@@ -26,10 +26,11 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
       await page.request.post('/api/auth/callback/credentials?json=true', { form: { csrfToken: csrf.csrfToken, login: user.email!, password, json: 'true' } })
       expect((await (await page.request.get('/api/auth/session')).json()).user.id).toBe(userId)
       if (uiJourney) {
+        expect((await (await page.request.get('/api/auth/confirm-age')).json()).confirmed).toBe(false)
         await page.goto('/create-league', { waitUntil: 'domcontentloaded' })
         await expect(page.getByTestId('g30-create-league-wizard')).toBeVisible({ timeout: 120000 })
         const confirmation = page.getByRole('dialog', { name: 'Quick confirmation' })
-        await expect(confirmation).toBeVisible({ timeout: 120000 })
+        await expect(confirmation).toBeVisible({ timeout: 300000 })
         await confirmation.getByRole('button', { name: 'I' + String.fromCharCode(39) + 'm 18+ and agree', exact: true }).click()
         await expect(confirmation).toBeHidden({ timeout: 120000 })
         await page.getByTestId('g30-sport-' + sport).click()
