@@ -162,7 +162,7 @@ describe('AI spend guard — provider boundary coverage', () => {
     // The other three inline-provider routes, guarded 2026-08-27.
     // start-sit/chimmy has NO session check and NO rate limit, so the spend
     // switch is the only thing between an anonymous caller and a paid call.
-    'app/api/chat/chimmy/route.ts',
+    'lib/chimmy/screenshotVision.ts',
     'app/api/start-sit/chimmy/route.ts',
     'app/api/waiver-ai/grok/route.ts',
     // Moved off the ratchet 2026-08-27. Reached from 18 route files, the widest
