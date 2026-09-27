@@ -30,7 +30,7 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { League } from '@prisma/client'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -47,7 +47,7 @@ async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, Non
   if (!tradeIds.length) return new Map()
   const store = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
   if (!store) return new Map()
-  const rows = await store.findMany({ where: { tradeId: { in: tradeIds } } }).catch(() => [])
+  const rows = await store.findMany({ where: { tradeId: { in: tradeIds } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
   return new Map(rows.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
 }
 

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -273,6 +275,47 @@ describe('getRecentTrades', () => {
     expect(out[0].sides.find((side) => side.rosterId === 'r1')).toMatchObject({ managerName: 'Alpha', grade: 'A', gradeReason: 'Improves weekly survival odds.' })
     expect(out[0].sides.find((side) => side.rosterId === 'r2')?.received[0]).toMatchObject({ name: 'Player One', kind: 'player', team: 'BUF' })
     expect(cacheFindMany).not.toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE UNMIGRATED DATABASE. The client knows the columns
+   * `20260927000000_trade_decision_snapshot_evaluation_receipts` adds before the database has them.
+   * A select-less read asks for them, gets P2022, and the reader's `.catch` turns that into "no
+   * receipts" — the frozen grade silently disappears from the card. This fake database refuses
+   * exactly those columns, so the test fails on a reader that does not name its own.
+   */
+  it('keeps the frozen grade on a database the receipt migration has not reached yet', async () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'prisma/migrations/20260927000000_trade_decision_snapshot_evaluation_receipts/migration.sql'),
+      'utf8',
+    )
+    const added = [...migration.matchAll(/ADD COLUMN IF NOT EXISTS "(\w+)"/g)].map((m) => m[1]!)
+    expect(added).toEqual(['surface', 'inputHash', 'evaluationReceipt'])
+
+    const createdAt = new Date(NOW.getTime() - 60_000)
+    nativeFindMany.mockResolvedValue([{
+      id: 'af-trade-unmigrated', leagueId: 'a', status: 'pending', proposerRosterId: 'r1', receiverRosterId: 'r2',
+      createdAt, updatedAt: createdAt, acceptedAt: null, processedAt: null, rejectedAt: null, cancelledAt: null,
+      items: [{ id: 'i1', itemType: 'player', itemReference: '101', fromRosterId: 'r1', toRosterId: 'r2', faabAmount: null, metadata: { playerName: 'Player One' } }],
+    }])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }])
+    userFindMany.mockResolvedValue([
+      { id: 'u1', displayName: 'Alpha', username: 'a', avatarUrl: null },
+      { id: 'u2', displayName: 'Beta', username: 'b', avatarUrl: null },
+    ])
+    snapshotFindMany.mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+      // No select = every column the generated client knows, which includes the new ones.
+      const asked = args.select ? Object.keys(args.select) : ['tradeId', 'policyVersion', ...added]
+      const missing = asked.filter((c) => added.includes(c))
+      if (missing.length) throw Object.assign(new Error(`column ${missing[0]} does not exist`), { code: 'P2022' })
+      return [{
+        tradeId: 'af-trade-unmigrated', policyVersion: 'v1', format: 'redraft', completeness: 'complete', capturedAt: createdAt,
+        evidence: {}, readiness: {}, outcomeSimulation: {}, assetContext: {},
+        decisionResult: { participants: [{ rosterId: 'r1', grade: 'B', reason: 'Slightly favors you.', action: 'accept', recommendation: 'Accept', coveragePct: 100 }] },
+      }]
+    })
+    const out = await getRecentTrades([{ id: 'a', name: 'Native League', platformLeagueId: null }], NOW, 3, { viewerUserId: 'u1' })
+    expect(out[0]?.sides.find((side) => side.rosterId === 'r1')).toMatchObject({ grade: 'B' })
   })
 
   it('does not expose another manager’s private native negotiation on Core', async () => {

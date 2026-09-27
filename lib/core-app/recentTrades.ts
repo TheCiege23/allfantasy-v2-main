@@ -10,7 +10,7 @@ import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
 import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 /**
  * Trades that landed in your leagues recently.
@@ -246,7 +246,7 @@ async function loadNativeRecentTrades(leagues: RecentTradesLeague[], cutoff: Dat
         }).catch(() => [])
       : Promise.resolve([]),
     client.tradeDecisionSnapshot
-      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } } }).catch(() => [])
+      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
       : Promise.resolve([]),
   ])
   const rosterById = new Map(rosters.map((row) => [row.id, row]))
