@@ -23,6 +23,8 @@ import type { CanonicalWorld, RosterFacts } from '@/lib/decision-os/world/facts'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { enrichLineupAvailability, unavailableForLineup, type LineupMetadata } from './lineupAvailability'
+import { checkStartedGames, type LockCheck } from './actions/gameLocks'
 import {
   activePlayerIds,
   allRosteredIds,
@@ -77,7 +79,7 @@ import {
  * states plainly, instead of a before/after for a move nobody described.
  *
  * ⚠ WHAT IS NOT MODELLED IS NAMED, NOT OMITTED: weather, injury news after the last sync, whether a
- * game has locked, whether a claim succeeds, FAAB competition, weeks after this one, playoff odds.
+ * provider-specific AutoSubs locks apply, whether a claim succeeds, FAAB competition, weeks after this one, playoff odds.
  */
 
 const MAX_LEAGUE_PLAYER_IDS = 800
@@ -92,6 +94,8 @@ export type WeekPlayer = { playerId: string; name: string; position: string | nu
 export interface LineupScenarioDeps extends LeagueWeekPricingDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
   loadPlayerNames: (sport: string, ids: string[]) => Promise<PlayerNames>
+  loadAvailability?: (sport: string, metadata: ReadonlyMap<string, LineupMetadata>) => Promise<Map<string, LineupMetadata>>
+  checkLocks?: (args: { sport: string; season: number; week: number; players: Array<{ playerId: string; name: string; team: string | null; gameTime: null }> }) => Promise<LockCheck>
   /**
    * Players in that week's feed whose name normalizes to `name` — the only way to reach a free agent.
    * `complete` is false when the feed could not be searched in full, so "no match" is not a finding.
@@ -106,6 +110,8 @@ const defaultDeps: LineupScenarioDeps = {
   ...defaultLeagueWeekPricingDeps,
   resolveWorld: resolveCanonicalWorld,
   loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
+  loadAvailability: enrichLineupAvailability,
+  checkLocks: checkStartedGames,
   findWeekPlayersByName: async ({ week, name }) => {
     const target = normalizePlayerName(name)
     if (!target) return { players: [], complete: true }
@@ -296,7 +302,22 @@ export async function buildStartSitScenario(
   const basis = await weekBasis(world, deps)
   if ('refuse' in basis) return startSitUnresolved(basis.refuse, basis.detail)
 
+  const metadata: Map<string, LineupMetadata> = deps.loadAvailability
+    ? await deps.loadAvailability(world.league.sport, new Map(active.flatMap((id) => names.has(id) ? [[id, names.get(id)!] as const] : [])))
+    : new Map(active.flatMap((id) => names.has(id) ? [[id, names.get(id)!] as const] : []))
+  const unavailable = mine.filter((p) => unavailableForLineup(metadata.get(p.playerId)?.injury))
+  if (unavailable.length) return startSitUnresolved('unavailable_player', `${unavailable.map((p) => p.name).join(' and ')} ${unavailable.length === 1 ? 'is' : 'are'} reported unavailable. Do not start an unavailable player; review an eligible replacement on your platform.`)
+  const locks = deps.checkLocks ? await deps.checkLocks({
+    sport: world.league.sport, season: Number(basis.week.season), week: basis.week.week,
+    players: active.map((id) => ({ playerId: id, name: metadata.get(id)?.name ?? id, team: metadata.get(id)?.team ?? null, gameTime: null })),
+  }).catch(() => ({ started: new Map<string, string>(), unverified: active })) : { started: new Map<string, string>(), unverified: [] }
+  const startedOptions = mine.filter((p) => locks.started.has(p.playerId))
+  if (startedOptions.length) return startSitUnresolved('players_locked', `${startedOptions.map((p) => p.name).join(' and ')} ${startedOptions.length === 1 ? 'has' : 'have'} already kicked off. No start/sit swap was computed; confirm individual locks and AutoSubs on your platform.`)
   const priced = await priceWeek(basis, active, new Map(active.map((id) => [id, names.get(id)?.position ?? null])), deps)
+  for (const id of active) {
+    const entry = priced.get(id)
+    if (entry && unavailableForLineup(metadata.get(id)?.injury)) priced.set(id, { ...entry, projectedPoints: 0 })
+  }
   const players = active.map((id) => priced.get(id)!)
   if (players.every((p) => p.projectedPoints == null)) return startSitUnresolved('no_league_projections', noLeaguePoints(basis.week))
 
@@ -312,12 +333,28 @@ export async function buildStartSitScenario(
     )
   }
 
-  const best = fillLineup(players, slots)
+  const startingSlots = slots.filter((slot) => !['BN', 'BE', 'BENCH', 'IR', 'TAXI'].includes(slot.toUpperCase()))
+  const fixed = new Map<number, string>()
+  for (const [index, id] of (roster.starterIds ?? []).entries()) {
+    if (!locks.started.has(id)) continue
+    const entry = priced.get(id)
+    if (!entry || entry.projectedPoints == null || !DEFAULT_SLOT_ELIGIBILITY[startingSlots[index]?.toUpperCase() ?? '']?.includes(entry.position.toUpperCase())) {
+      return startSitUnresolved('unknown_slots', 'An already-started starter could not be priced or placed. No whole-lineup start/sit comparison was computed.')
+    }
+    fixed.set(index, id)
+  }
+  const remainingSlots = startingSlots.filter((_, index) => !fixed.has(index))
+  const remainingPlayers = players.filter((p) => !locks.started.has(p.playerId) && !unavailableForLineup(metadata.get(p.playerId)?.injury))
+  const fixedPoints = [...fixed.values()].reduce((sum, id) => sum + (priced.get(id)?.projectedPoints ?? 0), 0)
+  const best = fillLineup(remainingPlayers, remainingSlots)
+  best.starterIds.push(...fixed.values())
   if (best.unknownSlots.length > 0) {
     return startSitUnresolved('unknown_slots', `The lineup has slots this model cannot fill: ${best.unknownSlots.join(', ')}.`)
   }
-  const ifA = bestLineupStarting(pa, players.filter((p) => p.playerId !== b.playerId), slots)
-  const ifB = bestLineupStarting(pb, players.filter((p) => p.playerId !== a.playerId), slots)
+  const aRemaining = bestLineupStarting(pa, remainingPlayers.filter((p) => p.playerId !== b.playerId), remainingSlots)
+  const bRemaining = bestLineupStarting(pb, remainingPlayers.filter((p) => p.playerId !== a.playerId), remainingSlots)
+  const ifA = aRemaining == null ? null : aRemaining + fixedPoints
+  const ifB = bRemaining == null ? null : bRemaining + fixedPoints
   if (ifA == null || ifB == null) {
     const who = [ifA == null ? a.name : null, ifB == null ? b.name : null].filter(Boolean).join(' and ')
     return startSitUnresolved('no_starting_slot', `${who} has no starting slot in this league's lineup.`)

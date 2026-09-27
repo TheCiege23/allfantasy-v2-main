@@ -128,6 +128,8 @@ export type WaiverScenario =
 /* ── Start / sit ───────────────────────────────────────────────────────────────────────────── */
 
 export type StartSitScenarioUnresolvedReason =
+  | 'unavailable_player'
+  | 'players_locked'
   | 'no_league_world'
   | 'no_viewer_roster'
   | 'players_not_on_roster'

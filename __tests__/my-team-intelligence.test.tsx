@@ -25,6 +25,6 @@ it('opens a roster review instead of a manual lineup check for Best Ball', () =>
   render(<LineupIntelligenceActions leagueId="automatic" leagueName="Best Ball" bestBall />)
   fireEvent.click(screen.getByRole('button',{name:"Ask Chimmy to check Best Ball's Best Ball roster"}))
   expect(events[0].leagueId).toBe('automatic')
-  expect(events[0].prefill).toContain('provider selects my scoring lineup automatically')
+  expect(events[0].prefill).toContain('provider selects my scoring starters automatically')
  } finally {window.removeEventListener(COMMS_OPEN_EVENT,listener)}
 })

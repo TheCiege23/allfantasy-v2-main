@@ -8,7 +8,7 @@ export function LineupIntelligenceActions({ leagueId, leagueName, bestBall = fal
     const detail: CommsOpenDetail = {
       tab: 'chimmy', leagueId,
       prefill: bestBall
-        ? `Review my ${leagueName} Best Ball roster using Decision OS. The provider selects my scoring lineup automatically; focus on injuries, roster depth, waiver opportunities and missing data, rather than manual start/sit swaps.`
+        ? `Review my ${leagueName} Best Ball roster using Decision OS. The provider selects my scoring starters automatically; focus on injuries, roster depth, potential free agents and missing data.`
         : `Run a start/sit check for my ${leagueName} lineup using Decision OS. Compare eligible bench replacements under this league's scoring, check injuries and byes, exclude players whose games have started, and identify any missing data or platform locks I must verify.`,
     }
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))

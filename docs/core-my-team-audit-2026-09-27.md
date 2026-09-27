@@ -28,3 +28,13 @@ Release checks and authenticated production evidence will be appended after depl
 Local targeted validation: 111 tests passed across 11 files. git diff --check passed.
 
 The player card opened from My team used an exact injury name and contradicted its own IR news. It now uses the same suffix variants and club guard. An additional 22 player-card tests passed across two files (133 targeted tests total).
+
+## Live intelligence regression
+
+An authenticated pre-release question returned a best lineup containing inactive Caleb Williams and Dallas Goedert at full points. The optimizer used cached vendor tags but did not remove unavailable candidates. It now reads the current club-matched injury reports, scores reported unavailable current starters at zero, and excludes them from the candidate pool. Healthy/Active tags are not presented as injury warnings.
+
+The existing started-game checker now supplies per-player constraints to the optimizer and two-player comparisons. Started starters retain their declared slot; started bench players cannot become new starters. Missing placement or projection for a started starter blocks the comparison. Unknown locks remain explicitly unverified, and source-platform AutoSubs still require confirmation.
+
+Two-player requests involving an unavailable or already-started option return a clear reason rather than a computed start recommendation. Best Ball roster-review prompts avoid requesting manual lineup optimization.
+
+Final targeted validation: 225 unique tests passed across 17 files (111 page/roster tests, 22 player-card tests, and 94 engine/action tests with two overlapping action tests). The pre-engine-fix full TypeScript ratchet passed at 143 existing errors; final-head CI is required before release.
