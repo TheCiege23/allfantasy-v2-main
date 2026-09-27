@@ -12,6 +12,7 @@ import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
+import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
 import type { CoreDepthAccess } from './coreDepthAccess'
@@ -519,7 +520,7 @@ async function loadComps(
  * week with no fixtures for ANYBODY is skipped rather than reported as a bye.
  * `buildNextGameMap` does the four-rows-per-fixture reconciliation.
  */
-async function loadSchedule(
+export async function loadSchedule(
   team: string | null,
   season: number,
   fromWeek: number,
@@ -542,7 +543,9 @@ async function loadSchedule(
         sport: SCHEDULE_SPORT,
         season,
         week: { gte: fromWeek, lte: lastWeek },
-        OR: [{ seasonType: 'regular' }, { seasonType: null }],
+        // An untyped preseason game can share the regular-season week number.
+        // Only confirmed regular fixtures can establish an opponent or a bye.
+        seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season', 'regularseason'] },
       },
       select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true, week: true },
     })
@@ -570,6 +573,18 @@ async function loadSchedule(
         projection: projectedWeek === w ? projection : null,
       })
     } else {
+      // Match the roster's coverage gate; a partial week is not proof of a bye.
+      const playing = new Set<string>()
+      const fixtures = new Set<string>()
+      for (const row of inWeek) {
+        const home = normalizeTeamAbbrev(row.homeTeam)
+        const away = normalizeTeamAbbrev(row.awayTeam)
+        if (!home || !away) continue
+        playing.add(home)
+        playing.add(away)
+        fixtures.add([home, away].sort().join('@'))
+      }
+      if (playing.has(club) || fixtures.size < MIN_PLAUSIBLE_SLATE) continue
       if (bye == null) bye = w
       weeks.push({ week: w, opponent: null, home: false, bye: true, projection: null })
     }
