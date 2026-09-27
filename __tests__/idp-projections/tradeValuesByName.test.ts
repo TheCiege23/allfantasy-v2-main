@@ -83,7 +83,7 @@ describe('loadIdpTradeValuesByName', () => {
     const res = await loadIdpTradeValuesByName({ prisma, platformLeagueId: 'L1', isDynasty: true })
     expect(res.byNameLower.get('mid backer')?.value).toBe(1200)
     expect(res.unpricedReasonBySleeperId?.get('lb_stud')).toEqual(gap)
-    expect(res.unpricedReasonByNameLower?.has('wide one')).toBe(false)
+    expect(res.unpricedReasonByNameLower?.get('wide one')?.code).toBe('ambiguous_identity')
   })
   it('keys the league board by lowercased name and keeps the values intact', async () => {
     const res = await loadIdpTradeValuesByName({
@@ -126,6 +126,8 @@ describe('loadIdpTradeValuesByName', () => {
     const res = await loadIdpTradeValuesByName({ prisma, platformLeagueId: 'L1', isDynasty: true })
 
     expect(res.byNameLower.has('justin jefferson')).toBe(false)
+    expect(res.bySleeperId?.get('lb_stud')?.value).toBe(5500)
+    expect(res.unpricedReasonBySleeperId?.has('lb_stud')).toBe(false)
     expect(res.ambiguousNames).toContain('justin jefferson')
     // The unambiguous defender still prices — one collision must not drop the board.
     expect(res.byNameLower.get('mid backer')?.value).toBe(1200)

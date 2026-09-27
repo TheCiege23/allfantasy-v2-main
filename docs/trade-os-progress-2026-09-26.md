@@ -55,6 +55,14 @@ The coverage release preserves individual defensive projection refusals through 
 
 Read-only production inspection found different underlying inputs for two missing linebackers: one had recorded games with no defensive production, while the other had only two recorded games. This release exposes those limitations; it does not invent prices for either player. Sleeper documents [tackle calculation](https://support.sleeper.com/en/articles/4056297-how-are-tackles-calculated) and [stacking scoring categories](https://support.sleeper.com/en/articles/3186339-what-stacks); defender estimates must continue to use the league's actual scoring rules.
 
+## Player identity pricing release (2026-09-27)
+
+League defender and kicker values retain their Sleeper IDs alongside the safe name fallback. Two rostered players with the same name no longer discard a valid defender price, and a missing defender price cannot borrow the offensive player's market, historical or draft value. The roster picker, shared proposal grader, console review, enrichment ID and roster context used by suggestions carry this distinction. Name-only legacy trade requests receive an identity refusal when the league contains a collision; known offensive players keep their own ID-matched market price.
+
+The shared context patch preserves ID prices and refusals even when no safe name entries exist. Current defender values do not answer past-date queries for identified defenders. This closes identity joins on these paths; it does not provide missing history or establish parity for every email surface.
+
+[Sleeper's official API documentation](https://docs.sleeper.com/) defines roster and player lookups by player ID. The change follows that existing identity contract without adding provider calls or changing the league's defender value curve.
+
 ## Remaining work
 
 1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.

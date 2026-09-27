@@ -4,6 +4,7 @@ import type { SportsPlayerRecord } from '@prisma/client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
@@ -141,7 +142,7 @@ export function lineFromPriced(
     ...(pa.unpriced
       ? {
           unpriced: true,
-          unpricedReason: opts?.unpricedReason ?? analysisUnpricedReason({
+          unpricedReason: opts?.unpricedReason ?? pa.unpricedReason ?? analysisUnpricedReason({
             position: opts?.reasonPosition ?? pa.position ?? meta.position,
             sport: meta.sport ?? 'NFL',
           }),
@@ -351,10 +352,21 @@ export async function resolveAssets(
         args.dataGaps.push('Unnamed NFL player — skipped')
         continue
       }
-      const matched = findPlayerByName(args.fcPlayers, displayName)
-      const pa = await pricePlayer(displayName, args.nflCtx)
+      const rawId = raw.playerId?.trim()
+      const rowSleeperId = row?.dataSource === 'sleeper' && row.id.startsWith('NFL:') ? row.id.slice(4) : null
+      const knownSleeperId = rowSleeperId ?? (rawId && (
+        args.nflCtx.leagueValueBySleeperId?.has(rawId) || args.nflCtx.leagueUnpricedReasonBySleeperId?.has(rawId)
+        || args.fcPlayers.some(p => p.player.sleeperId === rawId)
+      ) ? rawId : null)
+      const candidate = knownSleeperId ? args.fcPlayers.find(p => p.player.sleeperId === knownSleeperId) : findPlayerByName(args.fcPlayers, displayName)
+      const matched = candidate && valuePositionsAgree(row?.position, candidate.player.position) ? candidate : null
+      if (!row && knownSleeperId) {
+        displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
+      }
+      const pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position: row?.position })
       const unpricedReason = pa.unpriced
-        ? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
+        ? pa.unpricedReason ?? (knownSleeperId ? args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId) : null)
+          ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
       else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
@@ -374,7 +386,7 @@ export async function resolveAssets(
           enrichmentPlayerId:
             args.resolveEnrichmentIds === false
               ? null
-              : await resolveEnrichmentPlayerId(displayName, 'NFL', pa.position ?? row?.position ?? null),
+              : knownSleeperId ?? await resolveEnrichmentPlayerId(displayName, 'NFL', pa.position ?? row?.position ?? null),
           sport: 'NFL',
           team: row?.team ?? matched?.player.maybeTeam ?? '—',
           headshotUrl: headshot,
@@ -564,6 +576,8 @@ export async function resolveLeagueTradeChart(args: {
     fantasyCalcPlayers: fcPlayers,
     numTeams: leagueSize,
     ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
+    leagueValueBySleeperId: leagueValues?.bySleeperId,
+    leagueUnpricedReasonBySleeperId: leagueValues?.unpricedReasonBySleeperId,
     leagueUnpricedReasonByNameLower: leagueValues?.unpricedReasonByNameLower,
   }
 
