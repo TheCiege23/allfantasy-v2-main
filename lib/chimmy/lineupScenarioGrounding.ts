@@ -566,7 +566,7 @@ export function renderWaiverScenarioBlock(scenario: WaiverScenario): string {
     `- Add: ${who(s.add)}, ${pts(s.add)}.` +
       (s.drop ? ` Drop: ${who(s.drop)}, ${pts(s.drop)}.` : ' No drop named — whether the roster has room was NOT checked.'),
     s.lineup
-      ? `- Starting lineup, week ${wk}: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}).`
+      ? `- Hypothetical optimized lineup projection, week ${wk}: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). These are the best projected combinations from the available roster pool under these slots, not the provider's stored starting lineup projection or actual/live scores. In Best Ball the provider selects scoring starters automatically; this does not prescribe a manual swap.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
     unfilledLine(s.unfilledSlots),
     s.source === 'engine_top_claim'

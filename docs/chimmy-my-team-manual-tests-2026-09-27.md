@@ -30,7 +30,7 @@ A passing answer checks eligibility and game timing before recommending a change
 
 ## 4. Verify league isolation and draft behavior
 
-Type a short unsent draft, then switch leagues using the drawer's **League scope** selector. Confirm the new league's conversation appears without copying the previous league's unsent question into it. Return to the original league and confirm its draft is preserved. Click the new league's My team action and inspect both the selected league and question before sending.
+Type a short unsent draft, then switch leagues using the drawer's **League scope** selector. Confirm the new scope does not copy the previous league's unsent question. Conversation history is shared memory and may remain visible; it is not a queue of old requests to answer. Return to the original league and confirm its draft is preserved. Click the new league's My team action and inspect both the selected league and question before sending.
 
 Ask:
 
@@ -59,3 +59,14 @@ It should keep actual scores and forecasts distinct, identify the relevant week 
 Keep the league name, selected week, exact prompt, newest answer, test time, refreshed roster evidence and the specific contradiction. A screenshot of the league selector and relevant answer helps distinguish wrong scope from an outdated conversation. Record one of: **pass**, **fail**, or **cannot verify because source data is missing**. Missing data alone is not a correct reason for Chimmy to fabricate an answer.
 
 Repeat scope selection, action buttons and chat input on desktop, tablet and phone. Ensure the drawer scrolls, Send remains reachable, and no control requires horizontal page scrolling.
+
+## 7. Verify roster and injury arithmetic
+
+Ask: "Count my complete selected-league roster by listed position, including bench, IR and taxi. Then count players with reported injury designations by position. Use current tool evidence, not earlier answers; no report is not proof of health."
+
+Compare with the refreshed roster, not roster capacity or a shortened list. During the September 27 audit BB Dynasty League 26! held 25 players: QB 4, RB 7, WR 8, TE 6. Six had designations: QB 1, RB 2, WR 1, TE 2. Those numbers are a dated example, not permanent expected values. Changes after sync must use the new evidence. Waiver before/after totals are hypothetical optimized projections, which can differ from provider stored-lineup projections and live scores.
+## 8. Verify an explicit cross-league injury request
+
+With a league still selected, ask: "Across all of my current NFL leagues, report rostered players with dated injury designations. State how many leagues were checked and all coverage limits. Do not treat missing reports as healthy or assume a stored starter can still be replaced."
+
+This explicit request may span leagues. The answer must disclose the scan cap, unreadable/empty rosters and dated evidence. Starter placement does not establish kickoff-lock, transaction or AutoSubs eligibility. It must not tell you to fix an already-started player without checking whether a move remains allowed. Best Ball injuries remain depth concerns.
