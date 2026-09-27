@@ -1,3 +1,4 @@
+import { isPointsOnlySeeding } from '@/lib/playoff-defaults/seedingRule'
 import type {
   CanonicalLeagueRuntimeEvent,
   CanonicalLeagueRuntimeEventType,
@@ -290,6 +291,7 @@ function includesToken(value: unknown, token: string): boolean {
 }
 
 function normalizeTiebreakers(input: NflRedraftPlayoffRulesInput): string[] {
+  if (isPointsOnlySeeding(input.playoffs.seedingRules)) return ['points_for', 'roster_id']
   const raw = input.playoffs.standingsTiebreakers?.length
     ? input.playoffs.standingsTiebreakers
     : input.playoffs.tiebreakerRules?.length

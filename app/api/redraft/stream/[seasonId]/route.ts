@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId },
-    orderBy: [{ wins: 'desc' }, { pointsFor: 'desc' }],
+    orderBy: [{ playoffSeed: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
   })
 
   return NextResponse.json({ rosters })

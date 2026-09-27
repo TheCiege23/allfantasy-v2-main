@@ -306,6 +306,14 @@ export async function createCanonicalLeagueInTransaction(
     },
   }
 
+  // The concept choice must replace the preset's inherited standings mode before bootstrap.
+  if (bestBallSettings && (bestBallSettings.matchupFormat === 'cumulative' || bestBallSettings.playoffFormat === 'advancement')) {
+    const structure = mergedSettings.playoff_structure
+    mergedSettings.playoff_structure = {
+      ...(structure && typeof structure === 'object' && !Array.isArray(structure) ? structure : {}),
+      seeding_rules: 'points_only',
+    }
+  }
   const keeperBootstrap =
     formatId === 'keeper'
       ? mapKeeperCreationFromWizard({
