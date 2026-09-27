@@ -191,6 +191,33 @@ describe('TradeInbox — lineup effect line', () => {
     await screen.findByText('Current row')
     expect(container.querySelectorAll('.af-tc-timeline-row')).toHaveLength(1)
   })
+  it('keeps resolved-pick values when a live duplicate still prices the original picks', async () => {
+    const resolvedGrade = { ...GRADE, letter: 'A', partnerLetter: 'F', percentDiff: 45,
+      giveValue: 1456, getValue: 2631, lines: [
+        { side: 'give', name: 'Zachariah Branch', marketValue: 910, leagueValue: 910 },
+        { side: 'give', name: 'Chris Brazzell', marketValue: 546, leagueValue: 546 },
+        { side: 'get', name: '2027 2nd', marketValue: 1584, leagueValue: 1584 },
+        { side: 'get', name: '2027 3rd', marketValue: 1047, leagueValue: 1047 },
+      ] }
+    const history = { transactionId: 'league:pick-trade', at: new Date('2026-05-19T12:00:00Z'), rosterIds: ['1', '2'],
+      leagueGrade: resolvedGrade, players: [
+        { isYou: true, manager: 'You', received: [], picks: ['2027 2nd', '2027 3rd'], pickDrafted: [null, null] },
+        { isYou: false, manager: 'Hoovi', received: [], picks: ['2026 2nd', '2026 3rd'], pickDrafted: ['Zachariah Branch', 'Chris Brazzell'] },
+      ] } as never
+    fetchTradesPanel.mockResolvedValue(panel([], [row({ id: 'sleeper:pick-trade', status: 'completed_on_sleeper',
+      leagueGradeSide: 'viewer', leagueGrade: { ...GRADE, letter: 'F', partnerLetter: 'A', giveValue: 5401, getValue: 2631 },
+      currentGrade: 'F', currentValueGiven: 5401, currentValueReceived: 2631 })]))
+    const { container } = render(<TradeInbox leagueId="L" onLoad={() => {}} importedHistory={[history]} />)
+    await screen.findByText('Partner FC')
+    const trade = container.querySelector('.af-tc-timeline-row')!
+    expect([...trade.querySelectorAll('.af-tc-timeline-grades strong')].map(node => node.textContent)).toEqual(['A', 'F'])
+    expect(trade.textContent).toContain('Drafted Zachariah Branch')
+    expect(trade.textContent).toContain('910')
+    expect(trade.textContent).toContain('546')
+    expect(trade.textContent).toContain('1,456')
+    expect(trade.textContent).not.toContain('5,401')
+    expect(container.querySelectorAll('.af-tc-timeline-row')).toHaveLength(1)
+  })
   beforeEach(() => {
     fetchTradesPanel.mockReset()
   })

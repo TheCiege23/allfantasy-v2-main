@@ -43,6 +43,8 @@ import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
 import { loadTradeEdge } from '@/lib/competitive-edge/tradeEdgeLoader'
 import type { EdgeDealAsset } from '@/lib/competitive-edge/tradeEdge'
+import { captureConsoleEvaluation } from '@/lib/decision-os/trade/captureConsoleEvaluation'
+import { readTradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluationReceiptStore'
 
 /** A priced line, as Competitive Edge reads the deal: picks count as picks, FAAB is not an asset it tracks. */
 function edgeAssets(lines: Array<{ position?: string | null }>): EdgeDealAsset[] {
@@ -500,10 +502,32 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
       const withOpinion = decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit
       // Its own depth, so the trade-depth filter below keeps it (tradeAnalysisDepth.ts, SEPARATELY_GATED).
       const withEdge = competitiveEdge ? { ...withOpinion, competitiveEdge } : withOpinion
-      return NextResponse.json(applyTradeAnalysisDepth(withEdge, paywall.trade_depth))
+      // Preserve this exact result. A failed receipt write must not erase a valid
+      // evaluation or tell the manager that it was saved when it was not.
+      const saved = await captureConsoleEvaluation(payload, analysis, notes).catch(() => null)
+      const evaluationReceipt = saved ? { status: 'saved' as const, ...saved }
+        : out.league ? { status: 'unavailable' as const } : null
+      return NextResponse.json(applyTradeAnalysisDepth({ ...withEdge, evaluationReceipt }, paywall.trade_depth))
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })
     }
   },
 )
+
+/** Read an original evaluation. Account ownership and current league access are both required. */
+export async function GET(req: Request) {
+  const headers = { 'Cache-Control': 'private, no-store' }
+  const session = await getServerSession(authOptions)
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Sign in to view your saved evaluation.' }, { status: 401, headers })
+  const id = new URL(req.url).searchParams.get('evaluation')
+  if (!id || id.length > 128) return NextResponse.json({ error: 'Evaluation not found.' }, { status: 404, headers })
+  try {
+    const receipt = await readTradeEvaluationReceipt(userId, id)
+    if (!receipt) return NextResponse.json({ error: 'Evaluation not found.' }, { status: 404, headers })
+    return NextResponse.json({ receipt }, { headers })
+  } catch {
+    return NextResponse.json({ error: 'Saved evaluations are temporarily unavailable.' }, { status: 503, headers })
+  }
+}
