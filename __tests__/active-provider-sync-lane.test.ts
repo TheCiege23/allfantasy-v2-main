@@ -47,6 +47,25 @@ beforeEach(() => {
 })
 
 describe('active provider sync lane', () => {
+  it('refreshes current college-football leagues when their season calendar is unavailable', async () => {
+    h.enumerate.mockImplementation(async ([provider]: [string]) => provider === 'fantrax' ? [
+      { runKey: 'fantrax:college:2026', provider, externalLeagueId: 'college', season: 2026, sport: 'NCAAF' },
+      { runKey: 'fantrax:archive:2025', provider, externalLeagueId: 'archive', season: 2025, sport: 'NCAAF' },
+    ] : [])
+    const selected = await selectActiveSyncConnections({ now: new Date('2026-09-27T17:00:00Z') })
+    expect(selected.connections.map(row => row.runKey)).toEqual(['fantrax:college:2026:active'])
+    await runActiveSyncLane({ now: new Date('2026-09-27T17:00:00Z') })
+    expect(h.runDue).toHaveBeenCalledWith(expect.objectContaining({
+      cadenceMinutesOverride: 5,
+      scopes: ['league_state', 'transactions', 'teams_rosters'],
+    }))
+  })
+
+  it('still excludes a known offseason from the active lane', async () => {
+    const selected = await selectActiveSyncConnections({ now: new Date('2026-06-15T17:00:00Z') })
+    expect(selected.connections).toEqual([])
+  })
+
   it('selects the current in-season league for every supported provider and isolates its state key', async () => {
     const selected = await selectActiveSyncConnections({ now: new Date('2026-09-13T18:00:00Z'), limitPerProvider: 2 })
     expect(selected.eligible).toBe(6)

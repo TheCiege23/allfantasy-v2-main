@@ -4,6 +4,7 @@ import type { ReadyTradeScenario } from './tradeScenarioTypes'
 export function tradeDecisionRecommendation(s: ReadyTradeScenario): string {
   if (!s.recommendation) return 'Recommendation withheld: league valuation is incomplete.'
   const action = s.recommendation.action
+  if (action === 'hold') return `HOLD: ${s.recommendation.explanation}`
   if (action === 'decline') return `NO: ${s.recommendation.explanation}`
   if (action === 'counter') return `COUNTER: ${s.recommendation.explanation}`
   if (s.unpricedExcluded) return 'COUNTER / HOLD: Some rostered players lack projections and were excluded. Resolve that coverage gap before treating the lineup comparison as an acceptance recommendation.'

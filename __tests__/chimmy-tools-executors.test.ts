@@ -7,7 +7,10 @@ const h = vi.hoisted(() => ({
   leaders: vi.fn(),
   findLeague: vi.fn(),
   tradeBlock: vi.fn(),
+  injuries: vi.fn(),
 }))
+
+vi.mock('@/lib/chimmy/tools/myRosterInjuriesTool', () => ({ buildMyRosterInjuriesContext: h.injuries }))
 
 vi.mock('@/lib/chimmy/tradeBlockGrounding', () => ({ buildTradeBlockContext: h.tradeBlock }))
 
@@ -301,5 +304,28 @@ describe('find_league_by_name binds scope from a null start', () => {
     expect(out).toMatch(/cannot tell who is signed in/i)
     expect(h.findLeague).not.toHaveBeenCalled()
     expect(ctx.leagueId).toBeNull()
+  })
+})
+
+describe('injury tool scope', () => {
+  it('reads the selected league instead of spending the cross-league scan budget', async () => {
+    h.injuries.mockResolvedValue('Selected roster injuries')
+    await executeChimmyTool('get_my_injuries', {}, CTX)
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: 'l1', sport: null })
+  })
+  it('keeps an explicit account-wide injury request available', async () => {
+    h.injuries.mockResolvedValue('All roster injuries')
+    await executeChimmyTool('get_my_injuries', { scope: 'all', sport: 'nfl' }, CTX)
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: null, sport: 'NFL' })
+  })
+  it('uses account-wide context when no league is selected', async () => {
+    h.injuries.mockResolvedValue('All roster injuries')
+    await executeChimmyTool('get_my_injuries', {}, { userId: 'u1', leagueId: null })
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: null, sport: null })
+  })
+  it('does not broaden the selected scope for an invalid scope or model-supplied league id', async () => {
+    h.injuries.mockResolvedValue('Selected roster injuries')
+    await executeChimmyTool('get_my_injuries', { scope: 'anything', leagueId: 'foreign' }, CTX)
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: 'l1', sport: null })
   })
 })

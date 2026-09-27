@@ -166,6 +166,8 @@ function useEnsureSimpleDefaults(state: CreateLeagueV2State, onChange: WizardPro
 
 export function CreateLeagueWizard(props: WizardProps) {
   const { t, language } = useLanguage()
+  const [interactive, setInteractive] = useState(false)
+  useEffect(() => setInteractive(true), [])
   const [activeStep, setActiveStep] = useState<WizardStep>('sport')
   const [importOpen, setImportOpen] = useState(false)
   const entitlements = useEntitlements()
@@ -187,6 +189,7 @@ export function CreateLeagueWizard(props: WizardProps) {
 
   return (
     <div className="min-h-screen bg-[color:var(--surface-app)] text-[color:var(--text-primary)]" data-testid="g30-create-league-wizard">
+      <fieldset disabled={!interactive || props.submitting} aria-busy={!interactive || props.submitting} className="m-0 min-w-0 border-0 p-0">
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-10">
         <section className="space-y-5">
           <header className="space-y-3">
@@ -319,6 +322,7 @@ export function CreateLeagueWizard(props: WizardProps) {
           />
         </aside>
       </main>
+      </fieldset>
 
       {importOpen ? <ImportLeagueModal onClose={() => setImportOpen(false)} /> : null}
     </div>

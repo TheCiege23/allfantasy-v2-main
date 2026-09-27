@@ -107,6 +107,43 @@ const run = (message: string, userId = 'viewer-1') =>
   buildTradeScenario({ message, leagueId: 'league-1', userId }, deps)
 
 describe('a described trade is resolved against real rosters', () => {
+  it('resolves a trade when both stores carry identical rosters for the same teams', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, rosters: [
+      ...WORLD.rosters,
+      roster('r1-copy', 't1', [...WORLD.rosters[0]!.playerIds].reverse()),
+      roster('r2-copy', 't2', [...WORLD.rosters[1]!.playerIds].reverse()),
+    ] })
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    expect(s?.status).toBe('ready')
+    expect(evaluate.mock.calls[0]?.[0]).toMatchObject({ proposerRosterId: 'r1', receiverRosterId: 'r2' })
+  })
+
+  it('keeps conflicting snapshots of the same team ambiguous', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, rosters: [
+      ...WORLD.rosters,
+      roster('r2-conflict', 't2', ['p-puka']),
+    ] })
+    expect(await run('Should I trade Bijan Robinson for Puka Nacua?')).toMatchObject({ status: 'unresolved', reason: 'ambiguous_player' })
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  it('does not collapse the same player across different or unidentified teams', async () => {
+    for (const teamId of ['t3', null]) {
+      resolveWorld.mockResolvedValue({ ...WORLD, rosters: [
+        ...WORLD.rosters,
+        roster('r2-copy', teamId as string, [...WORLD.rosters[1]!.playerIds]),
+      ] })
+      expect(await run('Should I trade Bijan Robinson for Puka Nacua?')).toMatchObject({ status: 'unresolved', reason: 'ambiguous_player' })
+    }
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  it('counts a repeated player id within one roster once', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, rosters: WORLD.rosters.map(r =>
+      r.rosterId === 'r2' ? { ...r, playerIds: [...r.playerIds, 'p-puka'] } : r) })
+    expect((await run('Should I trade Bijan Robinson for Puka Nacua?'))?.status).toBe('ready')
+  })
+
   it('gives the viewer\'s player and receives the partner\'s', async () => {
     const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
     expect(s?.status).toBe('ready')

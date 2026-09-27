@@ -37,6 +37,8 @@ import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decisi
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
+import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -627,12 +629,19 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
 }
 
 /** Map a provider asset onto the panel's asset shape. */
-function providerAsset(asset: PendingTradeAsset, idx: number, accent: 'blue' | 'teal'): LeagueTradeAsset {
+function providerAsset(
+  asset: PendingTradeAsset,
+  idx: number,
+  accent: 'blue' | 'teal',
+  provider: string = 'sleeper',
+): LeagueTradeAsset {
+  const isPlayer = !asset.isPick && asset.faabAmount == null
   return {
     id: `${asset.playerId ?? 'pick'}:${idx}`,
     label: asset.playerName,
     sublabel: asset.isPick ? 'Draft pick' : [asset.position, asset.team].filter((v) => v && v !== '—').join(' · ') || null,
-    headshotUrl: null,
+    // ⚠ SLEEPER IDS ONLY. A Yahoo player key fed to Sleeper's CDN is a different player's face, or a 404.
+    headshotUrl: isPlayer && provider === 'sleeper' ? sleeperPlayerHeadshot(asset.playerId) : null,
     accent,
   }
 }
@@ -665,8 +674,8 @@ function mapProviderTrades(
       ? trade.proposedBy
       : trade.proposedByViewer ? 'Awaiting response' : trade.proposedBy,
     timestamp: trade.proposedAt ?? new Date().toISOString(),
-    sent: trade.assetsGiven.map((a, i) => providerAsset(a, i, 'blue')),
-    received: trade.assetsReceived.map((a, i) => providerAsset(a, i, 'teal')),
+    sent: trade.assetsGiven.map((a, i) => providerAsset(a, i, 'blue', trade.provider ?? 'sleeper')),
+    received: trade.assetsReceived.map((a, i) => providerAsset(a, i, 'teal', trade.provider ?? 'sleeper')),
     status: trade.lifecycleStatus === 'complete'
       ? `completed_on_${trade.provider}`
       : `pending_on_${trade.provider}`,
@@ -993,6 +1002,23 @@ export async function GET(req: NextRequest) {
   })()
 
   const grader = lazyGrader(leagueId, userId)
+  /*
+   * 🛑 THE LEAGUE'S COMPLETED HISTORY, ON THE ONE GRADE (2026-09-27, Guap: bring it back, graded).
+   * The league Trades tab retired this history on 2026-09-25 because the only copy it could read was
+   * the realized-points ledger, whose letter contradicted the one grade. The history now carries THE
+   * grade (`getSleeperTradeHistory` → `leagueGrade`), built into rows by the same function the Trade
+   * Center uses, so the two screens cannot disagree.
+   *
+   * ⚠ OPT-IN (`?history=1`). It grades up to sixty trades; the Trade Center already has this history
+   * from its page and must not pay for it twice, and the tab's once-a-minute background refresh does
+   * not ask for it. A failure is an empty list with a flag, never a failed panel.
+   */
+  const wantHistory = req.nextUrl.searchParams?.get('history') === '1'
+  const importedHistoryPromise = wantHistory
+    ? getSleeperTradeHistory(sleeperLeagueId, viewerSleeperId, { afLeagueId: leagueId })
+        .then((h) => (h ? { rows: importedTradeTimelineRows(h.history), available: true } : { rows: [], available: false }))
+        .catch(() => ({ rows: [], available: false }))
+    : null
   const [nativeTrades, nativeHistory, pendingScan] = await Promise.all([
     buildNativeActiveTrades(leagueId, userId, league.sport, grader).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
@@ -1146,6 +1172,8 @@ export async function GET(req: NextRequest) {
       ...settledProviderOffers,
       ...nativeHistory,
     ],
+    /* Present only when asked for — see `wantHistory`. `available: false` is "could not read", not "none". */
+    ...(importedHistoryPromise ? { importedHistory: await importedHistoryPromise } : {}),
     activeCount: activeTrades.length,
     source: 'sleeper' as const,
     leagueName: league.name ?? 'League',

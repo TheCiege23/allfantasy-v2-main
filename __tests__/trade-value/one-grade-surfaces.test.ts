@@ -30,7 +30,14 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/league-trade-engine/tradeLearningCapture.ts', entry: /gradeDeal\(/, what: 'native history "Now"' },
   { file: 'lib/trade-intel/tradeExpectationLoader.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the letter before points arrive (email, history, dashboard)' },
   { file: 'lib/core-app/recentTrades.ts', entry: /oneGradeForCompletedTrade\(/, what: 'the dashboard trade band verdict' },
-  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTrade\(/, what: 'the /core Trades grade list' },
+  /*
+   * 2026-09-27: the /core Trades grade list's glue moved into `archivedTradeGrade.ts`, shared with the
+   * player card, so ONE function grades an archived trade for both. Each surface is pinned to that
+   * function, and the function to the one grader.
+   */
+  { file: 'lib/core-app/archivedTradeGrade.ts', entry: /gradeArchivedTrade\(/, what: 'archived-trade grading (the /core Trades list and the player card)' },
+  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTradeRows\(/, what: 'the /core Trades grade list' },
+  { file: 'lib/core-app/playerCard.ts', entry: /gradeArchivedTradeRows\(/, what: 'the player card’s trades' },
   { file: 'lib/core-app/tradesBoard.ts', entry: /gradeArchivedTrade\(/, what: 'the cross-league trades board' },
 ]
 

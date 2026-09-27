@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
@@ -16,6 +17,7 @@ import {
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
 import {
   analysisUnpricedReason,
   pickUnpricedReason,
@@ -47,6 +49,7 @@ import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-a
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -221,6 +224,7 @@ function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines
 }
 
 type AnalyzeResult = {
+  evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
   counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
@@ -496,6 +500,8 @@ function toInput(a: PickedAsset) {
 }
 
 export function TradeCenter(props: {
+  /** Authenticated account identity, supplied by the server for device draft isolation. */
+  viewerId?: string | null
   league: { id: string; name: string; format: string | null; teamCount: number | null } | null
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
@@ -548,11 +554,11 @@ export function TradeCenter(props: {
    */
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
+  const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   // Offers poll independently. Rebuilding the full route while editing can remount
   // this form and discard an unsaved proposal or its in-flight analysis.
-  const editingProposal = busy || giveAssets.length > 0 || getAssets.length > 0
+  const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
   useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
-  const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   const [draftNote, setDraftNote] = useState<string | null>(null)
   /*
    * Non-null means the next send ANSWERS that offer rather than opening a new one.
@@ -613,6 +619,10 @@ export function TradeCenter(props: {
    * pick proposable rather than only priceable.
    */
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
+  const proposalFingerprint = JSON.stringify([props.viewerId, props.league?.id, giveAssets, getAssets, partnerRosterId])
+  const proposalFingerprintRef = useRef(proposalFingerprint)
+  proposalFingerprintRef.current = proposalFingerprint
+  useEffect(() => setBusy(false), [proposalFingerprint])
 
   /** FAAB labels are identical on both sides; players resolve by identity per side. */
   const pricedBy = useMemo(() => {
@@ -622,6 +632,12 @@ export function TradeCenter(props: {
     }
     return m
   }, [result])
+
+  const { data: rosterData } = useLeagueRosters(
+    props.league?.id ?? null,
+    Boolean(props.league?.id),
+    props.viewerId,
+  )
 
   const toLines = useCallback(
     (assets: PickedAsset[], engineLines?: EngineLine[] | null): Line[] => {
@@ -693,33 +709,16 @@ export function TradeCenter(props: {
             ...leagueOf(engine),
           }
         }
-        /*
-         * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
-         *
-         * This field has now been fixed three times in three places — the rosters route,
-         * the hand-typed pick, and here — because pricing at PICK time bakes a number into
-         * stored state, so every path that creates a pick has to remember to set it. Any
-         * path that forgets produces an em dash on the row and "1 unpriced" on a total
-         * that then understates itself by a whole first-rounder.
-         *
-         * The round is all the curve needs and every pick carries one, so deriving it here
-         * makes ONE rule serve every path — including a draft serialized into localStorage
-         * before the rule existed, which no amount of fixing creation sites can reach.
-         *
-         * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
-         * slot it projects to; the curve here only knows the round, so it is the fallback
-         * and not the override.
-         *
-         * ⚠ AND A PICK THE ROUTE COULD NOT PLACE STAYS UNPRICED. The picker defaults a missing
-         * round to 1 when it builds the asset, so pricing that round here would show a pick with no
-         * round as a first-rounder. `unpricedReason` is what survives from the route to say so.
-         */
+        // A league quote overrides saved draft values, including values from older pricing models.
         const pick: Line = {
           name: a.label,
           position: 'PICK',
           team: null,
           marketValue:
-            a.value ??
+            props.league?.id
+              ? (valuedByVerdict(a) ? readPickPreviewValue({ leagueId: props.league.id,
+                  book: rosterData?.pickPreviewBook, year: a.year, round: a.round }) : null)
+              : a.value ??
             (!a.unpricedReason && Number.isFinite(a.round) && a.round >= 1
               ? pickValueByOverall({
                   round: a.round,
@@ -729,9 +728,8 @@ export function TradeCenter(props: {
               : null),
         }
         /*
-         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The builder prices a pick on its
-         * own round curve and the analysis on the historical pick curve, and they are not the same
-         * number — so a row showing one while the verdict summed the other could never add up. The
+         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The league preview and
+         * evaluator share a pricer; an analysis retains its exact value even if the market refreshes. The
          * engine names picks differently from the builder, so the line is matched by its place in the
          * deal (the analysis returns lines in the order it was sent), and only if it IS a pick line.
          */
@@ -741,7 +739,7 @@ export function TradeCenter(props: {
           pick.leagueValue = graded
           pick.adjustments = []
         }
-        const why = pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null
+        const why = pick.marketValue == null ? (a.unpricedReason ?? pricedOnAnalysisReason()).label : null
         return {
           ...pick,
           // Said on the row because the verdict below it silently has one asset fewer.
@@ -749,7 +747,7 @@ export function TradeCenter(props: {
         }
       })
     },
-    [pricedBy, props.league?.teamCount],
+    [pricedBy, props.league?.id, props.league?.teamCount, rosterData?.pickPreviewBook],
   )
 
   const give = toLines(giveAssets, result?.players?.give)
@@ -774,10 +772,6 @@ export function TradeCenter(props: {
    * ⚠ THIS DOES ADD ONE REQUEST PER TRADE-PAGE LOAD, and that is the deliberate trade: it is the
    * request that fetches the content the page is for.
    */
-  const { data: rosterData } = useLeagueRosters(
-    props.league?.id ?? null,
-    Boolean(props.league?.id),
-  )
   /*
    * ⚠ IDENTITY, NOT THE PROPOSE GATE. `viewerRosterId` is the engine's strict
    * predicate and is null on every imported league, so filtering "everyone but
@@ -946,6 +940,7 @@ export function TradeCenter(props: {
   }, [result, give, get])
 
   const analyze = useCallback(async () => {
+    const analyzedProposal = proposalFingerprintRef.current
     const sendGive = giveAssets.filter(valuedByVerdict)
     const sendGet = getAssets.filter(valuedByVerdict)
     /*
@@ -995,6 +990,7 @@ export function TradeCenter(props: {
         }),
       })
       const j = (await r.json().catch(() => ({}))) as AnalyzeResult & { error?: string }
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       if (!r.ok) {
         setError(j.error ?? 'Analysis failed.')
         setResult(null)
@@ -1002,10 +998,11 @@ export function TradeCenter(props: {
       }
       setResult(j)
     } catch {
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       setError('Network error.')
       setResult(null)
     } finally {
-      setBusy(false)
+      if (proposalFingerprintRef.current === analyzedProposal) setBusy(false)
     }
   }, [props.league?.id, giveAssets, getAssets, partnerRoster?.teamExternalId])
 
@@ -1065,19 +1062,58 @@ export function TradeCenter(props: {
    * mean a manager who saved while offline and then came back online silently
    * loses the newer copy to a stale server row.
    */
-  const draftKey = props.league?.id ? `af-trade-draft:${props.league.id}` : null
+  const draftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id)
+  const workingDraftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id, true)
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null)
+  const [deviceDraftAvailable, setDeviceDraftAvailable] = useState<boolean | null>(null)
+  const draftContext = JSON.stringify([props.viewerId, props.league?.id])
+  const draftContextRef = useRef(draftContext)
+  draftContextRef.current = draftContext
+
+  useEffect(() => {
+    let recovered: ReturnType<typeof decodeTradeDraft> = null
+    if (workingDraftKey) {
+      try {
+        const raw = window.localStorage.getItem(workingDraftKey)
+        recovered = raw ? decodeTradeDraft(JSON.parse(raw)) : null
+      } catch { /* Storage can be unavailable on a private device. */ }
+    }
+    setGiveAssets(recovered?.give ?? [])
+    setGetAssets(recovered?.get ?? [])
+    setPicking(null)
+    setPartnerRosterId(recovered?.partnerRosterId ?? null)
+    setCountering(null)
+    setResult(null)
+    setError(null)
+    setDraftNote(recovered && (recovered.give.length || recovered.get.length)
+      ? 'Recovered this device’s in-progress proposal — analyse it again to get a verdict.' : null)
+    setDeviceDraftAvailable(null)
+    setHydratedDraftKey(workingDraftKey)
+  }, [workingDraftKey, props.league?.id, props.viewerId])
+
+  useEffect(() => {
+    // Do not overwrite recovery data with the initial empty render, or an old
+    // account/league's assets while the new context is being restored.
+    if (!workingDraftKey || hydratedDraftKey !== workingDraftKey) return
+    try {
+      if (!giveAssets.length && !getAssets.length) window.localStorage.removeItem(workingDraftKey)
+      else window.localStorage.setItem(workingDraftKey, JSON.stringify({ give: giveAssets, get: getAssets, partnerRosterId, at: Date.now() }))
+      setDeviceDraftAvailable(true)
+    } catch { setDeviceDraftAvailable(false) }
+  }, [workingDraftKey, hydratedDraftKey, giveAssets, getAssets, partnerRosterId])
 
   const saveDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const savingContext = draftContextRef.current
 
     let local = false
     try {
-      window.localStorage.setItem(
+      if (draftKey) window.localStorage.setItem(
         draftKey,
         JSON.stringify({ give: giveAssets, get: getAssets, at: Date.now() }),
       )
-      local = true
+      local = Boolean(draftKey)
     } catch {
       /* Private browsing and full quotas both throw. */
     }
@@ -1097,6 +1133,7 @@ export function TradeCenter(props: {
       /* Offline is a fallback, not a failure. */
     }
 
+    if (draftContextRef.current !== savingContext) return
     setDraftNote(
       remote
         ? 'Saved to your account — it will be here on your other devices.'
@@ -1111,12 +1148,16 @@ export function TradeCenter(props: {
     setGetAssets(Array.isArray(get) ? (get as PickedAsset[]) : [])
     /* A restored deal is not an analysed one. */
     setResult(null)
+    setCountering(null)
+    setPartnerRosterId(null)
     setDraftNote(note)
   }, [])
 
   const restoreDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const restoringContext = draftContextRef.current
+    const restoringProposal = proposalFingerprintRef.current
 
     /*
      * ⚠ THE ACCOUNT WINS WHEN BOTH EXIST, and that is a choice rather than an
@@ -1129,8 +1170,9 @@ export function TradeCenter(props: {
       const j = (await r.json().catch(() => ({}))) as {
         draft?: { payload?: { give?: unknown; get?: unknown } } | null
       }
-      const payload = j?.draft?.payload
-      if (payload && (Array.isArray(payload.give) || Array.isArray(payload.get))) {
+      if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
+      const payload = decodeTradeDraft(j?.draft?.payload)
+      if (r.ok && payload) {
         applyDraft(
           payload.give,
           payload.get,
@@ -1142,13 +1184,15 @@ export function TradeCenter(props: {
       /* Fall through to the browser copy. */
     }
 
+    if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
     try {
-      const raw = window.localStorage.getItem(draftKey)
+      const raw = draftKey ? window.localStorage.getItem(draftKey) : null
       if (!raw) {
         setDraftNote('No saved draft for this league, on your account or in this browser.')
         return
       }
-      const parsed = JSON.parse(raw) as { give?: PickedAsset[]; get?: PickedAsset[] }
+      const parsed = decodeTradeDraft(JSON.parse(raw))
+      if (!parsed) { setDraftNote('That saved draft could not be read.'); return }
       applyDraft(
         parsed.give,
         parsed.get,
@@ -1277,6 +1321,7 @@ export function TradeCenter(props: {
           they do not hold and the engine would refuse it on send.
         */
         rosterPicks={r?.picks ?? []}
+        pickPreviewBook={rosterData?.pickPreviewBook}
         rosterLabel={side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
@@ -1352,12 +1397,13 @@ export function TradeCenter(props: {
 
   return (
     <div className="af-tc" data-mobile-step={mobileStep}>
+      <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       <header className="af-tc-head">
         <div className="af-label">Core · Trades</div>
         <h1>Trade Center</h1>
         <p className="af-tc-lede">
           Build a deal across any league you&rsquo;re in and any asset class it allows. Context
-          explains the league scoring and roster needs used in the grade. Schedule and
+          explains the league scoring used in the grade. Roster fit, schedule and
           strategy notes help you judge the deal alongside that value.
         </p>
         {/*
@@ -1454,9 +1500,12 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {draftKey ? (
+      {props.league?.id ? (
         <div className="af-tc-draft" data-mstep="offers review">
           <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
+          {workingDraftKey ? <span className="af-tc-row-sub">{deviceDraftAvailable === false
+            ? 'Device recovery is unavailable. Use Save draft to save to your account.'
+            : 'In-progress proposals recover on this device. Use Save draft to sync across devices.'}</span> : null}
           <span className="af-tc-spacer" />
           <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
             Restore draft
@@ -1998,14 +2047,14 @@ export function TradeCenter(props: {
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
-              proposal value today &mdash; realized production is tracked separately after completion
+              trade value today &mdash; roster fit and realized production are separate
             </span>
           </div>
 
           {/*
             What the grade is priced in, always, so a letter never appears without its rules.
-            "League value" is the base asset value (market or league-derived) on this league's chart, moved by its scoring and your
-            roster; the moves are listed below with their reasons.
+            The shared trade-value letter uses this league's chart and scoring. Personal roster
+            utility is shown separately, so completion cannot remove a factor from the headline grade.
           */}
           {result.valueBasis ? (
             <p className="af-tc-basis">
@@ -2018,6 +2067,26 @@ export function TradeCenter(props: {
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
+          {serverGrade?.graded ? (
+            <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
+              This trade-value grade uses the same league scoring and asset-price rules as trade history and email.
+              Roster fit does not change the letter. Refreshed market values can change a later evaluation.
+            </p>
+          ) : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>Open this saved evaluation</Link> · Original values preserved at {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString()}.</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">This evaluation could not be saved. Keep a copy before relying on it later.</p> : null}
+          {serverGrade?.graded && serverGrade.rosterFit ? (
+            <div className="af-tc-cap-check" data-testid="trade-roster-fit">
+              <div className="af-label">Your roster fit · separate from the trade-value grade</div>
+              <p>Personal utility: {money(serverGrade.rosterFit.giveValue)} given, {money(serverGrade.rosterFit.getValue)} received.
+                {' '}This is a roster-fit estimate, not a win probability or the grade sent by email.</p>
+              {serverGrade.rosterFit.moves.map((move, index) => (
+                <p key={`${move.side}:${move.name}:${index}`}>
+                  {move.name}: {money(move.base)} base → {money(move.leagueValue)} personal utility. {move.reasons.join('; ')}.
+                </p>
+              ))}
+            </div>
+          ) : null}
 
           {result.salaryCap && result.salaryCap.status !== 'not_applicable' ? (
             <div className="af-tc-cap-check" role="status">
@@ -2381,7 +2450,7 @@ export function TradeCenter(props: {
           type="button"
           className="af-btn af-btn--ghost"
           onClick={() => void saveDraft()}
-          disabled={!draftKey || (giveAssets.length === 0 && getAssets.length === 0)}
+          disabled={!props.league?.id || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           Save draft
         </button>

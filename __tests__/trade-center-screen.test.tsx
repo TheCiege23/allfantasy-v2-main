@@ -8,6 +8,7 @@ import React from 'react'
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { StockMark } from '@/components/core-app/screens/TradeAssetPicker'
+import { tradeDeviceDraftKey } from '@/components/core-app/screens/tradeDeviceDraft'
 
 const SRC = readFileSync(
   resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
@@ -334,9 +335,10 @@ describe('phase 2 — mobile and drafts', () => {
     expect(SRC).toContain('analyse it again to get a verdict')
   })
 
-  it('scopes the draft key per league', () => {
-    // One draft per league, not one global draft that leaks across them.
-    expect(SRC).toContain('`af-trade-draft:${props.league.id}`')
+  it('isolates device drafts between accounts as well as leagues', () => {
+    expect(tradeDeviceDraftKey('account-a', 'league-a')).not.toBe(tradeDeviceDraftKey('account-b', 'league-a'))
+    expect(tradeDeviceDraftKey('account-a', 'league-a')).not.toBe(tradeDeviceDraftKey('account-a', 'league-b'))
+    expect(tradeDeviceDraftKey(null, 'league-a')).toBeNull()
   })
 })
 
@@ -384,7 +386,7 @@ describe('⚠ naming the other side is what turns the counterparty layer on', ()
 
   it('offers real picks above the hand-typed fallback, and labels which is which', () => {
     expect(PICKER).toContain('On the roster — can be proposed')
-    expect(PICKER).toContain('priced but not proposable')
+    expect(PICKER).toContain('proposals require a pick listed on the roster')
   })
 
   it('never claims a roster holds no picks when we do not know whose roster it is', () => {
@@ -647,7 +649,7 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     const pickBranch = /position: 'PICK'[\s\S]{0,220}?marketValue:\s*([^,}]+)/.exec(code)
     expect(pickBranch).not.toBeNull()
     expect(pickBranch![1].trim()).not.toBe('null')
-    expect(pickBranch![1]).toContain('a.value')
+    expect(pickBranch![1]).toContain('readPickPreviewValue')
   })
 
   it('FAAB is priced by the ANALYSIS only — never a number invented on this screen', () => {
@@ -664,44 +666,14 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     expect(body).not.toMatch(/normalizedFaabValue|pickValueByOverall|marketValue:\s*\d/)
   })
 
-  it('🛑 DERIVES the price from the round rather than trusting what the asset carries', () => {
-    /*
-     * This field was fixed three times in three places — the rosters route, the hand-typed pick,
-     * and here — because pricing at CREATION time bakes a number into stored state, so every path
-     * that makes a pick has to remember to set it. One that forgets shows an em dash and a total
-     * short by a whole first-rounder.
-     *
-     * Deriving at render makes one rule serve every path, including a draft serialized into
-     * localStorage BEFORE the rule existed — which no amount of fixing creation sites can reach,
-     * because those assets are already on disk.
-     */
-    const pickBranch = /position: 'PICK'[\s\S]{0,600}?marketValue:([\s\S]{0,420}?)\n\s*\}/.exec(code)
-    expect(pickBranch).not.toBeNull()
-    expect(pickBranch![1]).toContain('pickValueByOverall')
-    expect(pickBranch![1]).toContain('a.round')
+  it('uses the server league quote for picks, including restored draft values', () => {
+    expect(code).toContain('readPickPreviewValue')
+    expect(code).toContain('book: rosterData?.pickPreviewBook')
+    expect(code).toContain('year: a.year, round: a.round')
   })
 
-  it('⚠ a STORED price still wins over the derived one', () => {
-    /*
-     * The route prices a roster pick against the slot it projects to; the curve here knows only
-     * the round. Derived is the fallback, never the override — `a.value ??` has to come first.
-     */
-    const pickBranch = /position: 'PICK'[\s\S]{0,600}?marketValue:([\s\S]{0,420}?)\n\s*\}/.exec(code)
-    const body = pickBranch![1]
-    /*
-     * ⚠ PRESENCE FIRST, THEN ORDER. Asserting only the order passes when `a.value` is DELETED —
-     * `indexOf` returns -1, which is dutifully "less than" the other index. A mutation control
-     * removing the fallback left this green, which is how the hole was found.
-     */
-    expect(body).toContain('a.value')
-    expect(body.indexOf('a.value')).toBeGreaterThanOrEqual(0)
-    expect(body.indexOf('a.value')).toBeLessThan(body.indexOf('pickValueByOverall'))
-  })
-
-  it('prices against the real league size, and the memo depends on it', () => {
-    // A stale memo would keep a 12-team price after switching to a 10-team league.
-    expect(code).toContain('teams: props.league?.teamCount ?? null')
-    expect(code).toContain('[pricedBy, props.league?.teamCount]')
+  it('refreshes quotes when the league or server book changes', () => {
+    expect(code).toContain('[pricedBy, props.league?.id, props.league?.teamCount, rosterData?.pickPreviewBook]')
   })
 })
 

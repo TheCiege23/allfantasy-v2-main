@@ -57,6 +57,12 @@ export function buildBestBallWarRoomPrompt(inputs: BestBallWarRoomPromptInputs):
 
   lines.push('=== BEST BALL LEAGUE CONTEXT ===')
   lines.push(`Sport=${context.sport} Season=${context.season} Teams=${context.teamCount} DraftComplete=${context.draftComplete}`)
+  if (!context.ruleConfigurationVerified) {
+    lines.push('AUTOMATIC LINEUP: Best Ball scoring selects the lineup automatically; do not suggest manual start/sit swaps.')
+    lines.push('UNVERIFIED LEAGUE RULES: the stored league has no complete explicit Best Ball waiver, trade and substitution configuration. Generic draft-only defaults are not provider evidence. Do not say any of those actions are disabled or enabled, or recommend an actionable move, until provider rules and eligibility are verified.')
+    lines.push('Scoring presets, lineup slots, roster-size targets and construction grades from the generic Best Ball profile are withheld. Use the selected-league roster and scoring tools for verified facts, and disclose any missing data.')
+    return lines.join('\n')
+  }
   lines.push(`AUTOMATIC LINEUP: the optimal lineup is auto-selected each ${context.scoring.scoringPeriod} period — there is NO manual start/sit.`)
   lines.push(`Scoring: ${context.scoring.scoringPreset} ${context.scoring.matchupFormat}${context.scoring.cumulative ? ' (cumulative)' : ''}, period=${context.scoring.scoringPeriod}`)
   lines.push(

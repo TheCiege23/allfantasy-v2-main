@@ -51,8 +51,12 @@ const GUARD_CALL = /\b(assertAiSpendAllowed|isAiSpendEnabled)\s*\(/
  * would leave those four removable without a single check failing, which is the
  * whole failure mode this file exists to close. The floor tracks what is
  * MEASURED, never what another list happens to say.
+ *
+ * Raised to 40 on 2026-09-27: measured 39 on origin/main before the change (the
+ * floor had lagged two guards behind), plus `lib/ai/providerRouter.ts`, whose
+ * inline Anthropic adapter was the one unguarded path in the provider router.
  */
-const MINIMUM = 37
+const MINIMUM = 40
 
 const ROOTS = ['lib', 'app', 'server', 'components']
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '.git'])
