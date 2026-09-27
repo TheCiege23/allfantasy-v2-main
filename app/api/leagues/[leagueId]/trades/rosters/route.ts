@@ -399,7 +399,7 @@ export async function GET(
   const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
   const chartSettings = {
     isDynasty: marketContext.variant.dynasty || marketContext.variant.keeper,
-    numQbs: marketContext.variant.superflex ? 2 : 1,
+    numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
     numTeams: chartTeams,
     ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
   }
