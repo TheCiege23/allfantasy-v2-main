@@ -5,7 +5,7 @@ import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
 import { CardFreshness } from '@/components/core-app/home/CardFreshness'
 import { DecisionQueue } from '@/components/core-app/home/DecisionQueue'
 import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClientEffects'
-import { freshnessStamp, latestInstant, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
+import { freshnessStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
@@ -177,10 +177,9 @@ export type HomeScopeInfo = {
   total: number
 }
 
-/** The newest injury report behind the summary's book — the triage and decision stamps. */
+/** Collection success time, distinct from the report date on each player. */
 function injuriesAt(data: Dash34Result | null): string | null {
-  const latest = latestInstant((data?.book ?? []).map((row) => (row as { reportedAt?: string | null }).reportedAt ?? null))
-  return latest ? latest.toISOString() : null
+  return data?.injuryCheckedAt ?? null
 }
 
 /**
@@ -278,7 +277,7 @@ async function DecisionsCard({
         <Stamps
           stamps={[
             rostersStamp,
-            freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' }),
+            freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' }),
             ...(summaryStamp(data, now) ? [summaryStamp(data, now)!] : []),
           ]}
         />
@@ -340,7 +339,7 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
       valueBasis={data.valueBasis ?? null}
-      freshness={<Stamps stamps={[freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' })]} />}
+      freshness={<Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' })]} />}
     />
   )
 }

@@ -1,3 +1,4 @@
+import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
@@ -119,6 +120,7 @@ export type Dash34LeagueRow = {
 }
 
 export type Dash34Result = Dash34Data & {
+  injuryCheckedAt?: string | null
   /** Rows excluded from the list because they are historical, not played. */
   legacyCount: number
   /**
@@ -626,7 +628,7 @@ export async function getDash34Data(
   const activeIds = active.map((l) => l.id)
   const sports = [...new Set(active.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
 
-  const [teams, nextGames] = await Promise.all([
+  const [teams, nextGames, injuryChecks] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { claimedByUserId: userId, leagueId: { in: activeIds } },
@@ -648,6 +650,7 @@ export async function getDash34Data(
      * countdown target. Global — shared through the 60s cache above.
      */
     readNextGames(sports, now, options),
+    Promise.all(sports.filter(s => s !== 'SOCCER').map(s => readInjurySyncFreshness(s))),
   ])
 
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
@@ -1847,6 +1850,8 @@ export async function getDash34Data(
   }
 
   return {
+    injuryCheckedAt: injuryChecks.length && injuryChecks.every(check => check?.lastSuccessAt)
+      ? new Date(Math.min(...injuryChecks.map(check => check!.lastSuccessAt!.getTime()))).toISOString() : null,
     firstLock,
     // 0 of 893 LeagueTeam rows carry a result. There is no record to report.
     today: null,
