@@ -321,6 +321,7 @@ export async function buildTradeScenario(
   const partnerTeamId = world.rosters.find((r) => r.rosterId === chosen.partnerRosterId)?.teamId ?? null
   const partnerTeam = world.teams.find((t) => t.teamId === partnerTeamId) ?? null
 
+  const viewerTeam = world.teams.find(t => t.teamId === viewerRoster.teamId)
   const impact = evaluation.rosterImpact ?? null
   const lineup: TradeScenarioLineup | null =
     impact &&
@@ -348,6 +349,11 @@ export async function buildTradeScenario(
     give: [...chosen.give.map(strip), ...chosen.givePicks.map((p) => stripPick(p, viewerRoster.rosterId))],
     get: [...chosen.get.map(strip), ...chosen.getPicks.map((p) => stripPick(p, chosen.partnerRosterId))],
     partnerTeamName: partnerTeam?.displayName || partnerTeam?.ownerName || 'the other team',
+    ...(grade.graded ? { recommendation: { action: grade.action, explanation: grade.recommendation } } : {}),
+    ...(viewerTeam?.record ? { competitiveContext: { ...viewerTeam.record, rank: viewerTeam.rank } } : {}),
+    unpricedExcluded: impact?.unpricedExcluded ?? 0,
+    depthChanges: impact?.depth?.filter(d => d.rosteredDelta !== 0).map(d => ({ position: d.position,
+      before: d.rosteredBefore, after: d.rosteredAfter })) ?? [],
     ...(tradedPicks > 0 ? { picks: tradedPicks } : {}),
     value: grade.graded
       ? {

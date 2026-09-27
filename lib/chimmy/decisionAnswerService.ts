@@ -1,4 +1,6 @@
 import 'server-only'
+import { screenshotTradeQuestion } from './tradeOfferEvidence'
+import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisionRecommendation'
 import { loadLeagueGroundingForUser } from './chimmy-league-snapshot'
 import { chimmyDecisionKind, decisionAnswer, type ChimmyDecisionAnswer } from './decisionAnswerContract'
 import { buildStartSitScenario, buildWaiverScenario } from './lineupScenarioGrounding'
@@ -33,17 +35,23 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
       ...(s.unfilledSlots.length ? [`Totals exclude unfilled slots: ${s.unfilledSlots.join(', ')}.`] : []),
       'This compares one week; it does not authorize a claim or determine whether it will succeed. FAAB competition, future weeks and playoff odds are not computed.'].join('\n')
   }
-  return [`You give ${names(s.give)}; you receive ${names(s.get)} from ${s.partnerTeamName}.`,
+  return [tradeDecisionRecommendation(s),
+    `You give ${names(s.give)}; you receive ${names(s.get)} from ${s.partnerTeamName}.`,
     s.value.grade ? `Trade Center grade: ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}.` : `No trade grade: ${s.value.withheld ?? 'league values are incomplete'}.`,
     `League value (${s.value.basis ?? 'league chart'}): ${points(s.value.given)} given, ${points(s.value.received)} received. Coverage: ${s.value.coveragePct}%.`,
     s.lineup ? `Week ${s.lineupWeek ?? 'unknown'} projected lineup: ${points(s.lineup.before)} before, ${points(s.lineup.after)} after (${points(s.lineup.delta)} point change).` : `Lineup impact unavailable: ${s.lineupUnavailable ?? 'missing projections'}.`,
+    ...(s.unpricedExcluded ? [`${s.unpricedExcluded} rostered players have no projection and were excluded from lineup totals.`] : []),
+    ...(s.depthChanges ?? []).map(d => `${d.position} roster depth: ${d.before} before, ${d.after} after.`),
     ...(s.picks ? ['Pick values use round averages; exact draft slots are unknown.'] : []),
+    ...(s.competitiveContext ? [`Current competitive position: ${s.competitiveContext.wins}-${s.competitiveContext.losses}-${s.competitiveContext.ties}${s.competitiveContext.rank != null ? `, rank ${s.competitiveContext.rank}` : ''} in the synced standings. This is current standing, not a post-trade playoff probability.`] : []),
+    ...tradeFutureStructure(s),
     'Lineup impact covers one week. Playoff odds and future-season outcomes are not computed.'].join('\n')
 }
 
 /** Shared by full chat, bubble/public advice and private mentions. Membership is checked here too. */
-export async function prepareChimmyDecisionAnswer(args: { question: string; leagueId?: string | null; userId?: string | null }): Promise<ChimmyDecisionAnswer | null> {
-  const kind = chimmyDecisionKind(args.question)
+export async function prepareChimmyDecisionAnswer(args: { question: string; leagueId?: string | null; userId?: string | null; screenshotEvidence?: string | null }): Promise<ChimmyDecisionAnswer | null> {
+  const imageTrade = screenshotTradeQuestion(args.screenshotEvidence)
+  const kind = imageTrade.question || imageTrade.clarification ? 'trade' : chimmyDecisionKind(args.question)
   if (!kind) return null
   let provenLeagueId: string | null = null
   const gap = (code: string, detail: string, remedy: string) => decisionAnswer({ kind, status: 'needs_data', leagueId: provenLeagueId,
@@ -53,9 +61,23 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
     const access = await loadLeagueGroundingForUser(args.userId, args.leagueId)
     if (!access.ok) return gap('league_unavailable', 'I could not read an authorized league for this decision.', 'Open a league you belong to, sync it, and ask again.')
     provenLeagueId = access.snapshot.id
-    const input = { message: args.question, leagueId: provenLeagueId, userId: args.userId }
+    if (imageTrade.clarification) return gap('screenshot_trade_unclear', imageTrade.clarification, 'Confirm the assets on each side; no trade verdict was computed.')
+    const input = { message: imageTrade.question ?? args.question, leagueId: provenLeagueId, userId: args.userId }
+    const namedTrade = kind === 'trade' && /\bpending\b|\b(?:this|that|the)\s+(?:trade|offer)\b/i.test(args.question) ? await buildTradeScenario(input) : null
+    if (kind === 'trade' && !imageTrade.question && !namedTrade && /\bpending\b|\b(?:this|that|the)\s+(?:trade|offer)\b/i.test(args.question)) {
+      const { pendingTradeQuestions } = await import('./pendingTradeQuestions')
+      const pending = await pendingTradeQuestions(access.snapshot, args.userId)
+      if (!pending.offers.length) return gap('pending_offer_unavailable', pending.gap ?? 'The pending offer could not be read.', 'Attach the trade screenshot or identify the offer.')
+      const results = await Promise.all(pending.offers.map(async offer => ({ offer,
+        scenario: await buildTradeScenario({ ...input, message: offer.question }) })))
+      const ready = results.filter(r => r.scenario?.status === 'ready' && (r.scenario.value.grade || r.scenario.lineup))
+      const answer = results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready' ? renderDecisionScenario(r.scenario) : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
+      if (!ready.length) return gap('pending_offer_evaluation_missing', answer, 'Sync league rosters, scoring and values before deciding.')
+      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer,
+        sources: ['provider_pending_offers', 'league_rosters', 'league_scoring', 'trade_engine'] })
+    }
     if (kind === 'trade') {
-      if (/\b(?:find|suggest|recommend|propose)\b.*\btrades?\b|\btrade\s+ideas?\b/i.test(args.question)) {
+      if (!imageTrade.question && /\b(?:find|suggest|recommend|propose)\b.*\btrades?\b|\btrade\s+ideas?\b/i.test(args.question)) {
         const positionWord = args.question.match(/\b(?:QB|RB|WR|TE|quarterback|running back|wide receiver|tight end)\b/i)?.[0]
         const result = await buildTradeFinder({ leagueId: provenLeagueId, userId: args.userId, position: readTradeFinderPosition(positionWord) })
         if (result.status === 'unavailable') return gap('trade_discovery_unavailable', result.reason, 'Sync league settings, rosters and values, then retry.')
@@ -65,7 +87,7 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
             `${idea.partnerTeam}: give ${names(idea.give)}, receive ${names(idea.get)}. Market values ${points(idea.giveTotal)} vs ${points(idea.getTotal)}; fairness band: ${idea.fairness}.${idea.why.length ? ` ${idea.why.join(' ')}` : ''}${!idea.sendable ? ' This package needs review before proposing.' : ''}`),
             'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
       }
-      const target = parseTradeTargetQuestion(args.question)
+      const target = imageTrade.question ? null : parseTradeTargetQuestion(args.question)
       if (target) {
         const result = await buildTradeTargetVerdict({ playerName: target.playerName, leagueId: provenLeagueId, userId: args.userId })
         return result.status === 'decided'
@@ -73,7 +95,7 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
           : gap(result.reason, result.detail, 'Confirm the full player name and sync your league roster before retrying.')
       }
     }
-    const scenario = kind === 'trade' ? await buildTradeScenario(input)
+    const scenario = kind === 'trade' ? namedTrade ?? await buildTradeScenario(input)
       : kind === 'waiver' ? await buildWaiverScenario({ ...input, engineClaims: null })
       : await buildStartSitScenario(input)
     if (scenario?.status === 'unresolved') return gap(scenario.reason, scenario.detail, 'Sync league settings and rosters, then confirm the player names and ask again.')
@@ -91,9 +113,9 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
           rec: { key: pick.playerId, name: pick.name }, alt: { key: other.playerId, name: other.name }, slot: null,
         })
       }
-      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: renderDecisionScenario(scenario),
+      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: (imageTrade.question ? 'I read the attached offer and resolved its assets against your league roster.\n' : '') + renderDecisionScenario(scenario),
         ...(startCalls.length ? { startCalls } : {}),
-        scenario, sources: ['league_rosters', 'league_scoring', kind === 'trade' ? 'trade_engine' : 'weekly_projections'] })
+        scenario, sources: [...(imageTrade.question ? ['screenshot_vision'] : []), 'league_rosters', 'league_scoring', kind === 'trade' ? 'trade_engine' : 'weekly_projections'] })
     }
     if (kind === 'lineup') {
       const result = await buildLineupOptimization({ leagueId: provenLeagueId, userId: args.userId })

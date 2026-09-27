@@ -58,6 +58,10 @@ export type ReadyTradeScenario = {
   give: ScenarioPlayer[]
   get: ScenarioPlayer[]
   partnerTeamName: string
+  recommendation?: { action: string; explanation: string }
+  competitiveContext?: { wins: number; losses: number; ties: number; rank: number | null }
+  unpricedExcluded?: number
+  depthChanges?: Array<{ position: string; before: number; after: number }>
   /**
    * How many draft picks the trade carried. Picks appear in `give` / `get` as entries named like
    * "2027 1st-round pick" with no position; this count lets a renderer add the pricing caveat.
