@@ -140,6 +140,8 @@ describe('buildMyRosterInjuriesContext', () => {
     expect(h.identities).toHaveBeenCalledWith('espn', 'NFL', ['3916387'])
     const lines = out.split('\n').filter((l) => l.startsWith('- '))
     expect(lines).toHaveLength(2)
+    expect(out).toContain('CURRENT INJURY COUNTS: 2 distinct players')
+    expect(out).toContain('RB: 1; WR: 1')
     /* Most serious first, and one line for McCaffrey even though he is on two rosters. */
     expect(lines[0]).toContain('Christian McCaffrey')
     expect(lines[0]).toContain('Out')
@@ -218,4 +220,17 @@ describe('buildMyRosterInjuriesContext', () => {
     expect(h.team).toHaveBeenCalledTimes(1)
     expect(h.team.mock.calls[0][0].leagueId).toBe('L9')
   })
+})
+
+it('reports two injured tight ends among six designations rather than repeating old depth counts', async () => {
+  h.leagues.mockResolvedValue([{ id: 'L1', name: 'Best Ball', sport: 'NFL', season: 2026 }])
+  h.platforms.mockResolvedValue([{ id: 'L1', platform: 'sleeper', settings: { best_ball: 1 } }])
+  const designated = [['Caleb Williams','QB'],['DJ Giddens','RB'],['Jeremy McNichols','RB'],['Omar Cooper','WR'],['Dallas Goedert','TE'],['Mason Taylor','TE']] as const
+  h.team.mockResolvedValue(team({ bench: designated.map(([name, position], i) => ref(String(i), name, { position })) }))
+  h.injuries.mockResolvedValue(injuryResult(Object.fromEntries(designated.map(([name]) => [name, fact('Out', 4)]))))
+  const out = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'L1' })
+  expect(out).toContain('CURRENT INJURY COUNTS: 6 distinct players')
+  expect(out).toContain('QB: 1; RB: 2; TE: 2; WR: 1')
+  expect(out).toContain('No report does not mean healthy or available')
+  expect(h.injuries).toHaveBeenCalledTimes(1)
 })

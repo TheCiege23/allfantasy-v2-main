@@ -389,8 +389,10 @@ describe('prompt blocks', () => {
     const block = renderWaiverScenarioBlock((await waiver('Add Rashod Bateman?'))!)
     expect(block).toContain('Add: Rashod Bateman (WR), 14.0 points in week 3.')
     expect(block).toContain('whether the roster has room was NOT checked')
-    expect(block).toContain('Starting lineup, week 3: 106.0 before, 109.0 after (+3.0)')
+    expect(block).toContain('Hypothetical optimized lineup projection, week 3: 106.0 before, 109.0 after (+3.0)')
     expect(block).toContain('This is ONE week')
+    expect(block).toContain('not the provider')
+    expect(block).toContain('actual/live scores')
   })
 
   it('an unresolved block tells the model not to invent a comparison', async () => {

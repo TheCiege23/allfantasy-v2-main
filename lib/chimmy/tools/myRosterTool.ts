@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveAiTeamContext } from '@/lib/ai-payload/resolveAiTeamContext'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
+import { rosterCountEvidence } from '@/lib/chimmy/rosterCounts'
 
 /**
  * THE USER'S OWN ROSTER, FOR THE LEAGUE IN SCOPE.
@@ -110,6 +111,7 @@ export async function buildMyRosterContext(
     ].join(' ')
   }
 
+  lines.push(rosterCountEvidence([...team.starters, ...team.bench, ...team.injuredReserve, ...team.taxi]))
   lines.push(...groups)
 
   /*

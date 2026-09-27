@@ -234,4 +234,5 @@ it('keeps unified memory while making the new selected-league request authoritat
   expect(params.messages.slice(1, 3)).toEqual([...history, { role: 'user', content: 'CURRENT USER REQUEST:\nReview my Best Ball roster' }])
   expect(params.messages[0].content).toContain('do not reopen unrelated old or unanswered questions')
   expect(params.messages[0].content).toContain('Current selected league: l1')
+  expect(params.messages[0].content).toContain('Use the supplied current roster and injury counts')
 })

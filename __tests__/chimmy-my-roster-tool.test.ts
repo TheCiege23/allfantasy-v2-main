@@ -142,5 +142,9 @@ describe('buildMyRosterContext', () => {
     const out = await buildMyRosterContext('l1', 'u1')
 
     expect(out).toMatch(/\+15 more/)
+    expect(out).toContain('46 distinct identified players')
+    expect(out).toContain('QB: 1; WR: 45')
+    expect(h.resolveTeam).toHaveBeenCalledTimes(1)
+    expect(h.leagueFindUnique).toHaveBeenCalledTimes(1)
   })
 })

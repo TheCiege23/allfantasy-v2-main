@@ -288,6 +288,7 @@ it('keeps unified memory while making the new selected-league request authoritat
   const focus = params.system.at(-1)
   expect(focus.text).toContain('do not reopen unrelated old or unanswered questions')
   expect(focus.text).toContain('Current selected league: l1')
+  expect(focus.text).toContain('Use the supplied current roster and injury counts')
   expect(focus.cache_control).toBeUndefined()
   expect(params.system[0].text).toBe('You are Chimmy.')
 })
