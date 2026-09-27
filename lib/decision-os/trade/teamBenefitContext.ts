@@ -6,7 +6,7 @@ import { lookupProjections } from '@/lib/core-app/playerProjections'
 import { playoffSpots, playoffStartWeek } from '@/lib/core-app/seasonTimeline'
 import { detectQbFormat, lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { loadWaiverPool } from '@/lib/decision-os/waiver/pool'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { loadMarketValues } from '@/lib/decision-os/value/marketAdapter'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
@@ -16,8 +16,8 @@ import type { TradeSide } from './tradeRecord'
 
 /**
  * Gather what the team-benefit model (`./teamBenefit.ts`) reads, for one league and one two-team
- * deal, and run it. Database reads only — the projection feed, the schedule, injuries, the stored
- * FantasyCalc chart, the waiver pool — so a request path never calls a provider.
+ * deal, and run it. Database reads only — the projection feed, the schedule, injuries, market values,
+ * the waiver pool — so a request path never calls a provider.
  *
  * NFL only (design: "NFL redraft first"); a league the weekly basis refuses is refused with the same
  * words. Never throws: every gap is a refusal with a reason.
@@ -55,9 +55,28 @@ export const defaultTeamBenefitDeps: TeamBenefitDeps = {
     return out
   },
   byes: (season) => resolveTeamByeWeeks('NFL', season).catch(() => new Map()),
+  /*
+   * ⚠ THROUGH THE CANONICAL VALUE CONTRACT, NOT THE FANTASYCALC CLIENT. Decision OS may not import
+   * `@/lib/fantasycalc(-db)` (`__tests__/fantasy-os/unified-plane-provider-boundary.test.ts`, 5H/5H-c):
+   * value arrives as governed evidence. `loadMarketValues` reads `PlayerValueSnapshot`, the ingested
+   * FantasyCalc market, keyed back to the Sleeper id it was priced under (`idSpace: 'sleeperId'`).
+   *
+   * Two honest differences from the direct read it replaced: the snapshot is per format (dynasty or
+   * redraft, 1QB or superflex), not per league size or PPR; and a player the identity registry cannot
+   * resolve comes back `unresolved_identity` with no price. The model already handles a missing price —
+   * the blend falls back to value over replacement and `notes` names the player.
+   */
   market: async (s) => {
-    const rows = await getFantasyCalcValuesDbFirst(s, { maxStaleMs: 2 * 60 * 60 * 1000 }).catch(() => [])
-    return new Map(rows.filter((r) => r.player?.sleeperId).map((r) => [String(r.player.sleeperId), r.value]))
+    const lookups = await loadMarketValues({
+      sport: 'NFL',
+      format: s.isDynasty ? 'DYNASTY' : 'REDRAFT',
+      qbFormat: s.numQbs === 2 ? 'SUPERFLEX' : 'ONE_QB',
+    }).catch(() => [])
+    const out = new Map<string, number>()
+    for (const l of lookups) {
+      if (l.status === 'ok' && l.value.idSpace === 'sleeperId' && !out.has(l.value.sourceId)) out.set(l.value.sourceId, l.value.value)
+    }
+    return out
   },
   latestWeek: undefined,
 }

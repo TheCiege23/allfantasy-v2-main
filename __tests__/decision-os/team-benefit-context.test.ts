@@ -5,8 +5,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+const { loadMarketValues } = vi.hoisted(() => ({ loadMarketValues: vi.fn() }))
+vi.mock('@/lib/decision-os/value/marketAdapter', () => ({ loadMarketValues }))
 
-import { fantasyFinalWeek, loadTeamBenefit, type TeamBenefitDeps } from '@/lib/decision-os/trade/teamBenefitContext'
+import { defaultTeamBenefitDeps, fantasyFinalWeek, loadTeamBenefit, type TeamBenefitDeps } from '@/lib/decision-os/trade/teamBenefitContext'
 import type { TradeSide } from '@/lib/decision-os/trade/tradeRecord'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 
@@ -89,5 +91,25 @@ describe('loadTeamBenefit', () => {
   it('both rosters must be known', async () => {
     const r = await loadTeamBenefit({ world: world(), me: { ...side('r1', 'r1', ['a']), rosterId: null }, them: side('r2', 'r2', ['c']) }, deps())
     expect(r).toMatchObject({ ok: false })
+  })
+})
+
+describe('default market read — through the canonical value contract', () => {
+  // Decision OS may not import the FantasyCalc client (unified-plane-provider-boundary 5H/5H-c).
+  it("asks the canonical adapter for the league's format and keys prices by the Sleeper id they were priced under", async () => {
+    loadMarketValues.mockResolvedValueOnce([
+      { status: 'ok', value: { idSpace: 'sleeperId', sourceId: '4046', value: 7200 } },
+      { status: 'ok', value: { idSpace: 'rollingInsightsId', sourceId: 'ri-1', value: 999 } },
+      { status: 'unresolved_identity', idSpace: 'sleeperId', sourceId: '9999', detail: 'x' },
+    ])
+    const m = await defaultTeamBenefitDeps.market({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
+    expect(loadMarketValues).toHaveBeenCalledWith({ sport: 'NFL', format: 'DYNASTY', qbFormat: 'SUPERFLEX' })
+    expect([...m]).toEqual([['4046', 7200]])
+  })
+
+  it('an adapter failure is an empty market, not a thrown evaluation', async () => {
+    loadMarketValues.mockRejectedValueOnce(new Error('db down'))
+    await expect(defaultTeamBenefitDeps.market({ isDynasty: false, numQbs: 1, numTeams: 10, ppr: 0.5 })).resolves.toEqual(new Map())
+    expect(loadMarketValues).toHaveBeenLastCalledWith({ sport: 'NFL', format: 'REDRAFT', qbFormat: 'ONE_QB' })
   })
 })
