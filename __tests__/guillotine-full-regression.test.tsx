@@ -220,6 +220,15 @@ describe('Guillotine full regression matrix', () => {
     expect(prismaMock.guillotineRosterState.upsert).not.toHaveBeenCalled()
   })
 
+  it.each([4, 2])('passes the whole field to the resolver and preserves a survivor with %i active teams', async (teamCount) => {
+    const scores = Array.from({ length: teamCount }, (_, i) => ({ rosterId: `r-${i}`, periodPoints: 10 * (i + 1), seasonPointsCumul: 100 }))
+    getGuillotineConfigMock.mockResolvedValue({ eliminationStartWeek: 1, eliminationEndWeek: 18, teamsPerChop: 2, tiebreakerOrder: ['season_points'] })
+    evaluateWeekMock.mockResolvedValue({ pastCutoff: true, activeRosterIds: scores.map(row => row.rosterId), scores })
+    getDraftSlotByRosterMock.mockResolvedValue(new Map())
+    resolveTiebreakMock.mockReturnValue({ choppedRosterIds: [], stepUsed: null, reason: 'resolver boundary' })
+    await runElimination({ leagueId: 'league-1', weekOrPeriod: 2, skipChat: true })
+    expect(resolveTiebreakMock).toHaveBeenCalledWith(expect.objectContaining({ candidates: scores, teamsPerChop: Math.min(2, teamCount - 1) }))
+  })
   it('eliminates lowest score, marks roster eliminated, releases players to waivers, and emits events', async () => {
     getGuillotineConfigMock.mockResolvedValue({
       eliminationStartWeek: 1,
