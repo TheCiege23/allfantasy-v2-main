@@ -1203,14 +1203,17 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
  * fills in what only it knows as it learns it.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { withChimmyRequestReceipt } = await import('@/lib/chimmy/requestDelivery')
-  return withChimmyRequestReceipt(req, async requestReceipt => {
+  const execute = async (requestReceipt?: import('@/lib/chimmy/requestReceipts').ReceiptContext, parsedRequest?: NextRequest) => {
     const question = newQuestionTelemetry()
     const started = Date.now()
-    const res = await handleChimmyPost(req, question, requestReceipt)
+    const res = await handleChimmyPost(parsedRequest ?? req, question, requestReceipt)
     void recordChimmyQuestion(question, res, Date.now() - started)
     return res
-  }, userId => runAiProtection(req, { action:'chimmy', getUserId:async () => userId }))
+  }
+  if (!req.headers.get('x-chimmy-request-id')) return execute()
+  const { withChimmyRequestReceipt } = await import('@/lib/chimmy/requestDelivery')
+  return withChimmyRequestReceipt(req, execute,
+    userId => runAiProtection(req, { action:'chimmy', getUserId:async () => userId }))
 }
 
 async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTelemetry, requestReceipt?: import('@/lib/chimmy/requestReceipts').ReceiptContext): Promise<NextResponse> {

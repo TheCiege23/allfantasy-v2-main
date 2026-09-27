@@ -77,7 +77,7 @@ let cachedBotUserId: string | null = null
 export async function getBotUserId(): Promise<string | null> {
   if (cachedBotUserId) return cachedBotUserId
   if (!isBotConfigured()) return null
-  const res = await fetch(`${DISCORD_BASE}/users/@me`, { headers: botHeaders() })
+  const res = await fetch(`${DISCORD_BASE}/users/@me`, { headers: botHeaders(), signal:AbortSignal.timeout(5_000) })
   if (!res.ok) return null
   const data = (await res.json()) as { id?: string }
   if (data.id) {
@@ -270,6 +270,7 @@ export async function postMessage(
     throw new DiscordApiError('postMessage', res.status, t)
   }
   const data = (await res.json()) as { id: string }
+  if (typeof data.id !== 'string' || !data.id) throw new DiscordApiError('postMessage', 502, 'Missing message ID')
   return data.id
 }
 
@@ -347,7 +348,7 @@ export async function fetchChannelMessages(
   const u = new URL(`${DISCORD_BASE}/channels/${channelId}/messages`)
   if (query.after) u.searchParams.set('after', query.after)
   u.searchParams.set('limit', String(Math.min(query.limit ?? 10, 10)))
-  const res = await fetch(u.toString(), { headers: botHeaders() })
+  const res = await fetch(u.toString(), { headers: botHeaders(), signal:AbortSignal.timeout(8_000) })
   if (!res.ok) {
     const t = await res.text()
     throw new Error(`fetchChannelMessages: ${res.status} ${t.slice(0, 200)}`)

@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   linkFindFirst: vi.fn(),
   linkCreate: vi.fn(),
   createMessage: vi.fn(),
+  transaction: vi.fn(),
+  lock: vi.fn(),
   fetch: vi.fn(),
 }))
 
@@ -18,6 +20,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     discordLeagueChannel: { findMany: h.findMany, update: h.update },
     discordMessageLink: { findFirst: h.linkFindFirst, create: h.linkCreate },
+    leagueChatMessage: { create: h.createMessage },
+    $transaction: h.transaction,
   },
 }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: h.createMessage }))
@@ -56,6 +60,12 @@ beforeEach(() => {
   h.linkCreate.mockResolvedValue({})
   h.update.mockResolvedValue({})
   h.createMessage.mockImplementation(async () => ({ id: `created-${h.createMessage.mock.calls.length}` }))
+  h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+    callback({
+      $executeRaw: h.lock,
+      discordMessageLink: { findFirst: h.linkFindFirst, create: h.linkCreate },
+      leagueChatMessage: { create: h.createMessage },
+    }))
 })
 
 afterEach(() => {
@@ -63,9 +73,9 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('two-way is honest about not being scheduled', () => {
-  it('is not marked as scheduled until a host cron runs it', () => {
-    expect(DISCORD_INBOUND_SCHEDULED).toBe(false)
+describe('two-way is honest about its scheduled worker', () => {
+  it('is available only while the authenticated cron hosts the pass', () => {
+    expect(DISCORD_INBOUND_SCHEDULED).toBe(true)
   })
 })
 
@@ -80,8 +90,9 @@ describe('what it imports', () => {
     const report = await runDiscordInboundPass({ budgetMs: 10_000 })
     expect(report).toMatchObject({ channels: 1, imported: 1, errors: 0, deferred: 0 })
     expect(h.createMessage).toHaveBeenCalledTimes(1)
-    expect(h.createMessage.mock.calls[0][2]).toBe('I’ll listen on Achane.')
-    expect(h.createMessage.mock.calls[0][3]).toMatchObject({ sourceDiscord: true, discordMessageId: '103' })
+    expect(h.createMessage.mock.calls[0][0].data).toMatchObject({ message: 'I’ll listen on Achane.', sourceDiscord: true, discordMessageId: '103' })
+    expect(h.linkCreate).toHaveBeenCalledTimes(1)
+    expect(h.transaction).toHaveBeenCalledTimes(1)
     expect(h.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { lastSyncedMessageId: '103' } })
   })
 
@@ -102,10 +113,19 @@ describe('what it imports', () => {
     expect(h.createMessage).not.toHaveBeenCalled()
   })
 
+  it('does not advance the cursor when the dedup link write fails', async () => {
+    h.findMany.mockResolvedValue([row('a', '100')])
+    messagesByChannel['chan-a'] = [{ id: '101', content: 'one line', author: { id: '555' } }]
+    h.linkCreate.mockRejectedValue(new Error('link write failed'))
+    const report = await runDiscordInboundPass({ budgetMs: 10_000 })
+    expect(report).toMatchObject({ imported: 0, errors: 1 })
+    expect(h.update).not.toHaveBeenCalled()
+  })
+
   it('only reads channels with two-way switched on', async () => {
     h.findMany.mockResolvedValue([])
     await runDiscordInboundPass({ budgetMs: 10_000 })
-    expect(h.findMany.mock.calls[0][0].where).toEqual({ syncEnabled: true, syncInbound: true, surface: 'league_chat' })
+    expect(h.findMany.mock.calls[0][0].where).toEqual({ syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly:false })
   })
 })
 

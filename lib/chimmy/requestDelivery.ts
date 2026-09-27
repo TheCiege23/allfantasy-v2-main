@@ -31,13 +31,13 @@ export async function getChimmyRequestResponse(userId: string, requestId: string
 }
 
 export async function withChimmyRequestReceipt(req: NextRequest,
-  execute: (context?: ReceiptContext) => Promise<NextResponse>,
+  execute: (context?: ReceiptContext, request?: NextRequest) => Promise<NextResponse>,
   protect?: (userId:string) => Promise<NextResponse | null>): Promise<NextResponse> {
-  let form: FormData
-  try { form = await req.clone().formData() } catch { return execute() }
-  const requestId = form.get('requestId')
+  // Cached clients have no request identity. Let the legacy handler read their body once;
+  // teeing a multipart stream can wait forever while the original is unread.
+  const requestId = req.headers.get('x-chimmy-request-id')
   if (!requestId) return execute()
-  if (typeof requestId !== 'string' || !validChimmyRequestId(requestId)) {
+  if (!validChimmyRequestId(requestId)) {
     return NextResponse.json({ error: 'Invalid request ID' }, { status: 400 })
   }
   const session = await getServerSession(authOptions as never) as { user?: { id?: string } } | null
@@ -45,6 +45,13 @@ export async function withChimmyRequestReceipt(req: NextRequest,
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const limited = await protect?.(userId)
   if (limited) return limited
+  let form: FormData
+  try { form = await req.formData() } catch { return NextResponse.json({ error: 'Invalid multipart request' }, { status: 400 }) }
+  if (form.get('requestId') !== requestId) return NextResponse.json({ error: 'Invalid request ID' }, { status: 400 })
+  const headers = new Headers(req.headers)
+  headers.delete('content-type')
+  headers.delete('content-length')
+  const parsedRequest = new NextRequest(req.url, { method:'POST', headers, body:form })
   let context: ReceiptContext | undefined
   try {
     const fingerprint = await fingerprintChimmyRequest(form)
@@ -52,12 +59,12 @@ export async function withChimmyRequestReceipt(req: NextRequest,
     if (claim.kind === 'conflict') return NextResponse.json({ error: 'This request ID belongs to a different question.', code: 'chimmy_request_conflict' }, { status: 409 })
     if (claim.kind === 'existing') return await receiptResponse(claim.receipt)
     context = claim.context
-    const response = await execute(context)
+    const response = await execute(context, parsedRequest)
     const payload = await response.clone().json()
     const awaitingConfirmation = payload.code === 'token_confirmation_required'
     const undelivered = response.status >= 400 || payload.meta?.delivery?.delivered === false || payload.meta?.refundPending === true
     if (undelivered) await reconcileRequestCharge(context)
-    else if (!payload.tokenSpend?.ledgerId) await reconcileUnreportedTokenCharge(context)
+    else if (!(payload.tokenSpend?.ledgerId ?? payload.meta?.tokenSpend?.ledgerId)) await reconcileUnreportedTokenCharge(context)
     await finishRequestReceipt(context, payload, response.status, awaitingConfirmation)
     return response
   } catch {

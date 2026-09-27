@@ -116,7 +116,7 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
     where: { leagueMessageId: input.messageId, channelId: row.channelId, direction: 'to_discord' },
     select: { discordMessageId: true },
   })
-  if (previous) return { synced: true, discordMessageId: previous.discordMessageId }
+  if (previous?.discordMessageId) return { synced: true, discordMessageId: previous.discordMessageId }
   const discordMessageId = await postLeagueChatEmbed(row.channelId, {
     authorName: chimmy ? CHIMMY_DISPLAY_NAME : input.authorName,
     authorAvatar: chimmy ? undefined : (input.authorAvatarUrl ?? undefined),
