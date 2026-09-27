@@ -163,3 +163,35 @@ describe('evaluateStoredTrade', () => {
     expect(evaluate).not.toHaveBeenCalled()
   })
 })
+
+describe('evaluateStoredTrade — the team-benefit shadow', () => {
+  it('runs the model from the perspective side and hands its result to the engine', async () => {
+    const teamBenefit = vi.fn(async () => ({ ok: false as const, reason: 'nfl only', missingAssets: [] }))
+    const evaluate = vi.fn(async () => ({}) as never)
+    await evaluateStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 'T1' }, userId: 'u1' },
+      {
+        now: () => NOW,
+        loadDeps: {
+          now: () => NOW, isMember: async () => true, isCommissioner: async () => false,
+          viewerIdentity: async () => ({ rosterId: 'r2', redraftRosterId: null, externalTeamIds: [] }),
+          loadLeague: async () => ({ id: 'L1', platform: 'manual', platformLeagueId: '', sport: 'NFL', season: 2026, lastSyncedAt: null, name: null }),
+          loadAfTrade: async () => ({
+            id: 'T1', leagueId: 'L1', status: 'pending', proposerRosterId: 'r1', receiverRosterId: 'r2', createdAt: NOW, processedAt: null, expiresAt: null, metadata: {},
+            items: [
+              { itemType: 'player', itemReference: '4984', fromRosterId: 'r1', toRosterId: 'r2', faabAmount: null, metadata: null },
+              { itemType: 'player', itemReference: '5000', fromRosterId: 'r2', toRosterId: 'r1', faabAmount: null, metadata: null },
+            ],
+          }),
+          resolvePlayers: async (ids: readonly string[]) => new Map(ids.map((id) => [id, { ok: true as const, name: `P${id}`, position: 'RB' }])),
+        },
+        resolveWorld: async () => world([{ rosterId: 'r1', teamId: 't1', playerIds: ['4984'] }, { rosterId: 'r2', teamId: 't2', playerIds: ['5000'] }]),
+        evaluate,
+        teamBenefit,
+      },
+    )
+    // The viewer is r2, so r2 is "me".
+    expect(teamBenefit).toHaveBeenCalledWith(expect.objectContaining({ me: expect.objectContaining({ rosterId: 'r2' }), them: expect.objectContaining({ rosterId: 'r1' }) }))
+    expect(evaluate.mock.calls[0]![0]).toMatchObject({ teamBenefit: { ok: false, reason: 'nfl only' } })
+  })
+})

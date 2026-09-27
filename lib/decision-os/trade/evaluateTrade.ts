@@ -9,6 +9,7 @@ import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from './le
 import { saveAdHocReceipt } from './receiptStore'
 import { mirrorTradeGrade, type TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
+import type { TeamBenefit, TeamBenefitResult } from './teamBenefit'
 
 /**
  * THE trade engine's one entry point (2026-09-26). Every surface that evaluates a deal calls
@@ -93,6 +94,18 @@ export type TradeEvaluationReceipt = {
   canonicalError: string | null
   /** Set when the deal is an EXISTING trade (`./evaluateStoredTrade.ts`): which one, and how fresh its rosters were. */
   stored: StoredTradeContext | null
+  /**
+   * The design's value engine, SHADOWED (`./teamBenefit.ts`): package value, forced drops, multi-week
+   * lineup impact and the 60/40 letter. Never the letter a manager is shown. Null when not computed.
+   */
+  teamBenefit: TeamBenefit | null
+  /** Why the team-benefit model could not price this deal, when it was asked to and could not. */
+  teamBenefitRefusal: { reason: string; missingAssets: string[] } | null
+  /**
+   * The one grade's letter beside the design's 60/40 letter, for the SAME side. `agree` is null when
+   * either letter is missing — a comparison that did not happen is not an agreement.
+   */
+  designShadow: { currentLetter: string | null; designLetter: string | null; agree: boolean | null } | null
 }
 
 /** The existing trade a receipt was taken on. Plain JSON, so it rides in the saved receipt as-is. */
@@ -138,6 +151,8 @@ export type EvaluateTradeInput = {
   grader?: LeagueTradeGrader | null
   /** The existing trade being evaluated, when there is one. Copied onto the receipt. */
   stored?: StoredTradeContext | null
+  /** The team-benefit result for the `give` side's perspective, when the caller computed it. */
+  teamBenefit?: TeamBenefitResult | null
 }
 
 export type EvaluateTradeDeps = {
@@ -299,6 +314,15 @@ export async function evaluateTrade(
     canonical,
     canonicalError,
     stored: input.stored ?? null,
+    teamBenefit: input.teamBenefit?.ok ? input.teamBenefit.benefit : null,
+    teamBenefitRefusal: input.teamBenefit && !input.teamBenefit.ok ? { reason: input.teamBenefit.reason, missingAssets: input.teamBenefit.missingAssets } : null,
+    designShadow: input.teamBenefit?.ok
+      ? (() => {
+          const currentLetter = grade.graded ? grade.letter : null
+          const designLetter = input.teamBenefit.benefit.sides[0].grade
+          return { currentLetter, designLetter, agree: currentLetter && designLetter ? currentLetter === designLetter : null }
+        })()
+      : null,
   }
 
   if (input.persist === false) return receipt

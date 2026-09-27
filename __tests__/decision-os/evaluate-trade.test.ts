@@ -243,3 +243,43 @@ describe('tradeInputHash', () => {
     expect(a).not.toBe(b)
   })
 })
+
+describe('evaluateTrade — the team-benefit shadow on the receipt', () => {
+  const benefit = (designLetter: 'A' | 'B' | 'C' | null) => ({
+    ok: true as const,
+    benefit: {
+      model: 'team-benefit-v1-uncalibrated',
+      horizon: { currentWeek: 13, finalWeek: 16, playoffStartWeek: 15, weeks: [13, 14, 15, 16], playoffWeeks: [15, 16], approximation: 'x' },
+      sides: [
+        { teamId: 'me', receives: [], packageReceived: 10, forcedDrops: [], lineupDeltaPerWeek: 1, lineupBeforePerWeek: 100, grade: designLetter },
+        { teamId: 'them', receives: [], packageReceived: 8, forcedDrops: [], lineupDeltaPerWeek: -1, lineupBeforePerWeek: 100, grade: null },
+      ] as never,
+      gapPct: 20,
+      fairnessLabel: 'leans' as const,
+      notes: [],
+    },
+  })
+
+  it('records the one grade beside the design letter, for the same side — and whether they agree', async () => {
+    const same = await evaluateTrade({ ...base(), teamBenefit: benefit('B') }, deps())
+    expect(same.designShadow).toEqual({ currentLetter: 'B', designLetter: 'B', agree: true })
+    expect(same.teamBenefit?.gapPct).toBe(20)
+    const differ = await evaluateTrade({ ...base(), teamBenefit: benefit('A') }, deps())
+    expect(differ.designShadow).toEqual({ currentLetter: 'B', designLetter: 'A', agree: false })
+  })
+
+  it('the shadow NEVER changes the letter shown', async () => {
+    const r = await evaluateTrade({ ...base(), teamBenefit: benefit('A') }, deps())
+    expect(r.grade).toMatchObject({ letter: 'B' })
+  })
+
+  it('a missing letter on either side is no comparison — agree is null, not true', async () => {
+    const r = await evaluateTrade({ ...base(), teamBenefit: benefit(null) }, deps())
+    expect(r.designShadow).toEqual({ currentLetter: 'B', designLetter: null, agree: null })
+  })
+
+  it('a refused model is recorded as a refusal, with no shadow', async () => {
+    const r = await evaluateTrade({ ...base(), teamBenefit: { ok: false, reason: 'no projection', missingAssets: ['X'] } }, deps())
+    expect(r).toMatchObject({ teamBenefit: null, designShadow: null, teamBenefitRefusal: { reason: 'no projection', missingAssets: ['X'] } })
+  })
+})

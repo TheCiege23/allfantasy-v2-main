@@ -6,6 +6,8 @@ import { evaluateCanonicalTrade } from './canonicalEvaluator'
 import type { TradeAssetSummary } from './dco'
 import { evaluateTrade, type StoredTradeContext, type TradeEvaluationReceipt } from './evaluateTrade'
 import { loadTrade, type LoadTradeDeps } from './loadTrade'
+import { loadTeamBenefit } from './teamBenefitContext'
+import type { TeamBenefitResult } from './teamBenefit'
 import type { GradeInputs } from './tradeGradeInputs'
 import type { LoadedTrade, LoadedTradeAsset, TradeRef, TradeRefusal, TradeSide } from './tradeRecord'
 
@@ -46,6 +48,8 @@ export type EvaluateStoredTradeDeps = {
   loadDeps: Partial<LoadTradeDeps>
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
   evaluate: typeof evaluateTrade
+  /** The design's value engine (shadow). Default: `loadTeamBenefit`. */
+  teamBenefit: (args: { world: CanonicalWorld; me: TradeSide; them: TradeSide }) => Promise<TeamBenefitResult>
 }
 
 export const defaultEvaluateStoredTradeDeps: EvaluateStoredTradeDeps = {
@@ -53,6 +57,8 @@ export const defaultEvaluateStoredTradeDeps: EvaluateStoredTradeDeps = {
   loadDeps: {},
   resolveWorld: (leagueId) => resolveCanonicalWorld(leagueId).catch(() => null),
   evaluate: evaluateTrade,
+  teamBenefit: (args) =>
+    loadTeamBenefit(args).catch((): TeamBenefitResult => ({ ok: false, reason: 'The team-benefit model could not run.', missingAssets: [] })),
 }
 
 // ── Pure helpers (exported for tests) ───────────────────────────────────────
@@ -192,6 +198,14 @@ export async function evaluateStoredTrade(
         }
       : null
 
+  /*
+   * The design's value engine, SHADOWED beside the one grade: it rides on the receipt with the
+   * comparison of the two letters, and changes nothing a manager is shown (Guap, 2026-09-27).
+   */
+  const teamBenefit = world && me.rosterId && them.rosterId
+    ? await d.teamBenefit({ world, me, them }).catch((): TeamBenefitResult => ({ ok: false, reason: 'The team-benefit model could not run.', missingAssets: [] }))
+    : null
+
   const receipt = await d.evaluate(
     {
       surface: args.surface ?? 'stored-trade',
@@ -202,6 +216,7 @@ export async function evaluateStoredTrade(
       viewerSide: viewerInTrade,
       canonical,
       stored,
+      teamBenefit,
       persist: args.persist,
     },
     world ? { evaluateCanonical: (a) => evaluateCanonicalTrade(a, { resolveWorld: async () => world }) } : {},
