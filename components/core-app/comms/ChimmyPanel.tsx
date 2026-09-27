@@ -93,10 +93,10 @@ export const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.
  */
 function platformHandoff(platform: string): string {
   const p = platform.toLowerCase()
-  if (p === 'sleeper') return 'Open Sleeper to set it'
-  if (p === 'espn') return 'Open ESPN to set it'
-  if (p === 'yahoo') return 'Open Yahoo to set it'
-  return 'Open your platform to set it'
+  if (p === 'sleeper') return 'Review roster in Sleeper'
+  if (p === 'espn') return 'Review roster in ESPN'
+  if (p === 'yahoo') return 'Review roster in Yahoo'
+  return 'Review roster on your platform'
 }
 
 /**
