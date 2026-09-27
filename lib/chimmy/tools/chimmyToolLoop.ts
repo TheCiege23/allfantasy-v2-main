@@ -4,6 +4,7 @@ import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
+import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -216,10 +217,11 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   if (args.clockLine?.trim()) system.push({ type: 'text', text: args.clockLine.trim() })
   if (args.styleLine?.trim()) system.push({ type: 'text', text: args.styleLine.trim() })
   if (args.groundingLine?.trim()) system.push({ type: 'text', text: args.groundingLine.trim() })
+  system.push({ type: 'text', text: currentRequestFocus(args.context.leagueId) })
 
   const messages: Anthropic.MessageParam[] = [
     ...claudeHistory(args.conversation),
-    { role: 'user', content: args.question },
+    { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
   const toolsUsed: string[] = []
   const deadline = Date.now() + CLAUDE_LOOP_BUDGET_MS
@@ -323,9 +325,9 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
   const model = args.model?.trim() || DEFAULT_MODEL
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine].filter((s) => s?.trim()).join('\n\n') },
+    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
     ...(args.conversation ?? []).map((t) => ({ role: t.role, content: t.content }) as const),
-    { role: 'user', content: args.question },
+    { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
 
   const toolsUsed: string[] = []

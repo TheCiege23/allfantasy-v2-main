@@ -162,7 +162,7 @@ describe('runChimmyToolLoop on Claude', () => {
     await runChimmyToolLoop({ ...base, styleLine: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
 
     const [params] = h.anthropicCreate.mock.calls[0]
-    expect(params.system).toHaveLength(3)
+    expect(params.system).toHaveLength(4)
     expect(params.system[0]).toMatchObject({ text: 'You are Chimmy.', cache_control: { type: 'ephemeral' } })
     expect(params.system[2]).toEqual({ type: 'text', text: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
     expect(params.system[0].text).not.toContain('PERSONALIZATION')
@@ -277,4 +277,17 @@ describe('runChimmyToolLoop on Claude', () => {
     expect(msgs[1]).toEqual({ role: 'assistant', content: 'Yes.' })
     expect(msgs[2]).toEqual({ role: 'user', content: 'who leads in touchdowns?' })
   })
+})
+
+it('keeps unified memory while making the new selected-league request authoritative on Claude', async () => {
+  h.anthropicCreate.mockResolvedValue(answer('Best Ball roster review'))
+  const history = [{ role: 'user' as const, content: 'Grade the old KBFL trade screenshot' }]
+  await runChimmyToolLoop({ ...base, question: 'Review my Best Ball roster', conversation: history })
+  const params = h.anthropicCreate.mock.calls[0][0]
+  expect(params.messages.slice(0, 2)).toEqual([...history, { role: 'user', content: 'CURRENT USER REQUEST:\nReview my Best Ball roster' }])
+  const focus = params.system.at(-1)
+  expect(focus.text).toContain('do not reopen unrelated old or unanswered questions')
+  expect(focus.text).toContain('Current selected league: l1')
+  expect(focus.cache_control).toBeUndefined()
+  expect(params.system[0].text).toBe('You are Chimmy.')
 })

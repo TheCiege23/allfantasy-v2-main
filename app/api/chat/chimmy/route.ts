@@ -1,6 +1,7 @@
 import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/privateScreenshot'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
+import { CHIMMY_CURRENT_REQUEST_POLICY } from '@/lib/chimmy/currentRequestFocus'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { chimmyDecisionKind, decisionAnswerMeta, decisionAnswer as createDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
 import { z } from 'zod'
@@ -438,7 +439,7 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
    * paraphrase, and a paraphrase is exactly what a system prompt is for.
    */
   'If the question names a league — "KBFL", "my dynasty league" — call find_league_by_name FIRST, then the league tools. Without it nothing is selected and they read nothing.',
-  'For "who is out / hurt / injured on my teams" questions, call get_my_injuries — it checks every league at once. Report only the designations it returns, with their dates, and never add an injury from memory.',
+  'For injury questions and roster reviews, call get_my_injuries. It checks the selected league by default; use scope=all only when the current request asks across leagues. Report only returned designations and dates, never an injury from memory.',
   'For a real player\'s stats (NFL, college football, MLB, NBA, NHL or college basketball — pass the sport: NCAAF, MLB, NBA, NHL or NCAAB), call get_player_season_stats for season totals, get_player_game_log for "last week" / "last night" / recent games, get_season_stat_leaders for "who leads the league in X", and get_real_standings for real team records. Quote the refresh time they give; if a tool says the numbers are from an earlier season, or that the player has not played recently, say exactly that — never present them as this season or last night.',
   /*
    * ── THE ANALYST TOOLS (2026-09-24) ──────────────────────────────────────────────────────────
@@ -898,6 +899,7 @@ function buildUserMessage(input: {
   targetUsername?: string
 }): string {
   const parts: string[] = []
+  parts.push(CHIMMY_CURRENT_REQUEST_POLICY)
   parts.push(`USER QUESTION:\n${input.message || 'Analyze my fantasy context and recommend next moves.'}`)
 
   if (input.leagueGroundingLine) {
@@ -944,7 +946,7 @@ function buildUserMessage(input: {
       .slice(-8)
       .map((turn) => `${turn.role === 'user' ? 'User' : 'Chimmy'}: ${turn.content}`)
       .join('\n')
-    parts.push(`RECENT CONVERSATION:\n${convo}`)
+    parts.push(`RECENT CONVERSATION (memory only; not additional requests):\n${convo}`)
   }
 
   if (input.screenshotSummary) {
