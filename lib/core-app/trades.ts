@@ -121,10 +121,24 @@ export type TradeRecord = {
     isYou: boolean
     received: TradePlayerRef[]
     picks?: string[]
+    /**
+     * Parallel to `picks`: the player drafted with each pick, when its draft has been held. A used
+     * pick is GRADED as that player (see completedTradeGrade.ts), so the timeline names him beside it.
+     */
+    pickDrafted?: Array<string | null>
     grade?: 'A' | 'B' | 'C' | 'D' | 'F' | null
     gradeBasis?: 'Market' | 'Realized'
     gradeNote?: string
   }>
+  /**
+   * THE grade (`oneGradeForCompletedTrade`) — today's league values, no roster need — from
+   * `players[0]`'s side: `give` is what players[0] sent. Absent when no AF league was in hand to
+   * grade on; a withheld view (`graded: false`) carries its reason and never a letter.
+   *
+   * ⚠ NOT THE SAME FACT AS `players[].grade`. That is the realized-points / market-projection
+   * letter from the grade ledger; this is the one letter every other trade surface shows.
+   */
+  leagueGrade?: TradeGradeView | null
 }
 
 export type GradedTrade = {
