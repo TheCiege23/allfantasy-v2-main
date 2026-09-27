@@ -16,7 +16,10 @@ async function main() {
   const position = allowed.has(preferred[league.sport]) ? preferred[league.sport] : [...allowed].sort()[0]
   if (!position) throw new Error('DRAFT_ELIGIBLE_POSITION_REQUIRED')
   const rosterFp = (template.hasPersistedRosterSchema ? 'cfg' : 'nocfg') + ':starters:' + rosterFingerprintFromEligible(allowed)
-  const entries = Array.from({ length: 8 }, (_, i) => ({ playerId: league.name + '-p' + (i + 1), name: 'Fixture Player ' + (i + 1), position, team: 'FA', adp: i + 1 }))
+  const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId }, orderBy: { createdAt: 'desc' } })
+  const startingPositions = template.template.slots.flatMap(slot => Array.from({ length: slot.starterCount ?? 0 }, () => (slot.allowedPositions ?? []).find(p => allowed.has(p.toUpperCase()))?.toUpperCase() ?? position))
+  const entryCount = Math.max(8, draft.rounds * draft.teamCount)
+  const entries = Array.from({ length: entryCount }, (_, i) => ({ playerId: league.name + '-p' + (i + 1), name: 'Fixture Player ' + (i + 1), position: startingPositions[Math.floor(i / draft.teamCount)] ?? position, team: 'FA', adp: i + 1 }))
   await prisma.draftPoolCache.create({ data: { leagueId, cacheKey: 'seven-sport-browser:' + leagueId, sourceFingerprint: rosterFp, entryCount: entries.length, sport: league.sport, poolType: 'pro', expiresAt: new Date(Date.now() + 3600000), payload: { entries, sport: league.sport, count: entries.length, rosterConfigurationIncomplete: false } } })
   console.log(JSON.stringify({ position, entries }))
   await prisma.$disconnect()

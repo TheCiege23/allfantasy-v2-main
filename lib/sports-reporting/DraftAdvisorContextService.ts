@@ -159,10 +159,10 @@ function currentSeasonYear(): number {
  * A team's bye week is the week number (1–18 for NFL) where they have no game.
  * Returns an empty map when no schedule data exists.
  */
-async function loadByeWeekMap(sport: string): Promise<Record<string, number>> {
+async function loadByeWeekMap(sport: string, season: number): Promise<Record<string, number>> {
+  if (sport !== "NFL" && sport !== "NCAAF") return {}
   const byeMap: Record<string, number> = {}
   try {
-    const season = request.season ?? currentSeasonYear()
     const games = await prisma.sportsGame.findMany({
       where: {
         sport,
@@ -295,7 +295,7 @@ export async function getDraftAdvisorContext(
 
   // Resolve snapshots + bye week map in parallel
   const [byeWeekMap, snapshots] = await Promise.all([
-    loadByeWeekMap(sport),
+    loadByeWeekMap(sport, season),
     Promise.all(
       request.candidates.map((c) =>
         snapshotLoader({
