@@ -101,14 +101,19 @@ export async function selectActiveSyncConnections(input?: {
   const eligible = perProvider
     .flat()
     .filter((connection) => connection.season === season)
-    .filter((connection) =>
-      isInSeason(resolveSeasonState({
+    .filter((connection) => {
+      const { state } = resolveSeasonState({
         sport: connection.sport,
         provider: connection.provider,
         season: connection.season,
         now,
-      }).state),
-    )
+      })
+      // An absent calendar does not establish an offseason. Current-season
+      // Fantrax college-football leagues otherwise wait four hours between
+      // refreshes even while games are being played. Keep their mutable data
+      // in the bounded active lane without inventing season boundaries.
+      return isInSeason(state) || state === 'unknown'
+    })
     .map((connection) => ({ ...connection, runKey: `${connection.runKey}:${ACTIVE_LANE_SUFFIX}` }))
 
   if (eligible.length === 0) return { connections: [], eligible: 0, recentlyViewedSelected: 0 }
