@@ -467,7 +467,7 @@ describe('the cards', () => {
     expect(screen.getByTestId('chimmy-scenario').textContent).toContain('Tank Bigsby (RB)')
     expect(screen.queryByTestId('chimmy-scenario-room')).toBeNull()
     expect(s.lineup).toBeNull()
-    expect(s.lineupUnavailable).toContain('before-trade lineup cannot fill DEF')
+    expect(s.lineupUnavailable).toContain('after-trade lineup cannot fill DEF')
     expect(screen.getByTestId('chimmy-scenario').textContent).toContain(s.lineupUnavailable!)
     expect(screen.queryByTestId('chimmy-scenario-unfilled')).toBeNull()
     expect(renderWaiverScenarioBlock(s)).toContain('Starting lineup: not computed')
