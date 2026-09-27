@@ -939,8 +939,10 @@ export async function getMyTeamData(
     ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
     : null
   if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
-  if (liveRoster?.leagueStatus) base.preDraft = ['pre_draft', 'setup', 'drafting'].includes(liveRoster.leagueStatus.toLowerCase())
-  if (liveRoster?.leagueStatus) base.completed = ['complete', 'completed'].includes(liveRoster.leagueStatus.toLowerCase())
+  if (typeof liveRoster?.leagueStatus === 'string') {
+    base.preDraft = ['pre_draft', 'setup', 'drafting'].includes(liveRoster.leagueStatus.toLowerCase())
+    base.completed = ['complete', 'completed'].includes(liveRoster.leagueStatus.toLowerCase())
+  }
   const sourceScreen = resolveSourceScreenLink({
     platform: league.platform, sourceLeagueId: league.platformLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season,
