@@ -649,9 +649,8 @@ export async function runTradeConsoleAnalysis(
 
   let opponentRosterTargets: TradeConsoleOpponentRosterTarget[] | undefined
   if (rosterCtxForDrivers?.theirRoster?.length) {
-    const receiveIds = new Set(receiveAssets.map((a) => a.id))
     opponentRosterTargets = rosterCtxForDrivers.theirRoster
-      .filter((a) => a.type === 'PLAYER' && !receiveIds.has(a.id))
+      .filter((a) => a.type === 'PLAYER')
       .map((a) => ({
         id: a.rosterPlayerId ?? a.id,
         name: a.name ?? a.id,
@@ -680,6 +679,9 @@ export async function runTradeConsoleAnalysis(
       ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
     give: input.sideGive,
     get: input.sideGet,
+    selectedProviderIds: [...giveLines, ...getLines].map(line =>
+      line.sport === 'NFL' && line.enrichmentPlayerId
+        ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null),
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')

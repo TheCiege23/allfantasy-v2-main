@@ -148,7 +148,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, counterOffers: [{
         addTo: 'get', name: 'Depth Receiver', rosterPlayerId: 'sleeper-depth', position: 'WR', marketValue: 300,
-        asset: { kind: 'player', name: 'Depth Receiver' }, grade: counterGrade, remainingGap: 0, balanced: true,
+        asset: { kind: 'player', name: 'Depth Receiver', providerIdentity: { provider: 'sleeper', id: 'sleeper-depth', position: 'WR' } }, grade: counterGrade, remainingGap: 0, balanced: true,
       }] }) } : { ok: false, status: 500, json: async () => ({}) })
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
     await analyze(container)
@@ -156,6 +156,13 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to proposal' }))
     expect(container.querySelector('.af-tc-review')!.textContent).toContain('Depth Receiver')
     expect(container.querySelector('.af-tc-verdict')).toBeNull()
+    await act(async () => { fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!) })
+    const calls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/trade-value/analyze'))
+    const submitted = JSON.parse(calls.at(-1)![1].body)
+    expect(submitted.sideGet).toContainEqual(expect.objectContaining({
+      kind: 'player', playerId: 'sleeper-depth',
+      providerIdentity: { provider: 'sleeper', id: 'sleeper-depth', position: 'WR' },
+    }))
   })
   it('before analysis every row is its market value; after, the league value — with the market beside it', async () => {
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)

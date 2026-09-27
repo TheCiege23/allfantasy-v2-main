@@ -2127,7 +2127,8 @@ export function TradeCenter(props: {
                       You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
                     </span>
                     <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
-                      playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? null : null,
+                      playerId: counter.asset.kind === 'player'
+                        ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
                       providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
                       position: counter.position, team: null, value: counter.marketValue })}>
                       Add to proposal
