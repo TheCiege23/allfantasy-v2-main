@@ -72,6 +72,9 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
        * by hand, exactly as before.
        */
       if (summary.seasonId) {
+        const { ensureNativeTournamentEntries } = await import('@/lib/bestball/nativeTournament')
+        await ensureNativeTournamentEntries(leagueId, summary.seasonId)
+
         try {
           const { ensureGuillotineSeason } = await import('@/lib/guillotine/ensureGuillotineSeason')
           const guillotine = await ensureGuillotineSeason({
