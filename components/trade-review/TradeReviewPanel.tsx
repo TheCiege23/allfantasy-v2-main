@@ -33,6 +33,7 @@ const RECOMMENDATION: Record<TradeReview['recommendation'], { label: string; ton
 const LABEL: Record<ReviewCheck['code'], string> = {
   heavily_lopsided: 'Heavily lopsided',
   tanking_signal: 'Tanking signal',
+  rebuild_signal: 'Rebuild',
   repeat_partners: 'Repeat partners',
   inactive_manager: 'Inactive manager',
   eliminated_team_dumping: 'Eliminated team dumping',

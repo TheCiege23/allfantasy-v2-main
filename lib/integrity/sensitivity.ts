@@ -90,9 +90,9 @@ export const TANKING_BENCH_GAP_POINTS: Record<IntegritySensitivity, number> = {
  */
 export function describeCollusionSensitivity(level: IntegritySensitivity): string {
   const floor = COLLUSION_MIN_SEVERITY[level]
-  if (floor === 'high') return 'Low flags a trade only for a heavily lopsided value gap or a tanking signal.'
+  if (floor === 'high') return 'Low flags a trade only for a heavily lopsided value gap or, in a one-season league, a tanking signal.'
   if (floor === 'medium') {
-    return 'Medium flags a heavily lopsided value gap, a tanking signal, repeat partners who all lean one way, an inactive manager, or an eliminated team sending starters to a contender.'
+    return 'Medium flags a heavily lopsided value gap, a tanking signal, a dynasty or keeper rebuild, repeat partners who all lean one way, an inactive manager, or an eliminated team sending starters to a contender.'
   }
   return 'High flags every trade review flag, including a lopsided trade rushed in just before the deadline.'
 }

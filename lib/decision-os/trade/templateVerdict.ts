@@ -55,6 +55,7 @@ function topAsset(p: ExplanationPacket): TradeVerdict['reasons'][number] | null 
 const FLAG_WORDS: Record<string, string> = {
   heavily_lopsided: 'a heavily lopsided value gap',
   tanking_signal: 'a possible tanking signal',
+  rebuild_signal: 'a rebuild — lineup strength traded for future value',
   repeat_partners: 'repeat trading partners leaning one way',
   inactive_manager: 'an inactive manager',
   eliminated_team_dumping: 'an eliminated team sending starters to a contender',

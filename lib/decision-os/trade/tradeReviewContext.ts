@@ -495,6 +495,8 @@ export async function reviewStoredTrade(
     playoffPct,
     deadlineAt,
     now: now.toISOString(),
+    // The type the one grade priced the trade on — so "tanking" and "rebuild" follow the grade's own format.
+    leagueType: receipt.grade.leagueType ? { type: receipt.grade.leagueType.type, label: receipt.grade.leagueType.label } : null,
   }
   return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sides: [sideA, sideB], facts }
 }

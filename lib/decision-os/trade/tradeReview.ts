@@ -25,6 +25,8 @@
 export type ReviewFlagCode =
   | 'heavily_lopsided'
   | 'tanking_signal'
+  /** The same measurement as `tanking_signal`, in a league where selling for the future is normal. */
+  | 'rebuild_signal'
   | 'repeat_partners'
   | 'inactive_manager'
   | 'eliminated_team_dumping'
@@ -70,6 +72,18 @@ export const LEAN_EVEN_BAND_PCT = 10
 export const TANK_LINEUP_DROP_SHARE = 0.1
 /** "Mostly bench value": more than half the league value received would not start. */
 export const TANK_BENCH_VALUE_SHARE = 0.5
+/**
+ * League types that carry players into next season, where selling lineup strength for future value is
+ * a REBUILD, not tanking (Guap, 2026-09-27). There the same measurement raises `rebuild_signal` at
+ * MEDIUM — "talk to the managers" — instead of `tanking_signal` at HIGH ("consider a veto"). The type is
+ * the one the one grade priced the trade on, so the review and the grade agree about the format.
+ */
+export const REBUILD_LEAGUE_TYPES: readonly string[] = ['dynasty', 'keeper', 'devy', 'c2c']
+
+export function rebuildIsNormal(leagueType: string | null | undefined): boolean {
+  const t = String(leagueType ?? '').toLowerCase()
+  return REBUILD_LEAGUE_TYPES.includes(t) || t.includes('dynasty')
+}
 /** Season forecast playoff odds, in percent. Under this, a team is treated as eliminated. */
 export const ELIMINATED_PLAYOFF_PCT = 1
 /** At or over this, a team is a contender. */
@@ -111,6 +125,11 @@ export type TradeReviewFacts = {
   /** The deadline instant (ISO), or null when the league has no trade deadline. */
   deadlineAt: Known<string | null>
   now: string
+  /**
+   * The league type the one grade priced the trade on (`grade.leagueType`), with its label. Decides
+   * whether a lineup sold for bench value is tanking or a rebuild. Absent: treated as redraft.
+   */
+  leagueType?: { type: string; label: string } | null
 }
 
 // ─── The checks ──────────────────────────────────────────────────────────────
@@ -129,7 +148,11 @@ function lopsided(f: TradeReviewFacts): ReviewCheck {
 }
 
 function tanking(f: TradeReviewFacts): ReviewCheck {
-  const base = { code: 'tanking_signal' as const, severity: 'high' as const }
+  // One measurement, two readings: tanking in a one-season league, a rebuild where rosters carry over.
+  const rebuild = rebuildIsNormal(f.leagueType?.type)
+  const base = rebuild
+    ? { code: 'rebuild_signal' as const, severity: 'medium' as const }
+    : { code: 'tanking_signal' as const, severity: 'high' as const }
   if (!f.lineup.ok) return { ...base, status: 'not_computed', explanation: f.lineup.reason }
   const found: string[] = []
   let unknown = 0
@@ -148,7 +171,12 @@ function tanking(f: TradeReviewFacts): ReviewCheck {
       )
     }
   })
-  if (found.length) return { ...base, status: 'raised', explanation: found.join(' ') }
+  if (found.length) {
+    const lead = rebuild
+      ? `In a ${f.leagueType!.label.toLowerCase()} league this reads as a rebuild, which is normal — worth a word with both managers, not a veto. `
+      : ''
+    return { ...base, status: 'raised', explanation: lead + found.join(' ') }
+  }
   if (unknown) return { ...base, status: 'not_computed', explanation: 'The lineup effect could not be priced for every team in this trade.' }
   return { ...base, status: 'clear', explanation: 'Neither team gives up lineup strength for mostly bench value.' }
 }

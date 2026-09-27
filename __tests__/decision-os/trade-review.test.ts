@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTradeReview,
   recommendationFor,
+  rebuildIsNormal,
   type ReviewCheck,
   type TradeReviewFacts,
 } from '@/lib/decision-os/trade/tradeReview'
@@ -171,5 +172,42 @@ describe('recommendation — advice only', () => {
     const r = buildTradeReview(facts({ gapPct: { ok: true, value: 48 }, inactiveDays: { ok: true, value: [20, 1] } }))
     expect(r.flags.map((f) => `${f.code}:${f.severity}`)).toEqual(['heavily_lopsided:high', 'inactive_manager:medium'])
     expect(r.recommendation).toBe('consider_veto')
+  })
+})
+
+describe('dynasty and keeper: a rebuild, not tanking (Guap, 2026-09-27)', () => {
+  const tank = { startingBefore: 120, startingDelta: -18, receivedValue: 3000, receivedBenchValue: 2400, sentStarterNames: ['Star Runner'] }
+  const sold = (leagueType: { type: string; label: string } | null) =>
+    buildTradeReview(facts({ lineup: { ok: true, value: [tank, { ...tank, startingDelta: 4, receivedBenchValue: 0 }] }, leagueType }))
+
+  it('the same measurement raises a MEDIUM rebuild note that asks for a word with the managers, not a veto', () => {
+    const r = sold({ type: 'dynasty', label: 'Dynasty' })
+    const c = r.checks[1]!
+    expect(c).toMatchObject({ code: 'rebuild_signal', severity: 'medium', status: 'raised' })
+    expect(c.explanation).toMatch(/^In a dynasty league this reads as a rebuild, which is normal — worth a word with both managers, not a veto\. Alpha's projected starting lineup falls 18\.0 points/)
+    expect(r.recommendation).toBe('review_with_managers')
+    expect(r.checks.map((x) => x.code)).not.toContain('tanking_signal')
+  })
+
+  it('in a one-season league it is still tanking, HIGH', () => {
+    for (const lt of [null, { type: 'redraft', label: 'Redraft' }, { type: 'best_ball', label: 'Best Ball' }, { type: 'guillotine', label: 'Guillotine' }]) {
+      const r = sold(lt)
+      expect(r.checks[1]).toMatchObject({ code: 'tanking_signal', severity: 'high', status: 'raised' })
+      expect(r.recommendation).toBe('consider_veto')
+    }
+  })
+
+  it('every league type that carries rosters over reads it as a rebuild', () => {
+    for (const type of ['dynasty', 'keeper', 'devy', 'c2c', 'dynasty_idp']) {
+      expect(rebuildIsNormal(type), type).toBe(true)
+      expect(sold({ type, label: type }).checks[1]!.code).toBe('rebuild_signal')
+    }
+    for (const type of ['redraft', 'best_ball', 'salary_cap', 'zombie', '', null]) expect(rebuildIsNormal(type), String(type)).toBe(false)
+  })
+
+  it('clear and not-computed carry the rebuild code too, so the six checks read consistently', () => {
+    const d = { type: 'keeper', label: 'Keeper' }
+    expect(buildTradeReview(facts({ leagueType: d })).checks[1]).toMatchObject({ code: 'rebuild_signal', status: 'clear' })
+    expect(buildTradeReview(facts({ leagueType: d, lineup: missing('pending only') })).checks[1]).toMatchObject({ code: 'rebuild_signal', status: 'not_computed' })
   })
 })

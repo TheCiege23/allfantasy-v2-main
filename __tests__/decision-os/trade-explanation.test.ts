@@ -486,6 +486,14 @@ describe('commissioner mode — the AI explains the code-computed review and cha
     expect(note(good.commissioner!.noteToLeague!)).toBe('')
   })
 
+  it('a rebuild flag is a first-class code: the schema takes it and the template names it plainly', () => {
+    const rebuildReview = { ...review, recommendation: 'review_with_managers' as const, flags: [{ code: 'rebuild_signal' as const, severity: 'medium' as const, explanation: 'x' }] }
+    const rp = buildExplanationPacket(GOLDEN['star RB for a bench WR (heavily lopsided)']!, { commissionerReview: rebuildReview as never })
+    const v = templateVerdict(rp)
+    expect(v.commissioner?.noteToLeague).toMatch(/a rebuild — lineup strength traded for future value/)
+    expect(violationsOf(v, rp)).toEqual([])
+  })
+
   it('a manager’s explanation may not carry a commissioner block', () => {
     const manager = buildExplanationPacket(GOLDEN['star RB for a bench WR (heavily lopsided)']!)
     const v = { ...templateVerdict(manager), commissioner: { recommendation: 'approve', flags: [] } }

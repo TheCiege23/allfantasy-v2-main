@@ -119,6 +119,16 @@ describe('reviewStoredTrade — every check fed from its source', () => {
     expect(text).toMatch(/Alpha is out of the playoff race \(0\.5% odds\) and sends starters \(Star Runner\) to Bravo/)
   })
 
+  it("reads tanking or a rebuild from the league type the one grade priced the trade on", async () => {
+    const dyn = receipt({ grade: { ...receipt().grade, leagueType: { type: 'dynasty', label: 'Dynasty', source: 'confirmed', platform: null } } as never })
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({
+      evaluate: (async () => ({ ok: true, trade: trade(), receipt: dyn, perspectiveTeamId: 'rA', viewerInTrade: false, world })) as never,
+    }))
+    if (!r.ok) throw new Error('refused')
+    expect(r.review.checks[1]).toMatchObject({ code: 'rebuild_signal', severity: 'medium', status: 'raised' })
+    expect(r.facts.leagueType).toEqual({ type: 'dynasty', label: 'Dynasty' })
+  })
+
   it('evaluates as the commissioner surface', async () => {
     const evaluate = vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world }))
     await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({ evaluate: evaluate as never }))

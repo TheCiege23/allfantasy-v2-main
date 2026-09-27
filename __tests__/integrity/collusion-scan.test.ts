@@ -210,7 +210,8 @@ describe('collusion sensitivity', () => {
   })
 
   it('the sentence under the control names the flags each level opens, and no percentage it does not use', () => {
-    expect(describeCollusionSensitivity('low')).toMatch(/lopsided value gap or a tanking signal/)
+    expect(describeCollusionSensitivity('low')).toMatch(/lopsided value gap or, in a one-season league, a tanking signal/)
+    expect(describeCollusionSensitivity('medium')).toMatch(/dynasty or keeper rebuild/)
     expect(describeCollusionSensitivity('medium')).toMatch(/inactive manager/)
     expect(describeCollusionSensitivity('high')).toMatch(/deadline/)
     for (const l of ['low', 'medium', 'high'] as const) expect(describeCollusionSensitivity(l)).not.toMatch(/%/)

@@ -33,7 +33,15 @@ export const TradeVerdictSchema = z
         flags: z.array(
           z
             .object({
-              code: z.enum(['heavily_lopsided', 'tanking_signal', 'repeat_partners', 'inactive_manager', 'eliminated_team_dumping', 'deadline_rush']),
+              code: z.enum([
+                'heavily_lopsided',
+                'tanking_signal',
+                'rebuild_signal',
+                'repeat_partners',
+                'inactive_manager',
+                'eliminated_team_dumping',
+                'deadline_rush',
+              ]),
               severity: z.enum(['low', 'medium', 'high']),
             })
             .strict(),
