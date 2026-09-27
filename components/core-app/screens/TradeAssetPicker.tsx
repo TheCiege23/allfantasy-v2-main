@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PickCoverage, RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import { readPickPreviewValue, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
-import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { pricedOnAnalysisReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /**
  * The asset picker behind "+ Add asset" on the Trade Center.
@@ -57,8 +58,7 @@ export type PickedAsset =
       itemType?: 'rookie_pick' | 'future_pick'
       /**
        * ⚠ NULL IS "NOT PRICED", never 0 — the same contract a player carries. A pick typed by
-       * hand has no round we can trust and stays null; one taken off a roster is priced by
-       * `lib/pick-curve.ts` on the route.
+       * hand and roster picks use the server league quote when a league is selected.
        */
       value?: number | null
       /**
@@ -254,6 +254,7 @@ export function TradeAssetPicker(props: {
    * thing from "they hold none", and the copy below keeps them apart.
    */
   rosterPicks?: RosterPick[]
+  pickPreviewBook?: TradePickPreviewBook | null
   /** Whose picks these are, for the label. */
   rosterLabel?: string | null
   /** True once a counterparty is chosen, so "we do not know" can be said precisely. */
@@ -567,7 +568,13 @@ export function TradeAssetPicker(props: {
                     ? `${props.rosterLabel}'s picks`
                     : 'Picks on this roster'}
               </span>
-              {(props.rosterPicks ?? []).map((p) => (
+              {(props.rosterPicks ?? []).map((p) => {
+                const value = props.leagueId ? (p.round == null ? null : readPickPreviewValue({
+                  leagueId: props.leagueId, book: props.pickPreviewBook,
+                  year: p.season ?? new Date().getFullYear(), round: p.round,
+                })) : p.value
+                const reason = value == null ? p.unpricedReason ?? pricedOnAnalysisReason() : null
+                return (
                 <button
                   key={p.pickId}
                   type="button"
@@ -581,8 +588,8 @@ export function TradeAssetPicker(props: {
                       // An imported pick's id is for display only; an offer must never reference it.
                       pickId: p.proposable === false ? null : p.pickId,
                       itemType: p.itemType,
-                      value: p.value,
-                      unpricedReason: p.unpricedReason ?? null,
+                      value,
+                      unpricedReason: reason,
                       proposable: p.proposable !== false,
                     })
                   }
@@ -598,13 +605,14 @@ export function TradeAssetPicker(props: {
                     two are summed into one total. Rendering it anywhere else would invite the
                     reading that picks are a separate currency.
                   */}
-                  {p.value == null ? (
-                    <UnpricedValue reason={p.unpricedReason} />
+                  {value == null ? (
+                    <UnpricedValue reason={reason} />
                   ) : (
-                    <span className="af-tc-row-value">{p.value.toLocaleString()}</span>
+                    <span className="af-tc-row-value">{value.toLocaleString()}</span>
                   )}
                 </button>
-              ))}
+                )
+              })}
             </>
           ) : props.rosterKnown ? (
             <p className="af-tc-row-sub">
@@ -665,7 +673,9 @@ export function TradeAssetPicker(props: {
                  * a pickId the engine has nothing to point an offer at; the copy below already
                  * says so and is unchanged.
                  */
-                value: pickValueByOverall({
+                value: props.leagueId ? readPickPreviewValue({
+                  leagueId: props.leagueId, book: props.pickPreviewBook, year: pickYear, round: pickRound,
+                }) : pickValueByOverall({
                   round: pickRound,
                   teams: props.teamCount ?? null,
                   firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
@@ -681,9 +691,8 @@ export function TradeAssetPicker(props: {
             guess it would override a computed answer with a hunch.
           */}
           <p className="af-tc-row-sub">
-            Where in the round it lands is projected from the sending team&rsquo;s record, so there
-            is nothing to enter here. A pick added this way is priced but not proposable &mdash;
-            the league only recognises a pick it already has on a roster.
+            Future picks use the league&rsquo;s current round value until an actual slot is known.
+            You can analyze a manually entered pick; proposals require a pick listed on the roster.
           </p>
         </div>
       ) : null}
