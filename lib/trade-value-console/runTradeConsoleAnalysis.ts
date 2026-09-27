@@ -2,7 +2,7 @@ import 'server-only'
 
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
-import { evaluateCounterOffers } from './counterOffers'
+import { availableRosterTargets, evaluateCounterOffers } from './counterOffers'
 import { prepareProposalCap, proposalCapNote } from './proposalCap'
 import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
@@ -648,8 +648,13 @@ export async function runTradeConsoleAnalysis(
     : { bullets: drivers.acceptBullets, sensitivity: drivers.sensitivitySentence }
 
   let opponentRosterTargets: TradeConsoleOpponentRosterTarget[] | undefined
+  // Only align by selection order when every input has a resolved line.
+  const selectedProviderIds = input.sideGive.length + input.sideGet.length === giveLines.length + getLines.length
+    ? [...giveLines, ...getLines].map(line =>
+    line.sport === 'NFL' && line.enrichmentPlayerId
+      ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null) : undefined
   if (rosterCtxForDrivers?.theirRoster?.length) {
-    opponentRosterTargets = rosterCtxForDrivers.theirRoster
+    const rosterTargets = rosterCtxForDrivers.theirRoster
       .filter((a) => a.type === 'PLAYER')
       .map((a) => ({
         id: a.rosterPlayerId ?? a.id,
@@ -660,6 +665,8 @@ export async function runTradeConsoleAnalysis(
         playerId: a.valuationPlayerId,
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
+    opponentRosterTargets = availableRosterTargets({ targets: rosterTargets,
+      selected: [...input.sideGive, ...input.sideGet], selectedProviderIds })
   }
 
   const evaluateCap = input.leagueId && input.userId
@@ -679,9 +686,7 @@ export async function runTradeConsoleAnalysis(
       ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
     give: input.sideGive,
     get: input.sideGet,
-    selectedProviderIds: [...giveLines, ...getLines].map(line =>
-      line.sport === 'NFL' && line.enrichmentPlayerId
-        ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null),
+    selectedProviderIds,
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')
