@@ -98,7 +98,8 @@ describe('pending and screenshot offer resolution', () => {
     expect(h.trade).toHaveBeenCalledWith({ message: 'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?', leagueId: 'authorized-league', userId: 'u1' })
     expect(out?.answer).toContain('COUNTER:')
     expect(out?.answer).toContain('LB roster depth: 4 before, 2 after')
-    expect(out?.answer).toContain('Playoff odds and future-season outcomes are not computed')
+    expect(out?.answer).toContain('Playoff effect unavailable')
+    expect(out?.answer).toContain('Future-season results are not computed')
     expect(out?.sources).toContain('screenshot_vision')
   })
   it('reads and evaluates pending offers without asking the user to retype them', async () => {
@@ -138,5 +139,11 @@ describe('pending and screenshot offer resolution', () => {
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'trade_impact_incomplete' } })
     expect(out?.answer).toContain('Trade Center grade: C')
     expect(out?.answer).toContain('partial analysis')
+  })
+  it('keeps an explicitly requested season-impact decision free when the model is unavailable', async () => {
+    h.trade.mockResolvedValue(scenario)
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I accept this trade if I want to compete next few years?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'season_impact_missing' } })
+    expect(out?.answer).toContain('no charge')
   })
 })

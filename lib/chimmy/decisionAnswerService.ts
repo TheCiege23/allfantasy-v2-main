@@ -1,5 +1,6 @@
 import 'server-only'
 import { screenshotTradeQuestion } from './tradeOfferEvidence'
+import { tradeSeasonOutlook } from './tradeSeasonOutlook'
 import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisionRecommendation'
 import { loadLeagueGroundingForUser } from './chimmy-league-snapshot'
 import { chimmyDecisionKind, decisionAnswer, type ChimmyDecisionAnswer } from './decisionAnswerContract'
@@ -45,7 +46,8 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
     ...(s.picks ? ['Pick values use round averages; exact draft slots are unknown.'] : []),
     ...(s.competitiveContext ? [`Current competitive position: ${s.competitiveContext.wins}-${s.competitiveContext.losses}-${s.competitiveContext.ties}${s.competitiveContext.rank != null ? `, rank ${s.competitiveContext.rank}` : ''} in the synced standings. This is current standing, not a post-trade playoff probability.`] : []),
     ...tradeFutureStructure(s),
-    'Lineup impact covers one week. Playoff odds and future-season outcomes are not computed.'].join('\n')
+    s.playoffOdds.available ? `Playoff scenario estimate: ${s.playoffOdds.before.toFixed(1)}% before, ${s.playoffOdds.after.toFixed(1)}% after (${s.playoffOdds.delta.toFixed(1)} percentage-point change; ${s.playoffOdds.iterations} paired simulations). ${s.playoffOdds.reason}` : `Playoff effect unavailable: ${s.playoffOdds.reason}`,
+    'Future-season results are not computed; player development, future injuries and future draft selections are unknown.'].join('\n')
 }
 
 /** Shared by full chat, bubble/public advice and private mentions. Membership is checked here too. */
@@ -61,6 +63,8 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
     const access = await loadLeagueGroundingForUser(args.userId, args.leagueId)
     if (!access.ok) return gap('league_unavailable', 'I could not read an authorized league for this decision.', 'Open a league you belong to, sync it, and ask again.')
     provenLeagueId = access.snapshot.id
+    const enrichTrade = tradeSeasonOutlook(access.snapshot, args.userId)
+    const needsSeason = /\bplayoff|\bcompete|\bfuture|\bnext\s+(?:few\s+)?years/i.test(args.question)
     if (imageTrade.clarification) return gap('screenshot_trade_unclear', imageTrade.clarification, 'Confirm the assets on each side; no trade verdict was computed.')
     const input = { message: imageTrade.question ?? args.question, leagueId: provenLeagueId, userId: args.userId }
     const namedTrade = kind === 'trade' && /\bpending\b|\b(?:this|that|the)\s+(?:trade|offer)\b/i.test(args.question) ? await buildTradeScenario(input) : null
@@ -68,11 +72,14 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
       const { pendingTradeQuestions } = await import('./pendingTradeQuestions')
       const pending = await pendingTradeQuestions(access.snapshot, args.userId)
       if (!pending.offers.length) return gap('pending_offer_unavailable', pending.gap ?? 'The pending offer could not be read.', 'Attach the trade screenshot or identify the offer.')
-      const results = await Promise.all(pending.offers.map(async offer => ({ offer,
-        scenario: await buildTradeScenario({ ...input, message: offer.question }) })))
+      const results = await Promise.all(pending.offers.map(async offer => {
+        const scenario = await buildTradeScenario({ ...input, message: offer.question })
+        return { offer, scenario: scenario?.status === 'ready' ? await enrichTrade(scenario) : scenario }
+      }))
       const ready = results.filter(r => r.scenario?.status === 'ready' && (r.offer.assetCount == null || r.offer.assetCount === r.scenario.give.length + r.scenario.get.length) && r.scenario.value.grade && r.scenario.lineup && !r.scenario.unpricedExcluded)
       const answer = results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready' ? (r.offer.assetCount != null && r.offer.assetCount !== r.scenario.give.length + r.scenario.get.length ? 'Not every offer asset resolved; no verdict was computed for this package.' : renderDecisionScenario(r.scenario)) : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
       if (!ready.length) return gap('pending_offer_evaluation_missing', answer, 'Sync league rosters, scoring and values before deciding.')
+      if (needsSeason && results.some(r => r.scenario?.status !== 'ready' || !r.scenario.playoffOdds.available)) return gap('season_impact_missing', answer, 'This is a partial analysis, with no charge. Sync the league and complete schedule/projection coverage before relying on a playoff-impact decision.')
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer,
         sources: ['provider_pending_offers', 'league_rosters', 'league_scoring', 'trade_engine'] })
     }
@@ -95,7 +102,7 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
           : gap(result.reason, result.detail, 'Confirm the full player name and sync your league roster before retrying.')
       }
     }
-    const scenario = kind === 'trade' ? namedTrade ?? await buildTradeScenario(input)
+    let scenario = kind === 'trade' ? namedTrade ?? await buildTradeScenario(input)
       : kind === 'waiver' ? await buildWaiverScenario({ ...input, engineClaims: null })
       : await buildStartSitScenario(input)
     if (scenario?.status === 'unresolved') return gap(scenario.reason, scenario.detail, 'Sync league settings and rosters, then confirm the player names and ask again.')
@@ -104,6 +111,10 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
       // A resolved trade with no grade and no impact is still a missing answer, never a paid verdict.
       if ('value' in scenario && !scenario.value.grade && !scenario.lineup) return gap('valuation_missing', scenario.value.withheld ?? 'This trade could not be priced.', 'Sync league values and projections, then retry.')
       if ('value' in scenario && (!scenario.value.grade || !scenario.lineup || scenario.unpricedExcluded)) return gap('trade_impact_incomplete', renderDecisionScenario(scenario), 'This is a partial analysis. Sync league values and complete weekly projections before treating it as an acceptance decision.')
+      if ('value' in scenario) {
+        scenario = await enrichTrade(scenario)
+        if (needsSeason && !scenario.playoffOdds.available) return gap('season_impact_missing', renderDecisionScenario(scenario), 'This is a partial analysis, with no charge. Sync the league and complete season-model coverage before relying on a playoff-impact decision.')
+      }
       if (scenario.kind === 'waiver' && !scenario.lineup && scenario.add.points == null && scenario.drop?.points == null) return gap('projections_missing', 'The move was identified, but its players and lineup impact could not be projected.', 'Sync your league and retry when weekly projections are available.')
       const startCalls: ChatStartCall[] = []
       if (scenario.kind === 'start_sit' && scenario.contested) {
