@@ -14,9 +14,8 @@ import type { TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview
  * counterparty selector and the propose panel all want the same answer, and
  * three components each fetching it would triple that work for one screen.
  *
- * ⚠ LAZY, AND `enabled` IS LOAD-BEARING. A manager who opens the Trades tab and
- * reads the verdict on someone else's deal never needs this at all. It only
- * runs once they start building something.
+ * ⚠ LEAGUE-SCOPED. The preview needs this quote book before analysis, so it
+ * loads for a selected league. Global Trade Center has no league roster to load.
  */
 
 /**
