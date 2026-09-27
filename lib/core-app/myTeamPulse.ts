@@ -8,6 +8,9 @@ import { isAtRisk, isRuledOut } from './injuryStatus'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
+import { lineupDeadlines } from './lineupDeadlines'
+import { injuryNameKey, injuryNameVariants } from './injuryNames'
+import { isBestBallSettings } from './lineupMode'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -108,6 +111,7 @@ export type MyTeamRow = {
   leagueBadge: string
   /** Your team's name in this league, when the platform published one. */
   teamName: string | null
+  bestBall?: boolean
   /** Filled starting slots. */
   starters: number
   /** Starting slots with nobody in them. A guaranteed zero each. */
@@ -132,14 +136,17 @@ export type MyTeamRow = {
    */
   unresolved: number
   /**
-   * Earliest kickoff among this lineup's starters, as an ISO string.
+   * Next kickoff of a flagged starter, otherwise the next starter kickoff.
    *
    * Null when not one starter could be placed against a fixture — a non-NFL
    * league, or a week the ingested schedule does not reach.
    */
   lockAt: string | null
-  /** The first game has kicked off, so this lineup can no longer be set in full. */
+  /** Every identified starter's game has started, with no unknown schedules or holes. */
   locked: boolean
+  started?: number
+  unknownKickoffs?: number
+  actionableSeverity?: number
   season: number | null
   week: number | null
   /** Certain lost points: empty slots, ruled-out starters and byes. */
@@ -175,6 +182,8 @@ export type MyTeamPulse = {
   considered: number
   /** Teams we could actually read a starting lineup for. */
   checked: number
+  automatic?: number
+  paused?: number
   /**
    * True when at least one row could be checked for byes. When false the board
    * says the bye check did not run rather than implying every roster is clear.
@@ -186,6 +195,8 @@ export type MyTeamPulse = {
     noRoster: number
     /** A roster on file that carries no `starters` array at all. */
     noLineup: number
+    automatic?: number
+    inactive?: number
   }
 }
 
@@ -240,7 +251,6 @@ async function kickoffsForWeek(sport: string, week: SportsWeek): Promise<Map<str
       take: 400,
       select: { homeTeam: true, awayTeam: true, startTime: true },
     })
-    .catch(() => [])
 
   const out = new Map<string, Date>()
   for (const g of games) {
@@ -260,6 +270,7 @@ async function kickoffsForWeek(sport: string, week: SportsWeek): Promise<Map<str
 export async function getMyTeamPulse(
   userId: string,
   now: Date = new Date(),
+  pausedLeagueIds?: ReadonlySet<string>,
 ): Promise<MyTeamPulse> {
   /* ── 1. Every team this user has claimed, with its league. ─────────────── */
   const claimed = await prisma.leagueTeam
@@ -276,10 +287,12 @@ export async function getMyTeamPulse(
             name: true,
             platform: true,
             sport: true,
+            settings: true,
             logoUrl: true,
             avatarUrl: true,
             platformLeagueId: true,
             season: true,
+            status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true,
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
@@ -287,7 +300,6 @@ export async function getMyTeamPulse(
         },
       },
     })
-    .catch(() => [])
 
   /*
    * 🛑 ONE ROW PER REAL LEAGUE, NOT ONE PER IMPORTER. `leagues.userId` is the importer, so one
@@ -316,19 +328,18 @@ export async function getMyTeamPulse(
    * own user uuid. Pushing that into a WHERE clause per league is 67 queries;
    * pulling each league's rosters once and applying the same rule here is one.
    */
-  /*
-   * ⚠ TYPED EXPLICITLY BECAUSE `.catch(() => [])` WIDENS TO A UNION. The empty
-   * literal infers `never[]`, so `typeof rosters` is `Row[] | never[]` and any
-   * `push` onto it resolves against the `never[]` overload. Naming the row type
-   * collapses the union at the declaration instead of at every use site.
-   */
+  /* Name the batched roster row type for the per-league lookup. */
   type RosterRow = { leagueId: string; platformUserId: string; playerData: unknown }
   const rosters: RosterRow[] = await prisma.roster
     .findMany({
       where: { leagueId: { in: leagueIds } },
       select: { leagueId: true, platformUserId: true, playerData: true },
     })
-    .catch(() => [])
+
+  const eliminated = await prisma.guillotineElimination.findMany({
+    where: { leagueId: { in: leagueIds }, eliminatedOwnerId: { in: [userId, ...mine.map(c => c.platformUserId).filter((id): id is string => Boolean(id))] } },
+    select: { leagueId: true, season: { select: { season: true } } },
+  }).catch(() => [])
 
   const rostersByLeague = new Map<string, RosterRow[]>()
   for (const r of rosters) {
@@ -338,6 +349,7 @@ export async function getMyTeamPulse(
   }
 
   type Pending = {
+    bestBall: boolean
     leagueId: string
     leagueName: string
     platform: string
@@ -353,10 +365,14 @@ export async function getMyTeamPulse(
   }
 
   const pending: Pending[] = []
-  const notChecked = { noRoster: 0, noLineup: 0 }
+  const notChecked = { noRoster: 0, noLineup: 0, automatic: 0, inactive: 0 }
 
   for (const c of mine) {
+    if (pausedLeagueIds?.has(c.leagueId)) continue
     const l = c.league!
+    const state = String(l.status ?? l.lifecycleState ?? '').toLowerCase()
+    if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || ['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(state)) { notChecked.inactive++; continue }
+    const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
     const candidates = myRosterCandidates(c, userId)
     const pool: RosterRow[] = rostersByLeague.get(c.leagueId) ?? []
     /* First candidate that matches wins — the order in `myRosterCandidates` is
@@ -370,6 +386,8 @@ export async function getMyTeamPulse(
       continue
     }
 
+    const pd = roster.playerData && typeof roster.playerData === 'object' ? roster.playerData as Record<string, unknown> : {}
+    if (pd.eliminated === true || l.guillotineMode && Array.isArray(pd.players) && pd.players.length === 0) { notChecked.inactive++; continue }
     const { ids, empty } = startersOf(roster.playerData)
     if (ids.length === 0 && empty === 0) {
       notChecked.noLineup++
@@ -380,6 +398,7 @@ export async function getMyTeamPulse(
     const platform = String(l.platform ?? 'manual').toLowerCase()
 
     pending.push({
+      bestBall,
       leagueId: l.id,
       leagueName,
       platform,
@@ -396,7 +415,7 @@ export async function getMyTeamPulse(
   }
 
   if (pending.length === 0) {
-    return { ...EMPTY_PULSE, considered: mine.length, notChecked }
+    return { ...EMPTY_PULSE, considered: mine.length, paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length, notChecked }
   }
 
   /* ── 3. One player read for every starter on the board. ────────────────── */
@@ -406,7 +425,6 @@ export async function getMyTeamPulse(
       where: { sleeperId: { in: everyStarter } },
       select: { sleeperId: true, name: true, team: true },
     })
-    .catch(() => [])
 
   const playerBy = new Map<string, { name: string; team: string | null }>()
   for (const p of players) {
@@ -428,23 +446,19 @@ export async function getMyTeamPulse(
   const injuries = names.length
     ? await prisma.sportsInjury
         .findMany({
-          where: { sport: { in: sports }, playerName: { in: names } },
+          where: { sport: { in: sports }, playerName: { in: names.flatMap(injuryNameVariants), mode: 'insensitive' } },
           orderBy: { fetchedAt: 'desc' },
-          select: { sport: true, playerName: true, status: true },
+          select: { sport: true, playerName: true, status: true, team: true },
         })
-        .catch(() => [])
-    : []
+        : []
 
-  /*
-   * ⚠ FIRST WINS, NOT LAST. `new Map(pairs)` resolves a duplicate key to the
-   * LAST pair, so feeding it rows sorted `fetchedAt: desc` keeps the OLDEST
-   * status for the ~989 NFL players carrying more than one row. Same trap and
-   * same fix as `myTeam.ts`: build the map explicitly, skip a key already set.
-   */
-  const injuryByName = new Map<string, string | null>()
+  /* Preserve newest-first order across name aliases; resolve club matches per player. */
+  const injuryByName = new Map<string, Array<{ status: string | null; team: string | null }>>()
   for (const i of injuries) {
-    const k = `${i.sport}:${i.playerName.toLowerCase()}`
-    if (!injuryByName.has(k)) injuryByName.set(k, i.status)
+    const k = `${i.sport}:${injuryNameKey(i.playerName)}`
+    const list = injuryByName.get(k) ?? []
+    list.push(i)
+    injuryByName.set(k, list)
   }
 
   /* ── 5. Per DISTINCT SPORT: the week, its fixtures and its byes. ───────── */
@@ -504,16 +518,19 @@ export async function getMyTeamPulse(
     let questionable = 0
     let unresolved = 0
     let bye: number | null = byeIds ? 0 : null
-    let lockAt: Date | null = null
+    const deadlines: Array<{ kickoff: Date | null; issues: number }> = []
 
     for (const id of p.ids) {
       const row = playerBy.get(id)
       if (!row) {
         unresolved += 1
+        deadlines.push({ kickoff: null, issues: 0 })
         continue
       }
 
-      const status = injuryByName.get(`${p.sport}:${row.name.toLowerCase()}`) ?? null
+      const playerClub = normalizeTeamAbbrev(row.team)
+      const status = injuryByName.get(`${p.sport}:${injuryNameKey(row.name)}`)
+        ?.find((injury) => !playerClub || !injury.team || normalizeTeamAbbrev(injury.team) === playerClub)?.status ?? null
       if (isRuledOut(status)) out += 1
       else if (isAtRisk(status)) questionable += 1
 
@@ -521,13 +538,13 @@ export async function getMyTeamPulse(
       if (onBye) bye = (bye ?? 0) + 1
 
       /* A player on bye has no fixture this week, so he cannot set the lock. */
-      if (onBye) continue
       const club = normalizeTeamAbbrev(row.team)
-      const at = club ? kickoffs.get(club) : undefined
-      if (at && (!lockAt || at < lockAt)) lockAt = at
+      const at = !onBye && club ? kickoffs.get(club) : undefined
+      deadlines.push({ kickoff: at ?? null, issues: Number(isRuledOut(status)) + Number(onBye) })
     }
 
-    const severity = p.empty + out + (bye ?? 0)
+    const severity = p.bestBall ? 0 : p.empty + out + (bye ?? 0)
+    const deadline = lineupDeadlines(deadlines, p.empty, now.getTime())
 
     rows.push({
       leagueId: p.leagueId,
@@ -536,14 +553,18 @@ export async function getMyTeamPulse(
       logoUrl: p.logoUrl,
       leagueBadge: p.leagueBadge,
       teamName: p.teamName,
+      bestBall: p.bestBall,
       starters: p.ids.length,
       empty: p.empty,
       out,
       bye,
       questionable,
       unresolved,
-      lockAt: lockAt ? lockAt.toISOString() : null,
-      locked: lockAt != null && lockAt.getTime() <= now.getTime(),
+      lockAt: deadline.lockAt == null ? null : new Date(deadline.lockAt).toISOString(),
+      locked: deadline.locked,
+      started: deadline.started,
+      unknownKickoffs: deadline.unknownKickoffs,
+      actionableSeverity: p.bestBall ? 0 : deadline.actionableSeverity,
       season: week?.season ?? null,
       week: week?.week ?? null,
       severity,
@@ -571,12 +592,13 @@ export async function getMyTeamPulse(
   const needsAll = rows
     .filter((r) => r.severity > 0)
     /*
-     * A locked lineup cannot be fixed, so it sorts behind every one that can —
-     * this column is a to-do list, and an item you cannot action is not the top
-     * of it. It is still listed, because "you lost a slot here" is a fact.
+     * Remaining problems lead. Already-started losses remain visible, without
+     * pushing a Sunday replacement below a lineup with no remaining actions.
      */
     .sort(
-      (a, b) => Number(a.locked) - Number(b.locked) || b.severity - a.severity || byLock(a, b),
+      (a, b) => Number(a.actionableSeverity === 0) - Number(b.actionableSeverity === 0)
+        || (b.actionableSeverity ?? b.severity) - (a.actionableSeverity ?? a.severity)
+        || byLock(a, b),
     )
 
   const setAll = rows.filter((r) => r.severity === 0).sort(byLock)
@@ -588,6 +610,8 @@ export async function getMyTeamPulse(
     setTotal: setAll.length,
     considered: mine.length,
     checked: rows.length,
+    automatic: rows.filter((row) => row.bestBall).length,
+    paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length,
     byeChecked: rows.some((r) => r.bye != null),
     notChecked,
   }

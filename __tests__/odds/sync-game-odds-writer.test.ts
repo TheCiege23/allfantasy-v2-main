@@ -169,6 +169,9 @@ describe('writing', () => {
     const data = gameOddsUpsert.mock.calls[0][0].create
     expect(data.spreadHome).toBe(-3.5)
     expect(data.totalPoints).toBe(45.5)
+    const freshWindow = data.expiresAt.getTime() - data.fetchedAt.getTime()
+    expect(freshWindow).toBeGreaterThan(0)
+    expect(freshWindow).toBeLessThanOrEqual(3_600_000)
     // 45.5/2 -/+ 3.5/2 — the number a lineup decision actually reads.
     expect(data.impliedHomeTotal).toBeCloseTo(24.5, 5)
     expect(data.impliedAwayTotal).toBeCloseTo(21, 5)

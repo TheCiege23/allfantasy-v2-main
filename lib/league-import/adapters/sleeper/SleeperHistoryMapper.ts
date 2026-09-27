@@ -24,6 +24,7 @@ export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> 
       type: t.type === 'trade' ? 'trade' : t.type === 'waiver' ? 'waiver' : 'free_agent',
       status: t.status,
       created_at: new Date(t.created).toISOString(),
+      completed_at: t.status === 'complete' && typeof t.status_updated === 'number' && t.status_updated > 0 ? new Date(t.status_updated).toISOString() : undefined,
       adds: t.adds,
       drops: t.drops,
       roster_ids: (t.roster_ids ?? []).map(String),

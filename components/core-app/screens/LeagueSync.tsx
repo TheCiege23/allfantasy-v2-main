@@ -57,6 +57,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
     seasonsOnFile,
     status,
     lastReadAt,
+    rostersReadAt,
     consecutiveFailures,
     lastError,
     rows,
@@ -137,13 +138,24 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </div>
 
         <div className="af-sy-conn-read">
-          <span className="af-label">Last read</span>
+          <span className="af-label">{rostersReadAt ? 'Last full read' : 'Last read'}</span>
           {/*
             ⚠ "WE LAST READ", NOT "DATA IS N OLD". The stored value is our own
             collection time; the provider publishes no per-league data
             timestamp, and the column reserved for one is deliberately null.
           */}
           <span className="af-sy-conn-when af-num">{describeWhen(lastReadAt)}</span>
+          {/*
+            The five-minute lane's read of rosters and transactions, which runs far more often
+            than the full read above. Shown only when it has completed here — a league outside
+            the lane (offseason, an older season) has nothing honest to put on this line.
+          */}
+          {rostersReadAt ? (
+            <span className="af-sy-conn-lane">
+              Rosters &amp; transactions{' '}
+              <span className="af-num">{describeWhen(rostersReadAt)}</span>
+            </span>
+          ) : null}
           {coarse ? (
             <span className="af-sy-conn-coarse">
               from the league record — no per-run history has been written for this connection, so

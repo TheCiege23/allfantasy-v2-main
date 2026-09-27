@@ -23,6 +23,53 @@ const p = (playerId: string, position: string, projectedPoints: number | null): 
 const SLOTS = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN', 'BN']
 
 describe('fillLineup', () => {
+  it('keeps overlapping WR/RB and WR/TE flex slots filled instead of stranding the second slot', () => {
+    const fill = fillLineup([p('wr', 'WR', 20), p('rb', 'RB', 19)], ['WRRB_FLEX', 'REC_FLEX'])
+    expect(fill.points).toBe(39)
+    expect(fill.unfilledSlots).toEqual([])
+    expect(fill.assignments).toEqual([{ slot: 'WRRB_FLEX', playerId: 'rb' }, { slot: 'REC_FLEX', playerId: 'wr' }])
+  })
+
+  it('agrees with exhaustive legal lineup enumeration across overlapping slots and signed projections', () => {
+    const eligibility = { A: ['RB', 'WR'], B: ['WR', 'TE'], C: ['RB', 'TE', 'QB'] }
+    const slotOrders = [['A', 'B', 'C'], ['C', 'B', 'A'], ['A', 'A', 'B']]
+    for (let sample = 0; sample < 64; sample++) {
+      const players = ['RB', 'WR', 'TE', 'QB', 'WR'].map((position, i) =>
+        p(`p${i}`, position, [-2, 0, 7, 13][(sample >> (i % 3)) % 4]))
+      for (const slots of slotOrders) {
+        let best = { filled: -1, points: -Infinity }
+        const enumerate = (index: number, used: Set<string>, points: number) => {
+          if (index === slots.length) {
+            if (used.size > best.filled || used.size === best.filled && points > best.points) best = { filled: used.size, points }
+            return
+          }
+          enumerate(index + 1, used, points)
+          for (const player of players) {
+            if (used.has(player.playerId) || !eligibility[slots[index] as keyof typeof eligibility].includes(player.position)) continue
+            enumerate(index + 1, new Set([...used, player.playerId]), points + player.projectedPoints!)
+          }
+        }
+        enumerate(0, new Set(), 0)
+        const fill = fillLineup(players, slots, eligibility)
+        expect(fill.starterIds.length).toBe(best.filled)
+        expect(fill.points).toBe(best.points)
+        expect(new Set(fill.starterIds).size).toBe(fill.starterIds.length)
+      }
+    }
+  })
+
+  it('seats ILB and OLB in linebacker and defensive flex slots', () => {
+    const fill = fillLineup([p('inside', 'ILB', 10), p('outside', 'OLB', 9)], ['LB', 'IDP_FLEX'])
+    expect(fill.points).toBe(19)
+    expect(fill.unfilledSlots).toEqual([])
+  })
+
+  it('excludes non-finite projections without seating them or reusing duplicate player IDs', () => {
+    const fill = fillLineup([p('same', 'RB', 10), p('same', 'RB', 10), p('nan', 'RB', NaN)], ['RB', 'RB'])
+    expect(fill.starterIds).toEqual(['same'])
+    expect(fill.points).toBe(10)
+    expect(fill.unfilledSlots).toEqual(['RB'])
+  })
   it('fills specific defensive positions before DB/DL and IDP flex without losing players', () => {
     const fill = fillLineup([
       p('corner', 'CB', 12), p('safety', 'SS', 11), p('tackle', 'DT', 10),
@@ -131,6 +178,29 @@ describe('fillLineup', () => {
 })
 
 describe('computeRosterImpact', () => {
+  it('withholds a lineup gain when the trade leaves a required starting slot without an eligible replacement', () => {
+    const result = computeRosterImpact({ roster: [p('rb', 'RB', 10), p('te', 'TE', 9)],
+      slots: ['RB', 'TE'], outgoingPlayerIds: ['te'], incoming: [p('wr', 'WR', 20)] })
+    expect(result.startingPointsDelta).toBeNull()
+    expect(result.blockedReason).toMatch(/after-trade lineup cannot fill TE/)
+  })
+
+  it('withholds non-finite traded projections instead of publishing a NaN gain', () => {
+    const result = computeRosterImpact({ roster: [p('rb', 'RB', 10)], slots: ['RB'],
+      outgoingPlayerIds: ['rb'], incoming: [p('bad', 'RB', Infinity)] })
+    expect(result.startingPointsDelta).toBeNull()
+    expect(result.blockedReason).toMatch(/no projection/)
+  })
+
+  it.each([NaN, Infinity])('reports the best usable bench replacement when another estimate is %s', invalid => {
+    const result = computeRosterImpact({
+      roster: [p('starter', 'RB', 10), p('invalid', 'RB', invalid), p('backup', 'RB', 5)],
+      slots: ['RB'], outgoingPlayerIds: ['starter'], incoming: [p('upgrade', 'RB', 12)],
+    })
+    expect(result.startingPointsDelta).toBe(2)
+    expect(result.unpricedExcluded).toBe(1)
+    expect(result.replacement).toEqual([{ position: 'RB', before: 5, after: 5 }])
+  })
   /*
    * NINE players against seven starting slots, so two sit on the bench and depth is observable.
    * The first version of this fixture had exactly as many players as slots -- every position had a

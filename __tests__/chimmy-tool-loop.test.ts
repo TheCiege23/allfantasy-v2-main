@@ -225,3 +225,13 @@ describe('runChimmyToolLoop', () => {
     expect(h.execute.mock.calls[0][2]).toEqual(CTX)
   })
 })
+
+it('keeps unified memory while making the new selected-league request authoritative on Grok', async () => {
+  h.create.mockResolvedValue(answer('Best Ball roster review'))
+  const history = [{ role: 'user' as const, content: 'Grade the old KBFL trade screenshot' }]
+  await runChimmyToolLoop({ ...base, question: 'Review my Best Ball roster', conversation: history })
+  const params = h.create.mock.calls[0][0]
+  expect(params.messages.slice(1, 3)).toEqual([...history, { role: 'user', content: 'CURRENT USER REQUEST:\nReview my Best Ball roster' }])
+  expect(params.messages[0].content).toContain('do not reopen unrelated old or unanswered questions')
+  expect(params.messages[0].content).toContain('Current selected league: l1')
+})

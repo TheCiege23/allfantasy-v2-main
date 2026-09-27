@@ -31,6 +31,28 @@ function data(leagues: Dash34League[]): Dash34Data {
 const ids = (rows: ReturnType<typeof mergeDash34Issues>) => rows.map((r) => r.id)
 
 describe('mergeDash34Issues — the starter-out lock', () => {
+  it('labels a multi-player deadline as the earliest flagged starter, without anchoring a different player', () => {
+    const [row] = mergeDash34Issues([], data([league({
+      id: 'a', priority: 'urgent', hurtStarters: 2,
+      hurtStarterKickoffAt: KICK('2026-09-27T17:00:00Z'),
+      flaggedStarters: [
+        { playerId: 'monday-qb', name: 'Caleb Williams', status: 'Out', slot: 'QB', index: 0 },
+        { playerId: 'sunday-rb', name: 'Sunday RB', status: 'Out', slot: 'RB', index: 1 },
+      ],
+    })]))
+    expect(row.title).toBe('2 starters who cannot play — a')
+    expect(row.meta).toContain('earliest flagged starter kicks off Sun 1:00p ET')
+    expect(row.action).toMatchObject({ label: 'Review flagged starters', href: '/core/my-team?league=a' })
+    expect(row.deadline?.toISOString()).toBe(KICK('2026-09-27T17:00:00Z'))
+  })
+
+  it('still opens a single flagged player directly', () => {
+    const [row] = mergeDash34Issues([], data([league({ id: 'a', priority: 'urgent', hurtStarters: 1,
+      flaggedStarters: [{ playerId: 'qb', name: 'Caleb Williams', status: 'Out', slot: 'QB', index: 0 }],
+    })]))
+    expect(row.action.href).toBe('/core/my-team?league=a#lineup-player-qb')
+    expect(row.title).toContain('Caleb Williams · QB · Out')
+  })
   it('carries the flagged starter kickoff onto the row as its deadline', () => {
     const at = KICK('2026-09-20T17:00:00Z')
     const [row] = mergeDash34Issues(

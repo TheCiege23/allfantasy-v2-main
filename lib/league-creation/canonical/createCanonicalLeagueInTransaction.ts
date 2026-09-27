@@ -3,6 +3,7 @@
  * Mirrors redraft shell: League + settings + commissioner + draft + homepage + slots + draft session.
  */
 
+import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { randomUUID } from 'crypto'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
@@ -306,6 +307,14 @@ export async function createCanonicalLeagueInTransaction(
     },
   }
 
+  // The concept choice must replace the preset's inherited standings mode before bootstrap.
+  if (bestBallSettings && (bestBallSettings.matchupFormat === 'cumulative' || bestBallSettings.playoffFormat === 'advancement')) {
+    const structure = mergedSettings.playoff_structure
+    mergedSettings.playoff_structure = {
+      ...(structure && typeof structure === 'object' && !Array.isArray(structure) ? structure : {}),
+      seeding_rules: 'points_only',
+    }
+  }
   const keeperBootstrap =
     formatId === 'keeper'
       ? mapKeeperCreationFromWizard({
@@ -347,6 +356,8 @@ export async function createCanonicalLeagueInTransaction(
   const seasonYear = new Date().getFullYear()
 
   const isGuillotine = formatId === 'guillotine'
+  const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
+  if (isGuillotine) mergedSettings.guillotineEndgame = guillotineEndgame.format
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings
@@ -471,8 +482,8 @@ export async function createCanonicalLeagueInTransaction(
             playoffWeeksPerRound: null,
             playoffSeedingRule: null,
             playoffLowerBracket: null,
-            guillotineEndgame: 'final_two',
-            guillotineEndgameThreshold: 2,
+            guillotineEndgame: guillotineEndgame.format,
+            guillotineEndgameThreshold: guillotineEndgame.threshold,
             guillotineEliminationsPerPeriod: 1,
             guillotineProtectedWeek1: false,
             guillotineTiebreaker: 'lowest_bench_points',

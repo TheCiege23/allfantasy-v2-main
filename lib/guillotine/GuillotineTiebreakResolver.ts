@@ -1,150 +1,80 @@
-/**
- * Deterministic tiebreaker for guillotine elimination.
- * Order: season_points (higher survives) -> previous_period (higher survives) -> draft_slot (better slot loses in week 1) -> commissioner (manual) -> random.
- */
+import type { PeriodScoreRow, TiebreakStep } from './types'
 
-import type { PeriodScoreRow } from './types'
-import type { TiebreakStep } from './types'
-
-/** Draft slot by rosterId (1-based; 1 = first pick). Used for week-1 tiebreak: lower slot = eliminated first when tied. */
 export type DraftSlotByRoster = Map<string, number>
 
-/**
- * Resolve which roster(s) are "lowest" when period points are tied.
- * Returns the rosterIds that should be chopped (up to teamsPerChop), in order.
- * order is worst-first; steps are applied in tiebreakerOrder until we have a unique ordering for the bottom N.
- */
+/** Select the lowest N scores; apply tiebreakers only at an elimination boundary. */
 export function resolveTiebreak(args: {
   candidates: PeriodScoreRow[]
   tiebreakerOrder: TiebreakStep[]
   teamsPerChop: number
   weekOrPeriod: number
   draftSlotByRoster: DraftSlotByRoster
-  /** If commissioner already chose who to chop (override). */
   commissionerChoppedRosterIds?: string[]
-}): {
-  choppedRosterIds: string[]
-  stepUsed: TiebreakStep | null
-  reason: string
-} {
-  const {
-    candidates,
-    tiebreakerOrder,
-    teamsPerChop,
-    weekOrPeriod,
-    draftSlotByRoster,
-    commissionerChoppedRosterIds = [],
-  } = args
-
-  if (candidates.length === 0) {
-    return { choppedRosterIds: [], stepUsed: null, reason: 'no candidates' }
+}): { choppedRosterIds: string[]; stepUsed: TiebreakStep | null; reason: string } {
+  const { candidates, tiebreakerOrder, weekOrPeriod, draftSlotByRoster } = args
+  const count = Math.max(0, Math.min(Math.floor(args.teamsPerChop), candidates.length))
+  if (!count) return { choppedRosterIds: [], stepUsed: null, reason: 'no candidates' }
+  const overrides = [...new Set(args.commissionerChoppedRosterIds ?? [])]
+    .filter((id) => candidates.some((row) => row.rosterId === id))
+  if (overrides.length >= count) {
+    return { choppedRosterIds: overrides.slice(0, count), stepUsed: 'commissioner', reason: 'commissioner override' }
   }
 
-  if (commissionerChoppedRosterIds.length >= teamsPerChop) {
-    const valid = commissionerChoppedRosterIds.filter((id) => candidates.some((c) => c.rosterId === id))
-    return {
-      choppedRosterIds: valid.slice(0, teamsPerChop),
-      stepUsed: 'commissioner',
-      reason: 'commissioner override',
-    }
-  }
-
-  const minPeriodPoints = Math.min(...candidates.map((c) => c.periodPoints))
-  const tied = candidates.filter((c) => c.periodPoints === minPeriodPoints)
-  if (tied.length === 0) {
-    return { choppedRosterIds: [], stepUsed: null, reason: 'no tied candidates' }
-  }
-
-  let ordered: PeriodScoreRow[] = [...tied]
   let stepUsed: TiebreakStep | null = null
-
-  for (const step of tiebreakerOrder) {
-    if (ordered.length <= teamsPerChop) break
+  function takeGroups(rows: PeriodScoreRow[], remaining: number, key: (row: PeriodScoreRow) => number, nextStep: number): PeriodScoreRow[] {
+    const ordered = [...rows].sort((a, b) => key(a) - key(b))
+    const selected: PeriodScoreRow[] = []
+    for (const group of groupByKey(ordered, key)) {
+      const needed = remaining - selected.length
+      if (needed <= 0) break
+      selected.push(...(group.length <= needed ? group : breakTie(group, needed, nextStep)))
+    }
+    return selected
+  }
+  function breakTie(rows: PeriodScoreRow[], needed: number, index: number): PeriodScoreRow[] {
+    if (needed <= 0) return []
+    if (rows.length <= needed) return rows
+    const step = tiebreakerOrder[index]
+    if (!step) return rows.slice(0, needed)
     if (step === 'commissioner') {
-      if (commissionerChoppedRosterIds.length > 0) {
-        const overrideSet = new Set(commissionerChoppedRosterIds)
-        ordered = ordered.filter((r) => overrideSet.has(r.rosterId))
-        stepUsed = 'commissioner'
-        break
-      }
-      continue
+      const chosen = rows.filter((row) => overrides.includes(row.rosterId))
+      if (!chosen.length) return breakTie(rows, needed, index + 1)
+      stepUsed = step
+      return [...chosen.slice(0, needed), ...breakTie(rows.filter((row) => !overrides.includes(row.rosterId)), Math.max(0, needed - chosen.length), index + 1)]
     }
     if (step === 'random') {
-      stepUsed = 'random'
-      ordered = shuffleAndTake(ordered, ordered.length)
-      break
+      stepUsed = step
+      return shuffleAndTake(rows, needed)
     }
-
-    if (step === 'bench_points') {
-      ordered = [...ordered].sort((a, b) => (a.benchPoints ?? 0) - (b.benchPoints ?? 0))
-      stepUsed = 'bench_points'
-      const stillTied = groupByKey(ordered, (r) => r.benchPoints ?? -1)
-      const lowestGroup = stillTied[0]
-      if (lowestGroup && lowestGroup.length < ordered.length) ordered = lowestGroup
-      if (ordered.length <= teamsPerChop) break
-    } else if (step === 'season_points') {
-      ordered = [...ordered].sort((a, b) => a.seasonPointsCumul - b.seasonPointsCumul)
-      stepUsed = 'season_points'
-      const stillTied = groupByKey(ordered, (r) => r.seasonPointsCumul)
-      const lowestGroup = stillTied[0]
-      if (lowestGroup && lowestGroup.length < ordered.length) ordered = lowestGroup
-      if (ordered.length <= teamsPerChop) break
-    } else if (step === 'previous_period') {
-      ordered = [...ordered].sort((a, b) => (a.previousPeriodPoints ?? 0) - (b.previousPeriodPoints ?? 0))
-      stepUsed = 'previous_period'
-      const stillTied = groupByKey(ordered, (r) => r.previousPeriodPoints ?? -1)
-      const lowestGroup = stillTied[0]
-      if (lowestGroup && lowestGroup.length < ordered.length) ordered = lowestGroup
-      if (ordered.length <= teamsPerChop) break
-    } else if (step === 'draft_slot') {
-      if (weekOrPeriod <= 1) {
-        ordered = [...ordered].sort((a, b) => {
-          const slotA = draftSlotByRoster.get(a.rosterId) ?? 9999
-          const slotB = draftSlotByRoster.get(b.rosterId) ?? 9999
-          return slotB - slotA
-        })
-        stepUsed = 'draft_slot'
-        const stillTied = groupByKey(
-          ordered,
-          (r) => draftSlotByRoster.get(r.rosterId) ?? 9999
-        )
-        const worstSlotGroup = stillTied[0]
-        if (worstSlotGroup && worstSlotGroup.length < ordered.length) ordered = worstSlotGroup
-      }
-      if (ordered.length <= teamsPerChop) break
+    if (step === 'draft_slot' && weekOrPeriod > 1) return breakTie(rows, needed, index + 1)
+    const key = (row: PeriodScoreRow) => {
+      if (step === 'bench_points') return row.benchPoints ?? 0
+      if (step === 'season_points') return row.seasonPointsCumul
+      if (step === 'previous_period') return row.previousPeriodPoints ?? 0
+      return -(draftSlotByRoster.get(row.rosterId) ?? 9999)
     }
+    stepUsed = step
+    return takeGroups(rows, needed, key, index + 1)
   }
-
-  const toChop = ordered.slice(0, teamsPerChop).map((r) => r.rosterId)
-  return {
-    choppedRosterIds: toChop,
-    stepUsed,
-    reason: stepUsed ? `tiebreak: ${stepUsed}` : 'lowest period score',
-  }
+  const selected = takeGroups(candidates, count, (row) => row.periodPoints, 0)
+  return { choppedRosterIds: selected.map((row) => row.rosterId), stepUsed, reason: stepUsed ? `tiebreak: ${stepUsed}` : 'lowest period score' }
 }
 
-function groupByKey<T>(sorted: T[], key: (t: T) => number): T[][] {
+function groupByKey<T>(sorted: T[], key: (row: T) => number): T[][] {
   const groups: T[][] = []
-  let current: T[] = []
-  let lastKey: number | undefined
-  for (const t of sorted) {
-    const k = key(t)
-    if (lastKey !== undefined && k !== lastKey) {
-      groups.push(current)
-      current = []
-    }
-    current.push(t)
-    lastKey = k
+  for (const row of sorted) {
+    const last = groups[groups.length - 1]
+    if (last && key(last[0]!) === key(row)) last.push(row)
+    else groups.push([row])
   }
-  if (current.length) groups.push(current)
   return groups
 }
 
-function shuffleAndTake<T>(arr: T[], n: number): T[] {
-  const out = [...arr]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!]
+function shuffleAndTake<T>(rows: T[], count: number): T[] {
+  const result = [...rows]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j]!, result[i]!]
   }
-  return out.slice(0, n)
+  return result.slice(0, count)
 }

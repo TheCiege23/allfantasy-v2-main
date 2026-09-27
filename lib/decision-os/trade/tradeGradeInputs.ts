@@ -6,9 +6,8 @@
  * shape with its own pricer. Now they all convert to the console's `TradeAssetInput` and go through
  * `lib/decision-os/trade/leagueTradeGrader.ts`.
  *
- * ⚠ PLAYERS ARE HANDED OVER BY NAME, NEVER BY A PROVIDER ID. The console's `playerId` is a
- * `SportsPlayerRecord.id`; a Sleeper id there misses, and a miss in `getPlayer` queues a background
- * importer run for the whole sport. The NFL pricer keys on the name anyway (`pricePlayer`).
+ * Provider references retain their namespace. The shared pricer resolves Sleeper IDs directly
+ * and Yahoo references through the canonical identity resolver, never through Sleeper's ID space.
  *
  * ⚠ AN ASSET THAT CANNOT BE PRICED IS RETURNED AS A REASON, NOT DROPPED. A pick with no year or
  * round has no price; leaving it out would grade the deal as though it were not in it.
@@ -19,6 +18,9 @@ export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[] }
 
 type PendingLike = {
   playerName: string
+  playerId?: string | null
+  position?: string | null
+  team?: string | null
   isPick?: boolean
   pickRound?: string
   pickYear?: number
@@ -27,7 +29,7 @@ type PendingLike = {
 }
 
 /** A Sleeper/Yahoo pending-offer asset (`PendingTradeAsset`). */
-export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>): GradeInputs {
+export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provider?: 'sleeper' | 'yahoo'): GradeInputs {
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const a of assets) {
     if (a.faabAmount != null) {
@@ -36,7 +38,13 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>): Grad
       if (a.pickYear && a.pickRoundNumber) out.assets.push({ kind: 'pick', year: a.pickYear, round: a.pickRoundNumber })
       else out.unpriceable.push(a.pickRound || a.playerName || 'a draft pick')
     } else if (a.playerName?.trim()) {
-      out.assets.push({ kind: 'player', name: a.playerName.trim() })
+      const id = a.playerId?.trim()
+      out.assets.push({ kind: 'player', name: a.playerName.trim(),
+        ...(id && provider ? { providerIdentity: { provider, id,
+          ...(a.position?.trim() ? { position: a.position.trim() } : {}),
+          ...(a.team?.trim() ? { team: a.team.trim() } : {}),
+        } } : {}),
+      })
     } else {
       out.unpriceable.push('an unnamed player')
     }
@@ -96,8 +104,15 @@ export function gradeInputsFromNativeItems(
       else out.unpriceable.push(str(meta.pickLabel ?? meta.label) ?? 'a draft pick with no season or round on file')
       continue
     }
-    const name = str(meta.playerName ?? meta.name) ?? (item.itemReference ? str(nameForId?.(item.itemReference)) : null)
-    if (name) out.assets.push({ kind: 'player', name })
+    const ref = str(item.itemReference)
+    const verifiedName = ref ? str(nameForId?.(ref)) : null
+    const name = verifiedName ?? str(meta.playerName ?? meta.name)
+    if (name) out.assets.push({ kind: 'player', name,
+      // The lookup is specifically by SportsPlayer.sleeperId. Metadata alone does not verify a namespace.
+      ...(ref && verifiedName ? { providerIdentity: { provider: 'sleeper' as const, id: ref,
+        ...(str(meta.position) ? { position: str(meta.position)! } : {}),
+      } } : ref?.includes(':') ? { playerId: ref } : {}),
+    })
     else out.unpriceable.push('a player with no name on file')
   }
   return out

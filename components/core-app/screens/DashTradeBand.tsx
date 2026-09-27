@@ -46,7 +46,8 @@ function verdictSentence(t: RecentTrade): string {
   const v = t.verdict
   if (!v) return ''
   if (v.favoursRosterId == null) return 'An even deal on paper'
-  const side = t.sides.find((s) => s.rosterId === v.favoursRosterId)
+  // String-compared: a durable-feed side carries its roster id as a string, the verdict as a number.
+  const side = t.sides.find((s) => String(s.rosterId) === String(v.favoursRosterId))
   const who = side ? side.teamName || side.managerName : null
   const strength = v.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
   /* No name resolved: say the shape of the verdict, never a placeholder. */
@@ -90,7 +91,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
       <div className="af-trade-head">
         <span className="af-label af-trade-kicker">Latest league trades</span>
         <span className="af-trade-count af-num">
-          {trades.length === 1 ? '1 in the last 2 weeks' : `${trades.length} in the last 2 weeks`}
+          {`${trades.length} latest · past 2 weeks`}
         </span>
       </div>
 
@@ -139,7 +140,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                     {s.gradeBasis || s.gradeReason ? (
                       <div className="af-trade-side-grade" data-ungraded={!s.grade}>
                         <span className="af-trade-side-letter">{s.grade ?? '—'}</span>
-                        <span><strong>{s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
+                        <span><strong>{s.gradeBasis === 'League' ? 'League grade' : s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
                       </div>
                     ) : null}
                   </div>

@@ -254,8 +254,8 @@ describe('🛑 an offer goes only to the managers in it, linked to their own cop
     expect(h.gradeDeal).toHaveBeenCalledWith(
       expect.objectContaining({ leagueId: 'af-B', userId: 'uB' }),
       {
-        give: { assets: [{ kind: 'player', name: 'C.J. Stroud' }], unpriceable: [] },
-        get: { assets: [{ kind: 'player', name: 'Nico Collins' }], unpriceable: [] },
+        give: { assets: [{ kind: 'player', name: 'C.J. Stroud', providerIdentity: { provider: 'sleeper', id: 'p2', position: 'QB', team: 'HOU' } }], unpriceable: [] },
+        get: { assets: [{ kind: 'player', name: 'Nico Collins', providerIdentity: { provider: 'sleeper', id: 'p1', position: 'WR', team: 'HOU' } }], unpriceable: [] },
         viewerSide: true,
       },
     )

@@ -15,8 +15,9 @@
  * side at 10%/25%.
  *
  * So there is one number and everything else is read off it:
- *   - the number is `percentDiff` on LEAGUE value (`leagueTradeTotals`), signed from the side that
- *     sends `give` — the same figure the Trade Center has always graded on;
+ *   - the number is `percentDiff` on chart + league-scoring value (`leagueTradeTotals`), signed from the side that
+ *     sends `give`. Personal roster utility is reported separately: completion must not drop a
+ *     factor that previously changed the calculator's headline letter;
  *   - the letter is `projectedLetterFor` (`lib/trade-intel/gradeScale.ts`), unchanged;
  *   - the label and the recommendation use the SAME two bands, so a C always reads "Even" and a B
  *     always reads "Slightly favors you". They can no longer disagree, because nothing else is read.
@@ -61,6 +62,14 @@ export type TradeGradeMove = {
   reasons: string[]
 }
 
+/** Personal roster utility, separate from the shared trade-value letter. */
+export type TradeRosterFit = {
+  giveValue: number
+  getValue: number
+  percentDiff: number
+  moves: TradeGradeMove[]
+}
+
 export type TradeGradeView =
   | {
       graded: true
@@ -89,6 +98,8 @@ export type TradeGradeView =
       /** Every asset, so a card can print the value it was graded on beside each one. */
       lines: TradeGradeLine[]
       moves: TradeGradeMove[]
+      /** Changes in personal utility never replace the league-wide trade-value grade. */
+      rosterFit?: TradeRosterFit | null
       /**
        * The league type the grade was priced under and how we know it (see `leagueTypeGrading.ts`).
        * Set by the league grader; absent where no league was read.
@@ -266,5 +277,7 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
     getMarket: view.giveMarket,
     lines: view.lines.map((l) => ({ ...l, side: l.side === 'give' ? 'get' : 'give' })),
     moves: view.moves.map((m) => ({ ...m, side: m.side === 'give' ? 'get' : 'give' })),
+    // The original viewer's personal utility is not the other manager's roster fit.
+    rosterFit: null,
   }
 }

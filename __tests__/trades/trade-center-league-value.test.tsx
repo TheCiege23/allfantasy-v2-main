@@ -17,6 +17,8 @@ vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal)
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
+import { decodeTradeDraft, tradeDeviceDraftKey } from '@/components/core-app/screens/tradeDeviceDraft'
 
 const player = (id: string, name: string, position: string, value: number) => ({
   id, name, position, team: 'X', value, imageUrl: null, byeWeek: null, injuryStatus: null, stock: null, stockDelta: null,
@@ -61,6 +63,7 @@ const ANALYSIS = {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   rosterData.current = {
     rosters: [
       roster('r1', 'You', [player('p1', 'Kenneth Walker', 'RB', 5000)]),
@@ -94,6 +97,152 @@ async function analyze(container: HTMLElement) {
 }
 
 describe('🛑 the page shows the numbers the grade is taken on', () => {
+  it('keeps the headline letter and asset totals separate from personal roster utility', async () => {
+    const grade = gradeTrade({ giveValue: 5000, getValue: 5153, giveMarket: 5000, getMarket: 4500,
+      unpriced: 0, giveCount: 1, getCount: 1, basis: ANALYSIS.valueBasis.label,
+      scoringApplied: true, needApplied: false, needGap: null,
+      lines: [{ side: 'give', name: 'Kenneth Walker', marketValue: 5000, leagueValue: 5000 },
+        { side: 'get', name: 'Trey McBride', marketValue: 4500, leagueValue: 5153 }], moves: [] })
+    if (!grade.graded) throw new Error('expected the complete trade to be graded')
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS,
+          percentDiff: grade.percentDiff, getTotal: 5153,
+          grade: { ...grade, rosterFit: { giveValue: 5000, getValue: 5928, percentDiff: 16,
+            moves: [{ side: 'get', name: 'Trey McBride', base: 4500, leagueValue: 5928,
+              reasons: ['you cannot fill 1 TE slot and there is no TE available on waivers'] }] } },
+          valueBasis: { ...ANALYSIS.valueBasis, needAdjusted: false },
+          players: { ...ANALYSIS.players, get: [{ ...ANALYSIS.players.get[0], leagueValue: 5153,
+            valueAdjustments: [ANALYSIS.players.get[0].valueAdjustments[0]] }] },
+        }) }
+      : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: 'grade-fit-separation', name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    expect([...container.querySelectorAll('.af-tc-grade-letter')].map(el => el.textContent)).toEqual(['C', 'C'])
+    expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,153')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('5,928')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
+    expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Roster fit does not change the letter')
+  })
+  it('recovers a proposal and counterparty after remount, without recovering its grade', async () => {
+    const league = { id: 'recovery-league', name: 'L', format: 'Dynasty', teamCount: 12 }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    await analyze(view.container)
+    expect(view.container.querySelector('.af-tc-verdict')).not.toBeNull()
+    const stored = decodeTradeDraft(JSON.parse(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)!))
+    expect(stored?.give[0]).toMatchObject({ kind: 'player', playerId: 'p1', name: 'Kenneth Walker' })
+    expect(stored?.get[0]).toMatchObject({ playerId: 'p9', name: 'Trey McBride' })
+    expect(stored?.partnerRosterId).toBe('r2')
+    view.unmount()
+    const recovered = render(<TradeCenter league={league} viewerId="account-a" />)
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove Trey McBride', exact: true })).toBeTruthy()
+    expect(screen.getByText(/Recovered this device’s in-progress proposal/)).toBeTruthy()
+    expect(recovered.container.querySelector('.af-tc-verdict')).toBeNull()
+    await act(async () => fireEvent.click(recovered.container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!))
+    const calls = fetchMock.mock.calls.filter(([url]) => url === '/api/trade-value/analyze')
+    expect(JSON.parse(calls.at(-1)![1].body).opponentTeamExternalId).toBe('t-r2')
+  })
+  it('clears a previous account or league proposal without overwriting its recovery copy', async () => {
+    const league = { id: 'isolation-league', name: 'L', format: 'Dynasty', teamCount: 12 }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    const original = window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)
+    await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-b" />))
+    expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
+    expect(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)).toBe(original)
+    await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-a" />))
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    await act(async () => view.rerender(<TradeCenter league={{ ...league, id: 'other-league' }} viewerId="account-a" />))
+    expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
+    expect(decodeTradeDraft(JSON.parse(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)!))).toEqual(decodeTradeDraft(JSON.parse(original!)))
+  })
+  it('never restores a legacy league-only device draft to a different account', async () => {
+    const league = { id: 'legacy-league', name: 'L', format: 'Dynasty', teamCount: 12 }
+    window.localStorage.setItem(`af-trade-draft:${league.id}`, JSON.stringify({ give: [{ kind: 'faab', amount: 10 }], get: [] }))
+    render(<TradeCenter league={league} viewerId="account-b" />)
+    await act(async () => fireEvent.click(screen.getByText('Restore draft')))
+    expect(screen.getByText(/No saved draft for this league/)).toBeTruthy()
+    expect(decodeTradeDraft({ give: [{ kind: 'faab', amount: null }], get: [] })).toBeNull()
+  })
+  it('does not apply an in-flight analysis to a changed proposal', async () => {
+    let complete!: (value: unknown) => void
+    fetchMock.mockImplementation(async (url: string) => url === '/api/trade-value/analyze'
+      ? new Promise(resolve => { complete = resolve }) : { ok: false, status: 500, json: async () => ({}) })
+    const view = render(<TradeCenter league={{ id: 'pending-analysis', name: 'L', format: 'Dynasty', teamCount: 12 }} viewerId="account-a" />)
+    await analyze(view.container)
+    expect(view.container.querySelector('[aria-busy="true"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true }))
+    await act(async () => { complete({ ok: true, status: 200, json: async () => ANALYSIS }) })
+    expect(view.container.querySelector('.af-tc-verdict')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove Trey McBride', exact: true })).toBeTruthy()
+  })
+  it('discloses device recovery failure without reporting a successful save', async () => {
+    const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable') })
+    try {
+      render(<TradeCenter league={{ id: 'private-device', name: 'L', format: 'Dynasty', teamCount: 12 }} viewerId="account-a" />)
+      fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+      expect(screen.getByText(/Device recovery is unavailable/)).toBeTruthy()
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save draft', exact: true })))
+      expect(screen.getByText(/Nothing could store this draft/)).toBeTruthy()
+    } finally { storage.mockRestore() }
+  })
+  it('discards a delayed account draft after the manager changes account and starts another proposal', async () => {
+    const league = { id: 'stale-restore', name: 'L', format: 'Dynasty', teamCount: 12 }
+    const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    let complete!: (value: unknown) => void
+    fetchMock.mockImplementation(async (url: string) => String(url).startsWith('/api/league/trades-panel')
+      ? new Promise(resolve => { complete = resolve }) : { ok: false, status: 500, json: async () => ({}) })
+    await act(async () => fireEvent.click(screen.getByText('Restore draft')))
+    expect(typeof complete).toBe('function')
+    await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-b" />))
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    const payload = { give: [{ kind: 'faab', amount: 10 }], get: [{ kind: 'faab', amount: 20 }] }
+    expect(decodeTradeDraft(payload)).not.toBeNull()
+    await act(async () => { complete({ ok: true, json: async () => ({ draft: { payload } }) }) })
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    expect(screen.queryByText(/Draft restored from your account/)).toBeNull()
+  })
+  it('keeps same-name players on opposite sides on their own analyzed values', async () => {
+    rosterData.current = {
+      rosters: [roster('r1', 'You', [player('d1', 'Same Name', 'DL', 134)]),
+        roster('r2', 'Matt Jones', [player('b1', 'Same Name', 'DB', 500)])],
+      viewerRosterId: 'r1', viewerTeamRosterId: 'r1',
+    }
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, players: {
+        give: [{ name: 'Same Name', playerId: 'd1', position: 'DL', marketValue: 134, leagueValue: 129 }],
+        get: [{ name: 'Same Name', playerId: 'b1', position: 'DB', marketValue: 500, leagueValue: 550 }],
+      } }) } : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty IDP', teamCount: 16 }} />)
+    fireEvent.click(screen.getAllByLabelText('Add Same Name')[0])
+    fireEvent.click([...document.querySelectorAll<HTMLButtonElement>('.af-tc-partner-chip')].find(b => b.textContent === 'Matt Jones')!)
+    fireEvent.click(screen.getAllByLabelText('Add Same Name')[0])
+    await act(async () => fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!))
+    const rows = [...container.querySelectorAll<HTMLElement>('.af-tc-row')].filter(row => row.querySelector('.af-tc-remove'))
+    expect(rows.find(row => row.querySelector('.af-tc-pos')?.textContent === 'DL')?.querySelector('.af-tc-row-value')?.textContent).toContain('129')
+    expect(rows.find(row => row.querySelector('.af-tc-pos')?.textContent === 'DB')?.querySelector('.af-tc-row-value')?.textContent).toContain('550')
+  })
+  it('pauses whole-route polling while a proposal is being edited and releases on unmount', () => {
+    expect(routeRefreshClaimed()).toBe(false)
+    const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    expect(routeRefreshClaimed()).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true }))
+    expect(routeRefreshClaimed()).toBe(false)
+    fireEvent.click(screen.getByLabelText('Add Kenneth Walker'))
+    view.unmount()
+    expect(routeRefreshClaimed()).toBe(false)
+  })
+  it('pauses route polling while the first asset picker is open, before a player is selected', () => {
+    expect(routeRefreshClaimed()).toBe(false)
+    const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Add asset', exact: true })[0])
+    expect(routeRefreshClaimed()).toBe(true)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close', exact: true })[0])
+    expect(routeRefreshClaimed()).toBe(false)
+    view.unmount()
+    expect(routeRefreshClaimed()).toBe(false)
+  })
   it('a withheld shared grade suppresses legacy scores, confidence, meters and balancing advice', async () => {
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, fairnessScore: 100,
@@ -148,7 +297,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, counterOffers: [{
         addTo: 'get', name: 'Depth Receiver', rosterPlayerId: 'sleeper-depth', position: 'WR', marketValue: 300,
-        asset: { kind: 'player', name: 'Depth Receiver' }, grade: counterGrade, remainingGap: 0, balanced: true,
+        asset: { kind: 'player', name: 'Depth Receiver', providerIdentity: { provider: 'sleeper', id: 'sleeper-depth', position: 'WR' } }, grade: counterGrade, remainingGap: 0, balanced: true,
       }] }) } : { ok: false, status: 500, json: async () => ({}) })
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
     await analyze(container)
@@ -156,6 +305,13 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to proposal' }))
     expect(container.querySelector('.af-tc-review')!.textContent).toContain('Depth Receiver')
     expect(container.querySelector('.af-tc-verdict')).toBeNull()
+    await act(async () => { fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!) })
+    const calls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/trade-value/analyze'))
+    const submitted = JSON.parse(calls.at(-1)![1].body)
+    expect(submitted.sideGet).toContainEqual(expect.objectContaining({
+      kind: 'player', playerId: 'sleeper-depth',
+      providerIdentity: { provider: 'sleeper', id: 'sleeper-depth', position: 'WR' },
+    }))
   })
   it('before analysis every row is its market value; after, the league value — with the market beside it', async () => {
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
@@ -170,7 +326,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
 
     const review = container.querySelector('.af-tc-review')!.textContent ?? ''
     expect(review).toContain('5,928')
-    expect(review).toContain('mkt 4,500')
+    expect(review).toContain('base 4,500')
     // The totals add up to the grade's totals, not to the market prices.
     expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,928')
   })

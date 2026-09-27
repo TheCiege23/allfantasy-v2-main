@@ -5,8 +5,8 @@ import Link from 'next/link'
 import type { ChimmyMoves } from '@/lib/core-app/chimmyMoves'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
 
-function askChimmy(prefill: string) {
-  const detail: CommsOpenDetail = { tab: 'chimmy', prefill }
+function askChimmy(prefill: string, leagueId?: string) {
+  const detail: CommsOpenDetail = { tab: 'chimmy', prefill, ...(leagueId ? { leagueId } : {}) }
   window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))
 }
 
@@ -45,7 +45,7 @@ export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagu
                   type="button"
                   className="af-cmv-ask"
                   aria-label={`Ask Chimmy about ${move.title.replace(/^(Bench|Check) /, '')}`}
-                  onClick={() => askChimmy(move.ask)}
+                  onClick={() => askChimmy(move.ask, data.leagueId)}
                 >
                   ✦
                 </button>
@@ -61,10 +61,10 @@ export function ChimmyMovesCard({ data, leagueName }: { data: ChimmyMoves; leagu
           */}
           <p className="af-cmv-detail">
             {data.startersRead > 0
-              ? `No injured or idle starters in ${leagueName}.`
+              ? `No remaining flagged starters to review before kickoff in ${leagueName}. Check individual locks and injury updates on your platform.`
               : `Chimmy can check your ${leagueName} lineup for you.`}
           </p>
-          <button type="button" className="af-btn af-cmv-do" onClick={() => askChimmy(data.checkAsk)}>
+          <button type="button" className="af-btn af-cmv-do" onClick={() => askChimmy(data.checkAsk, data.leagueId)}>
             Start/sit check
           </button>
         </div>

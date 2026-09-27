@@ -99,8 +99,8 @@ function normalizeStarters(raw: unknown): string[] {
   return raw.map((x) => String(x).trim().toUpperCase()).filter(Boolean)
 }
 
-async function resolveNflIdToName(playerIds: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
+async function resolveNflIdToName(playerIds: string[]): Promise<Map<string, { name: string; position: string | null }>> {
+  const map = new Map<string, { name: string; position: string | null }>()
   if (playerIds.length === 0) return map
   try {
     const { getAllPlayers } = await import('@/lib/sleeper-client')
@@ -110,7 +110,7 @@ async function resolveNflIdToName(playerIds: string[]): Promise<Map<string, stri
       const name =
         p?.full_name ||
         (p ? `${(p as { first_name?: string }).first_name ?? ''} ${(p as { last_name?: string }).last_name ?? ''}`.trim() : '')
-      if (name) map.set(id, name)
+      if (name) map.set(id, { name, position: p?.position ?? null })
     }
   } catch {
     /* ignore */
@@ -130,10 +130,13 @@ async function rosterIdsToAssets(args: {
   if (args.sport === 'NFL') {
     const nameMap = await resolveNflIdToName(ids)
     for (const id of ids) {
-      const name = nameMap.get(id)?.trim() || id
+      const player = nameMap.get(id)
+      const name = player?.name.trim() || id
       try {
-        const pa = await pricePlayer(name, args.nflCtx)
-        out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id })
+        const pa = await pricePlayer(name, args.nflCtx, player ? { sleeperId: id, position: player.position } : undefined)
+        out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id,
+          ...(player ? { valuationIdentity: { provider: 'sleeper' as const, id,
+            ...(player.position ? { position: player.position } : {}) } } : {}) })
       } catch {
         args.dataGaps.push(`Could not price roster player "${name}"`)
       }
@@ -147,7 +150,7 @@ async function rosterIdsToAssets(args: {
       if (row) {
         const pa = sportsRecordToPricedAsset(row)
         if (pa) {
-          out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id })
+          out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id, valuationPlayerId: row.id })
         } else {
           // Honesty pass: no dynasty value and no projection for this player.
           // Previously a hardcoded 1200 stood in here, which made unpriceable

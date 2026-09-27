@@ -20,6 +20,9 @@
  * it drops already-chopped rosters before choosing — so the week is claimed with a lock and
  * checked against `GuillotineRosterState.choppedInPeriod` before anything is written.
  */
+import { resumeAuditedRosterRelease } from './resumeAuditedRosterRelease'
+import { determineFinalChampion } from './endgameEngine'
+import { resolveGuillotineEndgame } from './endgameRules'
 import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { isPastCorrectionCutoff, savePeriodScores } from '@/lib/guillotine/GuillotineWeekEvaluator'
@@ -39,6 +42,7 @@ export type NativeGuillotineOutcome =
   | 'locked'
   | 'refused'
   | 'chopped'
+  | 'final_stage_scored'
 
 export type NativeGuillotineResult = {
   seasonId: string
@@ -91,14 +95,22 @@ export async function runNativeGuillotineWeek(
     where: { seasonId: season.id, isEliminated: false },
     select: { id: true, ownerId: true },
   })
-  if (active.length <= 1) return completeSeason(season.id, gSeason, base)
+  const endgameLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, guillotineEndgame: true } })
+  const lastTeamStanding = resolveGuillotineEndgame(endgameLeague ?? {}).format === 'last_team_standing'
 
+  const finalSeason = gSeason.ok ? await prisma.guillotineSeason.findUnique({ where: { id: gSeason.seasonId }, select: { currentScoringPeriod: true, status: true } }) : null
   const lastChop = await prisma.guillotineRosterState.findFirst({
     where: { leagueId: season.leagueId, choppedInPeriod: { not: null } },
     orderBy: { choppedInPeriod: 'desc' },
     select: { choppedInPeriod: true },
   })
-  const week = Math.max((lastChop?.choppedInPeriod ?? 0) + 1, config.eliminationStartWeek)
+  if (gSeason.ok && lastChop?.choppedInPeriod != null && (finalSeason?.currentScoringPeriod ?? 0) >= lastChop.choppedInPeriod) await resumeAuditedRosterRelease(season.leagueId, gSeason.seasonId, lastChop.choppedInPeriod)
+  if (finalSeason?.status === 'complete') return completeSeason(season.id, gSeason, base)
+  // Recover a failure after final scores were saved but before completion was marked.
+  if (gSeason.ok && finalSeason?.status === 'final_stage' && await determineFinalChampion(gSeason.seasonId)) return completeSeason(season.id, gSeason, base)
+  const recoveryWeek = gSeason.ok && (lastChop?.choppedInPeriod ?? 0) > (finalSeason?.currentScoringPeriod ?? 0) ? lastChop!.choppedInPeriod : null
+  if (active.length <= 1 && lastTeamStanding && recoveryWeek == null) return completeSeason(season.id, gSeason, base)
+  const week = Math.max(recoveryWeek ?? Math.max(lastChop?.choppedInPeriod ?? 0, finalSeason?.currentScoringPeriod ?? 0) + 1, config.eliminationStartWeek)
   if (config.eliminationEndWeek != null && week > config.eliminationEndWeek) {
     return { ...base, outcome: 'past_elimination_window', week }
   }
@@ -134,7 +146,14 @@ export async function runNativeGuillotineWeek(
       where: { leagueId: season.leagueId, choppedInPeriod: week },
       select: { rosterId: true },
     })
-    if (already) return { ...base, outcome: 'already_chopped', week }
+    if (already) {
+      if (recoveryWeek == null) return { ...base, outcome: 'already_chopped', week }
+      const repair = await runElimination({ leagueId: season.leagueId, weekOrPeriod: week, season: season.season, periodEndedAt, skipChat: true })
+      const repairedIds = repair?.eliminationFlagged?.marked ?? []
+      if (!repairedIds.length) return { ...base, outcome: 'refused', week, reason: repair?.reason ?? 'audit recovery required' }
+      await prisma.redraftRosterPlayer.updateMany({ where: { rosterId: { in: repairedIds }, droppedAt: null }, data: { droppedAt: now } })
+      return { ...base, outcome: 'chopped', week, choppedRedraftRosterIds: repairedIds, reason: 'recovered previously selected chop' }
+    }
 
     // Every surviving team, scored from the sealed week. Bench/IR never count; best ball starts its best.
     const points = new Map<string, number>()
@@ -195,6 +214,8 @@ export async function runNativeGuillotineWeek(
       systemUserId: owner?.userId ?? undefined,
     })
     const choppedRedraft = result?.eliminationFlagged?.marked ?? []
+    if (result?.reason === 'final stage complete') return { ...base, outcome: 'season_complete', week }
+    if (result?.reason === 'final stage scored') return { ...base, outcome: 'final_stage_scored', week }
     if (!result || result.choppedRosterIds.length === 0) {
       return { ...base, outcome: 'refused', week, reason: result?.reason ?? 'engine_returned_nothing' }
     }

@@ -31,11 +31,14 @@ describe('trade visibility contract', () => {
     expect(hook).toContain("document.addEventListener('visibilitychange', onVisibility)")
   })
 
-  it('reconciles the core latest-trades feed and requests league-specific reasons', () => {
+  it('reads durable events on Home, reconciles league detail, and requests league-specific reasons', () => {
     const page = read('app/core/(shell)/[[...screen]]/page.tsx')
     const leagueHome = read('lib/core-app/leagueHome.ts')
+    // Home uses the durable feed without an 18-week provider fan-out on every refresh.
+    expect(page).toContain('reconcileLive: false')
+    expect(leagueHome).toContain('reconcileLive: true')
+    expect(read('lib/core-app/recentTrades.ts')).toContain('persistedRecentTrades(leagues, new Date(cutoff))')
     for (const source of [page, leagueHome]) {
-      expect(source).toContain('reconcileLive: true')
       expect(source).toContain('enrichLeagueContext: true')
     }
   })

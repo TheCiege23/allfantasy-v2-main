@@ -2,6 +2,7 @@
  * Ensures a league has playoff config in League.settings (sport- and variant-aware).
  * Idempotent: creates/merges only missing playoff keys while preserving commissioner overrides.
  */
+import { resolveConfiguredPlayoffSeedingRule } from './seedingRule'
 import { prisma } from '@/lib/prisma'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { getDefaultLeagueSettingsForVariant } from '@/lib/sport-defaults/LeagueDefaultSettingsService'
@@ -19,7 +20,7 @@ export interface LeaguePlayoffBootstrapResult {
 export async function bootstrapLeaguePlayoffConfig(leagueId: string): Promise<LeaguePlayoffBootstrapResult> {
   const league = await (prisma as any).league.findUnique({
     where: { id: leagueId },
-    select: { id: true, sport: true, leagueVariant: true, settings: true },
+    select: { id: true, sport: true, leagueVariant: true, settings: true, playoffSeedingRule: true },
   })
   if (!league) {
     return { leagueId, playoffConfigApplied: false, sport: '', variant: null }
@@ -40,7 +41,7 @@ export async function bootstrapLeaguePlayoffConfig(leagueId: string): Promise<Le
 
   for (const [key, value] of Object.entries(defaultStructure)) {
     if (nextStructure[key] === undefined || nextStructure[key] === null) {
-      nextStructure[key] = value
+      nextStructure[key] = key === 'seeding_rules' ? resolveConfiguredPlayoffSeedingRule(league, String(value)) : value
       applied = true
     }
   }

@@ -45,13 +45,17 @@ export function isKickerPositionLoose(position: string | null | undefined): bool
 export type LeagueValueBasis = 'idp-vorp' | 'kicker-flat'
 
 export interface LeagueNamedValue {
+  name?: string
+  sleeperId?: string
   value: number
   position: string
   /** Which of the two constructions produced this number. Never collapse these. */
   basis: LeagueValueBasis
+  projection?: { points: number; season: number; week: number }
 }
 
 export interface LeagueTradeValues {
+  bySleeperId?: ReadonlyMap<string, LeagueNamedValue>
   unpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>
   unpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>
   /** Lowercased, trimmed full name -> value. Only unambiguous names appear. */
@@ -65,6 +69,7 @@ export interface LeagueTradeValues {
 }
 
 const EMPTY: LeagueTradeValues = {
+  bySleeperId: new Map(),
   byNameLower: new Map(),
   idp: { skipped: 'no_league_id', coverage: { defenders: 0, projected: 0, priced: 0, named: 0 }, ambiguousNames: [] },
   kicker: {
@@ -114,8 +119,13 @@ export async function loadLeagueTradeValues(
     })
 
     const merged = new Map<string, LeagueNamedValue>()
+    const bySleeperId = new Map<string, LeagueNamedValue>()
+    const unpricedReasonByNameLower = new Map(idp.unpricedReasonByNameLower ?? [])
+    for (const [id, entry] of idp.bySleeperId ?? []) {
+      bySleeperId.set(id, { ...entry, basis: 'idp-vorp' })
+    }
     for (const [name, entry] of idp.byNameLower) {
-      merged.set(name, { value: entry.value, position: entry.position, basis: 'idp-vorp' })
+      merged.set(name, { ...entry, basis: 'idp-vorp' })
     }
 
     /*
@@ -170,21 +180,28 @@ export async function loadLeagueTradeValues(
         for (const pid of rosterPlayerIds) {
           const info = players?.[pid]
           if (!isKickerPositionLoose(info?.position)) continue
+          const entry: LeagueNamedValue = { value: kickerValue.value, name: info?.full_name?.trim(), position: 'K', basis: 'kicker-flat', sleeperId: pid }
+          bySleeperId.set(pid, entry)
           const nm = info?.full_name?.trim().toLowerCase()
-          if (!nm || (nameCounts.get(nm) ?? 0) > 1) continue
+          if (!nm) continue
+          if ((nameCounts.get(nm) ?? 0) > 1) {
+            unpricedReasonByNameLower.set(nm, { code: 'ambiguous_identity', label: 'Multiple rostered players share this name; choose a player ID to value this asset' })
+            continue
+          }
           // A defender already holding this name wins: his value is player-specific, the
           // kicker's is positional, so overwriting it would lose the more informative number.
           if (merged.has(nm)) continue
-          merged.set(nm, { value: kickerValue.value, position: 'K', basis: 'kicker-flat' })
+          merged.set(nm, entry)
           namedKickers++
         }
       }
     }
 
     return {
+      bySleeperId,
       byNameLower: merged,
       unpricedReasonBySleeperId: idp.unpricedReasonBySleeperId,
-      unpricedReasonByNameLower: idp.unpricedReasonByNameLower,
+      unpricedReasonByNameLower,
       idp: { skipped: idp.skipped, coverage: idp.coverage, ambiguousNames: idp.ambiguousNames },
       kicker: { ...kickerValue, named: namedKickers },
     }

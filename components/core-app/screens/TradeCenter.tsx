@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
+import type { TradeRecord } from '@/lib/core-app/trades'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
+import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
@@ -194,9 +198,26 @@ type ValueAdjustment = { kind: 'scoring' | 'need'; factor: number; reason: strin
  * so a team defense read "0" after Analyze — and was not counted as unpriced.
  */
 type EngineLine = Line & {
+  playerId?: string | null
+  enrichmentPlayerId?: string | null
   unpriced?: boolean
   sport?: string | null
   valueAdjustments?: ValueAdjustment[]
+}
+
+function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines: EngineLine[]) {
+  const compatible = lines.filter(line => valuePositionsAgree(asset.position, line.position))
+  const sleeperId = asset.providerIdentity?.provider === 'sleeper' ? asset.providerIdentity.id : null
+  const exact = compatible.filter(line =>
+    (asset.playerId && line.playerId === asset.playerId) ||
+    (sleeperId && line.enrichmentPlayerId === sleeperId),
+  )
+  if (exact.length) return exact.length === 1 ? exact[0] : undefined
+  // Older responses have no IDs. A unique compatible name on this side is safe;
+  // a conflicting verified provider ID must never fall through to a name.
+  const named = compatible.filter(line => line.name.toLowerCase() === asset.name.toLowerCase() &&
+    !(sleeperId && line.enrichmentPlayerId && line.enrichmentPlayerId !== sleeperId))
+  return named.length === 1 ? named[0] : undefined
 }
 
 type AnalyzeResult = {
@@ -294,7 +315,7 @@ function LeagueMove({ line }: { line: Line }) {
   return (
     <span className="af-tc-league-move" data-dir={league > market ? 'up' : 'down'}>
       {pctOf(league / market)}
-      <small>mkt {money(market)}</small>
+      <small>base {money(market)}</small>
     </span>
   )
 }
@@ -463,6 +484,7 @@ function toInput(a: PickedAsset) {
     return {
       kind: 'player' as const,
       ...(a.playerId ? { playerId: a.playerId } : {}),
+      ...(a.providerIdentity ? { providerIdentity: a.providerIdentity } : {}),
       name: a.name,
       ...(a.sportHint ? { sportHint: a.sportHint } : {}),
     }
@@ -474,6 +496,8 @@ function toInput(a: PickedAsset) {
 }
 
 export function TradeCenter(props: {
+  /** Authenticated account identity, supplied by the server for device draft isolation. */
+  viewerId?: string | null
   league: { id: string; name: string; format: string | null; teamCount: number | null } | null
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
@@ -505,6 +529,7 @@ export function TradeCenter(props: {
    * trailing every step.
    */
   history?: ReactNode
+  completedHistory?: readonly TradeRecord[]
   /**
    * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
    * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
@@ -526,6 +551,10 @@ export function TradeCenter(props: {
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
+  // Offers poll independently. Rebuilding the full route while editing can remount
+  // this form and discard an unsaved proposal or its in-flight analysis.
+  const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
+  useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
   const [draftNote, setDraftNote] = useState<string | null>(null)
   /*
    * Non-null means the next send ANSWERS that offer rather than opening a new one.
@@ -586,12 +615,16 @@ export function TradeCenter(props: {
    * pick proposable rather than only priceable.
    */
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
+  const proposalFingerprint = JSON.stringify([props.viewerId, props.league?.id, giveAssets, getAssets, partnerRosterId])
+  const proposalFingerprintRef = useRef(proposalFingerprint)
+  proposalFingerprintRef.current = proposalFingerprint
+  useEffect(() => setBusy(false), [proposalFingerprint])
 
-  /** The engine's lines, keyed by name, merged onto what was added. */
+  /** FAAB labels are identical on both sides; players resolve by identity per side. */
   const pricedBy = useMemo(() => {
     const m = new Map<string, EngineLine>()
     for (const l of [...(result?.players?.give ?? []), ...(result?.players?.get ?? [])]) {
-      m.set(l.name.toLowerCase(), l)
+      if (l.position === 'FAAB' || l.name.toLowerCase().startsWith('faab $')) m.set(l.name.toLowerCase(), l)
     }
     return m
   }, [result])
@@ -611,7 +644,7 @@ export function TradeCenter(props: {
       return assets.map((a) => {
         const engineAt = valuedByVerdict(a) ? engineLines?.[valuedIndex++] : undefined
         if (a.kind === 'player') {
-          const engine = pricedBy.get(a.name.toLowerCase())
+          const engine = playerEngineLine(a, engineLines ?? [])
           /*
            * Engine price wins; the list value is the fallback. An engine line flagged `unpriced`
            * wins too — as "no price": its 0 is a placeholder, and the verdict was computed without
@@ -919,6 +952,7 @@ export function TradeCenter(props: {
   }, [result, give, get])
 
   const analyze = useCallback(async () => {
+    const analyzedProposal = proposalFingerprintRef.current
     const sendGive = giveAssets.filter(valuedByVerdict)
     const sendGet = getAssets.filter(valuedByVerdict)
     /*
@@ -968,6 +1002,7 @@ export function TradeCenter(props: {
         }),
       })
       const j = (await r.json().catch(() => ({}))) as AnalyzeResult & { error?: string }
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       if (!r.ok) {
         setError(j.error ?? 'Analysis failed.')
         setResult(null)
@@ -975,10 +1010,11 @@ export function TradeCenter(props: {
       }
       setResult(j)
     } catch {
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       setError('Network error.')
       setResult(null)
     } finally {
-      setBusy(false)
+      if (proposalFingerprintRef.current === analyzedProposal) setBusy(false)
     }
   }, [props.league?.id, giveAssets, getAssets, partnerRoster?.teamExternalId])
 
@@ -1021,19 +1057,58 @@ export function TradeCenter(props: {
    * mean a manager who saved while offline and then came back online silently
    * loses the newer copy to a stale server row.
    */
-  const draftKey = props.league?.id ? `af-trade-draft:${props.league.id}` : null
+  const draftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id)
+  const workingDraftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id, true)
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null)
+  const [deviceDraftAvailable, setDeviceDraftAvailable] = useState<boolean | null>(null)
+  const draftContext = JSON.stringify([props.viewerId, props.league?.id])
+  const draftContextRef = useRef(draftContext)
+  draftContextRef.current = draftContext
+
+  useEffect(() => {
+    let recovered: ReturnType<typeof decodeTradeDraft> = null
+    if (workingDraftKey) {
+      try {
+        const raw = window.localStorage.getItem(workingDraftKey)
+        recovered = raw ? decodeTradeDraft(JSON.parse(raw)) : null
+      } catch { /* Storage can be unavailable on a private device. */ }
+    }
+    setGiveAssets(recovered?.give ?? [])
+    setGetAssets(recovered?.get ?? [])
+    setPicking(null)
+    setPartnerRosterId(recovered?.partnerRosterId ?? null)
+    setCountering(null)
+    setResult(null)
+    setError(null)
+    setDraftNote(recovered && (recovered.give.length || recovered.get.length)
+      ? 'Recovered this device’s in-progress proposal — analyse it again to get a verdict.' : null)
+    setDeviceDraftAvailable(null)
+    setHydratedDraftKey(workingDraftKey)
+  }, [workingDraftKey, props.league?.id, props.viewerId])
+
+  useEffect(() => {
+    // Do not overwrite recovery data with the initial empty render, or an old
+    // account/league's assets while the new context is being restored.
+    if (!workingDraftKey || hydratedDraftKey !== workingDraftKey) return
+    try {
+      if (!giveAssets.length && !getAssets.length) window.localStorage.removeItem(workingDraftKey)
+      else window.localStorage.setItem(workingDraftKey, JSON.stringify({ give: giveAssets, get: getAssets, partnerRosterId, at: Date.now() }))
+      setDeviceDraftAvailable(true)
+    } catch { setDeviceDraftAvailable(false) }
+  }, [workingDraftKey, hydratedDraftKey, giveAssets, getAssets, partnerRosterId])
 
   const saveDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const savingContext = draftContextRef.current
 
     let local = false
     try {
-      window.localStorage.setItem(
+      if (draftKey) window.localStorage.setItem(
         draftKey,
         JSON.stringify({ give: giveAssets, get: getAssets, at: Date.now() }),
       )
-      local = true
+      local = Boolean(draftKey)
     } catch {
       /* Private browsing and full quotas both throw. */
     }
@@ -1053,6 +1128,7 @@ export function TradeCenter(props: {
       /* Offline is a fallback, not a failure. */
     }
 
+    if (draftContextRef.current !== savingContext) return
     setDraftNote(
       remote
         ? 'Saved to your account — it will be here on your other devices.'
@@ -1067,12 +1143,16 @@ export function TradeCenter(props: {
     setGetAssets(Array.isArray(get) ? (get as PickedAsset[]) : [])
     /* A restored deal is not an analysed one. */
     setResult(null)
+    setCountering(null)
+    setPartnerRosterId(null)
     setDraftNote(note)
   }, [])
 
   const restoreDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const restoringContext = draftContextRef.current
+    const restoringProposal = proposalFingerprintRef.current
 
     /*
      * ⚠ THE ACCOUNT WINS WHEN BOTH EXIST, and that is a choice rather than an
@@ -1085,8 +1165,9 @@ export function TradeCenter(props: {
       const j = (await r.json().catch(() => ({}))) as {
         draft?: { payload?: { give?: unknown; get?: unknown } } | null
       }
-      const payload = j?.draft?.payload
-      if (payload && (Array.isArray(payload.give) || Array.isArray(payload.get))) {
+      if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
+      const payload = decodeTradeDraft(j?.draft?.payload)
+      if (r.ok && payload) {
         applyDraft(
           payload.give,
           payload.get,
@@ -1098,13 +1179,15 @@ export function TradeCenter(props: {
       /* Fall through to the browser copy. */
     }
 
+    if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
     try {
-      const raw = window.localStorage.getItem(draftKey)
+      const raw = draftKey ? window.localStorage.getItem(draftKey) : null
       if (!raw) {
         setDraftNote('No saved draft for this league, on your account or in this browser.')
         return
       }
-      const parsed = JSON.parse(raw) as { give?: PickedAsset[]; get?: PickedAsset[] }
+      const parsed = decodeTradeDraft(JSON.parse(raw))
+      if (!parsed) { setDraftNote('That saved draft could not be read.'); return }
       applyDraft(
         parsed.give,
         parsed.get,
@@ -1157,16 +1240,16 @@ export function TradeCenter(props: {
     ? 'The complete proposal value is unavailable. Review the priced assets and your roster before deciding.'
     : intel?.contenderRecommendation ?? intel?.why ??
     (balance?.diff != null && balance.diff >= 0
-      ? `You receive about ${money(balance.diff)} more in current market value.`
+      ? `You receive about ${money(balance.diff)} more in current league value.`
       : 'The deal may improve your roster construction even when the raw market total is close.')
   const theirIncentive = balance?.diff != null && balance.diff <= 0
-    ? `They receive about ${money(Math.abs(balance.diff))} more in current market value.`
+    ? `They receive about ${money(Math.abs(balance.diff))} more in current league value.`
     : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
   const agreementBlocker = noSignal
     ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'The complete proposal could not be valued.'
     : intel?.tradeWarnings?.[0] ??
     (balance?.diff != null && balance.diff > 0
-      ? `The current market baseline favors you by ${money(balance.diff)}, so they may ask for another asset.`
+      ? `The displayed league value favors you by ${money(balance.diff)}, so they may ask for another asset.`
       : unpricedCount([...give, ...get]) > 0
         ? 'One or more assets are unpriced, which lowers confidence until fresh data is available.'
         : 'Manager preference, roster limits, and each team’s competitive window can still prevent agreement.')
@@ -1224,6 +1307,7 @@ export function TradeCenter(props: {
     return (
       <TradeAssetPicker
         sport={null}
+        leagueId={props.league?.id}
         onClose={() => setPicking(null)}
         onPick={(a) => addAsset(side, a)}
         /*
@@ -1409,9 +1493,12 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {draftKey ? (
+      {props.league?.id ? (
         <div className="af-tc-draft" data-mstep="offers review">
           <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
+          {workingDraftKey ? <span className="af-tc-row-sub">{deviceDraftAvailable === false
+            ? 'Device recovery is unavailable. Use Save draft to save to your account.'
+            : 'In-progress proposals recover on this device. Use Save draft to sync across devices.'}</span> : null}
           <span className="af-tc-spacer" />
           <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
             Restore draft
@@ -1431,6 +1518,7 @@ export function TradeCenter(props: {
           onLoad={loadOffer}
           onCounter={startCounter}
           reloadToken={inboxReloadToken}
+          importedHistory={props.completedHistory}
           onNeedsYouCount={setNeedsYou}
         />
       </div>
@@ -1952,14 +2040,14 @@ export function TradeCenter(props: {
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
-              proposal value today &mdash; realized production is tracked separately after completion
+              trade value today &mdash; roster fit and realized production are separate
             </span>
           </div>
 
           {/*
             What the grade is priced in, always, so a letter never appears without its rules.
-            "League value" is the market price on this league's chart, moved by its scoring and your
-            roster; the moves are listed below with their reasons.
+            The shared trade-value letter uses this league's chart and scoring. Personal roster
+            utility is shown separately, so completion cannot remove a factor from the headline grade.
           */}
           {result.valueBasis ? (
             <p className="af-tc-basis">
@@ -1972,6 +2060,24 @@ export function TradeCenter(props: {
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
+          {serverGrade?.graded ? (
+            <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
+              This trade-value grade uses the same league scoring and asset-price rules as trade history and email.
+              Roster fit does not change the letter. Refreshed market values can change a later evaluation.
+            </p>
+          ) : null}
+          {serverGrade?.graded && serverGrade.rosterFit ? (
+            <div className="af-tc-cap-check" data-testid="trade-roster-fit">
+              <div className="af-label">Your roster fit · separate from the trade-value grade</div>
+              <p>Personal utility: {money(serverGrade.rosterFit.giveValue)} given, {money(serverGrade.rosterFit.getValue)} received.
+                {' '}This is a roster-fit estimate, not a win probability or the grade sent by email.</p>
+              {serverGrade.rosterFit.moves.map((move, index) => (
+                <p key={`${move.side}:${move.name}:${index}`}>
+                  {move.name}: {money(move.base)} base → {money(move.leagueValue)} personal utility. {move.reasons.join('; ')}.
+                </p>
+              ))}
+            </div>
+          ) : null}
 
           {result.salaryCap && result.salaryCap.status !== 'not_applicable' ? (
             <div className="af-tc-cap-check" role="status">
@@ -2101,13 +2207,17 @@ export function TradeCenter(props: {
               <p className="af-tc-row-sub">Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.</p>
               <ul>
                 {result.counterOffers!.map(counter => (
-                  <li key={`${counter.addTo}-${counter.name}`}>
+                  <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
                     <strong>{counter.addTo === 'get' ? 'Ask for' : 'Offer'} {counter.name}</strong>
-                    <span className="af-tc-row-sub">Market {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
+                    <span className="af-tc-row-sub">Base value {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
                       You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
                     </span>
-                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name, playerId: counter.rosterPlayerId, position: counter.position, team: null, value: counter.marketValue })}>
+                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
+                      playerId: counter.asset.kind === 'player'
+                        ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
+                      providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
+                      position: counter.position, team: null, value: counter.marketValue })}>
                       Add to proposal
                     </button>
                   </li>
@@ -2331,7 +2441,7 @@ export function TradeCenter(props: {
           type="button"
           className="af-btn af-btn--ghost"
           onClick={() => void saveDraft()}
-          disabled={!draftKey || (giveAssets.length === 0 && getAssets.length === 0)}
+          disabled={!props.league?.id || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           Save draft
         </button>

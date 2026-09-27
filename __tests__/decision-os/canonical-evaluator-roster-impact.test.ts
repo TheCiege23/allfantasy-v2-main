@@ -280,7 +280,7 @@ describe('rosterImpact on the canonical evaluation', () => {
     expect(r.rosterImpact?.blockedReason).toMatch(/no projection/i)
   })
 
-  it('discloses a bench player nothing prices this week, and leaves the lineup to the priced ones', async () => {
+  it('discloses missing roster projections and withholds the gain when they leave a required FLEX unfilled', async () => {
     const { rb3: _bench, ...noBench } = LINES
     // rb3 is traded away here, so trade a different asset set: only wr9 comes in.
     const r = await run(
@@ -288,8 +288,11 @@ describe('rosterImpact on the canonical evaluation', () => {
       { leagueWeek: leagueWeek(noBench) },
     )
     expect(r.rosterImpact?.unpricedExcluded).toBe(1)
-    // 20+15+12+14+11+9 = 81 before (FLEX empty); wr9 takes a WR slot, wr2 moves to FLEX: 81 + 25 = 106.
-    expect(r.rosterImpact?.startingPointsAfter).toBe(106)
+    // The previous 106 total compared against an 81-point lineup with an unknown FLEX.
+    // That missing player's production cannot be treated as zero to claim a 25-point gain.
+    expect(r.rosterImpact?.startingPointsAfter).toBeNull()
+    expect(r.rosterImpact?.startingPointsDelta).toBeNull()
+    expect(r.rosterImpact?.blockedReason).toMatch(/before-trade lineup cannot fill FLEX/)
   })
 
   it('leaves the value verdict untouched', async () => {

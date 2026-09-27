@@ -409,6 +409,7 @@ export async function assembleTradeDecisionContext(
     isSuperFlex: leagueSettings.isSF ?? false,
     numTeams: leagueSettings.numTeams,
     ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
+    leagueUnpricedReasonByNameLower: leagueValues?.unpricedReasonByNameLower,
   }
 
   const playerNames: string[] = []

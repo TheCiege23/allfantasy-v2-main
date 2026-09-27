@@ -144,7 +144,7 @@ async function readLineup(args: {
    * Said in his name. `computeRosterImpact` blocks on an unpriced traded player with a sentence about
    * "traded player(s)", which is right for a proposal and reads oddly for one man the asker named.
    */
-  if (incoming[0]?.projectedPoints == null) {
+  if (incoming[0]?.projectedPoints == null || !Number.isFinite(incoming[0].projectedPoints)) {
     const who = names.get(targetId)?.name ?? 'he'
     return {
       status: 'unavailable',
@@ -153,7 +153,12 @@ async function readLineup(args: {
   }
   const add = computeRosterImpact({ roster, slots, incoming, outgoingPlayerIds: [] })
   if (add.startingPointsDelta == null) {
-    return { status: 'unavailable', detail: add.blockedReason ?? 'his lineup effect could not be computed' }
+    const missingNames = roster.filter(player => player.projectedPoints == null || !Number.isFinite(player.projectedPoints))
+      .map(player => names.get(player.playerId)?.name ?? player.playerId)
+    const detail = add.blockedReason ?? 'his lineup effect could not be computed'
+    return { status: 'unavailable', detail: missingNames.length
+      ? `${detail.replace(/\.$/, '')}; no week ${basis.week.week} projection for ${missingNames.join(' and ')}`
+      : detail }
   }
 
   const before = fillLineup(roster, slots)

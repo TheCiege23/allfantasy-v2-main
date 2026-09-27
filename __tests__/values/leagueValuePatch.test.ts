@@ -60,6 +60,15 @@ beforeEach(() => {
 })
 
 describe('resolveLeagueValuePatch', () => {
+  it('preserves ID prices and identity refusals when every name is ambiguous', async () => {
+    const values = new Map([['lb-id', { value: 1200, position: 'LB', basis: 'idp-vorp' }]])
+    const gaps = new Map([['shared name', { code: 'ambiguous_identity', label: 'Choose a player ID' }]])
+    loadLeagueTradeValues.mockResolvedValue({ ...emptyBoard(), bySleeperId: values, unpricedReasonByNameLower: gaps })
+    const patch = await resolveLeagueValuePatch({ platformLeagueId: 'L1' })
+    expect(patch.leagueValueBySleeperId).toBe(values)
+    expect(patch.leagueUnpricedReasonByNameLower).toBe(gaps)
+    expect(patch.leagueValueByNameLower).toBeUndefined()
+  })
   it('sets the field when the league has a board — the positive control for every case below', async () => {
     const patch = await resolveLeagueValuePatch({
       platformLeagueId: 'L1',

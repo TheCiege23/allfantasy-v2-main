@@ -157,8 +157,8 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
     findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', platformLeagueId: 'provider-league' })
     findManyRoster.mockResolvedValue([{ id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1'] } }])
-    findManySportsPlayer.mockResolvedValue([])
-    loadLeagueValues.mockResolvedValue({ byNameLower: new Map([
+    findManySportsPlayer.mockResolvedValue([{ sleeperId: 'p1', name: 'Stud Backer', position: 'LB', sport: 'NFL', source: 'sleeper' }])
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), bySleeperId: new Map([
       ['p1', { value: 875, position: 'LB', basis: 'idp-vorp' }],
     ]) })
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
@@ -681,6 +681,32 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
     const { r, code } = await load()
     expect(r.players.find((p) => p.id === 'wr')?.value).toBe(6552)
     expect(code('wr')).toBeNull()
+  })
+
+  it('keeps same-name offensive and defensive assets on their own prices', async () => {
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'wr', name: 'Justin Jefferson', position: 'WR', team: 'MIN', sport: 'NFL', source: 'sleeper' },
+      { sleeperId: 'lb', name: 'Justin Jefferson', position: 'LB', team: 'CLE', sport: 'NFL', source: 'sleeper' },
+    ])
+    getPlayerValues.mockResolvedValue(new Map([['justin jefferson', { value: 9000, sleeperId: 'wr', position: 'WR' }]]))
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), bySleeperId: new Map([
+      ['lb', { value: 1200, position: 'LB', basis: 'idp-vorp' }],
+    ]) })
+    const { r } = await load()
+    expect(r.players.find(p => p.id === 'wr')?.value).toBe(9000)
+    expect(r.players.find(p => p.id === 'lb')?.value).toBe(1200)
+  })
+
+  it('does not fill a defender history gap with a same-name receiver market price', async () => {
+    const gap = { code: 'idp_no_history', label: 'No defensive game history on file for this player' }
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'lb', name: 'Justin Jefferson', position: 'LB', team: 'CLE', sport: 'NFL', source: 'sleeper' },
+    ])
+    getPlayerValues.mockResolvedValue(new Map([['justin jefferson', { value: 9000, sleeperId: 'wr', position: 'WR' }]]))
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), bySleeperId: new Map(), unpricedReasonBySleeperId: new Map([['lb', gap]]) })
+    const { r } = await load()
+    expect(r.players.find(p => p.id === 'lb')?.value).toBeNull()
+    expect(r.players.find(p => p.id === 'lb')?.unpricedReason).toEqual(gap)
   })
 
   it('🛑 a feed that did not load is reported as that, not as "not on the feed"', async () => {

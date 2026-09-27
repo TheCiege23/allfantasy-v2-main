@@ -168,6 +168,7 @@ export async function savePeriodScores(args: {
           seasonPointsCumul: s.seasonPointsCumul,
         },
         update: {
+          season,
           periodPoints: s.periodPoints,
           seasonPointsCumul: s.seasonPointsCumul,
         },

@@ -227,7 +227,7 @@ export async function recordChopAudit(input: ChopAuditInput): Promise<ChopAuditR
 
   let finalStageReached = false
   if (after && !after.isInFinalStage && after.currentTeamsActive <= (league?.guillotineEndgameThreshold ?? 1)) {
-    await transitionToFinalStage(seasonId, input.scoringPeriod)
+    await transitionToFinalStage(seasonId, input.scoringPeriod + 1)
     finalStageReached = true
   }
 

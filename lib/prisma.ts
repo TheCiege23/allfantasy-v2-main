@@ -8,6 +8,7 @@
  */
 import { PrismaClient, Prisma } from "@prisma/client";
 import { getDatabaseUrlOrThrow, isDomRuntime } from "@/lib/env/database-url";
+import { applyDatabasePoolGuardrails } from "@/lib/env/database-pool";
 import { observeDbOperation } from "@/lib/observability/dbTelemetry";
 
 const READ_OPERATIONS = new Set([
@@ -72,28 +73,6 @@ function isConnectionError(error: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function applyNonProdConnectionGuardrails(rawUrl: string): string {
-  if (process.env.NODE_ENV === "production") return rawUrl;
-
-  try {
-    const parsed = new URL(rawUrl);
-    if (!parsed.searchParams.has("connection_limit")) {
-      // Keep local/dev and e2e runs from exhausting pooled DB sessions.
-      // Note: 1 causes deadlocks when a service starts a $transaction and any
-      // inner helper (e.g. resolveDraftPickPresentation) uses the global
-      // `prisma` client for reads — it waits for a 2nd connection the pool
-      // will never give it. 5 is safe for Neon free-tier + a few retries.
-      parsed.searchParams.set("connection_limit", "5");
-    }
-    if (!parsed.searchParams.has("pool_timeout")) {
-      parsed.searchParams.set("pool_timeout", "30");
-    }
-    return parsed.toString();
-  } catch {
-    return rawUrl;
-  }
 }
 
 function isPostgresUrl(value: string): boolean {
@@ -226,11 +205,11 @@ function createPrismaClient(): ExtendedPrismaClient {
   // Runtime URL: resolveDatabaseUrl() prefers DATABASE_URL / pooler keys before DIRECT_URL (see lib/env/database-url.ts).
   let databaseUrl: string;
   try {
-    databaseUrl = applyNonProdConnectionGuardrails(getDatabaseUrlOrThrow());
+    databaseUrl = applyDatabasePoolGuardrails(getDatabaseUrlOrThrow());
   } catch (err) {
     // Last-resort: if anything still throws in a leaked client bundle, avoid crashing the page.
     if (isDomRuntime()) {
-      databaseUrl = applyNonProdConnectionGuardrails(
+      databaseUrl = applyDatabasePoolGuardrails(
         "postgresql://noop:noop@localhost:5432/noop"
       );
     } else {

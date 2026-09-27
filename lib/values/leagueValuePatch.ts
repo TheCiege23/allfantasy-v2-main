@@ -49,7 +49,8 @@ import { getLeagueType, type SleeperLeague } from '@/lib/sleeper-client'
  * The slice of a ValuationContext this module owns. A `Partial` on purpose: the empty object
  * is a first-class result, and spreading it must leave the context untouched.
  */
-export type LeagueValuePatch = Partial<Pick<ValuationContext, 'leagueValueByNameLower'>>
+export type LeagueValuePatch = Partial<Pick<ValuationContext,
+  'leagueValueByNameLower' | 'leagueValueBySleeperId' | 'leagueUnpricedReasonByNameLower' | 'leagueUnpricedReasonBySleeperId'>>
 
 /** Nothing to add. Frozen so a caller cannot mistake it for a mutable accumulator. */
 const EMPTY_PATCH: LeagueValuePatch = Object.freeze({})
@@ -145,8 +146,12 @@ export async function resolveLeagueValuePatch(
      * either: the field's presence is what tells `pricePlayer` a board exists, so handing it
      * a map with nothing in it would be a claim rather than an absence.
      */
-    if (values.byNameLower.size === 0) return EMPTY_PATCH
-    return { leagueValueByNameLower: values.byNameLower }
+    return {
+      ...(values.byNameLower.size > 0 && { leagueValueByNameLower: values.byNameLower }),
+      ...(values.bySleeperId?.size && { leagueValueBySleeperId: values.bySleeperId }),
+      ...(values.unpricedReasonByNameLower?.size && { leagueUnpricedReasonByNameLower: values.unpricedReasonByNameLower }),
+      ...(values.unpricedReasonBySleeperId?.size && { leagueUnpricedReasonBySleeperId: values.unpricedReasonBySleeperId }),
+    }
   } catch {
     return EMPTY_PATCH
   }

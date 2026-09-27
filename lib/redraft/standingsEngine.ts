@@ -1,3 +1,4 @@
+import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { computeWeeklyMedianResults, isMatchupComplete } from '@/lib/redraft/medianGame'
@@ -87,12 +88,14 @@ export async function updateStandings(
   // current `League.medianGame` wins over the season's copy, which is taken once at the draft.
   // A failed read of the flag means "no median this pass", never "no standings".
   let medianGameOn = false
+  let pointsOnlySeeding = false
   try {
     const seasonRow = await prisma.redraftSeason.findUnique({
       where: { id: seasonId },
-      select: { medianGame: true, league: { select: { medianGame: true } } },
+      select: { medianGame: true, league: { select: { medianGame: true, settings: true, playoffSeedingRule: true } } },
     })
     medianGameOn = seasonRow?.league?.medianGame ?? seasonRow?.medianGame ?? false
+    pointsOnlySeeding = isPointsOnlySeeding(resolveConfiguredPlayoffSeedingRule(seasonRow?.league ?? {}))
   } catch {
     medianGameOn = false
   }
@@ -115,7 +118,8 @@ export async function updateStandings(
     for (const row of rows.values()) row.streakEvents.sort((a, b) => a.week - b.week)
   }
 
-  const ordered = [...rows.entries()].sort(([, a], [, b]) => {
+  const ordered = [...rows.entries()].sort(([aId, a], [bId, b]) => {
+    if (pointsOnlySeeding) return b.pointsFor - a.pointsFor || aId.localeCompare(bId)
     if (b.wins !== a.wins) return b.wins - a.wins
     if (a.losses !== b.losses) return a.losses - b.losses
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor

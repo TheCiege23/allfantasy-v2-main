@@ -21,6 +21,7 @@ import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
+import { isBestBallSettings } from "@/lib/core-app/lineupMode"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -267,7 +268,7 @@ export function resolveSettings(league: Record<string, unknown>): LeagueGroundin
     isHalfPPR: scoring.includes("half_ppr") || scoring.includes("half-ppr"),
     isStandard: scoring.includes("std") || scoring.includes("standard"),
     isIDP: firstBoolean(league.idp, settings.idp, flags.isIDP) || scoring.includes("idp"),
-    isBestBall: String(league.leagueType ?? "").includes("best_ball"),
+    isBestBall: isBestBallSettings(league.settings) || String(league.leagueType ?? "").includes("best_ball"),
     isDynasty: firstBoolean(league.isDynasty, settings.isDynasty) || String(league.leagueType ?? "").includes("dynasty"),
     /*
      * 🛑 THIS READ WAS FALSE FOR 100% OF PRODUCTION LEAGUES. It used to test only

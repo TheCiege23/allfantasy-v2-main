@@ -35,12 +35,14 @@ const PERMANENT_EXCEPTIONS = [
    * the scan's blind spot showing, not the probe being safe.
    */
   /*
-   * NOT a probe — a ROUTER, and excepted for a different reason. It only
-   * chooses between clients that are themselves guarded, so guarding it would
-   * refuse callers that inject or mock a client and would therefore never
-   * have spent anything. The guard module's own docstring says so.
+   * ⚠ `lib/ai/providerRouter.ts` WAS HERE, ON A RATIONALE THAT WAS FALSE, AND IS NOW IN GUARDED.
+   * It was excepted as "a router that only chooses between clients that are themselves guarded".
+   * Three of its four providers are. The fourth, Anthropic, is an adapter INLINE in the router: it
+   * builds its own `@anthropic-ai/sdk` client, which no guarded module ever sees. With spend off, a
+   * call routed to Anthropic — directly, or by falling back after the guarded OpenAI client refused —
+   * still spent (found 2026-09-27). The lesson this list already records for ai-gm-intelligence:
+   * ask what a file CONSTRUCTS, never what it delegates to.
    */
-  'lib/ai/providerRouter.ts',
   /*
    * HAND-RUN DIAGNOSTICS, added with the scripts/ root on 2026-08-28. Both really do
    * call a provider and both are deliberately unguarded, for the reason the health
@@ -142,10 +144,9 @@ describe('AI spend guard — provider boundary coverage', () => {
   /**
    * Boundaries wired to the guard. Moving a module from UNGUARDED to here is the intended direction.
    *
-   * These are the points where a request actually LEAVES for a provider — deliberately not
-   * `providerRouter`, which only chooses between them. Guarding the router would have refused
-   * callers that inject or mock a client and therefore never would have spent anything, while
-   * leaving anyone who calls a client directly unguarded.
+   * These are the points where a request actually LEAVES for a provider. `providerRouter` is here
+   * for its inline Anthropic adapter, which is such a point — not for its routing loop, which only
+   * chooses between boundaries and carries no guard of its own.
    */
   const GUARDED = [
     'lib/openai-client.ts',
@@ -162,7 +163,7 @@ describe('AI spend guard — provider boundary coverage', () => {
     // The other three inline-provider routes, guarded 2026-08-27.
     // start-sit/chimmy has NO session check and NO rate limit, so the spend
     // switch is the only thing between an anonymous caller and a paid call.
-    'app/api/chat/chimmy/route.ts',
+    'lib/chimmy/screenshotVision.ts',
     'app/api/start-sit/chimmy/route.ts',
     'app/api/waiver-ai/grok/route.ts',
     // Moved off the ratchet 2026-08-27. Reached from 18 route files, the widest
@@ -234,6 +235,12 @@ describe('AI spend guard — provider boundary coverage', () => {
     // Also found by the census, and only once it learned to spot a boundary
     // that resolves its base URL from config instead of a literal.
     'lib/ai-external/grok.ts',
+    /*
+     * Guarded 2026-09-27 — moved from PERMANENT_EXCEPTIONS, where it sat on the false claim that it
+     * builds no client. Its inline Anthropic adapter does, and was the one unmetered path in the
+     * router. `__tests__/ai/providerRouter.test.ts` proves the SDK is never constructed with spend off.
+     */
+    'lib/ai/providerRouter.ts',
   ]
 
   /**
@@ -303,10 +310,10 @@ describe('AI spend guard — provider boundary coverage', () => {
      * genuinely deleted, and say which one in the commit — that sentence is the
      * difference between a deletion and a silent revert.
      */
-    // 33 → 32 on 2026-09-27: lib/integrity/CollusionDetectionEngine.ts is no longer a provider
-    // boundary — its direct Anthropic verdict was deleted, and its note now goes through explainTrade →
-    // providerRouter, which is guarded. A deletion, not a silent revert.
-    expect(GUARDED.length).toBeGreaterThanOrEqual(32)
+    // 34 on 2026-09-27 (#1385 guarded lib/ai/providerRouter.ts), then 33: lib/integrity/CollusionDetectionEngine.ts
+    // is no longer a provider boundary — its direct Anthropic verdict was deleted, and its note now goes through
+    // explainTrade → providerRouter, which is guarded. A deletion, not a silent revert.
+    expect(GUARDED.length).toBeGreaterThanOrEqual(33)
   })
 
   it('the unguarded ratchet has not grown', () => {

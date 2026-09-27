@@ -259,12 +259,15 @@ export function Dash3ATriage({
                   </div>
                 ) : null}
               </div>
-              <Link
-                className="af-triage-cta"
-                href={`/core/players?q=${encodeURIComponent(p.name)}`}
-              >
-                Find a free agent
-              </Link>
+              <div className="af-triage-actions">
+                {p.leagues.some((l) => l.slot === 'starter') ? p.leagues.filter((l) => l.slot === 'starter').map((l) => (
+                  <Link key={l.id} className="af-triage-cta" href={`/core/waivers?league=${encodeURIComponent(l.id)}`}>
+                    Find free agents in {l.name}
+                  </Link>
+                )) : (
+                  <Link className="af-triage-cta" href="/core/players">Open Player Finder</Link>
+                )}
+              </div>
             </li>
           )
         })}

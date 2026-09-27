@@ -24,7 +24,7 @@ import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
-import { getRecentTrades } from './recentTrades'
+import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type RecentTrade } from './recentTrades'
 import { recordPendingOffers } from './urgencyBadges'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
@@ -259,6 +259,13 @@ export type LeagueHomeData = {
       players?: ActivityPlayer[]
       /** What the claim cost. Null is UNKNOWN — render nothing, never $0. */
       bid?: number | null
+      /**
+       * A TRADE's letters, one per team, from THE grade (the same letter the Trade Center shows).
+       * Absent on non-trade rows and on a trade whose grade is withheld — never a stand-in letter.
+       */
+      grades?: Array<{ team: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }>
+      /** One line: who the grade favours, or why there is no grade. */
+      gradeLine?: string | null
     }>
   >
   /**
@@ -305,6 +312,34 @@ export type LeagueHomeData = {
     }>
   >
   syncAge: { label: string; stale: boolean }
+}
+
+/**
+ * A trade's grade, for its League buzz row (2026-09-27).
+ *
+ * Letters appear only when EVERY side carries THE grade (`gradeBasis: 'League'`), so a row never
+ * mixes it with a Realized or Market letter. The line names who it favours — the same sentence
+ * the dashboard band uses — or says why there is no grade.
+ */
+function tradeBuzzGrade(t: RecentTrade): { grades?: Array<{ team: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }>; gradeLine: string | null } {
+  const name = (sd: RecentTrade['sides'][number]) => sd.teamName || sd.managerName
+  const allLeague = t.sides.length === 2 && t.sides.every((sd) => sd.gradeBasis === 'League' && sd.grade)
+  if (allLeague) {
+    const favoured = t.verdict?.favoursRosterId == null
+      ? null
+      : t.sides.find((sd) => String(sd.rosterId) === String(t.verdict!.favoursRosterId))
+    const strength = t.verdict?.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
+    return {
+      grades: t.sides.map((sd) => ({ team: name(sd), letter: sd.grade! })),
+      gradeLine: favoured
+        ? `${strength} ${name(favoured)} on this league’s values today`
+        : t.verdict?.favoursRosterId == null
+          ? 'An even deal on this league’s values today'
+          : 'One side comes out ahead on this league’s values today',
+    }
+  }
+  const withheld = t.sides.find((sd) => sd.gradeReason.startsWith('League grade withheld'))
+  return { gradeLine: withheld ? withheld.gradeReason : null }
 }
 
 function recordOf(t: { wins: number; losses: number; ties: number }): string {
@@ -366,6 +401,21 @@ export async function getLeagueHomeData(
   const league = await lc.league()
   if (!league) return null
 
+  // Start independent draft reads while the lineup and trade sections load.
+  // Imported boards live in DraftFact; native rooms use DraftSession/DraftPick.
+  // Count in the database rather than loading every pick or grading the board.
+  const draftSummaryRead = Promise.all([
+    getDraftHqAll(userId, [{ id: league.id, name: league.name, platform: league.platform }]).catch(() => null),
+    prisma.draftFact.groupBy({
+      by: ['season'],
+      where: { leagueId: league.id, season: { not: null } },
+      orderBy: { season: 'desc' },
+      take: 1,
+      _count: { _all: true },
+      _max: { round: true },
+    }).catch(() => null),
+  ])
+
   /*
    * A PRE-SEASON LEAGUE IS NOT A LEAGUE WITH MISSING DATA.
    *
@@ -425,35 +475,32 @@ export async function getLeagueHomeData(
           new Date(),
         ).catch(() => undefined)
       }
-      const fresh = (live?.completedTrades ?? []).map((trade) => {
-        const assets = (items: typeof trade.assetsReceived) => items.map((asset) => ({
-          kind: asset.isPick ? 'pick' as const : 'player' as const,
-          playerId: asset.isPick ? null : asset.playerId ?? null,
-          name: asset.isPick ? (asset.pickRound ?? asset.playerName) : asset.playerName,
-          position: asset.isPick ? null : asset.position,
-          team: null,
-          headshotUrl: null,
-          teamLogoUrl: null,
-        }))
-        return {
-          id: trade.transactionId,
-          leagueId: league.id,
-          leagueName: league.name ?? 'League',
-          leagueAvatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
-          platformLeagueId: league.platformLeagueId,
-          acceptedAt: trade.proposedAt ?? new Date().toISOString(),
-          sides: [
-            { rosterId: Number(trade.viewerRosterExternalId) || 0, managerName: 'You', teamName: null, avatarUrl: null, received: assets(trade.assetsReceived), grade: null, gradeBasis: null, gradeReason: 'League-specific grade is still being prepared.' },
-            { rosterId: Number(trade.counterpartyRosterExternalId) || 0, managerName: trade.proposedBy, teamName: null, avatarUrl: null, received: assets(trade.assetsGiven), grade: null, gradeBasis: null, gradeReason: 'League-specific grade is still being prepared.' },
-          ],
-          partial: trade.assetsReceived.length === 0 || trade.assetsGiven.length === 0,
-          verdict: null,
-        }
-      })
-      const liveIds = new Set(fresh.map((trade) => trade.id))
-      recentTrades = [...fresh, ...recentTrades.filter((trade) => ![...liveIds].some((id) => trade.id === id || trade.id.endsWith(`:${id}`)))]
+      /*
+       * 🛑 THE GRADED COPY WINS (2026-09-27). This used to keep the LIVE copy and drop the loader's —
+       * so every trade the scan could see replaced its graded twin with "League-specific grade is
+       * still being prepared", on the one page whose subject is this league. A live copy is now
+       * added only for a trade the loader does not have, built by the loader's own
+       * `liveCompletedTrade` (it was a hand-kept copy here) and graded the same way.
+       */
+      const recentLeague = {
+        id: league.id,
+        name: league.name ?? 'League',
+        platformLeagueId: league.platformLeagueId,
+        avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
+        sport: String(league.sport ?? 'NFL'),
+      }
+      const known = new Set(recentTrades.map((trade) => trade.id.slice(trade.id.lastIndexOf(':') + 1)))
+      const fresh = (live?.completedTrades ?? [])
+        .filter((trade) => !known.has(trade.transactionId))
+        // A trade with no date keeps the old behaviour — dated now — rather than disappearing.
+        .map((trade) => liveCompletedTrade(recentLeague, { ...trade, proposedAt: trade.proposedAt ?? new Date().toISOString() }))
+        .filter((trade): trade is NonNullable<typeof trade> => trade != null)
+      recentTrades = [...recentTrades, ...fresh]
         .sort((a, b) => Date.parse(b.acceptedAt) - Date.parse(a.acceptedAt))
         .slice(0, 6)
+      // Only the fresh trades that survived the cut are graded — grading rows nobody sees is pure cost.
+      const freshIds = new Set(fresh.map((trade) => trade.id))
+      await Promise.all(recentTrades.filter((trade) => freshIds.has(trade.id)).map((trade) => gradeProviderRecentTrade(trade)))
     }
   }
   /*
@@ -534,6 +581,20 @@ export async function getLeagueHomeData(
       )
       .join(' · '),
     at: new Date(t.acceptedAt),
+    ...tradeBuzzGrade(t),
+    // Faces for the players who moved, as a waiver row already shows them.
+    players: t.sides.flatMap((sd) =>
+      sd.received
+        .filter((a) => a.kind === 'player')
+        .map((a, i): ActivityPlayer => ({
+          id: a.playerId ?? `${sd.rosterId}:${i}:${a.name}`,
+          label: a.name,
+          name: a.name,
+          position: a.position,
+          team: a.team,
+          imageUrl: a.headshotUrl,
+        })),
+    ),
   }))
 
   /*
@@ -789,10 +850,9 @@ export async function getLeagueHomeData(
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
-  const draftAll = await getDraftHqAll(userId, [
-    { id: league.id, name: league.name, platform: league.platform },
-  ]).catch(() => null)
+  const [draftAll, importedDrafts] = await draftSummaryRead
   const draftRow = draftAll?.rows?.[0] ?? null
+  const importedDraft = importedDrafts?.[0]
 
   /*
    * Both of these were previously hardcoded as unavailable with reasons that were
@@ -989,25 +1049,28 @@ export async function getLeagueHomeData(
               .join(' · '),
           },
         }
-      : draftedAlready
+      : importedDraft && importedDraft._count._all > 0
         ? {
-            /*
-             * WE DID NOT INGEST A DRAFT OBJECT, BUT THE LEAGUE HAS OBVIOUSLY
-             * DRAFTED — there are populated rosters sitting on the same screen.
-             * "No draft has been set up" is then a false statement about the
-             * league rather than a true one about our data, which is the exact
-             * failure the buzz panel had.
-             */
             available: true,
             data: {
-              headline: `${league.season ?? ''} draft has ended`.trim(),
-              detail:
-                'Rosters are populated, so this league drafted \u2014 but we did not capture the board itself.',
-              href: null,
-              linkLabel: null,
+              headline: `${importedDraft.season} imported draft`,
+              detail: `${importedDraft._count._all} picks on file${importedDraft._max.round != null ? ` · ${importedDraft._max.round} rounds` : ''}`,
+              href: `/core/draft-hq?league=${encodeURIComponent(league.id)}`,
+              linkLabel: 'Open the draft board',
             },
           }
-        : { available: false, reason: 'no draft on file for this league' },
+        : draftedAlready
+          ? {
+              // Populated rosters do not prove which season's draft is on file.
+              available: true,
+              data: {
+                headline: 'Rosters are populated',
+                detail: 'Rosters are populated. Open Draft HQ to check the draft history on file.',
+                href: `/core/draft-hq?league=${encodeURIComponent(league.id)}`,
+                linkLabel: 'Open Draft HQ',
+              },
+            }
+          : { available: false, reason: 'no draft on file for this league' },
     /*
      * THE OLD REASON WAS FALSE AND THE PANEL WAS PERMANENTLY BLANK. It claimed
      * commissioner tasks are not ingested for imported leagues. League health

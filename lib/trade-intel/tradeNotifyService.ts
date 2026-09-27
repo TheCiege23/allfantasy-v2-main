@@ -867,8 +867,8 @@ async function notifyOffers(args: {
            * grade that cannot be computed withholds its letter; the alert still goes.
            */
           const grader = await createLeagueTradeGrader({ leagueId: row.id, userId: recipient.id }).catch(() => null)
-          const give = gradeInputsFromPending(assetsGiven)
-          const get = gradeInputsFromPending(assetsReceived)
+          const give = gradeInputsFromPending(assetsGiven, 'sleeper')
+          const get = gradeInputsFromPending(assetsReceived, 'sleeper')
           const grade = await gradeDeal(grader, { give, get, viewerSide: true }).catch(() => null)
           // The emailed letter, on record for this recipient (Trade OS), linked to the Sleeper offer.
           // `receiptIdForGrade` never throws, so a failed save cannot cost the recipient their alert.

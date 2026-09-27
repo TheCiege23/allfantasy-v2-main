@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
+import { isBestBallSettings } from './lineupMode'
 import { latestProjectionWeek, lookupProjections, sumLeagueScoredStarters, summariseLineup } from './playerProjections'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -27,7 +28,7 @@ import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap } from './nextGameMap'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
-import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import {
@@ -204,11 +205,13 @@ export type LineupSlot = {
 }
 
 export type MyTeamData = {
+  bestBall?: boolean
   league: {
     id: string
     name: string
     platform: string
     format: string | null
+    bestBall?: boolean
     /**
      * Where to go to actually CHANGE the lineup.
      *
@@ -266,9 +269,11 @@ export type MyTeamData = {
    */
   ir: SectionState<LineupPlayer[]>
   taxi: SectionState<Array<LineupPlayer & { tenure: TaxiTenure | null }>>
-  /** Earliest kickoff among starters — the real lineup lock. */
+  /** Next starter kickoff, or the first kickoff when all known games have started. */
   lock: SectionState<{
     at: Date
+    next?: boolean
+    asOf?: number
     anyEmptySlot: boolean
     /** The week this lock belongs to, so the banner can name it. */
     week: number | null
@@ -363,7 +368,7 @@ function formatKickoff(d: Date | null): string | null {
   const mins = d.getUTCMinutes()
   const ampm = hours >= 12 ? 'p' : 'a'
   const h12 = hours % 12 === 0 ? 12 : hours % 12
-  return `${DAYS[d.getUTCDay()]} ${h12}:${String(mins).padStart(2, '0')}${ampm}`
+  return `${DAYS[d.getUTCDay()]} ${h12}:${String(mins).padStart(2, '0')}${ampm} UTC`
 }
 
 
@@ -535,7 +540,7 @@ async function resolvePlayers(
   const nextGameFor = buildNextGameMap(weekGames, rosterTeams)
 
   // The newest status per player across every spelling; shared with the /core/matchup scoreboard.
-  const injuryById = await readInjuryStatusById(sport, namesById)
+  const injuryById = await readInjuryStatusById(sport, namesById, new Map([...identityBy].map(([id, player]) => [id, player.team])))
 
   /*
    * ⚠ PROJECTIONS ARE JOINED HERE BECAUSE THIS IS WHERE THE IDS ALREADY ARE, and
@@ -838,6 +843,7 @@ export async function getMyTeamData(
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,
+      bestBall: isBestBallSettings(league.settings),
       sourceLink: resolveSourceLink({
         platform: league.platform,
         sourceLeagueId: league.platformLeagueId,
@@ -926,6 +932,16 @@ export async function getMyTeamData(
   const liveRoster = isSleeper && league.platformLeagueId
     ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
     : null
+  if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
+  const sourceScreen = resolveSourceScreenLink({
+    platform: league.platform, sourceLeagueId: league.platformLeagueId,
+    leagueName: leagueDisplayName(league.name), season: league.season,
+    teamId: myTeamRow.externalId, screen: base.league.bestBall ? 'league' : 'lineup',
+  })
+  base.league.sourceLink = sourceScreen?.verified ? sourceScreen : resolveSourceLink({
+    platform: league.platform, sourceLeagueId: league.platformLeagueId,
+    leagueName: leagueDisplayName(league.name), season: league.season, action: 'league',
+  })
   const roster = isSleeper
     ? (liveRoster ? { playerData: liveRoster } : null)
     : candidates.length > 0
@@ -1090,9 +1106,13 @@ export async function getMyTeamData(
   }
 
   const benchCandidates: BenchCandidate[] = []
+  const adviceAt = Date.now()
   starterSlots.forEach((slot, slotIndex) => {
+    if (base.league.bestBall) return
     const starter = slot.player
     if (!starter || slot.empty) return
+    // Kickoff applies to the individual player, not the whole lineup.
+    if (starter.kickoff && starter.kickoff.getTime() <= adviceAt) return
 
     /*
      * A starter on bye or ruled OUT is scored at 0 rather than skipped. That is
@@ -1114,6 +1134,7 @@ export async function getMyTeamData(
        *     the screen reports that your kicker outprojects your quarterback.
        */
       if (benchProj == null || bench.onBye || bench.ruledOut) continue
+      if (bench.kickoff && bench.kickoff.getTime() <= adviceAt) continue
       if (!isEligibleForSlot(slot.slotLabel, bench.position)) continue
       if (benchProj <= starterProj) continue
       benchCandidates.push({
@@ -1145,13 +1166,15 @@ export async function getMyTeamData(
 
   const starters: LineupSlot[] = starterSlots.map((slot, i) => ({
     ...slot,
-    benchCheck: checkBySlot.get(i) ?? null,
+    benchCheck: liveRoster?.bestBall === true || league.bestBallMode === true ? null : checkBySlot.get(i) ?? null,
   }))
 
   const kickoffs = starters
     .map((s) => s.player?.kickoff)
     .filter((d): d is Date => d instanceof Date)
     .sort((a, b) => a.getTime() - b.getTime())
+  const nextKickoff = kickoffs.find((at) => at.getTime() > adviceAt)
+  const bannerKickoff = nextKickoff ?? kickoffs[0]
 
   /*
    * ⚠ SUMMARISED OVER THE STARTERS AS STORED — INCLUDING THE "0" HOLES. An empty
@@ -1357,6 +1380,7 @@ export async function getMyTeamData(
   return {
     ...base,
     team,
+    bestBall: liveRoster?.bestBall === true || league.bestBallMode === true,
     lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
     upcomingByes,
@@ -1455,11 +1479,13 @@ export async function getMyTeamData(
         ? {
             available: true,
             data: {
-              at: kickoffs[0],
+              at: bannerKickoff,
+              next: nextKickoff != null,
+              asOf: adviceAt,
               anyEmptySlot: starters.some((s) => s.empty),
               week: sportsWeek?.week ?? null,
               season: sportsWeek?.season ?? null,
-              daysAway: Math.round((kickoffs[0].getTime() - Date.now()) / 86_400_000),
+              daysAway: Math.round((bannerKickoff.getTime() - adviceAt) / 86_400_000),
             },
           }
         : {

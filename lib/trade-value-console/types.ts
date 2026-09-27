@@ -19,7 +19,9 @@ export type TradeStrategyMode =
 export type TeamContextMode = 'my_team' | 'team_a' | 'team_b' | 'neutral'
 
 export type TradeAssetInput =
-  | { kind: 'player'; playerId?: string; name?: string; sportHint?: string }
+  | { kind: 'player'; playerId?: string; name?: string; sportHint?: string;
+      /** Provider-qualified reference; a Yahoo number must never be read as a Sleeper ID. */
+      providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string } }
   | {
       kind: 'pick'
       year: number
@@ -141,6 +143,8 @@ export type TradeConsolePlayerLine = {
   valueAdjustments?: LeagueValueAdjustment[]
   /** From `resolveNormalizedPlayerSportsProfiles` + league scoring stack. */
   effectiveProjection?: number | null
+  projectionSource?: 'league_idp_history'
+  projectionScope?: { season: number; week: number }
   projectionNotes?: string[]
   injuryNewsSummary?: string | null
   weatherSummary?: string | null
@@ -155,6 +159,8 @@ export type TradeConsoleOpponentRosterTarget = {
   name: string
   position: string | null
   marketValue: number
+  providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
+  playerId?: string
 }
 
 /** Deterministic, data-grounded summary for UI + Chimmy (no invented stats). */

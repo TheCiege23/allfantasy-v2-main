@@ -676,6 +676,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       numTeams: resolvedNumTeams,
       rosterConfig: rosterConfigForVorp,
       ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
+      leagueUnpricedReasonByNameLower: leagueValues?.unpricedReasonByNameLower,
     }
 
     const [senderPlayerPrices, receiverPlayerPrices, senderPickPrices, receiverPickPrices] = await Promise.all([
