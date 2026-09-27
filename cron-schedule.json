@@ -81,6 +81,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/import-injuries?sport=NFL&gameWindow=1",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/import-stat-lines",
       "schedule": "30 */6 * * *"
     },
