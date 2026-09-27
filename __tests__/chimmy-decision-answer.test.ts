@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ access: vi.fn(), start: vi.fn(), waiver: vi.fn(), trade: vi.fn(), lineup: vi.fn(), target: vi.fn(), finder: vi.fn() }))
+const h = vi.hoisted(() => ({ access: vi.fn(), start: vi.fn(), waiver: vi.fn(), trade: vi.fn(), lineup: vi.fn(), target: vi.fn(), finder: vi.fn(), pending: vi.fn() }))
 vi.mock('@/lib/chimmy/chimmy-league-snapshot', () => ({ loadLeagueGroundingForUser: h.access }))
 vi.mock('@/lib/chimmy/lineupScenarioGrounding', () => ({ buildStartSitScenario: h.start, buildWaiverScenario: h.waiver }))
 vi.mock('@/lib/chimmy/tradeScenarioGrounding', () => ({ buildTradeScenario: h.trade }))
 vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ buildLineupOptimization: h.lineup, singleSwapCall: () => null }))
 vi.mock('@/lib/chimmy/tradeTargetVerdict', () => ({ buildTradeTargetVerdict: h.target }))
 vi.mock('@/lib/chimmy/tradeFinderGrounding', () => ({ buildTradeFinder: h.finder, readTradeFinderPosition: (word: string) => word?.toUpperCase() ?? null }))
+
+vi.mock('@/lib/chimmy/pendingTradeQuestions', () => ({ pendingTradeQuestions: h.pending }))
 
 import { chimmyDecisionKind, decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
@@ -80,5 +82,68 @@ describe('shared consequential-answer contract', () => {
     expect(out?.answer).toContain('give Chase, receive Jefferson')
     expect(out?.answer).toContain('not completed trade verdicts')
     expect(out?.status).toBe('ready')
+  })
+})
+
+describe('pending and screenshot offer resolution', () => {
+  const scenario = { status: 'ready', kind: 'trade', give: [{ playerId: 'qw', name: 'Quincy Williams' }, { playerId: 'cs', name: 'Carson Schwesinger' }],
+    get: [{ playerId: 'tt', name: 'Tyrone Tracy' }, { playerId: 'rf', name: 'Ryan Fitzgerald' }, { playerId: 'pick:2027:1:other', name: '2027 1st' }], partnerTeamName: 'Layes23', picks: 1,
+    recommendation: { action: 'counter', explanation: 'The league value needs a stronger return.' },
+    value: { grade: 'C', given: 100, received: 90, coveragePct: 100 }, lineup: { before: 150, after: 130, delta: -20 },
+    depthChanges: [{ position: 'LB', before: 4, after: 2 }], playoffOdds: { available: false } }
+  it('analyzes the actual uploaded offer even on an image-only follow-up', async () => {
+    h.trade.mockResolvedValue(scenario)
+    const out = await prepareChimmyDecisionAnswer({ question: '', leagueId: 'l1', userId: 'u1',
+      screenshotEvidence: 'Trade gives: Quincy Williams and Carson Schwesinger\nTrade receives: Tyrone Tracy and Ryan Fitzgerald and 2027 1st' })
+    expect(h.trade).toHaveBeenCalledWith({ message: 'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?', leagueId: 'authorized-league', userId: 'u1' })
+    expect(out?.answer).toContain('COUNTER:')
+    expect(out?.answer).toContain('LB roster depth: 4 before, 2 after')
+    expect(out?.answer).toContain('Playoff effect unavailable')
+    expect(out?.answer).toContain('Future-season results are not computed')
+    expect(out?.sources).toContain('screenshot_vision')
+  })
+  it('reads and evaluates pending offers without asking the user to retype them', async () => {
+    h.pending.mockResolvedValue({ offers: [{ id: 'offer-1', question: 'Should I trade Quincy Williams for Tyrone Tracy?' }], gap: null })
+    h.trade.mockResolvedValueOnce(null).mockResolvedValueOnce(scenario)
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I accept my pending trades?', leagueId: 'l1', userId: 'u1' })
+    expect(h.pending).toHaveBeenCalledWith({ id: 'authorized-league' }, 'u1')
+    expect(out?.answer).toContain('Offer offer-1')
+    expect(out?.answer).toContain('COUNTER:')
+  })
+  it('keeps unreadable offers free and does not claim there are none', async () => {
+    h.pending.mockResolvedValue({ offers: [], gap: 'The provider inbox could not be read; this does not mean you have none.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I accept my pending trades?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'pending_offer_unavailable' } })
+    expect(out?.answer).toContain('does not mean you have none')
+  })
+  it('does not replace explicitly named pending trade assets with an arbitrary inbox offer', async () => {
+    h.trade.mockResolvedValue(scenario)
+    await prepareChimmyDecisionAnswer({ question: 'Should I accept this pending trade of Quincy Williams for Tyrone Tracy?', leagueId: 'l1', userId: 'u1' })
+    expect(h.pending).not.toHaveBeenCalled()
+  })
+  it('does not bill a screenshot verdict when an asset disappeared during resolution', async () => {
+    h.trade.mockResolvedValue({ ...scenario, get: scenario.get.slice(0, 2) })
+    const out = await prepareChimmyDecisionAnswer({ question: '', leagueId: 'l1', userId: 'u1', screenshotEvidence: 'Trade gives: Quincy Williams and Carson Schwesinger\nTrade receives: Tyrone Tracy and Ryan Fitzgerald and 2027 1st' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'screenshot_assets_unresolved' } })
+  })
+  it('does not grade a pending package after dropping one of its assets', async () => {
+    h.pending.mockResolvedValue({ offers: [{ id: 'offer', question: 'Should I trade Quincy Williams for Tyrone Tracy?', assetCount: 6 }], gap: null })
+    h.trade.mockResolvedValueOnce(null).mockResolvedValueOnce(scenario)
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I accept my pending trades?', leagueId: 'l1', userId: 'u1' })
+    expect(out?.status).toBe('needs_data')
+    expect(out?.answer).toContain('Not every offer asset resolved')
+  })
+  it('keeps partial value-only analysis free when the lineup cannot be computed', async () => {
+    h.trade.mockResolvedValue({ ...scenario, lineup: null, lineupUnavailable: 'Weekly projections missing.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Grade this trade: Quincy Williams for Tyrone Tracy', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'trade_impact_incomplete' } })
+    expect(out?.answer).toContain('Trade Center grade: C')
+    expect(out?.answer).toContain('partial analysis')
+  })
+  it('keeps an explicitly requested season-impact decision free when the model is unavailable', async () => {
+    h.trade.mockResolvedValue(scenario)
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I accept this trade if I want to compete next few years?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'season_impact_missing' } })
+    expect(out?.answer).toContain('no charge')
   })
 })

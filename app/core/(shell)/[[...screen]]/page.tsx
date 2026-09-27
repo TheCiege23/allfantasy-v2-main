@@ -246,7 +246,7 @@ export const dynamic = 'force-dynamic'
  * How many recent trades the home loads. Shared by the trade band's loader and the
  * since-last-visit brief, which must know the list is capped to say "3+" honestly.
  */
-const HOME_RECENT_TRADES_LIMIT = 3
+const HOME_RECENT_TRADES_LIMIT = 20
 
 /**
  * AF Core — every screen from the design handoff, behind ONE route.
@@ -1214,14 +1214,14 @@ export default async function AfCorePage({
    * but it will the moment a sync runs, and the shell no longer lies about
    * whether it is looking.
    */
-  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
+  const lastSynced = playedLeagues.filter(l => !pausedSyncLeagueIds?.has(l.id)).reduce<Date | null>((latest, l) => {
     const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
     if (!raw) return latest
     const d = raw instanceof Date ? raw : new Date(raw)
     if (Number.isNaN(d.getTime())) return latest
-    return latest == null || d > latest ? d : latest
+    return latest == null || d < latest ? d : latest
   }, null)
-  const syncAge = describeAge('roster', lastSynced, now)
+  const syncAge = describeAge('fantasy_league', lastSynced, now)
 
   const plan = access
     ? {
@@ -3054,7 +3054,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 viewerUserId: userId,
                 ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
                 currentWeek,
-                reconcileLive: true,
+                reconcileLive: false,
                 enrichLeagueContext: true,
                 maxLeagues: 8,
                 /*

@@ -103,6 +103,12 @@ describe('persistLiveTrades', () => {
     expect(persistTradesForSeasonMock).toHaveBeenCalledTimes(1)
   })
 
+  it('dates a trade by completion rather than its earlier proposal', async () => {
+    await run([tx({ completed_at: '2026-09-27T12:00:00.000Z' })])
+    const facts = persistTradesForSeasonMock.mock.calls[0][2] as Array<{ created: number }>
+    expect(facts[0].created).toBe(Date.parse('2026-09-27T12:00:00.000Z'))
+  })
+
   it('IGNORES proposed and vetoed trades — they never happened', async () => {
     const r = await run([
       tx({ source_transaction_id: 'p', status: 'proposed' }),

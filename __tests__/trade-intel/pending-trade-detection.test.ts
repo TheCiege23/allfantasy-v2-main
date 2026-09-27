@@ -30,7 +30,9 @@ describe('🛑 the feed no longer hides pending offers', () => {
 
   it('🛑 the completed-only filter is gone', () => {
     const code = strip(SYNC)
-    expect(code).not.toMatch(/status\s*===\s*'complete'/)
+    // Completion timestamps can inspect status; only a completed-only gate would hide offers.
+    expect(code).not.toMatch(/if\s*\(\s*t\.status\s*!==\s*'complete'\s*\)\s*continue/)
+    expect(code).toContain('if (!NOTIFIABLE_STATUSES.has(t.status)) continue')
     expect(code).toContain('NOTIFIABLE_STATUSES')
   })
 

@@ -61,9 +61,15 @@ export interface RunDueResult {
    */
   skipped: number
   errored: number
+  /**
+   * Selected, but never started, because `startDeadlineAt` had passed. Its own bucket for the
+   * same reason as `skipped`: counted as "not due" it would read as a league that was fresh, and
+   * counted as executed it would read as a refresh that happened.
+   */
+  deferred: number
   /** Per-provider enumeration counts, so a starved or empty provider is visible at a glance. */
   byProvider: Record<string, number>
-  results: Array<SyncConnectedResult & { error?: string }>
+  results: Array<SyncConnectedResult & { error?: string; deferred?: boolean }>
 }
 
 export interface RunDueInput {
@@ -95,6 +101,16 @@ export interface RunDueInput {
   scopes?: SyncScope[]
   matchupStaleThresholdMs?: number
   runTimeoutMs?: number
+  /**
+   * Epoch ms after which no NEW league is started; ones already running finish normally.
+   *
+   * ⚠ A BOUND ON STARTS, NOT ON THE RUN. It cannot shorten a league already in flight — that is
+   * `runTimeoutMs`. What it stops is a large selected slice walking on past its cron interval
+   * into the next tick on a single-core worker. Unstarted leagues are returned as `deferred`.
+   */
+  startDeadlineAt?: number
+  /** Injectable clock for `startDeadlineAt`. Default `Date.now`. */
+  clock?: () => number
 }
 
 export async function runDueLeagues(input?: RunDueInput): Promise<RunDueResult> {
@@ -119,7 +135,20 @@ export async function runDueLeagues(input?: RunDueInput): Promise<RunDueResult> 
   const results = await mapWithConcurrency(
     connections,
     input?.concurrency ?? 4,
-    async (connection): Promise<SyncConnectedResult & { error?: string }> => {
+    async (connection): Promise<SyncConnectedResult & { error?: string; deferred?: boolean }> => {
+      const clock = input?.clock ?? Date.now
+      if (input?.startDeadlineAt != null && clock() >= input.startDeadlineAt) {
+        return {
+          runKey: connection.runKey,
+          executed: false,
+          due: true,
+          deferred: true,
+          seasonState: 'unknown',
+          cadenceMinutes: 0,
+          nextEligibleAt: now.toISOString(),
+          reason: 'deferred: this tick spent its start budget',
+        }
+      }
       try {
         return await syncConnectedLeague(connection, now, {
           fetchNormalized: input?.fetchNormalized,
@@ -148,11 +177,13 @@ export async function runDueLeagues(input?: RunDueInput): Promise<RunDueResult> 
   const summary: RunDueResult = {
     enumerated: connections.length,
     executed: 0, completed: 0, partial: 0, failed: 0, locked: 0, notDue: 0, skipped: 0, errored: 0,
+    deferred: 0,
     byProvider,
     results,
   }
   for (const r of results) {
-    if (r.error) summary.errored += 1
+    if (r.deferred) summary.deferred += 1
+    else if (r.error) summary.errored += 1
     else if (!r.due || (!r.executed && r.reason?.includes('not due'))) summary.notDue += 1
     else if (r.status === 'locked') summary.locked += 1
     /*
