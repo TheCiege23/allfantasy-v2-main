@@ -37,6 +37,8 @@ import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decisi
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
+import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -1000,6 +1002,23 @@ export async function GET(req: NextRequest) {
   })()
 
   const grader = lazyGrader(leagueId, userId)
+  /*
+   * 🛑 THE LEAGUE'S COMPLETED HISTORY, ON THE ONE GRADE (2026-09-27, Guap: bring it back, graded).
+   * The league Trades tab retired this history on 2026-09-25 because the only copy it could read was
+   * the realized-points ledger, whose letter contradicted the one grade. The history now carries THE
+   * grade (`getSleeperTradeHistory` → `leagueGrade`), built into rows by the same function the Trade
+   * Center uses, so the two screens cannot disagree.
+   *
+   * ⚠ OPT-IN (`?history=1`). It grades up to sixty trades; the Trade Center already has this history
+   * from its page and must not pay for it twice, and the tab's once-a-minute background refresh does
+   * not ask for it. A failure is an empty list with a flag, never a failed panel.
+   */
+  const wantHistory = req.nextUrl.searchParams?.get('history') === '1'
+  const importedHistoryPromise = wantHistory
+    ? getSleeperTradeHistory(sleeperLeagueId, viewerSleeperId, { afLeagueId: leagueId })
+        .then((h) => (h ? { rows: importedTradeTimelineRows(h.history), available: true } : { rows: [], available: false }))
+        .catch(() => ({ rows: [], available: false }))
+    : null
   const [nativeTrades, nativeHistory, pendingScan] = await Promise.all([
     buildNativeActiveTrades(leagueId, userId, league.sport, grader).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
@@ -1153,6 +1172,8 @@ export async function GET(req: NextRequest) {
       ...settledProviderOffers,
       ...nativeHistory,
     ],
+    /* Present only when asked for — see `wantHistory`. `available: false` is "could not read", not "none". */
+    ...(importedHistoryPromise ? { importedHistory: await importedHistoryPromise } : {}),
     activeCount: activeTrades.length,
     source: 'sleeper' as const,
     leagueName: league.name ?? 'League',

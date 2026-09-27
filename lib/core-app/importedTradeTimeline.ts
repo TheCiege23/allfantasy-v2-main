@@ -50,6 +50,7 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
       direction: 'complete' as const, status: 'completed_on_sleeper',
       partnerName: `${first.manager ?? 'Side A'} ↔ ${second.manager ?? 'Side B'}`,
       sideAName: first.manager ?? 'Side A', sideBName: second.manager ?? 'Side B',
+      sideAYou: first.isYou, sideBYou: second.isYou,
       sideALabel: `${first.manager ?? 'Side A'} sent`, sideBLabel: `${second.manager ?? 'Side B'} sent`,
       sent: assets(second), received: assets(first),
       timestamp: Number.isFinite(date.getTime()) ? date.toISOString() : '',
