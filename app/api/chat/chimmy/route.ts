@@ -2803,7 +2803,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     ])
     return NextResponse.json({ response: decisionAnswer.answer, result: decisionAnswer.answer,
       source: 'chimmy_decision_engine', sessionId,
-      meta: { free: true, tokenSpend: { tokenCost: 0 }, screenshotAttachment, scenario: decisionAnswer.scenario,
+      meta: { free: true, tokenSpend: null, screenshotAttachment, scenario: decisionAnswer.scenario,
         decision: decisionAnswerMeta(decisionAnswer), mode: selectedAssistantMode,
         leagueGrounding: decisionAnswer.leagueId ? tradeTargetGrounding : { grounded: false, leagueId: null },
         dataSources: decisionAnswer.sources } })
