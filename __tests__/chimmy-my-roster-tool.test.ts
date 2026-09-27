@@ -55,7 +55,7 @@ describe('buildMyRosterContext', () => {
   it('names the starters and bench with position and injury status', async () => {
     h.resolveTeam.mockResolvedValue(
       team({
-        starters: [player('Josh Allen', { position: 'QB' })],
+        starters: [player('Josh Allen', { position: 'QB' }), player('Vacant', { playerId: '0', name: null, position: null })],
         bench: [player('Khalil Shakir', { injuryStatus: 'Questionable' })],
       }),
     )
@@ -67,6 +67,9 @@ describe('buildMyRosterContext', () => {
     expect(out).toContain('BENCH')
     expect(out).toMatch(/Khalil Shakir.*Questionable/)
     expect(out).toContain('2-1')
+    expect(out).toContain('(empty slot)')
+    expect(out).toContain('2 distinct identified players')
+    expect(out).not.toContain('unnamed player 0')
   })
 
   /*

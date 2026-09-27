@@ -289,6 +289,7 @@ it('keeps unified memory while making the new selected-league request authoritat
   expect(focus.text).toContain('do not reopen unrelated old or unanswered questions')
   expect(focus.text).toContain('Current selected league: l1')
   expect(focus.text).toContain('Use the supplied current roster and injury counts')
+  expect(focus.text).toContain('Stored starter placement or an injury list is not proof')
   expect(focus.cache_control).toBeUndefined()
   expect(params.system[0].text).toBe('You are Chimmy.')
 })

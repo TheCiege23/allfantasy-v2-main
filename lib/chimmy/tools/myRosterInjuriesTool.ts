@@ -51,7 +51,7 @@ type RosterEntry = {
 }
 
 /** Statuses that carry no injury claim. A feed "Active" is the absence of news, not news. */
-const NON_INJURY_STATUS = /^(?:active|healthy|none|na|n\/a|probable|-)?$/i
+const NON_INJURY_STATUS = /^(?:act|inact|active|inactive|healthy|none|na|n\/a|probable|-)?$/i
 
 /** Most actionable first. Anything unlisted sorts after these. */
 const SEVERITY: Array<[RegExp, number]> = [
@@ -71,7 +71,7 @@ function isoDay(d: Date): string {
 }
 
 function refsWithSlot(refs: AiRosterPlayerRef[], slot: Slot, leagueName: string): Array<RosterEntry & { playerId: string }> {
-  return refs.map((r) => ({
+  return refs.filter((r) => r.playerId?.trim() !== '0').map((r) => ({
     playerId: r.playerId,
     leagueName,
     slot,
@@ -312,9 +312,9 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
     )
     if (startingHurt.length > 0) {
       lines.push(
-        `⚠ ACTION: ${startingHurt.length} player(s) listed Out/IR are in a STARTING lineup: ${startingHurt
+        `ROSTER PLACEMENT: ${startingHurt.length} player(s) listed Out/IR are among stored STARTERS: ${startingHurt
           .map((f) => `${f.name} (${f.appearances.filter((a) => a.slot === 'starter' && !a.automatic).map((a) => a.leagueName).join(', ')})`)
-          .join('; ')}. Lead with these.`,
+          .join('; ')}. This injury check does not verify kickoff locks, provider transaction rules or AutoSubs eligibility. Stored starter placement is not proof a replacement is still allowed; verify those before suggesting an actionable swap.`,
       )
     }
   }

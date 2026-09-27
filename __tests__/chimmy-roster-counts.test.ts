@@ -16,9 +16,10 @@ describe('current roster count evidence', () => {
     expect(out).toContain('TE: 1; UNKNOWN: 1; WR: 1')
   })
   it('discloses conflicting positions and missing IDs instead of guessing identities', () => {
-    const out = rosterCountEvidence([ref('1', 'TE'), ref('1', 'WR'), ref('', 'RB')])
+    const out = rosterCountEvidence([ref('1', 'TE'), ref('1', 'WR'), ref('', 'RB'), ref('0', null)])
     expect(out).toContain('1 distinct identified players')
     expect(out).toContain('UNKNOWN: 1')
     expect(out).toContain('1 row(s) lack a player ID')
+    expect(out).toContain('1 zero-ID empty-slot marker(s) are excluded')
   })
 })

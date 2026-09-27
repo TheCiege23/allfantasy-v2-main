@@ -29,6 +29,7 @@ import { rosterCountEvidence } from '@/lib/chimmy/rosterCounts'
 const MAX_PER_GROUP = 30
 
 function describePlayer(p: AiRosterPlayerRef): string {
+  if (p.playerId?.trim() === '0') return '(empty slot)'
   const bits = [p.position, p.team].filter(Boolean).join(' ')
   const injury = p.injuryStatus ? ` — ${p.injuryStatus}` : ''
   const name = p.name ?? `(unnamed player ${p.playerId})`

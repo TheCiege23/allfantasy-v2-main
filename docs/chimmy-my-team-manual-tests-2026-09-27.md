@@ -65,3 +65,8 @@ Repeat scope selection, action buttons and chat input on desktop, tablet and pho
 Ask: "Count my complete selected-league roster by listed position, including bench, IR and taxi. Then count players with reported injury designations by position. Use current tool evidence, not earlier answers; no report is not proof of health."
 
 Compare with the refreshed roster, not roster capacity or a shortened list. During the September 27 audit BB Dynasty League 26! held 25 players: QB 4, RB 7, WR 8, TE 6. Six had designations: QB 1, RB 2, WR 1, TE 2. Those numbers are a dated example, not permanent expected values. Changes after sync must use the new evidence. Waiver before/after totals are hypothetical optimized projections, which can differ from provider stored-lineup projections and live scores.
+## 8. Verify an explicit cross-league injury request
+
+With a league still selected, ask: "Across all of my current NFL leagues, report rostered players with dated injury designations. State how many leagues were checked and all coverage limits. Do not treat missing reports as healthy or assume a stored starter can still be replaced."
+
+This explicit request may span leagues. The answer must disclose the scan cap, unreadable/empty rosters and dated evidence. Starter placement does not establish kickoff-lock, transaction or AutoSubs eligibility. It must not tell you to fix an already-started player without checking whether a move remains allowed. Best Ball injuries remain depth concerns.

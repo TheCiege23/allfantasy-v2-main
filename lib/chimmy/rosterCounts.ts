@@ -13,8 +13,10 @@ export function listedPositionCounts(players: readonly { position: string | null
 export function rosterCountEvidence(players: readonly AiRosterPlayerRef[]): string {
   const positions = new Map<string, Set<string>>()
   let unidentifiedRows = 0
+  let emptySlotRows = 0
   for (const player of players) {
     const id = player.playerId?.trim()
+    if (id === '0') { emptySlotRows++; continue }
     if (!id) { unidentifiedRows++; continue }
     const known = positions.get(id) ?? new Set<string>()
     const position = player.position?.trim().toUpperCase()
@@ -26,5 +28,6 @@ export function rosterCountEvidence(players: readonly AiRosterPlayerRef[]): stri
   return `CURRENT ROSTER COUNTS: ${unique.length} distinct identified players across starters, bench, IR and taxi. ` +
     `By listed primary position: ${listedPositionCounts(unique) || 'none'}. ` +
     'Counts use the full synced roster before display truncation, deduplicate player IDs, and are not roster capacity or a count of healthy players. UNKNOWN means missing or conflicting position evidence.' +
-    (unidentifiedRows ? ` ${unidentifiedRows} row(s) lack a player ID and cannot be included in distinct-player counts.` : '')
+    (unidentifiedRows ? ` ${unidentifiedRows} row(s) lack a player ID and cannot be included in distinct-player counts.` : '') +
+    (emptySlotRows ? ` ${emptySlotRows} zero-ID empty-slot marker(s) are excluded from player counts.` : '')
 }
