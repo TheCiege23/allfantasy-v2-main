@@ -67,6 +67,30 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
+/** A live completed feed has unresolved picks. Preserve its metadata, but use
+ * the graded ledger's resolved assets and values when both describe the same deal. */
+export function mergeImportedTradeTimelineRows<T extends { id: string; status: string }>(
+  imported: ReturnType<typeof importedTradeTimelineRows>, current: T[],
+) {
+  const rows = new Map<string, T | (typeof imported)[number]>(current.map(row => [row.id, row]))
+  for (const original of imported) {
+    const live = rows.get(original.id)
+    rows.set(original.id, live ? {
+      ...live,
+      status: original.status, direction: original.direction,
+      sent: original.sent, received: original.received,
+      leagueGrade: original.leagueGrade, leagueGradeSide: original.leagueGradeSide,
+      currentGrade: original.currentGrade, currentValueGiven: original.currentValueGiven,
+      currentValueReceived: original.currentValueReceived,
+      sideAName: original.sideAName, sideBName: original.sideBName,
+      sideAYou: original.sideAYou, sideBYou: original.sideBYou,
+      sideALabel: original.sideALabel, sideBLabel: original.sideBLabel,
+      realizedGrade: original.realizedGrade, realizedNote: original.realizedNote,
+    } : original)
+  }
+  return [...rows.values()]
+}
+
 /**
  * The league value the grade priced each asset at, in the assets' own order.
  *
