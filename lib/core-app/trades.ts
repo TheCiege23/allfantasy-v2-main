@@ -4,15 +4,13 @@ import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-lin
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
-import { LATEST_TRADE_ORDER, pickAssets } from './tradePicks'
+import { LATEST_TRADE_ORDER } from './tradePicks'
 import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
-import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
-import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
-import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
+import { gradeArchivedTradeRows } from './archivedTradeGrade'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -305,45 +303,24 @@ async function resolveGrades(
    * (the trade has happened). The honesty rule survives unchanged: any asset that cannot be priced
    * — an unnamed player, a pick whose draft has been held — withholds the letter; it is never zero.
    */
-  const grader = await completedTradeGraderFor(leagueId)
-  const currentSeason = new Date().getUTCFullYear()
   const nameOf = (id: string) => playerById.get(id)?.name?.trim() || null
   // Warm the per-player analytics cache the pricer reads, in ONE query, before sixty deals hit it.
   await getPlayerAnalyticsBatch([...playerById.values()].map((p) => p.name)).catch(() => null)
 
   /*
-   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). This row stores a pick
-   * as `{ season, round }`, which cannot name the player; the league's graded ledger already did
-   * (`archivedPickOutcomes.ts`). One DB read, only for trades that moved a pick. A league with no
-   * ledger (every non-Sleeper platform today) gets nothing back and grades exactly as before.
+   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). The grading itself —
+   * drafted-pick names from the league's ledger, then the one grader — lives in
+   * `archivedTradeGrade.ts`, shared with the player card so one trade reads one letter on both.
    */
-  const ledgerSides = await loadLedgerSidesForTrades(
-    distinctTrades
-      .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
-      .map((t) => ({ sleeperLeagueId: platformLeagueId, transactionId: t.transactionId })),
-  )
+  const gradedRows = await gradeArchivedTradeRows({ afLeagueId: leagueId, platformLeagueId, rows: distinctTrades, nameOf })
 
   const graded: GradedTrade[] = await Promise.all(distinctTrades.map(async (t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
-    const pickRef = (p: { pickSeason?: string; pickRound?: number }) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null })
-    const drafted = draftedPickNamesForRow(
-      {
-        picksIn: pickAssets(t.picksReceived).map(pickRef),
-        picksOut: pickAssets(t.picksGiven).map(pickRef),
-        partnerRosterId: t.partnerRosterId ?? null,
-      },
-      ledgerSides.get(ledgerKey(platformLeagueId, t.transactionId)),
-    )
-    const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
-    const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
-    const g = await gradeArchivedTrade(grader, {
-      received: recv.map(nameOf),
-      gave: gave.map(nameOf),
-      picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
-      picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
-      currentSeason,
-    })
+    const row = gradedRows.get(t.transactionId)
+    const g: TradeGradeView = row?.grade ?? { graded: false, reason: 'This trade could not be graded just now.', basis: null }
+    const picksIn = row?.picksIn ?? []
+    const picksOut = row?.picksOut ?? []
 
     /*
      * 🛑 ONLY THE VIEWER'S OWN ROW, because only there do we hold a name for both sides.
