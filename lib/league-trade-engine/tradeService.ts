@@ -33,6 +33,7 @@ import {
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
 import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
+import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -977,6 +978,13 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+
+  // The integrity scan: the trade review, run once the trade has settled. Native trades were never
+  // scanned before the scan read real trades (2026-09-27). Fire-and-forget; the worker checks entitlement.
+  // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
+  void Promise.resolve()
+    .then(() => enqueueCollusionScan(trade.leagueId, { kind: 'af', tradeId: trade.id }, [trade.proposerRosterId, trade.receiverRosterId]))
+    .catch((e) => console.error('[af-trade] enqueueCollusionScan failed', e))
 
   recordProductEvent(ENGAGEMENT.TRADE_PROCESSED, {
     userId: input.actorUserId,

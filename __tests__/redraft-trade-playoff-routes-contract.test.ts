@@ -431,6 +431,8 @@ describe('Redraft trade votes route contract', () => {
     expect(applyRedraftTradeCapTransfersInTransactionMock).toHaveBeenCalledTimes(1)
     expect(prismaMock.redraftLeagueTrade.create).toHaveBeenCalledTimes(1)
     expect(enqueueCollusionScanMock).toHaveBeenCalledTimes(1)
+    // The scan reviews the REAL proposal, never the legacy mirror row.
+    expect(enqueueCollusionScanMock).toHaveBeenCalledWith('l-1', { kind: 'redraft', proposalId: 'p-1' }, ['r-1', 'r-2'])
     // Execution evidence is written WITH the trade. `TradeExecutionSnapshot` had no writer at all
     // before this, so a settled trade left nothing for a reversal to restore to.
     expect(prismaMock.tradeExecutionSnapshot.create).toHaveBeenCalledTimes(1)

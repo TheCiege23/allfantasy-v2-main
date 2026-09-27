@@ -201,9 +201,21 @@ describe('evaluateTrade — the canonical half', () => {
       ['r1', 90, 4, 'memo-v'],
       ['r2', 70, -3, 'memo-v'],
     ])
+    // Who went where, so a saved receipt can say by itself whether a received player starts.
+    expect(r.canonical?.moves).toEqual([])
     // Positive control: the canonical letter was A+, and the receipt's letter is the one grade.
     expect(JSON.stringify(r)).not.toContain('A+')
     expect(r.grade).toMatchObject({ letter: 'B' })
+  })
+
+  it('records which player went to which roster — picks and FAAB are not lineup, and are left out', async () => {
+    const evaluateCanonical = vi.fn(async () => ({ action: 'accept' as const, recommendation: 'x', fairnessScore: 80, confidenceScore: 80, coverageStatus: 'complete' as const, coveragePct: 100, memo: null, rosterImpact: null }))
+    const assets = [
+      { fromRosterId: 'r1', toRosterId: 'r2', assetType: 'player', playerId: 'p1', playerName: 'Star Runner' },
+      { fromRosterId: 'r2', toRosterId: 'r1', assetType: 'draft_pick', playerId: null, playerName: null, pickLabel: '2027 R2' },
+    ]
+    const r = await evaluateTrade(base({ canonical: { ...canonical, assets: assets as never } }), deps({ evaluateCanonical: evaluateCanonical as never }))
+    expect(r.canonical?.moves).toEqual([{ fromRosterId: 'r1', toRosterId: 'r2', playerId: 'p1', name: 'Star Runner' }])
   })
 
   it('a canonical failure is a named gap beside an intact grade', async () => {

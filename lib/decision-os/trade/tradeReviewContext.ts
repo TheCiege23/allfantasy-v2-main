@@ -4,6 +4,8 @@ import type { League } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
+import { importedActivityLeagueWhere, managerKeysOf, teamResolver } from '@/lib/core-app/importedActivityAttribution'
+import type { GradedTrade, TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { tradeDeadlineWeek as settingsDeadlineWeek } from '@/lib/core-app/seasonTimeline'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
@@ -13,7 +15,9 @@ import { forecastForTeam } from '@/lib/decision-os/value-v2/windowFactsPrismaPor
 import type { TradeEvaluationReceipt } from './evaluateTrade'
 import { evaluateStoredTrade, type EvaluateStoredTradeResult } from './evaluateStoredTrade'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from './leagueTradeGrader'
-import { signedGapPct } from './tradeGrade'
+import { oneGradeForCompletedTrade } from './completedTradeGrade'
+import { receivedValueSplit } from './tankingCalibration'
+import { signedGapPct, type TradeGradeView } from './tradeGrade'
 import { gradeInputsFromNativeItems, gradeInputsFromRedraftAssets } from './tradeGradeInputs'
 import type { LoadedTrade, TradeRef, TradeSide } from './tradeRecord'
 import { buildTradeReview, type Known, type ReviewSideLineup, type TradeReview, type TradeReviewFacts } from './tradeReview'
@@ -36,12 +40,16 @@ const FORECAST_MAX_WEEK_LAG = 1
  * — after the previous NFL season's playoffs, before any draft.
  */
 const seasonStart = (season: number) => new Date(Date.UTC(season, 2, 1))
+/** The durable graded-trades cache for one Sleeper league (`lib/core-app/recentTrades.ts` reads the same key). */
+const TRADE_GRADES_CACHE_PREFIX = 'trade-grades:v2:'
 
 export type TradeReviewDeps = {
   evaluate: typeof evaluateStoredTrade
   leagueRow: (leagueId: string) => Promise<League | null>
   pairHistory: (args: PairHistoryArgs) => Promise<Known<Array<number | null>>>
   managerHealth: typeof getLeagueManagerHealth
+  /** Redraft and imported leagues: when each team last moved (native reads `managerHealth`). */
+  lastMoves: (args: LastMovesArgs) => Promise<Known<LastMoves>>
   forecast: (args: { leagueIds: string[]; season: number }) => Promise<{ week: number; teamForecasts: unknown } | null>
   deadlineKickoff: (args: { sport: string; season: number; week: number }) => Promise<Date | null>
   now: () => Date
@@ -127,7 +135,178 @@ async function defaultPairHistory(args: PairHistoryArgs): Promise<Known<Array<nu
     }
   }
 
-  return { ok: false, reason: 'Trade history between two teams is not joined for imported leagues yet.' }
+  // Imported: the league's graded completed trades — the same cache, and the same one grade, the
+  // dashboard band and the trade emails read. Sleeper sides are Sleeper roster ids on both.
+  const platform = String(league.platform ?? '').toLowerCase()
+  if (platform !== 'sleeper' || !league.platformLeagueId) {
+    return { ok: false, reason: `Completed trades are only held for Sleeper leagues; this league is on ${platform || 'an unknown platform'}.` }
+  }
+  const row = await prisma.sportsDataCache.findFirst({
+    where: { cacheKey: `${TRADE_GRADES_CACHE_PREFIX}${league.platformLeagueId}` },
+    select: { data: true },
+  })
+  const payload = row?.data && typeof row.data === 'object' && !Array.isArray(row.data) ? (row.data as unknown as TradeGradesPayload) : null
+  if (!payload || payload.version !== 2) return { ok: false, reason: "This league's completed trades have not been graded yet." }
+  const season = league.season ?? new Date().getUTCFullYear()
+  return {
+    ok: true,
+    value: await Promise.all(
+      priorPairTrades({ trades: payload.trades ?? [], a, b, excludeTradeId: trade.origin.externalTradeId, since: seasonStart(season) }).map(async (t) => {
+        const g = await oneGradeForCompletedTrade(league.id, t, season).catch(() => null)
+        return leanForSideA(g, t, a)
+      }),
+    ),
+  }
+}
+
+/** A completed Sleeper trade's earlier trades between the same two rosters this season (at most 20). */
+export function priorPairTrades(args: {
+  trades: readonly GradedTrade[]
+  a: string
+  b: string
+  excludeTradeId: string | null
+  since: Date
+}): GradedTrade[] {
+  return args.trades
+    .filter((t) => {
+      if (t.multiTeam || t.sides.length !== 2) return false
+      const ids = t.sides.map((s) => String(s.rosterId))
+      if (!ids.includes(args.a) || !ids.includes(args.b)) return false
+      if (args.excludeTradeId && t.id.split(':').pop() === args.excludeTradeId) return false
+      const at = Date.parse(t.createdIso)
+      return Number.isFinite(at) && at >= args.since.getTime()
+    })
+    .slice(0, 20)
+}
+
+/** The completed grade is from the trade's FIRST side; turn it to face side A. */
+export function leanForSideA(g: TradeGradeView | null, t: GradedTrade, a: string): number | null {
+  if (!g?.graded) return null
+  return String(t.sides[0]!.rosterId) === a ? g.percentDiff : -g.percentDiff
+}
+
+// ─── Activity (redraft and imported leagues) ────────────────────────────────
+
+/** The last move each team made before `asOf`, and the span of moves recorded for the whole league. */
+export type LastMoves = {
+  byTeam: Map<string, Date>
+  /** The earliest and newest move recorded for ANY team in the window — the evidence we were recording. */
+  earliest: Date | null
+  newest: Date | null
+  /** Teams whose moves can be attributed at all. Absent: every team. */
+  attributable?: ReadonlySet<string>
+}
+
+export type LastMovesArgs = { trade: LoadedTrade; league: League; asOf: Date }
+
+/** Imported activity arrives by cron; a league whose newest row is older than this may just be unsynced. */
+export const IMPORTED_ACTIVITY_MAX_STALE_DAYS = 3
+/** How far back imported activity is read. */
+const IMPORTED_ACTIVITY_WINDOW_DAYS = 90
+
+export function lastMovesFrom(moves: ReadonlyArray<{ teamId: string; at: Date }>): LastMoves {
+  const byTeam = new Map<string, Date>()
+  let earliest: Date | null = null
+  let newest: Date | null = null
+  for (const { teamId, at } of moves) {
+    const prev = byTeam.get(teamId)
+    if (!prev || at > prev) byTeam.set(teamId, at)
+    if (!earliest || at < earliest) earliest = at
+    if (!newest || at > newest) newest = at
+  }
+  return { byTeam, earliest, newest }
+}
+
+/**
+ * Days since each side last moved, as of `asOf`. A side with no recorded move is counted from the
+ * first move recorded for anyone in the league — the span we can vouch for — never from nothing.
+ */
+export function inactiveDaysFrom(args: {
+  moves: LastMoves
+  teamIds: readonly [string | null, string | null]
+  asOf: Date
+  maxStaleDays?: number
+}): Known<readonly [number | null, number | null]> {
+  const { moves, asOf } = args
+  if (!moves.newest || !moves.earliest) return { ok: false, reason: 'No manager activity has been recorded for this league.' }
+  if (args.maxStaleDays != null) {
+    const staleDays = (asOf.getTime() - moves.newest.getTime()) / DAY_MS
+    if (staleDays > args.maxStaleDays) {
+      return {
+        ok: false,
+        reason: `This league's activity was last imported ${Math.floor(staleDays)} days ago, so a quiet manager can't be told from a stale import.`,
+      }
+    }
+  }
+  const days = (teamId: string | null): number | null => {
+    if (!teamId || (moves.attributable && !moves.attributable.has(teamId))) return null
+    const since = moves.byTeam.get(teamId) ?? moves.earliest!
+    return (asOf.getTime() - since.getTime()) / DAY_MS
+  }
+  return { ok: true, value: [days(args.teamIds[0]), days(args.teamIds[1])] as const }
+}
+
+async function redraftLastMoves(args: LastMovesArgs): Promise<Known<LastMoves>> {
+  const current = await prisma.redraftTradeProposal.findUnique({ where: { id: args.trade.id }, select: { seasonId: true } })
+  if (!current) return { ok: false, reason: 'This proposal could not be read again to find its season.' }
+  const base = { leagueId: args.league.id, seasonId: current.seasonId }
+  const before = { lt: args.asOf }
+  // A manager's own moves: lineup saves they made, transactions on their roster, waiver claims they filed.
+  const [saves, txns, claims] = await Promise.all([
+    prisma.redraftRosterMoveHistory.findMany({ where: { ...base, source: 'user', createdAt: before }, select: { rosterId: true, createdAt: true } }),
+    prisma.redraftLeagueTransaction.findMany({ where: { ...base, createdAt: before }, select: { rosterId: true, createdAt: true } }),
+    prisma.redraftWaiverClaim.findMany({ where: { ...base, submittedAt: before }, select: { rosterId: true, submittedAt: true } }),
+  ])
+  return {
+    ok: true,
+    value: lastMovesFrom([
+      ...saves.map((r) => ({ teamId: r.rosterId, at: r.createdAt })),
+      ...txns.map((r) => ({ teamId: r.rosterId, at: r.createdAt })),
+      ...claims.map((r) => ({ teamId: r.rosterId, at: r.submittedAt })),
+    ]),
+  }
+}
+
+async function importedLastMoves(args: LastMovesArgs): Promise<Known<LastMoves>> {
+  const { league, asOf } = args
+  const [teams, rows] = await Promise.all([
+    prisma.leagueTeam.findMany({ where: { leagueId: league.id }, select: { externalId: true, platformUserId: true, claimedByUserId: true } }),
+    prisma.decisionOsImportedActivity.findMany({
+      where: {
+        ...importedActivityLeagueWhere(league),
+        activityType: { in: ['trade', 'waiver', 'roster_move'] },
+        occurredAt: { lt: asOf, gte: new Date(asOf.getTime() - IMPORTED_ACTIVITY_WINDOW_DAYS * DAY_MS) },
+      },
+      orderBy: { occurredAt: 'desc' },
+      take: 4000,
+      select: { occurredAt: true, normalized: true },
+    }),
+  ])
+  if (rows.length === 0) return { ok: false, reason: 'No manager activity has been imported for this league.' }
+  const attribution = teamResolver(teams)
+  await attribution.withProfileKeys(rows.flatMap((r) => managerKeysOf(r.normalized)))
+  const moves: Array<{ teamId: string; at: Date }> = []
+  for (const r of rows) {
+    const hit = new Set(managerKeysOf(r.normalized).flatMap((k) => attribution.resolve(k)?.externalId ?? []))
+    for (const teamId of hit) moves.push({ teamId, at: r.occurredAt })
+  }
+  return {
+    ok: true,
+    value: {
+      ...lastMovesFrom(moves),
+      // Every row is evidence the league was being recorded, attributed or not.
+      earliest: rows[rows.length - 1]!.occurredAt,
+      newest: rows[0]!.occurredAt,
+      // A team with no linked manager can never be named on a row, so its silence proves nothing.
+      attributable: new Set(teams.filter((t) => t.platformUserId || t.claimedByUserId).map((t) => t.externalId)),
+    },
+  }
+}
+
+async function defaultLastMoves(args: LastMovesArgs): Promise<Known<LastMoves>> {
+  if (args.trade.origin.source === 'redraft') return redraftLastMoves(args)
+  if (args.trade.origin.source === 'provider') return importedLastMoves(args)
+  return { ok: false, reason: 'Native leagues read the commissioner hub’s activity instead.' }
 }
 
 export const defaultTradeReviewDeps: TradeReviewDeps = {
@@ -135,6 +314,7 @@ export const defaultTradeReviewDeps: TradeReviewDeps = {
   leagueRow: (leagueId) => prisma.league.findUnique({ where: { id: leagueId } }).catch(() => null),
   pairHistory: (args) => defaultPairHistory(args).catch(() => ({ ok: false as const, reason: 'Trade history could not be read.' })),
   managerHealth: getLeagueManagerHealth,
+  lastMoves: (args) => defaultLastMoves(args).catch(() => ({ ok: false as const, reason: 'Manager activity could not be read.' })),
   forecast: async ({ leagueIds, season }) =>
     prisma.seasonForecastSnapshot
       .findFirst({ where: { leagueId: { in: leagueIds }, season }, orderBy: { week: 'desc' }, select: { week: true, teamForecasts: true } })
@@ -162,21 +342,13 @@ export function sideLineup(args: {
 
   // What this side RECEIVES is what the other side gives; its league value is on the receipt's lines.
   const receivedLines = receipt.assets.filter((l) => l.side === (isGradedSide ? 'get' : 'give'))
-  let receivedValue: number | null = 0
-  let receivedBenchValue: number | null = 0
   const startersAfter = new Set(ri.startersAfter)
-  for (const line of receivedLines) {
-    if (line.leagueValue == null) {
-      receivedValue = null
-      receivedBenchValue = null
-      break
-    }
-    receivedValue += line.leagueValue
-    const asset = other.gives.find((g) => g.kind === 'player' && g.name === line.name)
-    const starts = asset?.kind === 'player' && startersAfter.has(asset.playerId)
-    // A pick or FAAB starts for nobody this week: it is not lineup value.
-    if (!starts) receivedBenchValue += line.leagueValue
-  }
+  // The same split the tanking calibration measures saved receipts with. A pick or FAAB starts for
+  // nobody this week: it is not lineup value.
+  const { receivedValue, receivedBenchValue } = receivedValueSplit(receivedLines, (name) => {
+    const asset = other.gives.find((g) => g.kind === 'player' && g.name === name)
+    return asset?.kind === 'player' && startersAfter.has(asset.playerId)
+  })
 
   const actual = world?.rosters.find((r) => r.rosterId === side.rosterId)?.starterIds ?? []
   const startersNow = new Set(actual.length ? actual : ri.startersBefore ?? [])
@@ -206,15 +378,19 @@ export type StoredTradeReview =
       receipt: TradeEvaluationReceipt
       trade: LoadedTrade
       sideNames: [string, string]
+      /** The two sides in the review's order — side A is the receipt's graded side. */
+      sides: [TradeSide, TradeSide]
+      /** The facts the review was built from, for a caller that files them as evidence. */
+      facts: TradeReviewFacts
     }
   | Extract<EvaluateStoredTradeResult, { ok: false }>
 
 export async function reviewStoredTrade(
-  args: { leagueId: string; ref: TradeRef; userId: string },
+  args: { leagueId: string; ref: TradeRef; userId: string; surface?: string },
   deps: Partial<TradeReviewDeps> = {},
 ): Promise<StoredTradeReview> {
   const d: TradeReviewDeps = { ...defaultTradeReviewDeps, ...deps }
-  const evaluated = await d.evaluate({ leagueId: args.leagueId, ref: args.ref, userId: args.userId, surface: 'commissioner-review' })
+  const evaluated = await d.evaluate({ leagueId: args.leagueId, ref: args.ref, userId: args.userId, surface: args.surface ?? 'commissioner-review' })
   if (!evaluated.ok) return evaluated
   const { trade, receipt, world = null } = evaluated
   const [sideA, sideB] = evaluated.perspectiveTeamId === trade.sideB.teamId ? [trade.sideB, trade.sideA] : [trade.sideA, trade.sideB]
@@ -252,10 +428,24 @@ export async function reviewStoredTrade(
         return { ok: true as const, value: [...prior.value, gapPct.ok ? gapPct.value : null] }
       })()
 
-  // Inactivity — native leagues only, on the commissioner hub's own basis (roster last changed).
+  // Inactivity. Native: the commissioner hub's own basis (roster last changed). Redraft and imported:
+  // each manager's last recorded move, as of when the trade was proposed — a completed trade's own
+  // processing is a move, and must not clear the manager who made it.
   const inactiveDays: TradeReviewFacts['inactiveDays'] =
     trade.origin.source !== 'af'
-      ? { ok: false, reason: trade.origin.source === 'redraft' ? 'Manager activity is not tracked for redraft rosters yet.' : 'Manager activity for imported leagues is not wired into reviews yet.' }
+      ? await (async () => {
+          if (!league) return { ok: false as const, reason: 'The league could not be read.' }
+          const proposed = trade.proposedAt ? Date.parse(trade.proposedAt) : NaN
+          const asOf = trade.status !== 'proposed' && Number.isFinite(proposed) ? new Date(proposed) : now
+          const moves = await d.lastMoves({ trade, league, asOf })
+          if (!moves.ok) return moves
+          return inactiveDaysFrom({
+            moves: moves.value,
+            teamIds: [sideA.teamId, sideB.teamId],
+            asOf,
+            maxStaleDays: trade.origin.source === 'provider' ? IMPORTED_ACTIVITY_MAX_STALE_DAYS : undefined,
+          })
+        })()
       : await (async () => {
           const health = await d.managerHealth(trade.leagueId).catch(() => null)
           if (!health || health.rows.length === 0) return { ok: false as const, reason: 'Manager activity could not be read.' }
@@ -296,7 +486,7 @@ export async function reviewStoredTrade(
     return { ok: true as const, value: kickoff.toISOString() }
   })()
 
-  const review = buildTradeReview({
+  const facts: TradeReviewFacts = {
     sides: [{ name: sideNames[0] }, { name: sideNames[1] }],
     gapPct,
     lineup,
@@ -305,6 +495,6 @@ export async function reviewStoredTrade(
     playoffPct,
     deadlineAt,
     now: now.toISOString(),
-  })
-  return { ok: true, review, receipt, trade, sideNames }
+  }
+  return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sides: [sideA, sideB], facts }
 }

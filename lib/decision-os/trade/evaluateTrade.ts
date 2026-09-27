@@ -90,7 +90,17 @@ export type TradeEvaluationReceipt = {
    * The canonical evaluation per participant roster. Null when the caller gave no rosters (an ad-hoc
    * evaluation by name), which is "not asked", not "failed" — `canonicalError` says when it failed.
    */
-  canonical: { proposerRosterId: string; receiverRosterId: string; participants: TradeEvaluationParticipant[] } | null
+  canonical: {
+    proposerRosterId: string
+    receiverRosterId: string
+    participants: TradeEvaluationParticipant[]
+    /**
+     * Which player went to which roster — so a saved receipt can say, on its own, whether a received
+     * player starts (`rosterImpact.startersAfter` holds player ids; the asset lines hold names). Read by
+     * the tanking calibration report. Optional: receipts saved before 2026-09-27 have none.
+     */
+    moves?: Array<{ fromRosterId: string; toRosterId: string; playerId: string | null; name: string | null }>
+  } | null
   canonicalError: string | null
   /** Set when the deal is an EXISTING trade (`./evaluateStoredTrade.ts`): which one, and how fresh its rosters were. */
   stored: StoredTradeContext | null
@@ -288,6 +298,9 @@ export async function evaluateTrade(
             rosterImpact: e.rosterImpact ?? null,
             memoVersion: e.memo?.snapshot?.version ?? null,
           })),
+          moves: c.assets
+            .filter((a) => a.assetType === 'player')
+            .map((a) => ({ fromRosterId: a.fromRosterId, toRosterId: a.toRosterId, playerId: a.playerId ?? null, name: a.playerName ?? null })),
         }
       } catch (error) {
         canonicalError = error instanceof Error ? error.message : 'Canonical trade evaluation unavailable.'

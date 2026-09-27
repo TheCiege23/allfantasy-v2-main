@@ -300,7 +300,7 @@ async function finalizeAcceptedTrade(
   }
 
   if (proposerOwnerId && receiverOwnerId) {
-    const legacy = await prisma.redraftLeagueTrade.create({
+    await prisma.redraftLeagueTrade.create({
       data: {
         leagueId: proposal.leagueId,
         seasonId: proposal.seasonId,
@@ -313,13 +313,15 @@ async function finalizeAcceptedTrade(
         status: 'accepted',
         processedAt: new Date(),
         expiresAt: proposal.expiresAt ?? new Date(),
-        notes: 'Normalized proposal accepted and mirrored for legacy integrity workflows',
+        notes: 'Normalized proposal accepted and mirrored for legacy readers (the redraft trades list)',
       },
     })
-    void enqueueCollusionScan(legacy.leagueId, legacy.id, [legacy.proposerRosterId, legacy.receiverRosterId]).catch((e) =>
-      console.error('[redraft/trade-votes] enqueueCollusionScan failed', e),
-    )
   }
+  // The integrity scan reviews the proposal itself — the real trade, through the one trade engine.
+  // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
+  void Promise.resolve()
+    .then(() => enqueueCollusionScan(proposal.leagueId, { kind: 'redraft', proposalId: proposal.id }, [proposal.proposerRosterId, proposal.receiverRosterId]))
+    .catch((e) => console.error('[redraft/trade-votes] enqueueCollusionScan failed', e))
 
   // Market ledger: terminal acceptance event + processed event (best-effort, idempotent).
   await recordRedraftTradeMarketEvent({
