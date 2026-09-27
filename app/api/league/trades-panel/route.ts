@@ -50,11 +50,17 @@ async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, Non
   const rows = await store.findMany({ where: { tradeId: { in: tradeIds } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
   /*
    * `tradeId` is nullable since the one receipt table (2026-09-26): an ad-hoc `evaluateTrade()` row has
-   * none. This query selects by tradeId so it never returns one — the guard makes the Map's key type
-   * say so rather than widening it to `string | null`.
+   * none. This query selects by tradeId so it never returns one; the check makes the key type say so.
+   *
+   * ⚠ A LOOP, NOT `rows.filter(isKeyed)`. `.catch(() => [])` makes `rows` a union of two array types,
+   * and on a union TypeScript picks `filter`'s non-narrowing overload — the type guard compiled and
+   * narrowed nothing, which CI's branch-generated client caught and a local client could not.
    */
-  const keyed = rows.filter((row): row is typeof row & { tradeId: string } => typeof row.tradeId === 'string')
-  return new Map(keyed.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
+  const receipts = new Map<string, NonNullable<LeagueTradeHistoryItem['decisionReceipt']>>()
+  for (const row of rows) {
+    if (typeof row.tradeId === 'string') receipts.set(row.tradeId, publicTradeDecisionReceipt(row))
+  }
+  return receipts
 }
 
 /**
