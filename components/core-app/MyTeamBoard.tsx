@@ -324,6 +324,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
 
   const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup
   const hidden = Math.max(0, activeTotal - rows.length)
+  const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
 
   return (
     <div className="af-bd">
@@ -422,7 +423,12 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         clean; putting it in the same sentence as "nothing needs you there" is
         the claim this whole loader refuses to make.
       */}
-      {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? <p className="af-bd-note">{pulse.automatic ?? 0} Best Ball teams use automatic lineups. {pulse.notChecked.inactive ?? 0} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.</p> : null}
+      {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
+        <p className="af-bd-note">
+          {(pulse.automatic ?? 0) > 0 ? `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
+          {(pulse.notChecked.inactive ?? 0) > 0 ? `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
+        </p>
+      ) : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
@@ -460,9 +466,13 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         href={allHref}
         emptyText={pulse.paused ? 'Every active league is on this board.' : undefined}
         quiet={
-          unreadable > 0
-            ? 'are either set or could not be read — the line above says which.'
-            : 'are set — nothing needs you there.'
+          hiddenNeeds > 0
+            ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
+            : unreadable > 0
+              ? 'are either set or could not be read — the line above says which.'
+            : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+              ? 'have no remaining manual lineup task or are excluded — the line above explains why.'
+              : 'are set — nothing needs you there.'
         }
       />
     </div>

@@ -30,8 +30,18 @@ export function allRosteredIds(world: CanonicalWorld): string[] {
 
 export function indexRosterNames(world: CanonicalWorld, names: PlayerNames): Map<string, LocatedPlayer[]> {
   const byName = new Map<string, LocatedPlayer[]>()
+  const seenRosters = new Set<string>()
   for (const roster of world.rosters) {
-    for (const playerId of roster.playerIds) {
+    // Imported and native roster stores can both contain the same team's roster.
+    // Collapse only identical player sets for a proven team; conflicting snapshots,
+    // unclaimed rows and different teams must still produce ambiguity.
+    const playerIds = [...new Set(roster.playerIds)]
+    if (roster.teamId != null) {
+      const identity = JSON.stringify([roster.teamId, [...playerIds].sort()])
+      if (seenRosters.has(identity)) continue
+      seenRosters.add(identity)
+    }
+    for (const playerId of playerIds) {
       const meta = names.get(playerId)
       if (!meta?.name) continue
       const key = normalizePlayerName(meta.name)

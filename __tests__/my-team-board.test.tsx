@@ -501,3 +501,9 @@ describe('the board ranks only what it actually ordered', () => {
     expect(ranksOf(container)).toEqual(['01', '02'])
   })
 })
+
+it('does not call additional urgent teams set when the top-ten payload is truncated', () => {
+  const { container } = render(<MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: Array.from({ length: 10 }, (_, i) => row({ leagueId: `urgent-${i}`, empty: 1, severity: 1 })), needsTotal: 12, considered: 65, checked: 65 })} />)
+  expect(container.textContent).toContain('55 more leagues include 2 more teams needing lineup review')
+  expect(container.textContent).not.toContain('55 more leagues are set')
+})
