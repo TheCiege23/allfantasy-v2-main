@@ -55,8 +55,13 @@ const GUARD_CALL = /\b(assertAiSpendAllowed|isAiSpendEnabled)\s*\(/
  * Raised to 40 on 2026-09-27: measured 39 on origin/main before the change (the
  * floor had lagged two guards behind), plus `lib/ai/providerRouter.ts`, whose
  * inline Anthropic adapter was the one unguarded path in the provider router.
+ *
+ * Lowered to 39 on 2026-09-27, a DELETION: `lib/integrity/CollusionDetectionEngine.ts` no
+ * longer calls a provider at all. Its direct Anthropic verdict was removed (the scan now runs
+ * the trade review), and its note goes through `explainTrade` → `lib/ai/providerRouter.ts`,
+ * which is guarded. Measured: the guarded set differs from origin/main by that one file only.
  */
-const MINIMUM = 40
+const MINIMUM = 39
 
 const ROOTS = ['lib', 'app', 'server', 'components']
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '.git'])
