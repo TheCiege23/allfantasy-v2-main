@@ -12,6 +12,7 @@ import { completedTradeGraderFor, oneGradeForCompletedTrade } from '@/lib/decisi
 import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { captureCompletedEmailEvaluation, captureEmailEvaluation } from '@/lib/decision-os/trade/captureEmailEvaluation'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
 import { recordSweptTradesOnLedger } from '@/lib/provider-trades/syncProviderTradeOffers'
@@ -384,9 +385,9 @@ async function sleeperIdResolver(
 function completedGradeCache(): (
   rowId: string,
   trade: GradedTrade,
-) => Promise<{ grade: TradeGradeView | null; leagueType: LeagueTypeBasis | null }> {
+) => Promise<{ grade: TradeGradeView | null; leagueType: LeagueTypeBasis | null; grader: LeagueTradeGrader | null }> {
   const season = new Date().getUTCFullYear()
-  const memo = new Map<string, Promise<{ grade: TradeGradeView | null; leagueType: LeagueTypeBasis | null }>>()
+  const memo = new Map<string, Promise<{ grade: TradeGradeView | null; leagueType: LeagueTypeBasis | null; grader: LeagueTradeGrader | null }>>()
   return (rowId, trade) => {
     const key = `${rowId}|${trade.id}`
     let hit = memo.get(key)
@@ -394,7 +395,7 @@ function completedGradeCache(): (
       hit = (async () => {
         const grader: LeagueTradeGrader | null = await completedTradeGraderFor(rowId).catch(() => null)
         const grade = await oneGradeForCompletedTrade(rowId, trade, season, { graderFor: async () => grader }).catch(() => null)
-        return { grade, leagueType: grade?.leagueType ?? grader?.leagueType ?? null }
+        return { grade, leagueType: grade?.leagueType ?? grader?.leagueType ?? null, grader }
       })()
       memo.set(key, hit)
     }
@@ -671,14 +672,18 @@ async function deliverPlan(args: {
            * settings, one band edge. Now each row is graded by `oneGradeForCompletedTrade`, which is
            * what /core Trades and the home band call for this trade, once per row.
            */
-          const { grade, leagueType } = await gradeFor(row.id, trade)
+          const { grade, leagueType, grader } = await gradeFor(row.id, trade)
+          const viewerOwnerId = sleeperIdOf(recipient.id)
+          const saved = await captureCompletedEmailEvaluation({ userId: recipient.id, leagueId: row.id, leagueName,
+            grader, grade, trade, viewerOwnerId }).catch(() => null)
           return buildTradeGradeEmail({
             leagueName,
             trade,
             ledgerUrl: `${getBaseUrl()}${href}`,
             grade,
             leagueType,
-            viewerOwnerId: sleeperIdOf(recipient.id),
+            viewerOwnerId,
+            receiptUrl: saved ? `${getBaseUrl()}${saved.href}` : null,
             confirmUrl: confirmUrlFor(row.id),
             /*
              * 22a's footer. `leagueId` powers the PER-LEAGUE mute — at 61 leagues,
@@ -858,12 +863,16 @@ async function notifyOffers(args: {
             get: gradeInputsFromPending(assetsReceived, 'sleeper'),
             viewerSide: true,
           }).catch(() => null)
+          const saved = await captureEmailEvaluation({ userId: recipient.id, leagueId: row.id, leagueName, grader, grade,
+            give: gradeInputsFromPending(assetsGiven, 'sleeper'), get: gradeInputsFromPending(assetsReceived, 'sleeper'), origin: 'pending_email',
+          }).catch(() => null)
           return buildPendingTradeOfferEmail({
             leagueName,
             proposerName: proposerNameOf(offer.creator),
             youGet: assetsReceived,
             youGive: assetsGiven,
             reviewUrl: `${getBaseUrl()}${href}`,
+            receiptUrl: saved ? `${getBaseUrl()}${saved.href}` : null,
             sleeperUrl,
             grade,
             leagueType: grade?.leagueType ?? grader?.leagueType ?? null,
