@@ -12,6 +12,7 @@ import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
+import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
 import type { CoreDepthAccess } from './coreDepthAccess'
@@ -572,6 +573,18 @@ export async function loadSchedule(
         projection: projectedWeek === w ? projection : null,
       })
     } else {
+      // Match the roster's coverage gate; a partial week is not proof of a bye.
+      const playing = new Set<string>()
+      const fixtures = new Set<string>()
+      for (const row of inWeek) {
+        const home = normalizeTeamAbbrev(row.homeTeam)
+        const away = normalizeTeamAbbrev(row.awayTeam)
+        if (!home || !away) continue
+        playing.add(home)
+        playing.add(away)
+        fixtures.add([home, away].sort().join('@'))
+      }
+      if (playing.has(club) || fixtures.size < MIN_PLAUSIBLE_SLATE) continue
       if (bye == null) bye = w
       weeks.push({ week: w, opponent: null, home: false, bye: true, projection: null })
     }

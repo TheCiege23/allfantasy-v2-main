@@ -49,3 +49,30 @@ describe('player-card regular-season fixtures', () => {
     ] } })
   })
 })
+
+describe('player-card bye coverage', () => {
+  const clubs = ['BUF','MIA','NE','BAL','CIN','CLE','PIT','HOU','IND','JAX','TEN','DEN','KC','LAC','LV','DAL','NYG','PHI','WAS','CHI','DET','GB','MIN','ATL']
+  function fullSlate() {
+    return Array.from({ length: 12 }, (_, i) => game({ homeTeam: clubs[i * 2], awayTeam: clubs[i * 2 + 1] }))
+  }
+
+  it('does not report a bye from a partial confirmed regular slate', async () => {
+    h.games = [game({ awayTeam: 'BUF' })]
+    expect(await loadSchedule('NYJ', 2026, 3, null, null)).toMatchObject({ schedule: { available: false }, byeWeek: null })
+  })
+
+  it('deduplicates provider fixtures before deciding the week is covered', async () => {
+    h.games = Array.from({ length: 13 }, () => game({ homeTeam: 'Detroit Lions', awayTeam: 'Buffalo Bills' }))
+    expect(await loadSchedule('NYJ', 2026, 3, null, null)).toMatchObject({ schedule: { available: false }, byeWeek: null })
+  })
+
+  it('can report a bye when the confirmed regular slate has sufficient distinct fixtures', async () => {
+    h.games = fullSlate()
+    expect(await loadSchedule('NYJ', 2026, 3, null, null)).toMatchObject({ schedule: { available: true, data: { weeks: [{ week: 3, bye: true, opponent: null, projection: null }] } }, byeWeek: 3 })
+  })
+
+  it('does not label a missing kickoff as a bye when the club has a fixture', async () => {
+    h.games = [...fullSlate(), game({ startTime: null })]
+    expect(await loadSchedule('NYJ', 2026, 3, null, null)).toMatchObject({ schedule: { available: false }, byeWeek: null })
+  })
+})
