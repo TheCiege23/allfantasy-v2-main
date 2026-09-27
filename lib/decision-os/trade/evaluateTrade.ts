@@ -91,6 +91,24 @@ export type TradeEvaluationReceipt = {
    */
   canonical: { proposerRosterId: string; receiverRosterId: string; participants: TradeEvaluationParticipant[] } | null
   canonicalError: string | null
+  /** Set when the deal is an EXISTING trade (`./evaluateStoredTrade.ts`): which one, and how fresh its rosters were. */
+  stored: StoredTradeContext | null
+}
+
+/** The existing trade a receipt was taken on. Plain JSON, so it rides in the saved receipt as-is. */
+export type StoredTradeContext = {
+  ref: Record<string, string>
+  tradeId: string
+  source: string
+  platform: string
+  status: string
+  rawStatus: string
+  deepLink: string | null
+  rostersSyncedAt: string | null
+  /** Imported rosters older than the freshness window: the design caps confidence at medium. */
+  rostersStale: boolean
+  /** Whether each outgoing player was confirmed still on the giving roster (pending trades only). */
+  rosterCheck: 'passed' | 'not_applicable' | 'unverified'
 }
 
 export type EvaluateTradeInput = {
@@ -118,6 +136,8 @@ export type EvaluateTradeInput = {
   persist?: boolean
   /** A grader already loaded for this league, to grade a batch on one chart. */
   grader?: LeagueTradeGrader | null
+  /** The existing trade being evaluated, when there is one. Copied onto the receipt. */
+  stored?: StoredTradeContext | null
 }
 
 export type EvaluateTradeDeps = {
@@ -278,6 +298,7 @@ export async function evaluateTrade(
     unpriceable: [...input.give.unpriceable, ...input.get.unpriceable],
     canonical,
     canonicalError,
+    stored: input.stored ?? null,
   }
 
   if (input.persist === false) return receipt

@@ -79,7 +79,14 @@ export function adHocSnapshotData(receipt: TradeEvaluationReceipt) {
     rosterContext: { captured: false, reason: 'An ad-hoc evaluation names assets, not rosters.' },
     assetContext: { assets: receipt.assets, unpriceable: receipt.unpriceable },
     managerContext: { userId: receipt.userId },
-    evidence: { source: 'evaluateTrade', surface: receipt.surface, inputHash: receipt.inputHash },
+    evidence: {
+      source: 'evaluateTrade',
+      surface: receipt.surface,
+      inputHash: receipt.inputHash,
+      // A re-evaluation of an existing trade names it: the trade's own proposal-time row keeps its
+      // `tradeId` (unique), so this row is found through the reference instead, never by rewriting that one.
+      storedTrade: receipt.stored ? { ref: receipt.stored.ref, tradeId: receipt.stored.tradeId, source: receipt.stored.source } : null,
+    },
     readiness: { graded: g.graded, withheldReason: g.graded ? null : g.reason },
     completeness: g.graded ? 'complete' : 'partial',
     capturedAt: new Date(receipt.evaluatedAt),
