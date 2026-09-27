@@ -551,11 +551,11 @@ export function TradeCenter(props: {
    */
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
+  const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   // Offers poll independently. Rebuilding the full route while editing can remount
   // this form and discard an unsaved proposal or its in-flight analysis.
-  const editingProposal = busy || giveAssets.length > 0 || getAssets.length > 0
+  const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
   useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
-  const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   const [draftNote, setDraftNote] = useState<string | null>(null)
   /*
    * Non-null means the next send ANSWERS that offer rather than opening a new one.
@@ -1093,6 +1093,7 @@ export function TradeCenter(props: {
     }
     setGiveAssets(recovered?.give ?? [])
     setGetAssets(recovered?.get ?? [])
+    setPicking(null)
     setPartnerRosterId(recovered?.partnerRosterId ?? null)
     setCountering(null)
     setResult(null)

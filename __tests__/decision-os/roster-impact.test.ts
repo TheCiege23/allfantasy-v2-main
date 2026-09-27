@@ -191,6 +191,16 @@ describe('computeRosterImpact', () => {
     expect(result.startingPointsDelta).toBeNull()
     expect(result.blockedReason).toMatch(/no projection/)
   })
+
+  it.each([NaN, Infinity])('reports the best usable bench replacement when another estimate is %s', invalid => {
+    const result = computeRosterImpact({
+      roster: [p('starter', 'RB', 10), p('invalid', 'RB', invalid), p('backup', 'RB', 5)],
+      slots: ['RB'], outgoingPlayerIds: ['starter'], incoming: [p('upgrade', 'RB', 12)],
+    })
+    expect(result.startingPointsDelta).toBe(2)
+    expect(result.unpricedExcluded).toBe(1)
+    expect(result.replacement).toEqual([{ position: 'RB', before: 5, after: 5 }])
+  })
   /*
    * NINE players against seven starting slots, so two sit on the bench and depth is observable.
    * The first version of this fixture had exactly as many players as slots -- every position had a

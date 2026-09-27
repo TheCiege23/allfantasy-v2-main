@@ -207,6 +207,16 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     view.unmount()
     expect(routeRefreshClaimed()).toBe(false)
   })
+  it('pauses route polling while the first asset picker is open, before a player is selected', () => {
+    expect(routeRefreshClaimed()).toBe(false)
+    const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Add asset', exact: true })[0])
+    expect(routeRefreshClaimed()).toBe(true)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close', exact: true })[0])
+    expect(routeRefreshClaimed()).toBe(false)
+    view.unmount()
+    expect(routeRefreshClaimed()).toBe(false)
+  })
   it('a withheld shared grade suppresses legacy scores, confidence, meters and balancing advice', async () => {
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, fairnessScore: 100,

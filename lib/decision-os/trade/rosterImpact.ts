@@ -265,7 +265,9 @@ function benchByPosition(players: readonly ImpactPlayer[], starterIds: readonly 
     out.set(key, list)
   }
   for (const list of out.values()) {
-    list.sort((a, b) => (b.projectedPoints ?? -Infinity) - (a.projectedPoints ?? -Infinity))
+    const value = (p: ImpactPlayer) => p.projectedPoints != null && Number.isFinite(p.projectedPoints)
+      ? p.projectedPoints : -Infinity
+    list.sort((a, b) => value(b) - value(a))
   }
   return out
 }
@@ -357,8 +359,8 @@ export function computeRosterImpact(args: {
 
   const replacement: ReplacementRow[] = positions.map((position) => ({
     position,
-    before: benchBefore.get(position)?.[0]?.projectedPoints ?? null,
-    after: benchAfter.get(position)?.[0]?.projectedPoints ?? null,
+    before: benchBefore.get(position)?.find(hasProjection)?.projectedPoints ?? null,
+    after: benchAfter.get(position)?.find(hasProjection)?.projectedPoints ?? null,
   }))
 
   return {
