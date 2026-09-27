@@ -24,4 +24,4 @@ Record the selected league, prompt, newest answer, checked time and any contradi
 
 ## Release status
 
-Source implementation and focused automated validation are in progress. Live verification of this follow-up is pending deployment.
+Source implementation is complete. All 65 focused tests pass across four suites: injury-tool dispatch, canonical injury reads, Claude request context, and Grok request context. The initial combined run had one outdated expected-message assertion; the corrected Claude suite passed all 19 tests. Hosted release checks and live verification of this follow-up are pending.

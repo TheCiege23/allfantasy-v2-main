@@ -275,7 +275,7 @@ describe('runChimmyToolLoop on Claude', () => {
     // The loop mutates one array, so by now the answer has been appended — match, don't index the end.
     expect(msgs[0]).toEqual({ role: 'user', content: 'start Chase?' })
     expect(msgs[1]).toEqual({ role: 'assistant', content: 'Yes.' })
-    expect(msgs[2]).toEqual({ role: 'user', content: 'who leads in touchdowns?' })
+    expect(msgs[2]).toEqual({ role: 'user', content: 'CURRENT USER REQUEST:\nwho leads in touchdowns?' })
   })
 })
 
