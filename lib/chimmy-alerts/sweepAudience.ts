@@ -56,9 +56,15 @@ export function injuredStarterDedupeKey(top: SweepTopAlert, now: Date): string {
  * Where a tap lands: the Player Finder card for that player, which leads with
  * the game-day banner and the verified Open-lineup buttons for every league he
  * starts in — one tap from the notification to the platform's lineup screen.
+ *
+ * ⚠ `q=` ALONE DID NOT OPEN THE CARD. The finder opens a card only for `player=<sport:externalId>`;
+ * with just a name it showed search results over the home list, one tap short of what this promised.
+ * The sweep resolves the ref from the alert's Sleeper id and passes it; the name search stays as
+ * the fallback when no ref resolves.
  */
-export function injuredStarterHref(top: SweepTopAlert): string {
+export function injuredStarterHref(top: SweepTopAlert, playerRef?: string | null): string {
   const name = alertPlayerName(top)
+  if (name && playerRef) return `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(playerRef)}`
   if (name) return `/core/players?q=${encodeURIComponent(name)}`
   return top.leagueId ? `/league/${top.leagueId}` : '/my-players'
 }

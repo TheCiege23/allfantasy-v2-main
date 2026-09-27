@@ -84,8 +84,8 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       })
       .catch(() => [] as LeagueRow[]),
     prisma.roster
-      .findMany({ where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } }, select: { leagueId: true, platformUserId: true, playerData: true } })
-      .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
+      .findMany({ where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } }, select: { leagueId: true, platformUserId: true, playerData: true, updatedAt: true } })
+      .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown; updatedAt: Date | null }>),
   ])
   const leagueById = new Map<string, LeagueRow>(leagues.map((l) => [l.id, l]))
 
@@ -118,16 +118,29 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
 
   // One roster per league — the first that matches your candidates — and its starters.
   const startersByLeague = new Map<string, string[]>()
+  /*
+   * "Lineups as of …" — the OLDEST roster read, because the list is only as current as its
+   * stalest league. `Roster.updatedAt` bumps on every successful roster sync (the collector's
+   * teams_rosters scope updates every row it writes), so it is when we last saw the lineup.
+   */
+  let oldestRosterMs: number | null = null
   for (const r of readable) {
     if (startersByLeague.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
+    const at = r.updatedAt ? new Date(r.updatedAt).getTime() : NaN
+    if (Number.isFinite(at) && (oldestRosterMs === null || at < oldestRosterMs)) oldestRosterMs = at
     const pd = (r.playerData ?? {}) as Record<string, unknown>
     const raw = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== '0') : []
     const isEspn = rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn'
     const starters = isEspn ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
     startersByLeague.set(r.leagueId, starters)
   }
-  const coverage = { leaguesNotRead, bestBallLeagues: bestBall.size, unsupportedLeagues: otherLeagues.size }
+  const coverage = {
+    leaguesNotRead,
+    bestBallLeagues: bestBall.size,
+    unsupportedLeagues: otherLeagues.size,
+    rostersAsOf: oldestRosterMs === null ? null : new Date(oldestRosterMs).toISOString(),
+  }
   const allIds = [...new Set([...startersByLeague.values()].flat())]
   if (allIds.length === 0) {
     return { available: true, data: { rows: [], week: null, leaguesRead: startersByLeague.size, startersRead: 0, ...coverage } }

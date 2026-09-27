@@ -90,6 +90,9 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
       metadata: {
         // Carried so a delivery path can key and link on the player without parsing the title.
         playerName: player.playerName,
+        // With `sport`, what the tap needs to open his card directly (sweepAudience.injuredStarterHref).
+        sleeperId: player.sleeperId ?? null,
+        sport: player.sport ?? null,
         minutesToLock: mins,
         designation: player.designation,
         inactive: Boolean(inactive),

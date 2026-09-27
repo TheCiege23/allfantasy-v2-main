@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
+import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
 import { TriageLineupLinks } from '@/components/core-app/player-finder/TriageLineupLinks'
 import { chipDetail, type GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
 import type { SectionState } from '@/lib/core-app/leagueHome'
@@ -52,6 +53,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
           {unsupported > 0 ? ` · ${unsupported} on a platform we can't read yet` : ''} · {weekLabel}
         </span>
       </header>
+      <RefreshLineups asOf={state.data.rostersAsOf ?? null} nowIso={nowIso} />
       {notRead > 0 ? (
         <p className="af-pf-triage-warn" role="note">
           {notRead} {notRead === 1 ? 'league was' : 'leagues were'} not read — more than this list checks at once. Search a player to see every league he is in.

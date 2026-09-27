@@ -20,7 +20,8 @@ export const ACTIVE_SYNC_SCOPES = ['transactions', 'teams_rosters'] as const
  * with one JS thread is how one slow league stalls the ones behind it.
  */
 export const ACTIVE_SYNC_LEAGUE_TIMEOUT_MS = 60_000
-const ACTIVE_LANE_SUFFIX = 'active'
+/** State-key suffix for the five-minute lane — shared by `lineupRefresh.ts` so a manual refresh and the lane hold one lock. */
+export const ACTIVE_LANE_SUFFIX = 'active'
 const RECENT_VIEW_WINDOW_MS = 30 * 60_000
 
 export type ActiveSyncLaneResult = RunDueResult & {

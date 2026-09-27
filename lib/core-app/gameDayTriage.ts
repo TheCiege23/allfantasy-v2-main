@@ -90,6 +90,8 @@ export type GameDayTriage = {
    * player's Sleeper id.
    */
   unsupportedLeagues?: number
+  /** When the OLDEST lineup read was last synced (Roster.updatedAt), ISO — the list is only as current as that. */
+  rostersAsOf?: string | null
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }
