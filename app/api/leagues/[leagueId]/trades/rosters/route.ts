@@ -8,8 +8,11 @@ import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationSe
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
-import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
-import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
+import { marketContextFor } from '@/lib/trade-intel/marketContext'
+import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
+import { pickPreviewKey, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
@@ -392,8 +395,14 @@ export async function GET(
   const scoring = settingsBag.scoring_settings && typeof settingsBag.scoring_settings === 'object'
     ? settingsBag.scoring_settings as Record<string, unknown>
     : {}
-  const rawPpr = Number(scoring.rec ?? nestedSettings.rec ?? 1)
-  const ppr: 0 | 0.5 | 1 = rawPpr >= 0.75 ? 1 : rawPpr >= 0.25 ? 0.5 : 0
+  const chartTeams = Number(league?.leagueSize) || 12
+  const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
+  const chartSettings = {
+    isDynasty: marketContext.variant.dynasty || marketContext.variant.keeper,
+    numQbs: marketContext.variant.superflex ? 2 : 1,
+    numTeams: chartTeams,
+    ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
+  }
 
   /*
    * Who among these rosters is an actual AllFantasy account, and what to call
@@ -507,22 +516,7 @@ export async function GET(
     rosters.map((r) => [r.id, teamNameByPlatformId.get(String(r.platformUserId)) ?? null]),
   )
 
-  /*
-   * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS ANYTHING.
-   * Player values on this route come from `getPlayerValuesForNamesDbFirst`, i.e. FantasyCalc
-   * dynasty units, and `FIRST_ROUND_IN_MARKET_UNITS` is the first-round anchor SOLVED in those same
-   * units across 771 real trades. Anchoring to any other number would put picks and players on two
-   * scales inside one sum.
-   *
-   * ⚠ AND THE SLOT IS DELIBERATELY OMITTED. A future pick has no draft position yet, so
-   * `pickValueByOverall` defaults it to the middle of the round rather than assuming a favourable
-   * one. A 2027 1st prices as a MID first, not an early one — the honest read when the order is
-   * unknown.
-   */
-  const pickValue = (round: number | null): number | null =>
-    round != null && Number.isFinite(round)
-      ? pickValueByOverall({ round, teams: rosters.length || null, firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS })
-      : null
+  // Picks are priced below, from the same chart read that supplies the players.
   const itemTypeFor = (season: number | null) =>
     currentSeason != null && season != null && season > currentSeason
       ? ('future_pick' as const)
@@ -588,15 +582,8 @@ export async function GET(
           ...listProposablePicks(r.playerData).map((p): TradeableRosterPick => ({
             ...p,
             itemType: itemTypeFor(p.season),
-            // The one way a pick goes unpriced here; see `pickValue` above.
             unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
-            /*
-             * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
-             * "1 unpriced" on a side whose total then understated it by a first-round pick. The
-             * curve to price it has existed in `lib/pick-curve.ts` the whole time — it was simply
-             * never called from here.
-             */
-            value: pickValue(p.round),
+            value: null,
           })),
           ...(importedPicks.picksByRosterId.get(r.id) ?? []).map(
             (p: RosterFuturePick): TradeableRosterPick => ({
@@ -605,7 +592,7 @@ export async function GET(
               round: p.round,
               label: `${p.season} ${roundOrdinal(p.round)}${p.fromTeamName ? ` (${p.fromTeamName})` : ''}`,
               itemType: itemTypeFor(p.season),
-              value: pickValue(p.round),
+              value: null,
               unpricedReason: null,
               proposable: false,
               fromTeam: p.fromTeamName,
@@ -620,7 +607,7 @@ export async function GET(
               round: p.round,
               label: `${p.season} ${roundOrdinal(p.round)}${fromTeam ? ` (${fromTeam})` : ''}`,
               itemType: itemTypeFor(p.season),
-              value: pickValue(p.round),
+              value: null,
               unpricedReason: null,
               proposable: true,
               fromTeam,
@@ -695,12 +682,11 @@ export async function GET(
    * ⚠ THE SETTINGS MATCH `/api/trade-value/player-search` EXACTLY, and that is not incidental. The
    * picker shows search results beside roster rows; if the two resolved value under different
    * settings the SAME player would carry two different numbers on one screen, and a manager would
-   * have no way to tell which the engine used. `getPlayerValuesForNamesDbFirst` defaults to
+   * have no way to tell which the engine used. `getFantasyCalcValuesDbFirst` defaults to
    * `numQbs: 2`, so the settings are passed explicitly rather than defaulted.
    *
    * DB-first by construction — this is a request path, and `getFantasyCalcValuesDbFirst` reads
-   * `sportsDataCache` rather than the vendor. It returns an empty map on failure, so an outage
-   * costs values and nothing else.
+   * `sportsDataCache` rather than the vendor. A failed chart read withholds prices while preserving the roster list.
    */
   /*
    * ── THIRTY-DAY STOCK, ONE QUERY FOR THE WHOLE LEAGUE ───────────────────────────────────────
@@ -719,7 +705,7 @@ export async function GET(
    * what keeps a missing snapshot table from costing the rosters.
    */
   const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, values, leagueValues] = await Promise.all([
+  const [stock, projections, loadedMarketRows, leagueValues] = await Promise.all([
     stockIds.length > 0
       ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
@@ -728,14 +714,9 @@ export async function GET(
     stockIds.length > 0
       ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
       : Promise.resolve(new Map()),
-    allNames.length > 0
-      ? getPlayerValuesForNamesDbFirst(allNames, {
-          isDynasty: valueBook.format === 'DYNASTY',
-          numQbs: valueBook.qbFormat === 'SUPERFLEX' ? 2 : 1,
-          numTeams: Number(league?.leagueSize) || rosters.length || 12,
-          ppr,
-        }).catch(() => new Map())
-      : Promise.resolve(new Map()),
+    // One chart read supplies both players and picks, using the evaluator's profile and freshness.
+    league ? getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 }).catch(() => null)
+      : Promise.resolve(null),
     loadLeagueTradeValues({
       prisma,
       platformLeagueId: league?.platform === 'sleeper' ? league.platformLeagueId : null,
@@ -746,6 +727,46 @@ export async function GET(
       },
     }).catch(() => null),
   ])
+
+  const marketRows = loadedMarketRows ?? []
+  const values = buildPlayerValuesForNames(marketRows, allNames)
+  const pickPreviewBook: TradePickPreviewBook = { leagueId, values: {} }
+  const requestedPicks = new Map<string, { year: number; round: number }>()
+  const rememberPick = (year: number, round: number) => {
+    if (Number.isInteger(year) && Number.isInteger(round) && round > 0) {
+      requestedPicks.set(pickPreviewKey(year, round), { year, round })
+    }
+  }
+  const calendarYear = new Date().getFullYear()
+  // Cover the manual pick fields as well as the league's owned pick inventory.
+  for (let year = calendarYear; year <= calendarYear + 5; year++) {
+    for (let round = 1; round <= 10; round++) rememberPick(year, round)
+  }
+  for (const roster of result) {
+    for (const pick of roster.picks) {
+      if (pick.round != null) rememberPick(pick.season ?? calendarYear, pick.round)
+    }
+  }
+  const pickPricing = {
+    fcPlayers: marketRows,
+    nflCtx: { asOfDate: new Date().toISOString().slice(0, 10),
+      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows },
+  }
+  await Promise.all([...requestedPicks].map(async ([key, pick]) => {
+    const resolved = loadedMarketRows == null ? null
+      : await priceLeagueTradePick(pick, pickPricing).catch(() => null)
+    pickPreviewBook.values[key] = resolved && !resolved.priced.unpriced
+      ? resolved.priced.assetValue.marketValue : null
+  }))
+  for (const roster of result) {
+    for (const pick of roster.picks) {
+      pick.value = pick.round != null
+        ? pickPreviewBook.values[pickPreviewKey(pick.season ?? calendarYear, pick.round)] ?? null : null
+      if (pick.value == null && !pick.unpricedReason) {
+        pick.unpricedReason = { code: 'priced_on_analysis', label: 'Pick values could not be loaded. Analyze to retry.' }
+      }
+    }
+  }
 
   /*
    * ⚠ WHETHER THE FEED LOADED IS INFERRED, BECAUSE THE LOOKUP HIDES IT. Both of its failure paths
@@ -994,5 +1015,6 @@ export async function GET(
      * rather than letting a short list read as a team with no picks.
      */
     pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
+    pickPreviewBook,
   })
 }

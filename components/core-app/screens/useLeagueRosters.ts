@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import type { TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 
 /**
  * The league's rosters, read once and shared by everything on the Trade Center
@@ -117,6 +118,7 @@ export type LeagueRostersData = {
   partnerRanking?: PartnerRanking | null
   /** Optional: absent from a server that predates imported picks. */
   pickCoverage?: PickCoverage
+  pickPreviewBook?: TradePickPreviewBook | null
 }
 
 export type LeagueRostersState = 'idle' | 'loading' | 'failed'
@@ -124,38 +126,45 @@ export type LeagueRostersState = 'idle' | 'loading' | 'failed'
 export function useLeagueRosters(
   leagueId: string | null,
   enabled: boolean,
+  viewerId?: string | null,
 ): { data: LeagueRostersData | null; state: LeagueRostersState } {
   const [data, setData] = useState<LeagueRostersData | null>(null)
   const [state, setState] = useState<LeagueRostersState>('idle')
 
-  const load = useCallback(async () => {
-    if (!leagueId) return
-    setState('loading')
-    try {
-      const r = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/rosters`)
-      const j = (await r.json().catch(() => ({}))) as Partial<LeagueRostersData>
-      if (!r.ok) {
-        setState('failed')
-        return
-      }
-      setData({
-        rosters: Array.isArray(j.rosters) ? j.rosters : [],
-        viewerRosterId: j.viewerRosterId ?? null,
-        viewerTeamRosterId: j.viewerTeamRosterId ?? null,
-        partnerRanking: j.partnerRanking ?? null,
-        // ⚠ Copied field by field, so a new server field is dropped here unless it is named.
-        pickCoverage: j.pickCoverage ?? 'none',
-      })
-      setState('idle')
-    } catch {
-      setState('failed')
-    }
-  }, [leagueId])
-
   useEffect(() => {
-    if (!leagueId || !enabled || data != null || state === 'loading') return
-    void load()
-  }, [leagueId, enabled, data, state, load])
+    const controller = new AbortController()
+    let current = true
+    setData(null)
+    if (!leagueId || !enabled) {
+      setState('idle')
+      return () => { current = false; controller.abort() }
+    }
+    setState('loading')
+    void (async () => {
+      try {
+        const response = await fetch('/api/leagues/' + encodeURIComponent(leagueId) + '/trades/rosters',
+          { signal: controller.signal })
+        const j = (await response.json().catch(() => ({}))) as Partial<LeagueRostersData>
+        if (!current) return
+        if (!response.ok) {
+          setState('failed')
+          return
+        }
+        setData({
+          rosters: Array.isArray(j.rosters) ? j.rosters : [],
+          viewerRosterId: j.viewerRosterId ?? null,
+          viewerTeamRosterId: j.viewerTeamRosterId ?? null,
+          partnerRanking: j.partnerRanking ?? null,
+          pickCoverage: j.pickCoverage ?? 'none',
+          pickPreviewBook: j.pickPreviewBook ?? null,
+        })
+        setState('idle')
+      } catch {
+        if (current) setState('failed')
+      }
+    })()
+    return () => { current = false; controller.abort() }
+  }, [leagueId, enabled, viewerId])
 
   return { data, state }
 }

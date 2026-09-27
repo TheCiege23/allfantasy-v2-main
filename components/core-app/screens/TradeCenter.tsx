@@ -17,6 +17,7 @@ import {
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
 import {
   analysisUnpricedReason,
   pickUnpricedReason,
@@ -632,6 +633,12 @@ export function TradeCenter(props: {
     return m
   }, [result])
 
+  const { data: rosterData } = useLeagueRosters(
+    props.league?.id ?? null,
+    Boolean(props.league?.id),
+    props.viewerId,
+  )
+
   const toLines = useCallback(
     (assets: PickedAsset[], engineLines?: EngineLine[] | null): Line[] => {
       /*
@@ -702,33 +709,16 @@ export function TradeCenter(props: {
             ...leagueOf(engine),
           }
         }
-        /*
-         * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
-         *
-         * This field has now been fixed three times in three places — the rosters route,
-         * the hand-typed pick, and here — because pricing at PICK time bakes a number into
-         * stored state, so every path that creates a pick has to remember to set it. Any
-         * path that forgets produces an em dash on the row and "1 unpriced" on a total
-         * that then understates itself by a whole first-rounder.
-         *
-         * The round is all the curve needs and every pick carries one, so deriving it here
-         * makes ONE rule serve every path — including a draft serialized into localStorage
-         * before the rule existed, which no amount of fixing creation sites can reach.
-         *
-         * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
-         * slot it projects to; the curve here only knows the round, so it is the fallback
-         * and not the override.
-         *
-         * ⚠ AND A PICK THE ROUTE COULD NOT PLACE STAYS UNPRICED. The picker defaults a missing
-         * round to 1 when it builds the asset, so pricing that round here would show a pick with no
-         * round as a first-rounder. `unpricedReason` is what survives from the route to say so.
-         */
+        // A league quote overrides saved draft values, including values from older pricing models.
         const pick: Line = {
           name: a.label,
           position: 'PICK',
           team: null,
           marketValue:
-            a.value ??
+            props.league?.id
+              ? (valuedByVerdict(a) ? readPickPreviewValue({ leagueId: props.league.id,
+                  book: rosterData?.pickPreviewBook, year: a.year, round: a.round }) : null)
+              : a.value ??
             (!a.unpricedReason && Number.isFinite(a.round) && a.round >= 1
               ? pickValueByOverall({
                   round: a.round,
@@ -738,9 +728,8 @@ export function TradeCenter(props: {
               : null),
         }
         /*
-         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The builder prices a pick on its
-         * own round curve and the analysis on the historical pick curve, and they are not the same
-         * number — so a row showing one while the verdict summed the other could never add up. The
+         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The league preview and
+         * evaluator share a pricer; an analysis retains its exact value even if the market refreshes. The
          * engine names picks differently from the builder, so the line is matched by its place in the
          * deal (the analysis returns lines in the order it was sent), and only if it IS a pick line.
          */
@@ -750,7 +739,7 @@ export function TradeCenter(props: {
           pick.leagueValue = graded
           pick.adjustments = []
         }
-        const why = pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null
+        const why = pick.marketValue == null ? (a.unpricedReason ?? pricedOnAnalysisReason()).label : null
         return {
           ...pick,
           // Said on the row because the verdict below it silently has one asset fewer.
@@ -758,7 +747,7 @@ export function TradeCenter(props: {
         }
       })
     },
-    [pricedBy, props.league?.teamCount],
+    [pricedBy, props.league?.id, props.league?.teamCount, rosterData?.pickPreviewBook],
   )
 
   const give = toLines(giveAssets, result?.players?.give)
@@ -783,10 +772,6 @@ export function TradeCenter(props: {
    * ⚠ THIS DOES ADD ONE REQUEST PER TRADE-PAGE LOAD, and that is the deliberate trade: it is the
    * request that fetches the content the page is for.
    */
-  const { data: rosterData } = useLeagueRosters(
-    props.league?.id ?? null,
-    Boolean(props.league?.id),
-  )
   /*
    * ⚠ IDENTITY, NOT THE PROPOSE GATE. `viewerRosterId` is the engine's strict
    * predicate and is null on every imported league, so filtering "everyone but
@@ -1336,6 +1321,7 @@ export function TradeCenter(props: {
           they do not hold and the engine would refuse it on send.
         */
         rosterPicks={r?.picks ?? []}
+        pickPreviewBook={rosterData?.pickPreviewBook}
         rosterLabel={side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
