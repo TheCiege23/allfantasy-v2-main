@@ -205,10 +205,6 @@
       "schedule": "*/1 * * * *"
     },
     {
-      "path": "/api/brackets/world-cup/cron/sync?job=all&provider=apifootball&recalculate=true",
-      "schedule": "0 8 * * *"
-    },
-    {
       "path": "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn",
       "schedule": "0 16-19 * * *"
     },

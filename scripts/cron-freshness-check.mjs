@@ -330,6 +330,13 @@ export const PROBES = {
   // (waivers, score-sync, draft-tick, legacy-import-drain) it will persist until the fast tier
   // has a scheduler again, exactly like the fast-tier output probes above.
   '/api/cron/waivers': { heartbeat: 'cron-waivers' },
+  /*
+   * The NFL game-window injury run (2026-09-27): every five minutes, real work only while an NFL
+   * kickoff is near. A HEARTBEAT, for both reasons above at once — it shares SportsInjury with the
+   * half-hourly run (a table probe would be satisfied by its sibling) and it correctly writes
+   * nothing for most of the week. The route writes the heartbeat on every fire, in window or not.
+   */
+  '/api/cron/import-injuries?sport=NFL&gameWindow=1': { heartbeat: 'cron-import-injuries-gamewindow' },
   '/api/redraft/score-sync': { heartbeat: 'cron-redraft-score-sync' },
   '/api/redraft/waiver-process': { heartbeat: 'cron-redraft-waiver-process' },
   /*
