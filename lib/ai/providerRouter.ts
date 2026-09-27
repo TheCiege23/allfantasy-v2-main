@@ -3,7 +3,9 @@
  *
  * Tries providers in configured order. Falls back on billing, rate-limit,
  * 5xx, timeout, or network failure. Halts immediately on content-filter
- * refusals (other providers would also refuse).
+ * refusals (other providers would also refuse) and on the AI spend kill switch
+ * (it is global — every provider is off, so trying the next one only risks a
+ * provider that forgot to check).
  *
  * Configure order via AI_PROVIDER_ORDER env var (comma-separated):
  *   AI_PROVIDER_ORDER=openai,anthropic,xai,deepseek
@@ -11,6 +13,7 @@
  * Users never see which provider answered. Admin logs include provider attempts.
  */
 
+import { assertAiSpendAllowed } from '@/lib/ai/aiSpendGuard'
 import { normalizeProviderError } from '@/lib/ai/providerErrors'
 import {
   resolveOpenAIModel,
@@ -106,6 +109,14 @@ export function getProviderOrder(): ProviderName[] {
 
 // ─── Anthropic adapter ────────────────────────────────────────────────────────
 // Isolated from anthropic-pipeline.ts to prevent circular imports.
+//
+// 🛑 THIS ADAPTER IS A PROVIDER BOUNDARY, SO IT CARRIES THE SPEND GUARD ITSELF. The router's other
+// three providers delegate to clients that check `aiSpendGuard` (`lib/openai-client`,
+// `lib/xai-client`, `lib/deepseek-client`); this one builds its own Anthropic SDK client below, so
+// until 2026-09-27 nothing checked the kill switch on this path. With spend OFF, a call that reached
+// Anthropic — directly (`trade_eval` routes here) or by falling back after the guarded OpenAI client
+// refused with a 503 — still spent. The guard runs first in both call functions: before the rate
+// limiter, before the client is built, before any request leaves.
 
 const anthropicApiKey = process.env.ANTHROPIC_API_KEY?.trim() ?? ''
 
@@ -142,6 +153,8 @@ function extractSystemAndUser(messages: RouterMessage[]): { system: string; user
 }
 
 async function callAnthropicText(args: TextCallArgs): Promise<RouterResult> {
+  // Throws, like the missing-key branch below: the router maps it to a non-fallback halt.
+  assertAiSpendAllowed('provider-router:anthropic')
   if (!anthropicApiKey) {
     throw Object.assign(new Error('Anthropic API key not configured.'), { status: 503 })
   }
@@ -194,6 +207,7 @@ async function callAnthropicText(args: TextCallArgs): Promise<RouterResult> {
 }
 
 async function callAnthropicStream(args: StreamCallArgs): Promise<RouterResult> {
+  assertAiSpendAllowed('provider-router:anthropic-stream')
   if (!anthropicApiKey) {
     throw Object.assign(new Error('Anthropic API key not configured.'), { status: 503 })
   }
@@ -381,10 +395,10 @@ export async function routeTextCall(args: {
    */
   preferredProvider?: ProviderName | null
 }): Promise<RouterResult> {
-  // NOTE: the spend guard is NOT here. It lives in the provider clients this router delegates to
-  // (`lib/openai-client`, `lib/xai-client`, `lib/deepseek-client`) — the point where a request
-  // actually leaves. Guarding the router instead would refuse callers that inject or mock a client
-  // and would therefore never have spent anything.
+  // NOTE: the spend guard is NOT in this loop. It lives at each provider boundary — the clients this
+  // router delegates to (`lib/openai-client`, `lib/xai-client`, `lib/deepseek-client`) and the inline
+  // Anthropic adapter above, the point where a request actually leaves. A refusal from any of them is
+  // classified `spend_disabled` and ends the loop: the switch is global, so no later provider may spend.
   const order = applyPreferredProvider(getProviderOrder(), args.preferredProvider)
   const attempts: string[] = []
 

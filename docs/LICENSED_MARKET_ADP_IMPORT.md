@@ -1,5 +1,7 @@
 # Licensed market ADP imports
 
+Admin screen: `/admin/adp-import`, linked from the admin dashboard. Choose the expected sport, season, format and scoring, upload a JSON export or paste it, then select **Validate export**. Validation writes no observations. Review the accepted player count and source/date before selecting **Import validated export**. Editing the context or replacing the file requires validation again.
+
 Admin endpoint: `POST /api/admin/fantasy-data/adp-import`. Requires the existing authenticated admin session. No public or commissioner write access.
 
 Send `{ "dryRun": true, "expected": { "sport": "NBA", "season": 2026, "format": "redraft", "scoring": "points" }, "board": { ... } }`. Review the accepted count, then send the same request with `dryRun: false` to import. No production import has been performed by this build.
