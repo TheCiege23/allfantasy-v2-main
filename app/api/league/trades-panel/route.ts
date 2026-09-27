@@ -48,7 +48,13 @@ async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, Non
   const store = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
   if (!store) return new Map()
   const rows = await store.findMany({ where: { tradeId: { in: tradeIds } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
-  return new Map(rows.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
+  /*
+   * `tradeId` is nullable since the one receipt table (2026-09-26): an ad-hoc `evaluateTrade()` row has
+   * none. This query selects by tradeId so it never returns one — the guard makes the Map's key type
+   * say so rather than widening it to `string | null`.
+   */
+  const keyed = rows.filter((row): row is typeof row & { tradeId: string } => typeof row.tradeId === 'string')
+  return new Map(keyed.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
 }
 
 /**
