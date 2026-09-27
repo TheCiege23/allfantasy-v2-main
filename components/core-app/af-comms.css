@@ -1135,6 +1135,11 @@
   line-height: 1.4;
 }
 
+/* A trade's grade, one chip per team — lib/activity/tradeGradeLabel.ts. */
+.af-cm-act-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 10.5px; color: var(--faint); }
+.af-cm-act-grade-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.af-cm-act-grade-chip b { font-weight: 800; }
+
 .af-cm-act > span:first-child { flex: 1; min-width: 0; }
 .af-cm-act-go { flex: none; font-size: 15px; color: var(--faint); }
 
