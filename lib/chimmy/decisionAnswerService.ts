@@ -56,8 +56,12 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
   const kind = imageTrade.question || imageTrade.clarification ? 'trade' : chimmyDecisionKind(args.question)
   if (!kind) return null
   let provenLeagueId: string | null = null
-  const gap = (code: string, detail: string, remedy: string) => decisionAnswer({ kind, status: 'needs_data', leagueId: provenLeagueId,
-    answer: `${detail}\n${remedy}`, sources: [], gap: { code, remedy } })
+  const gap = (code: string, detail: string, remedy: string, scenario?: ReadyChimmyScenario) => {
+    const partial = scenario && 'value' in scenario ? { ...scenario, recommendation: { action: 'hold', explanation: remedy } } : scenario
+    return decisionAnswer({ kind, status: 'needs_data', leagueId: provenLeagueId,
+      answer: (partial ? renderDecisionScenario(partial) : detail) + '\n' + remedy,
+      sources: [], gap: { code, remedy }, ...(partial ? { scenario: partial } : {}) })
+  }
   if (!args.leagueId || !args.userId) return gap('league_required', 'I need your league and roster before computing this decision.', 'Select a league in Chimmy and ask again.')
   try {
     const access = await loadLeagueGroundingForUser(args.userId, args.leagueId)
@@ -110,10 +114,10 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
       if ('value' in scenario && imageTrade.assetCount != null && imageTrade.assetCount !== scenario.give.length + scenario.get.length) return gap('screenshot_assets_unresolved', 'I received the screenshot, but not every asset resolved against the league roster. No complete-package verdict was computed.', 'Confirm every player and pick on both sides before deciding.')
       // A resolved trade with no grade and no impact is still a missing answer, never a paid verdict.
       if ('value' in scenario && !scenario.value.grade && !scenario.lineup) return gap('valuation_missing', scenario.value.withheld ?? 'This trade could not be priced.', 'Sync league values and projections, then retry.')
-      if ('value' in scenario && (!scenario.value.grade || !scenario.lineup || scenario.unpricedExcluded)) return gap('trade_impact_incomplete', renderDecisionScenario(scenario), 'This is a partial analysis. Sync league values and complete weekly projections before treating it as an acceptance decision.')
+      if ('value' in scenario && (!scenario.value.grade || !scenario.lineup || scenario.unpricedExcluded)) return gap('trade_impact_incomplete', renderDecisionScenario(scenario), 'This is a partial analysis. Sync league values and complete weekly projections before treating it as an acceptance decision.', scenario)
       if ('value' in scenario) {
         scenario = await enrichTrade(scenario)
-        if (needsSeason && !scenario.playoffOdds.available) return gap('season_impact_missing', renderDecisionScenario(scenario), 'This is a partial analysis, with no charge. Sync the league and complete season-model coverage before relying on a playoff-impact decision.')
+        if (needsSeason && !scenario.playoffOdds.available) return gap('season_impact_missing', renderDecisionScenario(scenario), 'This is a partial analysis, with no charge. Sync the league and complete season-model coverage before relying on a playoff-impact decision.', scenario)
       }
       if (scenario.kind === 'waiver' && !scenario.lineup && scenario.add.points == null && scenario.drop?.points == null) return gap('projections_missing', 'The move was identified, but its players and lineup impact could not be projected.', 'Sync your league and retry when weekly projections are available.')
       const startCalls: ChatStartCall[] = []

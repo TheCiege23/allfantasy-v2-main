@@ -184,6 +184,12 @@ type ChatTurn = {
   actionCards?: ChimmyActionCardData[] | null
 }
 
+function scenarioFollowUps(scenario: ReadyChimmyScenario | null): string[] | null {
+  if (!scenario || scenario.kind === 'waiver' || scenario.kind === 'start_sit') return null
+  const offer = 'Should I trade ' + scenario.give.map(p => p.name).join(', ') + ' for ' + scenario.get.map(p => p.name).join(', ') + '?'
+  return [offer + ' Explain a counter that protects my starting lineup.', 'Should I accept my pending trade offers? Compare them against my roster and scoring.', offer + ' Explain future pick value and positional depth.']
+}
+
 /** How many earlier turns follow the user into another scope. */
 const CARRIED_TURNS = 6
 
@@ -380,6 +386,7 @@ type ChimmyEnvelope = {
     connectedFranchise?: Array<{ leagueId: string; leagueName: string; rosterStatus: 'available' | 'unavailable'; playerCount: number }>
     players?: ChimmyPlayerCard[]
     /** Validated by `readReadyScenario` before anything renders it. */
+    screenshotAttachment?: { url: string; name: string } | null
     scenario?: unknown
     /** Set only when the route recorded this answer's advice. */
     advice?: { key?: unknown; type?: unknown; playerName?: unknown }
@@ -793,6 +800,10 @@ export function ChimmyPanel({
             ? reported
             : null
 
+        if (payload.meta?.screenshotAttachment?.url.startsWith('/api/chat/chimmy?attachment=')) {
+          const stored = payload.meta.screenshotAttachment
+          setTurns(all => all.map((turn, index) => index === all.length - 1 && turn.role === 'you' ? { ...turn, imagePreview: stored.url, imageName: stored.name } : turn))
+        }
         const answer = payload.response ?? 'Chimmy did not return a message.'
 
         /*
@@ -849,7 +860,7 @@ export function ChimmyPanel({
             scenario: readReadyScenario(payload.meta?.scenario),
             advice: readAdvice(payload),
             mode: answeredMode(payload.meta),
-            followUps: readFollowUps(payload.meta?.followUps),
+            followUps: scenarioFollowUps(readReadyScenario(payload.meta?.scenario)) ?? readFollowUps(payload.meta?.followUps),
             plan: answeredPlan,
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
@@ -922,7 +933,8 @@ export function ChimmyPanel({
   const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
 
   return (
-    <div className="af-cm-panel">
+    <div className="af-cm-panel" data-chimmy="true">
+      {source !== 'messages_ai' ? <Link className="af-cm-expand" href={'/chimmy/chat' + (scopeId ? '?leagueId=' + encodeURIComponent(scopeId) : '')}>Open full-page analysis ↗</Link> : null}
       {/* Scope selector. The current scope is always visible, by contract. */}
       <div className="af-cm-scope">
         <span className="af-cm-scope-label">Scope</span>
@@ -1018,10 +1030,12 @@ export function ChimmyPanel({
                 {t.role === 'chimmy' ? 'Chimmy' : 'You'}
                 {t.carried ? ' · earlier' : ''}
               </span>
+
+              {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' ? (
                 <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
               ) : (
-                <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <img src={t.imagePreview} alt={`Screenshot: ${t.imageName ?? 'attachment'}`} style={{ maxWidth: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12 }} /> : null}</div>
+                <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <a href={t.imagePreview} target="_blank" rel="noopener noreferrer" aria-label="Enlarge attached screenshot"><img src={t.imagePreview} alt={`Screenshot: ${t.imageName ?? 'attachment'}`} style={{ maxWidth: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12 }} /></a> : null}</div>
               )}
 
               {t.role === 'chimmy' && t.choices?.length && t.retryQuestion ? (
@@ -1089,7 +1103,6 @@ export function ChimmyPanel({
                 <ChimmyEvidenceBlock evidence={t.evidence} />
               ) : null}
 
-              {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
 
               {t.role === 'chimmy' && t.actionCards?.length
                 ? t.actionCards.map((card) => <ChimmyActionCard key={card.actionId} card={card} />)
@@ -1184,7 +1197,7 @@ export function ChimmyPanel({
             </div>
           ))
         )}
-        {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">Chimmy is thinking…</p></div> : null}
+        {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">Chimmy is checking your question and available evidence…</p></div> : null}
         {/*
           * ⚠ "Nothing was charged." USED TO BE APPENDED TO EVERY ERROR, and it is
           * not always true: route.ts:2848 returns a 500 AFTER the spend at 1883,
