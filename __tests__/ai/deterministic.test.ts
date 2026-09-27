@@ -1000,6 +1000,62 @@ describe('injury short-circuit', () => {
  * one and never picked up by the other — answered by nobody.
  */
 describe('isOwnRosterInjuryQuestion', () => {
+  const completeRosterPrompt = 'Count my complete roster by position and explain injury risks using current Decision OS evidence. Respect Best Ball rules and disclose missing data or unverified swap eligibility.'
+
+  it('recognizes the reported complete-roster prompt as a personal injury request', () => {
+    expect(isOwnRosterInjuryQuestion(completeRosterPrompt)).toBe(true)
+  })
+
+  it('yields the reported complete-roster prompt before a generic injury lookup', async () => {
+    const result = await tryDeterministicAnswerDetailed(completeRosterPrompt, 'en', 'authorized-league', true)
+    expect(result).toBeNull()
+    expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
+    expect(getEnrichedNewsFeedMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'Count my complete Best Ball roster by position and explain injury risks.',
+    'Count our current league roster by position. Patrick Mahomes is hurt; include every injured player.',
+    'Review my starting lineup using the live NFL games right now and current injuries.',
+    'Break down my complete selected-league roster and injury reports using Decision OS.',
+    'How many RBs and TEs are on my team? Include injury risks.',
+    'Review my roster depth and compare Patrick Mahomes with my other quarterbacks.',
+  ])('keeps a complete roster analysis out of individual cache shortcuts: %s', async (question) => {
+    mockSportsInjuryFindMany.mockResolvedValue([{
+      ...freshInjury(), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable',
+    }])
+    const result = await tryDeterministicAnswerDetailed(question, 'en', 'authorized-league', true)
+    expect(result).toBeNull()
+    expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
+    expect(mockSportsGameFindMany).not.toHaveBeenCalled()
+    expect(getEnrichedNewsFeedMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'Respect Best Ball. Any injuries on my roster?',
+    'Any injuries on my Best Ball roster using Decision OS?',
+  ])('does not treat a format label as an athlete: %s', async (question) => {
+    expect(isOwnRosterInjuryQuestion(question)).toBe(true)
+    expect(await tryDeterministicAnswerDetailed(question)).toBeNull()
+    expect(mockSportsInjuryFindMany).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'Best Ball: is my guy Patrick Mahomes hurt?',
+    'Best Ball Patrick Mahomes injury update',
+    'Decision OS: Patrick Mahomes injury update',
+  ])('preserves a direct named-player injury lookup: %s', async (question) => {
+    mockSportsInjuryFindMany.mockResolvedValue([{
+      ...freshInjury(), playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable',
+    }])
+    expect(isOwnRosterInjuryQuestion(question)).toBe(false)
+    const result = await tryDeterministicAnswerDetailed(question)
+    expect(result?.kind).toBe('answer')
+    expect(result?.text).toContain('Patrick Mahomes')
+    const where = mockSportsInjuryFindMany.mock.calls[0]?.[0]?.where
+    expect(where?.playerName?.contains).toBe('Patrick Mahomes')
+  })
+
   it.each([
     "who's out in my leagues",
     'any injuries on my team?',
