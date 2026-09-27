@@ -7,7 +7,8 @@ import { test, expect } from '@playwright/test'
 import { getScoringPresetOptionsForSelection } from '../lib/create-league-v2/rules-engine'
 import { prisma } from '../lib/prisma'
 
-test.describe.configure({ mode: 'serial' })
+// Each sport owns independent fixtures; a failure must not skip unrelated sports.
+test.describe.configure({ mode: 'default' })
 test.use({ actionTimeout: 120000, navigationTimeout: 300000 })
 
 for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const) {
