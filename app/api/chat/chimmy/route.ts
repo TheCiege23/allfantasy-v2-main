@@ -2776,7 +2776,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    */
   const tradeTargetQuestion = leagueSnapshot ? parseTradeTargetQuestion(message) : null
   const tradeTargetRead: TradeTargetResult | null =
-    tradeTargetQuestion && leagueSnapshot
+    tradeTargetQuestion && leagueSnapshot && !hasImage
       ? await buildTradeTargetVerdict({
           playerName: tradeTargetQuestion.playerName,
           leagueId: leagueSnapshot.id,
