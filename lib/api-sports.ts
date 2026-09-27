@@ -1956,9 +1956,9 @@ export async function syncAPISportsGameOddsToDb(opts?: {
   summary.gamesConsidered = games.length;
   if (games.length === 0) return summary;
 
-  // 6h TTL matches the cron cadence, so a row is never presented as fresh once a
+  // 1h TTL matches the cron cadence, so a row is never presented as fresh once a
   // fire has been missed.
-  const expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
   const unrecognized = new Set<string>();
 
   for (const game of games) {

@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
@@ -3818,7 +3819,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <PickALeague
             tabKey="my-team"
             title="My team"
-            blurb="Which lineups still need setting, and how long you have left. Pick one below for the full roster."
+            blurb="Choose a league for its full roster, lineup checks and Chimmy analysis."
+            showQueue={false}
+            above={<p><Link href="/core/my-team">Back to lineup priorities</Link></p>}
             issues={issues}
             leagues={rail}
           />

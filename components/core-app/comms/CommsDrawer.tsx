@@ -683,6 +683,8 @@ export function CommsDrawer({
             homeSignals={homeSignals}
             pageSurface={pageSurface}
             initialDraft={initialDraft}
+            initialDraftScopeId={openRequest?.leagueId ?? undefined}
+            draftRequestKey={openRequestSeq}
             userId={userId}
           />
         ) : tab === 'huddle' ? (

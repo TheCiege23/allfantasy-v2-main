@@ -473,6 +473,8 @@ export function ChimmyPanel({
   homeSignals,
   pageSurface,
   initialDraft,
+  initialDraftScopeId,
+  draftRequestKey = 0,
   userId,
   planAllowance = null,
   sport = null,
@@ -491,6 +493,9 @@ export function ChimmyPanel({
   pageSurface: CoreSurfaceKey | null
   /** A question a screen asked us to seed. Never auto-sent. */
   initialDraft?: string | null
+  /** Apply a screen's question only after its explicit league scope is selected. */
+  initialDraftScopeId?: string | null
+  draftRequestKey?: number
   /** Keys the saved conversation, so one account's chat never loads for another. */
   userId?: string
   /**
@@ -520,7 +525,7 @@ export function ChimmyPanel({
     (id: string | null) => `${publicMode ? 'public:' : ''}${id ?? 'global'}`,
     [publicMode],
   )
-  const { turns, draft, setTurns, setDraft, carryInto, historyFailed, retryHistory } = useScopedConversation<ChatTurn>(
+  const { turns, draft, setTurns, setDraft, carryInto, historyFailed, retryHistory, ready: conversationReady } = useScopedConversation<ChatTurn>(
     userId,
     threadKey(scopeId),
   )
@@ -614,9 +619,15 @@ export function ChimmyPanel({
    * something the user has already started typing — overwriting a half-written
    * message to insert our own is the one way this could cost someone anything.
    */
+  const appliedDraftRequest = useRef<string | null>(null)
   useEffect(() => {
-    if (initialDraft) setDraft((d) => (d.trim() ? d : initialDraft))
-  }, [initialDraft])
+    if (!initialDraft || !conversationReady) return
+    if (initialDraftScopeId !== undefined && initialDraftScopeId !== scopeId) return
+    const request = JSON.stringify([userId, draftRequestKey, initialDraftScopeId, initialDraft])
+    if (appliedDraftRequest.current === request) return
+    appliedDraftRequest.current = request
+    setDraft((d) => (d.trim() ? d : initialDraft))
+  }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, setDraft])
 
   const send = useCallback(
     async (text: string) => {

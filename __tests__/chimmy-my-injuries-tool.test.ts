@@ -72,6 +72,31 @@ beforeEach(() => {
 })
 
 describe('buildMyRosterInjuriesContext', () => {
+  it('reads only the authorized selected roster and treats Best Ball injuries as depth concerns', async () => {
+    h.leagues.mockResolvedValue([
+      { id: 'L1', name: 'Best Ball dynasty', sport: 'NFL', season: 2026 },
+      { id: 'L2', name: 'Another league', sport: 'NFL', season: 2026 },
+    ])
+    h.platforms.mockResolvedValue([{ id: 'L1', platform: 'sleeper', leagueType: 'dynasty', settings: { best_ball: 1 } }])
+    h.team.mockResolvedValue(team({ starters: [ref('1', 'Omar Cooper', { position: 'WR', team: 'NYJ' })] }))
+    h.injuries.mockResolvedValue(injuryResult({ 'Omar Cooper': fact('IR', 4) }))
+    const result = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'L1' })
+    expect(h.team).toHaveBeenCalledTimes(1)
+    expect(h.team.mock.calls[0][0].leagueId).toBe('L1')
+    expect(result).toContain('SELECTED-LEAGUE INJURY CHECK')
+    expect(result).toContain('Omar Cooper WR NYJ: IR')
+    expect(result).toContain('AUTOMATIC BEST BALL LINEUP')
+    expect(result).toContain('not requests for manual starter swaps')
+    expect(result).not.toContain('⚠ ACTION:')
+    expect(result).not.toContain('Another league')
+  })
+  it('does not read an unlisted selected league or substitute another roster', async () => {
+    h.leagues.mockResolvedValue([{ id: 'L1', name: 'My league', sport: 'NFL', season: 2026 }])
+    const result = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'private-league' })
+    expect(result).toContain('No authorized current-season roster')
+    expect(h.team).not.toHaveBeenCalled()
+    expect(h.injuries).not.toHaveBeenCalled()
+  })
   it('refuses without a signed-in user', async () => {
     const out = await buildMyRosterInjuriesContext({ userId: '' })
     expect(out).toMatch(/cannot tell who is signed in/)

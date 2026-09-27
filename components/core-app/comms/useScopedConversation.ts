@@ -131,6 +131,7 @@ export function useScopedConversation<T extends { id: string; role: string; text
     return { ...previous, [target]: { ...state, turns: [...state.turns, ...added].slice(-80) } }
   }), [scope])
   return {
+    ready: loadedKey === storageKey,
     turns: loadedKey === storageKey ? all[scope]?.turns ?? [] : [],
     draft: loadedKey === storageKey ? all[scope]?.draft ?? '' : '',
     setTurns,

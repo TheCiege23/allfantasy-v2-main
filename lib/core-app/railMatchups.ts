@@ -4,7 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeekFrom } from './currentWeek'
 import { managerArtUrl } from './leagueArt'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
-import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
+import { isRuledOut } from './injuryStatus'
+import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
+import { composePlayerIdentities } from './playerIdentityCompose'
+import { getByeWeeks } from './byeWeeks'
 import { resolveRailMatchupMode } from './railMatchupMode'
 
 /**
@@ -23,6 +27,8 @@ import { resolveRailMatchupMode } from './railMatchupMode'
  * union of those starters. A seventh MatchupFact read runs only for leagues with
  * no WeeklyMatchup cache, preserving older importer coverage without replacing
  * a live-cache answer.
+ * Current availability adds one identity read plus injury and schedule reads per
+ * sport, shared across every lineup. It never adds queries per league.
  *
  * ⚠ THE LAST THREE READ JSON SUBPATHS, NOT WHOLE COLUMNS, AND THAT IS THE WHOLE
  * REASON THEY ARE AFFORDABLE. Measured against production (94 claimed teams, 93
@@ -95,7 +101,7 @@ import { resolveRailMatchupMode } from './railMatchupMode'
  * projection of nothing, which is a different and much stronger claim.
  */
 export type RailSideProjection = {
-  /** The feed's own weekly number, generic PPR. Null when no starter priced. */
+  /** Generic PPR baseline with known absences zeroed. Null when no starter priced. */
   projected: number | null
   /**
    * The same starters under this league's rules. Null when the league's scoring
@@ -613,6 +619,7 @@ const NO_PROJECTIONS: RailProjections = { byLeague: new Map(), projectionWeek: n
 
 type LeagueMetaRow = {
   id: string
+  sport: string | null
   scoring_settings: unknown
   scoringSettings: unknown
   yahoo_settings: unknown
@@ -642,7 +649,7 @@ function startersOf(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.map(String) : []
 }
 
-async function loadRailProjections(args: {
+export async function loadRailProjections(args: {
   fixtures: Array<{ dbLeagueId: string; platformLeagueId: string; rosterIds: string[] }>
   /* ReadonlyMap, not Map: `Map` is invariant in its value type, so the caller's
      richer `TeamMeta` would not assign to a narrower one. */
@@ -670,6 +677,7 @@ async function loadRailProjections(args: {
     prisma
       .$queryRawUnsafe<LeagueMetaRow[]>(
         `SELECT id,
+                "sport",
                 settings->'scoring_settings' AS "scoring_settings",
                 settings->'scoringSettings'  AS "scoringSettings",
                 settings->'yahoo_settings'   AS "yahoo_settings",
@@ -747,6 +755,29 @@ async function loadRailProjections(args: {
     projectionWeek = fallback
   }
 
+  // A current injury cannot be applied to a fallback projection from another week.
+  // All roster ids share one identity read and one availability read per sport.
+  const unavailableBySport = new Map<string, Set<string>>()
+  if (projectionWeek?.season === asked.season && projectionWeek.week === asked.week) {
+    const sports = [...new Set(leagueMeta.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
+    const playerRows = await prisma.sportsPlayer.findMany({
+      where: { sleeperId: { in: wanted }, sport: { in: sports } },
+      select: { sleeperId: true, name: true, team: true, sport: true },
+    }).catch(() => [])
+    await Promise.all(sports.map(async (sport) => {
+      const players = playerRows.filter((p) => String(p.sport).toUpperCase() === sport)
+      const teams = new Map([...composePlayerIdentities(players)].map(([id, p]) => [id, p.team]))
+      const [statuses, byes] = await Promise.all([
+        readInjuryStatusById(sport, namesBySleeperId(players), teams),
+        getByeWeeks({ sport, season: args.season, playerTeams: teams, fromWeek: args.week, horizon: 0 }).catch(() => null),
+      ])
+      unavailableBySport.set(sport, new Set([
+        ...[...statuses].filter(([, status]) => isRuledOut(status)).map(([id]) => id),
+        ...(byes?.byWeek.get(args.week) ?? []),
+      ]))
+    }))
+  }
+  const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
   const eliminationByLeague = new Map<string, boolean>()
   for (const l of leagueMeta) {
@@ -781,6 +812,12 @@ async function loadRailProjections(args: {
     let afFrom = 0
     for (const id of side.starters) {
       if (!isPriceableId(id)) continue
+      if (unavailableBySport.get(sportByLeague.get(side.dbLeagueId) ?? 'NFL')?.has(id)) {
+        // Known absence is a priced zero, even when that player has no feed projection.
+        vendorFrom += 1
+        if (hasScoringRules(scoring)) afFrom += 1
+        continue
+      }
       const p = feed.get(id)
       if (!p) continue
       if (Number.isFinite(p.projectedPoints)) {
