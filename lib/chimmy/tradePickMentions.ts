@@ -43,7 +43,7 @@ const NOT_A_PICK = String.raw`(?![\s-]+(?:place|down|quarter|half|string|team|ti
 const MENTION = new RegExp(
   String.raw`(?:\b(a|an|one|two|three|2|3)\s+)?(?:\b((?:19|20)\d{2})\s+)?\b(1st|2nd|3rd|4th|first|second|third|fourth)(s)?\b` +
     /* Longest first: "round pick" before "round", or " pick" is left behind and reads as an unparsed pick. */
-    String.raw`(?:[\s-]+(round\s+picks?|round(?:er)?s?|picks?))?` +
+    String.raw`(?:[\s-]+(round\s+(?:draft\s+)?picks?|round(?:er)?s?|(?:draft\s+)?picks?))?` +
     NOT_A_PICK,
   'gi',
 )
