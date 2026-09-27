@@ -169,6 +169,7 @@ export type MatchupData = {
     id: string
     name: string
     platform: string
+    bestBall?: boolean
     /** The league crest, when the platform published one. */
     logoUrl: string | null
     /**
@@ -266,6 +267,7 @@ export async function getMatchupData(
       id: league.id,
       name: leagueDisplayName(league.name),
       platform,
+      bestBall: league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings),
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
       sourceLink: resolveSourceLink({
         platform: league.platform,
@@ -564,7 +566,7 @@ export async function getMatchupData(
   if (sideProjections) base.yetToPlay.reason = `${counts.upcoming} yet to start · ${counts.live} in progress · ${counts.final} finished or unavailable${counts.unknown ? ` · ${counts.unknown} game states unavailable` : ''}`
   const bestBall = league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)
   const forecastReason = bestBall
-    ? 'Best Ball selects the scoring lineup automatically. The stored starter list cannot predict bench substitutions; live provider totals are shown above.'
+    ? 'Best Ball selects eligible bench players automatically. Forecasts cannot be calculated from the listed starters alone.'
     : counts.unknown > 0
       ? 'Some starter game states are unavailable, so remaining points and win probability cannot be verified.'
       : null
