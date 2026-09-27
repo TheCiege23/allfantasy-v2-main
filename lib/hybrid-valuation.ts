@@ -41,7 +41,7 @@ export interface ValuationContext {
    */
   leagueValueByNameLower?: ReadonlyMap<
     string,
-    { value: number; position: string; basis: 'idp-vorp' | 'kicker-flat' }
+    LeagueNamedValue
   >;
 }
 

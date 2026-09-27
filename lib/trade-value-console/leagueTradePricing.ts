@@ -4,7 +4,7 @@ import type { SportsPlayerRecord } from '@prisma/client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
-import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
+import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
@@ -140,6 +140,12 @@ export function lineFromPriced(
     composite: compositeScore(pa.assetValue),
     marketValue: pa.assetValue.marketValue,
     pricedSource: meta.pricedSource ?? 'unknown',
+    ...(meta.projectionSource ? {
+      effectiveProjection: meta.effectiveProjection,
+      projectionSource: meta.projectionSource,
+      projectionScope: meta.projectionScope,
+      projectionNotes: meta.projectionNotes,
+    } : {}),
     ...(pa.unpriced
       ? {
           unpriced: true,
@@ -391,6 +397,11 @@ export async function resolveAssets(
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
       const pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+      const defenderProjection = pa.source === 'idp-vorp' ? leagueValueForPlayer({
+        name: displayName, identity: { sleeperId: knownSleeperId, position },
+        bySleeperId: args.nflCtx.leagueValueBySleeperId,
+        byNameLower: args.nflCtx.leagueValueByNameLower,
+      })?.projection : null
       const unpricedReason = pa.unpriced
         ? pa.unpricedReason ?? (knownSleeperId ? args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId) : null)
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
@@ -422,6 +433,12 @@ export async function resolveAssets(
           pricedSource: src,
           dataSource: row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
+          ...(defenderProjection ? {
+            effectiveProjection: defenderProjection.points,
+            projectionSource: 'league_idp_history' as const,
+            projectionScope: { season: defenderProjection.season, week: defenderProjection.week },
+            projectionNotes: [`${defenderProjection.season} week ${defenderProjection.week}: league-scored defensive history estimate. Live injury and weather adjustments are not included in this estimate.`],
+          } : {}),
         }, { reasonPosition: position ?? null, unpricedReason }),
       )
       continue

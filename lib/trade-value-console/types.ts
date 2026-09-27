@@ -143,6 +143,8 @@ export type TradeConsolePlayerLine = {
   valueAdjustments?: LeagueValueAdjustment[]
   /** From `resolveNormalizedPlayerSportsProfiles` + league scoring stack. */
   effectiveProjection?: number | null
+  projectionSource?: 'league_idp_history'
+  projectionScope?: { season: number; week: number }
   projectionNotes?: string[]
   injuryNewsSummary?: string | null
   weatherSummary?: string | null

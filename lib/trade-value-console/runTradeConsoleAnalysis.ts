@@ -459,8 +459,9 @@ export async function runTradeConsoleAnalysis(
     dataGaps.length > 0 ||
     [...giveLines, ...getLines].some((l) => l.dataSource === 'placeholder')
 
-  const giveProjSum = sumEffectiveProjections(giveLines)
-  const getProjSum = sumEffectiveProjections(getLines)
+  const comparableProjections = sumEffectiveProjections([...giveLines, ...getLines]) != null
+  const giveProjSum = comparableProjections ? sumEffectiveProjections(giveLines) : null
+  const getProjSum = comparableProjections ? sumEffectiveProjections(getLines) : null
   const netProj =
     giveProjSum != null && getProjSum != null
       ? Math.round((getProjSum - giveProjSum) * 10) / 10
@@ -472,8 +473,8 @@ export async function runTradeConsoleAnalysis(
     net: netProj,
     summary:
       giveProjSum != null && getProjSum != null
-        ? 'Net = sum(get) − sum(give) of league-scored weekly projections (injury → weather → scoring stack) for players with DB rows — short-term add/drop signal, not dynasty market value.'
-        : 'Add league + player rows with projections to unlock scoring-adjusted weekly impact alongside market composites.',
+        ? 'Net compares combined player production, not starting-lineup improvement or win probability. Picks and FAAB are excluded. Defensive history estimates use league scoring; review each estimate for its week and injury/weather coverage.'
+        : 'Complete, comparable player projections are required on both sides. Missing players are not counted as zero; picks and FAAB have no weekly production estimate.',
   }
 
   const scoringSummaryLine = leagueNormCtx

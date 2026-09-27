@@ -92,8 +92,12 @@ export async function enrichTradeConsolePlayerLines(args: {
     const notes = collectProjectionNotes(prof)
     const key = `${line.playerId}|${line.name.toLowerCase()}`
     enrichByKey.set(key, {
-      effectiveProjection: eff,
-      projectionNotes: notes.length ? notes : undefined,
+      // The defender board already applied this league's IDP scoring. A generic
+      // record projection may use another score or horizon and cannot replace it.
+      effectiveProjection: line.projectionSource === 'league_idp_history' ? line.effectiveProjection : eff,
+      projectionNotes: line.projectionSource === 'league_idp_history'
+        ? [...(line.projectionNotes ?? []), ...notes.filter(n => n.startsWith('Injury source conflict:'))]
+        : notes.length ? notes : undefined,
       injuryNewsSummary: prof?.injuryNewsLayer?.playerNewsSummary ?? null,
       weatherSummary: prof?.projection.weatherSummary ?? null,
       weatherRiskLevel: prof?.projection.weatherRiskLevel ?? null,
@@ -110,9 +114,13 @@ export async function enrichTradeConsolePlayerLines(args: {
 }
 
 export function sumEffectiveProjections(lines: TradeConsolePlayerLine[]): number | null {
-  const vals = lines
-    .map((l) => l.effectiveProjection)
-    .filter((v): v is number => v != null && Number.isFinite(v))
-  if (vals.length === 0) return null
+  const players = lines.filter(l => l.pricedSource !== 'pick' && l.pricedSource !== 'faab')
+  // A partial total makes a missing player look like zero production.
+  if (!players.length || players.some(l => l.unpriced || l.effectiveProjection == null || !Number.isFinite(l.effectiveProjection))) return null
+  if (players.some(l => l.projectionScope)) {
+    const scope = players[0].projectionScope
+    if (!scope || players.some(l => l.projectionScope?.season !== scope.season || l.projectionScope?.week !== scope.week)) return null
+  }
+  const vals = players.map(l => l.effectiveProjection!)
   return Math.round(vals.reduce((a, b) => a + b, 0) * 10) / 10
 }
