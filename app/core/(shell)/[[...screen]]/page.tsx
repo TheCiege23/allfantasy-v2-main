@@ -1627,7 +1627,7 @@ export default async function AfCorePage({
           }
           recommendationSlot={
             <Suspense key={selectedLeagueId} fallback={null}>
-              <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} />
+              {activeKey === 'home' ? <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} /> : null}
             </Suspense>
           }
         />
@@ -3793,7 +3793,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <>
-            {myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
+            {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
               leagueId: myTeam.league.id,
               leagueName: myTeam.league.name,
               starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
