@@ -1,4 +1,10 @@
 type PendingStorage = Pick<Storage,'getItem'|'setItem'|'removeItem'>
+async function inspectJson(response: Response): Promise<Record<string, unknown>> {
+  // Native fetch returns a cloneable Response. Lightweight app test fetches may
+  // return a repeatable json() object without clone().
+  const data = await (typeof response.clone === 'function' ? response.clone() : response).json().catch(() => ({}))
+  return data && typeof data === 'object' ? data : {}
+}
 function browserStorage(): PendingStorage | undefined {
   try { return typeof window === 'undefined' ? undefined : window.sessionStorage } catch { return undefined }
 }
@@ -19,7 +25,9 @@ async function pendingKey(form: FormData): Promise<string> {
 /** Preserve pending identity across transport failure, manual retry and page reload. Storage contains only hashes and IDs. */
 export async function postChimmyRequest(form: FormData, fetcher: typeof fetch = fetch,
   storage: PendingStorage | undefined = browserStorage()): Promise<Response> {
-  if (!form.get('requestId')) form.set('requestId', crypto.randomUUID())
+  // HTTPS browsers have randomUUID; older embedded browsers and test DOMs may not.
+  // The receipt is also scoped to the signed-in user and fingerprinted server-side.
+  if (!form.get('requestId')) form.set('requestId', globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
   let key: string | undefined
   let pending: string | null = null
   try {
@@ -30,12 +38,11 @@ export async function postChimmyRequest(form: FormData, fetcher: typeof fetch = 
   let response: Response
   const post = async () => {
     const init = { method:'POST',body:form,headers:{'x-chimmy-request-id':String(form.get('requestId'))} }
-    try { return await fetcher('/api/chat/chimmy',init) }
-    catch { return fetcher('/api/chat/chimmy',init) }
+    return fetcher('/api/chat/chimmy',init)
   }
-  if (pending) {
+  if (pending && form.get('confirmTokenSpend') !== 'true') {
     response = await fetcher(`/api/chat/chimmy?requestId=${encodeURIComponent(pending)}`,{cache:'no-store'})
-    const confirmation = response.status === 409 && (await response.clone().json().catch(()=>({}))).code === 'token_confirmation_required'
+    const confirmation = response.status === 409 && (await inspectJson(response)).code === 'token_confirmation_required'
     if (response.status === 404 || (confirmation && form.get('confirmTokenSpend') === 'true')) response = await post()
   } else response = await post()
   const started = Date.now()
@@ -44,9 +51,11 @@ export async function postChimmyRequest(form: FormData, fetcher: typeof fetch = 
     response = await fetcher(`/api/chat/chimmy?requestId=${encodeURIComponent(String(form.get('requestId')))}`, { cache: 'no-store' })
   }
   if (response.status === 202) throw new Error('Your answer is still processing. Check your Chimmy history before asking again.')
-  const code = (await response.clone().json().catch(()=>({}))).code
+  const code = (await inspectJson(response)).code
   const resumable = code === 'token_confirmation_required' || code === 'chimmy_request_recovery_pending'
-  if (!resumable && (response.status < 500 || ['chimmy_request_failed','chimmy_request_expired'].includes(code))) {
+  // Every non-pending response is final in the receipt, including a 500 whose
+  // charge has already been released. A manual retry must get a fresh ID.
+  if (!resumable) {
     try { if (storage && key) storage.removeItem(key) } catch { /* storage is optional */ }
   }
   return response

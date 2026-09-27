@@ -80,8 +80,10 @@ const scopeValue = () => (screen.getByLabelText('League scope') as HTMLSelectEle
 const pickScope = (value: string) => fireEvent.change(screen.getByLabelText('League scope'), { target: { value } })
 
 async function ask(question: string) {
+  const priorPosts = chimmyCalls().length
   fireEvent.change(screen.getByLabelText('Message'), { target: { value: question } })
   fireEvent.click(screen.getByRole('button', { name: 'Send to Chimmy' }))
+  await waitFor(() => expect(chimmyCalls().length).toBeGreaterThan(priorPosts))
   await waitFor(() => expect(screen.queryByText('Chimmy is thinking…')).toBeNull())
 }
 
@@ -160,7 +162,7 @@ describe('CommsDrawer keeps the league the user is asking about', () => {
       body: { response: 'Start him.', meta: { leagueGrounding: { grounded: true, leagueId: 'l0', leagueName: 'Sunday Squad' } } },
     })
     await ask('should I start Rice?')
-    expect(screen.queryAllByRole('link').some((a) => /sleeper/i.test(a.textContent ?? ''))).toBe(true)
+    await waitFor(() => expect(screen.queryAllByRole('link').some((a) => /sleeper/i.test(a.textContent ?? ''))).toBe(true))
     pickScope('dj')
     expect(screen.getByText('Start him.')).toBeTruthy()
     expect(screen.queryAllByRole('link').some((a) => /sleeper/i.test(a.textContent ?? ''))).toBe(false)
@@ -184,7 +186,7 @@ describe('CommsDrawer keeps the league the user is asking about', () => {
     })
     await ask('is Rashee Rice worth trading for?')
 
-    expect(screen.getByRole('button', { name: /Ask in Draft Junkies/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Ask in Draft Junkies/ })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Old Tournament/ })).toBeNull()
 
     replies.push({ status: 200, body: { response: 'In Draft Junkies, yes.' } })
