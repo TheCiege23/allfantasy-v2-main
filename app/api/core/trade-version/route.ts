@@ -12,12 +12,12 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers })
   try {
     const [claimed, owned] = await Promise.all([
-      prisma.leagueTeam.findMany({ where: { claimedByUserId: session.user.id }, select: { league: { select: { platformLeagueId: true } } } }),
-      prisma.league.findMany({ where: { userId: session.user.id }, select: { platformLeagueId: true } }),
+      prisma.leagueTeam.findMany({ where: { claimedByUserId: session.user.id }, select: { league: { select: { platformLeagueId: true, platform: true } } } }),
+      prisma.league.findMany({ where: { userId: session.user.id }, select: { platformLeagueId: true, platform: true } }),
     ])
-    const sources = [...new Set([...owned, ...claimed.map(t => t.league)].flatMap(l => l?.platformLeagueId ? [l.platformLeagueId] : []))]
+    const sources = [...new Map([...owned, ...claimed.map(t => t.league)].flatMap(l => l?.platformLeagueId ? [[`${l.platform}:${l.platformLeagueId}`, { platform: String(l.platform ?? 'sleeper').toLowerCase(), history: { sleeperLeagueId: l.platformLeagueId } }] as const] : [])).values()]
     const rows = sources.length ? await prisma.leagueTrade.findMany({
-      where: { history: { sleeperLeagueId: { in: sources } }, tradeDate: { gte: new Date(Date.now() - 14 * 86400000) } },
+      where: { OR: sources, tradeDate: { gte: new Date(Date.now() - 14 * 86400000) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 40,
       select: { id: true, tradeDate: true },
     }) : []

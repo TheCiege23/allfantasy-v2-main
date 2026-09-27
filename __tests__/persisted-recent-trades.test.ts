@@ -24,3 +24,11 @@ it('publishes an ingested trade between other managers before grading exists, on
   expect(trades[0].sides[0].gradeReason).toBe('Trade received. Grade pending.')
   expect(trades[0].partial).toBe(false)
 })
+
+it('keeps identical provider league and transaction IDs in separate feeds', async () => {
+  const row = { sport: 'nfl', transactionId: 'same', tradeDate: new Date('2026-09-27'), playersReceived: [], picksReceived: [{ season: '2027', round: 1 }], history: { sleeperLeagueId: '123', sleeperUsername: 'manager' } }
+  h.trades.mockResolvedValue([{ ...row, platform: 'espn' }, { ...row, platform: 'yahoo' }])
+  const trades = await persistedRecentTrades([{ id: 'espn-league', name: 'ESPN', platform: 'espn', platformLeagueId: '123' }, { id: 'yahoo-league', name: 'Yahoo', platform: 'yahoo', platformLeagueId: '123' }], new Date('2026-09-26'))
+  expect(trades.map(t => t.leagueId)).toEqual(['espn-league', 'yahoo-league'])
+  expect(new Set(trades.map(t => t.id)).size).toBe(2)
+})

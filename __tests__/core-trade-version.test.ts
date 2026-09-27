@@ -11,7 +11,7 @@ describe('Home trade invalidation', () => {
     const before = await (await GET()).json()
     expect(m.claimed.mock.calls[0][0].where).toEqual({ claimedByUserId: 'viewer' })
     expect(m.owned.mock.calls[0][0].where).toEqual({ userId: 'viewer' })
-    expect(m.trades.mock.calls[0][0].where.history.sleeperLeagueId.in).toEqual(['owned-source', 'claimed-source'])
+    expect(m.trades.mock.calls[0][0].where.OR).toEqual([{ platform: 'sleeper', history: { sleeperLeagueId: 'owned-source' } }, { platform: 'sleeper', history: { sleeperLeagueId: 'claimed-source' } }])
     m.trades.mockResolvedValue([{ id: 'new-trade', tradeDate: new Date('2026-09-27') }])
     const after = await (await GET()).json()
     expect(after.version).not.toBe(before.version)

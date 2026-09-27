@@ -6,10 +6,10 @@ import { attachPlayerMediaBatch } from '@/lib/player-media'
 /** Completed ingestion events are news even while their analytical grade is pending. */
 export async function persistedRecentTrades(leagues: RecentTradesLeague[], cutoff: Date): Promise<RecentTrade[]> {
   if (!prisma.leagueTrade) return []
-  const bySource = new Map(leagues.filter(l => l.platformLeagueId).map(l => [l.platformLeagueId!, l]))
+  const bySource = new Map(leagues.filter(l => l.platformLeagueId).map(l => [`${String(l.platform ?? 'sleeper').toLowerCase()}:${l.platformLeagueId}`, l]))
   if (!bySource.size) return []
   const rows = await prisma.leagueTrade.findMany({
-    where: { history: { sleeperLeagueId: { in: [...bySource.keys()] } }, tradeDate: { gte: cutoff } },
+    where: { OR: [...bySource.values()].map(l => ({ platform: String(l.platform ?? 'sleeper').toLowerCase(), history: { sleeperLeagueId: l.platformLeagueId! } })), tradeDate: { gte: cutoff } },
     orderBy: { tradeDate: 'desc' }, take: 400,
     select: { transactionId: true, tradeDate: true, platform: true, sport: true, playersReceived: true, picksReceived: true,
       history: { select: { sleeperLeagueId: true, sleeperUsername: true } } },
@@ -24,9 +24,9 @@ export async function persistedRecentTrades(leagues: RecentTradesLeague[], cutof
   const named = new Map(players.filter(p => p.sleeperId).map(p => [p.sleeperId!, p]))
   const grouped = new Map<string, RecentTrade>()
   for (const row of rows) {
-    const league = bySource.get(row.history.sleeperLeagueId)
+    const league = bySource.get(`${row.platform}:${row.history.sleeperLeagueId}`)
     if (!league || !row.tradeDate) continue
-    const key = `${row.history.sleeperLeagueId}:${row.transactionId}`
+    const key = `${row.platform}:${row.history.sleeperLeagueId}:${row.transactionId}`
     let trade = grouped.get(key)
     if (!trade) {
       trade = { id: key, leagueId: league.id, leagueName: league.name, leagueAvatarUrl: league.avatarUrl ?? null,

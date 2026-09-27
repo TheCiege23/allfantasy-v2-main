@@ -643,7 +643,7 @@ export async function getRecentTrades(
     }
   }
 
-  const eventKey = (t: RecentTrade) => `${t.platformLeagueId}:${t.id.split(':').pop()}`
+  const eventKey = (t: RecentTrade) => `${t.leagueId}:${t.id.split(':').pop()}`
   for (const trade of persisted) {
     const existing = out.find(t => eventKey(t) === eventKey(trade))
     if (existing) { if (Date.parse(trade.acceptedAt) > Date.parse(existing.acceptedAt)) existing.acceptedAt = trade.acceptedAt }
