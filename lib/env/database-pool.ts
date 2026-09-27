@@ -5,6 +5,7 @@ export function applyDatabasePoolGuardrails(rawUrl: string): string {
   if (!/^postgres(ql)?:\/\//i.test(rawUrl)) return rawUrl;
   try {
     const parsed = new URL(rawUrl);
+    if (!parsed.hostname) return rawUrl;
     if (!parsed.searchParams.has("connection_limit")) {
       // More than one is needed by helpers that read outside a transaction.
       parsed.searchParams.set("connection_limit", "5");
