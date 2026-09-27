@@ -48,9 +48,15 @@ async function main() {
       count(*) FILTER (WHERE "expiresAt">now())::int AS unexpired,
       max("fetchedAt") AS observed FROM player_season_stats WHERE sport=ANY($1::text[])
       GROUP BY sport,season ORDER BY sport,season`,[sports])).rows
+    const canonicalSeasonStats = (await db.query(`SELECT sport_key,season_key,source,count(*)::int AS records,
+      count(*) FILTER (WHERE games_played>0)::int AS played_games,
+      count(*) FILTER (WHERE fantasy_points IS NOT NULL)::int AS fantasy_scored,
+      count(*) FILTER (WHERE expires_at>now())::int AS unexpired,
+      max(fetched_at) AS observed FROM sports_core_player_season_stats
+      GROUP BY sport_key,season_key,source ORDER BY sport_key,season_key,source`)).rows
     await db.query('ROLLBACK')
     console.log(JSON.stringify({ asOf: new Date().toISOString(), transactionReadOnly: true,
-      scope: 'Stored cache inventory only. Counts are not a deduplicated active draft pool, verified identity, reachable media, observed current-season stats, or live browser acceptance.', sports, boards, storedPlayers, identityAssets, teamAssets, gameLogs, mediaHosts, observedSeasonStats }, null, 2))
+      scope: 'Stored cache inventory only. Counts are not a deduplicated active draft pool, verified identity, reachable media, observed current-season stats, or live browser acceptance.', sports, boards, storedPlayers, identityAssets, teamAssets, gameLogs, mediaHosts, observedSeasonStats, canonicalSeasonStats }, null, 2))
   } finally { await db.end() }
 }
 main().catch(error => { console.error('Read-only draft inventory failed:', error.code ?? error.name); process.exitCode = 1 })
