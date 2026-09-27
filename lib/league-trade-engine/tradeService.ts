@@ -32,6 +32,7 @@ import {
 } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
+import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -101,16 +102,69 @@ async function notifyProposerOfDecision(input: {
   body?: string
 }) {
   const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+  // The letter the proposer SENT it at — the frozen receipt, not a regrade (see `frozenProposerGrade`).
+  const line = gradeNoticeLine(await frozenProposerGrade(input.tradeId), 'sent')
   await ingest(
     tradeEvent({
       userIds: [input.proposerUserId],
       leagueId: input.leagueId,
       type: input.type,
       tradeId: input.tradeId,
-      title: input.title,
-      body: input.body,
+      title: line ? `${input.title}${line.titleSuffix}` : input.title,
+      body: line ? [input.body, line.bodyLine].filter(Boolean).join(' ') : input.body,
     }),
   ).catch(() => {})
+}
+
+/** The part of a trade decision a notice can state for one side. */
+export type NoticeGrade = { grade: string | null; valueGiven: number | null; valueReceived: number | null }
+
+/**
+ * THE grade, in a trade notice's words (2026-09-27). PURE.
+ *
+ * 🛑 A NATIVE TRADE'S EMAIL, PUSH AND IN-APP NOTICE CARRIED NO GRADE. "Someone in your league sent
+ * you a trade offer" — while the one grade for that exact offer had been computed seconds earlier
+ * (`evaluateServerTradeDecision`) and frozen into its receipt. The Sleeper offer and completed-trade
+ * emails already carried it (`lib/trade-intel/tradeGradeEmail.ts`); these did not. Title and body
+ * are what every channel renders, so the line goes there.
+ *
+ * Null — and the notice reads exactly as before — when the side has no letter. A withheld grade is
+ * never replaced by a neutral one.
+ */
+export function gradeNoticeLine(
+  d: NoticeGrade | null | undefined,
+  when: 'offer' | 'sent',
+): { titleSuffix: string; bodyLine: string } | null {
+  if (!d?.grade || !['A', 'B', 'C', 'D', 'F'].includes(d.grade)) return null
+  const values =
+    d.valueGiven != null && d.valueReceived != null
+      ? ` — you get ${Math.round(d.valueReceived).toLocaleString('en-US')} for ${Math.round(d.valueGiven).toLocaleString('en-US')}`
+      : ''
+  return {
+    titleSuffix: ` — ${d.grade} for you`,
+    bodyLine:
+      when === 'offer'
+        ? `AllFantasy grades it ${d.grade} for you on this league’s values${values}.`
+        : `You sent it graded ${d.grade} for you on this league’s values${values}.`,
+  }
+}
+
+/**
+ * The proposer's side of a trade's FROZEN receipt — the letter shown at proposal. Never throws: a
+ * receipt table that is missing or unreadable, or a test double without it, means "no grade line",
+ * never a failed notice.
+ */
+export async function frozenProposerGrade(tradeId: string): Promise<NoticeGrade | null> {
+  try {
+    const [trade, snapshot] = await Promise.all([
+      prisma.afLeagueTrade.findUnique({ where: { id: tradeId }, select: { proposerRosterId: true } }),
+      prisma.tradeDecisionSnapshot ? prisma.tradeDecisionSnapshot.findFirst({ where: { tradeId } }) : Promise.resolve(null),
+    ])
+    if (!trade || !snapshot) return null
+    return publicTradeDecisionReceipt(snapshot).participantDecisions.find((p) => p.rosterId === trade.proposerRosterId) ?? null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -233,23 +287,28 @@ async function notifyOnTradeCreated(input: {
   actorUserId: string
   receiverUserIds: string[]
   counteredProposerUserId: string | null
+  /** Each recipient's side of THE grade for the NEW offer, keyed by user id. Absent: no grade line. */
+  gradeByUserId?: ReadonlyMap<string, NoticeGrade>
 }) {
   const planned: PlannedTradeNotice[] = []
+  // The recipient's letter for the new offer, appended to the title and body every channel renders.
+  const withGrade = (userId: string, title: string, body: string) => {
+    const line = gradeNoticeLine(input.gradeByUserId?.get(userId), 'offer')
+    return line ? { title: `${title}${line.titleSuffix}`, body: `${body} ${line.bodyLine}` } : { title, body }
+  }
 
   if (input.counteredProposerUserId) {
     planned.push({
       userId: input.counteredProposerUserId,
       type: 'trade_countered',
-      title: 'Your trade offer was countered',
-      body: 'They sent one back — open it to accept, counter again, or decline.',
+      ...withGrade(input.counteredProposerUserId, 'Your trade offer was countered', 'They sent one back — open it to accept, counter again, or decline.'),
     })
   }
   for (const receiverUserId of input.receiverUserIds) {
     planned.push({
       userId: receiverUserId,
       type: 'trade_proposed',
-      title: 'New trade offer',
-      body: 'Someone in your league sent you a trade offer.',
+      ...withGrade(receiverUserId, 'New trade offer', 'Someone in your league sent you a trade offer.'),
     })
   }
 
@@ -613,6 +672,16 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
       .map((r) => r.platformUserId)
       .filter((id): id is string => Boolean(id)),
     counteredProposerUserId: parent?.proposedByUserId ?? null,
+    /*
+     * Each participant's side of THE grade, from the decision computed above and frozen into this
+     * offer's receipt — the same letter the offer card shows. Keyed the way the recipients are.
+     */
+    gradeByUserId: new Map(
+      (serverDecisionResult?.participants ?? []).flatMap((d) => {
+        const uid = participants.find((r) => r.id === d.rosterId)?.platformUserId
+        return uid ? [[uid, d] as const] : []
+      }),
+    ),
   })
 
   /*
