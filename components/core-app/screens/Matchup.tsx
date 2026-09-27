@@ -199,7 +199,7 @@ function PlayerHalf({
             title={
               cell.unavailable === 'bye'
                 ? 'His team is not playing this week. A starter on bye is a guaranteed zero.'
-                : 'Ruled out this week. A starter who is out is a guaranteed zero.'
+                : 'Unavailable this week. In Best Ball, another eligible roster player can replace this player automatically.'
             }
           >
             {cell.unavailable === 'bye' ? 'BYE' : 'OUT'}

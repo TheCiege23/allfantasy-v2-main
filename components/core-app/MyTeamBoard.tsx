@@ -286,7 +286,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
    */
   const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
   const total = pulse.considered
-  const activeTotal = total - (pulse.paused ?? 0)
+  const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
   /*
    * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
@@ -422,7 +422,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         clean; putting it in the same sentence as "nothing needs you there" is
         the claim this whole loader refuses to make.
       */}
-      {(pulse.notChecked.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? <p className="af-bd-note">{pulse.notChecked.automatic ?? 0} Best Ball teams use automatic lineups. {pulse.notChecked.inactive ?? 0} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.</p> : null}
+      {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? <p className="af-bd-note">{pulse.automatic ?? 0} Best Ball teams use automatic lineups. {pulse.notChecked.inactive ?? 0} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.</p> : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
