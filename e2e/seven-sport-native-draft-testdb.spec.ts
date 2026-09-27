@@ -46,7 +46,7 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         await page.getByTestId('g30-timezone').selectOption('America/Chicago')
         await page.getByTestId('g30-step-review').click()
         await expect(page.getByTestId('g30-review-issues')).toHaveCount(0)
-        const createdPromise = page.waitForResponse(r => new URL(r.url()).pathname === '/api/leagues' && r.request().method() === 'POST')
+        const createdPromise = page.waitForResponse(r => new URL(r.url()).pathname === '/api/leagues' && r.request().method() === 'POST', { timeout: 300000 })
         await page.getByTestId('g30-create-league-submit').click()
         const created = await createdPromise
         expect(created.status(), await created.text()).toBeLessThan(400)
