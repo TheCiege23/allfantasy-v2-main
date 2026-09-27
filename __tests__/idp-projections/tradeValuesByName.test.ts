@@ -66,6 +66,25 @@ beforeEach(() => {
 })
 
 describe('loadIdpTradeValuesByName', () => {
+  it('preserves per-player refusals even when the entire league board is unpriced', async () => {
+    const gap = { code: 'idp_insufficient_sample', label: 'Too few recorded games to estimate a reliable defensive value' }
+    loadLeagueIdpVorp.mockResolvedValue({ ...boardResult(new Map(), 'valuation_refused'), unpricedReasonBySleeperId: new Map([['lb_mid', gap]]) })
+    const res = await loadIdpTradeValuesByName({ prisma, platformLeagueId: 'L1', isDynasty: true })
+    expect(res.skipped).toBe('valuation_refused')
+    expect(res.byNameLower.size).toBe(0)
+    expect(res.unpricedReasonBySleeperId?.get('lb_mid')).toEqual(gap)
+    expect(res.unpricedReasonByNameLower?.get('mid backer')).toEqual(gap)
+  })
+
+  it('keeps priced defenders unchanged and does not assign another player’s refusal through a name collision', async () => {
+    const gap = { code: 'idp_no_history', label: 'No defensive game history on file for this player' }
+    loadLeagueIdpVorp.mockResolvedValue({ ...boardResult(new Map([['lb_mid', 1200]])), unpricedReasonBySleeperId: new Map([['lb_stud', gap]]) })
+    getPlayersBySport.mockResolvedValue({ ...PLAYERS, lb_stud: { full_name: 'Wide One', position: 'LB' } })
+    const res = await loadIdpTradeValuesByName({ prisma, platformLeagueId: 'L1', isDynasty: true })
+    expect(res.byNameLower.get('mid backer')?.value).toBe(1200)
+    expect(res.unpricedReasonBySleeperId?.get('lb_stud')).toEqual(gap)
+    expect(res.unpricedReasonByNameLower?.has('wide one')).toBe(false)
+  })
   it('keys the league board by lowercased name and keeps the values intact', async () => {
     const res = await loadIdpTradeValuesByName({
       prisma,

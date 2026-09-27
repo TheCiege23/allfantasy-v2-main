@@ -27,6 +27,7 @@ import type { PrismaClient } from '@prisma/client'
 import { getLeagueInfo, getLeagueRosters, getPlayersBySport } from '@/lib/sleeper-client'
 import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
 import { resolveLeagueKickerValue, type LeagueKickerValue } from '@/lib/kicker-values/leagueKickerValue'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /** Sleeper's kicker position vocabulary, which is NOT just `K`. */
 const KICKER_POSITIONS = new Set(['K', 'PK', 'KICKER', 'PLACE KICKER', 'K/P'])
@@ -51,6 +52,8 @@ export interface LeagueNamedValue {
 }
 
 export interface LeagueTradeValues {
+  unpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>
+  unpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>
   /** Lowercased, trimmed full name -> value. Only unambiguous names appear. */
   byNameLower: ReadonlyMap<string, LeagueNamedValue>
   idp: {
@@ -180,6 +183,8 @@ export async function loadLeagueTradeValues(
 
     return {
       byNameLower: merged,
+      unpricedReasonBySleeperId: idp.unpricedReasonBySleeperId,
+      unpricedReasonByNameLower: idp.unpricedReasonByNameLower,
       idp: { skipped: idp.skipped, coverage: idp.coverage, ambiguousNames: idp.ambiguousNames },
       kicker: { ...kickerValue, named: namedKickers },
     }

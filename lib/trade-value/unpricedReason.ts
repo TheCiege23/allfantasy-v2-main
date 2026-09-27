@@ -3,7 +3,7 @@
  *
  * An unpriced asset has always rendered as an em dash, never a zero, and the builder counts it
  * toward "N unpriced". What it never said was WHY, and the reasons are not interchangeable: a
- * defender will never be on the value feed, a feed that failed to load will be back in a minute,
+ * defender may have a league-derived value despite being absent from the market feed,
  * and a player we could not identify needs a different search. Measured on staging 2026-09-16,
  * 11,920 of 67,879 rostered players (17.6%) showed a dash on the roster list:
  *
@@ -37,8 +37,29 @@ export type UnpricedReasonCode =
   | 'no_value_on_file'
   | 'pick_without_round'
   | 'priced_on_analysis'
+  | 'idp_no_history'
+  | 'idp_insufficient_sample'
+  | 'idp_no_defensive_production'
+  | 'idp_replacement_unavailable'
+  | 'idp_scoring_unavailable'
+  | 'ambiguous_identity'
 
 export type UnpricedReason = { code: UnpricedReasonCode; label: string }
+
+/** Projection refusals describe this player, rather than the offence-only market feed. */
+export function idpProjectionUnpricedReason(
+  cause: 'no_history' | 'insufficient_sample' | 'no_defensive_production' | 'not_idp_position' | 'history_unavailable',
+): UnpricedReason {
+  if (cause === 'history_unavailable') return reason('feed_unavailable', 'Defensive history could not be loaded — try again shortly')
+  if (cause === 'no_history') return reason('idp_no_history', 'No defensive game history on file for this player')
+  if (cause === 'insufficient_sample') return reason('idp_insufficient_sample', 'Too few recorded games to estimate a reliable defensive value')
+  if (cause === 'no_defensive_production') return reason('idp_no_defensive_production', 'Recorded games contain no defensive production to project')
+  return reason('unidentified', 'Player records do not resolve to a defensive position')
+}
+
+export function idpReplacementUnpricedReason(): UnpricedReason {
+  return reason('idp_replacement_unavailable', 'League starting slots or projected defender coverage cannot establish replacement value')
+}
 
 const TEAM_DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
 
@@ -85,12 +106,16 @@ export function playerUnpricedReason(args: {
   position: string | null | undefined
   sport: string | null | undefined
   marketLoaded: boolean
+  /** The caller also attempted this league's defensive board, not just the market feed. */
+  leagueDerived?: boolean
 }): UnpricedReason {
   if (!args.identified) {
     return reason('unidentified', "We couldn't match this player to our player records")
   }
   return (
     sportReason(args.sport) ??
+    (args.leagueDerived && isIdpPosition(args.position)
+      ? reason('defender', 'No league-derived defensive value available for this player') : null) ??
     positionReason(args.position) ??
     (args.marketLoaded
       ? reason('not_on_feed', "Not among the ~400 players our value feed prices")
@@ -109,6 +134,7 @@ export function analysisUnpricedReason(args: {
 }): UnpricedReason {
   return (
     sportReason(args.sport) ??
+    (isIdpPosition(args.position) ? reason('defender', 'No league-derived defensive value available for this player') : null) ??
     positionReason(args.position) ??
     reason('no_value_on_file', 'No feed, historical or draft value on file')
   )

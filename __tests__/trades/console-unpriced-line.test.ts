@@ -32,6 +32,14 @@ const priced = {
 } as unknown as PricedAsset
 
 describe('lineFromPriced carries the pricer\'s "found nothing" flag', () => {
+  it('uses the player-specific league refusal, including when the market position is UNKNOWN', () => {
+    const gap = { code: 'idp_no_defensive_production' as const, label: 'Recorded games contain no defensive production to project' }
+    const line = lineFromPriced(unpricedDefense, { sport: 'NFL' }, { reasonPosition: 'LB', unpricedReason: gap })
+    expect(line.unpricedReason).toEqual(gap)
+    expect(line.unpriced).toBe(true)
+    expect(line.marketValue).toBe(0)
+    expect(lineFromPriced(priced, {}, { unpricedReason: gap }).unpricedReason).toBeUndefined()
+  })
   it('flags the line and gives the reason from the player row\'s position', () => {
     const line = lineFromPriced(unpricedDefense, { sport: 'NFL' }, { reasonPosition: 'DEF' })
     expect(line.unpriced).toBe(true)

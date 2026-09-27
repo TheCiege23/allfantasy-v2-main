@@ -54,6 +54,14 @@ function fullHistory(): GameRow[] {
 }
 
 describe('loadIdpProjections', () => {
+  it('distinguishes an unreadable history store from a successful read with no games', async () => {
+    const prisma = fakePrisma([], [])
+    prisma._findMany.mockRejectedValue(new Error('Unavailable'))
+    const result = await loadIdpProjections({ prisma, season: 2026, week: 3, players: LBS })
+    expect(result.bySleeperId.get('lb0')).toMatchObject({ ok: false, reason: 'history_unavailable' })
+    expect(result.coverage.refusalsByReason).toEqual({ history_unavailable: LBS.length })
+    expect(result.coverage.projected).toBe(0)
+  })
   it('never reads the week it is projecting', async () => {
     // Week 7 carries an absurd line. If it leaked in, the projection would jump.
     const rows = [...fullHistory(), ...LBS.map((p) => game(p.sleeperId, 7, { idp_tkl_solo: 99 }))]

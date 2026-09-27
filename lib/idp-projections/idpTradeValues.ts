@@ -29,6 +29,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { getLeagueInfo, getLeagueRosters, getPlayersBySport } from '@/lib/sleeper-client'
 import { loadLeagueIdpVorp, resolveLeagueIdpScoring, type LeagueIdpVorpResult } from './leagueIdpVorp'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /** What a priced defender is worth in this league, and what he plays. */
 export interface IdpNamedValue {
@@ -39,6 +40,8 @@ export interface IdpNamedValue {
 }
 
 export interface IdpTradeValueMap {
+  unpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>
+  unpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>
   /**
    * Lowercased, trimmed full name -> value. Only unambiguous names appear; see
    * `ambiguousNames`.
@@ -62,6 +65,8 @@ export interface IdpTradeValueMap {
 
 const EMPTY = (skipped: IdpTradeValueMap['skipped']): IdpTradeValueMap => ({
   byNameLower: new Map(),
+  unpricedReasonBySleeperId: new Map(),
+  unpricedReasonByNameLower: new Map(),
   skipped,
   coverage: { defenders: 0, projected: 0, priced: 0, named: 0 },
   ambiguousNames: [],
@@ -139,7 +144,7 @@ export async function loadIdpTradeValuesByName(
       isDynasty: args.isDynasty,
     })
 
-    if (board.skipped !== null || board.valueBySleeperId.size === 0) {
+    if ((board.skipped !== null || board.valueBySleeperId.size === 0) && !board.unpricedReasonBySleeperId?.size) {
       return { ...EMPTY(board.skipped ?? 'no_rostered_players'), coverage: { ...board.coverage, named: 0 } }
     }
 
@@ -174,6 +179,12 @@ export async function loadIdpTradeValuesByName(
     }
 
     const byNameLower = new Map<string, IdpNamedValue>()
+    const unpricedReasonBySleeperId = new Map(board.unpricedReasonBySleeperId ?? [])
+    const unpricedReasonByNameLower = new Map<string, UnpricedReason>()
+    for (const [pid, gap] of unpricedReasonBySleeperId) {
+      const name = players?.[pid]?.full_name?.trim().toLowerCase()
+      if (name && nameCounts.get(name) === 1) unpricedReasonByNameLower.set(name, gap)
+    }
     const ambiguousNames: string[] = []
     for (const [sleeperId, value] of board.valueBySleeperId) {
       const info = players?.[sleeperId]
@@ -181,6 +192,9 @@ export async function loadIdpTradeValuesByName(
       if (!nm) continue
       if ((nameCounts.get(nm) ?? 0) > 1) {
         ambiguousNames.push(nm)
+        const gap: UnpricedReason = { code: 'ambiguous_identity', label: 'Multiple rostered players share this name; a defensive value cannot be assigned safely' }
+        unpricedReasonBySleeperId.set(sleeperId, gap)
+        unpricedReasonByNameLower.set(nm, gap)
         continue
       }
       byNameLower.set(nm, {
@@ -192,7 +206,9 @@ export async function loadIdpTradeValuesByName(
 
     return {
       byNameLower,
-      skipped: null,
+      unpricedReasonBySleeperId,
+      unpricedReasonByNameLower,
+      skipped: board.skipped,
       coverage: { ...board.coverage, named: byNameLower.size },
       ambiguousNames: [...new Set(ambiguousNames)],
     }

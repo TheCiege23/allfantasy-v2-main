@@ -599,6 +599,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
     getServerSession.mockResolvedValue({ user: { id: 'u1' } })
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
     findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper' })
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map() })
     findManyAppUser.mockResolvedValue([])
     findManyLeagueTeam.mockResolvedValue([])
     findFirstLeagueTeam.mockResolvedValue(null)
@@ -663,7 +664,23 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   it('carries a sentence, not only a code', async () => {
     const { r } = await load()
     const lb = r.players.find((p) => p.id === 'lb')
-    expect(lb?.unpricedReason?.label).toMatch(/defenders/)
+    expect(lb?.unpricedReason?.label).toBe('No league-derived defensive value available for this player')
+  })
+
+  it('preserves a specific defensive refusal even when the league has no priced defenders', async () => {
+    const gap = { code: 'idp_insufficient_sample', label: 'Too few recorded games to estimate a reliable defensive value' }
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), unpricedReasonBySleeperId: new Map([['lb', gap], ['ghost', gap]]) })
+    const { r, code } = await load()
+    expect(r.players.find((p) => p.id === 'lb')?.unpricedReason).toEqual(gap)
+    expect(code('ghost')).toBe('unidentified')
+  })
+
+  it('a priced player does not inherit a stale refusal from the diagnostics map', async () => {
+    const gap = { code: 'idp_no_history', label: 'No defensive game history on file for this player' }
+    loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), unpricedReasonBySleeperId: new Map([['wr', gap]]) })
+    const { r, code } = await load()
+    expect(r.players.find((p) => p.id === 'wr')?.value).toBe(6552)
+    expect(code('wr')).toBeNull()
   })
 
   it('🛑 a feed that did not load is reported as that, not as "not on the feed"', async () => {
