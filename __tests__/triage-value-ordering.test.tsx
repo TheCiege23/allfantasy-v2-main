@@ -165,7 +165,23 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
 
     it('sends you to free agents, not to a search for the injured player', () => {
       const { container } = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
-      expect(container.textContent).toContain('Find a free agent')
+      const actions = [...container.querySelectorAll('.af-triage-cta')]
+      expect(actions.map(a => a.getAttribute('href'))).toEqual(['/core/waivers?league=l1'])
+      expect(actions[0].textContent).toContain('Find free agents in Bla bla bla')
+    })
+
+    it('offers each affected league its own waiver pool', () => {
+      const player = row({ leagues: row().leagues.map(l => ({ ...l, slot: 'starter' })) })
+      const { container } = render(<Dash3ATriage book={[player]} now={NOW} />)
+      expect([...container.querySelectorAll('.af-triage-cta')].map(a => a.getAttribute('href')))
+        .toEqual(['/core/waivers?league=l1', '/core/waivers?league=l2', '/core/waivers?league=l3'])
+    })
+
+    it('does not promise league free agents when the roster slot is unknown', () => {
+      const player = row({ leagues: row().leagues.map(l => ({ ...l, slot: null })) })
+      const { container } = render(<Dash3ATriage book={[player]} now={NOW} />)
+      expect(container.querySelector('.af-triage-cta')?.getAttribute('href')).toBe('/core/players')
+      expect(container.querySelector('.af-triage-cta')?.textContent).toBe('Open Player Finder')
     })
   })
 

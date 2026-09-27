@@ -152,15 +152,17 @@ describe('league home: Draft HQ says which draft, and stops calling a finished o
      */
     expect(SRC).toContain('const draftedAlready = rosterCountForDraft > 0')
     expect(SRC).not.toContain("reason: 'no draft has been set up for this league'")
-    expect(SRC).toContain('we did not capture the board itself')
+    expect(SRC).not.toContain('we did not capture the board itself')
+    expect(SRC).toContain('Open Draft HQ to check the draft history on file')
   })
 
-  it('offers a link only when there is something behind it', () => {
+  it('opens the actual Draft HQ rather than inventing a board-specific destination', () => {
     expect(SRC).toContain('href: string | null')
     expect(SRC).toContain('linkLabel: string | null')
-    // The no-board branch must not fabricate a destination.
+    // Draft HQ handles imported history and empty states, even without a native draft room.
     const branch = SRC.slice(SRC.indexOf('const draftedAlready'), SRC.length)
-    expect(branch).toContain('href: null')
+    expect(branch).toContain('href: `/core/draft-hq?league=${encodeURIComponent(league.id)}`')
+    expect(branch).not.toContain('we did not capture the board itself')
   })
 })
 

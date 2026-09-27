@@ -366,6 +366,21 @@ export async function getLeagueHomeData(
   const league = await lc.league()
   if (!league) return null
 
+  // Start independent draft reads while the lineup and trade sections load.
+  // Imported boards live in DraftFact; native rooms use DraftSession/DraftPick.
+  // Count in the database rather than loading every pick or grading the board.
+  const draftSummaryRead = Promise.all([
+    getDraftHqAll(userId, [{ id: league.id, name: league.name, platform: league.platform }]).catch(() => null),
+    prisma.draftFact.groupBy({
+      by: ['season'],
+      where: { leagueId: league.id, season: { not: null } },
+      orderBy: { season: 'desc' },
+      take: 1,
+      _count: { _all: true },
+      _max: { round: true },
+    }).catch(() => null),
+  ])
+
   /*
    * A PRE-SEASON LEAGUE IS NOT A LEAGUE WITH MISSING DATA.
    *
@@ -789,10 +804,9 @@ export async function getLeagueHomeData(
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
-  const draftAll = await getDraftHqAll(userId, [
-    { id: league.id, name: league.name, platform: league.platform },
-  ]).catch(() => null)
+  const [draftAll, importedDrafts] = await draftSummaryRead
   const draftRow = draftAll?.rows?.[0] ?? null
+  const importedDraft = importedDrafts?.[0]
 
   /*
    * Both of these were previously hardcoded as unavailable with reasons that were
@@ -989,25 +1003,28 @@ export async function getLeagueHomeData(
               .join(' · '),
           },
         }
-      : draftedAlready
+      : importedDraft && importedDraft._count._all > 0
         ? {
-            /*
-             * WE DID NOT INGEST A DRAFT OBJECT, BUT THE LEAGUE HAS OBVIOUSLY
-             * DRAFTED — there are populated rosters sitting on the same screen.
-             * "No draft has been set up" is then a false statement about the
-             * league rather than a true one about our data, which is the exact
-             * failure the buzz panel had.
-             */
             available: true,
             data: {
-              headline: `${league.season ?? ''} draft has ended`.trim(),
-              detail:
-                'Rosters are populated, so this league drafted \u2014 but we did not capture the board itself.',
-              href: null,
-              linkLabel: null,
+              headline: `${importedDraft.season} imported draft`,
+              detail: `${importedDraft._count._all} picks on file${importedDraft._max.round != null ? ` · ${importedDraft._max.round} rounds` : ''}`,
+              href: `/core/draft-hq?league=${encodeURIComponent(league.id)}`,
+              linkLabel: 'Open the draft board',
             },
           }
-        : { available: false, reason: 'no draft on file for this league' },
+        : draftedAlready
+          ? {
+              // Populated rosters do not prove which season's draft is on file.
+              available: true,
+              data: {
+                headline: 'Rosters are populated',
+                detail: 'Rosters are populated. Open Draft HQ to check the draft history on file.',
+                href: `/core/draft-hq?league=${encodeURIComponent(league.id)}`,
+                linkLabel: 'Open Draft HQ',
+              },
+            }
+          : { available: false, reason: 'no draft on file for this league' },
     /*
      * THE OLD REASON WAS FALSE AND THE PANEL WAS PERMANENTLY BLANK. It claimed
      * commissioner tasks are not ingested for imported leagues. League health
