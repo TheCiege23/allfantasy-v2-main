@@ -148,11 +148,50 @@ beforeEach(() => {
   loadWeekLines.mockImplementation(async ({ playerIds }: { playerIds: string[] }) =>
     new Map(playerIds.filter((id) => LINES[id]).map((id) => [id, LINES[id]!])),
   )
-  deps = { resolveWorld, loadPlayerNames, tradeVisual, leagueWeek: { latestWeek, loadWeekLines } }
+  gradePackage.mockResolvedValue({ graded: true, letter: 'B', partnerLetter: 'C', label: 'Slightly favors you', action: 'accept', receiptId: 'rcpt_target' })
+  deps = { resolveWorld, loadPlayerNames, tradeVisual, leagueWeek: { latestWeek, loadWeekLines }, gradePackage }
 })
+
+const gradePackage = vi.fn()
 
 const run = (playerName: string, userId = 'viewer-1') =>
   buildTradeTargetVerdict({ playerName, leagueId: 'league-1', userId }, deps)
+
+describe('the package is judged by the one grade (design step 7, 2026-09-27)', () => {
+  it('grades the package the finder would open with, from the asker’s side, in this league', async () => {
+    const r = await run('Rashee Rice')
+    expect(gradePackage).toHaveBeenCalledTimes(1)
+    const call = gradePackage.mock.calls[0]![0]
+    expect(call).toMatchObject({ leagueId: 'league-1', userId: 'viewer-1' })
+    expect(call.get.assets).toEqual([{ kind: 'player', name: 'Rashee Rice' }])
+    expect(call.give.assets.length).toBeGreaterThan(0)
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(r.verdict.reasons.join('\n')).toMatch(/The AllFantasy grade for you: B/)
+  })
+
+  it('an F from the one grade turns the answer into a no — the player card’s own engine verdict no longer decides', async () => {
+    gradePackage.mockResolvedValue({ graded: true, letter: 'F', partnerLetter: 'A', label: 'Major loss (you)', action: 'decline', receiptId: null })
+    const r = await run('Rashee Rice')
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(r.verdict.verdict).toBe('no')
+  })
+
+  it('a grader that fails is said, never replaced by a guessed price', async () => {
+    gradePackage.mockRejectedValue(new Error('boom'))
+    const r = await run('Rashee Rice')
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(r.verdict.verdict).toBe('no')
+    expect(r.verdict.because).toMatch(/could not be graded/)
+  })
+
+  it('the default grades through the one trade engine, with a receipt', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const src = fs.readFileSync(path.join(process.cwd(), 'lib', 'chimmy', 'tradeTargetVerdict.ts'), 'utf8')
+    expect(src).toMatch(/evaluateTrade\(\{\s*surface: 'chimmy-target'/)
+    expect(src).toMatch(/gradePackage: defaultGradePackage,/)
+  })
+})
 
 describe('the verdict is built from this league', () => {
   it('finds him on his roster and prices the trade with the league-scoped read', async () => {

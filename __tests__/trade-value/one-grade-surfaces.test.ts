@@ -9,7 +9,7 @@
  * ⚠ Comments are stripped before matching, so a sentence ABOUT an old producer (and there are many
  * — they explain why it went) cannot satisfy or break a check.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -23,8 +23,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/trade-value-console/runTradeConsoleAnalysis.ts', entry: /gradePricedSides\(/, what: 'the Trade Center verdict' },
   { file: 'app/api/league/trades-panel/route.ts', entry: /gradeDeal\(/, what: 'pending offers on the league page and the inbox' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
-  { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade between rostered players' },
-  { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade described in prose' },
+  { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade between rostered players (the evaluate_trade tool and the push path) — through the one engine, with a receipt' },
+  { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade described in prose — through the one engine, with a receipt' },
   /* Completed trades and receipts (2026-09-25). */
   { file: 'lib/league-trade-engine/serverTradeDecision.ts', entry: /gradeDeal\(/, what: 'the proposal-time receipt' },
   { file: 'lib/league-trade-engine/tradeLearningCapture.ts', entry: /gradeDeal\(/, what: 'native history "Now"' },
@@ -230,11 +230,14 @@ describe('Trade OS — no screen keeps a private letter', () => {
     expect(SNAPSHOT_LETTER.test(code(file))).toBe(false)
   })
 
-  it('the commissioner review sends the one grade and no snapshot letter', () => {
-    const src = code('app/api/redraft/trades/[proposalId]/commissioner-review/route.ts')
-    expect(src).toMatch(/evaluateStoredTrade\(/)
-    expect(src).toMatch(/summary:\s*\{\s*\.\.\.review\.summary,\s*grade:\s*tradeGrade\.grade\s*\}/)
-    expect(src).not.toMatch(/snapshotSummary:[\s\S]{0,80}grade:\s*snapshot\.grade/)
+  it('the old redraft commissioner review — its snapshot scale, its route and its engine — is gone for good', () => {
+    // Replaced by the code-computed trade review (Phase 6); deleted with Chimmy's unreachable path to it (step 7).
+    for (const f of [
+      'app/api/redraft/trades/[proposalId]/commissioner-review/route.ts',
+      'lib/trade-review/redraftCommissionerTradeReview.ts',
+    ]) {
+      expect(existsSync(resolve(process.cwd(), f)), f).toBe(false)
+    }
   })
 
   it("the inbox's provider rows take nothing from the canonical evaluation but coverage and lineup", () => {
@@ -271,7 +274,7 @@ describe('Trade OS — every screen records its grade as a receipt', () => {
     ['lib/trade-intel/tradeNotifyService.ts', /receiptIdForGrade\(\{\s*surface:\s*'trade-email'/],
     ['app/api/redraft/trade-proposals/route.ts', /receiptIdForGrade\(\{\s*surface:\s*'redraft-trade-list'/],
     ['app/api/redraft/trade-value-preview/route.ts', /evaluateTrade\(\{\s*surface:\s*'redraft-trade-preview'/],
-    ['app/api/redraft/trades/[proposalId]/commissioner-review/route.ts', /surface:\s*'redraft-commissioner-review'/],
+    ['lib/decision-os/trade/tradeReviewContext.ts', /surface: args\.surface \?\? 'commissioner-review'/],
   ])('%s', (file, shape) => {
     expect(code(file)).toMatch(shape)
   })
@@ -320,5 +323,43 @@ describe('Commissioner review mode — advice, never an action', () => {
     expect(DECIDES.test('await commissionerAfTradeDecision({ tradeId, leagueId, userId, decision })')).toBe(true)
     expect(DECIDES.test('await prisma.redraftTradeProposal.update({ where: { id } })')).toBe(true)
     expect(DECIDES.test('const r = await reviewStoredTrade({ leagueId, ref, userId })')).toBe(false)
+  })
+})
+
+describe('Chimmy — explains the one grade, never makes one (design step 7)', () => {
+  it.each([
+    ['lib/chimmy/tradeScenarioGrounding.ts', /evaluateTrade\(\s*\{\s*surface: 'chimmy'/, 'the evaluate_trade tool and the push path'],
+    ['lib/chimmy-trade/describedTradeEvaluator.ts', /evaluateTrade\(\{ surface: 'chimmy-described'/, 'a trade described in prose'],
+    ['lib/chimmy-trade/pendingTradeDecisionGrounding.ts', /surface: 'chimmy-pending'/, 'pending incoming trades'],
+    ['lib/chimmy/tradeTargetVerdict.ts', /evaluateTrade\(\{ surface: 'chimmy-target'/, '"should I trade for X?"'],
+  ])('%s grades through the one engine, with a receipt', (file, entry) => {
+    expect(code(file)).toMatch(entry)
+  })
+
+  it('pending trades never print the proposal-time snapshot letter', () => {
+    const src = code('lib/chimmy-trade/pendingTradeDecisionGrounding.ts')
+    expect(src).not.toMatch(/valueSnapshot/)
+    expect(src).not.toMatch(/toTradeCard|runTradeShadowForProposal/)
+  })
+
+  it('"should I trade for X?" is not decided by a second engine or the finder’s band', () => {
+    const src = code('lib/chimmy/tradeTargetDecision.ts')
+    expect(src).not.toMatch(/FAIRNESS_PHRASE|acceptance|verdict === 'reject'/)
+  })
+
+  it('the answer contract carries no letter of its own', () => {
+    const src = code('lib/chimmy-chat/response-contract.ts')
+    expect(src).not.toMatch(/scoreToGrade|grade:\s*z\.string/)
+  })
+
+  it('the old commissioner review and the snapshot letter are gone from Chimmy’s trade tools', () => {
+    const src = code('lib/chimmy-trade/tradeIntelligenceTools.ts')
+    expect(src).not.toMatch(/buildCommissionerTradeReview|export async function explainTrade/)
+  })
+
+  it('the tool loop’s answer is held to the letters the engine gave', () => {
+    const route = code('app/api/chat/chimmy/route.ts')
+    expect(route).toMatch(/tradeGrades: \[\] as ChimmyTradeGrade\[\]/)
+    expect(route).toMatch(/enforceTradeLetters\(\{\s*answer: loop\.text,\s*grades: toolContext\.tradeGrades,/)
   })
 })

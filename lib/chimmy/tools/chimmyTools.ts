@@ -15,6 +15,7 @@ import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -66,6 +67,11 @@ export type ChimmyToolContext = {
    * tools say so instead of promising one.
    */
   actionCards?: ChimmyActionCard[]
+  /**
+   * Every trade letter the one trade engine gave during this answer, collected so the route can check
+   * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
+   */
+  tradeGrades?: ChimmyTradeGrade[]
 }
 
 /** More cards than this in one answer is a model looping, not a user deciding. */
@@ -654,7 +660,10 @@ export async function executeChimmyTool(
         ])
         const results = await Promise.allSettled([
           buildTradeContextForChimmy(ctx.leagueId, ctx.userId),
-          buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
+          // The third argument only when grades are collected, so the scoped read stays exactly (league, user).
+          ctx.tradeGrades
+            ? buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId, { onGrade: (g) => ctx.tradeGrades!.push(g) })
+            : buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
           buildLeagueTradeHistoryContext(ctx.leagueId, ctx.userId),
           executeChimmyTool('get_my_roster', {}, ctx),
         ])
@@ -950,7 +959,13 @@ export async function executeChimmyTool(
       case 'evaluate_trade': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runTradeScenarioTool({ give: args.give, get: args.get, leagueId: ctx.leagueId, userId: ctx.userId })
+        return await runTradeScenarioTool({
+          give: args.give,
+          get: args.get,
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
       }
 
       case 'find_trade_ideas': {

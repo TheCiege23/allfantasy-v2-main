@@ -40,7 +40,6 @@ vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
 vi.mock('@/lib/decision-os/trade/evaluateStoredTrade', () => ({ evaluateStoredTrade: h.evaluateStoredTrade }))
 
 import { GET as listProposals } from '@/app/api/redraft/trade-proposals/route'
-import { GET as commissionerReview } from '@/app/api/redraft/trades/[proposalId]/commissioner-review/route'
 
 const SNAPSHOT = { grade: 'A+', fairnessScore: 31, confidenceScore: 40, valueDifference: 900, payload: null }
 const PROPOSAL = {
@@ -113,25 +112,7 @@ describe('the redraft proposal list', () => {
   })
 })
 
-describe('the commissioner review', () => {
-  const review = async () =>
-    (await commissionerReview({} as never, { params: Promise.resolve({ proposalId: 'rp1' }) })).json()
-
-  it("shows the ONE grade from the proposer's side, and sends no snapshot letter at all", async () => {
-    const body = await review()
-    expect(h.evaluateStoredTrade).toHaveBeenCalledWith(expect.objectContaining({
-      leagueId: 'l1', ref: { kind: 'redraft', proposalId: 'rp1' }, userId: 'commish', surface: 'redraft-commissioner-review',
-    }))
-    expect(body.tradeGrade).toMatchObject({ grade: 'D', partnerGrade: 'B', evaluationReceiptId: 'rcpt_review' })
-    expect(body.review.summary.grade).toBe('D')
-    expect(body.snapshotSummary).not.toHaveProperty('grade')
-    expect(JSON.stringify(body)).not.toContain('A+')
-  })
-
-  it('a refusal is a withheld grade with its reason', async () => {
-    h.evaluateStoredTrade.mockResolvedValue({ ok: false, refusal: { code: 'asset_moved', reason: 'Star Runner is no longer on the roster sending him.' } })
-    const body = await review()
-    expect(body.tradeGrade).toMatchObject({ grade: null, gradeWithheld: 'Star Runner is no longer on the roster sending him.' })
-    expect(body.review.summary.grade).toBeNull()
-  })
-})
+/*
+ * The redraft commissioner review now runs the code-computed trade review (Phase 6,
+ * `__tests__/decision-os/trade-review-route.test.ts`); its old route was deleted on 2026-09-27.
+ */

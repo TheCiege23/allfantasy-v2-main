@@ -12,6 +12,8 @@ import {
   type LeagueWeekPricingDeps,
 } from '@/lib/decision-os/trade/leagueWeekPricing'
 import { computeRosterImpact, fillLineup, type ImpactPlayer } from '@/lib/decision-os/trade/rosterImpact'
+import { evaluateTrade } from '@/lib/decision-os/trade/evaluateTrade'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
@@ -25,7 +27,13 @@ import {
   type LocatedPlayer,
   type PlayerNames,
 } from './leagueRosterIndex'
-import { decideTradeTarget, type TradeTargetFacts, type TradeTargetLineup, type TradeTargetVerdict } from './tradeTargetDecision'
+import {
+  decideTradeTarget,
+  type TradeTargetFacts,
+  type TradeTargetGrade,
+  type TradeTargetLineup,
+  type TradeTargetVerdict,
+} from './tradeTargetDecision'
 
 /**
  * "Should I trade for X?" — the facts, read from the asker's own league, handed to
@@ -70,6 +78,38 @@ export interface TradeTargetDeps {
   leagueWeek: LeagueWeekPricingDeps
   /** His current listing on this league's trade block, as marked in AllFantasy. */
   tradeBlockListing?: (leagueId: string, sleeperId: string) => Promise<TradeBlockListing | null>
+  /** THE grade of the package, through the one trade engine. Default: `evaluateTrade`, with a receipt. */
+  gradePackage?: (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeTargetGrade>
+}
+
+/*
+ * The package the finder would open with, graded by the one trade engine from your side (design step 7,
+ * 2026-09-27) — the letter every trade surface gives it, saved as a receipt. The player card beside this
+ * still shows its own engine's verdict; Chimmy's answer no longer rests on it.
+ */
+export const defaultGradePackage: NonNullable<TradeTargetDeps['gradePackage']> = async ({ leagueId, userId, give, get }) => {
+  const r = await evaluateTrade({ surface: 'chimmy-target', leagueId, userId, give, get, viewerSide: true })
+  return r.grade.graded
+    ? {
+        graded: true,
+        letter: r.grade.letter,
+        partnerLetter: r.grade.partnerLetter,
+        label: r.grade.label,
+        action: r.grade.action,
+        receiptId: r.receiptId,
+      }
+    : { graded: false, reason: r.grade.reason }
+}
+
+/** A trade-visual asset in the one grader's terms: players by name, FAAB by amount. */
+function gradeInputs(assets: ReadonlyArray<{ kind: 'player' | 'faab'; name: string; value: number | null }>): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const a of assets) {
+    if (a.kind === 'player') out.assets.push({ kind: 'player', name: a.name })
+    else if (a.value != null && a.value > 0) out.assets.push({ kind: 'faab', amount: a.value })
+    else out.unpriceable.push(a.name)
+  }
+  return out
 }
 
 /*
@@ -84,6 +124,7 @@ const defaultDeps: TradeTargetDeps = {
   tradeVisual: (leagueId, sleeperId, userId) => getPlayerTradeVisual(leagueId, sleeperId, userId),
   leagueWeek: defaultLeagueWeekPricingDeps,
   tradeBlockListing: tradeBlockListingFor,
+  gradePackage: defaultGradePackage,
 }
 
 /**
@@ -282,6 +323,17 @@ export async function buildTradeTargetVerdict(
     }
   }
 
+  // The package's one grade — only for a package a manager could actually send.
+  const sendable = tv.recommended && !(tv.tradesAllowed === false || tv.bidInstead)
+  const packageGrade: TradeTargetGrade | null = sendable
+    ? await (deps.gradePackage ?? defaultGradePackage)({
+        leagueId: args.leagueId,
+        userId: args.userId,
+        give: gradeInputs(tv.recommended!.give),
+        get: gradeInputs(tv.recommended!.receive),
+      }).catch((): TradeTargetGrade => ({ graded: false, reason: 'the package could not be graded just now.' }))
+    : null
+
   const facts: TradeTargetFacts = {
     leagueName: tv.leagueName,
     target: {
@@ -310,7 +362,7 @@ export async function buildTradeTargetVerdict(
           fairness: tv.recommended.fairness,
         }
       : null,
-    grade: tv.grade.available ? { verdict: tv.grade.data.verdict, acceptance: tv.grade.data.acceptance } : null,
+    grade: packageGrade,
     noTrades:
       tv.tradesAllowed === false || tv.bidInstead
         ? { waiverNote: tv.bidInstead?.reason ?? null }

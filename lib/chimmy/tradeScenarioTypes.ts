@@ -91,7 +91,15 @@ export type ReadyTradeScenario = {
     basis?: string | null
     /** Why there is no grade, when there is none. */
     withheld?: string | null
+    /** The other team's letter for the same deal — the exact mirror of `grade`, never a second computation. */
+    partnerGrade?: string | null
   }
+  /**
+   * The saved evaluation receipt (`evaluateTrade`), so a reply can point at the one record every
+   * surface reads. Null when the receipt could not be saved (e.g. before the receipts migration).
+   * Absent on scenarios sent before 2026-09-27.
+   */
+  receiptId?: string | null
   lineup: TradeScenarioLineup | null
   /** The week `lineup` is for (`LEAGUE_WEEK_UNIT`); absent on scenarios sent before 2026-09-17. */
   lineupWeek?: number | null
