@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import SyncNowButton from '../SyncNowButton'
+import SyncPauseButton from '../SyncPauseButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
 
@@ -70,7 +71,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-title-row">
           <h1 className="af-display af-sy-title">Sync</h1>
           <span className="af-sy-status af-label" data-status={status}>
-            {status === 'ok' ? 'All synced' : status === 'attention' ? 'Needs attention' : 'Never synced'}
+            {status === 'paused' ? 'Account sync paused' : status === 'ok' ? 'All synced' : status === 'attention' ? 'Needs attention' : 'Never synced'}
           </span>
         </div>
         <p className="af-sy-sub">
@@ -79,11 +80,14 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </p>
       </header>
 
-      {data.syncKey ? <SyncNowButton onlyKey={data.syncKey} eligibleCount={1} /> : (
+      {data.syncKey ? <>
+        {!data.syncPaused ? <SyncNowButton onlyKey={data.syncKey} eligibleCount={1} /> : null}
+        <SyncPauseButton leagueId={league.id} paused={data.syncPaused === true} />
+      </> : (
         <p className="af-sy-sub">This league has no supported external connection to refresh.</p>
       )}
       {/* ── The stuck-run warning ───────────────────────────────────── */}
-      {orphanedRun ? (
+      {orphanedRun && !data.syncPaused ? (
         <div className="af-sy-alert" data-tone="bad">
           <span className="af-label">Last run never finished</span>
           <p>
@@ -95,7 +99,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </div>
       ) : null}
 
-      {consecutiveFailures > 0 ? (
+      {consecutiveFailures > 0 && !data.syncPaused ? (
         <div className="af-sy-alert" data-tone="warn">
           <span className="af-label">
             {consecutiveFailures} failed {consecutiveFailures === 1 ? 'run' : 'runs'} in a row
@@ -110,6 +114,10 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
           </Link>
         </div>
       ) : null}
+
+      {data.syncPaused && lastError ? <details className="af-sy-alert">
+        <summary>Latest recorded sync error</summary><p>{lastError}</p>
+      </details> : null}
 
       {/* ── Connection ──────────────────────────────────────────────── */}
       <section className="af-sy-conn" aria-label="Platform connection">

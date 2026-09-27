@@ -36,7 +36,7 @@ const MIN_RAIL_REFRESH_MS = 10_000
 export function useLiveRailScores(leagues: RailLeague[], enabled: boolean, refreshMs: number) {
   const [scores, setScores] = useState<Record<string, LiveScore>>({})
   const [delayed, setDelayed] = useState<string[]>([])
-  const idsKey = JSON.stringify(leagues.filter(league => league.platform.toLowerCase() === 'sleeper').map(league => league.id))
+  const idsKey = JSON.stringify(leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused).map(league => league.id))
   useEffect(() => {
     if (!enabled) return
     const ids: string[] = JSON.parse(idsKey)

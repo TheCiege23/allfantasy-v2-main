@@ -135,6 +135,7 @@ export async function getUrgencyBadges(input: {
   /** The leagues the user plays — every count is scoped to these. */
   leagues: Array<{ id: string; platform?: string | null; draftDate?: string | Date | null; lastSyncedAt?: Date | string | null }>
   liveDraftLeagueIds: string[]
+  pausedSyncLeagueIds?: ReadonlySet<string> | null
   now: Date
   /** The home already computed these; passing them refreshes the cache for free. */
   lineupLeagues?: LineupLeague[] | null
@@ -170,6 +171,8 @@ export async function getUrgencyBadges(input: {
     myTeam: lineupIds ? countOrNull(lineupIds.filter((id) => played.has(id)).length) : null,
     trades: countOrNull(offerCount),
     draftHq: countOrNull(draftLeagueIds(leagues, input.liveDraftLeagueIds, now).filter((id) => played.has(id)).length),
-    sync: countOrNull(staleLeagueIds(leagues, lastSyncByLeagueFrom(leagues), now).length),
+    sync: input.pausedSyncLeagueIds === null ? null : countOrNull(staleLeagueIds(
+      leagues.filter((l) => !input.pausedSyncLeagueIds?.has(l.id)), lastSyncByLeagueFrom(leagues), now,
+    ).length),
   }
 }

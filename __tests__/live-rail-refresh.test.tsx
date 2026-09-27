@@ -21,6 +21,15 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetAllMocks() })
 describe('league rail score refresh', () => {
+  it('excludes paused leagues from polling and includes them again on resume', async () => {
+    const { rerender } = renderHook(({ paused }) => useLiveRailScores([{ ...leagues[0], syncPaused: paused }], true, GAME_DAY), { initialProps: { paused: true } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(fetchMock).not.toHaveBeenCalled()
+    rerender({ paused: false })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('league=mine')
+  })
   it('fetches when opened and refreshes both scores on the interval it is given', async () => {
     const { result } = renderHook(() => useLiveRailScores(leagues, true, GAME_DAY))
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })

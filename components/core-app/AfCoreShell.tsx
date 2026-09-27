@@ -59,6 +59,7 @@ export type RailLeague = {
   id: string
   name: string
   platform: PlatformId | string
+  syncPaused?: boolean
   /** Single letter shown on the tile — the genuine fallback when no image renders. */
   mark: string
   /**
@@ -1717,7 +1718,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           {groupLeagueHubs(leagues).map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
-            const live = liveRail.scores[l.id]
+            const live = l.syncPaused ? undefined : liveRail.scores[l.id]
             const sameWeek = live && saved?.season === live.season && saved?.week === live.week
             const fieldRace = saved?.standing?.elimination === true
             const standing = fieldRace ? live?.fieldStanding : live?.standing
@@ -1831,8 +1832,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     ) : null}
                   </span>
                   {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
-                    <span className="af-rail-score-status" data-delayed={delayed || undefined}>
-                      {delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
+                    <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
+                      {l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
                     </span>
                   ) : null}
                   {m ? (

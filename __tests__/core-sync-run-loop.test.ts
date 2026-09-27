@@ -206,6 +206,12 @@ describe('selectResyncCandidates', () => {
     expect(selectResyncCandidates([sleeper]).map((c) => c.key)).toEqual(['sleeper:123'])
   })
 
+  it('excludes account-paused keys and allows them again after resuming', () => {
+    const other = { ...sleeper, platformLeagueId: '456' }
+    expect(selectResyncCandidates([sleeper, other], new Set(['sleeper:123'])).map(c => c.key)).toEqual(['sleeper:456'])
+    expect(selectResyncCandidates([sleeper, other], new Set()).map(c => c.key)).toEqual(['sleeper:123', 'sleeper:456'])
+  })
+
   it('excludes a career-board snapshot, which has no live native backing', () => {
     /*
      * The exclusion that matters most: this row HAS a platformLeagueId, so a

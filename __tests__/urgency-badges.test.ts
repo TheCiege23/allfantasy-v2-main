@@ -79,6 +79,13 @@ describe('getUrgencyBadges', () => {
       ...over,
     })
 
+  it('does not count a paused external league as a sync task, but preserves lineup tasks', async () => {
+    const badges = await run({ pausedSyncLeagueIds: new Set(['L3']), lineupLeagues: [{ id: 'L3', emptyStarters: 1 }] })
+    expect(badges.sync).toBeNull()
+    expect(badges.myTeam).toBe(1)
+    expect((await run({ pausedSyncLeagueIds: new Set() })).sync).toBe(1)
+  })
+
   it('on the home, uses the lineup facts already loaded and refreshes the cache', async () => {
     const load = vi.fn(async () => null)
     const badges = await run({

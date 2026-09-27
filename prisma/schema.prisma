@@ -5986,6 +5986,8 @@ model UserProfile {
   leagueImportDetailPending Boolean?            @default(false) @map("league_import_detail_pending")
   chimmyTtsVoiceId          String?             @map("chimmy_tts_voice_id")
   dashboardOnboarding       Json?
+  /// Account-scoped Core preferences, including paused external sync keys.
+  corePreferences           Json?               @map("core_preferences")
   /// Draft / war-room: risk and build prefs (AF War Room AI).
   riskProfile               String?             @db.VarChar(32)
   draftStyle                String?             @db.VarChar(32)
