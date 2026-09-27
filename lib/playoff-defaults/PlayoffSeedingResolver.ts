@@ -1,6 +1,7 @@
 /**
  * Resolves playoff seeding rules for a league. Used by standings, bracket generation, and matchup logic.
  */
+import { resolveConfiguredPlayoffSeedingRule } from './seedingRule'
 import { prisma } from '@/lib/prisma'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoffConfigResolver'
@@ -22,7 +23,7 @@ export interface PlayoffSeedingConfig {
 export async function getSeedingRulesForLeague(leagueId: string): Promise<PlayoffSeedingConfig | null> {
   const league = await (prisma as any).league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, leagueVariant: true, settings: true },
+    select: { sport: true, leagueVariant: true, settings: true, playoffSeedingRule: true },
   })
   if (!league) return null
 
@@ -50,7 +51,7 @@ export async function getSeedingRulesForLeague(leagueId: string): Promise<Playof
     : (defaults.tiebreaker_rules ?? [])
 
   return {
-    seeding_rules: fromSettings<string>('seeding_rules', defaults.seeding_rules ?? 'standard_standings'),
+    seeding_rules: resolveConfiguredPlayoffSeedingRule(league, defaults.seeding_rules ?? 'standard_standings'),
     tiebreaker_rules,
     bye_rules: fromSettings<string | null>('bye_rules', defaults.bye_rules ?? null),
     reseed_behavior: fromSettings<string>('reseed_behavior', defaults.reseed_behavior ?? 'fixed_bracket'),
