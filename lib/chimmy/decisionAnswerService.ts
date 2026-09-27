@@ -118,8 +118,9 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
       if (scenario.kind === 'waiver' && !scenario.lineup && scenario.add.points == null && scenario.drop?.points == null) return gap('projections_missing', 'The move was identified, but its players and lineup impact could not be projected.', 'Sync your league and retry when weekly projections are available.')
       const startCalls: ChatStartCall[] = []
       if (scenario.kind === 'start_sit' && scenario.contested) {
-        const pick = scenario.options.find(p => p.playerId === scenario.startPlayerId)
-        const other = scenario.options.find(p => p.playerId !== scenario.startPlayerId)
+        const startScenario = scenario
+        const pick = startScenario.options.find(p => p.playerId === startScenario.startPlayerId)
+        const other = startScenario.options.find(p => p.playerId !== startScenario.startPlayerId)
         const season = Number(scenario.week.season)
         if (pick && other && Number.isInteger(season)) startCalls.push({
           leagueId: provenLeagueId, season, week: scenario.week.week,
