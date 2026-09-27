@@ -350,7 +350,8 @@ function reportIncomplete(
   }
 }
 
-function liveCompletedTrade(
+/** A completed trade from a live Sleeper scan, in the band's shape. Exported for the league home. */
+export function liveCompletedTrade(
   league: RecentTradesLeague,
   trade: NonNullable<Awaited<ReturnType<typeof scanPendingSleeperTrades>>['completedTrades']>[number],
 ): RecentTrade | null {
@@ -520,6 +521,24 @@ async function gradeFromAssets(leagueId: string, a: RecentTradeSide, b: RecentTr
     picksOut: gave.picks,
     currentSeason,
   })
+}
+
+/**
+ * Grade a two-sided PROVIDER trade in place from its own assets: THE letter on each side (mirrored)
+ * and the verdict, or the withheld reason on each side. A native trade (`status` set) keeps its
+ * frozen receipt and is left alone. Never throws — a grading failure leaves the trade as it was.
+ * Shared by the band's loader and the league home, which reads its own live scan.
+ */
+export async function gradeProviderRecentTrade(t: RecentTrade, now: Date = new Date()): Promise<void> {
+  if (t.status || t.sides.length !== 2) return
+  const [a, b] = t.sides as [RecentTradeSide, RecentTradeSide]
+  const g = await gradeFromAssets(t.leagueId, a, b, now.getUTCFullYear()).catch(() => null)
+  if (g?.graded) {
+    applyOneGrade(t, g, a.rosterId)
+    t.verdict = verdictFromGrade(g, a.rosterId, b.rosterId)
+  } else if (g) {
+    for (const side of t.sides) side.gradeReason = `League grade withheld: ${g.reason}`
+  }
 }
 
 export async function getRecentTrades(
@@ -760,16 +779,7 @@ export async function getRecentTrades(
        * durable feed. These used to sit at "Grade pending" for as long as the ledger lagged; they are
        * graded from their own assets now. A native trade (`status` set) keeps its frozen receipt.
        */
-      if (!t.status && t.sides.length === 2) {
-        const [a, b] = t.sides as [RecentTradeSide, RecentTradeSide]
-        const g = await gradeFromAssets(t.leagueId, a, b, currentSeason).catch(() => null)
-        if (g?.graded) {
-          applyOneGrade(t, g, a.rosterId)
-          t.verdict = verdictFromGrade(g, a.rosterId, b.rosterId)
-        } else if (g) {
-          for (const side of t.sides) side.gradeReason = `League grade withheld: ${g.reason}`
-        }
-      }
+      await gradeProviderRecentTrade(t, now)
       continue
     }
     const oneGrade = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null)
