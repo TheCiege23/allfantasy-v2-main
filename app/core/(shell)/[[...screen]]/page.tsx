@@ -66,6 +66,10 @@ import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { getPlayerDepth } from '@/lib/core-app/playerDepth'
+import { loadPlayerShares } from '@/lib/core-app/playerShares'
+import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
+import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
+import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
@@ -2052,6 +2056,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   // Player depth: compare, the trade visual, trade windows and free-agent pickups (AF Pro).
   const playerDepthOpen = corePaywall?.player_depth.unlocked !== false
 
+  /*
+   * "All leagues / pick leagues" (Phase 2, 2026-09-27): the account's saved pick, intersected with
+   * the leagues played NOW (finderLeaguePicks.ts). Every Player Finder read below that is not held
+   * to one league uses `finderLeagueIds`. A held league (?league=) still wins.
+   */
+  const finderSavedPicks = activeKey === 'players' && userId ? await getFinderLeaguePicks(userId) : null
+  const finderScope = resolveLeagueScope(playedLeagues.map((l) => l.id), finderSavedPicks)
+  const finderLeagueIds = finderScope.leagueIds
+
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
   /*
    * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
@@ -2068,7 +2081,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'players' && selectedPlayerId
       ? await getPlayerDetail(
           selectedPlayerId,
-          selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id),
+          selectedLeagueId ? [selectedLeagueId] : finderLeagueIds,
           userId,
           { includeMoves: playerDepthOpen },
         ).catch(() => null)
@@ -2093,7 +2106,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const vsRef = typeof sp.vs === 'string' && sp.vs.trim() ? sp.vs.trim() : null
   const playerCompare =
     activeKey === 'players' && playerDepthOpen && playerDetail && vsRef
-      ? await getPlayerDetail(vsRef, selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id), userId).catch(() => null)
+      ? await getPlayerDetail(vsRef, selectedLeagueId ? [selectedLeagueId] : finderLeagueIds, userId).catch(() => null)
       : null
   const playerDepth = await playerDepthRead
 
@@ -2127,7 +2140,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const gameDayTriage =
     activeKey === 'players' && userId && !playerDetail
-      ? await loadGameDayTriage(userId, playedLeagues.map((l) => l.id)).catch(() => null)
+      ? await loadGameDayTriage(userId, finderLeagueIds).catch(() => null)
+      : null
+
+  /*
+   * "Your shares" (Phase 2): the players you roster most across the picked leagues, on the home
+   * (no player open). With a league held, the same players are also read IN that league: who has
+   * each one there, his value there (AF Pro), and his season points under its scoring.
+   */
+  const playerShares =
+    activeKey === 'players' && userId && !playerDetail ? await loadPlayerShares(userId, finderLeagueIds).catch(() => null) : null
+  const playerLeagueShares =
+    playerShares?.available && selectedLeagueId && userId
+      ? await loadLeagueShareView(userId, selectedLeagueId, playerShares.data.rows, {
+          includeValues: playerDepthOpen,
+          season: gameDayTriage?.available && gameDayTriage.data.week ? gameDayTriage.data.week.season : new Date().getUTCFullYear(),
+        }).catch(() => null)
       : null
   /*
    * Queue bump (2026-09-27): a league where a flagged starter can still be moved is refreshed
@@ -4168,8 +4196,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           query={playerQuery}
           matches={playerMatches}
           detail={playerDetail}
-          leagueCount={playedLeagues.length}
+          leagueCount={finderScope.count}
           selectedLeagueId={selectedLeagueId}
+          shares={playerShares}
+          leagueShares={playerLeagueShares}
+          pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
+          savedPicks={finderScope.picked ? finderLeagueIds : null}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}

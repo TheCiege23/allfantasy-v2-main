@@ -42,6 +42,10 @@ import type { PitchPackage } from '@/lib/core-app/tradePitch'
 import type { RecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { PlayerDepth } from '@/lib/core-app/playerDepth'
+import type { PlayerShares } from '@/lib/core-app/playerShares'
+import type { LeagueShareView } from '@/lib/core-app/playerSharesLeague'
+import { PlayerSharesBoard } from '@/components/core-app/player-finder/PlayerSharesBoard'
+import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
 import { PlayerNextGames } from '@/components/core-app/player-finder/PlayerNextGames'
 import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
@@ -161,6 +165,14 @@ export type PlayerFinderProps = {
    * viewer without AF Pro). Null renders the card exactly as before.
    */
   depth?: PlayerDepth | null
+  /** "Your shares" (Phase 2): the players you roster most across the picked leagues; home only. */
+  shares?: SectionState<PlayerShares> | null
+  /** League mode: the same players read in the held league (holder, value, season points). */
+  leagueShares?: LeagueShareView | null
+  /** Every league the account plays, for the "pick leagues" control. */
+  pickLeagues?: Array<{ id: string; name: string; platform: string | null }>
+  /** The account's saved pick (already intersected with `pickLeagues`); null = all. */
+  savedPicks?: string[] | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -350,6 +362,10 @@ export function PlayerFinder({
   compareRequested = false,
   depthAccess = null,
   depth = null,
+  shares = null,
+  leagueShares = null,
+  pickLeagues = [],
+  savedPicks = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -662,7 +678,10 @@ export function PlayerFinder({
 
       <section className="af-pf-main" aria-label="Player details">
         {/* ── Game day home: your flagged starters, before any search ──── */}
+        {/* Pick the leagues the finder reads — only on the all-leagues home; a held league is the switcher's. */}
+        {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
         {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}
+        {!detail && signedIn && shares ? <PlayerSharesBoard state={shares} league={leagueShares} valuesLocked={depthLocked} /> : null}
 
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
