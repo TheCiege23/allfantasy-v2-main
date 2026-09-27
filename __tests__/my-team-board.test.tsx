@@ -324,7 +324,7 @@ describe('MyTeamBoard', () => {
     expect(cta?.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('says Locked once the first kickoff has passed', () => {
+  it('asks for individual player locks after a displayed deadline passes, without locking the whole lineup', () => {
     const { container } = render(
       <MyTeamBoard
         allHref={ALL_HREF}
@@ -335,7 +335,8 @@ describe('MyTeamBoard', () => {
         })}
       />,
     )
-    expect(container.textContent ?? '').toContain('Locked')
+    expect(container.textContent ?? '').toContain('Check player locks')
+    expect(container.textContent ?? '').not.toContain('Locked')
   })
 
   it('renders an em dash, not a zero, when no kickoff could be read', () => {

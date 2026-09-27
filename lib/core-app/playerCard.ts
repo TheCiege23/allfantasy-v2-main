@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { memberLeaguePlatformIdsFor } from '@/lib/league-access'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { injuryNameVariants } from './injuryNames'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -773,7 +774,8 @@ const NON_DESIGNATIONS = new Set(['active', 'na', 'healthy', ''])
 export async function loadInjury(
   sleeperId: string | null,
   name: string,
-  sport: string
+  sport: string,
+  team?: string | null,
 ): Promise<SectionState<PlayerCardInjury>> {
   const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
 
@@ -794,7 +796,7 @@ export async function loadInjury(
              */
             OR: [
               ...(sleeperId ? [{ playerId: sleeperId }] : []),
-              { playerName: { equals: name, mode: 'insensitive' as const } },
+              { playerName: { in: injuryNameVariants(name), mode: 'insensitive' as const } },
             ],
           },
           {
@@ -805,11 +807,13 @@ export async function loadInjury(
       },
       orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
       take: 5,
-      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true },
+      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true, team: true },
     })
     .catch(() => [])
 
-  const hit = rows.find((r) => r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
+  const club = normalizeTeamAbbrev(team)
+  const hit = rows.find((r) => (!club || !r.team || normalizeTeamAbbrev(r.team) === club)
+    && r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
   if (!hit || !hit.status) {
     return unavailable(
       `No injury designation reported in the last ${INJURY_WINDOW_DAYS} days.`
@@ -1413,7 +1417,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       : Promise.resolve(new Map()),
     loadNews(player.name, player.sport),
     loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
-    loadInjury(player.sleeperId, player.name, player.sport),
+    loadInjury(player.sleeperId, player.name, player.sport, player.team),
     /*
      * ⚠ NOT INSIDE `loadInjury`. The stamp annotates the injury slot in BOTH
      * states, including the unavailable one — and `SectionState`'s unavailable

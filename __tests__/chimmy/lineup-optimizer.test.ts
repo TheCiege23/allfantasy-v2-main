@@ -273,3 +273,42 @@ describe('singleSwapCall', () => {
     await expect(buildLineupOptimizerContext({ leagueId: 'L1', userId: 'viewer-1' }, deps)).resolves.toMatch(/LINEUP OPTIMIZER/)
   })
 })
+
+
+it('excludes unavailable players even when they retain high weekly projections', async () => {
+  const metadata = new Map([...META].map(([id, player]) => [id, {...player}]))
+  metadata.get('qb1')!.injury = 'INACT'
+  metadata.get('rb1')!.injury = 'Out'
+  metadata.get('wr2')!.injury = 'IR'
+  loadPlayers.mockResolvedValue(metadata)
+  const r = await run()
+  expect(r.status).toBe('ready')
+  if (r.status !== 'ready') return
+  expect(r.best.slots.some(s => ['qb1','rb1','wr2'].includes(s.player.playerId))).toBe(false)
+  expect(r.unfilledSlots).toContain('QB')
+  expect(r.current.starters.find(p=>p.playerId==='qb1')?.points).toBe(0)
+  expect(r.bench.some(p=>['qb1','rb1','wr2'].includes(p.playerId))).toBe(false)
+})
+it('keeps a started starter in its slot and excludes a started bench upgrade', async () => {
+  deps.checkLocks = async () => ({started: new Map([['rb3','started'],['wr3','started']]),unverified:[]})
+  const r = await run()
+  expect(r.status).toBe('ready')
+  if (r.status !== 'ready') return
+  expect(r.best.slots.find(s=>s.slot==='FLEX')?.player.playerId).toBe('rb3')
+  expect(r.best.slots.some(s=>s.player.playerId==='wr3')).toBe(false)
+  expect(r.startInstead.some(p=>p.playerId==='wr3')).toBe(false)
+  expect(r.benchInstead.some(p=>p.playerId==='rb3')).toBe(false)
+  expect(r.lockedPlayers?.map(p=>p.playerId)).toEqual(['rb3','wr3'])
+})
+it('refuses a complete comparison when a started starter is unpriced', async () => {
+  deps.checkLocks = async () => ({started:new Map([['wr-bye','started']]),unverified:[]})
+  expect(await run()).toMatchObject({status:'unresolved',reason:'locked_starter_unpriced'})
+})
+it('reports unknown locks when the schedule read fails', async () => {
+  deps.checkLocks = async () => {throw new Error('schedule unavailable')}
+  const r = await run()
+  expect(r.status).toBe('ready')
+  if (r.status !== 'ready') return
+  expect(r.unverifiedLocks?.length).toBe(MINE.length-1)
+  expect(renderLineupOptimizationBlock(r)).toContain('Kickoff locks could not be verified')
+})

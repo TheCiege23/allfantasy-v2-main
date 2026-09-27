@@ -42,16 +42,21 @@ function LockCountdown({
   platform,
   week,
   daysAway,
+  next = false,
+  asOf,
 }: {
   at: Date
   anyEmptySlot: boolean
   platform: string
   week: number | null
   daysAway: number
+  next?: boolean
+  asOf?: number
 }) {
-  const [now, setNow] = useState<number>(() => Date.now())
+  const [now, setNow] = useState<number>(() => asOf ?? Date.now())
 
   useEffect(() => {
+    setNow(Date.now())
     // A ticking second hand on a deadline eight days out is noise; it only
     // earns the re-render when the number is actually moving for the reader.
     const period = daysAway >= 1 ? 60_000 : 1_000
@@ -87,12 +92,12 @@ function LockCountdown({
         and are headings.
       */}
       <span className="af-label af-mt-lock-label">
-        {week != null ? `Week ${week} · first kickoff` : 'First kickoff'}
+        {week != null ? `Week ${week} · ${next ? 'next player kickoff' : 'first kickoff'}` : next ? 'Next player kickoff' : 'First kickoff'}
       </span>
       <span className="af-num af-mt-lock-time">{label}</span>
       <span className="af-mt-lock-note">
         {at.toUTCString().slice(0, 22)} UTC
-        {locked ? ' · check individual player locks on your platform' : null}
+        {' · confirm individual locks and AutoSubs on your platform'}
         {anyEmptySlot ? ' · a starting slot is still empty' : null}
       </span>
       {anyEmptySlot && !locked ? (
@@ -532,7 +537,7 @@ function ProjHeader() {
  * different and much weaker statement than "we checked and he is the play".
  * Saying so out loud is the whole value of running the check every week.
  */
-function BenchCheckStrip({ check }: { check: BenchCheck }) {
+function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
   const gap = check.benchProjected - check.starterProjected
   return (
     <div className="af-mt-bench-check" data-verdict={check.verdict}>
@@ -562,6 +567,11 @@ function BenchCheckStrip({ check }: { check: BenchCheck }) {
           </>
         )}
       </span>
+      <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
+        tab: 'chimmy', leagueId,
+        prefill: `Should I start ${check.benchName} instead of ${check.starterName} in this league? Use Decision OS to compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
+      } }))}>Ask Chimmy about this swap</button>
+      <span className="af-mt-bench-caveat">Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.</span>
     </div>
   )
 }
@@ -569,11 +579,15 @@ function BenchCheckStrip({ check }: { check: BenchCheck }) {
 function SlotRow({
   slot,
   platform,
+  leagueId,
+  sourceLink,
   anchor,
 }: {
   slot: LineupSlot
   anchor?: string
   platform: string
+  leagueId: string
+  sourceLink: MyTeamData['league']['sourceLink']
 }) {
   return (
     /*
@@ -610,9 +624,8 @@ function SlotRow({
               <div className="af-mt-player-meta">Nobody is starting in this slot</div>
             </div>
           </div>
-          <Link href="/import" className="af-btn af-mt-fix">
-            Fix in {platform}
-          </Link>
+          {sourceLink ? <SourceActionLink link={sourceLink} className="af-btn af-mt-fix" /> :
+            <span className="af-mt-player-meta">Choose a player in your league's lineup manager.</span>}
         </>
       )}
 
@@ -623,7 +636,7 @@ function SlotRow({
         player rather than under the slot gutter is what makes it read as
         attached to THIS row in a table layout.
       */}
-      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} /> : null}
+      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
     </li>
   )
 }
@@ -725,6 +738,7 @@ export function MyTeam({ data }: MyTeamProps) {
       new CustomEvent(COMMS_OPEN_EVENT, {
         detail: {
           tab: 'chimmy',
+          leagueId: data.league.id,
           prefill: buildProjectionQuestion(data.league.name, proj?.week ?? null),
         },
       }),
@@ -742,7 +756,9 @@ export function MyTeam({ data }: MyTeamProps) {
     <div className="af-mt">
       {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
       {/* ── Lock banner ─────────────────────────────────────────────── */}
-      {data.lock.available ? (
+      {data.league.bestBall ? (
+        <div className="af-mt-lock"><span className="af-label">Best Ball · automatic lineup</span><span className="af-mt-lock-note">Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.</span></div>
+      ) : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
             ⚠ A LOCK MORE THAN A WEEK OUT IS A COVERAGE GAP, NOT A DEADLINE, and
@@ -765,6 +781,8 @@ export function MyTeam({ data }: MyTeamProps) {
             platform={platform}
             week={data.lock.data.week}
             daysAway={data.lock.data.daysAway}
+            next={data.lock.data.next}
+            asOf={data.lock.data.asOf}
           />
         )
       ) : (
@@ -1025,7 +1043,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <header className="af-mt-section-head">
           <h2 className="af-label">Starters</h2>
           <span className="af-mt-section-note">
-            Lineup from {platform}. To change it, open {platform} — AllFantasy only reads.
+            {data.league.bestBall ? `Scoring lineup snapshot from ${platform}. Your provider selects the lineup automatically.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
           </span>
           <ProjHeader />
         </header>
@@ -1038,6 +1056,8 @@ export function MyTeam({ data }: MyTeamProps) {
                 anchor={slot.player ? `lineup-player-${slot.player.sleeperId}` : `lineup-slot-${i}`}
                 slot={slot}
                 platform={platform}
+                leagueId={data.league.id}
+                sourceLink={data.league.sourceLink}
               />
             ))}
           </ul>

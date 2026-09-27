@@ -121,7 +121,8 @@ import {
 } from '@/lib/core-app/leagueFirst'
 import { readLastLeague, rememberLastLeague } from '@/lib/core-app/leagueFirstStore'
 import { readLeagueChatPreview } from '@/lib/core-app/leagueChatPreview'
-import { composeChimmyMoves, type ChimmyMoves } from '@/lib/core-app/chimmyMoves'
+import { composeChimmyMoves, composeMyTeamMoves, type ChimmyMoves } from '@/lib/core-app/chimmyMoves'
+import { LineupIntelligenceActions } from '@/components/core-app/LineupIntelligenceActions'
 import { ChimmyMovesCard } from '@/components/core-app/ChimmyMovesCard'
 import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
 import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
@@ -2255,8 +2256,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * the critical path of a screen that never renders it.
    */
   const myTeamPulse =
-    activeKey === 'my-team' && !selectedLeagueId
-      ? await getMyTeamPulse(userId).catch(() => null)
+    activeKey === 'my-team' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
+      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined).catch((error: unknown) => {
+          console.error('[core/my-team] pulse read failed', error)
+          myTeamLoadFailed = true
+          return null
+        })
       : null
 
   /* Same split as my-team above: a failed read must not read as "no league". */
@@ -3786,7 +3791,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'my-team' ? (
         myTeam ? (
-          <MyTeam data={myTeam} />
+          <>
+            {myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
+              leagueId: myTeam.league.id,
+              leagueName: myTeam.league.name,
+              starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
+              nowIso: new Date().toISOString(),
+            })} />}
+            <MyTeam data={myTeam} />
+          </>
         ) : myTeamLoadFailed ? (
           /* The read failed for a league the user HAS selected — say so, and keep
              them on this screen. Falling through to the picker below would tell

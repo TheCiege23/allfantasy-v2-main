@@ -110,7 +110,9 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
           ...result.injuredStarters.map(p => `${p.name}: ${p.injury}. Check current availability.`),
           ...(result.unfilledSlots.length ? [`Unfilled slots: ${result.unfilledSlots.join(', ')}. No eligible player has a projection.`] : []),
           ...(result.unpricedActive ? [`${result.unpricedActive} active players lack projections and were excluded.`] : []),
-          'Check game locks and injury news before changing your lineup. This is a one-week projection, not a guarantee.'].join('\n') })
+          ...(result.lockedPlayers?.length ? [`Games already started: ${result.lockedPlayers.map(p => p.name).join(', ')}. Current starters were kept in place; started bench players were excluded.`] : []),
+          ...(result.unverifiedLocks?.length ? [`Kickoff locks unverified: ${result.unverifiedLocks.map(p => p.name).join(', ')}.`] : []),
+          'Confirm individual locks, AutoSubs and current injury news on your platform. This is a one-week projection, not a guarantee.'].join('\n') })
     }
     return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', kind === 'trade' ? 'Name what you give and receive, or ask whether to trade for a named player.' : 'Name the player to add and the player to drop. FAAB bidding needs additional waiver-engine evidence.')
   } catch {
