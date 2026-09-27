@@ -258,6 +258,41 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(await screen.findByText('Is Bijan a sell?')).toBeInTheDocument()
     expect(screen.getByText('Hold. His usage is climbing.')).toBeInTheDocument()
   })
+
+  /*
+   * 🛑 "MY QUESTION APPEARED TWICE" (owner's report, 2026-09-25). Turn ids were `you-${t.length}` and
+   * the thread is capped at 80, so once a thread was full — and the saved conversation arrives FULL
+   * for anyone who uses Chimmy — every question was `you-80` and every answer `chimmy-80`: the key
+   * of the exchange before it, still on screen. Duplicate keys are how React duplicates children.
+   */
+  it('shows each new question once when the saved conversation is already at the 80-turn cap', async () => {
+    const full = Array.from({ length: 80 }, (_, i) => ({
+      id: `hist-${i}`,
+      role: i % 2 === 0 ? 'you' : 'chimmy',
+      text: i % 2 === 0 ? `Old question ${i}` : `Old answer ${i}`,
+    }))
+    routeFetch({
+      history: { global: full },
+      chimmy: (form) => json({ response: `Answer to ${String(form.get('message'))}` }),
+    })
+    const keyWarnings = vi.spyOn(console, 'error').mockImplementation(() => {})
+    openPage()
+    expect(await screen.findByText('Old question 78')).toBeInTheDocument()
+
+    await ask('Who wins KBFL this week?')
+    expect(await screen.findByText('Answer to Who wins KBFL this week?')).toBeInTheDocument()
+    await ask('Should I start Kyren?')
+    expect(await screen.findByText('Answer to Should I start Kyren?')).toBeInTheDocument()
+
+    expect(screen.getAllByText('Who wins KBFL this week?')).toHaveLength(1)
+    expect(screen.getAllByText('Should I start Kyren?')).toHaveLength(1)
+    const ids = JSON.parse(sessionStorage.getItem('af:comms:conversations:u1') ?? '{}').global.turns.map(
+      (t: { id: string }) => t.id,
+    )
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(keyWarnings.mock.calls.some((c) => /same key/i.test(String(c[0])))).toBe(false)
+    keyWarnings.mockRestore()
+  })
 })
 
 describe('the page around the panel', () => {

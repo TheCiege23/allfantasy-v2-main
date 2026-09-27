@@ -224,6 +224,23 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_league_trade_history',
+      description:
+        "Trades that already HAPPENED in the league in scope, itemized: date, both managers, and every player and pick that moved each way. Use for 'what trades happened this year', 'who has X traded with', 'what did X give up for Y', 'when was X traded'. Optional filters narrow it to one season, one manager (Sleeper username or team name) or one player. Sleeper leagues only; it says so for other platforms. Stores no trade values — never grade these or say who won.",
+      parameters: {
+        type: 'object',
+        properties: {
+          season: { type: 'integer', description: 'Only trades from this season, e.g. 2026.' },
+          manager: { type: 'string', description: 'Only trades this manager was part of — a Sleeper username or team name exactly as the user wrote it.' },
+          player: { type: 'string', description: 'Only trades that moved this player (full or last name).' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_upcoming_games',
       description:
         'Scheduled games that have not kicked off yet. Use for "when is the next game", "when does the season start", "what is on this week".',
@@ -775,6 +792,30 @@ export async function executeChimmyTool(
       case 'get_trade_block': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         return buildTradeBlockContext(ctx.leagueId)
+      }
+
+      case 'get_league_trade_history': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildLeagueTradeHistoryOutcome, TOOL_TRADES_SHOWN, TOOL_TRADE_SCAN_LIMIT } = await import(
+          '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
+        )
+        const season =
+          typeof args.season === 'number' ? Math.trunc(args.season) : Number.parseInt(String(args.season ?? ''), 10)
+        const outcome = await buildLeagueTradeHistoryOutcome(ctx.leagueId, ctx.userId, {
+          season: Number.isFinite(season) ? season : null,
+          manager: typeof args.manager === 'string' ? args.manager.slice(0, 60) : null,
+          player: typeof args.player === 'string' ? args.player.slice(0, 60) : null,
+          maxShown: TOOL_TRADES_SHOWN,
+          scanLimit: TOOL_TRADE_SCAN_LIMIT,
+        })
+        if (outcome.kind === 'ok') return outcome.text
+        if (outcome.kind === 'not-sleeper') {
+          return `Completed-trade history is only synced for Sleeper leagues, and this league is on ${outcome.platform}. Say that plainly; do NOT say the league has made no trades.`
+        }
+        if (outcome.kind === 'no-history-rows' || outcome.kind === 'no-trade-rows') {
+          return 'No completed trades are stored for this league yet (trade history syncs daily from Sleeper). Say no trades are on file — not that none have happened.'
+        }
+        return 'The trade history could not be read just now. Say so; do not describe any trades.'
       }
 
       case 'get_head_to_head': {

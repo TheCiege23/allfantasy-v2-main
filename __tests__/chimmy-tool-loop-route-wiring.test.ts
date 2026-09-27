@@ -163,7 +163,9 @@ describe('tool loop wiring', () => {
   it('reports the bound league in meta.leagueGrounding, read back from the tool context', () => {
     const afterLoop = BLOCK.slice(BLOCK.indexOf('if (loop?.text)'))
     expect(afterLoop).toContain('const boundLeagueId = toolContext.leagueId')
-    expect(afterLoop).toMatch(/leagueGrounding:\s*boundLeague/)
+    /* Built once from the bound league, then shared by the reply and the saved transcript row. */
+    expect(afterLoop).toMatch(/const loopGrounding = boundLeague\b/)
+    expect(afterLoop).toMatch(/leagueGrounding:\s*loopGrounding/)
     expect(afterLoop).toContain("reason: 'no_league_selected'")
     // Never the raw request field.
     expect(afterLoop).not.toMatch(/boundLeagueId\s*=\s*(?:leagueId|requestedLeagueId)\b/)

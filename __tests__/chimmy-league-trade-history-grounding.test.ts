@@ -5,11 +5,14 @@ const mocks = vi.hoisted(() => ({
   historyFindMany: vi.fn(),
   tradeFindMany: vi.fn(),
   sportsPlayerFindMany: vi.fn(),
+  leagueFindMany: vi.fn(),
+  leagueTeamFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findUnique: mocks.leagueFindUnique },
+    league: { findUnique: mocks.leagueFindUnique, findMany: mocks.leagueFindMany },
+    leagueTeam: { findMany: mocks.leagueTeamFindMany },
     leagueTradeHistory: { findMany: mocks.historyFindMany },
     leagueTrade: { findMany: mocks.tradeFindMany },
     sportsPlayer: { findMany: mocks.sportsPlayerFindMany },
@@ -277,5 +280,192 @@ describe('buildLeagueTradeHistoryOutcome — why there is no block', () => {
 
     mocks.historyFindMany.mockResolvedValue([])
     expect(await buildLeagueTradeHistoryContext('lg1', 'user-1')).toBeNull()
+  })
+})
+
+/*
+ * 🛑 CHIMMY TOLD A KBFL MANAGER THE TRADE HISTORY "ISN'T ITEMIZED" (2026-09-20/21).
+ *
+ * The block it could read printed "one side got [..] for [..]": no manager on either
+ * side and eight trades at most, so "what did Layes23 give up?" had no answer even
+ * when the block arrived. Every line now names both managers, and the tool path can
+ * narrow to a season, a manager or a player.
+ */
+describe('buildLeagueTradeHistoryOutcome — itemized, with both managers', () => {
+  /* One deal, stored once from each manager's side, as ingestion writes it. */
+  const bothSides = [
+    trade({
+      transactionId: 'tx-9',
+      playersGiven: ['2216'],
+      playersReceived: ['5859'],
+      picksReceived: [{ round: 1, season: '2027' }],
+      picksGiven: [],
+      partnerName: 'Layes23',
+      history: { sleeperUsername: 'TheCiege24' },
+    }),
+    trade({
+      transactionId: 'tx-9',
+      playersGiven: ['5859'],
+      playersReceived: ['2216'],
+      picksReceived: [],
+      picksGiven: [{ round: 1, season: '2027' }],
+      partnerName: 'TheCiege24',
+      history: { sleeperUsername: 'Layes23' },
+    }),
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.leagueFindUnique.mockResolvedValue({
+      platform: 'sleeper',
+      platformLeagueId: '1234567890',
+      sport: 'nfl',
+      season: 2026,
+    })
+    mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }, { id: 'h2' }])
+    mocks.tradeFindMany.mockResolvedValue(bothSides)
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Mike Evans' },
+    ])
+  })
+
+  it('names both managers and every asset on one line per deal', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.uniqueTrades).toBe(1)
+    expect(out.text).toContain(
+      'TheCiege24 got [Brian Thomas Jr., 2027 R1] from Layes23 for [Mike Evans].',
+    )
+    expect(out.text).not.toContain('one side got')
+  })
+
+  it("reads a manager's own side of the deal when the question is about them", async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'layes23' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Layes23 got [Mike Evans] from TheCiege24 for [Brian Thomas Jr., 2027 R1].')
+    expect(out.text).toContain('Filtered to manager "layes23": 1 trade.')
+  })
+
+  it('drops deals a named manager was not part of', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'SomeoneElse' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Filtered to manager "SomeoneElse": 0 trades.')
+    expect(out.text).toContain('No trade in the window read matches that filter.')
+    expect(out.text).not.toContain('Mike Evans')
+  })
+
+  it('finds a trade by player name', async () => {
+    const hit = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { player: 'evans' })
+    if (hit.kind !== 'ok') throw new Error('expected ok')
+    expect(hit.text).toContain('Filtered to player "evans": 1 trade.')
+    expect(hit.text).toContain('Mike Evans')
+
+    const miss = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { player: 'Jefferson' })
+    if (miss.kind !== 'ok') throw new Error('expected ok')
+    expect(miss.text).toContain('Filtered to player "Jefferson": 0 trades.')
+  })
+
+  /* A player match only sees named players; an unnamed one must not read as "never traded". */
+  it('warns that a player match can miss a trade whose players have no name on file', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([])
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { player: 'Evans' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toMatch(/have no name on file, so a player match can miss a trade/)
+  })
+
+  it('narrows the database read to one season rather than filtering afterwards', async () => {
+    await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { season: 2025 })
+    expect(mocks.tradeFindMany.mock.calls[0][0].where.season).toBe(2025)
+
+    await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    expect(mocks.tradeFindMany.mock.calls[1][0].where.season).toBeUndefined()
+  })
+
+  it('lists more than the push block\'s eight when the tool asks for them, and says when older ones were not read', async () => {
+    const many = Array.from({ length: 24 }, (_, i) =>
+      trade({ transactionId: `tx-${i}`, partnerName: 'Layes23', history: { sleeperUsername: 'TheCiege24' } }),
+    )
+    mocks.tradeFindMany.mockResolvedValue(many)
+
+    const push = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (push.kind !== 'ok') throw new Error('expected ok')
+    expect(push.shown).toBe(8)
+
+    const tool = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { maxShown: 30, scanLimit: 24 })
+    if (tool.kind !== 'ok') throw new Error('expected ok')
+    expect(tool.shown).toBe(24)
+    expect(tool.text).toContain('All 24, most recent first:')
+    expect(tool.text).toContain('Older trades exist beyond this window')
+  })
+})
+
+/*
+ * 🛑 NEITHER STORED NAME IS A NAME. On every ingested row `partnerName` is null and
+ * `sleeperUsername` is the Sleeper USER ID, so a block built from them printed
+ * "1208593130748645376 got [..] from another manager". Seen in Chrome against the test copy,
+ * 2026-09-25. The league's own team rows name both sides.
+ */
+describe('buildLeagueTradeHistoryOutcome — managers named by team', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.leagueFindUnique.mockResolvedValue({ platform: 'sleeper', platformLeagueId: '1382', sport: 'nfl', season: 2026 })
+    mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }])
+    mocks.tradeFindMany.mockResolvedValue([
+      trade({
+        transactionId: 'tx-7',
+        playersGiven: ['2216'],
+        playersReceived: ['5859'],
+        picksReceived: [],
+        partnerName: null,
+        partnerRosterId: 3,
+        history: { sleeperUsername: '1208593130748645376' },
+      }),
+    ])
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Mike Evans' },
+    ])
+    /* The question arrived on a row with no teams; a sibling row for the same Sleeper league has them. */
+    mocks.leagueFindMany.mockResolvedValue([{ id: 'lg1' }, { id: 'lg-sibling' }])
+    mocks.leagueTeamFindMany.mockResolvedValue([
+      { leagueId: 'lg-sibling', externalId: '7', platformUserId: '1208593130748645376', teamName: 'ElTigre164', ownerName: 'ElTigre164' },
+      { leagueId: 'lg-sibling', externalId: '3', platformUserId: '1227375788647530496', teamName: 'Whohatesyou', ownerName: 'Whohatesyou' },
+    ])
+  })
+
+  it('turns a Sleeper user id and a roster id into the teams they are', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('ElTigre164 got [Brian Thomas Jr.] from Whohatesyou for [Mike Evans].')
+    expect(out.text).not.toContain('1208593130748645376 got')
+    expect(out.text).toMatch(/CURRENT team names/)
+    /* Every row for this Sleeper league is read, not just the one the question came in on. */
+    expect(mocks.leagueTeamFindMany.mock.calls[0][0].where.leagueId.in).toEqual(['lg1', 'lg-sibling'])
+  })
+
+  it('finds a manager by part of their team name, on either side of the deal', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'tigre' })
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('Filtered to manager "tigre": 1 trade.')
+
+    const partner = await buildLeagueTradeHistoryOutcome('lg1', 'user-1', { manager: 'Whohatesyou' })
+    if (partner.kind !== 'ok') throw new Error('expected ok')
+    expect(partner.text).toContain('Filtered to manager "Whohatesyou": 1 trade.')
+  })
+
+  it('never prints a bare id when no team row names it', async () => {
+    mocks.leagueTeamFindMany.mockResolvedValue([])
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text).toContain('an unnamed manager got [Brian Thomas Jr.] from another manager for [Mike Evans].')
+    expect(out.text).not.toMatch(/\d{12,}/)
+    expect(out.text).not.toMatch(/CURRENT team names/)
+  })
+
+  it('still builds the block when the team read fails', async () => {
+    mocks.leagueFindMany.mockRejectedValue(new Error('db down'))
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    expect(out.kind).toBe('ok')
   })
 })
