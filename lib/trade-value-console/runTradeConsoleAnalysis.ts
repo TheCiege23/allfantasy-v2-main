@@ -2,7 +2,7 @@ import 'server-only'
 
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
-import { evaluateCounterOffers } from './counterOffers'
+import { availableRosterTargets, evaluateCounterOffers } from './counterOffers'
 import { prepareProposalCap, proposalCapNote } from './proposalCap'
 import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
@@ -459,8 +459,9 @@ export async function runTradeConsoleAnalysis(
     dataGaps.length > 0 ||
     [...giveLines, ...getLines].some((l) => l.dataSource === 'placeholder')
 
-  const giveProjSum = sumEffectiveProjections(giveLines)
-  const getProjSum = sumEffectiveProjections(getLines)
+  const comparableProjections = sumEffectiveProjections([...giveLines, ...getLines]) != null
+  const giveProjSum = comparableProjections ? sumEffectiveProjections(giveLines) : null
+  const getProjSum = comparableProjections ? sumEffectiveProjections(getLines) : null
   const netProj =
     giveProjSum != null && getProjSum != null
       ? Math.round((getProjSum - giveProjSum) * 10) / 10
@@ -472,8 +473,8 @@ export async function runTradeConsoleAnalysis(
     net: netProj,
     summary:
       giveProjSum != null && getProjSum != null
-        ? 'Net = sum(get) − sum(give) of league-scored weekly projections (injury → weather → scoring stack) for players with DB rows — short-term add/drop signal, not dynasty market value.'
-        : 'Add league + player rows with projections to unlock scoring-adjusted weekly impact alongside market composites.',
+        ? 'Net compares combined player production, not starting-lineup improvement or win probability. Picks and FAAB are excluded. Defensive history estimates use league scoring; review each estimate for its week and injury/weather coverage.'
+        : 'Complete, comparable player projections are required on both sides. Missing players are not counted as zero; picks and FAAB have no weekly production estimate.',
   }
 
   const scoringSummaryLine = leagueNormCtx
@@ -648,8 +649,13 @@ export async function runTradeConsoleAnalysis(
     : { bullets: drivers.acceptBullets, sensitivity: drivers.sensitivitySentence }
 
   let opponentRosterTargets: TradeConsoleOpponentRosterTarget[] | undefined
+  // Only align by selection order when every input has a resolved line.
+  const selectedProviderIds = input.sideGive.length + input.sideGet.length === giveLines.length + getLines.length
+    ? [...giveLines, ...getLines].map(line =>
+    line.sport === 'NFL' && line.enrichmentPlayerId
+      ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null) : undefined
   if (rosterCtxForDrivers?.theirRoster?.length) {
-    opponentRosterTargets = rosterCtxForDrivers.theirRoster
+    const rosterTargets = rosterCtxForDrivers.theirRoster
       .filter((a) => a.type === 'PLAYER')
       .map((a) => ({
         id: a.rosterPlayerId ?? a.id,
@@ -660,6 +666,8 @@ export async function runTradeConsoleAnalysis(
         playerId: a.valuationPlayerId,
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
+    opponentRosterTargets = availableRosterTargets({ targets: rosterTargets,
+      selected: [...input.sideGive, ...input.sideGet], selectedProviderIds })
   }
 
   const evaluateCap = input.leagueId && input.userId
@@ -679,9 +687,7 @@ export async function runTradeConsoleAnalysis(
       ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
     give: input.sideGive,
     get: input.sideGet,
-    selectedProviderIds: [...giveLines, ...getLines].map(line =>
-      line.sport === 'NFL' && line.enrichmentPlayerId
-        ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null),
+    selectedProviderIds,
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')

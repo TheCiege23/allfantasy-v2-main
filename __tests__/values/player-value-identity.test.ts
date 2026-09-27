@@ -33,6 +33,23 @@ const ctx = (): ValuationContext => ({
 beforeEach(() => { playerRows.clear(); searchRows.length = 0; identityResolve.mockReset(); identityResolve.mockResolvedValue({ confidence: 'none' }); historical.mockReturnValue({ value: 8000, snapshotDate: '2026-09-26' }); analytics.mockResolvedValue(null) })
 
 describe('identity-safe player trade pricing', () => {
+  it('retains the priced defender board projection without a general player record', async () => {
+    const nflCtx = ctx()
+    nflCtx.leagueValueBySleeperId = new Map([['lb', {
+      value: 1200, position: 'LB', basis: 'idp-vorp', sleeperId: 'lb',
+      projection: { points: 17.1, season: 2026, week: 3 },
+    }]])
+    const resolved = await resolveAssets([{ kind: 'player', name: 'Justin Jefferson',
+      providerIdentity: { provider: 'sleeper', id: 'lb', position: 'LB' },
+    }], { effectiveSport: 'NFL', nflCtx, fcPlayers: [receiver], waiverBudget: 100, dataGaps: [] })
+    expect(resolved.lines[0]).toMatchObject({ marketValue: 1200, effectiveProjection: 17.1,
+      projectionSource: 'league_idp_history', projectionScope: { season: 2026, week: 3 } })
+    expect(resolved.lines[0].projectionNotes?.join(' ')).toContain('Live injury and weather adjustments are not included')
+    const offense = await resolveAssets([{ kind: 'player', name: 'Justin Jefferson',
+      providerIdentity: { provider: 'sleeper', id: 'wr', position: 'WR' },
+    }], { effectiveSport: 'NFL', nflCtx, fcPlayers: [receiver], waiverBudget: 100, dataGaps: [] })
+    expect(offense.lines[0].effectiveProjection).toBeUndefined()
+  })
   it('refuses ambiguous college names and never replaces a missing selected ID with a name hit', async () => {
     searchRows.push(...['college-1', 'college-2'].map(id => ({ id, sport: 'NCAAF', name: 'Same College Name',
       position: 'QB', team: 'College', dynastyValue: 10, projections: {} })))
