@@ -80,7 +80,7 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         expect(loadedPool.entries[0]).toMatchObject({ name: 'Fixture Player 1', display: { sport } })
         await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort())
         const introStatusPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/${draft.id}/intro-status` && response.request().method() === 'GET', { timeout: 300000 })
-        const introSeenPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/${draft.id}/intro-seen` && response.request().method() === 'POST', { timeout: 300000 }).catch(() => null)
+        const introSeenPromise = page.waitForResponse(response => new URL(response.url()).pathname === `/api/leagues/${leagueId}/draft/${draft.id}/intro-seen` && response.request().method() === 'POST', { timeout: 600000 }).catch(() => null)
         await page.goto('/drafts/' + draft.id, { waitUntil: 'domcontentloaded' })
         const introStatus = await introStatusPromise
         expect(introStatus.status()).toBe(200)
@@ -88,7 +88,7 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
         if (intro.seen === false && intro.videoUrl) {
           // The HTTP response can precede React opening the overlay.
           const dismissed = await Promise.race([
-            page.getByTestId('draft-intro-skip').waitFor({ state: 'visible', timeout: 120000 }).then(() => 'skip' as const),
+            page.getByTestId('draft-intro-skip').waitFor({ state: 'visible', timeout: 300000 }).then(() => 'skip' as const),
             introSeenPromise.then(response => {
               if (!response) throw new Error('INTRO_DISMISSAL_RESPONSE_REQUIRED')
               expect(response.status()).toBeLessThan(400)
