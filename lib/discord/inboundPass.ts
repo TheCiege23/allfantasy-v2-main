@@ -104,8 +104,8 @@ async function importChannel(row: Row, botId: string): Promise<number> {
   if (!row.lastSyncedMessageId) {
     const latest = await fetchChannelMessages(row.channelId, { limit: 1 })
     if (latest[0]?.id) {
-      await prisma.discordLeagueChannel.update({
-        where: { id: row.id },
+      await prisma.discordLeagueChannel.updateMany({
+        where: { id: row.id, syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
         data: { lastSyncedMessageId: latest[0].id },
       })
     }
@@ -132,6 +132,11 @@ async function importChannel(row: Row, botId: string): Promise<number> {
     // without its link. The advisory lock is transaction-scoped and auto-released.
     const didImport = await prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`discord-inbound:${m.id}`}))`
+      const stillOptedIn = await tx.discordLeagueChannel.findFirst({
+        where: { id: row.id, syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
+        select: { id: true },
+      })
+      if (!stillOptedIn) return false
       const existing = await tx.discordMessageLink.findFirst({
         where: { discordMessageId: m.id, direction: 'from_discord' },
         select: { id: true },
@@ -169,8 +174,8 @@ async function importChannel(row: Row, botId: string): Promise<number> {
   }
 
   if (maxId && maxId !== row.lastSyncedMessageId) {
-    await prisma.discordLeagueChannel.update({
-      where: { id: row.id },
+    await prisma.discordLeagueChannel.updateMany({
+      where: { id: row.id, syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
       data: { lastSyncedMessageId: maxId },
     })
   }

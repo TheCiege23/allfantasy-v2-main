@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   findMany: vi.fn(),
-  update: vi.fn(),
+  updateMany: vi.fn(),
+  channelFindFirst: vi.fn(),
   linkFindFirst: vi.fn(),
   linkCreate: vi.fn(),
   createMessage: vi.fn(),
@@ -18,7 +19,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    discordLeagueChannel: { findMany: h.findMany, update: h.update },
+    discordLeagueChannel: { findMany: h.findMany, updateMany: h.updateMany },
     discordMessageLink: { findFirst: h.linkFindFirst, create: h.linkCreate },
     leagueChatMessage: { create: h.createMessage },
     $transaction: h.transaction,
@@ -58,11 +59,13 @@ beforeEach(() => {
   })
   h.linkFindFirst.mockResolvedValue(null)
   h.linkCreate.mockResolvedValue({})
-  h.update.mockResolvedValue({})
+  h.updateMany.mockResolvedValue({ count: 1 })
+  h.channelFindFirst.mockResolvedValue({ id: 'still-on' })
   h.createMessage.mockImplementation(async () => ({ id: `created-${h.createMessage.mock.calls.length}` }))
   h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
     callback({
       $executeRaw: h.lock,
+      discordLeagueChannel: { findFirst: h.channelFindFirst },
       discordMessageLink: { findFirst: h.linkFindFirst, create: h.linkCreate },
       leagueChatMessage: { create: h.createMessage },
     }))
@@ -93,7 +96,7 @@ describe('what it imports', () => {
     expect(h.createMessage.mock.calls[0][0].data).toMatchObject({ message: 'I’ll listen on Achane.', sourceDiscord: true, discordMessageId: '103' })
     expect(h.linkCreate).toHaveBeenCalledTimes(1)
     expect(h.transaction).toHaveBeenCalledTimes(1)
-    expect(h.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { lastSyncedMessageId: '103' } })
+    expect(h.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: 'a', syncInbound: true }), data: { lastSyncedMessageId: '103' } })
   })
 
   it('starts from "now" on first sight — never imports a channel’s history', async () => {
@@ -102,7 +105,7 @@ describe('what it imports', () => {
     const report = await runDiscordInboundPass({ budgetMs: 10_000 })
     expect(report.imported).toBe(0)
     expect(h.createMessage).not.toHaveBeenCalled()
-    expect(h.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { lastSyncedMessageId: '999' } })
+    expect(h.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: 'a', syncInbound: true }), data: { lastSyncedMessageId: '999' } })
   })
 
   it('does not import a line it already imported', async () => {
@@ -119,7 +122,17 @@ describe('what it imports', () => {
     h.linkCreate.mockRejectedValue(new Error('link write failed'))
     const report = await runDiscordInboundPass({ budgetMs: 10_000 })
     expect(report).toMatchObject({ imported: 0, errors: 1 })
-    expect(h.update).not.toHaveBeenCalled()
+    expect(h.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('does not import a fetched message after the commissioner disables inbound', async () => {
+    h.findMany.mockResolvedValue([row('a', '100')])
+    messagesByChannel['chan-a'] = [{ id: '101', content: 'private after opt-out', author: { id: '555' } }]
+    h.channelFindFirst.mockResolvedValue(null)
+    const report = await runDiscordInboundPass({ budgetMs: 10_000 })
+    expect(report.imported).toBe(0)
+    expect(h.createMessage).not.toHaveBeenCalled()
+    expect(h.linkCreate).not.toHaveBeenCalled()
   })
 
   it('only reads channels with two-way switched on', async () => {
