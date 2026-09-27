@@ -627,12 +627,19 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
 }
 
 /** Map a provider asset onto the panel's asset shape. */
-function providerAsset(asset: PendingTradeAsset, idx: number, accent: 'blue' | 'teal'): LeagueTradeAsset {
+function providerAsset(
+  asset: PendingTradeAsset,
+  idx: number,
+  accent: 'blue' | 'teal',
+  provider: string = 'sleeper',
+): LeagueTradeAsset {
+  const isPlayer = !asset.isPick && asset.faabAmount == null
   return {
     id: `${asset.playerId ?? 'pick'}:${idx}`,
     label: asset.playerName,
     sublabel: asset.isPick ? 'Draft pick' : [asset.position, asset.team].filter((v) => v && v !== '—').join(' · ') || null,
-    headshotUrl: null,
+    // ⚠ SLEEPER IDS ONLY. A Yahoo player key fed to Sleeper's CDN is a different player's face, or a 404.
+    headshotUrl: isPlayer && provider === 'sleeper' ? sleeperPlayerHeadshot(asset.playerId) : null,
     accent,
   }
 }
@@ -665,8 +672,8 @@ function mapProviderTrades(
       ? trade.proposedBy
       : trade.proposedByViewer ? 'Awaiting response' : trade.proposedBy,
     timestamp: trade.proposedAt ?? new Date().toISOString(),
-    sent: trade.assetsGiven.map((a, i) => providerAsset(a, i, 'blue')),
-    received: trade.assetsReceived.map((a, i) => providerAsset(a, i, 'teal')),
+    sent: trade.assetsGiven.map((a, i) => providerAsset(a, i, 'blue', trade.provider ?? 'sleeper')),
+    received: trade.assetsReceived.map((a, i) => providerAsset(a, i, 'teal', trade.provider ?? 'sleeper')),
     status: trade.lifecycleStatus === 'complete'
       ? `completed_on_${trade.provider}`
       : `pending_on_${trade.provider}`,
