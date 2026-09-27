@@ -69,7 +69,7 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 /** A live completed feed has unresolved picks. Preserve its metadata, but use
  * the graded ledger's resolved assets and values when both describe the same deal. */
-export function mergeImportedTradeTimelineRows<T extends { id: string; status: string }>(
+export function mergeImportedTradeTimelineRows<T extends { id: string }>(
   imported: ReturnType<typeof importedTradeTimelineRows>, current: T[],
 ) {
   const rows = new Map<string, T | (typeof imported)[number]>(current.map(row => [row.id, row]))
