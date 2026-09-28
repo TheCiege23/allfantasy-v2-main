@@ -914,7 +914,17 @@ export async function getSeasonOutlook(
   for (const league of contested) {
     const p = preparedById.get(league.leagueId)
     if (!league.you || !p) continue
-    const nextWeek = p.weeks[0]
+    /*
+     * 🛑 THE SWING GAME IS ONE YOU CAN STILL AFFECT. `weeks` holds every week not yet FINAL, which on
+     * a Monday includes the week being played — so the card asked "win week 3?" of The Deep!, then
+     * 110 points down on the scoreboard (production 2026-09-28). A game with points already on the
+     * board is in progress; the swing moves to the first week nobody has scored in yet.
+     */
+    const nextWeek = p.weeks.find((w) => {
+      const r = p.unscored.find((x) => x.week === w && x.rosterId === league.you!.rosterId)
+      return r != null && !(r.pointsFor > 0 || r.pointsAgainst > 0)
+    })
+    if (nextWeek == null) continue
     const mineRow = p.unscored.find((r) => r.week === nextWeek && r.rosterId === league.you!.rosterId)
     if (!mineRow) continue
     const oppRow = p.unscored.find(

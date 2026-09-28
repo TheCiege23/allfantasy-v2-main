@@ -18,6 +18,12 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   }] },
   roster: { findMany: async () => [{ leagueId: 'lg', platformUserId: 'me', faabRemaining: 100, playerData: { players: ['bench1', 'starter1'], starters: ['starter1'] } }] },
   leagueWaiverSettings: { findMany: async () => [] },
+  /* Week 3: two fixtures, one stored twice (two sources) — one kicked off, one still to play. */
+  sportsGame: { findMany: async () => [
+    { homeTeam: 'Chicago Bears', awayTeam: 'Philadelphia Eagles', startTime: new Date('2000-01-01T00:00:00Z') },
+    { homeTeam: 'CHI', awayTeam: 'PHI', startTime: new Date('2000-01-01T00:00:00Z') },
+    { homeTeam: 'Buffalo Bills', awayTeam: 'Miami Dolphins', startTime: new Date('2999-01-01T00:00:00Z') },
+  ] },
   fantasyProjection: { findMany: async () => [
     { playerId: 'dart', projectedPoints: 27.4, stats: { stats: { pts: 27.4 } } },
     { playerId: 'mahomes', projectedPoints: 24.0, stats: { stats: { pts: 24.0 } } },
@@ -86,5 +92,13 @@ describe('waiver board: a pickup who cannot play is not a gain', () => {
   it('excludes nobody when the injury feed cannot be read', async () => {
     h.injuryReadFails = true
     expect(await add()).toBe('Jaxson Dart')
+  })
+})
+
+describe('waiver board: which week it is pricing', () => {
+  it('hands over one kickoff per fixture (club pair across sources) and no clock-derived count', async () => {
+    const board = await getWaiversBoard('me')
+    expect(board.at).toEqual({ season: 2026, week: 3 })
+    expect(board.weekKickoffs).toEqual(['2000-01-01T00:00:00.000Z', '2999-01-01T00:00:00.000Z'])
   })
 })

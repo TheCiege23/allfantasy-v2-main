@@ -579,7 +579,7 @@ export async function getLeagueHomeData(
           `${sd.teamName || sd.managerName} got ${
             sd.received.length > 0
               ? sd.received.map((a) => a.name).join(', ')
-              : 'nothing we can name'
+              : 'no players or picks on record'
           }`,
       )
       .join(' · '),
