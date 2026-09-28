@@ -10,6 +10,7 @@ import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 import { isBestBallSettings } from '@/lib/core-app/lineupMode'
 import { listedPositionCounts } from '@/lib/chimmy/rosterCounts'
+import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
 
 /**
  * WHO IS HURT ON THE USER'S OWN ROSTERS, ACROSS EVERY LEAGUE THEY ARE IN.
@@ -314,7 +315,7 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
       lines.push(
         `ROSTER PLACEMENT: ${startingHurt.length} player(s) listed Out/IR are among stored STARTERS: ${startingHurt
           .map((f) => `${f.name} (${f.appearances.filter((a) => a.slot === 'starter' && !a.automatic).map((a) => a.leagueName).join(', ')})`)
-          .join('; ')}. This injury check does not verify kickoff locks, provider transaction rules or AutoSubs eligibility. Stored starter placement is not proof a replacement is still allowed; verify those before suggesting an actionable swap.`,
+          .join('; ')}. This injury check does not verify kickoff locks, provider transaction rules or AutoSubs eligibility. Stored starter placement is not proof a replacement is still allowed; verify those before suggesting an actionable swap. ${LINEUP_ACTION_RULES}`,
       )
     }
   }

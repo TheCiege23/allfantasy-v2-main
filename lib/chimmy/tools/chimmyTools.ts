@@ -14,6 +14,7 @@ import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
+import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 
 /**
@@ -771,7 +772,12 @@ export async function executeChimmyTool(
         const bestBallRuleGap = rules?.ok && rules.context.lineupBehavior.bestBallMode && !rules.context.lineupBehavior.bestBallSettings
           ? 'BEST BALL RULE EVIDENCE GAP: Automatic scoring lineup is confirmed, but this import has no verified Best Ball transaction or substitution configuration. Waiver, trade, and substitution permissions are UNVERIFIED; do not say they are disabled or enabled. Prior chat answers and generic Best Ball defaults are not evidence of this league\'s rules.'
           : null
-        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
+        const actionEvidence = lineupActionEvidence({
+          platform: rules?.ok ? rules.context.platform : null,
+          bestBallMode: rules?.ok ? rules.context.lineupBehavior.bestBallMode : false,
+          lastSyncedAt: rules?.ok ? rules.context.importHealth.lastSyncedAt : null,
+        })
+        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, actionEvidence, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
       }
 
       case 'get_league_standings': {
