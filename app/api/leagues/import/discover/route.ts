@@ -468,8 +468,7 @@ export async function POST(req: NextRequest) {
    * every league below fails with "You are not a member of that Sleeper league." The response names
    * the linked account (`sleeperAccountMismatch`) so the screen can say so before Import, and
    * `relinkSleeper` switches the link on request. That is no new power: settings can already clear
-   * the link, and the next discovery stamps the typed account. The unique key still refuses a Sleeper
-   * id held by another login, which reports as `handleLinkedElsewhere` like the first write.
+   * the link, and the next discovery stamps the typed account.
    */
   const discoveredSleeperId = sleeperUser.user.user_id
   let linkedSleeperId: string | null = null
@@ -508,13 +507,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const leagues = await getUserLeagues(discoveredSleeperId, sport, season)
+    const leagues = await getUserLeagues(sleeperUser.user.user_id, sport, season)
     return NextResponse.json({
       provider,
       sport,
       season,
       account: {
-        providerUserId: discoveredSleeperId,
+        providerUserId: sleeperUser.user.user_id,
         accountIdentifier: sleeperUser.user.username ?? accountIdentifier,
         displayName:
           sleeperUser.user.display_name?.trim() ||

@@ -877,11 +877,7 @@ export function ImportV4({
    * login cannot follow — so the list says what actually works before anyone presses Import.
    */
   const [handleLinkedElsewhere, setHandleLinkedElsewhere] = useState(false)
-  /*
-   * The profile is linked to a DIFFERENT Sleeper account than the one just discovered, and the gate
-   * checks membership against the linked one — so every league in this list would fail with "You
-   * are not a member of that Sleeper league." Named before Import, with a way to switch the link.
-   */
+  /* The profile's linked Sleeper account (which the gate checks) is not the one just discovered. */
   const [sleeperMismatch, setSleeperMismatch] = useState<{
     linkedUsername: string | null
     discoveredHandle: string
