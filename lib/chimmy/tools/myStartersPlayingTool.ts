@@ -8,6 +8,10 @@ import { sameNflTeam } from '@/lib/sports/teamRef'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
 import { nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
+import { resolveInjuryFacts, type InjuryFact } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { isHealthyDesignation, ruledOutByFact } from '@/lib/core-app/injuryStatus'
+import { isBestBallSettings } from '@/lib/core-app/lineupMode'
 
 /**
  * HOW MANY OF THE USER'S LEAGUES HAVE A STARTER IN TODAY'S / TONIGHT'S NFL GAMES.
@@ -77,6 +81,20 @@ type LeagueHit = {
   leagueName: string
   season: number
   players: string[]
+  /** Starters on a team in those games whom the injury report rules OUT — listed, never counted. */
+  ruledOut: string[]
+  /** The platform sets this lineup automatically, so a stored "starter" is not a manual start. */
+  bestBall: boolean
+}
+
+function playerLabel(p: AiRosterPlayerRef): string {
+  return [p.name ?? 'unnamed player', p.position, p.team].filter(Boolean).join(' ')
+}
+
+/** "Out (Hamstring), reported 2026-09-27" — the designation as the report states it, dated. */
+function designation(fact: InjuryFact): string {
+  const what = [fact.status, fact.type ? `(${fact.type})` : null].filter(Boolean).join(' ')
+  return `${what}, reported ${fact.reportedAt.toISOString().slice(0, 10)}${fact.stale ? ' — may be out of date' : ''}`
 }
 
 function formatEt(value: Date | null): string {
@@ -293,7 +311,45 @@ export async function buildMyStartersPlayingContext(
   const unfinished = [...scan.timedOut, ...scan.failed].map((l) => l.name)
   const unchecked = notReached.length + unfinished.length
 
+  /*
+   * 🛑 A STARTER ON A TEAM THAT PLAYS TONIGHT IS NOT A STARTER WHO PLAYS TONIGHT. Measured live
+   * 2026-09-28: "who do I have playing tonight" listed Caleb Williams (Out, hamstring) and Dallas
+   * Goedert (Out, knee) as playing in BB Dynasty, while the same account's injury answer an hour
+   * earlier had both Out. This tool matched team to fixture and never read an injury.
+   *
+   * So every starter in those games is checked against the canonical injury port, ONE read for the
+   * whole account, and judged by `ruledOutByFact` — the same rule the waiver board uses (a stale
+   * game-day Out is last week's news; IR and the other season-scale rulings still count). A ruled-
+   * out starter is listed as NOT COUNTED. Questionable and Doubtful still count and are labelled.
+   * An unreadable injury report excludes nobody, and says the count may therefore be too HIGH.
+   */
+  const readResults = results.filter((r): r is Extract<typeof r, { state: 'read' }> => r.state === 'read')
+  const lookups = new Map<string, { name: string; position: string | null; team: string | null }>()
+  for (const r of readResults) {
+    for (const p of r.playing) {
+      const key = p.name ? normalizeMatchName(p.name) : ''
+      if (key && !lookups.has(key)) lookups.set(key, { name: p.name!, position: p.position, team: p.team })
+    }
+  }
+  const injuries = lookups.size > 0 ? await resolveInjuryFacts({ sport: 'NFL', players: [...lookups.values()] }).catch(() => null) : null
+  const injuryGap =
+    lookups.size === 0
+      ? null
+      : !injuries
+        ? 'the injury report could not be read'
+        : !injuries.coverage.sourceAvailable
+          ? `no injury source is available (${injuries.coverage.reason ?? 'unknown reason'})`
+          : null
+  const factFor = (p: AiRosterPlayerRef): InjuryFact | undefined =>
+    injuries && p.name ? injuries.byPlayer.get(normalizeMatchName(p.name)) : undefined
+
+  const bestBallRows = await prisma.league
+    .findMany({ where: { id: { in: readResults.map((r) => r.league.id) } }, select: { id: true, settings: true, leagueType: true } })
+    .catch(() => [] as Array<{ id: string; settings?: unknown; leagueType?: string | null }>)
+  const bestBallOf = new Map(bestBallRows.map((r) => [r.id, isBestBallSettings(r.settings) || String(r.leagueType ?? '').includes('best_ball')]))
+
   const hits: LeagueHit[] = []
+  const onlyOut: string[] = []
   const unreadable: string[] = []
   const noStarters: string[] = []
   let leaguesWithUnknownTeams = 0
@@ -308,16 +364,21 @@ export async function buildMyStartersPlayingContext(
       continue
     }
     if (r.unknownTeam > 0) leaguesWithUnknownTeams += 1
-    if (r.playing.length > 0) {
-      hits.push({
-        leagueName: r.league.name,
-        season: r.league.season,
-        players: r.playing.map((p) =>
-          [p.name ?? 'unnamed player', p.position, p.team].filter(Boolean).join(' '),
-        ),
-      })
+    const available: string[] = []
+    const out: string[] = []
+    for (const p of r.playing) {
+      const fact = factFor(p)
+      if (ruledOutByFact(fact)) out.push(`${playerLabel(p)} — ${designation(fact!)}`)
+      /* Counted, but a designation he still carries (Questionable, a stale Out) travels with him. */
+      else available.push(fact && fact.status && !isHealthyDesignation(fact.status) ? `${playerLabel(p)} (${designation(fact)})` : playerLabel(p))
+    }
+    if (available.length > 0) {
+      hits.push({ leagueName: r.league.name, season: r.league.season, players: available, ruledOut: out, bestBall: bestBallOf.get(r.league.id) ?? false })
+    } else if (out.length > 0) {
+      onlyOut.push(`${r.league.name} (${out.join('; ')})`)
     }
   }
+  const bestBallHits = hits.filter((h) => h.bestBall).length
 
   const readCount = results.filter((r) => r.state === 'read').length
 
@@ -344,15 +405,28 @@ export async function buildMyStartersPlayingContext(
         'and never present it as the total — asking again usually reaches the rest.',
     )
   }
-  lines.push(`ANSWER: ${hits.length} of ${readCount} readable NFL league(s) have at least one STARTER in those games.`)
+  lines.push(
+    `ANSWER: ${hits.length} of ${readCount} readable NFL league(s) have at least one STARTER set to play in those games — starters the injury report rules OUT are not counted` +
+      (bestBallHits > 0 ? `; ${bestBallHits} of these are Best Ball leagues, where the platform picks the lineup, so those "starters" are not a manual start.` : '.'),
+  )
 
   if (hits.length > 0) {
     lines.push(
       'The leagues and the starters:',
-      ...hits.map((h) => `- ${h.leagueName}: ${h.players.join('; ')}`),
+      ...hits.map(
+        (h) =>
+          `- ${h.leagueName}${h.bestBall ? ' [Best Ball — lineup set automatically]' : ''}: ${h.players.join('; ')}` +
+          (h.ruledOut.length ? ` | ruled OUT, not counted: ${h.ruledOut.join('; ')}` : ''),
+      ),
     )
   } else {
-    lines.push('No starter of theirs is on a team playing in those games.')
+    lines.push('No starter of theirs who is available is on a team playing in those games.')
+  }
+  if (onlyOut.length > 0) {
+    lines.push(
+      `NOT COUNTED — in ${onlyOut.length} league(s) every starter on a team in those games is ruled OUT by the injury report: ${onlyOut.join('; ')}. ` +
+        'Say these players are not playing; never list them as playing tonight.',
+    )
   }
 
   /*
@@ -379,6 +453,16 @@ export async function buildMyStartersPlayingContext(
   if (leaguesWithUnknownTeams > 0) {
     gaps.push(
       `in ${leaguesWithUnknownTeams} league(s) at least one starter has no NFL team on file, so they could not be checked either way — the real count can only be HIGHER`,
+    )
+  }
+  /*
+   * ⚠ THE ONE GAP THAT MOVES THE COUNT DOWN. Every other gap here can only hide a league; an
+   * unread injury report can only ADD one — a league counted on a starter who is Out. So it must
+   * not be summarised with the others as "a floor".
+   */
+  if (injuryGap) {
+    gaps.push(
+      `${injuryGap}, so starters who are OUT may be counted as playing — the real count may be LOWER than stated, and it is NOT a floor`,
     )
   }
 
