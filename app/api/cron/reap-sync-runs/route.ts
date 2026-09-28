@@ -3,8 +3,10 @@ import type { NextRequest } from 'next/server'
 
 import { requireCronAuth } from '../_auth'
 import { purgeExpiredCache } from '@/lib/enrichment-cache'
+import { refreshPrivateRelayRanges } from '@/lib/geo/privateRelayIngest'
 import { prisma } from '@/lib/prisma'
 import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
 
 /**
  * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
@@ -24,7 +26,14 @@ const JOB = 'cron-reap-sync-runs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+/*
+ * 300, not 30, only for the nightly trade-agent pass below: the reap and the purge are unchanged and
+ * still finish in seconds. Outside 03:00–10:59 UTC the pass returns at once and so does the route.
+ */
+export const maxDuration = 300
+
+/** The trade-agent pass stops by here, leaving the platform's 300s kill well clear. */
+const ROUTE_BUDGET_MS = 240_000
 
 /**
  * GET /api/cron/reap-sync-runs
@@ -85,14 +94,40 @@ export async function GET(request: NextRequest) {
   const purgeWarnings =
     cachePurge.available || cachePurge.error === 'disabled' ? [] : [`cache purge: ${cachePurge.error ?? 'unavailable'}`]
 
+  /*
+   * The third job: Apple's iCloud Private Relay egress ranges, which let the VPN
+   * gate PLACE a relay user by state instead of refusing them
+   * (lib/geo/privateRelayRanges). Called every hour, acts at most once a day —
+   * see lib/geo/privateRelayIngest for why it rides here (the cron schedule is
+   * at its ceiling). Like the purge, its outcome is a warning, never a failed reap;
+   * a failed refresh keeps the last good set, and the stored set retires itself
+   * after 30 days without one, returning relay users to "blocked".
+   */
+  const privateRelay = await refreshPrivateRelayRanges().catch((err: unknown) => ({
+    status: 'failed' as const,
+    error: String((err as Error)?.message ?? err),
+    keptFetchedAt: null,
+  }))
+  if (privateRelay.status === 'failed') purgeWarnings.push(`private relay ranges: ${privateRelay.error}`)
+
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
   // nothing: if the model is unreachable, this insert would fail anyway.
   await recordSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge } },
+    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge, privateRelay } },
     Date.now() - startedAt,
   )
 
-  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge })
+  /*
+   * The nightly trade agent rides here (design step 9, 2026-09-27) because `cron-schedule.json` is at
+   * its 60-job ceiling and docs/crons.md says to extend an existing handler first. It runs AFTER the
+   * heartbeat above, so it can never delay or fail the reap, and a failure is reported beside the
+   * reap's result, never as one. It records its own telemetry row (`cron-trade-agent`).
+   */
+  const tradeAgent: TradeAgentPassResult | { ran: false; reason: string } = await runTradeAgentPass({
+    budgetMs: ROUTE_BUDGET_MS - (Date.now() - startedAt),
+  }).catch((error) => ({ ran: false as const, reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed' }))
+
+  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay, tradeAgent })
 }

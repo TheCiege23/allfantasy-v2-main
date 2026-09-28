@@ -13,6 +13,7 @@
  * round has no price; leaving it out would grade the deal as though it were not in it.
  */
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
+import { parsePickLabel } from '@/lib/parsePickLabel'
 
 export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[] }
 
@@ -148,6 +149,60 @@ export function gradeInputsFromRedraftAssets(
       }
     }),
   )
+}
+
+/**
+ * One side of a trade typed as text, as the dynasty analyzer's form sends it: chips joined by " + ".
+ *
+ * 🛑 The route used to split on `/,|and/i`, which never split on " + " (so a two-player side arrived as
+ * ONE asset) and DID split inside names: "Mark Andrews" became "Mark " and "rews", "Brandon Aiyuk"
+ * became "Br" and "on Aiyuk". "and" now splits only as a whole word.
+ */
+export function splitSideAssets(side: string): string[] {
+  return side
+    .split(/\s\+\s|,|\band\b/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1)
+}
+
+/*
+ * A player label as a form built it: "Josh Allen (QB)". The position suffix is the form's decoration,
+ * not part of the name the player database knows.
+ */
+const TRAILING_POSITION = /\s*\((?:QB|RB|WR|TE|K|DEF|DST|D\/ST|DL|LB|DB|IDP|FLEX|[A-Z]{1,4})\)\s*$/
+const FAAB_LABEL = /^\$?\s*(\d{1,4})\s*(?:\$\s*)?faab$|^faab\s*\$?\s*(\d{1,4})$/i
+/** Anything carrying a draft year reads as a pick, so an unreadable one is refused, not looked up as a name. */
+const LOOKS_LIKE_PICK = /\b20\d{2}\b.*\b(?:\d{1,2}(?:st|nd|rd|th)|round|rd|pick)\b|\bpick\b/i
+
+/**
+ * Assets typed as labels — the dynasty trade analyzer's chips ("Josh Allen (QB)", "2026 1st",
+ * "2027 Early 2nd"). A pick is read by `parsePickLabel`, the same reader the trade evaluator uses; a
+ * label that looks like a pick but cannot be read is returned as unpriceable rather than searched
+ * for as a player, where it would withhold with a misleading "not in the player database".
+ */
+export function gradeInputsFromAssetLabels(
+  labels: ReadonlyArray<{ name: string; type?: 'player' | 'pick' | null }>,
+): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const l of labels) {
+    const label = String(l.name ?? '').trim()
+    if (!label) continue
+    const faab = label.match(FAAB_LABEL)
+    if (faab) {
+      out.assets.push({ kind: 'faab', amount: Number(faab[1] ?? faab[2]) })
+      continue
+    }
+    if (l.type === 'pick' || (l.type !== 'player' && LOOKS_LIKE_PICK.test(label))) {
+      const pick = parsePickLabel(label)
+      if (pick) out.assets.push({ kind: 'pick', year: pick.year, round: pick.round, ...(pick.bucket ? { tier: pick.bucket } : {}), label })
+      else out.unpriceable.push(`"${label}"`)
+      continue
+    }
+    const name = label.replace(TRAILING_POSITION, '').trim()
+    if (name) out.assets.push({ kind: 'player', name })
+    else out.unpriceable.push(`"${label}"`)
+  }
+  return out
 }
 
 /** The reason a deal is not graded because of assets that cannot be priced, or null. */

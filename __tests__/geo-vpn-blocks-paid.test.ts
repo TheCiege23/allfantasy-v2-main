@@ -22,6 +22,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+// No Private Relay feed stored: every relay user stays refused, the rule these tests pin.
+vi.mock("@/lib/geo/privateRelayStore", () => ({ getRelayRangeSetNode: vi.fn(async () => null) }))
 vi.mock("@/lib/geo/geoIpFetch", () => ({
   fetchIpApi: vi.fn(),
   fetchProxycheck: vi.fn(),

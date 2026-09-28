@@ -2,6 +2,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-trade.css'
 import type { RecentTrade } from '@/lib/core-app/recentTrades'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 
@@ -165,7 +166,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                   </span>
                   <span className="af-trade-conf af-num">
                     {' '}
-                    · on this league’s values today
+                    · on this league’s values {gradeMoment({ frozenAt: t.gradedAt })}
                     {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
                   </span>
                 </p>

@@ -11,6 +11,7 @@ import {
   describeFleaflickerDraftCoverage,
 } from '@/lib/league-import/fleaflicker/fleaflickerDraft'
 import { normalizeFleaflickerTransactions } from '@/lib/league-import/fleaflicker/fleaflickerTransactions'
+import { readFleaflickerLineup } from '@/lib/league-import/fleaflicker/fleaflickerLineup'
 
 function mapWaiverType(raw: string | null | undefined): string {
   const s = String(raw ?? '').toUpperCase()
@@ -96,6 +97,12 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       const rr = rosterByTeamId.get(t.id)
       const playerIds =
         rr?.players?.map((p) => String(p.proPlayer?.id ?? '')).filter(Boolean) ?? []
+      /*
+       * Starters, IR and taxi from `FetchRoster` (raw.lineups). Until 2026-09-28 these were
+       * hardcoded `[]`: FetchLeagueRosters carries no lineup at all. A team whose lineup call
+       * failed still gets `[]` — unknown, as before — never a lineup inferred from composition.
+       */
+      const lineup = readFleaflickerLineup(raw.lineups?.[String(t.id)])
       const owner = t.owners?.[0]
       const w = t.recordOverall?.wins ?? 0
       const l = t.recordOverall?.losses ?? 0
@@ -113,13 +120,15 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         points_for: t.pointsFor?.value ?? 0,
         points_against: t.pointsAgainst?.value ?? undefined,
         player_ids: playerIds,
-        starter_ids: [],
-        reserve_ids: [],
-        taxi_ids: [],
+        starter_ids: lineup?.starters ?? [],
+        reserve_ids: lineup?.reserve ?? [],
+        taxi_ids: lineup?.taxi ?? [],
         faab_remaining: t.waiverAcquisitionBudget?.value ?? null,
         waiver_priority: null,
       }
     })
+
+    const lineupsRead = teamsFlat.filter(({ team: t }) => readFleaflickerLineup(raw.lineups?.[String(t.id)]) != null).length
 
     const player_map: NormalizedImportResult['player_map'] = {}
     for (const r of rosters.rosters ?? []) {
@@ -280,7 +289,19 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       league_branding: { avatar_url: lg.logoUrl ?? null, name: lg.name },
       coverage: {
         leagueSettings: { state: 'full' },
-        currentRosters: normalizedRosters.some((x) => x.player_ids.length > 0) ? { state: 'full' } : { state: 'partial', note: 'Roster players depend on FetchLeagueRosters' },
+        /*
+         * Full only when the players AND every team's lineup were read: a roster whose starters
+         * are unknown is not the whole roster, and "full" would tell a lineup surface otherwise.
+         */
+        currentRosters: !normalizedRosters.some((x) => x.player_ids.length > 0)
+          ? { state: 'partial', note: 'Roster players depend on FetchLeagueRosters' }
+          : lineupsRead === normalizedRosters.length
+            ? { state: 'full' }
+            : {
+                state: 'partial',
+                count: lineupsRead,
+                note: `Lineups (starters, IR, taxi) read for ${lineupsRead} of ${normalizedRosters.length} teams from FetchRoster`,
+              },
         historicalRosterSnapshots: { state: 'missing' },
         scoringSettings:
             scoringRules.length > 0

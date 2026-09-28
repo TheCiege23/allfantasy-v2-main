@@ -22,6 +22,18 @@ describe('reportedLabel', () => {
     expect(reportedLabel('2026-09-05T00:00:00.000Z', '2026-09-05T00:10:00.000Z')).toBe('reported Sat')
   })
 
+  /*
+   * 2026-09-27, a Sunday morning: "reported Sun 6:47p ET" was LAST Sunday's report,
+   * reading as a time that had not happened yet that day.
+   */
+  it('dates a report six or more days old so its weekday cannot be read as this week', () => {
+    // Sun 2026-09-20 6:47p ET, read Sun 2026-09-27 8:00a ET.
+    expect(reportedLabel('2026-09-20T22:47:00.000Z', '2026-09-27T12:00:00.000Z')).toBe('reported Sun 9/20 6:47p ET')
+    expect(reportedLabel('2026-09-20T00:00:00.000Z', '2026-09-27T12:00:00.000Z')).toBe('reported Sun 9/20')
+    // Two days old keeps the plain weekday.
+    expect(reportedLabel('2026-09-25T22:47:00.000Z', '2026-09-27T12:00:00.000Z')).toBe('reported Fri 6:47p ET')
+  })
+
   it('is null for nothing and for garbage', () => {
     expect(reportedLabel(null)).toBeNull()
     expect(reportedLabel('not a date')).toBeNull()

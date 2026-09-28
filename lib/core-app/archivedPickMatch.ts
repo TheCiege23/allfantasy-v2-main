@@ -12,7 +12,7 @@
  * drafted players is right, and so is every total and letter graded from it.
  */
 
-export type LedgerPick = { season?: unknown; round?: unknown; resolved?: { name?: unknown } | null }
+export type LedgerPick = { season?: unknown; round?: unknown; resolved?: { name?: unknown; playerId?: unknown } | null }
 export type LedgerTradeSide = { rosterId?: unknown; picksIn?: unknown; picksOut?: unknown }
 
 type RowPick = { season: string | number | null; round: number | null }
@@ -41,16 +41,23 @@ function sameMultiset(row: ReadonlyArray<RowPick>, ledger: ReadonlyArray<LedgerP
   return true
 }
 
-function namesFor(row: ReadonlyArray<RowPick>, ledger: ReadonlyArray<LedgerPick>): Array<string | null> {
+/** Index-aligned with the row: each pick's drafted player, and his Sleeper id when the ledger has it. */
+function draftedFor(row: ReadonlyArray<RowPick>, ledger: ReadonlyArray<LedgerPick>): { names: Array<string | null>; ids: Array<string | null> } {
   const used = new Set<number>()
-  return row.map((p) => {
+  const names: Array<string | null> = []
+  const ids: Array<string | null> = []
+  for (const p of row) {
     const k = keyOf(p.season, p.round)
     const i = ledger.findIndex((l, idx) => !used.has(idx) && keyOf(l.season, l.round) === k)
-    if (i < 0) return null
-    used.add(i)
-    const name = ledger[i]!.resolved?.name
-    return typeof name === 'string' && name.trim() ? name.trim() : null
-  })
+    if (i >= 0) used.add(i)
+    const name = i >= 0 ? ledger[i]!.resolved?.name : null
+    const id = i >= 0 ? ledger[i]!.resolved?.playerId : null
+    const named = typeof name === 'string' && name.trim() ? name.trim() : null
+    names.push(named)
+    // An id only beside a name: the grader prices a drafted player by name AND id, never an id alone.
+    ids.push(named && (typeof id === 'string' || typeof id === 'number') && String(id).trim() ? String(id).trim() : null)
+  }
+  return { names, ids }
 }
 
 /**
@@ -61,17 +68,27 @@ function namesFor(row: ReadonlyArray<RowPick>, ledger: ReadonlyArray<LedgerPick>
 export function withDraftedNames<T extends { name: string }>(
   picks: ReadonlyArray<T>,
   names: ReadonlyArray<string | null> | undefined,
-): Array<T & { drafted: string | null }> {
+  /** Index-aligned Sleeper ids for those players, so the grader prices them by id — see `sleeperPlayerInput`. */
+  ids?: ReadonlyArray<string | null>,
+): Array<T & { drafted: string | null; draftedId: string | null }> {
+  const aligned = Boolean(names && names.length === picks.length)
   return picks.map((p, i) => {
-    const drafted = names && names.length === picks.length ? names[i] ?? null : null
-    return { ...p, name: drafted ? `${p.name} · ${drafted}` : p.name, drafted }
+    const drafted = aligned ? names![i] ?? null : null
+    const draftedId = drafted && ids && ids.length === picks.length ? ids[i] ?? null : null
+    return { ...p, name: drafted ? `${p.name} · ${drafted}` : p.name, drafted, draftedId }
   })
 }
 
 export function draftedPickNamesForRow(
   row: { picksIn: ReadonlyArray<RowPick>; picksOut: ReadonlyArray<RowPick>; partnerRosterId: number | null },
   sides: ReadonlyArray<LedgerTradeSide> | null | undefined,
-): { picksIn: Array<string | null>; picksOut: Array<string | null> } | null {
+): {
+  picksIn: Array<string | null>
+  picksOut: Array<string | null>
+  /** Index-aligned with `picksIn` / `picksOut`: each drafted player's Sleeper id, where known. */
+  idsIn: Array<string | null>
+  idsOut: Array<string | null>
+} | null {
   if (!sides || sides.length === 0) return null
   if (row.picksIn.length === 0 && row.picksOut.length === 0) return null
   const candidates = sides.filter(
@@ -82,5 +99,7 @@ export function draftedPickNamesForRow(
   )
   if (candidates.length !== 1) return null
   const side = candidates[0]!
-  return { picksIn: namesFor(row.picksIn, picksOf(side.picksIn)), picksOut: namesFor(row.picksOut, picksOf(side.picksOut)) }
+  const into = draftedFor(row.picksIn, picksOf(side.picksIn))
+  const outOf = draftedFor(row.picksOut, picksOf(side.picksOut))
+  return { picksIn: into.names, picksOut: outOf.names, idsIn: into.ids, idsOut: outOf.ids }
 }

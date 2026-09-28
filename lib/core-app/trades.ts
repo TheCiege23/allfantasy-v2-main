@@ -4,6 +4,7 @@ import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-lin
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { readTradeAgentSuggestions, tradeAgentTableReady } from '@/lib/decision-os/trade/tradeAgentStore'
 import { LATEST_TRADE_ORDER } from './tradePicks'
 import {
   scanPendingSleeperTrades,
@@ -411,6 +412,28 @@ export type TradesData = {
   sent: SectionState<PendingOffer[]>
   grades: SectionState<GradedTrade[]>
   deadline: SectionState<TradeDeadline>
+  /**
+   * The nightly trade agent's ideas for this manager (design step 9): deals the one grade reads C for
+   * both sides, on which both rosters gain. Suggest only — nothing is sent, and the partner is not told.
+   * ABSENT until `trade_agent_suggestions` exists, so the screen shows nothing before the migration.
+   */
+  agentIdeas?: SectionState<TradeAgentIdea[]>
+}
+
+/** One nightly trade idea, in display form. */
+export type TradeAgentIdea = {
+  id: string
+  partnerName: string | null
+  give: Array<{ name: string; position: string }>
+  get: Array<{ name: string; position: string }>
+  letter: string
+  partnerLetter: string
+  percentDiff: number
+  viewerFitPct: number
+  partnerFitPct: number
+  basis: string
+  /** The night it was suggested (YYYY-MM-DD, UTC). */
+  runDate: string
 }
 
 /** One asset on one side of a pending offer, already in display form. */
@@ -616,6 +639,34 @@ async function resolvePendingOffers(
   }
 }
 
+/** The nightly ideas, or nothing at all before the table exists. Never throws. */
+async function resolveAgentIdeas(leagueId: string, userId: string): Promise<{ agentIdeas?: SectionState<TradeAgentIdea[]> }> {
+  if (!(await tradeAgentTableReady().catch(() => false))) return {}
+  const rows = await readTradeAgentSuggestions(leagueId, userId).catch(() => null)
+  if (!rows) return { agentIdeas: { available: false, reason: 'Trade ideas could not be read just now.' } }
+  if (rows.length === 0) {
+    return { agentIdeas: { available: false, reason: 'No trade last night was near-even and good for both rosters.' } }
+  }
+  return {
+    agentIdeas: {
+      available: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        partnerName: r.partnerName,
+        give: r.give.map((a) => ({ name: a.name, position: a.position })),
+        get: r.get.map((a) => ({ name: a.name, position: a.position })),
+        letter: r.letter,
+        partnerLetter: r.partnerLetter,
+        percentDiff: r.percentDiff,
+        viewerFitPct: r.viewerFitPct,
+        partnerFitPct: r.partnerFitPct,
+        basis: r.basis,
+        runDate: r.runDate,
+      })),
+    },
+  }
+}
+
 export async function getTradesData(
   leagueId: string,
   userId: string,
@@ -674,6 +725,7 @@ export async function getTradesData(
     ...(await resolvePendingOffers(league, userId, lc)),
     grades,
     deadline: resolveDeadline(league.settings),
+    ...(await resolveAgentIdeas(league.id, userId)),
   }
 
   if (String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId) {

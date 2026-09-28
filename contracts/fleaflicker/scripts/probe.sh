@@ -17,6 +17,7 @@
 #   ./probe.sh standings NFL 206154
 #   ./probe.sh rosters   NFL 206154 2026
 #   ./probe.sh scoreboard NFL 206154 2026 1
+#   TEAM_ID=1371776 ./probe.sh roster NFL 206154 2021 1
 #
 # Requires: curl, jq. No credential of any kind — see ENDPOINTS.yaml auth: none.
 # =============================================================================
@@ -84,9 +85,24 @@ case "$ENDPOINT" in
     # still names real people's teams; read the privacy note at the top of this file.
     PATH_SEG="/FetchLeagueDraftBoard"
     ;;
+  roster)
+    # ONE team's lineup: which players START, sit on the BENCH, or are INJURED/TAXI.
+    # FetchLeagueRosters carries composition only — its `displayGroup` is a position
+    # group (RUSHER, RECEIVER, …), not a lineup slot — so this is the only source of
+    # starters. Endpoint NAME and params from Fleaflicker's published Swagger docs, read
+    # 2026-09-28 — documentation, not a probe: sport, league_id, team_id (required),
+    # season, scoring_period, external_id_type. `team_id` rides in the environment
+    # because the positional slots are already spoken for.
+    TEAM_ID="${TEAM_ID:?roster needs TEAM_ID=<team id> — see rosters[].team.id in a FetchLeagueRosters fixture}"
+    if ! [[ "$TEAM_ID" =~ ^[0-9]+$ ]]; then
+      echo "ERROR: TEAM_ID must be a positive integer, got '${TEAM_ID}'." >&2
+      exit 1
+    fi
+    PATH_SEG="/FetchRoster"
+    ;;
   *)
     echo "ERROR: unknown endpoint '${ENDPOINT}'. See ENDPOINTS.yaml." >&2
-    echo "       Known: standings, rosters, scoreboard, rules, activity, transactions, draft." >&2
+    echo "       Known: standings, rosters, scoreboard, rules, activity, transactions, draft, roster." >&2
     exit 1
     ;;
 esac
@@ -114,6 +130,10 @@ case "$ENDPOINT" in
     # — not an error, not a 404 — but "you forgot draft_number" is not the cause. See
     # G-10 in ../GAPS.md.
     QS="sport=${SPORT}&league_id=${LEAGUE_ID}&season=${SEASON}&draft_number=${SCORING_PERIOD:-1}"
+    ;;
+  roster)
+    QS="sport=${SPORT}&league_id=${LEAGUE_ID}&team_id=${TEAM_ID}&season=${SEASON}"
+    [[ -n "$SCORING_PERIOD" ]] && QS="${QS}&scoring_period=${SCORING_PERIOD}"
     ;;
   *)
     QS="sport=${SPORT}&league_id=${LEAGUE_ID}&season=${SEASON}"
@@ -240,6 +260,8 @@ case "$ENDPOINT" in
   *) NAME="${NAME}.${SEASON}" ;;
 esac
 [[ -n "$SCORING_PERIOD" ]] && NAME="${NAME}.week${SCORING_PERIOD}"
+# One team's roster: the team is part of what the payload describes, so it is in the name.
+[[ "$ENDPOINT" == "roster" ]] && NAME="${NAME}.team${TEAM_ID}"
 OUT="${FIXTURE_DIR}/${NAME}${NAME_SUFFIX}.json"   # suffix set only when EXTERNAL_ID_TYPE is — see above
 json_write "$TMP" "$OUT"
 

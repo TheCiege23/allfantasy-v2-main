@@ -8,8 +8,9 @@ import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
-import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade, type ArchivedPlayer } from '@/lib/decision-os/trade/completedTradeGrade'
 import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
@@ -143,6 +144,11 @@ export type RecentTrade = {
   receiptId?: string | null
   /** Native lifecycle state. Provider history omits it because those rows are completed. */
   status?: string
+  /**
+   * When the letters on this trade were frozen as its original grade (`frozenCompletedGrade.ts`), so
+   * the band says WHEN rather than "today". Absent: a live grade.
+   */
+  gradedAt?: string | null
 }
 
 export type RecentTradesLeague = {
@@ -486,6 +492,7 @@ function applyOneGrade(
   a: number | string,
   realizedNote: (side: RecentTradeSide) => string | null = () => null,
 ): void {
+  trade.gradedAt = grade.frozenAt ?? null
   for (const side of trade.sides) {
     const isA = String(side.rosterId) === String(a)
     const got = isA ? grade.getValue : grade.giveValue
@@ -493,7 +500,10 @@ function applyOneGrade(
     side.grade = isA ? grade.letter : grade.partnerLetter
     side.gradeBasis = 'League'
     const realized = realizedNote(side)
-    side.gradeReason = `Got ${got.toLocaleString()} for ${gave.toLocaleString()} on this league’s values today.${realized ? ` ${realized}` : ''}`
+    // A frozen original says WHEN; today's letter rides beside it only when it moved (`frozenCompletedGrade.ts`).
+    const nowLetter = grade.current ? (isA ? grade.current.letter : grade.current.partnerLetter) : null
+    const moved = nowLetter && nowLetter !== side.grade ? ` On today’s values: ${nowLetter}.` : ''
+    side.gradeReason = `Got ${got.toLocaleString()} for ${gave.toLocaleString()} on this league’s values ${gradeMoment(grade)}.${moved}${realized ? ` ${realized}` : ''}`
   }
 }
 
@@ -502,14 +512,23 @@ function applyOneGrade(
  * structured assets — side `a` received what `a.received` holds. Any asset without `gradeAs`
  * withholds the letter through the grader's own rule; nothing is priced as zero.
  */
-async function gradeFromAssets(leagueId: string, a: RecentTradeSide, b: RecentTradeSide, currentSeason: number): Promise<TradeGradeView> {
+async function gradeFromAssets(
+  leagueId: string,
+  a: RecentTradeSide,
+  b: RecentTradeSide,
+  currentSeason: number,
+  /** The trade's id (any form ending in Sleeper's transaction id), so its frozen original is read. */
+  tradeId: string,
+  now: Date,
+): Promise<TradeGradeView> {
   const split = (side: RecentTradeSide) => {
-    const players: Array<string | null> = []
+    const players: ArchivedPlayer[] = []
     const picks: Array<{ season: number | null; round: number | null; label: string }> = []
     for (const asset of side.received) {
       const g = asset.gradeAs
       if (g?.kind === 'pick') picks.push({ season: g.season, round: g.round, label: asset.name })
-      else if (g?.kind === 'player') players.push(g.name)
+      // `playerId` is a Sleeper id (set only for NFL Sleeper assets): priced by it, as the live paths are.
+      else if (g?.kind === 'player') players.push({ name: g.name, sleeperId: asset.playerId, position: asset.position })
       else if (asset.kind === 'pick') picks.push({ season: null, round: null, label: asset.name })
       else players.push(null)
     }
@@ -523,6 +542,8 @@ async function gradeFromAssets(leagueId: string, a: RecentTradeSide, b: RecentTr
     picksIn: got.picks,
     picksOut: gave.picks,
     currentSeason,
+    // The same frozen original the email and history show for this trade (`frozenCompletedGrade.ts`).
+    original: { afLeagueId: leagueId, tradeId, now },
   })
 }
 
@@ -535,7 +556,7 @@ async function gradeFromAssets(leagueId: string, a: RecentTradeSide, b: RecentTr
 export async function gradeProviderRecentTrade(t: RecentTrade, now: Date = new Date()): Promise<void> {
   if (t.status || t.sides.length !== 2) return
   const [a, b] = t.sides as [RecentTradeSide, RecentTradeSide]
-  const g = await gradeFromAssets(t.leagueId, a, b, now.getUTCFullYear()).catch(() => null)
+  const g = await gradeFromAssets(t.leagueId, a, b, now.getUTCFullYear(), t.id, now).catch(() => null)
   if (g?.graded) {
     applyOneGrade(t, g, a.rosterId)
     t.verdict = verdictFromGrade(g, a.rosterId, b.rosterId)

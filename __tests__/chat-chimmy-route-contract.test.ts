@@ -655,7 +655,10 @@ describe("POST /api/chat/chimmy contract", () => {
     const res = await POST(buildMultipartRequest(formData) as any)
 
     expect(res.status).toBe(200)
-    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1" })
+    /* The push path races this report at 4s, so its scan budget must sit inside that race. */
+    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 } })
+    const pushScan = buildMyRosterInjuriesMock.mock.calls.at(-1)?.[0]?.scan
+    expect(pushScan.budgetMs + pushScan.perItemTimeoutMs).toBeLessThan(4_000)
     const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
     expect(request?.userMessage).toContain("MY ROSTER INJURIES (ALL LEAGUES)")
     expect(request?.userMessage).toContain("Christian McCaffrey")
@@ -663,7 +666,7 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(body.meta?.dataSources).toContain("cross_league_roster_injuries")
   })
 
-  it("does not run the 40-league injury scan for a question that is not about injuries", async () => {
+  it("does not run the cross-league injury scan for a question that is not about injuries", async () => {
     previewSpendMock.mockResolvedValueOnce({
       ruleCode: "ai_chimmy_chat_message",
       tokenCost: 0,
@@ -688,7 +691,7 @@ describe("POST /api/chat/chimmy contract", () => {
     const { POST } = await import("@/app/api/chat/chimmy/route")
     const response = await POST(buildMultipartRequest(formData) as any)
     expect(response.status).toBe(200)
-    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", leagueId: "league-1" })
+    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", leagueId: "league-1", scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 } })
     const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
     expect(request?.userMessage).toContain("MY ROSTER INJURIES (SELECTED LEAGUE)")
     expect(request?.userMessage).toContain("Omar Cooper: IR")

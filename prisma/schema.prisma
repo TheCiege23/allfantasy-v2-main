@@ -12249,6 +12249,43 @@ model TradeDecisionSnapshot {
   @@map("trade_decision_snapshots")
 }
 
+/// Nightly trade agent suggestions (design build step 9, 2026-09-27). One row per deal suggested to
+/// one AllFantasy user in one league on one night. Suggest-only: nothing here proposes a trade. A deal
+/// qualifies when the one grade reads C for both sides (within 10% on league value) AND each side's
+/// own roster fit gains. Shown only to `userId`; the partner is never told.
+model TradeAgentSuggestion {
+  id              String    @id @default(cuid())
+  leagueId        String    @db.VarChar(64)
+  userId          String    @db.VarChar(64)
+  /// The viewer's roster and the partner's, in `Roster.platformUserId` terms.
+  rosterId        String    @db.VarChar(128)
+  partnerRosterId String    @db.VarChar(128)
+  partnerName     String?   @db.VarChar(128)
+  /// What the viewer sends and receives: [{ playerId, name, position }].
+  give            Json
+  get             Json
+  /// Sorted player ids of both sides — the de-duplication key within a night.
+  dealKey         String    @db.VarChar(512)
+  letter          String    @db.VarChar(2)
+  partnerLetter   String    @db.VarChar(2)
+  percentDiff     Int
+  giveValue       Int
+  getValue        Int
+  /// Signed roster-fit gap for each side, on its own need-weighted values (> 0 = that roster gains).
+  viewerFitPct    Int
+  partnerFitPct   Int
+  basis           String    @db.Text
+  /// The night the suggestion was made (YYYY-MM-DD, UTC).
+  runDate         String    @db.VarChar(10)
+  rank            Int
+  dismissedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([leagueId, userId, runDate, dealKey])
+  @@index([userId, leagueId, runDate])
+  @@map("trade_agent_suggestions")
+}
+
 /// One processing batch (scheduled, manual, FCFS immediate, etc.).
 model WaiverRun {
   id                String              @id @default(uuid())

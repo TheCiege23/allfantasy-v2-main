@@ -14,7 +14,9 @@ import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
+import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -66,6 +68,11 @@ export type ChimmyToolContext = {
    * tools say so instead of promising one.
    */
   actionCards?: ChimmyActionCard[]
+  /**
+   * Every trade letter the one trade engine gave during this answer, collected so the route can check
+   * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
+   */
+  tradeGrades?: ChimmyTradeGrade[]
 }
 
 /** More cards than this in one answer is a model looping, not a user deciding. */
@@ -654,7 +661,10 @@ export async function executeChimmyTool(
         ])
         const results = await Promise.allSettled([
           buildTradeContextForChimmy(ctx.leagueId, ctx.userId),
-          buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
+          // The third argument only when grades are collected, so the scoped read stays exactly (league, user).
+          ctx.tradeGrades
+            ? buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId, { onGrade: (g) => ctx.tradeGrades!.push(g) })
+            : buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
           buildLeagueTradeHistoryContext(ctx.leagueId, ctx.userId),
           executeChimmyTool('get_my_roster', {}, ctx),
         ])
@@ -771,7 +781,12 @@ export async function executeChimmyTool(
         const bestBallRuleGap = rules?.ok && rules.context.lineupBehavior.bestBallMode && !rules.context.lineupBehavior.bestBallSettings
           ? 'BEST BALL RULE EVIDENCE GAP: Automatic scoring lineup is confirmed, but this import has no verified Best Ball transaction or substitution configuration. Waiver, trade, and substitution permissions are UNVERIFIED; do not say they are disabled or enabled. Prior chat answers and generic Best Ball defaults are not evidence of this league\'s rules.'
           : null
-        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
+        const actionEvidence = lineupActionEvidence({
+          platform: rules?.ok ? rules.context.platform : null,
+          bestBallMode: rules?.ok ? rules.context.lineupBehavior.bestBallMode : false,
+          lastSyncedAt: rules?.ok ? rules.context.importHealth.lastSyncedAt : null,
+        })
+        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, actionEvidence, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
       }
 
       case 'get_league_standings': {
@@ -953,7 +968,13 @@ export async function executeChimmyTool(
       case 'evaluate_trade': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runTradeScenarioTool({ give: args.give, get: args.get, leagueId: ctx.leagueId, userId: ctx.userId })
+        return await runTradeScenarioTool({
+          give: args.give,
+          get: args.get,
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
       }
 
       case 'find_trade_ideas': {

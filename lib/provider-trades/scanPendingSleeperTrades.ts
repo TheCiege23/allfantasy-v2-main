@@ -23,7 +23,15 @@ import { triggerAlertFromScreenRead } from '@/lib/trade-intel/screenTradeAlerts'
  * league showed as "Active Trades 0", and nothing could analyze it because
  * nothing knew it existed.
  *
- * Sleeper's public API DOES expose these: `/league/<id>/transactions/<week>`
+ * 🛑 IN PRACTICE IT DOES NOT, AND THE SENTENCE THAT STOOD HERE SAID IT DID. Measured on
+ * production 2026-09-28: 2,154 Sleeper trades in `provider_trade_offers` (12 days of 5-minute
+ * sweeps) and 28,167 trade rows in `dw_transaction_facts`, every one `complete` and not one ever
+ * first seen pending. Sleeper's docs list no proposal endpoint and no authenticated API. The
+ * pending branch below is kept because it costs nothing if Sleeper ever does publish one, but an
+ * empty result is NOT "nothing is waiting" — screens must say Sleeper does not share open offers
+ * and offer manual entry (TradeInbox, TradeLeagueStrip).
+ *
+ * Originally written on the belief that `/league/<id>/transactions/<week>`
  * returns `type: "trade"` rows with `status: "pending"`. This logic already ran
  * in production inside `lib/dashboard-strip/fetchTradesDashboard.ts`, but was
  * trapped in a per-user dashboard loop. It is extracted here verbatim in
