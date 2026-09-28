@@ -30,6 +30,7 @@ import {
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
+import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
 
 export type WeeklyScoreSyncSummary = {
@@ -47,6 +48,12 @@ export type WeeklyScoreSyncSummary = {
   /** NCAAF: roster ids resolved to a CFBD athlete id (see ncaafGameLogIdBridge.ts), and those that could not be. */
   cfbdIdsResolved?: number
   unresolvedCfbdPlayerIds?: string[]
+  /**
+   * NCAAF starters with no CFBD row who scored a real 0 — a bye, or a final, ingested game in which
+   * they recorded nothing (see ncaafWeekParticipation.ts) — and why the rest with no row stayed missing.
+   */
+  ncaafZeroScored?: Array<{ playerId: string; reason: 'bye' | 'no_stat' }>
+  ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team', number>>
   scoresUpserted: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
@@ -347,6 +354,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * carries a real week number, and `gameDate` is null whenever the CFBD schedule row is missing.
    */
   const ncaafRowsByPlayer = new Map<string, unknown[]>()
+  const ncaafResolvedRosterIds = new Set<string>()
+  let ncaafVerdictFor: ((team: string | null | undefined) => NcaafNoRowVerdict) | null = null
   if (isNcaaf) {
     const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, playerIds)
     summary.cfbdIdsResolved = bridge.cfbdIds.length
@@ -382,6 +391,14 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       ncaafRowsByPlayer.set(rosterId, rows)
     }
     summary.cacheRowsRead = gameRows.length
+    // Only a roster id the bridge RESOLVED can be judged: an unlinked id is not known to be him.
+    for (const cfbdId of bridge.cfbdIds) {
+      const rosterId = bridge.rosterIdFor(cfbdId)
+      if (rosterId) ncaafResolvedRosterIds.add(rosterId)
+    }
+    if (playerIds.some((id) => ncaafResolvedRosterIds.has(id) && !ncaafRowsByPlayer.has(id))) {
+      ncaafVerdictFor = await loadNcaafWeekParticipation(prisma as never, { season: seasonYear, week })
+    }
   }
 
   const cacheByPlayer = new Map<string, { payload: unknown }>(
@@ -485,6 +502,29 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     if (isNcaaf) {
       const rows = ncaafRowsByPlayer.get(playerId) ?? []
       if (rows.length === 0) {
+        /*
+         * No CFBD row is not "no data": CFBD lists only players who recorded a stat. A resolved player
+         * whose school had a bye, or played a final game the ingest DID bring in, scored a real 0 —
+         * written, so the finalizer counts him as covered. Only a game that is unfinished, or final
+         * with no rows (a data gap), or a school we cannot place, leaves him missing.
+         */
+        const team = teamByPlayer.get(playerId) ?? null
+        const verdict = ncaafResolvedRosterIds.has(playerId) && ncaafVerdictFor && team ? ncaafVerdictFor(team) : null
+        if (verdict && NCAAF_ZERO_VERDICTS.has(verdict)) {
+          await prisma.playerWeeklyScore.upsert({
+            where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+            update: { stats: {}, fantasyPts: 0, isFinalized: false },
+            create: { playerId, week, season: seasonYear, sport: playerSport, stats: {}, fantasyPts: 0, isFinalized: false },
+          })
+          summary.scoresUpserted += 1
+          ;(summary.ncaafZeroScored ??= []).push({ playerId, reason: verdict as 'bye' | 'no_stat' })
+          continue
+        }
+        if (ncaafResolvedRosterIds.has(playerId)) {
+          const reason = !team ? 'no_team' : ((verdict ?? 'unmatched') as 'pending' | 'not_ingested' | 'unmatched')
+          const byReason = (summary.ncaafMissingByReason ??= {})
+          byReason[reason] = (byReason[reason] ?? 0) + 1
+        }
         summary.missingCachePlayerIds.push(playerId)
         continue
       }
