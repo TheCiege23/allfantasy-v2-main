@@ -129,7 +129,8 @@ export const KEEPER_DRAFT_TYPE_IDS: readonly KeeperDraftType[] = [
 ] as const
 
 const NFL_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 } as const
-const NCAAF_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 } as const
+// No DEF: no college team defense exists to draft and none is scored (see redraftTeamDefenseEnabled).
+const NCAAF_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1 } as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -236,7 +237,7 @@ function buildRosterTemplate(sport: FootballKeeperSport): KeeperRosterTemplate {
   const rosterPositions = Object.keys(starterSlots)
   const draftablePlayerPositions =
     sport === 'NCAAF'
-      ? ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+      ? ['QB', 'RB', 'WR', 'TE', 'K']
       : ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
   const benchSlots = sport === 'NCAAF' ? 8 : 7
   const irSlots = 2

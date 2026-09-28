@@ -130,8 +130,8 @@ describe('NCAAF dynasty default contract', () => {
     expect(contract?.rosterTemplate.taxiSlots).toBe(4)
   })
 
-  it('startup draft rounds = 9 + 12 + 4 = 25', () => {
-    expect(contract?.rosterTemplate.startupDraftRounds).toBe(25)
+  it('startup draft rounds = 8 + 12 + 4 = 24 (no team-defense starter)', () => {
+    expect(contract?.rosterTemplate.startupDraftRounds).toBe(24)
   })
 
   it('uses NCAAF-only player pool (no NFL)', () => {
@@ -149,8 +149,8 @@ describe('NCAAF dynasty default contract', () => {
     expect(pool.collegeOnly).toBe(true)
   })
 
-  it('has NCAAF starter slots with DEF (not DST)', () => {
-    expect(contract?.rosterTemplate.starterSlots).toHaveProperty('DEF')
+  it('has no team-defense starter — no college team defense exists to draft', () => {
+    expect(contract?.rosterTemplate.starterSlots).not.toHaveProperty('DEF')
     expect(contract?.rosterTemplate.starterSlots).not.toHaveProperty('DST')
     expect(contract?.rosterTemplate.defensePosition).toBe('DEF')
   })

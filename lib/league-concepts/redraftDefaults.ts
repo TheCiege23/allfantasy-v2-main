@@ -195,10 +195,12 @@ export function getCanonicalRedraftRosterSlotOrder(input: {
   explicitIdpPositions?: boolean
   includeBench?: boolean
   includeIr?: boolean
+  /** A team-defense starter. Off for NCAAF — see {@link redraftTeamDefenseEnabled}. */
+  defenseEnabled?: boolean
 } = {}): string[] {
   const order: string[] = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLX', 'K']
   if (input.superflexEnabled) order.push('SF')
-  order.push('DEF')
+  if (input.defenseEnabled !== false) order.push('DEF')
   if (input.idpEnabled) {
     if (input.explicitIdpPositions) order.push('DL', 'LB', 'DB')
     order.push('IDP')
@@ -213,6 +215,7 @@ export function getCanonicalRedraftStarterSlots(input: {
   superflexEnabled?: boolean
   idpEnabled?: boolean
   explicitIdpPositions?: boolean
+  defenseEnabled?: boolean
 } = {}): Record<string, number> {
   return expandSlotCount(
     getCanonicalRedraftRosterSlotOrder({
@@ -350,12 +353,25 @@ function scoringAliasesForPreset(sport: FootballRedraftSport, presetId: string):
   return ['half_ppr']
 }
 
+/**
+ * 🛑 NCAAF HAS NO TEAM-DEFENSE STARTER. No college team defense exists to draft — the NCAAF pool
+ * holds zero DEF/DST rows (production, 2026-09-28), and team-defense entries are generated for NFL
+ * only — and no feed we ingest carries a college team-defense stat line. A required DEF slot could
+ * therefore never be filled, and `validateRedraftLineup` rejects a lineup with an unfilled slot
+ * (`missing_starter_slot`, a 422 from the lineup route), so every NCAAF redraft lineup save failed.
+ * A commissioner can still add one; it is simply not in the default.
+ */
+export function redraftTeamDefenseEnabled(sport: FootballRedraftSport): boolean {
+  return sport !== 'NCAAF'
+}
+
 function buildRosterTemplate(sport: FootballRedraftSport): RedraftRosterTemplate {
-  const starterSlotOrder = [...DEFAULT_STARTER_ORDER]
-  const starterSlots = getCanonicalRedraftStarterSlots()
-  const rosterPositions = getCanonicalRedraftRosterSlotOrder({ includeIr: true })
-  const compactRosterSlotOrder = getCanonicalRedraftRosterSlotOrder()
-  const draftablePlayerPositions = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+  const defenseEnabled = redraftTeamDefenseEnabled(sport)
+  const starterSlotOrder = DEFAULT_STARTER_ORDER.filter((slot) => defenseEnabled || slot !== 'DEF')
+  const starterSlots = getCanonicalRedraftStarterSlots({ defenseEnabled })
+  const rosterPositions = getCanonicalRedraftRosterSlotOrder({ includeIr: true, defenseEnabled })
+  const compactRosterSlotOrder = getCanonicalRedraftRosterSlotOrder({ defenseEnabled })
+  const draftablePlayerPositions = defenseEnabled ? ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] : ['QB', 'RB', 'WR', 'TE', 'K']
   const benchSlots = sport === 'NCAAF' ? 8 : 6
   const irSlots = 1
   const rosterSlots = starterCount(starterSlots)
@@ -393,7 +409,7 @@ function buildRosterTemplate(sport: FootballRedraftSport): RedraftRosterTemplate
       IDP: ['IDP_FLEX'],
     },
     lineupValidationRules: {
-      requiredPositions: ['QB', 'RB', 'WR', 'TE', 'FLX', 'K', 'DEF'],
+      requiredPositions: defenseEnabled ? ['QB', 'RB', 'WR', 'TE', 'FLX', 'K', 'DEF'] : ['QB', 'RB', 'WR', 'TE', 'FLX', 'K'],
       enforceStarterCapacity: true,
       enforceSlotEligibility: true,
       lockedPlayerMovesBlocked: true,
@@ -481,7 +497,8 @@ function buildDraftSettings(
     draftType: engineDraftType,
     requestedDraftType: draftType,
     rounds: rosterTemplate.draftableRosterSlots,
-    fallbackRounds: sport === 'NCAAF' ? 17 : 15,
+    // The default roster's draftable slots (NCAAF: 8 starters with no team defense + 8 bench).
+    fallbackRounds: sport === 'NCAAF' ? 16 : 15,
     timerSeconds: 90,
     slowTimerSeconds: 28_800,
     pickOrderRules,

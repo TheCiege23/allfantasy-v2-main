@@ -207,10 +207,11 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
   ncaaf: {
     sport: 'ncaaf',
     label: 'College Football',
-    starterSlots: ['QB', 'RB', 'WR', 'WR', 'TE', 'DEF'],
+    // No DEF starter: no college team defense exists to draft (see redraftTeamDefenseEnabled).
+    starterSlots: ['QB', 'RB', 'WR', 'WR', 'TE'],
     benchSlots: 8,
     irSlots: 1,
-    totalRosterSize: 15,
+    totalRosterSize: 14,
     lineupFrequency: 'weekly',
     defaultScoringFormat: 'half_ppr',
     supportedScoringFormats: ['ppr', 'half_ppr', 'standard'],

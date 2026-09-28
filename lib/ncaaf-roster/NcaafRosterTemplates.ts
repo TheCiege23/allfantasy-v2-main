@@ -1,7 +1,7 @@
 /**
  * [NEW] lib/ncaaf-roster/NcaafRosterTemplates.ts
  * NCAAF roster slot definitions and league-type templates.
- * College football defaults: K/DEF redraft, 2 WR, Superflex optional, IDP optional.
+ * College football defaults: K in redraft (team defense optional and off — none exists to draft), 2 WR, Superflex optional, IDP optional.
  */
 
 import type { RosterSlotDef } from '@/lib/nfl-roster/NflRosterTemplates'
@@ -21,7 +21,10 @@ export const NCAAF_ROSTER_SLOTS: RosterSlotDef[] = [
   { key: 'SUPERFLEX', label: 'Super Flex (QB/WR/RB/TE)', shortLabel: 'SF', color: '#ec4899', category: 'flex', eligiblePositions: ['QB', 'WR', 'RB', 'TE'], defaultCount: 0, minCount: 0, maxCount: 2 },
   // K / DEF
   { key: 'K', label: 'Kicker', shortLabel: 'K', color: '#6b7280', category: 'kicker', eligiblePositions: ['K'], defaultCount: 1, minCount: 0, maxCount: 2 },
-  { key: 'DEF', label: 'Defense / Special Teams', shortLabel: 'DEF', color: '#64748b', category: 'dst', eligiblePositions: ['DEF'], defaultCount: 1, minCount: 0, maxCount: 2 },
+  // Off by default: no college team defense exists to draft (the pool holds none) and no feed carries a
+  // college team-defense stat line, so a default DEF starter could never be filled — and an unfilled
+  // starter slot makes every lineup save fail. A commissioner can still add one.
+  { key: 'DEF', label: 'Defense / Special Teams', shortLabel: 'DEF', color: '#64748b', category: 'dst', eligiblePositions: ['DEF'], defaultCount: 0, minCount: 0, maxCount: 2 },
   // IDP (optional for college)
   { key: 'DL', label: 'Defensive Line', shortLabel: 'DL', color: '#22d3ee', category: 'idp', eligiblePositions: ['DE', 'DT', 'DL'], defaultCount: 0, minCount: 0, maxCount: 4 },
   { key: 'LB', label: 'Linebacker', shortLabel: 'LB', color: '#34d399', category: 'idp', eligiblePositions: ['LB', 'ILB', 'OLB'], defaultCount: 0, minCount: 0, maxCount: 4 },
@@ -48,7 +51,7 @@ export const NCAAF_SLOT_MAP = new Map(NCAAF_ROSTER_SLOTS.map((s) => [s.key, s]))
 
 export const NCAAF_ROSTER_TEMPLATES: NcaafRosterTemplate[] = [
   { key: 'redraft', label: 'Redraft', leagueTypes: ['redraft'], description: 'Standard NCAAF redraft.',
-    slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 8, IR: 1 } },
+    slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, BN: 8, IR: 1 } },
   { key: 'dynasty', label: 'Dynasty', leagueTypes: ['dynasty'], description: 'Deep dynasty with superflex and taxi.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 15, IR: 3, TAXI: 4 } },
   { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Extended keeper roster.',
