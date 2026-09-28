@@ -38,9 +38,18 @@ export type ScheduleGame = {
   seasonType: RiSeasonType | null
   eventName: string | null
   replacedBy: string | null
+  /**
+   * The teams, in Rolling Insights' own formal naming ("Winthrop University") — the same naming the
+   * NCAAB player pool carries, which is what lets the lineup lock match a player to his game. Absent
+   * on rows synced before they were kept; a reader must treat that as "unknown", never as "no game".
+   */
+  homeTeam?: string | null
+  awayTeam?: string | null
+  homeTeamId?: string | null
+  awayTeamId?: string | null
 }
 
-const str = (v: unknown): string | null => {
+const str =(v: unknown): string | null => {
   if (v == null) return null
   const t = String(v).trim()
   return t && t.toLowerCase() !== 'null' ? t : null
@@ -68,6 +77,10 @@ export function parseRiScheduleSeason(rows: unknown[]): ScheduleGame[] {
       seasonType: classifyRiSeasonType(g.season_type),
       eventName: str(g.event_name),
       replacedBy: str(g.replaced_by),
+      homeTeam: str(g.home_team),
+      awayTeam: str(g.away_team),
+      homeTeamId: str(g.home_team_ID ?? g.home_team_id),
+      awayTeamId: str(g.away_team_ID ?? g.away_team_id),
     })
   }
   return out
