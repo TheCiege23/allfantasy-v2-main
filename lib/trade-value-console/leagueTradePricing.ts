@@ -415,7 +415,7 @@ export async function resolveAssets(
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
-      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
+      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
@@ -423,7 +423,7 @@ export async function resolveAssets(
       const src: TradeConsolePlayerLine['pricedSource'] =
         pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
-          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat'
+          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat' || pa.source === 'dst-flat'
             ? 'idp_league'
             : 'unknown'
       lines.push(
