@@ -243,15 +243,33 @@ describe('getManagerPresence — nothing to pitch', () => {
   })
 })
 
-describe('getManagerPresence — a platform whose moves are not ingested', () => {
+describe('getManagerPresence — a league whose moves are not ingested', () => {
+  /*
+   * ⚠ THIS USED `platform: 'yahoo'` OVER ROSTERS OF SLEEPER IDS, a combination production never holds:
+   * Yahoo rosters carry player keys ("461.p.100"). `activityIngested` is `rows.length > 0` — it has
+   * nothing to do with the platform — so the case under test is simply "no moves ingested", which a
+   * Sleeper-id league (manual) exercises honestly.
+   */
   it('still names the owner, need and record, and says the window is missing', async () => {
-    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'yahoo', timezone: null })
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'manual', timezone: null })
     mockActivityFindMany.mockResolvedValue([])
     const res = await getManagerPresence('L-gang', KINCAID, 'me', { position: 'TE' })
     expect(res.available).toBe(true)
     if (!res.available) return
-    expect(res.data).toMatchObject({ platform: 'yahoo', activityIngested: false, newestMove: null, unattributed: 0, timeZone: 'America/New_York' })
+    expect(res.data).toMatchObject({ platform: 'manual', activityIngested: false, newestMove: null, unattributed: 0, timeZone: 'America/New_York' })
     expect(res.data.managers[0]).toMatchObject({ ownerName: 'tashaR', record: '4-2', window: null, lastMove: null, moves: 0 })
     expect(mockProfileFindMany).not.toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 And the combination that test used to rely on is now refused. A foreign-id roster (Yahoo,
+   * Fleaflicker, MFL, Fantrax) is never read as Sleeper ids — its numbers overlap Sleeper's (44 of 248
+   * on the one production Fleaflicker league) — so whatever ids it holds, presence cannot name a holder.
+   */
+  it('never reads a foreign-id roster as Sleeper ids, even when its ids look like Sleeper ids', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'yahoo', timezone: null })
+    mockActivityFindMany.mockResolvedValue([])
+    const res = await getManagerPresence('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(res.available).toBe(false)
   })
 })

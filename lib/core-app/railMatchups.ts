@@ -10,6 +10,7 @@ import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { getByeWeeks } from './byeWeeks'
 import { resolveRailMatchupMode } from './railMatchupMode'
+import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -620,6 +621,7 @@ const NO_PROJECTIONS: RailProjections = { byLeague: new Map(), projectionWeek: n
 type LeagueMetaRow = {
   id: string
   sport: string | null
+  platform: string | null
   scoring_settings: unknown
   scoringSettings: unknown
   yahoo_settings: unknown
@@ -678,6 +680,7 @@ export async function loadRailProjections(args: {
       .$queryRawUnsafe<LeagueMetaRow[]>(
         `SELECT id,
                 "sport",
+                "platform",
                 settings->'scoring_settings' AS "scoring_settings",
                 settings->'scoringSettings'  AS "scoringSettings",
                 settings->'yahoo_settings'   AS "yahoo_settings",
@@ -701,9 +704,18 @@ export async function loadRailProjections(args: {
 
   /** "dbLeagueId:rosterKey" → that roster's starters. */
   const startersByKey = new Map<string, string[]>()
+  /*
+   * 🛑 A FOREIGN-ID LEAGUE PRICES NOTHING, NOT THE WRONG PLAYERS. This loader skips the crosswalk
+   * on purpose (the header), which is harmless for ESPN — long ids collide with nobody, the side
+   * prices nothing and renders `PROJ —`. A Fleaflicker/MFL/Fantrax/Yahoo starter id is a short
+   * number in Sleeper's range (44 of 248 on the one production Fleaflicker league ARE Sleeper ids),
+   * so it priced a stranger into the side's total and rank. Its starters are emptied: the side still
+   * renders, as `PROJ —`, which is the true statement (isForeignIdSpace, rosterIdSpace.ts).
+   */
+  const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform)).map((m) => m.id))
   for (const r of starterRows) {
     if (!r.platformUserId) continue
-    startersByKey.set(`${r.leagueId}:${r.platformUserId}`, startersOf(r.starters))
+    startersByKey.set(`${r.leagueId}:${r.platformUserId}`, foreignLeagues.has(r.leagueId) ? [] : startersOf(r.starters))
   }
 
   /* Which lineup belongs to which side, resolved once so it is not re-derived per pass. */

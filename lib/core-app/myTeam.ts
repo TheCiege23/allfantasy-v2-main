@@ -23,7 +23,7 @@ import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
-import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap } from './nextGameMap'
 import { displayPosition, inferSlotLabel } from './positionLabels'
@@ -432,7 +432,9 @@ async function resolvePlayers(
   const sleeperIdByRosterId = await crosswalkToSleeperIds(platform, sport, ids).catch(
     () => new Map<string, string>(),
   )
-  const lookupIds = [...new Set(ids.map((id) => sleeperIdByRosterId.get(id) ?? id))]
+  const lookupIds = [
+    ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId)).filter((x): x is string => x != null)),
+  ]
 
   const rows = await prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: lookupIds } },
