@@ -31,7 +31,7 @@ vi.mock('@/lib/trade-intel/marketValueService', async () => {
   return { ...actual, getMarketValues: h.values }
 })
 
-import { buildFaabBidContext } from '@/lib/chimmy/tools/faabBidTool'
+import { buildFaabBidContext, computeFaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
 import { executeChimmyTool } from '@/lib/chimmy/tools/chimmyTools'
 
 const LEAGUE = {
@@ -162,5 +162,35 @@ describe('get_faab_bid_plan', () => {
     expect(text).toContain('- Free TE (TE): bid up to $323')
     const noLeague = await executeChimmyTool('get_faab_bid_plan', {}, { leagueId: null, userId: 'me' } as never)
     expect(noLeague).not.toContain('FAAB BID PLAN')
+  })
+})
+
+/*
+ * The plan as DATA, for the chat's bid card and the chop-release alert. The text above is a pure
+ * rendering of it, so these are the same numbers the model is given.
+ */
+describe('computeFaabBidPlan', () => {
+  it('returns every upgrade with its ceiling, share and effect, best first', async () => {
+    const plan = await computeFaabBidPlan('L1', 'me')
+    expect(plan).toMatchObject({ status: 'ok', outcome: 'bid', elimination: true, remaining: 400, seasonBudget: 1000, seatsLabel: null, nonUpgrades: 2 })
+    if (plan.status !== 'ok') throw new Error('expected a plan')
+    expect(plan.upgrades.map((b) => [b.name, b.ceiling, b.marginalValue])).toEqual([['Free TE', 323, 2100], ['Free QB', 77, 500]])
+    expect(plan.upgrades[0].shareOfSupply).toBeCloseTo(2100 / 2600, 6)
+  })
+
+  it('names who leaves the lineup when the slots are real, and gives no ceiling outside an elimination league', async () => {
+    h.league.mockResolvedValue({ ...LEAGUE, leagueType: 'redraft', settings: { ...LEAGUE.settings, roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN'] } })
+    const plan = await computeFaabBidPlan('L1', 'me')
+    if (plan.status !== 'ok') throw new Error('expected a plan')
+    expect(plan.outcome).toBe('rank')
+    expect(plan.upgrades).toEqual([expect.objectContaining({ name: 'Free QB', ceiling: null, displacedName: 'My QB', marginalValue: 500 })])
+  })
+
+  it('says save, and refuses with the same line the model is given', async () => {
+    const onlyDowngrades = { ...VALUES, bySleeperId: Object.fromEntries(Object.entries(VALUES.bySleeperId).filter(([id]) => !['fa-te', 'fa-qb'].includes(id))) }
+    h.values.mockResolvedValue(onlyDowngrades)
+    expect(await computeFaabBidPlan('L1', 'me')).toMatchObject({ status: 'ok', outcome: 'save', upgrades: [] })
+    h.values.mockResolvedValue(null)
+    expect(await computeFaabBidPlan('L1', 'me')).toEqual({ status: 'refused', line: expect.stringContaining('no player values are loaded') })
   })
 })
