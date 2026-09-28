@@ -101,6 +101,47 @@ function devyPricedAsset(name: string, position: string | null, value: number): 
 }
 
 /**
+ * The same rule for a caller that holds `PricedAsset`s rather than console lines — the trade evaluator's
+ * first pricing pass (2026-09-28). That pass refused every college player (DEVY_SCALE) before the one
+ * grade, which prices held prospects through `applyDevyPricing` below, ever ran — so a devy league's
+ * trade was refused on the page while its grade would have been taken. Pricing both passes with one
+ * matcher and one `devyOptionValue` is what keeps the page's totals and the letter on the same number.
+ *
+ * Only an UNPRICED player is touched; a prospect this league does not hold, or one `devyOptionValue`
+ * cannot measure, stays unpriced (the route then refuses as before). Null is never zero.
+ */
+export function priceHeldDevyAssets(args: {
+  prices: readonly PricedAsset[]
+  held: readonly HeldDevyPlayer[]
+  currentSeason: number
+}): { prices: PricedAsset[]; devyPriced: string[]; unmeasured: string[] } {
+  const prices = [...args.prices]
+  const devyPriced: string[] = []
+  const unmeasured: string[] = []
+  prices.forEach((p, i) => {
+    if (!p.unpriced || p.type === 'pick') return
+    const held = matchHeldDevy(undefined, p.name, args.held)
+    if (!held) return
+    const option = devyOptionValue({
+      name: held.name,
+      position: held.position,
+      ppaSeasonTotal: held.ppaSeasonTotal,
+      recruitingComposite: held.recruitingComposite,
+      recruitingStars: held.recruitingStars,
+      draftEligibleYear: held.draftEligibleYear,
+      currentSeason: args.currentSeason,
+    } satisfies DevyOptionValueArgs)
+    if (option.value == null) {
+      unmeasured.push(option.basis)
+      return
+    }
+    prices[i] = devyPricedAsset(held.name, held.position, option.value)
+    devyPriced.push(held.name)
+  })
+  return { prices, devyPriced, unmeasured }
+}
+
+/**
  * Price every line the chart could not, when it is a college player this league holds. Returns new
  * arrays (index-aligned, as the grade requires) and what happened.
  *
