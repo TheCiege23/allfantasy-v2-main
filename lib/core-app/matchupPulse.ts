@@ -160,6 +160,16 @@ export type MatchupPulse = {
      * claimed a team" are different sentences and the screen now says which.
      */
     unidentifiedRoster: number
+    /**
+     * Claimed leagues that have not started — still in setup, before or during their draft.
+     *
+     * 🛑 THESE WERE COUNTED AS `unidentifiedRoster`, "a roster id we cannot match — our gap". On
+     * the audited account (production 2026-09-28) all 8 of that count were not our gap: 7 native
+     * AllFantasy leagues still in setup, which have no schedule to match, and 1 second claimed
+     * copy of a Fantrax league whose other copy is already ranked. The duplicate is now not
+     * counted at all; these are counted here.
+     */
+    notStarted: number
   }
 }
 
@@ -237,7 +247,7 @@ const EMPTY_PULSE: MatchupPulse = {
   considered: 0,
   ranked: 0,
   basis: null,
-  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 },
+  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
 }
 
 export async function getMatchupPulse(
@@ -262,6 +272,8 @@ export async function getMatchupPulse(
             logoUrl: true,
             avatarUrl: true,
             settings: true,
+            status: true,
+            lifecycleState: true,
           },
         },
       },
@@ -275,12 +287,12 @@ export async function getMatchupPulse(
    * See `notRanked.unidentifiedRoster`. Reporting `considered: 0` here told a
    * manager with four claimed teams that they had none.
    */
-  const unidentifiedRoster = claimed.length - mine.length
+  const { unidentifiedRoster, notStarted } = classifyUnplaced(claimed, mine)
   if (mine.length === 0) {
     return {
       ...EMPTY_PULSE,
       considered: claimed.length,
-      notRanked: { ...EMPTY_PULSE.notRanked, unidentifiedRoster },
+      notRanked: { ...EMPTY_PULSE.notRanked, unidentifiedRoster, notStarted },
     }
   }
 
@@ -505,7 +517,7 @@ export async function getMatchupPulse(
     return {
       ...EMPTY_PULSE,
       considered: claimed.length,
-      notRanked: { ...notRanked, unidentifiedRoster },
+      notRanked: { ...notRanked, unidentifiedRoster, notStarted },
     }
   }
 
@@ -718,6 +730,35 @@ export async function getMatchupPulse(
     considered: claimed.length,
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],
-    notRanked: { ...notRanked, unidentifiedRoster },
+    notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
+}
+
+/** League states in which no schedule exists yet to place a roster against. */
+const NOT_STARTED = new Set(['setup', 'pre_draft', 'predraft', 'drafting'])
+
+type UnplacedClaim = {
+  league: { platform: string | null; platformLeagueId: string | null; status?: string | null; lifecycleState?: string | null } | null
+}
+
+/**
+ * Why each claimed team the board could not place is absent. See `notRanked.notStarted`.
+ *
+ * Exported so the rule can be tested without the loader's reads. PURE.
+ */
+export function classifyUnplaced<T extends UnplacedClaim>(claimed: T[], placed: T[]): { unidentifiedRoster: number; notStarted: number } {
+  const key = (c: T) => `${String(c.league?.platform ?? '').toLowerCase()}:${c.league?.platformLeagueId ?? ''}`
+  const placedSet = new Set(placed)
+  const placedLeagues = new Set(placed.map(key))
+  let unidentifiedRoster = 0
+  let notStarted = 0
+  for (const c of claimed) {
+    if (placedSet.has(c)) continue
+    /* A second claimed copy of a league already on the board is not missing from it. */
+    if (c.league?.platformLeagueId && placedLeagues.has(key(c))) continue
+    const states = [c.league?.status, c.league?.lifecycleState].map((v) => String(v ?? '').toLowerCase())
+    if (states.some((v) => NOT_STARTED.has(v))) notStarted++
+    else unidentifiedRoster++
+  }
+  return { unidentifiedRoster, notStarted }
 }
