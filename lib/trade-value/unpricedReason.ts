@@ -125,8 +125,8 @@ export function playerUnpricedReason(args: {
 
 /**
  * Why the trade ANALYSIS priced a player at nothing. Its engine tries the feed, this league's own
- * defender board, a historical value and a draft value before giving up, so "not on the feed" is
- * not the whole story there — but a position the feed never covers still is.
+ * defender board (and, for a question about the past, a historical value) before giving up, so "not
+ * on the feed" is not the whole story there — but a position the feed never covers still is.
  */
 export function analysisUnpricedReason(args: {
   position: string | null | undefined
@@ -137,6 +137,24 @@ export function analysisUnpricedReason(args: {
     (isIdpPosition(args.position) ? reason('defender', 'No league-derived defensive value available for this player') : null) ??
     positionReason(args.position) ??
     reason('no_value_on_file', 'No feed, historical or draft value on file')
+  )
+}
+
+/**
+ * A player today's market board does not carry, whose only number is an old historical snapshot.
+ *
+ * That snapshot is NOT the market (measured 2026-09-28, SF 12-team): rank for rank it sits 1.4–2.4×
+ * above the live board at the fringe — rank 150 is 2,210 against 1,431, rank 300 is 773 against 316 —
+ * and the board lists ~420 players down to a value of 5, so a player missing from it is valued below
+ * that floor today. Carrying the snapshot priced exactly those players at a multiple of their market.
+ */
+export function staleHistoricalUnpricedReason(snapshotDate: string | null | undefined): UnpricedReason {
+  const when = String(snapshotDate ?? '').slice(0, 10)
+  return reason(
+    'not_on_feed',
+    when
+      ? `Not on today's market board — the only value on file is from a ${when} snapshot, which is not today's market`
+      : "Not on today's market board — the only value on file is an old snapshot, which is not today's market",
   )
 }
 

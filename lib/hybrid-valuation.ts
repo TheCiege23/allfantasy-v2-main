@@ -3,11 +3,11 @@ import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { pickValue } from './pick-valuation';
 import { computePlayerVorp as computePlayerVorpEngine, computePickVorp as computePickVorpEngine, LeagueRosterConfig } from './vorp-engine';
-import { IDP_CEILING_UNCERTAINTY_BAND, isIdpPosition, isKickerPosition } from './idp-kicker-values';
+import { IDP_CEILING_UNCERTAINTY_BAND, isIdpPosition } from './idp-kicker-values';
 import { isUserParty } from './user-matching';
 import { getPlayerAnalytics, type PlayerAnalytics } from './player-analytics';
 import type { UnpricedReason } from './trade-value/unpricedReason';
-import { analysisUnpricedReason } from './trade-value/unpricedReason';
+import { analysisUnpricedReason, staleHistoricalUnpricedReason } from './trade-value/unpricedReason';
 import { leagueValueForPlayer, valuePositionsAgree, type TradePlayerIdentity } from './league-values/playerValueIdentity';
 import type { LeagueNamedValue } from './league-values/leagueTradeValues';
 
@@ -31,13 +31,13 @@ export interface ValuationContext {
    * KICKERS (deliberately unranked; every kicker in a league carries the same number,
    * because kicker rank does not persist — see lib/kicker-values/leagueKickerValue.ts).
    *
-   * 🛑 OPTIONAL, AND ITS ABSENCE MUST STAY HARMLESS. Without it every defender is
-   * priced off IDP_KICKER_BASELINE_VALUES below, which is a flat per-position
-   * constant: every linebacker in the league worth 800, the best and the worst
-   * alike. Supplying it replaces that with a value derived from the league's own
-   * scoring settings and starting slots. Callers that have no league — a trade
-   * described in chat, a snapshot write path — must NOT supply one, because an IDP
-   * value computed against the wrong league is worse than a flat one.
+   * 🛑 OPTIONAL, AND ITS ABSENCE MUST STAY HARMLESS. Without it a defender, kicker or
+   * team defense is REFUSED with a reason (since 2026-09-28; before that it was priced
+   * off a flat per-position constant — every linebacker 800, the best and the worst
+   * alike). Supplying it prices him from the league's own scoring settings and starting
+   * slots. Callers that have no league — a trade described in chat, a snapshot write
+   * path — must NOT supply one, because an IDP value computed against the wrong league
+   * is worse than none.
    */
   leagueValueByNameLower?: ReadonlyMap<
     string,
@@ -383,47 +383,6 @@ export interface TradeDelta {
   idpCeilingBand?: { low: string; high: string; sensitive: boolean } | null;
 }
 
-const IDP_KICKER_BASELINE_VALUES: Record<string, number> = {
-  LB: 800,
-  DL: 700,
-  DB: 650,
-  DE: 700,
-  DT: 600,
-  ILB: 800,
-  OLB: 750,
-  CB: 650,
-  SS: 600,
-  FS: 600,
-  S: 600,
-  K: 300,
-}
-
-function getIdpKickerFallbackValue(name: string, position: string): number {
-  const pos = position.toUpperCase()
-  if (isIdpPosition(pos) || isKickerPosition(pos)) {
-    return IDP_KICKER_BASELINE_VALUES[pos] ?? 500
-  }
-  return 0
-}
-
-/**
- * How old a historical snapshot may be and still stand in for a player the LIVE
- * board does not carry.
- *
- * ⚠ THIS BOUND IS DELIBERATELY GENEROUS, AND A TIGHT ONE IS A BUG. The fix above
- * stops the stale board OUTRANKING the live one; it does not follow that a stale
- * price is worthless. This branch is only reached when FantasyCalc has no entry at
- * all, and measured against the live board 101 players — 30% of the Excel board,
- * AJ Dillon, Brandin Cooks, Alexander Mattison and other fringe veterans — exist
- * only in the historical file. A short window there would refuse to grade any trade
- * containing one of them, which is strictly worse for the user than an old price
- * carried with lowered confidence (see computeConfidence, which now subtracts for it).
- *
- * The bound exists only so that a file left un-regenerated for YEARS eventually
- * stops pricing silently. A full season plus an offseason is the right scale.
- */
-const HISTORICAL_FALLBACK_MAX_AGE_DAYS = 400;
-
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -442,15 +401,6 @@ function isHindsightQuery(asOfDate: string | null | undefined): boolean {
   return d < todayIso();
 }
 
-function historicalSnapshotIsRecent(
-  result: { actualDate: string | null },
-  maxAgeDays: number = HISTORICAL_FALLBACK_MAX_AGE_DAYS
-): boolean {
-  if (!result.actualDate) return false;
-  const t = Date.parse(`${result.actualDate.slice(0, 10)}T00:00:00Z`);
-  if (!Number.isFinite(t)) return false;
-  return (Date.now() - t) / 86_400_000 <= maxAgeDays;
-}
 
 export async function pricePlayer(
   name: string,
@@ -582,46 +532,31 @@ export async function pricePlayer(
   }
 
   /*
-   * The live board does not carry this player — 30% of the historical board's names
-   * are in exactly that position. Use the older price rather than refusing: it is the
-   * only number available, the ordering bug it used to cause is fixed above, and
-   * computeConfidence now subtracts for it instead of adding. Bounded only against a
-   * file left un-regenerated for years.
+   * 🛑 NOTHING BELOW THE LIVE BOARD PRICES A LIVE GRADE (2026-09-28).
+   *
+   * Three fallbacks used to price what the board and the league did not, and each was a number
+   * on the wrong scale counted as if it were the market:
+   *
+   *   - the HISTORICAL snapshot. Measured against the live SF 12-team board, rank for rank it
+   *     sits 1.4–2.4× above the market at the fringe (rank 150: 2,210 v 1,431; rank 300: 773 v
+   *     316), and this branch only ever served the fringe — the ~100 names the board dropped.
+   *     The board lists ~420 players down to a value of 5, so a player missing from it is valued
+   *     below that floor today, and the snapshot priced him at a multiple of it: Joe Mixon at
+   *     1,605, Marquise Brown at 1,721, both from 2026-02-05.
+   *   - the flat IDP/kicker constant (every linebacker 800, best and worst alike).
+   *   - the analytics draft lifetime value — a different unit, never calibrated to the board,
+   *     and backed by a table that holds no rows in production.
+   *
+   * A caller with a Sleeper id was already refused all three (above: the name-joined stores
+   * cannot verify an id), so only a TYPED name reached them — the trade evaluator. Now a typed
+   * name and an id get the same answer, and it names why.
+   *
+   * The historical file still answers a HINDSIGHT query above, which is what it is for.
    */
-  if (historicalResult.value !== null && historicalSnapshotIsRecent(historicalResult)) {
-    return priceFromHistorical();
+  if (historicalResult.value !== null) {
+    return refuse(staleHistoricalUnpricedReason(historicalResult.actualDate));
   }
-
-  const idpKickerFallback = getIdpKickerFallbackValue(name, position);
-  if (idpKickerFallback > 0) {
-    const vol = computePlayerVolatility(null, position, age, analyticsData);
-    return {
-      name,
-      type: 'player',
-      value: idpKickerFallback,
-      assetValue: {
-        marketValue: idpKickerFallback,
-        impactValue: Math.round(idpKickerFallback * 0.6),
-        vorpValue: Math.round(idpKickerFallback * 0.3),
-        volatility: vol,
-      },
-      source: 'idp-flat-baseline',
-      position,
-    };
-  }
-
-  if (analyticsData && analyticsData.draft.lifetimeValue != null && analyticsData.draft.lifetimeValue > 0) {
-    const mv = Math.round(analyticsData.draft.lifetimeValue);
-    const vol = computePlayerVolatility(null, analyticsData.position, age, analyticsData);
-    return {
-      name,
-      type: 'player',
-      value: mv,
-      assetValue: { marketValue: mv, impactValue: Math.round(mv * 0.5), vorpValue: Math.round(mv * 0.25), volatility: vol },
-      source: 'analytics-lifetime',
-      position: analyticsData.position || position,
-    };
-  }
+  if (nonMarketPosition) return refuse(analysisUnpricedReason({ position, sport: 'NFL' }));
 
   console.warn(`[hybrid-valuation] No value found for player: "${name}"`);
   return {
