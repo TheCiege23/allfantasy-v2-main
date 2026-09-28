@@ -1,6 +1,7 @@
 import crypto from "crypto"
 import { recordAnalyticsEvent } from "@/lib/analytics/recordAnalyticsEvent"
 import { getServedOrigin } from "@/lib/http/served-origin"
+import { isIosAppUserAgent } from "@/lib/platform/iosApp"
 import {
   DEFAULT_META_PIXEL_ID,
   normalizeMetaCustomData,
@@ -95,6 +96,13 @@ export interface CAPIEventParams {
 export type MetaCapiResult = { success: boolean; error?: string; meta?: unknown }
 
 export async function sendMetaCAPIEvent(params: CAPIEventParams): Promise<MetaCapiResult> {
+  // An action taken inside the iOS app is never sent to Meta: that is tracking,
+  // and the app shows no App Tracking Transparency prompt (lib/platform/iosApp).
+  // Checked first, before any user data is hashed or assembled.
+  if (isIosAppUserAgent(params.clientUserAgent ?? params.request?.headers.get("user-agent"))) {
+    return { success: false, error: "skipped_ios_app" }
+  }
+
   const accessToken = process.env.META_CONVERSIONS_API_TOKEN
 
   if (!accessToken) {
