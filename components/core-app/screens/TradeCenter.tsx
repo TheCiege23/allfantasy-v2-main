@@ -559,6 +559,8 @@ export function TradeCenter(props: {
   const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
   useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
   const [draftNote, setDraftNote] = useState<string | null>(null)
+  const [recoverableDraft, setRecoverableDraft] = useState<ReturnType<typeof decodeTradeDraft>>(null)
+  const [draftTouched, setDraftTouched] = useState(false)
   /*
    * Non-null means the next send ANSWERS that offer rather than opening a new one.
    * Held here rather than in the propose panel because the inbox arms it and the
@@ -577,13 +579,15 @@ export function TradeCenter(props: {
   const [needsYou, setNeedsYou] = useState<number | null>(null)
 
   /*
-   * A trade email or push links to `?trade=<id>`, and that trade is on the Offers step (its inbox
-   * or its history). Read after mount rather than during render so the server and client agree on
-   * the first paint; `useFocusTradeFromUrl` then brings the trade itself into view.
+   * A trade email or push links to `?trade=<id>`. Pending offers live on Offers; completed imported
+   * trades now live below the builder on Review. Select the matching step before the focus hook
+   * scrolls, so a history link does not target hidden phone content.
    */
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('trade')) setMobileStep('offers')
-  }, [])
+    const tradeId = new URLSearchParams(window.location.search).get('trade')
+    if (!tradeId) return
+    setMobileStep(props.completedHistory?.some((trade) => trade.transactionId === tradeId) ? 'review' : 'offers')
+  }, [props.completedHistory])
   /* The "+ Add asset" button that opened the phone sheet — where focus returns on close. */
   const sheetOpenerRef = useRef<HTMLElement | null>(null)
 
@@ -808,6 +812,8 @@ export function TradeCenter(props: {
    */
   const addAsset = useCallback(
     (side: 'give' | 'get', asset: PickedAsset) => {
+      setDraftTouched(true)
+      setRecoverableDraft(null)
       const setter = side === 'give' ? setGiveAssets : setGetAssets
       /* Immutable update — never write into the existing array. */
       setter((prev) => [...prev, asset])
@@ -819,6 +825,7 @@ export function TradeCenter(props: {
   )
 
   const removeAsset = useCallback((side: 'give' | 'get', index: number) => {
+    setDraftTouched(true)
     const setter = side === 'give' ? setGiveAssets : setGetAssets
     setter((prev) => prev.filter((_, i) => i !== index))
     setResult(null)
@@ -839,6 +846,8 @@ export function TradeCenter(props: {
    */
   const loadOffer = useCallback(
     (give: PickedAsset[], get: PickedAsset[], note: string | null) => {
+      setDraftTouched(true)
+      setRecoverableDraft(null)
       setGiveAssets(give)
       setGetAssets(get)
       setResult(null)
@@ -868,6 +877,8 @@ export function TradeCenter(props: {
    */
   const startCounter = useCallback(
     (input: { tradeId: string; give: PickedAsset[]; get: PickedAsset[]; partnerRosterId: string; label: string }) => {
+      setDraftTouched(true)
+      setRecoverableDraft(null)
       setGiveAssets(input.give)
       setGetAssets(input.get)
       setResult(null)
@@ -897,6 +908,8 @@ export function TradeCenter(props: {
   const startSuggestedDeal = useCallback(
     (p: PartnerRecommendation) => {
       if (!p.suggestion || !rosterData) return
+      setDraftTouched(true)
+      setRecoverableDraft(null)
       const target = rosterData.rosters.find((r) => r.rosterId === p.rosterId) ?? null
       const mine = rosterData.rosters.find((r) => r.rosterId === rosterData.viewerTeamRosterId) ?? null
       const { give, get, dropped } = suggestionToPickedAssets(p.suggestion, mine, target)
@@ -1060,15 +1073,19 @@ export function TradeCenter(props: {
         recovered = raw ? decodeTradeDraft(JSON.parse(raw)) : null
       } catch { /* Storage can be unavailable on a private device. */ }
     }
-    setGiveAssets(recovered?.give ?? [])
-    setGetAssets(recovered?.get ?? [])
+    // A browser scratchpad can outlive an accepted provider trade. Keep the board blank until
+    // the manager explicitly resumes it, so an old direction never looks like a new offer.
+    setGiveAssets([])
+    setGetAssets([])
+    setRecoverableDraft(recovered)
+    setDraftTouched(false)
     setPicking(null)
-    setPartnerRosterId(recovered?.partnerRosterId ?? null)
+    setPartnerRosterId(null)
     setCountering(null)
     setResult(null)
     setError(null)
     setDraftNote(recovered && (recovered.give.length || recovered.get.length)
-      ? 'Recovered this device’s in-progress proposal — analyse it again to get a verdict.' : null)
+      ? 'An unfinished proposal is saved on this device. Resume it only if you still want that trade.' : null)
     setDeviceDraftAvailable(null)
     setHydratedDraftKey(workingDraftKey)
   }, [workingDraftKey, props.league?.id, props.viewerId])
@@ -1076,13 +1093,13 @@ export function TradeCenter(props: {
   useEffect(() => {
     // Do not overwrite recovery data with the initial empty render, or an old
     // account/league's assets while the new context is being restored.
-    if (!workingDraftKey || hydratedDraftKey !== workingDraftKey) return
+    if (!workingDraftKey || hydratedDraftKey !== workingDraftKey || !draftTouched) return
     try {
       if (!giveAssets.length && !getAssets.length) window.localStorage.removeItem(workingDraftKey)
       else window.localStorage.setItem(workingDraftKey, JSON.stringify({ give: giveAssets, get: getAssets, partnerRosterId, at: Date.now() }))
       setDeviceDraftAvailable(true)
     } catch { setDeviceDraftAvailable(false) }
-  }, [workingDraftKey, hydratedDraftKey, giveAssets, getAssets, partnerRosterId])
+  }, [workingDraftKey, hydratedDraftKey, draftTouched, giveAssets, getAssets, partnerRosterId])
 
   const saveDraft = useCallback(async () => {
     const leagueId = props.league?.id
@@ -1126,6 +1143,8 @@ export function TradeCenter(props: {
   }, [draftKey, giveAssets, getAssets, props.league?.id])
 
   const applyDraft = useCallback((give: unknown, get: unknown, note: string) => {
+    setDraftTouched(true)
+    setRecoverableDraft(null)
     setGiveAssets(Array.isArray(give) ? (give as PickedAsset[]) : [])
     setGetAssets(Array.isArray(get) ? (get as PickedAsset[]) : [])
     /* A restored deal is not an analysed one. */
@@ -1487,11 +1506,36 @@ export function TradeCenter(props: {
           <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
           {workingDraftKey ? <span className="af-tc-row-sub">{deviceDraftAvailable === false
             ? 'Device recovery is unavailable. Use Save draft to save to your account.'
-            : 'In-progress proposals recover on this device. Use Save draft to sync across devices.'}</span> : null}
+            : 'Unfinished proposals can be resumed on this device. Use Save draft to sync across devices.'}</span> : null}
           <span className="af-tc-spacer" />
           <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
             Restore draft
           </button>
+          {recoverableDraft && (recoverableDraft.give.length > 0 || recoverableDraft.get.length > 0) ? (
+            <button type="button" className="af-btn af-btn--ghost" onClick={() => {
+              setDraftTouched(true)
+              setGiveAssets(recoverableDraft.give)
+              setGetAssets(recoverableDraft.get)
+              setPartnerRosterId(recoverableDraft.partnerRosterId ?? null)
+              setRecoverableDraft(null)
+              setResult(null)
+              setDraftNote('Resumed the unfinished proposal from this device. Analyze it again for current values.')
+              goToStep('review')
+            }}>Resume unfinished proposal</button>
+          ) : null}
+          <button type="button" className="af-btn af-btn--ghost" onClick={() => {
+            setDraftTouched(true)
+            setRecoverableDraft(null)
+            setGiveAssets([])
+            setGetAssets([])
+            setPartnerRosterId(null)
+            setCountering(null)
+            setPicking(null)
+            setResult(null)
+            setError(null)
+            setDraftNote('Started a new trade. Your account-saved draft is still available through Restore draft.')
+            goToStep('give')
+          }}>Start new trade</button>
           {draftNote ? <span className="af-tc-row-sub">{draftNote}</span> : null}
         </div>
       ) : null}
@@ -1503,6 +1547,7 @@ export function TradeCenter(props: {
       */}
       <div className="af-tc-mstep-wrap" data-mstep="offers">
         <TradeInbox
+          view="offers"
           leagueId={props.league?.id ?? null}
           onLoad={loadOffer}
           onCounter={startCounter}
@@ -1511,29 +1556,6 @@ export function TradeCenter(props: {
           onNeedsYouCount={setNeedsYou}
         />
       </div>
-
-      {valueActions.length > 0 ? (
-        <details className="af-tc-value-actions" data-mstep="offers">
-          <summary><span>Value change alerts</span><b>{valueActions.length} players across your leagues</b></summary>
-          <div className="af-tc-value-action-list">
-            {valueActions.map((player) => (
-              <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
-                <div>
-                  <strong>{player.name}</strong>
-                  <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>
-                  <span className="af-tc-value-leagues">
-                    {player.affectedLeagues.map((league, index) => (
-                      <span key={league.id}>{index > 0 ? ' · ' : ''}<Link href={`/core/trades?league=${encodeURIComponent(league.id)}`}>{league.name}</Link></span>
-                    ))}
-                  </span>
-                </div>
-                <b>{player.advice}</b>
-              </div>
-            ))}
-          </div>
-        </details>
-      ) : null}
 
       {/*
         ── PHONE STEP BAR ─────────────────────────────────────────────────────────────────────────
@@ -2442,11 +2464,43 @@ export function TradeCenter(props: {
       </div>
 
       {/*
-        The league's history, last on the page as it always was on desktop. On a phone it belongs
-        to Offers — the place a trade email lands — instead of trailing every building step.
+        Construction and analysis lead the page after pending offers. The unified timeline and
+        imported history follow the builder, including below the verdict on the phone's Review step.
       */}
+      {valueActions.length > 0 ? (
+        <details className="af-tc-value-actions" data-mstep="review">
+          <summary><span>Value change alerts</span><b>{valueActions.length} players across your leagues</b></summary>
+          <div className="af-tc-value-action-list">
+            {valueActions.map((player) => (
+              <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
+                {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                <div>
+                  <strong>{player.name}</strong>
+                  <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>
+                  <span className="af-tc-value-leagues">
+                    {player.affectedLeagues.map((league, index) => (
+                      <span key={league.id}>{index > 0 ? ' · ' : ''}<Link href={`/core/trades?league=${encodeURIComponent(league.id)}`}>{league.name}</Link></span>
+                    ))}
+                  </span>
+                </div>
+                <b>{player.advice}</b>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+      <div className="af-tc-mstep-wrap" data-mstep="review">
+        <TradeInbox
+          view="timeline"
+          leagueId={props.league?.id ?? null}
+          onLoad={loadOffer}
+          onCounter={startCounter}
+          reloadToken={inboxReloadToken}
+          importedHistory={props.completedHistory}
+        />
+      </div>
       {props.history ? (
-        <div className="af-tc-mstep-wrap" data-mstep="offers">
+        <div className="af-tc-mstep-wrap" data-mstep="review">
           {props.history}
         </div>
       ) : null}

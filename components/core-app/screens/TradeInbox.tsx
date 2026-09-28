@@ -358,6 +358,8 @@ export function nativeItemsToAssets(
 
 export function TradeInbox(props: {
   leagueId: string | null
+  /** Render the actionable inbox before the builder, or the archive after it. */
+  view?: 'offers' | 'timeline' | 'all'
   /** Hands a whole offer to the builder on this page. */
   onLoad: (give: PickedAsset[], get: PickedAsset[], note: string | null) => void
   /**
@@ -441,7 +443,7 @@ export function TradeInbox(props: {
    * and once a minute while it is in view. See useVisibleRefresh; the server reads the current
    * weeks at most 45 s old (scanPendingSleeperTrades), so a refresh can actually see it.
    */
-  useVisibleRefresh(() => load({ background: true }), { enabled: Boolean(leagueId) })
+  useVisibleRefresh(() => load({ background: true }), { enabled: Boolean(leagueId) && props.view !== 'timeline' })
 
   const { onNeedsYouCount } = props
   useEffect(() => {
@@ -517,6 +519,7 @@ export function TradeInbox(props: {
 
   if (!leagueId) return null
 
+  const view = props.view ?? 'all'
   const offers = data?.pendingOffers ?? []
   const inbox = offers.filter((o) => o.direction === 'incoming')
   const sent = offers.filter((o) => o.direction === 'outgoing')
@@ -574,7 +577,9 @@ export function TradeInbox(props: {
         </p>
       ) : rows.length === 0 ? (
         <p className="af-tc-row-sub">
-          {emptyWhenScanned}
+          {pending?.platform === 'sleeper'
+            ? 'No offer was returned by Sleeper’s public transaction feed. Sleeper can show live proposals that are absent from that feed; check Sleeper for any offer awaiting your response.'
+            : emptyWhenScanned}
           {pending && pending.weeksUnanswered > 0
             ? ` Sleeper did not answer for ${pending.weeksUnanswered} of the weeks we asked about, so this is short of a full read.`
             : ''}
@@ -659,11 +664,12 @@ export function TradeInbox(props: {
 
   return (
     <div className="af-tc-inbox">
+      {view !== 'timeline' ? <>
       {pending?.scanned && pending.weeksRequested ? (
         <p className="af-tc-scan-receipt">
-          <b>Live trade import check</b>
+          <b>Public transaction feed check</b>
           Sleeper answered {pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} of {pending.weeksRequested} transaction weeks.
-          Pending offers appear here during their live review window; accept, decline, or counter them in Sleeper. You do not enter them by hand.
+          Offers returned by that feed appear here. Sleeper may show additional live proposals in its app; accept, decline, or counter them there.
         </p>
       ) : null}
       {column('Inbox', inbox, 'Nothing waiting on you right now.')}
@@ -706,6 +712,9 @@ export function TradeInbox(props: {
         </p>
       ) : null}
 
+      </> : null}
+
+      {view !== 'offers' ? (
       <section className="af-tc-timeline" aria-labelledby="trade-timeline-title">
         <header className="af-tc-timeline-head">
           <div>
@@ -829,6 +838,7 @@ export function TradeInbox(props: {
           </div>
         )}
       </section>
+      ) : null}
     </div>
   )
 }
