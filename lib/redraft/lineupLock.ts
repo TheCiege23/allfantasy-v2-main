@@ -22,6 +22,24 @@ import type { PrismaClient } from '@prisma/client'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
+import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
+
+/** `RedraftSeason.sport` stores the config key `NCAAFB`; every other layer says `NCAAF`. */
+function isNcaafLockSport(sport: string): boolean {
+  const s = String(sport).toUpperCase()
+  return s === 'NCAAF' || s === 'NCAAFB'
+}
+
+/**
+ * The keys a player's team is looked up under in `WeekKickoffs.byTeam`, best first. One key for
+ * every sport but NCAAF, which tries the exact school (`x:`) before the loose form (`l:`) — see the
+ * NCAAF branch of `buildWeekKickoffMap` for why the loose form is not always present.
+ */
+export function lockTeamLookupKeys(sport: string, team: string | null | undefined): string[] {
+  if (!isNcaafLockSport(sport)) return [normalizeLockTeam(sport, team)]
+  const { exact, loose } = cfbdScheduleTeamKeys(team)
+  return [exact ? `x:${exact}` : '', loose ? `l:${loose}` : ''].filter(Boolean)
+}
 
 export type LineupLockMode = 'per_player_kickoff' | 'first_game_of_week' | 'manual'
 
@@ -154,6 +172,72 @@ export async function buildWeekKickoffMap(
    * complete slate — the Rolling Insights schedule the finalizer reads — cannot stand in either:
    * `ScheduleGame` stores no team names, so there is nothing to match a player's team against.
    */
+  /*
+   * 🛑 NCAAF PLAYERS NEVER LOCKED — a college lineup stayed editable all week, after kickoff.
+   *
+   * NCAAF carries a real week, so kickoffs come from that week's games, like NFL. Two things differ:
+   *
+   *   - THE SOURCE IS CFBD's schedule rows (`source: 'cfbd'`), not the ranked live-score feeds
+   *     `readWeekGames` reads. Measured on the test DB (2026 week 4): CFBD 285 games, TheSportsDB 123
+   *     — a lock read from the partial feed would leave most teams unlocked with no warning. And
+   *     CFBD's school spellings are the ones the pool's own crosswalk is built on; ESPN's carry
+   *     mascots ("Vanderbilt Commodores") that match nothing.
+   *   - THE TEAM NAMES DIFFER IN KIND. A drafted player's team is Rolling Insights' formal name
+   *     ("University of Mississippi"); CFBD says "Ole Miss". Both sides go through the crosswalk the
+   *     draft-pool logos already use (`cfbdScheduleTeamKeys`), which keeps "Miami University" (Ohio)
+   *     apart from "University of Miami". A team it cannot place fails open, as a bye does.
+   *
+   * ⚠ THE LOOSE KEY IS DROPPED WHEREVER TWO SCHOOLS SHARE IT, AND THAT IS JUDGED OVER THE WHOLE
+   * SEASON, NOT THIS WEEK. "Illinois" and D-III "Illinois College" are both "illinois" loosely.
+   * Judged per week, the week Illinois is on a bye would leave the loose key to Illinois College
+   * alone — and every Illinois player would lock at the wrong school's kickoff. Exact names are
+   * always kept; an Illinois player ("University of Illinois" -> "Illinois") matches exactly.
+   *
+   * ⚠ A KICKOFF TIME CFBD HAS NOT ANNOUNCED IS STORED AS MIDNIGHT EASTERN ON GAME DAY. Measured on the
+   * test DB's schedule (fetched 2026-09-03): about 40 games a week in weeks 4-9 still carried it. Those
+   * players lock at the start of game day — early, never late — until the schedule refresh brings the
+   * real time. Failing a TBD game open instead would let a lineup change after the real kickoff.
+   */
+  if (isNcaafLockSport(sport)) {
+    const [games, seasonTeams] = await Promise.all([
+      prisma.sportsGame.findMany({
+        where: { sport: 'NCAAF', source: 'cfbd', season: args.season, week: args.week, seasonType: 'regular', startTime: { not: null } },
+        select: { homeTeam: true, awayTeam: true, startTime: true },
+      }) as Promise<Array<{ homeTeam: string; awayTeam: string; startTime: Date | null }>>,
+      prisma.sportsGame.findMany({
+        where: { sport: 'NCAAF', source: 'cfbd', season: args.season },
+        select: { homeTeam: true, awayTeam: true },
+        distinct: ['homeTeam', 'awayTeam'],
+      }) as Promise<Array<{ homeTeam: string; awayTeam: string }>>,
+    ])
+    const schoolsByLoose = new Map<string, Set<string>>()
+    for (const g of seasonTeams) {
+      for (const team of [g.homeTeam, g.awayTeam]) {
+        const { exact, loose } = cfbdScheduleTeamKeys(team)
+        if (!loose) continue
+        schoolsByLoose.set(loose, (schoolsByLoose.get(loose) ?? new Set()).add(exact))
+      }
+    }
+    const setEarliest = (key: string, kickoff: Date) => {
+      const existing = byTeam.get(key)
+      if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
+    }
+    for (const g of games) {
+      if (!g.startTime) continue
+      const kickoff = g.startTime
+      if (!firstKickoff || kickoff.getTime() < firstKickoff.getTime()) firstKickoff = kickoff
+      for (const team of [g.homeTeam, g.awayTeam]) {
+        const { exact, loose } = cfbdScheduleTeamKeys(team)
+        if (exact) setEarliest(`x:${exact}`, kickoff)
+        if (loose && (schoolsByLoose.get(loose)?.size ?? 0) <= 1) setEarliest(`l:${loose}`, kickoff)
+      }
+    }
+    if (games.length === 0) {
+      warnings.push(`No NCAAF (CFBD) games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
+    }
+    return { byTeam, firstKickoff, warnings }
+  }
+
   if (sport !== 'NFL' && DATE_WINDOWED_SPORTS.includes(sport) && !RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
@@ -187,7 +271,7 @@ export async function buildWeekKickoffMap(
 
   if (sport !== 'NFL') {
     // Named from the lists, so this cannot go stale again when the next sport joins.
-    const lockable = ['NFL', ...DATE_WINDOWED_SPORTS.filter((s) => !RI_SCHEDULE_SLATE_SPORTS.includes(s))]
+    const lockable = ['NFL', 'NCAAF', ...DATE_WINDOWED_SPORTS.filter((s) => !RI_SCHEDULE_SLATE_SPORTS.includes(s))]
     warnings.push(`Lineup lock schedule lookup is wired for ${lockable.join(', ')} only; ${args.sport} players are not locked.`)
     return { byTeam, firstKickoff, warnings }
   }
@@ -275,7 +359,10 @@ function stampLineupLock<T extends LockablePlayer>(
       (o.rosterId == null || o.rosterId === scope.rosterId) &&
       (o.playerId == null || o.playerId === player.playerId),
   )
-  const playerKickoffUtc = ctx.kickoffs.byTeam.get(normalizeLockTeam(ctx.sport, player.team)) ?? null
+  const playerKickoffUtc =
+    lockTeamLookupKeys(ctx.sport, player.team)
+      .map((key) => ctx.kickoffs.byTeam.get(key))
+      .find((kickoff): kickoff is Date => kickoff != null) ?? null
   const isLocked = computeLineupLock({
     mode: ctx.mode,
     now: scope.now,

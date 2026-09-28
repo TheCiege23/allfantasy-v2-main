@@ -19,80 +19,13 @@
  */
 import { prisma } from '@/lib/prisma'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
+import { COLLEGE_NAME_ALIASES, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
+
+// Re-exported: callers imported it from here before the crosswalk moved to its own module.
+export { looseTeamKey }
 
 /** Sources whose logos are real crests, best first. */
 const LOGO_SOURCE_ORDER = ['thesportsdb', 'api_football', 'cfbd', 'api_sports', 'rolling_insights']
-
-function exactKey(value: string | null | undefined): string {
-  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-/**
- * Rolling Insights' formal college names that no suffix rule can reach, mapped to the name the
- * logo sources use. Checked on the EXACT name, before the loose rule — which is what makes
- * "Miami University" (Ohio) safe: loosely it is "miami", which is the Florida school.
- */
-const COLLEGE_NAME_ALIASES: Record<string, string> = {
-  'miami university': 'Miami (OH)',
-  'united states naval academy': 'Navy',
-  'united states military academy': 'Army',
-  'united states air force academy': 'Air Force',
-  'university of colorado boulder': 'Colorado',
-  'university of north carolina at charlotte': 'Charlotte',
-  'university of north carolina at chapel hill': 'North Carolina',
-  'university of nebraska-lincoln': 'Nebraska',
-  'university of southern mississippi': 'Southern Miss',
-  'university of louisiana at monroe': 'Louisiana-Monroe',
-  'university of louisiana at lafayette': 'Louisiana',
-  'louisiana state university': 'LSU',
-  'texas christian university': 'TCU',
-  'university of central florida': 'UCF',
-  'georgia institute of technology': 'Georgia Tech',
-  'university of alabama at birmingham': 'UAB',
-  'north carolina state university': 'NC State',
-  'university of southern california': 'USC',
-  'university of california, los angeles': 'UCLA',
-  'university of california, berkeley': 'California',
-  'university of california, davis': 'UC Davis',
-  'the state university of new york at buffalo': 'Buffalo',
-  'university at albany': 'UAlbany',
-  'university of texas at el paso': 'UTEP',
-  'university of texas at san antonio': 'UTSA',
-  'university of texas at austin': 'Texas',
-  'pennsylvania state university': 'Penn State',
-  'university of nevada, las vegas': 'UNLV',
-  'university of nevada, reno': 'Nevada',
-  'university of illinois': 'Illinois',
-  'university of wisconsin-madison': 'Wisconsin',
-  'university of hawaii at manoa': "Hawai'i",
-  'bowling green state university': 'Bowling Green',
-  'middle tennessee state university': 'Middle Tennessee',
-  'california state university, fresno': 'Fresno State',
-  'california state university, sacramento': 'Sacramento State',
-  'california polytechnic state university': 'Cal Poly',
-  'brigham young university': 'BYU',
-  'university of massachusetts': 'UMass',
-  'university of connecticut': 'UConn',
-  'university of mississippi': 'Ole Miss',
-  'north carolina agricultural and technical state university': 'North Carolina A&T',
-  'alabama agricultural and mechanical university': 'Alabama A&M',
-  'virginia commonwealth university': 'VCU',
-}
-
-export function looseTeamKey(value: string | null | undefined): string {
-  return exactKey(value)
-    .replace(/&/g, ' and ')
-    .replace(/[.'’]/g, '')
-    .replace(/[(),–-]/g, ' ')
-    .replace(/^the /, '')
-    .replace(/^university of /, '')
-    .replace(/ university$/, '')
-    .replace(/ college$/, '')
-    .replace(/^(afc|fc|cf|ac) /, '')
-    .replace(/ (afc|fc|cf|sc)$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 type TeamRow = {
   externalId: string
