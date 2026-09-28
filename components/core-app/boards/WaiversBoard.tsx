@@ -238,6 +238,24 @@ export function WaiversBoard({ data, allHref, totalLeagues }: WaiversBoardProps)
         blurb="The single best available player on each of your wires, ranked by how many points the add actually gains you over the player you would drop."
       />
 
+      {/*
+        The projection feed holds ONE week (see `WaiversBoardData.weekPlayed`). Once most of it has
+        kicked off, the gains below describe a week that is nearly over — say so, and say which week
+        a claim made now is actually for.
+      */}
+      {data.rows.length > 0 && data.at && data.weekPlayed && data.weekPlayed.total > 0 &&
+      data.weekPlayed.played / data.weekPlayed.total >= 0.75 ? (
+        <p className="af-bd-note" data-tone="warn" data-testid="waivers-spent-week">
+          <strong>
+            Most of week {data.at.week} has been played ({data.weekPlayed.played} of {data.weekPlayed.total}{' '}
+            games).
+          </strong>{' '}
+          These gains are week {data.at.week} projections — the projection feed has not published week{' '}
+          {data.at.week + 1} yet, and a claim that processes now is for week {data.at.week + 1}. Read them
+          as each player&apos;s current role, not next week&apos;s points.
+        </p>
+      ) : null}
+
       {data.rows.length > 0 ? (
         <section className="af-bd-sec" aria-labelledby="af-wv-board">
           <SectionHead
