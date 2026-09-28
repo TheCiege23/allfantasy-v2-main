@@ -387,7 +387,14 @@ function describeWhatDecidesIt(
         : 'The regular season is over; the seeding is already what it is.'
   }
   if (you.playoffPct >= 99) return `In all but a rounding error. The last ${weeksRemaining} are about seeding.`
-  if (you.playoffPct <= 1) return `Out in all but ${(100 - you.playoffPct).toFixed(0)}% of runs.`
+  /*
+   * ⚠ THIS READ "Out in all but ${100 - pct}% of runs" — i.e. "Out in all but 99% of runs" at 1%
+   * and "Out in all but 100% of runs" at 0%, which says the opposite of what it means. Measured on
+   * the production standings screen 2026-09-28.
+   */
+  if (you.playoffPct <= 1) {
+    return you.playoffPct < 0.5 ? 'Out in every simulated run.' : 'In the field in about 1 run in 100.'
+  }
 
   if (m) {
     const target = m.winsForSafe ?? m.winsForLikely
