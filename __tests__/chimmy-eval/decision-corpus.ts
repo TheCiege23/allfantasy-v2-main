@@ -49,7 +49,7 @@ import type { LineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
  * input changed. `synthetic` cases are written to cover a rule, and say which.
  */
 
-export type LeagueFormat = 'redraft' | 'dynasty' | 'best_ball' | 'idp' | 'guillotine'
+export type LeagueFormat = 'redraft' | 'dynasty' | 'best_ball' | 'best_ball_dynasty' | 'idp' | 'guillotine' | 'survivor_guillotine' | 'survivor'
 export type CaseSource = 'owner' | 'counterfactual' | 'synthetic'
 
 /** What a verdict looks like once parsed from the answer text. */
@@ -78,6 +78,8 @@ export type LeagueSnapshotFixture = {
   leagueVariant: string | null
   isDynasty: boolean
   leagueType: string | null
+  settings: Record<string, unknown>
+  bestBallMode: boolean
 }
 
 export type EngineFixture = {
@@ -124,14 +126,32 @@ const NO_ODDS: PlayoffOddsNotComputed = {
   reason: 'Playoff odds are not computed for a hypothetical trade in this fixture.',
 }
 
+/**
+ * Each format shaped the way production stores it (read-only query, 2026-09-28):
+ * - best ball is ONLY the `bestBallMode` column; `leagueType` reads `redraft` (40 leagues) or
+ *   `dynasty` (18, five of them `DYNASTY_IDP`). A fixture that put "best_ball" in `leagueType`
+ *   would test a league shape that does not exist.
+ * - guillotine is `leagueType = 'guillotine'`, usually with a confirmed concept in settings;
+ *   one is confirmed as `survivor_guillotine`. Survivor is `leagueType = 'survivor'`.
+ */
 export function snapshot(format: LeagueFormat): LeagueSnapshotFixture {
+  const dynasty = format === 'dynasty' || format === 'idp' || format === 'best_ball_dynasty'
+  const leagueType =
+    format === 'guillotine' || format === 'survivor_guillotine' ? 'guillotine'
+      : format === 'survivor' ? 'survivor'
+        : dynasty ? 'dynasty' : 'redraft'
   return {
     id: 'proven-league',
     sport: 'NFL',
     platform: 'sleeper',
-    leagueVariant: format === 'best_ball' ? 'best_ball' : format === 'guillotine' ? 'guillotine' : null,
-    isDynasty: format === 'dynasty' || format === 'idp',
-    leagueType: format === 'dynasty' || format === 'idp' ? 'dynasty' : 'redraft',
+    leagueVariant: format === 'idp' || format === 'best_ball_dynasty' ? 'DYNASTY_IDP' : null,
+    isDynasty: dynasty,
+    leagueType,
+    settings:
+      format === 'guillotine' ? { leagueTypeConfirmation: { type: 'guillotine' } }
+        : format === 'survivor_guillotine' ? { leagueTypeConfirmation: { type: 'survivor_guillotine' } }
+          : {},
+    bestBallMode: format === 'best_ball' || format === 'best_ball_dynasty',
   }
 }
 
@@ -471,12 +491,35 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     engine: {
       trade: { 'Should I trade Kyren Williams for Garrett Wilson in my guillotine league?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) },
     },
-    expect: { kind: 'trade', status: 'needs_data', gap: null, verdict: 'none', billing: 'free' },
-    gaps: {
-      status: { today: 'ready', why: 'A guillotine league has no trade market, but nothing on the decision path reads the league variant, so a trade verdict is produced.' },
-      verdict: { today: 'YES', why: 'Same cause: a YES for a trade the league cannot make.' },
-      billing: { today: 'charge', why: 'Same cause: the user is charged for it.' },
-    },
+    // Was READY, YES and CHARGED until `decisionFormatGate` (2026-09-28).
+    expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none', says: ['does not allow trades', 'not charged'] },
+  },
+  {
+    id: 'survivor-guillotine-trade-target',
+    format: 'survivor_guillotine',
+    source: 'synthetic',
+    // The trade-TARGET shape, which the chat route answers before the shared service. See the route test.
+    question: "Should I trade for Ja'Marr Chase?",
+    engine: {},
+    expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none' },
+  },
+  {
+    id: 'survivor-trade-screenshot',
+    format: 'survivor',
+    source: 'synthetic',
+    question: 'Should I accept this trade?',
+    screenshot: 'Trade gives: Kyren Williams\nTrade receives: Garrett Wilson',
+    engine: { trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) } },
+    expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none' },
+  },
+  {
+    id: 'guillotine-waiver-still-answered',
+    format: 'guillotine',
+    source: 'synthetic',
+    // The gate refuses trades, not the league: a waiver move is the ONE move a guillotine has.
+    question: 'Should I add Jaylen Warren and drop Tyjae Spears?',
+    engine: { waiver: waiver() },
+    expect: { kind: 'waiver', status: 'ready', gap: 'none', verdict: 'none', billing: 'charge' },
   },
 
   // ── Pending offers ─────────────────────────────────────────────────────────────────────
@@ -596,12 +639,8 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     source: 'synthetic',
     question: 'Who should I start this week?',
     engine: { lineup: lineupReady() },
-    expect: { kind: 'lineup', status: 'needs_data', gap: null, verdict: 'none', billing: 'free', says: ['Best Ball'] },
-    gaps: {
-      status: { today: 'ready', why: 'Best Ball picks the scoring lineup automatically. `lineupActionEvidence` says so for the model path, but the decision lane never reads the format, so it computes and records a start/sit "move".' },
-      billing: { today: 'charge', why: 'Same cause: the user is charged for a lineup change they cannot make.' },
-      evidence: { today: 'missing: Best Ball', why: 'Same cause.' },
-    },
+    // Was READY and CHARGED as a lineup move until `decisionFormatGate` (2026-09-28).
+    expect: { kind: 'lineup', status: 'needs_data', gap: 'best_ball_auto_lineup', verdict: 'none', billing: 'free', says: ['Best Ball', 'not charged'] },
   },
   {
     id: 'best-ball-start-sit',
@@ -609,12 +648,33 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     source: 'synthetic',
     question: "Should I start Ja'Marr Chase or Justin Jefferson in best ball?",
     engine: { start: startSit() },
-    expect: { kind: 'lineup', status: 'needs_data', gap: null, verdict: 'none', billing: 'free' },
-    gaps: {
-      status: { today: 'ready', why: 'As best-ball-who-to-start.' },
-      verdict: { today: "start:Ja'Marr Chase", why: 'A start/sit call in a league that sets its own lineup.' },
-      billing: { today: 'charge', why: 'As best-ball-who-to-start.' },
-    },
+    expect: { kind: 'lineup', status: 'needs_data', gap: 'best_ball_auto_lineup', verdict: 'none', billing: 'free' },
+  },
+  {
+    id: 'best-ball-dynasty-idp-optimize',
+    format: 'best_ball_dynasty',
+    source: 'synthetic',
+    // The production shape that no format test can see: leagueType 'dynasty', variant DYNASTY_IDP.
+    question: 'Optimize my lineup',
+    engine: { lineup: lineupReady() },
+    expect: { kind: 'lineup', status: 'needs_data', gap: 'best_ball_auto_lineup', verdict: 'none', billing: 'free' },
+  },
+  {
+    id: 'best-ball-trade-still-answered',
+    format: 'best_ball',
+    source: 'synthetic',
+    // Best-ball trade permissions are UNVERIFIED on imports, so the gate must not claim them away.
+    question: 'Should I trade Kyren Williams for Garrett Wilson?',
+    engine: { trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) } },
+    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge' },
+  },
+  {
+    id: 'best-ball-waiver-still-answered',
+    format: 'best_ball',
+    source: 'synthetic',
+    question: 'Should I add Jaylen Warren and drop Tyjae Spears?',
+    engine: { waiver: waiver() },
+    expect: { kind: 'waiver', status: 'ready', gap: 'none', verdict: 'none', billing: 'charge' },
   },
 
   // ── Waiver ─────────────────────────────────────────────────────────────────────────────
