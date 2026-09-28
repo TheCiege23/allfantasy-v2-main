@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY } from '@/lib/chimmy/currentRequestFocus'
 import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
+import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
+import { compoundDecision } from '@/lib/chimmy/decisionClauses'
 import { chimmyDecisionKind, decisionAnswerMeta, decisionAnswer as createDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
 import { z } from 'zod'
 import { getServerSession } from 'next-auth'
@@ -2765,8 +2767,18 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    *     answer, never for us saying we have none. A decided verdict is charged below like any other.
    *
    * 🛑 `leagueSnapshot.id` ONLY. The verdict reads every roster in the league.
+   *
+   * ⚠ NOT IN A LEAGUE WITH NO TRADES. This read runs BEFORE `prepareChimmyDecisionAnswer` and is
+   * charged when it decides, so it would sell a Survivor-Guillotine or Tournament manager a trade
+   * verdict the shared format gate refuses. Skipping it hands the question to that gate, which
+   * answers free. (Plain guillotine and survivor leagues DO trade, per the concept catalog.)
+   *
+   * ⚠ NOR ON A MESSAGE HOLDING SEVERAL DECISIONS. It reads the whole message, and the shared service
+   * answers a compound question clause by clause (`lib/chimmy/decisionClauses.ts`).
    */
-  const tradeTargetQuestion = leagueSnapshot ? parseTradeTargetQuestion(message) : null
+  const tradeTargetQuestion = leagueSnapshot && !leagueForbidsTrades(leagueSnapshot) && !compoundDecision(message)
+    ? parseTradeTargetQuestion(message)
+    : null
   const tradeTargetRead: TradeTargetResult | null =
     tradeTargetQuestion && leagueSnapshot && !hasImage
       ? await buildTradeTargetVerdict({
@@ -2797,9 +2809,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       }
     : null
   if (tradeTargetResult?.status === 'unresolved') {
+    // Says it in the text, as every free decision answer now does (`prepareChimmyDecisionAnswer`'s gap).
+    const unresolvedText = `${tradeTargetResult.detail}\nThis answer is not charged.`
     return NextResponse.json({
-      response: tradeTargetResult.detail,
-      result: tradeTargetResult.detail,
+      response: unresolvedText,
+      result: unresolvedText,
       source: 'chimmy_trade_target_verdict',
       sessionId,
       meta: {

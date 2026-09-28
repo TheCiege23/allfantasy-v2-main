@@ -10,7 +10,7 @@ import { injuryCoverageFor, resolveInjuryFacts } from '@/lib/injuries/injuryRead
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { myRosterCandidates } from './myRoster'
-import { translateRostersByLeague } from './rosterIdSpace'
+import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { fragilePositions, rosterSlots, topStack } from './portfolioInsights'
 import { isAtRisk, isRuledOut } from './injuryStatus'
@@ -205,7 +205,18 @@ export async function loadScenarioModel(args: {
   const rosteredIds = [...new Set(matched.flatMap((m) => [...m.slots.keys()]))]
   if (rosteredIds.length === 0) {
     return {
-      model: { ...base, basisWeek: basis.week, refusal: 'Roster changes cannot be priced here: no rosters are synced for this league.' },
+      model: {
+        ...base,
+        basisWeek: basis.week,
+        /*
+         * A foreign-id league (Fleaflicker/MFL/Fantrax/Yahoo) arrives here stripped by the translator —
+         * its rosters ARE synced, we just cannot read them as players we know. Saying "no rosters are
+         * synced" would send a manager to re-import something that already imported fine.
+         */
+        refusal: isForeignIdSpace(args.platform)
+          ? "Roster changes cannot be priced here: this league's rosters use player ids we cannot match to our player table yet."
+          : 'Roster changes cannot be priced here: no rosters are synced for this league.',
+      },
       injuryFeedNote: null,
     }
   }

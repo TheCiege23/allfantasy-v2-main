@@ -97,6 +97,21 @@ describe('generateChimmyPrivateReply grounding', () => {
     expect(h.buildLeagueStandingsContext).not.toHaveBeenCalled()
   })
 
+  /*
+   * The loader is `(userId, leagueId)`. This file's default mock admits ANY arguments, so a swapped
+   * call passed every test here while the real membership check refused every member (2026-08-26 to
+   * 2026-09-28). This mock admits only the real member, the way `resolveLeagueMembership` does.
+   */
+  it('checks membership as (userId, leagueId), the loader\'s real argument order', async () => {
+    h.loadLeagueGroundingForUser.mockImplementation(async (userId: string, leagueId: string) =>
+      userId === 'u1' && leagueId === 'l1' ? { ok: true, snapshot: { id: 'l1' } } : { ok: false, reason: 'not_member' })
+
+    await generateChimmyPrivateReply('@chimmy standings?', { leagueId: 'l1', userId: 'u1' })
+
+    expect(h.loadLeagueGroundingForUser).toHaveBeenCalledWith('u1', 'l1')
+    expect(systemPrompt()).toContain('STANDINGS: Casey 5-1')
+  })
+
   it('treats a thrown access check as no access', async () => {
     h.loadLeagueGroundingForUser.mockRejectedValue(new Error('db down'))
 

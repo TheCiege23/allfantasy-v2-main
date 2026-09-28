@@ -22,6 +22,8 @@ import type { LineupResult } from '@/lib/redraft-war-room/redraftLineupEngine'
 import type { WaiverResult } from '@/lib/redraft-war-room/redraftWaiverEngine'
 import { PRIORITY_GUIDANCE_LABEL, type WaiverTier } from '@/lib/redraft-war-room/redraftWaiverScoring'
 import type { TradeAnalysis, TradeFinderResult } from '@/lib/redraft-war-room/redraftTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'lineup' | 'waivers' | 'trade-analyze' | 'trade-find' | null
 
@@ -60,6 +62,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [lineup, setLineup] = useState<LineupResult | null>(null)
   const [waivers, setWaivers] = useState<WaiverResult | null>(null)
   const [tradeAnalysis, setTradeAnalysis] = useState<TradeAnalysis | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<TradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
@@ -101,14 +104,12 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
             .split(',')
             .map((id) => id.trim())
             .filter(Boolean)
-          setTradeAnalysis(
-            (
-              await analyzeRedraftWarRoomTrade(leagueId, {
-                outgoingPlayerIds: outgoing ? [outgoing] : [],
-                incomingPlayerIds: incoming,
-              })
-            ).tradeAnalysis,
-          )
+          const analyzed = await analyzeRedraftWarRoomTrade(leagueId, {
+            outgoingPlayerIds: outgoing ? [outgoing] : [],
+            incomingPlayerIds: incoming,
+          })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallbackOutgoing) setTradeOutgoingId(fallbackOutgoing)
         }
         else if (which === 'trade-find') setTradeFinder((await findRedraftWarRoomTrades(leagueId)).tradeFinder)
@@ -403,12 +404,20 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
           </div>
           {tradeAnalysis ? (
             <div className="mt-2 space-y-1" data-testid="redraft-war-room-trade-analyze-result">
-              <p className="font-semibold text-white/80">
-                Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}
-                {tradeAnalysis.valueDelta != null ? (
-                  <span className="text-white/40"> - value {tradeAnalysis.valueDelta}</span>
-                ) : null}
-              </p>
+              {/*
+                🛑 THE GRADE IS THE VERDICT (2026-09-28). The engine's own accept/reject/neutral and its
+                private value delta show only when the route sent no grade at all.
+              */}
+              {tradeGrade ? (
+                <WarRoomTradeGradeLine grade={tradeGrade} testId="redraft-war-room-trade-grade" />
+              ) : (
+                <p className="font-semibold text-white/80">
+                  Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}
+                  {tradeAnalysis.valueDelta != null ? (
+                    <span className="text-white/40"> - value {tradeAnalysis.valueDelta}</span>
+                  ) : null}
+                </p>
+              )}
               {tradeAnalysis.explanationFacts.map((f) => (
                 <p key={f}>{f}</p>
               ))}

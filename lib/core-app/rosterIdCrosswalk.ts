@@ -2,6 +2,26 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
+import { isForeignIdSpace } from './rosterIdSpace'
+
+/**
+ * The id to look a roster id up by on a Sleeper-keyed table — or null, when there is none.
+ *
+ * 🛑 THIS REPLACES `crosswalk.get(id) ?? id`, WHICH WAS WRONG FOR EVERY FOREIGN PLATFORM. The
+ * fallback exists because a Sleeper league's roster id IS its Sleeper id (and an unmatched ESPN
+ * id is long and collides with nothing). A Fleaflicker/MFL/Fantrax/Yahoo id is a short number in
+ * Sleeper's range — 44 of 248 on the one production Fleaflicker league ARE real Sleeper ids — so
+ * the fallback looked it up as a Sleeper id and My Team, the matchup board and its projections
+ * named and priced a stranger. For a foreign league an unmapped id resolves to NOTHING, and the
+ * caller's own honest fallback (provider name, "could not identify", unprojected) takes over.
+ */
+export function sleeperLookupId(
+  platform: string | null | undefined,
+  rosterId: string,
+  crosswalk: ReadonlyMap<string, string>,
+): string | null {
+  return crosswalk.get(rosterId) ?? (isForeignIdSpace(platform) ? null : rosterId)
+}
 
 /**
  * Translate a platform's own roster ids into Sleeper ids.

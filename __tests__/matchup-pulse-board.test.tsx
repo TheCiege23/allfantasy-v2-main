@@ -460,6 +460,23 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
     expect(text).toMatch(/our gap, not theirs/i)
   })
 
+  /* Production 2026-09-28: 7 native leagues in setup were reported as "our gap". */
+  it('says leagues that have not drafted are not started, and does not call them our gap', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          leading: [row()],
+          notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 7 },
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('7 have not started yet')
+    expect(text).not.toMatch(/our gap/i)
+  })
+
   it('still says "no claimed team" when there genuinely is none', () => {
     const { container } = render(
       <MatchupPulseBoard

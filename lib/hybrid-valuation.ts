@@ -87,6 +87,8 @@ export interface PricedAsset {
     | 'curve'
     | 'idp-vorp'
     | 'kicker-flat'
+    /** A team defense, priced as a position by `lib/defense-values/leagueDefenseValue.ts` (measured). */
+    | 'dst-flat'
     | 'idp-flat-baseline'
     | 'analytics-lifetime'
     /** A college prospect held in a devy/C2C league, priced by `lib/devy/devyOptionValue.ts` (measured). */

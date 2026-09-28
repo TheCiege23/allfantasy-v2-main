@@ -126,3 +126,25 @@ describe('rail projections use the roster availability rules', () => {
     expect(result.byLeague.get('L2')?.sides.get('team')?.projected).toBe(25)
   })
 })
+
+/*
+ * A foreign-id league prices NOTHING. Fleaflicker ids are short numbers in Sleeper's range (44 of 248
+ * on the one production Fleaflicker league ARE Sleeper ids); the rail skips the crosswalk, so its
+ * starters used to price whichever Sleeper players shared those numbers into the side's total.
+ */
+describe('rail projections — a foreign-id league', () => {
+  it('prices no starter of a Fleaflicker league, however many of its ids are also Sleeper ids', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([{ ...meta('L1'), platform: 'fleaflicker' }])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters }])
+    const result = await loadRailProjections(fixtures())
+    expect(result.byLeague.get('L1')?.sides.get('team')?.projected ?? null).toBeNull()
+    expect(h.projections).not.toHaveBeenCalled()
+  })
+
+  it('control: the same starters in a Sleeper league are priced', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([{ ...meta('L1'), platform: 'sleeper' }])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters }])
+    const result = await loadRailProjections(fixtures())
+    expect(result.byLeague.get('L1')?.sides.get('team')?.projected).toBe(34)
+  })
+})

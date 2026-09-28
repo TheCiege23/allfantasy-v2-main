@@ -159,8 +159,9 @@ export function gradeNcaafRedraftDeal(args: {
   }
 
   const lines: TradeGradeLine[] = [
-    ...give.priced.map((p) => ({ side: 'give' as const, name: p.name, marketValue: round1(p.value), leagueValue: round1(p.value), source: 'ncaaf-redraft-vorp' })),
-    ...get.priced.map((p) => ({ side: 'get' as const, name: p.name, marketValue: round1(p.value), leagueValue: round1(p.value), source: 'ncaaf-redraft-vorp' })),
+    // College points over replacement, computed at grading from projections — no market date (`./valueSource.ts`).
+    ...give.priced.map((p) => ({ side: 'give' as const, name: p.name, marketValue: round1(p.value), leagueValue: round1(p.value), source: 'ncaaf-redraft-vorp', valueSource: 'ncaaf_projection' as const, valueAsOf: null })),
+    ...get.priced.map((p) => ({ side: 'get' as const, name: p.name, marketValue: round1(p.value), leagueValue: round1(p.value), source: 'ncaaf-redraft-vorp', valueSource: 'ncaaf_projection' as const, valueAsOf: null })),
   ]
   /*
    * ⚠ A SIDE WORTH NOTHING OVER REPLACEMENT IS A REAL ANSWER, NOT A MISSING ONE. `gradeTrade` refuses

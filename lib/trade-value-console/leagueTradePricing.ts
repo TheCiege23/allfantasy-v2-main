@@ -5,7 +5,7 @@ import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcChartDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
@@ -415,7 +415,7 @@ export async function resolveAssets(
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
-      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
+      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
@@ -423,7 +423,7 @@ export async function resolveAssets(
       const src: TradeConsolePlayerLine['pricedSource'] =
         pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
-          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat'
+          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat' || pa.source === 'dst-flat'
             ? 'idp_league'
             : 'unknown'
       lines.push(
@@ -523,6 +523,8 @@ export type LeagueTradeChart = {
   /** The reception weight the chart was REQUESTED with — `scoringFit` measures against this. */
   pprNfl: 0 | 0.5 | 1
   fcPlayers: FantasyCalcPlayer[]
+  /** When `fcPlayers` was synced from FantasyCalc (ISO) — the age of every market value on the chart. */
+  fcSyncedAt?: string | null
   nflCtx: ValuationContext
   valuationGaps?: string[]
 }
@@ -597,7 +599,7 @@ export async function resolveLeagueTradeChart(args: {
    * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
    * retired, this number has to come back DOWN to 6 h or lower, not up.
    */
-  const fcPlayers = await getFantasyCalcValuesDbFirst(
+  const { players: fcPlayers, syncedAt: fcSyncedAt } = await getFantasyCalcChartDbFirst(
     {
       isDynasty: chartIsDynasty,
       numQbs: isSuperFlex ? 2 : 1,
@@ -647,6 +649,7 @@ export async function resolveLeagueTradeChart(args: {
     waiverBudget,
     pprNfl,
     fcPlayers,
+    fcSyncedAt,
     nflCtx,
     valuationGaps: coverage.gaps,
   }

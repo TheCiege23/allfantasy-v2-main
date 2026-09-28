@@ -10,7 +10,7 @@ import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/load
 import { startingSlots, slotForStarterIndex, canFillSlot, shareAnySlot } from './slotEligibility'
 import { leagueDisplayName } from './leagueHome'
 import { pickStartOver, type StartOver } from './startOver'
-import { rosterIdSpaceOf, translateRostersToSleeperIds } from './rosterIdSpace'
+import { isForeignIdSpace, translateRostersToSleeperIds } from './rosterIdSpace'
 import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 export type { StartOver } from './startOver'
 
@@ -220,7 +220,7 @@ export async function getPlayerImpact(
      */
     const platform = t.league?.platform
     const bridged = bridgedLeagues.get(t.leagueId)
-    if (rosterIdSpaceOf(platform) === 'other' && !bridged?.readable) continue
+    if (isForeignIdSpace(platform) && !bridged?.readable) continue
     const candidates = [t.platformUserId, t.externalId, userId].filter(Boolean) as string[]
     const found = await prisma.roster.findFirst({
       where: { leagueId: t.leagueId, platformUserId: { in: candidates } },

@@ -239,19 +239,31 @@ export async function getFantasyCalcValuesDbFirst(
   settings: FantasyCalcSettings,
   options?: { maxStaleMs?: number }
 ): Promise<FantasyCalcPlayer[]> {
+  return (await getFantasyCalcChartDbFirst(settings, options)).players
+}
+
+/**
+ * `getFantasyCalcValuesDbFirst`, plus WHEN the chart was synced from FantasyCalc — so a trade grade
+ * can record the age of every market value it was taken on (2026-09-28). Same freshness rule.
+ */
+export async function getFantasyCalcChartDbFirst(
+  settings: FantasyCalcSettings,
+  options?: { maxStaleMs?: number }
+): Promise<{ players: FantasyCalcPlayer[]; syncedAt: string | null }> {
   const fromDb = await readFantasyCalcValuesFromDb(settings, { allowStale: true })
   const maxStale = options?.maxStaleMs ?? 1000 * 60 * 60 * 6
 
   if (fromDb.players.length > 0) {
     const syncedMs = fromDb.syncedAt ? Date.now() - new Date(fromDb.syncedAt).getTime() : Infinity
     if (!fromDb.stale || syncedMs <= maxStale) {
-      return fromDb.players
+      return { players: fromDb.players, syncedAt: fromDb.syncedAt }
     }
   }
 
   const fresh = await fetchFantasyCalcValues(settings)
-  await writeFantasyCalcValuesToDb(settings, fresh)
-  return fresh
+  const syncedAt = new Date()
+  await writeFantasyCalcValuesToDb(settings, fresh, { syncedAt })
+  return { players: fresh, syncedAt: syncedAt.toISOString() }
 }
 
 /**

@@ -22,11 +22,17 @@ const code = (rel: string) =>
 const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/trade-value-console/runTradeConsoleAnalysis.ts', entry: /gradePricedSides\(/, what: 'the Trade Center verdict' },
   { file: 'app/api/league/trades-panel/route.ts', entry: /gradeDeal\(/, what: 'pending offers on the league page and the inbox' },
+  /* 2026-09-28: the War Room's trade analyzer, redraft and dynasty (see lib/decision-os/trade/warRoomTradeGrade.ts). */
+  { file: 'lib/decision-os/trade/warRoomTradeGrade.ts', entry: /gradeDeal\(/, what: 'War Room trade grading' },
+  { file: 'app/api/leagues/[leagueId]/redraft-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the redraft War Room trade analyzer' },
+  { file: 'app/api/leagues/[leagueId]/dynasty-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the dynasty War Room trade analyzer' },
   /* 2026-09-27: the Trade Center's "Best trade partners" suggestions (see lib/trade-intel/partnerSuggestionGrades.ts). */
   { file: 'app/api/leagues/[leagueId]/trades/rosters/route.ts', entry: /gradeDeal\(/, what: 'the Trade Center partner suggestions' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   /* 2026-09-28: the live draft's pick-trade builder, rookie drafts (see lib/live-draft-engine/draftPickTradeGrade.ts). */
   { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /gradeDeal\(/, what: 'the live draft pick-trade builder' },
+  /* 2026-09-28: "Propose a Trade" — the deal as composed, before it is sent (packages: the rosters route above). */
+  { file: 'app/api/leagues/[leagueId]/trades/grade-preview/route.ts', entry: /gradeDeal\(/, what: 'the trade proposal composer' },
   { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade between rostered players (the evaluate_trade tool and the push path) — through the one engine, with a receipt' },
   { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade described in prose — through the one engine, with a receipt' },
   /* Completed trades and receipts (2026-09-25). */

@@ -26,6 +26,8 @@ import type { BuySellHoldResult } from '@/lib/dynasty-war-room/dynastyBuySellHol
 import type { DynastyLineupResult } from '@/lib/dynasty-war-room/dynastyLineupEngine'
 import type { DynastyWaiverResult } from '@/lib/dynasty-war-room/dynastyWaiverEngine'
 import type { DynastyTradeAnalysis, DynastyTradeFinderResult } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'buy-sell-hold' | 'waivers' | 'lineup' | 'trade-analyze' | 'trade-find' | null
 
@@ -63,6 +65,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [waivers, setWaivers] = useState<DynastyWaiverResult | null>(null)
   const [lineup, setLineup] = useState<DynastyLineupResult | null>(null)
   const [tradeAnalysis, setTradeAnalysis] = useState<DynastyTradeAnalysis | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<DynastyTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
@@ -103,14 +106,12 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           const fallbackOutgoing = ownPlayers.find((p) => !p.isStarterSlot)?.playerId ?? ownPlayers[0]?.playerId ?? ''
           const outgoing = (tradeOutgoingId || fallbackOutgoing).trim()
           const incoming = tradeIncomingIds.split(',').map((id) => id.trim()).filter(Boolean)
-          setTradeAnalysis(
-            (
-              await analyzeDynastyWarRoomTrade(leagueId, {
-                outgoingPlayerIds: outgoing ? [outgoing] : [],
-                incomingPlayerIds: incoming,
-              })
-            ).tradeAnalysis,
-          )
+          const analyzed = await analyzeDynastyWarRoomTrade(leagueId, {
+            outgoingPlayerIds: outgoing ? [outgoing] : [],
+            incomingPlayerIds: incoming,
+          })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallbackOutgoing) setTradeOutgoingId(fallbackOutgoing)
         } else if (which === 'trade-find') setTradeFinder((await findDynastyWarRoomTrades(leagueId)).tradeFinder)
       } catch (e) {
@@ -483,12 +484,20 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           </div>
           {tradeAnalysis ? (
             <div className="mt-2 space-y-1" data-testid="dynasty-war-room-trade-analyze-result">
-              <p className="font-semibold text-white/80">
-                Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}
-                {tradeAnalysis.valueDelta != null ? (
-                  <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span>
-                ) : null}
-              </p>
+              {/*
+                🛑 THE GRADE IS THE VERDICT (2026-09-28). The engine's own accept/reject/neutral and its
+                private value delta show only when the route sent no grade at all.
+              */}
+              {tradeGrade ? (
+                <WarRoomTradeGradeLine grade={tradeGrade} testId="dynasty-war-room-trade-grade" />
+              ) : (
+                <p className="font-semibold text-white/80">
+                  Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}
+                  {tradeAnalysis.valueDelta != null ? (
+                    <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span>
+                  ) : null}
+                </p>
+              )}
               {tradeAnalysis.explanationFacts.map((f) => (
                 <p key={f}>{f}</p>
               ))}

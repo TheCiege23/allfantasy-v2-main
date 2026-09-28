@@ -52,6 +52,12 @@ export type WeeklyRecap = {
   closestLoss: { leagueName: string; margin: number } | null
   /** Your highest-scoring STARTER that week, from the platform's own weekly scores. */
   topScorer: { name: string; points: number; leagueName: string } | null
+  /**
+   * True when some of that week's matchups are not final yet — the only case in which "Monday night
+   * games may still change these" is true. It was printed under every recap, including week 2's
+   * on the Monday of week 3, when week 2 had been final for a week (production audit 2026-09-28).
+   */
+  pending: boolean
 }
 
 /** A weekly award you won in the last played week — a shareable moment (item 9, 2026-09-14). */
@@ -117,6 +123,7 @@ export function recapFrom(week: WeekAllData | null, topScorer: WeeklyRecap['topS
     biggestWin: biggest ? { leagueName: biggest.leagueName, margin: margin(biggest) } : null,
     closestLoss: closest ? { leagueName: closest.leagueName, margin: margin(closest) } : null,
     topScorer,
+    pending: week.rows.some((r) => r.completed === false),
   }
 }
 

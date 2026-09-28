@@ -126,9 +126,12 @@ describe('suggestPlayers', () => {
     expect(got.every((s) => s.presence === null)).toBe(true)
     expect(got.map((s) => s.name)).toEqual(['Dalton Kincaid', 'Kingsley Suamataia', 'Kamren Kinchens', 'Kinsley Unknown', 'Tyler Skinner'])
     expect(loadLeagueIds).not.toHaveBeenCalled()
-    // The global count is one read of every roster, with no league filter.
+    // The global count is one read of every roster, with no league filter — carrying each roster's
+    // league platform, so a foreign-id roster can be left out of the count.
     expect(mockRosterFindMany).toHaveBeenCalledTimes(1)
-    expect(mockRosterFindMany.mock.calls[0][0]).toEqual({ select: { playerData: true } })
+    expect(mockRosterFindMany.mock.calls[0][0]).toEqual({
+      select: { playerData: true, league: { select: { platform: true } } },
+    })
   })
 
   it('reads the roster index once a minute per user and the global count once in ten, not once per keystroke', async () => {
@@ -230,5 +233,46 @@ describe('isPrefixMatch', () => {
     expect(isPrefixMatch('DAL', 'Dalton Kincaid')).toBe(true)
     expect(isPrefixMatch('kin', 'Tyler Skinner')).toBe(false)
     expect(isPrefixMatch('', 'Dalton Kincaid')).toBe(false)
+  })
+})
+
+/*
+ * A foreign-id league: Fleaflicker's own ids are short numbers in Sleeper's range (44 of 248 on the one
+ * production Fleaflicker league ARE Sleeper ids). Here the Fleaflicker roster holds "10236" — a
+ * Fleaflicker id that happens to equal Kincaid's Sleeper id. It must not make him "yours" there, nor
+ * count toward how widely AllFantasy rosters him.
+ */
+describe('suggestions — a foreign-id league', () => {
+  const FLEA = { id: 'L-flea', name: 'Flea Flickers', platform: 'fleaflicker' }
+  const fleaRoster = {
+    leagueId: 'L-flea',
+    platformUserId: 'f-me',
+    playerData: { players: ['10236', '9'], starters: ['10236'] },
+    league: { platform: 'fleaflicker' },
+  }
+  const withFlea = vi.fn(async () => ['L-dragons', 'L-gang', 'L-espn', 'L-flea'])
+
+  beforeEach(() => {
+    mockLeagueFindMany.mockResolvedValue([...LEAGUES, FLEA])
+    mockTeamFindMany.mockResolvedValue([
+      ...TEAMS,
+      { leagueId: 'L-flea', externalId: '3', platformUserId: 'f-me', claimedByUserId: 'me', ownerName: 'guap' },
+    ])
+    mockRosterFindMany.mockResolvedValue([...ROSTERS, fleaRoster])
+  })
+
+  it('never calls him "yours" on a colliding id — the league is named as one it could not check', async () => {
+    const got = await suggestPlayers({ query: 'kin', userId: 'me', loadLeagueIds: withFlea })
+    expect(got.find((s) => s.name === 'Dalton Kincaid')?.presence).toEqual({
+      yours: ['Dynasty Dragons', 'Gridiron Gang'],
+      owned: [],
+      free: [],
+      unchecked: 2,
+    })
+  })
+
+  it('does not count a foreign roster toward how widely he is rostered', async () => {
+    const counts = await getGlobalRosterCounts(0)
+    expect(counts.get('10236')).toBe(2)
   })
 })
