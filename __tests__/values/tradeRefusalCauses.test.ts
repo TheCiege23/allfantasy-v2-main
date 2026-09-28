@@ -67,6 +67,21 @@ describe('trade refusals name their own cause', () => {
     expect(SRC).not.toMatch(/AMBIGUOUS_PLAYER[\s\S]{0,400}Check the spelling/)
   })
 
+  /**
+   * ⚠ A REFUSAL THAT KNOWS ITS CAUSE IS NOT AN OUTAGE (2026-09-28). `pricePlayer` refuses a
+   * fringe veteran the market board dropped, or a defender with no league board, WITH a reason.
+   * Counting those toward "every asset unpriced" would answer a trade made only of them with
+   * "this is on our side, try again shortly" — which retrying can never fix.
+   */
+  it('counts only UNEXPLAINED misses toward the board-outage answer', () => {
+    expect(SRC).toMatch(/const unexplained = unpricedAssets\.filter\(\(p\) => !p\.unpricedReason\)/)
+    expect(SRC).toMatch(/unexplained\.length === allPlayerPrices\.length[\s\S]{0,200}error: 'VALUATION_UNAVAILABLE'/)
+  })
+
+  it('names each refused player’s own reason in the generic refusal', () => {
+    expect(SRC).toMatch(/unpricedReasons: explained\.map/)
+  })
+
   it('reads the refused names from the league board rather than a local list', () => {
     expect(SRC).toContain('leagueValues?.idp.ambiguousNames')
   })

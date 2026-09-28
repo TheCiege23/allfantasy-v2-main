@@ -19,6 +19,7 @@ describe('tradeValueSourceOf — the evidence behind one priced asset', () => {
     [{ source: 'fantasycalc' }, { position: 'PICK', dataSource: 'fantasycalc_pick' }, 'fantasycalc_pick'],
     [{ source: 'idp-vorp' }, { position: 'LB' }, 'league_idp'],
     [{ source: 'kicker-flat' }, { position: 'K' }, 'league_kicker'],
+    [{ source: 'dst-flat' }, { position: 'DEF' }, 'league_defense'],
     [{ source: 'unknown' }, { position: 'FAAB', dataSource: 'league_waiver_budget' }, 'faab_formula'],
     [{ source: 'devy-option' }, { position: 'WR', dataSource: 'devy-option' }, 'devy_option'],
     [{ source: 'excel' }, { position: 'WR' }, 'historical_file'],
@@ -38,7 +39,7 @@ describe('tradeValueSourceOf — the evidence behind one priced asset', () => {
   it('only a market chart value is dated; league math and undated stores are not', () => {
     expect(tradeValueAsOf('fantasycalc', SYNCED)).toBe(SYNCED)
     expect(tradeValueAsOf('fantasycalc_pick', SYNCED)).toBe(SYNCED)
-    for (const s of ['league_idp', 'league_kicker', 'faab_formula', 'pick_curve', 'historical_file'] as const) {
+    for (const s of ['league_idp', 'league_kicker', 'league_defense', 'faab_formula', 'pick_curve', 'historical_file'] as const) {
       expect(tradeValueAsOf(s, SYNCED)).toBeNull()
     }
     expect(tradeValueAsOf('fantasycalc', null)).toBeNull()
