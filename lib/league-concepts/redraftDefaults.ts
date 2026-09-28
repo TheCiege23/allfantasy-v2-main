@@ -1,4 +1,5 @@
 import type { LeagueSport } from '@prisma/client'
+import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 
 export type FootballRedraftSport = 'NFL' | 'NCAAF'
 export type RedraftDraftType =
@@ -665,13 +666,16 @@ function derivePlayoffTeams(teamCount: number): number {
 }
 
 function buildPlayoffSettings(sport: FootballRedraftSport, teamCount: number): Record<string, unknown> {
+  const playoffTeams = derivePlayoffTeams(teamCount)
+  // NCAAF brackets end on week 13, the last full college slate (ncaafPlayoffWindow.ts).
+  const ncaaf = sport === 'NCAAF' ? ncaafPlayoffWindow(playoffTeams) : null
   return {
     enabled: true,
     regularSeasonStartWeek: 1,
-    regularSeasonEndWeek: sport === 'NCAAF' ? 12 : 14,
-    playoffTeams: derivePlayoffTeams(teamCount),
-    playoffStartWeek: sport === 'NCAAF' ? 13 : 15,
-    championshipWeek: sport === 'NCAAF' ? 14 : 17,
+    regularSeasonEndWeek: ncaaf ? ncaaf.regularSeasonEndWeek : 14,
+    playoffTeams,
+    playoffStartWeek: ncaaf ? ncaaf.playoffStartWeek : 15,
+    championshipWeek: ncaaf ? ncaaf.championshipWeek : 17,
     playoffWeeksPerRound: 1,
     topSeedByes: teamCount >= 10,
     tiebreakers: ['points_for', 'head_to_head', 'division_record'],

@@ -214,8 +214,9 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
     lineupFrequency: 'weekly',
     defaultScoringFormat: 'half_ppr',
     supportedScoringFormats: ['ppr', 'half_ppr', 'standard'],
-    regularSeasonWeeks: 12,
-    defaultPlayoffStartWeek: 13,
+    // A 4-team bracket plays weeks 12-13 — NCAAF brackets end on week 13 (ncaafPlayoffWindow.ts).
+    regularSeasonWeeks: 11,
+    defaultPlayoffStartWeek: 12,
     defaultPlayoffTeams: 4,
     supportedPlayoffSizes: [4, 6],
     defaultTeamCount: 12,

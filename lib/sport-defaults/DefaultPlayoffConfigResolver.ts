@@ -90,7 +90,8 @@ const BASE_CONFIGS: Record<SportType, DefaultPlayoffConfig> = {
     first_round_byes: 2,
     bracket_type: 'single_elimination',
     consolation_plays_for: 'pick',
-    playoff_start_week: 13,
+    // 6 teams, 3 rounds: weeks 11-13 — NCAAF brackets end on week 13 (ncaafPlayoffWindow.ts).
+    playoff_start_week: 11,
     seeding_rules: 'standard_standings',
     tiebreaker_rules: ['points_for', 'head_to_head', 'points_against'],
     bye_rules: 'top_two_seeds_bye',
