@@ -153,10 +153,52 @@ function pirateCarriesOver(settings: unknown): boolean {
  * Exported so `marketContextFor` can build its `variant` from the same
  * predicates rather than a second copy of them.
  */
+/**
+ * The share of a keeper league's roster that carries over to next season, or null when the league
+ * does not say how many players it keeps or how big a roster is.
+ *
+ * Sleeper stores the count as `max_keepers`; a native league as `keeper_max_keepers` /
+ * `keeperMaxKeepers` / `keeperCount` (lib/league-concepts/keeperDefaults.ts). The roster is the
+ * league's own `roster_positions` without IR, which is not a roster spot a keeper competes for.
+ */
+export function keeperShareFromSettings(settings: unknown): number | null {
+  const s = (settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {}) as Record<string, unknown>
+  const raw = [s.max_keepers, s.keeper_max_keepers, s.keeperMaxKeepers, s.keeperCount].find(
+    (v) => typeof v === 'number' && Number.isFinite(v) && v > 0,
+  ) as number | undefined
+  const positions = Array.isArray(s.roster_positions) ? s.roster_positions : []
+  const roster = positions.filter((p) => String(p ?? '').toUpperCase() !== 'IR').length
+  if (!raw || roster === 0) return null
+  return Math.min(1, raw / roster)
+}
+
+/**
+ * 🛑 A KEEPER LEAGUE PRICES ON THE DYNASTY CHART ONLY WHEN MOST OF ITS ROSTER CARRIES OVER
+ * (Guap, 2026-09-28: "by keeper share, everywhere").
+ *
+ * Until this, every keeper league priced on the dynasty chart. Measured on production that day, 17 of
+ * the 19 keeper league rows keep 1–3 players of a 15–20 man roster (7–19%), and on those leagues the
+ * dynasty chart valued TreVeyon Henderson (27) near Derrick Henry (31) — whom the redraft chart,
+ * this season's value, puts at 16 against 58. The other two keep 60% and 76% and genuinely are
+ * dynasty leagues. So: half the roster or more carries over → dynasty; less → redraft, with the
+ * next-season value of the few keepers shown beside the grade (lib/keeper/tradeKeeperCosts.ts).
+ *
+ * ⚠ AN UNKNOWN SHARE KEEPS THE DYNASTY CHART — today's behaviour — so only a league we can measure
+ * moves. Every chart decision asks this, never `dynasty || keeper` by hand: that expression is the
+ * rule this replaces, and a copy of it left anywhere prices one league off two charts.
+ */
+export const KEEPER_DYNASTY_SHARE = 0.5
+
+export function pricesOnDynastyChart(variant: { dynasty: boolean; keeper: boolean; keeperShare?: number | null }): boolean {
+  if (variant.dynasty) return true
+  if (!variant.keeper) return false
+  return variant.keeperShare == null || variant.keeperShare >= KEEPER_DYNASTY_SHARE
+}
+
 export function leagueVariantFor(
   settings: unknown,
   leagueType: string | null
-): { superflex: boolean; dynasty: boolean; keeper: boolean } {
+): { superflex: boolean; dynasty: boolean; keeper: boolean; keeperShare: number | null } {
   const s = (settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {}) as Record<string, unknown>
   const positions = Array.isArray(s.roster_positions) ? s.roster_positions : []
   const type = (resolveLeagueConcept(settings, leagueType) ?? '').toLowerCase()
@@ -191,17 +233,18 @@ export function leagueVariantFor(
      * type; a confirmation always wins, including a confirmed `redraft`.
      */
     keeper: type.includes('keeper') || (!confirmed && readProviderKeeperFact(s)),
+    keeperShare: keeperShareFromSettings(s),
   }
 }
 
 /**
  * The book to price THIS league against.
  *
- * ⚠ KEEPER COUNTS AS DYNASTY, matching `getMarketValues` exactly
- * (`isDynasty = variant.dynasty || variant.keeper`). A keeper league carries
- * players across seasons, so future value is priced in; splitting it away from
- * dynasty here would make the card and the trade engine disagree on the same
- * league, which is the whole failure this module exists to prevent.
+ * ⚠ A KEEPER LEAGUE FOLLOWS `pricesOnDynastyChart` — dynasty when most of the
+ * roster carries over, redraft otherwise (2026-09-28). It used to count as
+ * dynasty outright. `getMarketValues` and the one grade ask the same function,
+ * so the card and the trade engine still cannot disagree on one league, which
+ * is the whole failure this module exists to prevent.
  *
  * DEVY, C2C AND EFL price on DYNASTY; PIRATE follows the commissioner's
  * `baseFormat` answer and defaults to DYNASTY without one — see
@@ -218,7 +261,7 @@ export function valueBookFor(settings: unknown, leagueType: string | null): Valu
   const v = leagueVariantFor(settings, leagueType)
   return {
     source: 'FANTASYCALC',
-    format: v.dynasty || v.keeper ? 'DYNASTY' : 'REDRAFT',
+    format: pricesOnDynastyChart(v) ? 'DYNASTY' : 'REDRAFT',
     qbFormat: v.superflex ? 'SUPERFLEX' : 'ONE_QB',
   }
 }

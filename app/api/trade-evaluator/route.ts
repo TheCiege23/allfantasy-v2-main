@@ -51,7 +51,6 @@ import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } fr
 import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
 import { priceEvaluatorDevy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { loadTradeKeeperCosts, type TradeKeeperCosts } from '@/lib/keeper/tradeKeeperCosts'
-import { buildLeagueShape } from '@/lib/trade-value/leagueShape'
 import { receiptGradeFields, structuredEvaluationFromExplanation } from '@/lib/decision-os/trade/receiptViews'
 import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -936,8 +935,14 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
      * In a keeper league a receiver kept at a 2nd and the same receiver kept at a 12th graded
      * identically: nothing on file said what either costs to keep. `loadTradeKeeperCosts` reads the
      * league's own drafts (the Sleeper keeper flag the draft sync now keeps), prices the cost only
-     * where the league's rule is MEASURED, and words the surplus through the keeper model. It rides
-     * beside the grade, so the letter does not move until those costs are checked on real leagues.
+     * where the league's rule is MEASURED, and prices the cost round on the grade's own chart. It
+     * rides beside the grade, so the letter does not move until those costs are checked on real
+     * leagues.
+     *
+     * ⚠ EACH PLAYER'S VALUE IS THE ONE GRADE'S, FROM ITS RECEIPT — not this route's first pricing
+     * pass, which prices on the dynasty chart whatever the league. Since 2026-09-28 a keeper league
+     * that carries little over grades on the REDRAFT chart (`pricesOnDynastyChart`), so the first
+     * pass's number would set a player on one chart against a cost on another.
      *
      * Started here, awaited at the response, in the same membership-checked league the grade uses.
      */
@@ -949,21 +954,22 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       if (ids) ids.push(pid)
       else candidateIdsByNameLower.set(n, [pid])
     }
-    const keeperShape = sleeperLeagueForConfig?.total_rosters
-      ? buildLeagueShape({ teams: sleeperLeagueForConfig.total_rosters, starterSlots: sleeperLeagueForConfig.roster_positions })
-      : null
     const keeperCostsPromise: Promise<TradeKeeperCosts> = (async () => {
       const leagueId = data.league_id ? await evaluationLeagueIdPromise.catch(() => null) : null
       if (!leagueId) return { applies: false }
+      const receipt = await evaluationReceiptPromise.catch(() => null)
+      const gradeValueByName = new Map(
+        (receipt?.assets ?? [])
+          .filter((a) => a.kind === 'player' && a.marketValue != null)
+          .map((a) => [a.name.toLowerCase().trim(), a.marketValue as number] as const),
+      )
       return loadTradeKeeperCosts({
         leagueId,
-        shape: keeperShape,
         players: allPlayerPrices
           .filter((p) => !p.unpriced)
           .map((p) => ({
             name: p.name,
-            value: p.value,
-            position: p.position ?? null,
+            value: gradeValueByName.get(p.name.toLowerCase().trim()) ?? null,
             candidateIds: candidateIdsByNameLower.get(p.name.toLowerCase().trim()) ?? [],
           })),
       })

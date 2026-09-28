@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { scoringFit, type ScoringFit } from '@/lib/trade-value/scoringFit'
+import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 
 /**
  * marketValueService — REAL trade-value charts for players, picks, and FAAB,
@@ -138,7 +139,7 @@ function parsePickName(name: string): { season: string; round: number; slot: num
 export async function getMarketValues(
   context: Pick<LeagueContextEnvelope, 'variant' | 'scoring' | 'teams'>,
 ): Promise<MarketValuesPayload | null> {
-  const isDynasty = context.variant.dynasty || context.variant.keeper
+  const isDynasty = pricesOnDynastyChart(context.variant)
   const numQbs: 1 | 2 = context.variant.superflex ? 2 : 1
   const numTeams = Math.min(Math.max(context.teams || 12, 8), 16)
   const ppr = context.scoring.format === 'ppr' ? 1 : context.scoring.format === 'half_ppr' ? 0.5 : 0

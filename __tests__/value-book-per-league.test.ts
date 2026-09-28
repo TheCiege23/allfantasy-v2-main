@@ -174,15 +174,18 @@ describe('valueBookFor — confirmed concepts', () => {
 
 describe('leagueVariantFor — the shared predicates marketContextFor also reads', () => {
   it('reports the three traits the trade engine keys on', () => {
+    // `keeperShare` is null without a keeper count: see __tests__/core-app/keeper-league-chart.test.ts.
     expect(leagueVariantFor({ roster_positions: SF }, 'dynasty')).toEqual({
       superflex: true,
       dynasty: true,
       keeper: false,
+      keeperShare: null,
     })
     expect(leagueVariantFor({ roster_positions: RB }, 'keeper')).toEqual({
       superflex: false,
       dynasty: false,
       keeper: true,
+      keeperShare: null,
     })
   })
 })
