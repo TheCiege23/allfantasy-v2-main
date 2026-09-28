@@ -1,5 +1,5 @@
 const APP_NAME = 'AllFantasy';
-const CACHE_VER = 'v1.0.6';
+const CACHE_VER = 'v1.0.7';
 const CACHE_STATIC = `${APP_NAME}-static-${CACHE_VER}`;
 const CACHE_PAGES = `${APP_NAME}-pages-${CACHE_VER}`;
 const CACHE_IMAGES = `${APP_NAME}-images-${CACHE_VER}`;
@@ -13,24 +13,17 @@ const ALL_CACHES = [CACHE_STATIC, CACHE_PAGES, CACHE_IMAGES];
  *   /app/home    REJECTED — 404. The route went away when /app became /core.
  *   /favicon.ico REJECTED — 404. This app declares its icons in layout
  *                metadata and ships no .ico at all.
- *   /app         CACHED, and that is the bad one. cache.add FOLLOWS redirects,
- *                so /app 307s to /core, /core 307s to /login, and the LOGIN
- *                PAGE gets stored under the /app key (status 200,
- *                redirected=true). `/^\/app/` is in NETWORK_FIRST_PATTERNS
- *                below, so an offline hit on any /app* URL served that login
- *                HTML back as if it were the app shell.
+ *   /app         CACHED a redirected login page under the old app URL.
  *
  * The install handler wraps each add in its own catch, so the two rejections
  * were console warnings rather than a broken install — which is exactly why all
  * three survived a rename of the whole app shell. They are dropped, not
  * repointed.
  *
- * `/login` is added because it is where an offline launch actually lands:
- * start_url is /core, and /core 307s to /login for anyone not signed in.
+ * Only public offline/static resources are pre-cached. App HTML is always
+ * fetched fresh because a redirect may lead to a VPN block or sign-in page.
  */
 const PRECACHE_ASSETS = [
-  '/',
-  '/login',
   '/offline',
   '/manifest.webmanifest',
   '/af-crest.png',
@@ -47,15 +40,6 @@ const CACHE_FIRST_PATTERNS = [
   /\/icons\//,
   /\/branding\//,
   /\.(?:png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i,
-];
-
-const NETWORK_FIRST_PATTERNS = [
-  /^\/$/,
-  /^\/app/,
-  /^\/news/,
-  /^\/trade/,
-  /^\/waiver/,
-  /^\/draft/,
 ];
 
 self.addEventListener('install', (event) => {
@@ -140,12 +124,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (NETWORK_FIRST_PATTERNS.some((pattern) => pattern.test(url.pathname))) {
-    event.respondWith(networkFirst(request, CACHE_PAGES));
-    return;
-  }
-
-  event.respondWith(staleWhileRevalidate(request, CACHE_PAGES));
+  // RSC and other dynamic GET responses can carry a VPN refusal, auth state,
+  // or private data. Let the browser fetch them directly without SW storage.
 });
 
 async function cacheFirst(request, cacheName) {
@@ -164,50 +144,22 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-async function networkFirst(request, cacheName) {
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    const cached = await caches.match(request);
-    return cached || new Response('Offline - content unavailable', { status: 503 });
-  }
-}
-
 async function networkFirstWithOfflineFallback(event) {
   const { request } = event;
 
   try {
     const preloadResponse = await event.preloadResponse;
-    if (preloadResponse) {
-      if (preloadResponse.ok) {
-        const cache = await caches.open(CACHE_PAGES);
-        cache.put(request, preloadResponse.clone());
-      }
-      return preloadResponse;
-    }
+    if (preloadResponse) return preloadResponse;
   } catch {
     // Fall through to network fetch
   }
 
   try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_PAGES);
-      cache.put(request, response.clone());
-    }
-    return response;
+    // Navigation HTML can contain a VPN block, login, or user data after a
+    // redirect. Never persist it under the original app URL: on iOS a failed
+    // launch could otherwise replay that page after the VPN is disconnected.
+    return await fetch(request);
   } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-
-    const home = await caches.match('/');
-    if (home) return home;
-
     const offline = await caches.match('/offline');
     return offline || new Response(
       `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline - AllFantasy</title></head>
@@ -219,25 +171,6 @@ async function networkFirstWithOfflineFallback(event) {
       { status: 200, headers: { 'Content-Type': 'text/html' } }
     );
   }
-}
-
-async function staleWhileRevalidate(request, cacheName) {
-  const cached = await caches.match(request);
-
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        const forCache = response.clone();
-        caches.open(cacheName).then((cache) => cache.put(request, forCache));
-      }
-      return response;
-    })
-    .catch(() => null);
-
-  if (cached) return cached;
-
-  const networkResponse = await fetchPromise;
-  return networkResponse || new Response('Offline - content unavailable', { status: 503 });
 }
 
 self.addEventListener('push', (event) => {
@@ -343,7 +276,7 @@ async function syncPendingWaivers() {
 }
 
 self.addEventListener('message', (event) => {
-  const { type, payload } = event.data || {};
+  const { type } = event.data || {};
 
   switch (type) {
     case 'SKIP_WAITING':
@@ -374,14 +307,6 @@ self.addEventListener('message', (event) => {
           event.source?.postMessage?.({ type: 'CACHE_STATS', payload: stats });
         })
       );
-      break;
-
-    case 'PRECACHE_URL':
-      if (payload?.url) {
-        event.waitUntil(
-          caches.open(CACHE_PAGES).then((cache) => cache.add(payload.url))
-        );
-      }
       break;
 
     default:

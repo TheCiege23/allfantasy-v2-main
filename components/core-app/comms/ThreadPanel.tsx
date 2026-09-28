@@ -690,6 +690,9 @@ export function ThreadPanel({
               activeThreadId.current = null
               setOpenThread(null)
               setReplyTo(null)
+              // Reading messages advances the server-side read marker. Refresh the list here so
+              // its unread count reflects that marker without closing and reopening the drawer.
+              void loadThreads()
             }}>
             ‹ All {label}
           </button>

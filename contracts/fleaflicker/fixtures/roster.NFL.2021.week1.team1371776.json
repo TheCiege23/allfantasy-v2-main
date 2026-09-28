@@ -1,0 +1,2169 @@
+{
+  "groups": [
+    {
+      "group": "START",
+      "slots": [
+        {
+          "position": {
+            "label": "TE",
+            "group": "START",
+            "eligibility": [
+              "TE"
+            ],
+            "min": 1,
+            "max": 15,
+            "start": 1,
+            "colors": [
+              "DRAFT_BOARD_YELLOW"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 14677,
+              "nameFull": "T.J. Hockenson",
+              "nameShort": "T. Hockenson",
+              "proTeamAbbreviation": "MIN",
+              "position": "TE",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14677.png",
+              "nflByeWeek": 6,
+              "news": [
+                {
+                  "timeEpochMilli": "1790574633000",
+                  "contents": "[redacted: third-party news text]",
+                  "analysis": "[redacted: third-party news text]",
+                  "title": "[redacted: third-party news text]"
+                },
+                {
+                  "timeEpochMilli": "1790504133000",
+                  "contents": "[redacted: third-party news text]",
+                  "url": "https://example.invalid/redacted-news-url",
+                  "title": "[redacted: third-party news text]"
+                }
+              ],
+              "nameFirst": "T.J.",
+              "nameLast": "Hockenson",
+              "hasLockedPremiumContent": true,
+              "proTeam": {
+                "abbreviation": "MIN",
+                "location": "Minnesota",
+                "name": "Vikings"
+              },
+              "positionEligibility": [
+                "TE"
+              ],
+              "percentOwnedRatio": 0.53
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6437,
+                  "away": {
+                    "abbreviation": "SF",
+                    "location": "San Francisco",
+                    "name": "49ers"
+                  },
+                  "home": {
+                    "abbreviation": "DET",
+                    "location": "Detroit",
+                    "name": "Lions"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 41,
+                  "homeScore": 33,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 175,
+                      "abbreviation": "Rec",
+                      "nameSingular": "Target % Caught",
+                      "namePlural": "Target % Caught"
+                    },
+                    "value": {
+                      "value": 72.72727,
+                      "formatted": "8/11"
+                    }
+                  },
+                  {
+                    "category": {
+                      "id": 26,
+                      "abbreviation": "Fum",
+                      "nameSingular": "Fumble",
+                      "namePlural": "Fumbles",
+                      "lowerIsBetter": true
+                    },
+                    "value": {
+                      "formatted": "0"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 29.2,
+                  "formatted": "29.2"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 29.2,
+              "formatted": "29.2"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 175,
+                  "abbreviation": "Rec",
+                  "nameSingular": "Target % Caught",
+                  "namePlural": "Target % Caught"
+                },
+                "value": {
+                  "value": 72.72727,
+                  "formatted": "8/11"
+                }
+              },
+              {
+                "category": {
+                  "id": 26,
+                  "abbreviation": "Fum",
+                  "nameSingular": "Fumble",
+                  "namePlural": "Fumbles",
+                  "lowerIsBetter": true
+                },
+                "value": {
+                  "formatted": "0"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "RECEIVER",
+            "rankFantasy": {
+              "ordinal": 157,
+              "positions": [
+                {
+                  "position": {
+                    "label": "TE",
+                    "group": "START",
+                    "eligibility": [
+                      "TE"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_YELLOW"
+                    ]
+                  },
+                  "ordinal": 14,
+                  "formatted": "14"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 17.9,
+                  "formatted": "17.9"
+                },
+                "duration": 1,
+                "overPerforming": true
+              }
+            ],
+            "seasonTotal": {
+              "value": 164.3,
+              "formatted": "164.3"
+            },
+            "seasonAverage": {
+              "value": 13.691667,
+              "formatted": "13.69"
+            },
+            "seasonsStandartDeviation": {
+              "value": 8.332012,
+              "formatted": "8.33"
+            }
+          }
+        },
+        {
+          "position": {
+            "label": "LB",
+            "group": "START",
+            "eligibility": [
+              "LB"
+            ],
+            "min": 2,
+            "max": 15,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_PURPLE"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 12050,
+              "nameFull": "Myles Jack",
+              "nameShort": "M. Jack",
+              "proTeamAbbreviation": "FA",
+              "position": "LB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/12050.png",
+              "nflByeWeek": 7,
+              "nameFirst": "Myles",
+              "nameLast": "Jack",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "LB"
+              ],
+              "percentOwnedRatio": 0.01
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6433,
+                  "away": {
+                    "abbreviation": "JAC",
+                    "location": "Jacksonville",
+                    "name": "Jaguars"
+                  },
+                  "home": {
+                    "abbreviation": "HOU",
+                    "location": "Houston",
+                    "name": "Texans"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 21,
+                  "homeScore": 37,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "WIN",
+                  "awayResult": "LOSE"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 82,
+                      "abbreviation": "Ast",
+                      "nameSingular": "Assisted Tackle",
+                      "namePlural": "Assisted Tackles"
+                    },
+                    "value": {
+                      "value": 3,
+                      "formatted": "3"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 14.5,
+                  "formatted": "14.5"
+                },
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 14.5,
+              "formatted": "14.5"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 82,
+                  "abbreviation": "Ast",
+                  "nameSingular": "Assisted Tackle",
+                  "namePlural": "Assisted Tackles"
+                },
+                "value": {
+                  "value": 3,
+                  "formatted": "3"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "DEFENDER",
+            "rankFantasy": {
+              "ordinal": 255,
+              "positions": [
+                {
+                  "position": {
+                    "label": "LB",
+                    "group": "START",
+                    "eligibility": [
+                      "LB"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_PURPLE"
+                    ]
+                  },
+                  "ordinal": 54,
+                  "formatted": "54",
+                  "rating": "RATING_VERY_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 4.5,
+                  "formatted": "4.5"
+                },
+                "duration": 1,
+                "underPerforming": true
+              }
+            ],
+            "isKeeper": true,
+            "isOnTradingBlock": true,
+            "seasonTotal": {
+              "value": 128.5,
+              "formatted": "128.5"
+            },
+            "seasonAverage": {
+              "value": 8.566667,
+              "formatted": "8.57"
+            },
+            "seasonsStandartDeviation": {
+              "value": 3.1457198,
+              "formatted": "3.15"
+            },
+            "seasonConsistency": "RATING_GOOD"
+          }
+        }
+      ]
+    },
+    {
+      "slots": [
+        {
+          "position": {
+            "label": "BN",
+            "max": 24
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 12032,
+              "nameFull": "Carson Wentz",
+              "nameShort": "C. Wentz",
+              "proTeamAbbreviation": "MIN",
+              "position": "QB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/12032.png",
+              "nflByeWeek": 13,
+              "news": [
+                {
+                  "timeEpochMilli": "1790352516000",
+                  "contents": "[redacted: third-party news text]",
+                  "url": "https://example.invalid/redacted-news-url",
+                  "title": "[redacted: third-party news text]"
+                }
+              ],
+              "nameFirst": "Carson",
+              "nameLast": "Wentz",
+              "proTeam": {
+                "abbreviation": "MIN",
+                "location": "Minnesota",
+                "name": "Vikings"
+              },
+              "positionEligibility": [
+                "QB"
+              ],
+              "percentOwnedRatio": 0.19
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6435,
+                  "away": {
+                    "abbreviation": "SEA",
+                    "location": "Seattle",
+                    "name": "Seahawks"
+                  },
+                  "home": {
+                    "abbreviation": "IND",
+                    "location": "Indianapolis",
+                    "name": "Colts"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 28,
+                  "homeScore": 16,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 12,
+                      "abbreviation": "%",
+                      "nameSingular": "Completion Percentage",
+                      "namePlural": "Completion Percentage",
+                      "summaryLabelIfDiffersFromAbbreviation": " "
+                    },
+                    "value": {
+                      "value": 65.789474,
+                      "formatted": "25/38"
+                    }
+                  },
+                  {
+                    "category": {
+                      "id": 7,
+                      "abbreviation": "INT",
+                      "nameSingular": "Interception",
+                      "namePlural": "Interceptions",
+                      "lowerIsBetter": true
+                    },
+                    "value": {
+                      "formatted": "0"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 22.54,
+                  "formatted": "22.54"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 22.54,
+              "formatted": "22.54"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 12,
+                  "abbreviation": "%",
+                  "nameSingular": "Completion Percentage",
+                  "namePlural": "Completion Percentage",
+                  "summaryLabelIfDiffersFromAbbreviation": " "
+                },
+                "value": {
+                  "value": 65.789474,
+                  "formatted": "25/38"
+                }
+              },
+              {
+                "category": {
+                  "id": 7,
+                  "abbreviation": "INT",
+                  "nameSingular": "Interception",
+                  "namePlural": "Interceptions",
+                  "lowerIsBetter": true
+                },
+                "value": {
+                  "formatted": "0"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "PASSER",
+            "rankFantasy": {
+              "ordinal": 21,
+              "positions": [
+                {
+                  "position": {
+                    "label": "QB",
+                    "group": "START",
+                    "eligibility": [
+                      "QB"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_RED"
+                    ]
+                  },
+                  "ordinal": 12,
+                  "formatted": "12",
+                  "rating": "RATING_VERY_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 9.6,
+                  "formatted": "9.6"
+                },
+                "duration": 1,
+                "underPerforming": true
+              }
+            ],
+            "isKeeper": true,
+            "seasonTotal": {
+              "value": 303.98,
+              "formatted": "303.98"
+            },
+            "seasonAverage": {
+              "value": 17.881178,
+              "formatted": "17.88"
+            },
+            "seasonsStandartDeviation": {
+              "value": 8.857206,
+              "formatted": "8.86"
+            },
+            "seasonConsistency": "RATING_GOOD"
+          }
+        },
+        {
+          "position": {
+            "label": "BN",
+            "max": 24
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 13364,
+              "nameFull": "Kendrick Bourne",
+              "nameShort": "K. Bourne",
+              "proTeamAbbreviation": "ARI",
+              "position": "WR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/13364.png",
+              "nflByeWeek": 11,
+              "news": [
+                {
+                  "timeEpochMilli": "1790572464000",
+                  "contents": "[redacted: third-party news text]",
+                  "analysis": "[redacted: third-party news text]",
+                  "title": "[redacted: third-party news text]"
+                },
+                {
+                  "timeEpochMilli": "1790462167000",
+                  "contents": "[redacted: third-party news text]",
+                  "url": "https://example.invalid/redacted-news-url",
+                  "title": "[redacted: third-party news text]"
+                }
+              ],
+              "nameFirst": "Kendrick",
+              "nameLast": "Bourne",
+              "proTeam": {
+                "abbreviation": "ARI",
+                "location": "Arizona",
+                "name": "Cardinals"
+              },
+              "positionEligibility": [
+                "WR"
+              ],
+              "percentOwnedRatio": 0.21
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6444,
+                  "away": {
+                    "abbreviation": "MIA",
+                    "location": "Miami",
+                    "name": "Dolphins"
+                  },
+                  "home": {
+                    "abbreviation": "NE",
+                    "location": "New England",
+                    "name": "Patriots"
+                  },
+                  "startTimeEpochMilli": "1631478300000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 17,
+                  "homeScore": 16,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 175,
+                      "abbreviation": "Rec",
+                      "nameSingular": "Target % Caught",
+                      "namePlural": "Target % Caught"
+                    },
+                    "value": {
+                      "value": 33.333332,
+                      "formatted": "1/3"
+                    }
+                  },
+                  {
+                    "category": {
+                      "id": 26,
+                      "abbreviation": "Fum",
+                      "nameSingular": "Fumble",
+                      "namePlural": "Fumbles",
+                      "lowerIsBetter": true
+                    },
+                    "value": {
+                      "formatted": "0"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 2.2,
+                  "formatted": "2.2"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 2.2,
+              "formatted": "2.2"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 175,
+                  "abbreviation": "Rec",
+                  "nameSingular": "Target % Caught",
+                  "namePlural": "Target % Caught"
+                },
+                "value": {
+                  "value": 33.333332,
+                  "formatted": "1/3"
+                }
+              },
+              {
+                "category": {
+                  "id": 26,
+                  "abbreviation": "Fum",
+                  "nameSingular": "Fumble",
+                  "namePlural": "Fumbles",
+                  "lowerIsBetter": true
+                },
+                "value": {
+                  "formatted": "0"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "RECEIVER",
+            "rankFantasy": {
+              "ordinal": 139,
+              "positions": [
+                {
+                  "position": {
+                    "label": "WR",
+                    "group": "START",
+                    "eligibility": [
+                      "WR"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_BLUE"
+                    ]
+                  },
+                  "ordinal": 34,
+                  "formatted": "34",
+                  "rating": "RATING_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 5.2,
+                  "formatted": "5.2"
+                },
+                "duration": 1,
+                "underPerforming": true
+              }
+            ],
+            "seasonTotal": {
+              "value": 172.00002,
+              "formatted": "172"
+            },
+            "seasonAverage": {
+              "value": 10.117648,
+              "formatted": "10.12"
+            },
+            "seasonsStandartDeviation": {
+              "value": 7.033217,
+              "formatted": "7.03"
+            }
+          }
+        },
+        {
+          "position": {
+            "label": "BN",
+            "max": 24
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 13967,
+              "nameFull": "Russell Gage",
+              "nameShort": "R. Gage",
+              "proTeamAbbreviation": "FA",
+              "position": "WR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/13967.png",
+              "nflByeWeek": 11,
+              "nameFirst": "Russell",
+              "nameLast": "Gage",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "WR"
+              ]
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6440,
+                  "away": {
+                    "abbreviation": "PHI",
+                    "location": "Philadelphia",
+                    "name": "Eagles"
+                  },
+                  "home": {
+                    "abbreviation": "ATL",
+                    "location": "Atlanta",
+                    "name": "Falcons"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 32,
+                  "homeScore": 6,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 26,
+                      "abbreviation": "Fum",
+                      "nameSingular": "Fumble",
+                      "namePlural": "Fumbles",
+                      "lowerIsBetter": true
+                    },
+                    "value": {
+                      "formatted": "0"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "formatted": "0"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "formatted": "0"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 26,
+                  "abbreviation": "Fum",
+                  "nameSingular": "Fumble",
+                  "namePlural": "Fumbles",
+                  "lowerIsBetter": true
+                },
+                "value": {
+                  "formatted": "0"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "RECEIVER",
+            "rankFantasy": {
+              "ordinal": 185,
+              "positions": [
+                {
+                  "position": {
+                    "label": "WR",
+                    "group": "START",
+                    "eligibility": [
+                      "WR"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_BLUE"
+                    ]
+                  },
+                  "ordinal": 44,
+                  "formatted": "44",
+                  "rating": "RATING_VERY_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 26.1,
+                  "formatted": "26.1"
+                },
+                "duration": 1,
+                "overPerforming": true
+              }
+            ],
+            "seasonTotal": {
+              "value": 150,
+              "formatted": "150"
+            },
+            "seasonAverage": {
+              "value": 11.538462,
+              "formatted": "11.54"
+            },
+            "seasonsStandartDeviation": {
+              "value": 7.7871237,
+              "formatted": "7.79"
+            }
+          }
+        },
+        {
+          "position": {
+            "label": "BN",
+            "max": 24
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 13876,
+              "nameFull": "Avonte Maddox",
+              "nameShort": "A. Maddox",
+              "proTeamAbbreviation": "DET",
+              "position": "S",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/13876.png",
+              "nflByeWeek": 10,
+              "injury": {
+                "typeAbbreviaition": "IR",
+                "description": "Foot",
+                "severity": "OUT",
+                "typeFull": "Injured Reserve"
+              },
+              "nameFirst": "Avonte",
+              "nameLast": "Maddox",
+              "proTeam": {
+                "abbreviation": "DET",
+                "location": "Detroit",
+                "name": "Lions"
+              },
+              "positionEligibility": [
+                "S"
+              ],
+              "percentOwnedRatio": 0.09
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6440,
+                  "away": {
+                    "abbreviation": "PHI",
+                    "location": "Philadelphia",
+                    "name": "Eagles"
+                  },
+                  "home": {
+                    "abbreviation": "ATL",
+                    "location": "Atlanta",
+                    "name": "Falcons"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 32,
+                  "homeScore": 6,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 82,
+                      "abbreviation": "Ast",
+                      "nameSingular": "Assisted Tackle",
+                      "namePlural": "Assisted Tackles"
+                    },
+                    "value": {
+                      "value": 3,
+                      "formatted": "3"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 18.5,
+                  "formatted": "18.5"
+                },
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 18.5,
+              "formatted": "18.5"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 82,
+                  "abbreviation": "Ast",
+                  "nameSingular": "Assisted Tackle",
+                  "namePlural": "Assisted Tackles"
+                },
+                "value": {
+                  "value": 3,
+                  "formatted": "3"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "DEFENDER",
+            "rankFantasy": {
+              "ordinal": 177,
+              "positions": [
+                {
+                  "position": {
+                    "label": "S",
+                    "group": "START",
+                    "eligibility": [
+                      "S"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_PURPLE"
+                    ]
+                  },
+                  "ordinal": 34,
+                  "formatted": "34"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 10,
+                  "formatted": "10"
+                },
+                "duration": 1
+              }
+            ],
+            "seasonTotal": {
+              "value": 152.9,
+              "formatted": "152.9"
+            },
+            "seasonAverage": {
+              "value": 9.55625,
+              "formatted": "9.56"
+            },
+            "seasonsStandartDeviation": {
+              "value": 5.2282853,
+              "formatted": "5.23"
+            }
+          }
+        },
+        {
+          "position": {
+            "label": "BN",
+            "max": 24
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 11222,
+              "nameFull": "Eric Kendricks",
+              "nameShort": "E. Kendricks",
+              "proTeamAbbreviation": "FA",
+              "position": "LB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/11222.png",
+              "nflByeWeek": 6,
+              "nameFirst": "Eric",
+              "nameLast": "Kendricks",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "LB"
+              ],
+              "percentOwnedRatio": 0.02
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6434,
+                  "away": {
+                    "abbreviation": "MIN",
+                    "location": "Minnesota",
+                    "name": "Vikings"
+                  },
+                  "home": {
+                    "abbreviation": "CIN",
+                    "location": "Cincinnati",
+                    "name": "Bengals"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 24,
+                  "homeScore": 27,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "WIN",
+                  "awayResult": "LOSE"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 82,
+                      "abbreviation": "Ast",
+                      "nameSingular": "Assisted Tackle",
+                      "namePlural": "Assisted Tackles"
+                    },
+                    "value": {
+                      "value": 9,
+                      "formatted": "9"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 13.5,
+                  "formatted": "13.5"
+                },
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 13.5,
+              "formatted": "13.5"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 82,
+                  "abbreviation": "Ast",
+                  "nameSingular": "Assisted Tackle",
+                  "namePlural": "Assisted Tackles"
+                },
+                "value": {
+                  "value": 9,
+                  "formatted": "9"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "DEFENDER",
+            "rankFantasy": {
+              "ordinal": 40,
+              "positions": [
+                {
+                  "position": {
+                    "label": "LB",
+                    "group": "START",
+                    "eligibility": [
+                      "LB"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_PURPLE"
+                    ]
+                  },
+                  "ordinal": 5,
+                  "formatted": "5",
+                  "rating": "RATING_VERY_GOOD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 10.5,
+                  "formatted": "10.5"
+                },
+                "duration": 1,
+                "underPerforming": true
+              }
+            ],
+            "isOnTradingBlock": true,
+            "seasonTotal": {
+              "value": 248.9,
+              "formatted": "248.9"
+            },
+            "seasonAverage": {
+              "value": 15.55625,
+              "formatted": "15.56"
+            },
+            "seasonsStandartDeviation": {
+              "value": 8.062953,
+              "formatted": "8.06"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "group": "INJURED",
+      "slots": [
+        {
+          "position": {
+            "label": "IR",
+            "group": "INJURED",
+            "eligibility": [
+              "QB"
+            ],
+            "start": 25,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 13778,
+              "nameFull": "Saquon Barkley",
+              "nameShort": "S. Barkley",
+              "proTeamAbbreviation": "PHI",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/13778.png",
+              "nflByeWeek": 8,
+              "news": [
+                {
+                  "timeEpochMilli": "1790454002000",
+                  "contents": "[redacted: third-party news text]",
+                  "analysis": "[redacted: third-party news text]",
+                  "title": "[redacted: third-party news text]"
+                },
+                {
+                  "timeEpochMilli": "1790455934000",
+                  "contents": "[redacted: third-party news text]",
+                  "url": "https://example.invalid/redacted-news-url",
+                  "title": "[redacted: third-party news text]"
+                }
+              ],
+              "nameFirst": "Saquon",
+              "nameLast": "Barkley",
+              "proTeam": {
+                "abbreviation": "PHI",
+                "location": "Philadelphia",
+                "name": "Eagles"
+              },
+              "positionEligibility": [
+                "RB"
+              ],
+              "percentOwnedRatio": 0.99
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6443,
+                  "away": {
+                    "abbreviation": "DEN",
+                    "location": "Denver",
+                    "name": "Broncos"
+                  },
+                  "home": {
+                    "abbreviation": "NYG",
+                    "location": "New York",
+                    "name": "Giants"
+                  },
+                  "startTimeEpochMilli": "1631478300000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 27,
+                  "homeScore": 13,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 22,
+                      "abbreviation": "Yd",
+                      "nameSingular": "Rushing Yard",
+                      "namePlural": "Rushing Yards"
+                    },
+                    "value": {
+                      "value": 26,
+                      "formatted": "26"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 3.6999998,
+                  "formatted": "3.7"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 3.6999998,
+              "formatted": "3.7"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 22,
+                  "abbreviation": "Yd",
+                  "nameSingular": "Rushing Yard",
+                  "namePlural": "Rushing Yards"
+                },
+                "value": {
+                  "value": 26,
+                  "formatted": "26"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "RUSHER",
+            "rankFantasy": {
+              "ordinal": 197,
+              "positions": [
+                {
+                  "position": {
+                    "label": "RB",
+                    "group": "START",
+                    "eligibility": [
+                      "RB"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_GREEN"
+                    ]
+                  },
+                  "ordinal": 35,
+                  "formatted": "35",
+                  "rating": "RATING_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 6.9,
+                  "formatted": "6.9"
+                },
+                "duration": 1,
+                "underPerforming": true
+              }
+            ],
+            "isKeeper": true,
+            "seasonTotal": {
+              "value": 147.09999,
+              "formatted": "147.1"
+            },
+            "seasonAverage": {
+              "value": 10.507142,
+              "formatted": "10.51"
+            },
+            "seasonsStandartDeviation": {
+              "value": 7.9363074,
+              "formatted": "7.94"
+            },
+            "seasonConsistency": "RATING_BAD"
+          }
+        },
+        {
+          "position": {
+            "label": "IR",
+            "group": "INJURED",
+            "eligibility": [
+              "QB"
+            ],
+            "start": 25,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 9552,
+              "nameFull": "Chris Thompson",
+              "nameShort": "C. Thompson",
+              "proTeamAbbreviation": "FA",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/9552.png",
+              "nameFirst": "Chris",
+              "nameLast": "Thompson",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "RB"
+              ]
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 22,
+                  "abbreviation": "Yd",
+                  "nameSingular": "Rushing Yard",
+                  "namePlural": "Rushing Yards"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "RUSHER",
+            "lastX": [
+              {
+                "duration": 1
+              }
+            ],
+            "isKeeper": true,
+            "isOnTradingBlock": true
+          }
+        },
+        {
+          "position": {
+            "label": "IR",
+            "group": "INJURED",
+            "eligibility": [
+              "QB"
+            ],
+            "start": 25,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 13985,
+              "nameFull": "Auden Tate",
+              "nameShort": "A. Tate",
+              "proTeamAbbreviation": "FA",
+              "position": "WR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/13985.png",
+              "nameFirst": "Auden",
+              "nameLast": "Tate",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "WR"
+              ]
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 26,
+                  "abbreviation": "Fum",
+                  "nameSingular": "Fumble",
+                  "namePlural": "Fumbles",
+                  "lowerIsBetter": true
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "RECEIVER",
+            "rankFantasy": {
+              "ordinal": 804,
+              "positions": [
+                {
+                  "position": {
+                    "label": "WR",
+                    "group": "START",
+                    "eligibility": [
+                      "WR"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_BLUE"
+                    ]
+                  },
+                  "ordinal": 186,
+                  "formatted": "186",
+                  "rating": "RATING_VERY_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 7.7,
+                  "formatted": "7.7"
+                },
+                "duration": 1,
+                "overPerforming": true
+              }
+            ],
+            "seasonTotal": {
+              "value": 14.4,
+              "formatted": "14.4"
+            },
+            "seasonAverage": {
+              "value": 3.6,
+              "formatted": "3.6"
+            },
+            "seasonsStandartDeviation": {
+              "value": 2.413504,
+              "formatted": "2.41"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "group": "TAXI",
+      "slots": [
+        {
+          "position": {
+            "label": "TAXI",
+            "group": "TAXI",
+            "eligibility": [
+              "QB"
+            ],
+            "start": 3,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 15602,
+              "nameFull": "Julian Okwara",
+              "nameShort": "J. Okwara",
+              "proTeamAbbreviation": "FA",
+              "position": "EDR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/15602.png",
+              "nameFirst": "Julian",
+              "nameLast": "Okwara",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "EDR"
+              ]
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 82,
+                  "abbreviation": "Ast",
+                  "nameSingular": "Assisted Tackle",
+                  "namePlural": "Assisted Tackles"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "DEFENDER",
+            "rankFantasy": {
+              "ordinal": 328,
+              "positions": [
+                {
+                  "position": {
+                    "label": "EDR",
+                    "group": "START",
+                    "eligibility": [
+                      "EDR"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_PURPLE"
+                    ]
+                  },
+                  "ordinal": 46,
+                  "formatted": "46",
+                  "rating": "RATING_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 19.5,
+                  "formatted": "19.5"
+                },
+                "duration": 1,
+                "overPerforming": true
+              }
+            ],
+            "seasonTotal": {
+              "value": 108,
+              "formatted": "108"
+            },
+            "seasonAverage": {
+              "value": 9,
+              "formatted": "9"
+            },
+            "seasonsStandartDeviation": {
+              "value": 6.778151,
+              "formatted": "6.78"
+            },
+            "seasonConsistency": "RATING_BAD"
+          }
+        },
+        {
+          "position": {
+            "label": "TAXI",
+            "group": "TAXI",
+            "eligibility": [
+              "QB"
+            ],
+            "start": 3,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 14713,
+              "nameFull": "Chase Winovich",
+              "nameShort": "C. Winovich",
+              "proTeamAbbreviation": "FA",
+              "position": "EDR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14713.png",
+              "nflByeWeek": 11,
+              "nameFirst": "Chase",
+              "nameLast": "Winovich",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "EDR"
+              ]
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6444,
+                  "away": {
+                    "abbreviation": "MIA",
+                    "location": "Miami",
+                    "name": "Dolphins"
+                  },
+                  "home": {
+                    "abbreviation": "NE",
+                    "location": "New England",
+                    "name": "Patriots"
+                  },
+                  "startTimeEpochMilli": "1631478300000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 17,
+                  "homeScore": 16,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "LOSE",
+                  "awayResult": "WIN"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 83,
+                      "abbreviation": "Solo",
+                      "nameSingular": "Solo Tackle",
+                      "namePlural": "Solo Tackles"
+                    },
+                    "value": {
+                      "value": 1,
+                      "formatted": "1"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 1.5,
+                  "formatted": "1.5"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 1.5,
+              "formatted": "1.5"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 83,
+                  "abbreviation": "Solo",
+                  "nameSingular": "Solo Tackle",
+                  "namePlural": "Solo Tackles"
+                },
+                "value": {
+                  "value": 1,
+                  "formatted": "1"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "DEFENDER",
+            "rankFantasy": {
+              "ordinal": 836,
+              "positions": [
+                {
+                  "position": {
+                    "label": "EDR",
+                    "group": "START",
+                    "eligibility": [
+                      "EDR"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_PURPLE"
+                    ]
+                  },
+                  "ordinal": 161,
+                  "formatted": "161",
+                  "rating": "RATING_VERY_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 2.5,
+                  "formatted": "2.5"
+                },
+                "duration": 1,
+                "overPerforming": true
+              }
+            ],
+            "seasonTotal": {
+              "value": 11.5,
+              "formatted": "11.5"
+            },
+            "seasonAverage": {
+              "value": 1.6428572,
+              "formatted": "1.64"
+            },
+            "seasonsStandartDeviation": {
+              "value": 0.87481755,
+              "formatted": "0.87"
+            }
+          }
+        },
+        {
+          "position": {
+            "label": "TAXI",
+            "group": "TAXI",
+            "eligibility": [
+              "QB"
+            ],
+            "start": 3,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "leaguePlayer": {
+            "proPlayer": {
+              "id": 14715,
+              "nameFull": "Germaine Pratt",
+              "nameShort": "G. Pratt",
+              "proTeamAbbreviation": "FA",
+              "position": "LB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14715.png",
+              "nflByeWeek": 6,
+              "nameFirst": "Germaine",
+              "nameLast": "Pratt",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "positionEligibility": [
+                "LB"
+              ],
+              "percentOwnedRatio": 0.06
+            },
+            "requestedGames": [
+              {
+                "game": {
+                  "id": 6434,
+                  "away": {
+                    "abbreviation": "MIN",
+                    "location": "Minnesota",
+                    "name": "Vikings"
+                  },
+                  "home": {
+                    "abbreviation": "CIN",
+                    "location": "Cincinnati",
+                    "name": "Bengals"
+                  },
+                  "startTimeEpochMilli": "1631466000000",
+                  "status": "FINAL_SCORE",
+                  "awayScore": 24,
+                  "homeScore": 27,
+                  "period": {
+                    "ordinal": 1,
+                    "season": 2021,
+                    "startEpochMilli": "1631008800000"
+                  },
+                  "homeResult": "WIN",
+                  "awayResult": "LOSE"
+                },
+                "stats": [
+                  {
+                    "category": {
+                      "id": 82,
+                      "abbreviation": "Ast",
+                      "nameSingular": "Assisted Tackle",
+                      "namePlural": "Assisted Tackles"
+                    },
+                    "value": {
+                      "value": 2,
+                      "formatted": "2"
+                    }
+                  }
+                ],
+                "pointsActual": {
+                  "value": 20,
+                  "formatted": "20"
+                },
+                "participant": "HOME",
+                "period": {
+                  "ordinal": 1,
+                  "season": 2021,
+                  "startEpochMilli": "1631008800000"
+                }
+              }
+            ],
+            "viewingActualPoints": {
+              "value": 20,
+              "formatted": "20"
+            },
+            "viewingActualStats": [
+              {
+                "category": {
+                  "id": 82,
+                  "abbreviation": "Ast",
+                  "nameSingular": "Assisted Tackle",
+                  "namePlural": "Assisted Tackles"
+                },
+                "value": {
+                  "value": 2,
+                  "formatted": "2"
+                }
+              }
+            ],
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "season": 2021,
+              "startEpochMilli": "1631008800000"
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "season": 2021,
+              "low": 1
+            },
+            "owner": {
+              "id": 1371776,
+              "name": "Winter Hill Black Shamrocks",
+              "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+              "initials": "WH"
+            },
+            "displayGroup": "DEFENDER",
+            "rankFantasy": {
+              "ordinal": 192,
+              "positions": [
+                {
+                  "position": {
+                    "label": "LB",
+                    "group": "START",
+                    "eligibility": [
+                      "LB"
+                    ],
+                    "colors": [
+                      "DRAFT_BOARD_PURPLE"
+                    ]
+                  },
+                  "ordinal": 42,
+                  "formatted": "42",
+                  "rating": "RATING_BAD"
+                }
+              ],
+              "season": 2021
+            },
+            "lastX": [
+              {
+                "value": {
+                  "value": 8,
+                  "formatted": "8"
+                },
+                "duration": 1
+              }
+            ],
+            "seasonTotal": {
+              "value": 149,
+              "formatted": "149"
+            },
+            "seasonAverage": {
+              "value": 9.933333,
+              "formatted": "9.93"
+            },
+            "seasonsStandartDeviation": {
+              "value": 6.2115664,
+              "formatted": "6.21"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "alwaysAvailablePositions": [
+    {
+      "label": "BN",
+      "max": 24
+    },
+    {
+      "label": "IR",
+      "group": "INJURED",
+      "eligibility": [
+        "QB"
+      ],
+      "start": 25,
+      "colors": [
+        "DRAFT_BOARD_GREEN"
+      ]
+    }
+  ],
+  "eligibleLineupPeriods": [
+    {
+      "ordinal": 1,
+      "low": {
+        "ordinal": 1,
+        "season": 2021,
+        "startEpochMilli": "1631008800000"
+      },
+      "value": 1
+    },
+    {
+      "ordinal": 3,
+      "low": {
+        "ordinal": 3,
+        "startEpochMilli": "1790071200000",
+        "isNow": true
+      },
+      "containsNow": true,
+      "value": 3
+    }
+  ],
+  "lineupPeriod": {
+    "ordinal": 1,
+    "low": {
+      "ordinal": 1,
+      "season": 2021,
+      "startEpochMilli": "1631008800000"
+    },
+    "value": 1
+  },
+  "eligibleTeams": [
+    {
+      "id": 1371776,
+      "name": "Winter Hill Black Shamrocks",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+      "initials": "WH"
+    }
+  ]
+}

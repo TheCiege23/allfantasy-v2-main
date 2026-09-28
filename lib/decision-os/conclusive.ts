@@ -161,6 +161,44 @@ function human(ms: number): string {
   return `${Math.max(1, Math.round(ms / MINUTES))} minutes`
 }
 
+const SCOPE_LABEL: Record<string, string> = {
+  league_state: 'league settings',
+  teams_rosters: 'rosters',
+  transactions: 'transactions',
+  traded_picks: 'traded picks',
+}
+
+function scopeList(scopes: readonly string[]): string {
+  const names = scopes.map((s) => SCOPE_LABEL[s] ?? s)
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+export interface CertifiedFreshness {
+  lastSuccessfulSyncAt: string | null
+  staleMs: number | null
+  /** Which certified clock this came from. */
+  lane: 'full' | 'active'
+}
+
+/**
+ * The certified freshness that applies to a fact built from `scopes`.
+ *
+ * ⚠ THE ACTIVE LANE COUNTS ONLY WHEN IT COVERS EVERY SCOPE THE FACT NEEDS. Its stamp certifies
+ * league settings, rosters and transactions together; it says nothing about traded picks. So a
+ * lineup call (rosters only) may be judged by it, and a fact that also needs traded picks may not —
+ * otherwise a fresh roster read would vouch for a picks table nobody refreshed.
+ *
+ * PURE, like the rest of this module.
+ */
+export function certifiedFreshnessFor(scopes: readonly string[], a: ImportAssertions): CertifiedFreshness {
+  const full: CertifiedFreshness = { lastSuccessfulSyncAt: a.lastSuccessfulSyncAt, staleMs: a.staleMs, lane: 'full' }
+  const lane = a.activeLane
+  if (!lane || lane.lastSuccessfulSyncAt == null || lane.staleMs == null) return full
+  if (scopes.length === 0 || !scopes.every((s) => lane.scopes.includes(s))) return full
+  if (full.staleMs != null && full.staleMs <= lane.staleMs) return full
+  return { lastSuccessfulSyncAt: lane.lastSuccessfulSyncAt, staleMs: lane.staleMs, lane: 'active' }
+}
+
 /**
  * Decide whether one fact class may be asserted about one league.
  *
@@ -179,11 +217,23 @@ export function isConclusive(
   }
 
   const blockedBy: ConclusivenessBlocker[] = []
+  const fresh = certifiedFreshnessFor(dep.scopes, assertions)
+  /*
+   * A scope the full run left incomplete is not a gap once the active lane has since completed
+   * it: that lane's certified stamp is later than the full run that failed on it.
+   */
+  const laneCompletedAfterFullRun = (scope: string): boolean => {
+    const lane = assertions.activeLane
+    if (!lane?.lastSuccessfulSyncAt || !lane.scopes.includes(scope)) return false
+    const laneAt = Date.parse(lane.lastSuccessfulSyncAt)
+    const fullAt = assertions.lastAttemptedSyncAt ? Date.parse(assertions.lastAttemptedSyncAt) : NaN
+    return Number.isFinite(laneAt) && (!Number.isFinite(fullAt) || laneAt > fullAt)
+  }
 
   // ── freshness, per scope ────────────────────────────────────────────────────────────────────
   for (const scope of dep.scopes) {
     const s = assertions.scopes.find((x) => x.scope === scope)
-    if (s && s.incomplete) {
+    if (s && s.incomplete && !laneCompletedAfterFullRun(scope)) {
       blockedBy.push({
         assertion: 'freshness',
         scope,
@@ -194,17 +244,23 @@ export function isConclusive(
   }
 
   if (dep.maxStaleMs != null) {
-    if (assertions.lastSuccessfulSyncAt === null) {
+    if (fresh.lastSuccessfulSyncAt === null) {
       blockedBy.push({
         assertion: 'freshness',
         detail: 'This league has never completed a full sync, so its data has never been certified fresh.',
         remedy: 'Reconnect the league, or run a manual refresh, and this becomes answerable.',
       })
-    } else if (assertions.staleMs != null && assertions.staleMs > dep.maxStaleMs) {
+    } else if (fresh.staleMs != null && fresh.staleMs > dep.maxStaleMs) {
+      /*
+       * ⚠ SAY WHICH DATA THE CLOCK DESCRIBES. "The last successful sync was 4 hours ago" printed
+       * under a header reading "synced 25 minutes ago" is a contradiction to the reader even when
+       * both are true — they are different collections. Name the scopes the age belongs to.
+       */
+      const what = dep.scopes.length ? `this league's ${scopeList(dep.scopes)}` : 'this league'
       blockedBy.push({
         assertion: 'freshness',
         detail:
-          `The last successful sync was ${human(assertions.staleMs)} ago, and this answer needs data ` +
+          `The last complete sync of ${what} was ${human(fresh.staleMs)} ago, and this answer needs data ` +
           `no older than ${human(dep.maxStaleMs)}.`,
         remedy:
           assertions.consecutiveFailures > 0

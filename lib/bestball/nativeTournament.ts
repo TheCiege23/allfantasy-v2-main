@@ -1,3 +1,4 @@
+import { finalizeNativeTournamentSeason } from './finalizeNativeTournamentSeason'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -43,7 +44,7 @@ export async function runNativeTournamentWeek(seasonId: string, throughWeek: num
   if (!isNativeTournamentLeague(season.league) || !contestId) return 'not_tournament'
   const contest = await prisma.bestBallContest.findUniqueOrThrow({ where: { id: contestId } })
   if (contest.status === 'complete') {
-    await prisma.redraftSeason.update({ where: { id: seasonId }, data: { status: 'complete' } })
+    await finalizeNativeTournamentSeason(seasonId)
     return 'complete'
   }
   if (contest.status !== 'active') {
@@ -85,6 +86,6 @@ export async function runNativeTournamentWeek(seasonId: string, throughWeek: num
   if (end < ends[round - 1]!) return 'scored'
   const tie = season.league.bbTiebreaker
   await advancePodWinners(contestId, round, tie === 'max_week' || tie === 'points_for' ? tie : 'advance_all')
-  if (round === contest.rounds) await prisma.redraftSeason.update({ where: { id: seasonId }, data: { status: 'complete' } })
+  if (round === contest.rounds) await finalizeNativeTournamentSeason(seasonId)
   return round === contest.rounds ? 'complete' : 'advanced'
 }

@@ -75,7 +75,7 @@ When an authenticated user connects a fantasy platform account:
 
 | Provider | Flow type | Notes |
 |---|---|---|
-| Sleeper | Credentials (username lookup) | `app/api/auth/sleeper-lookup/` — existing pattern; use as reference |
+| Sleeper | Credentials (username lookup) | Server-side `lookupSleeperUser` in `lib/sleeper/user-lookup.ts`. Do NOT add a public lookup route for it: the old `app/api/auth/sleeper-lookup` was an unthrottled Sleeper proxy and was removed 2026-09-27. Any public Sleeper read needs rate limits and must go through `lib/api-cache/SleeperCacheLayer.ts` (see `/api/sleeper-check`, PR #1426). |
 | Discord | Standard OAuth2 | Route skeleton exists at `app/api/auth/discord/`; wire to `UnifiedAuthService` |
 | Yahoo | OAuth1/OAuth2 hybrid | Route skeleton at `app/api/auth/yahoo/`; verify active before expanding |
 | ESPN | Credential/cookie-based | No standard OAuth; may require session cookie exchange; treat carefully |

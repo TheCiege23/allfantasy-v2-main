@@ -8,6 +8,9 @@ import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
+import { isOutDesignation, isRuledOut } from './injuryStatus'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 
 /**
  * Waivers, across every league — "the single best add on each wire, ranked by
@@ -346,6 +349,42 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
 
   const marketOk = market.leaguesCounted >= MIN_LEAGUES_FOR_MARKET
 
+  /*
+   * 🛑 THE PROJECTION FEED DOES NOT KNOW WHO IS HURT, AND THIS BOARD TRUSTED IT. Measured on
+   * production 2026-09-28: Jaxson Dart — on IR, and shown as IR on the same account's home and
+   * Player Finder — was the #1 add in three leagues at 27.4 projected points, because
+   * `fantasyProjection` still carried a week-3 line for him. A pickup who cannot play is not a
+   * gain, and naming him first is the single most confident wrong thing this screen can say.
+   *
+   * So a candidate the injury feed declares ABSENT (IR, Out, PUP, NFI, suspension — `isRuledOut`,
+   * the same predicate the home's "cannot play" alert reads) is never named as the add.
+   * Questionable and Doubtful stay eligible: uncertainty is not absence (see injuryStatus.ts).
+   * ⚠ A GAME-DAY "Out" OLDER THAN THE STALENESS WINDOW IS LAST WEEK'S NEWS and does not exclude —
+   * season-scale rulings (IR and the rest) still do, because they hold for months.
+   * An unreadable feed excludes nobody: a missing injury row is "no news", never "healthy", but it
+   * is not "hurt" either.
+   */
+  const ruledOut = new Set<string>()
+  {
+    const lookups = new Map<string, { name: string; position: string | null; team: string | null }>()
+    for (const p of pool) {
+      const meta = metaById.get(p.playerId)
+      if (meta) lookups.set(p.playerId, { name: meta.name, position: meta.position, team: meta.team })
+    }
+    const injuries =
+      lookups.size > 0
+        ? await resolveInjuryFacts({ sport: 'NFL', players: [...lookups.values()] }).catch(() => null)
+        : null
+    if (injuries) {
+      for (const [playerId, lookup] of lookups) {
+        const fact = injuries.byPlayer.get(normalizeMatchName(lookup.name))
+        if (!fact || !isRuledOut(fact.status)) continue
+        if (fact.stale && isOutDesignation(fact.status)) continue
+        ruledOut.add(playerId)
+      }
+    }
+  }
+
   function toPlayer(id: string, projected: number): WaiverPlayer | null {
     const meta = metaById.get(id)
     if (!meta) return null
@@ -410,6 +449,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     for (const p of pool) {
       if (takenIds.has(p.playerId)) continue
       if (!metaById.has(p.playerId)) continue
+      if (ruledOut.has(p.playerId)) continue
       const pts = scoreOf(p)
       if (pts == null) continue
       if (pts > bestPts) {

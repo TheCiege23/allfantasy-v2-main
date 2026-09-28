@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -358,8 +359,15 @@ export function nativeItemsToAssets(
 
 export function TradeInbox(props: {
   leagueId: string | null
+  /** Render the actionable inbox before the builder, or the archive after it. */
+  view?: 'offers' | 'timeline' | 'all'
   /** Hands a whole offer to the builder on this page. */
   onLoad: (give: PickedAsset[], get: PickedAsset[], note: string | null) => void
+  /**
+   * Clears the builder so the manager can type in an offer they can see on Sleeper and we cannot.
+   * Absent: the screen has no builder, so the control is not drawn.
+   */
+  onEnterByHand?: () => void
   /**
    * Hands a NATIVE offer to the builder in counter mode. Absent means the screen
    * cannot counter, and no counter control is rendered — a button that cannot
@@ -396,8 +404,10 @@ export function TradeInbox(props: {
   const [countering, setCountering] = useState<{ id: string; state: 'loading' | 'failed' } | null>(null)
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
   const [timelineLimit, setTimelineLimit] = useState(5)
+  /** When the feed last answered — the freshness line under the Sleeper notice. */
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
 
-  const { leagueId, onLoad, onCounter, reloadToken = 0 } = props
+  const { leagueId, onLoad, onCounter, onEnterByHand, reloadToken = 0 } = props
   useEffect(() => { setTimelineLimit(5) }, [leagueId, timelineFilter])
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
@@ -424,6 +434,7 @@ export function TradeInbox(props: {
       }
       setData(j)
       setState('idle')
+      if (j.pending?.scanned) setCheckedAt(new Date())
     } catch {
       if (background) return
       setData(null)
@@ -441,7 +452,7 @@ export function TradeInbox(props: {
    * and once a minute while it is in view. See useVisibleRefresh; the server reads the current
    * weeks at most 45 s old (scanPendingSleeperTrades), so a refresh can actually see it.
    */
-  useVisibleRefresh(() => load({ background: true }), { enabled: Boolean(leagueId) })
+  useVisibleRefresh(() => load({ background: true }), { enabled: Boolean(leagueId) && props.view !== 'timeline' })
 
   const { onNeedsYouCount } = props
   useEffect(() => {
@@ -517,6 +528,7 @@ export function TradeInbox(props: {
 
   if (!leagueId) return null
 
+  const view = props.view ?? 'all'
   const offers = data?.pendingOffers ?? []
   const inbox = offers.filter((o) => o.direction === 'incoming')
   const sent = offers.filter((o) => o.direction === 'outgoing')
@@ -574,7 +586,9 @@ export function TradeInbox(props: {
         </p>
       ) : rows.length === 0 ? (
         <p className="af-tc-row-sub">
-          {emptyWhenScanned}
+          {pending?.platform === 'sleeper'
+            ? 'None we can see. Sleeper doesn’t share an offer until it’s accepted — see the note above.'
+            : emptyWhenScanned}
           {pending && pending.weeksUnanswered > 0
             ? ` Sleeper did not answer for ${pending.weeksUnanswered} of the weeks we asked about, so this is short of a full read.`
             : ''}
@@ -659,11 +673,49 @@ export function TradeInbox(props: {
 
   return (
     <div className="af-tc-inbox">
-      {pending?.scanned && pending.weeksRequested ? (
+      {view !== 'timeline' ? <>
+      {/*
+        🛑 SLEEPER'S PUBLIC FEED DOES NOT CARRY AN OFFER UNTIL IT IS ACCEPTED. Measured on
+        production 2026-09-28: 2,154 Sleeper trades swept into `provider_trade_offers` over 12
+        days of 5-minute sweeps, and 28,167 trade rows in `dw_transaction_facts` — every one
+        `complete`, not one ever seen pending. Sleeper's docs list no proposal endpoint and no
+        authenticated API. So an empty Inbox here is not "nothing is waiting"; it is "Sleeper
+        does not tell us", and the manager can see what we cannot. The honest path is to say so
+        and let them type the offer in, graded by the same builder as every other trade.
+      */}
+      {pending?.platform === 'sleeper' ? (
+        <div className="af-tc-scan-receipt af-tc-sleeper-offers" role="note">
+          <b>Offers waiting in Sleeper don&rsquo;t appear here</b>
+          Sleeper only shares a trade once it&rsquo;s accepted, so an offer still waiting for an answer
+          never reaches AllFantasy. Enter it yourself and it gets the same grade as any trade in this league.
+          <span className="af-tc-offer-actions">
+            {onEnterByHand ? (
+              <button type="button" className="af-btn af-btn--ghost" onClick={onEnterByHand}>
+                Grade a Sleeper offer
+              </button>
+            ) : null}
+            {pending.leagueUrl ? (
+              <a className="af-tc-offer-link" href={pending.leagueUrl} target="_blank" rel="noreferrer noopener">
+                Open Sleeper
+              </a>
+            ) : null}
+          </span>
+          {pending.scanned && checkedAt ? (
+            <span className="af-tc-row-sub">
+              Accepted trades last checked at{' '}
+              {checkedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              {pending.weeksRequested
+                ? ` · Sleeper answered ${pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} of ${pending.weeksRequested} weeks`
+                : ''}
+              .
+            </span>
+          ) : null}
+        </div>
+      ) : pending?.scanned && pending.weeksRequested ? (
         <p className="af-tc-scan-receipt">
-          <b>Live trade import check</b>
+          <b>Public transaction feed check</b>
           Sleeper answered {pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} of {pending.weeksRequested} transaction weeks.
-          Pending offers appear here during their live review window; accept, decline, or counter them in Sleeper. You do not enter them by hand.
+          Offers returned by that feed appear here. Sleeper may show additional live proposals in its app; accept, decline, or counter them there.
         </p>
       ) : null}
       {column('Inbox', inbox, 'Nothing waiting on you right now.')}
@@ -706,6 +758,9 @@ export function TradeInbox(props: {
         </p>
       ) : null}
 
+      </> : null}
+
+      {view !== 'offers' ? (
       <section className="af-tc-timeline" aria-labelledby="trade-timeline-title">
         <header className="af-tc-timeline-head">
           <div>
@@ -799,16 +854,31 @@ export function TradeInbox(props: {
                      * so the column answers the question a finished deal actually has: who won it.
                      * The two letters are one grade seen from each side (`partnerLetter` is exact).
                      */
-                    <div className="af-tc-timeline-grades" data-mode="teams" aria-label="Grade for each team, on league value today">
+                    /*
+                     * A FROZEN original (`frozenCompletedGrade.ts`) is labelled with the day it was
+                     * first graded, and today's letter shows under it only when the market moved it —
+                     * the original and the re-evaluation are two facts, never one.
+                     */
+                    <div
+                      className="af-tc-timeline-grades"
+                      data-mode="teams"
+                      aria-label={`Grade for each team, on league value ${gradeMoment(teamGrades)}`}
+                    >
                       <div data-letter={teamGrades.letter}>
                         <span title={sideAName}>{sideAName}</span>
                         <strong>{teamGrades.letter}</strong>
                         <small>{teamGrades.getValue.toLocaleString()} for {teamGrades.giveValue.toLocaleString()}</small>
+                        {teamGrades.current && teamGrades.current.letter !== teamGrades.letter
+                          ? <small>Today {teamGrades.current.letter}</small>
+                          : null}
                       </div>
                       <div data-letter={teamGrades.partnerLetter}>
                         <span title={sideBName}>{sideBName}</span>
                         <strong>{teamGrades.partnerLetter}</strong>
                         <small>{teamGrades.giveValue.toLocaleString()} for {teamGrades.getValue.toLocaleString()}</small>
+                        {teamGrades.current && teamGrades.current.partnerLetter !== teamGrades.partnerLetter
+                          ? <small>Today {teamGrades.current.partnerLetter}</small>
+                          : null}
                       </div>
                     </div>
                   ) : (
@@ -829,6 +899,7 @@ export function TradeInbox(props: {
           </div>
         )}
       </section>
+      ) : null}
     </div>
   )
 }

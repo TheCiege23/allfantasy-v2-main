@@ -492,7 +492,10 @@ export function WeekBoard({
           sample the basis stands alone; with one it is a clause.
         */}
         {board.model.sampleSize > 0
-          ? `Margins are projected from each league's own completed weeks — ${board.model.basis}, fitted on ${board.model.sampleSize.toLocaleString()} roster-weeks.`
+          ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
+               a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
+               on 40,396 roster-weeks." on production, 2026-09-28. */
+            `${board.model.basis} Fitted on ${board.model.sampleSize.toLocaleString()} roster-weeks.`
           : board.model.basis}{' '}
         {outlook
           ? ` Playoff odds are a simulated probability over the remaining schedule; a league below ${DEAD_PATH_PCT}% is left out of the trailing column.`

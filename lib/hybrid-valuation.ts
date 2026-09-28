@@ -89,6 +89,8 @@ export interface PricedAsset {
     | 'kicker-flat'
     | 'idp-flat-baseline'
     | 'analytics-lifetime'
+    /** A college prospect held in a devy/C2C league, priced by `lib/devy/devyOptionValue.ts` (measured). */
+    | 'devy-option'
     | 'unknown';
   /**
    * TRUE MEANS NO VALUE SOURCE MATCHED THIS ASSET AT ALL — it is not "worth zero",

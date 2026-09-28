@@ -17,9 +17,12 @@ import {
 import { snapshotFromLoaded } from '@/lib/trade-value-console/quick-badges'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
-import { loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
+import { loadRosterNeedFactors, loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
+import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
+import { createLeagueAssetPolicy } from './leagueAssetPolicy'
+import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 
 /**
  * The ONE trade grade, computed. Every surface that shows a letter for a deal that has not happened
@@ -42,7 +45,17 @@ import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligib
  * other managers' offer gets the league's chart and scoring, no need, and `needGap` says why.
  */
 
-export type NeedScope = { leagueId: string; userId: string; sport: string; starters: unknown }
+export type NeedScope = {
+  leagueId: string
+  userId: string
+  sport: string
+  starters: unknown
+  /**
+   * Price need for THIS roster instead of the user's claimed one — how the nightly trade agent asks
+   * whether the partner's roster gains, when the partner has no AllFantasy account to look up.
+   */
+  playerData?: unknown
+}
 
 /** Price-independent: a line counts as a move only when this league's value differs from market. */
 function movesOf(leagueGrade: LeagueGrade): TradeGradeMove[] {
@@ -81,6 +94,8 @@ export async function gradePricedSides(args: {
   need: NeedScope | null
   /** Why this deal cannot be graded at all, when the caller already knows (e.g. no league). */
   withheld?: string | null
+  /** Sentences the basis must carry about how some lines were priced (e.g. devy prospects). */
+  basisNotes?: readonly string[]
   mark?: (name: string) => void
 }): Promise<{ leagueGrade: LeagueGrade; grade: TradeGradeView; needFactors: NeedFactors | null }> {
   const { chart } = args
@@ -94,14 +109,17 @@ export async function gradePricedSides(args: {
         base: gradeBaseOf(l, priced[i]),
         injuryStatus: l.injuryStatus,
       }))
-    needFactors = await loadViewerNeedFactors({
+    const needArgs = {
       leagueId: args.need.leagueId,
-      userId: args.need.userId,
       sport: args.need.sport,
       starters: args.need.starters,
       give: toNeed(args.giveLines, args.givePriced),
       get: toNeed(args.getLines, args.getPriced),
-    })
+    }
+    needFactors =
+      args.need.playerData !== undefined
+        ? await loadRosterNeedFactors({ ...needArgs, playerData: args.need.playerData })
+        : await loadViewerNeedFactors({ ...needArgs, userId: args.need.userId })
     args.mark?.('need_factors')
   }
 
@@ -132,6 +150,7 @@ export async function gradePricedSides(args: {
   if (chart.valuationGaps?.length) {
     leagueGrade.valueBasis.label += ` — scope: chart and league scoring only. ${chart.valuationGaps.join(' ')}`
   }
+  if (args.basisNotes?.length) leagueGrade.valueBasis.label += ` ${args.basisNotes.join(' ')}`
   const withheld =
     args.withheld ??
     proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
@@ -181,7 +200,13 @@ export type LeagueTradeGrader = {
    * Price and grade one deal on this league's chart. `give` is what the graded side sends.
    * `viewerSide: true` adds personal roster utility separately; it does not change the letter.
    */
-  grade(args: { give: TradeAssetInput[]; get: TradeAssetInput[]; viewerSide: boolean }): Promise<TradeGradeView>
+  grade(args: {
+    give: TradeAssetInput[]
+    get: TradeAssetInput[]
+    viewerSide: boolean
+    /** Price roster fit for this roster (the `give` side's) rather than the grader's user's. */
+    needRoster?: { playerData: unknown }
+  }): Promise<TradeGradeView>
 }
 
 /**
@@ -236,18 +261,40 @@ export async function createLeagueTradeGrader(args: {
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
+  /*
+   * A college league is not graded on the NFL chart where it can be helped (Phase 8): a redraft league
+   * on points over replacement, and a pick refused in every college league. See `./ncaafLeagueGrader.ts`.
+   */
+  const college =
+    sport === 'NCAAF'
+      ? createNcaafLeagueGrader({ id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType })
+      : null
+  /* Phase 9: picks refused where nothing prices them, and devy prospects this league holds priced. */
+  const assets = createLeagueAssetPolicy({
+    id: args.leagueId,
+    sport,
+    leagueType,
+    season: leagueRow.season ?? null,
+    status: leagueRow.status ?? null,
+  })
 
   // An arrow, not a function declaration: a hoisted declaration loses the `leagueRow` null narrowing.
   const gradeOnce = async ({
     give,
     get,
     viewerSide,
+    needRoster,
   }: {
     give: TradeAssetInput[]
     get: TradeAssetInput[]
     viewerSide: boolean
+    needRoster?: { playerData: unknown }
   }): Promise<TradeGradeView> => {
     try {
+      const collegeView = college ? await college.grade(give, get) : null
+      if (collegeView) return collegeView
+      const pickWhy = assets.pickRefusal([...give, ...get])
+      if (pickWhy) return { graded: false, reason: pickWhy, basis: null }
       const dataGaps: string[] = []
       const opts = {
         effectiveSport: sport,
@@ -266,14 +313,20 @@ export async function createLeagueTradeGrader(args: {
           basis: null,
         }
       }
+      const [gd, td] = await Promise.all([
+        assets.priceDevy({ inputs: give, lines: g.lines, priced: g.priced }),
+        assets.priceDevy({ inputs: get, lines: t.lines, priced: t.priced }),
+      ])
       const { grade } = await gradePricedSides({
         chart,
-        giveLines: g.lines,
-        getLines: t.lines,
-        givePriced: applyChartTePremium(chart, g.priced),
-        getPriced: applyChartTePremium(chart, t.priced),
-        need:
-          viewerSide && args.userId
+        giveLines: gd.lines,
+        getLines: td.lines,
+        givePriced: applyChartTePremium(chart, gd.priced),
+        getPriced: applyChartTePremium(chart, td.priced),
+        basisNotes: gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : [],
+        need: needRoster
+          ? { leagueId: args.leagueId, userId: args.userId ?? '', sport, starters: leagueRow.starters, playerData: needRoster.playerData }
+          : viewerSide && args.userId
             ? { leagueId: args.leagueId, userId: args.userId, sport, starters: leagueRow.starters }
             : null,
       })

@@ -27,6 +27,7 @@ vi.mock('next/link', () => ({
 
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
+import { lineupLink } from '@/lib/core-app/platformLinks'
 
 function impact(
   over: Partial<LeagueImpact> & Pick<LeagueImpact, 'leagueId' | 'leagueName' | 'platform' | 'slot'>,
@@ -498,8 +499,8 @@ describe('Player Finder — game-day home', () => {
           description: 'Ankle',
           reportedAt: null,
           leagues: [
-            { leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper' },
-            { leagueId: 'L-elites', leagueName: 'End Zone Elites', platform: 'espn' },
+            { leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper', platformLeagueId: '1313566817444167680', season: 2026, teamId: '1' },
+            { leagueId: 'L-elites', leagueName: 'End Zone Elites', platform: 'espn', platformLeagueId: '919055222', season: 2026, teamId: '7' },
           ],
           kickoff: '2026-10-25T17:00:00.000Z',
           noGame: false,
@@ -524,11 +525,18 @@ describe('Player Finder — game-day home', () => {
     render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={TRIAGE} nowIso={NOW} />)
     const card = screen.getByRole('region', { name: 'Game day · your flagged starters' })
     expect(within(card).getByText('3 of 6 lineups read · week 12')).toBeInTheDocument()
-    const rows = within(card).getAllByRole('listitem')
+    const rows = [...card.querySelectorAll('li.af-pf-triage-row')] as HTMLElement[]
     expect(rows).toHaveLength(2)
-    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
+    const links = within(rows[0]).getAllByRole('link')
+    expect(links[0]).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
     expect(within(rows[0]).getByText('Out · Ankle')).toBeInTheDocument()
-    expect(within(rows[0]).getByText(/starting in Dynasty Dragons · Sleeper, End Zone Elites · ESPN/)).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/starting in 2 leagues/)).toBeInTheDocument()
+    // One lineup button per league ON THE ROW (2026-09-27) — no round trip through the card.
+    const sleeperBtn = within(rows[0]).getByRole('link', { name: /Dynasty Dragons — open the lineup on Sleeper/ })
+    expect(sleeperBtn).toHaveAttribute('href', 'https://sleeper.com/leagues/1313566817444167680/team')
+    expect(sleeperBtn).toHaveAttribute('target', '_blank')
+    const espnBtn = within(rows[0]).getByRole('link', { name: /End Zone Elites — open the lineup on ESPN/ })
+    expect(espnBtn.getAttribute('href')).toBe(lineupLink({ id: 'L-elites', platform: 'espn', platformLeagueId: '919055222', season: 2026, name: 'End Zone Elites', teamId: '7' })!.href)
     expect(within(rows[0]).getByText('locks in 42 min')).toHaveAttribute('data-lock', 'soon')
     expect(rows[1]).toHaveAttribute('data-nogame', 'true')
     // A plain schedule gap (the fixture's `bye: false`): the chip says so, and there is no kickoff to count down to.
