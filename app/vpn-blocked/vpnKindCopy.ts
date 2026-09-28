@@ -23,7 +23,8 @@ export const VPN_KIND_COPY = {
     detected: "iCloud Private Relay (or Cloudflare WARP)",
     lead:
       "Your VPN may already be off — but Safari is also sending you through iCloud Private Relay, which is switched on " +
-      "for many iPhones by default. It hides which state you're in, so it has to be off for this site.",
+      "for many iPhones by default. In most of the US that's fine, but where you are it can make you look like you're " +
+      "in a neighbouring state, so it has to be off for this site.",
     steps: [
       "Safari on iPhone or iPad: tap the page menu at the left of the address bar (it shows aA on older iPhones) and choose Show IP Address, then tap Try again.",
       "Or turn it off everywhere: Settings → your name → iCloud → Private Relay.",
@@ -70,6 +71,23 @@ export const VPN_KIND_COPY = {
     steps: ["Open allfantasy.ai in a regular browser such as Safari or Chrome."],
   },
 } satisfies Record<AnonymizerKind, VpnKindCopy>
+
+/**
+ * A Mountain-time Private Relay user on a PAID page: the free product works with
+ * the relay on, paid features need it off (lib/geo/privateRelayRanges).
+ */
+export const PAID_RELAY_COPY: VpnKindCopy = {
+  title: "Turn off iCloud Private Relay to use paid features",
+  detected: "iCloud Private Relay",
+  lead:
+    "Free features work with Private Relay on. Paid features are different: fantasy sports laws in some nearby states " +
+    "limit paid play, and in your time zone Private Relay can hide which of those states you're in.",
+  steps: [
+    "Safari on iPhone or iPad: tap the page menu at the left of the address bar (it shows aA on older iPhones) and choose Show IP Address, then tap Try again.",
+    "Or turn it off everywhere: Settings → your name → iCloud → Private Relay.",
+    "Safari on Mac: View → Reload and Show IP Address.",
+  ],
+}
 
 export function vpnKindCopy(kind: unknown): VpnKindCopy | null {
   return typeof kind === "string" && Object.prototype.hasOwnProperty.call(VPN_KIND_COPY, kind)

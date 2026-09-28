@@ -69,3 +69,17 @@ describe("/vpn-blocked names what it saw", () => {
     }
   })
 })
+
+describe("/vpn-blocked for a Mountain-time Private Relay user on a paid page", () => {
+  it("says free features work and only paid ones need the relay off", async () => {
+    const html = renderToStaticMarkup(await VpnBlockedPage({ searchParams: { why: "privacy_relay", scope: "paid", from: "/pro" } }))
+    expect(html).toContain("Turn off iCloud Private Relay to use paid features")
+    expect(html).toContain("Everything free on AllFantasy.ai still works with Private Relay on")
+  })
+
+  it("ignores scope=paid for anything but Private Relay", async () => {
+    const html = renderToStaticMarkup(await VpnBlockedPage({ searchParams: { why: "vpn", scope: "paid" } }))
+    expect(html).toContain("Turn off your VPN to use AllFantasy.ai")
+    expect(html).not.toContain("paid features")
+  })
+})
