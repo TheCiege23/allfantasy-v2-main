@@ -33,6 +33,21 @@ export type TriageStarter = {
   leagueId: string
   leagueName: string
   platform: string
+  /** What a deep link to this league's lineup screen needs (platformLinks.lineupLink). Optional: older callers omit them and the link falls back to the league page. */
+  platformLeagueId?: string | null
+  season?: number | null
+  /** Your team's platform id in this league — the ESPN teamId / Yahoo team number. */
+  teamId?: string | null
+}
+
+/** A league he starts in, carrying what the row's "Open lineup" button needs. */
+export type TriageLeague = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  platformLeagueId?: string | null
+  season?: number | null
+  teamId?: string | null
 }
 
 export type TriageInjury = { status: string | null; description: string | null; reportedAt: string | null }
@@ -44,7 +59,7 @@ export type TriageRow = {
   description: string | null
   reportedAt: string | null
   /** Leagues where he is in your starting lineup. */
-  leagues: Array<{ leagueId: string; leagueName: string; platform: string }>
+  leagues: TriageLeague[]
   /** His kickoff this week, ISO; null when his club is not on the schedule. */
   kickoff: string | null
   /** The schedule is on file and his club has no game in it. */
@@ -61,9 +76,43 @@ export type GameDayTriage = {
   /** How many leagues' starting lineups were read. */
   leaguesRead: number
   startersRead: number
+  /**
+   * Leagues whose lineups were NOT read because the loader's bound was reached.
+   * Zero in any realistic account (the bound is far above the largest one on
+   * production); non-zero is said on screen, never swallowed.
+   */
+  leaguesNotRead?: number
+  /** Leagues left out because they are best ball — the platform sets those lineups itself. */
+  bestBallLeagues?: number
+  /**
+   * Leagues on a platform whose player ids we cannot translate yet (Yahoo, MFL, Fantrax,
+   * Fleaflicker). Left out rather than read raw: an untranslated id matches a DIFFERENT
+   * player's Sleeper id.
+   */
+  unsupportedLeagues?: number
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }
+
+/**
+ * The short text after the status on a chip — "Questionable · Hamstring" — or null.
+ *
+ * ⚠ A FEED DESCRIPTION OFTEN JUST RESTATES THE DESIGNATION. The chip read
+ * "IR · IR. INJURED RESERVE" for Jaxson Dart on 2026-09-27. A description whose
+ * letters begin with the label's letters adds nothing and is dropped; so is one
+ * too long for a chip (the card shows the whole sentence).
+ */
+export function chipDetail(label: string | null | undefined, description: string | null | undefined, max = 20): string | null {
+  const d = (description ?? '').trim()
+  if (!d || d.length > max) return null
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '')
+  const l = letters(label ?? '')
+  const dl = letters(d)
+  if (l && dl.startsWith(l)) return null
+  // "IR · Injured Reserve" says the same thing twice in a different spelling.
+  if (l === 'ir' && dl.startsWith('injuredreserve')) return null
+  return d
+}
 
 export function triageRows(args: {
   starters: TriageStarter[]
@@ -112,9 +161,17 @@ export function triageRows(args: {
     const bye = noGame && byeStatus(club, kickoffs, week, unresolved) === 'bye'
     if (!flagged && !noGame) continue
 
+    const league: TriageLeague = {
+      leagueId: s.leagueId,
+      leagueName: s.leagueName,
+      platform: s.platform,
+      platformLeagueId: s.platformLeagueId ?? null,
+      season: s.season ?? null,
+      teamId: s.teamId ?? null,
+    }
     const existing = byPlayer.get(s.sleeperId)
     if (existing) {
-      if (!existing.leagues.some((l) => l.leagueId === s.leagueId)) existing.leagues.push({ leagueId: s.leagueId, leagueName: s.leagueName, platform: s.platform })
+      if (!existing.leagues.some((l) => l.leagueId === s.leagueId)) existing.leagues.push(league)
       continue
     }
     byPlayer.set(s.sleeperId, {
@@ -122,7 +179,7 @@ export function triageRows(args: {
       status: ready,
       description: inj?.description ?? null,
       reportedAt: inj?.reportedAt ?? null,
-      leagues: [{ leagueId: s.leagueId, leagueName: s.leagueName, platform: s.platform }],
+      leagues: [league],
       kickoff,
       noGame,
       bye,
