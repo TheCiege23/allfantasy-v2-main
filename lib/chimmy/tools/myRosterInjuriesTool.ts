@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
+import { NAME_EVERY_LEAGUE, nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
 import { resolveAiTeamContext } from '@/lib/ai-payload/resolveAiTeamContext'
 import { resolveRosterPlayerIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { resolveInjuryFacts, type InjuryFact, type InjuryLookup } from '@/lib/injuries/injuryReadPort'
@@ -343,8 +343,9 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
     ].filter(Boolean)
     lines.push(
       `⚠ PARTIAL SCAN — ${current.length - unchecked} of ${current.length} current-season leagues were checked; ${unchecked} were NOT. ${parts.join('; ')}. ` +
-        `Open the answer by saying the check covered ${current.length - unchecked} of ${current.length} leagues and naming (or counting) the ones not checked. ` +
-        'Never say "all your leagues" or "across your leagues", and never describe a roster in an unchecked league as healthy — asking again usually reaches the rest.',
+        `Open the answer by saying the check covered ${current.length - unchecked} of ${current.length} leagues and naming the ones not checked. ` +
+        'Never say "all your leagues" or "across your leagues", and never describe a roster in an unchecked league as healthy — asking again usually reaches the rest. ' +
+        NAME_EVERY_LEAGUE,
     )
   }
 
@@ -420,7 +421,7 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
   if (staleFeeds.length > 0) gaps.push(`the injury feed is behind for ${staleFeeds.join(', ')}, so statuses may have changed`)
 
   if (gaps.length > 0) {
-    lines.push(`⚠ KNOWN GAPS — each can only hide an injury, so the true list can only be LONGER: ${gaps.join('; ')}.`)
+    lines.push(`⚠ KNOWN GAPS — each can only hide an injury, so the true list can only be LONGER: ${gaps.join('; ')}. ${NAME_EVERY_LEAGUE}`)
   }
 
   lines.push(

@@ -6,7 +6,7 @@ import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
 import { sameNflTeam } from '@/lib/sports/teamRef'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
-import { nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
+import { NAME_EVERY_LEAGUE, nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 import { resolveInjuryFacts, type InjuryFact } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
@@ -410,8 +410,9 @@ export async function buildMyStartersPlayingContext(
     ].filter(Boolean)
     lines.push(
       `⚠ PARTIAL SCAN — ${pool.length - unchecked} of ${pool.length} ${reportedSeason} NFL leagues were checked; ${unchecked} were NOT. ${parts.join('; ')}. ` +
-        `The count below is a FLOOR: say it covers ${pool.length - unchecked} of ${pool.length} leagues, name (or count) the ones not checked, ` +
-        'and never present it as the total — asking again usually reaches the rest.',
+        `The count below is a FLOOR: say it covers ${pool.length - unchecked} of ${pool.length} leagues, name the ones not checked, ` +
+        'and never present it as the total — asking again usually reaches the rest. ' +
+        NAME_EVERY_LEAGUE,
     )
   }
   lines.push(
@@ -476,7 +477,7 @@ export async function buildMyStartersPlayingContext(
   }
 
   if (gaps.length > 0) {
-    lines.push(`⚠ KNOWN GAPS, state them if they affect the answer: ${gaps.join('; ')}.`)
+    lines.push(`⚠ KNOWN GAPS, state them if they affect the answer: ${gaps.join('; ')}. ${NAME_EVERY_LEAGUE}`)
   }
 
   lines.push(

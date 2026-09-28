@@ -76,6 +76,17 @@ export async function scanWithinBudget<T, R>(
   return result
 }
 
+/**
+ * Said beside every league list a tool hands the model.
+ *
+ * ⚠ LISTING THE NAMES WAS NOT ENOUGH. After the 6-name cap was lifted (#1509), a 2026-09-28 answer
+ * about 8 unsynced leagues still wrote "KBI Commish Chat, Guillotine League 26 (2), NFL, and four
+ * TheCiege26 redraft leagues" — a paraphrase naming 7 of 8 and hiding which ones. A user cannot act
+ * on "four redraft leagues"; they can act on four names.
+ */
+export const NAME_EVERY_LEAGUE =
+  'When you mention these leagues, name every one exactly as listed (and give any "+N more" count as stated) — never group them ("four redraft leagues") or shorten the list with "including".'
+
 /** "A, B, C (+4 more)" — names up to `max`, then counts the rest. */
 export function nameList(names: readonly string[], max = 12): string {
   const shown = names.slice(0, max)

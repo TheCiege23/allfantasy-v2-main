@@ -19,7 +19,7 @@ vi.mock('@/lib/ai-payload/resolveAiTeamContext', () => ({ resolveAiTeamContext: 
 vi.mock('@/lib/player-identity/resolveRosterPlayerIdentities', () => ({ resolveRosterPlayerIdentities: h.identities }))
 vi.mock('@/lib/injuries/injuryReadPort', () => ({ resolveInjuryFacts: h.injuries }))
 
-import { nameList, scanWithinBudget } from '@/lib/chimmy/tools/boundedScan'
+import { NAME_EVERY_LEAGUE, nameList, scanWithinBudget } from '@/lib/chimmy/tools/boundedScan'
 import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjuriesTool'
 
 /*
@@ -174,5 +174,30 @@ describe('gap lists name every league up to the shared limit', () => {
     const out = await buildMyRosterInjuriesContext({ userId: 'u1', sport: 'NFL' })
     expect(out).toContain('8 league(s) have a team with no players synced (League 01, League 02, League 03, League 04, League 05, League 06, League 07, League 08)')
     expect(out).toContain('8 league(s) have no claimed or synced team for this user (League 09, League 10, League 11, League 12, League 13, League 14, League 15, League 16)')
+  })
+})
+
+/*
+ * 2026-09-28, after #1509: handed all 8 unsynced leagues, the answer still wrote "... NFL, and four
+ * TheCiege26 redraft leagues" — 7 of 8, grouped. Listing the names is not enough; the line must
+ * say to name each one.
+ */
+describe('every league list carries the name-every-league rule', () => {
+  it('on KNOWN GAPS', async () => {
+    h.leagues.mockResolvedValue(Array.from({ length: 3 }, (_, i) => league(i + 1)))
+    h.team.mockResolvedValue({ starters: [], bench: [], injuredReserve: [], taxi: [] })
+    const out = await buildMyRosterInjuriesContext({ userId: 'u1', sport: 'NFL' })
+    const gaps = out.split('\n').find((l) => l.startsWith('⚠ KNOWN GAPS'))!
+    expect(gaps).toContain('League 01, League 02, League 03')
+    expect(gaps).toContain(NAME_EVERY_LEAGUE)
+  })
+
+  it('on PARTIAL SCAN, with no "(or counting)" escape left', async () => {
+    h.leagues.mockResolvedValue([league(1), league(2)])
+    h.team.mockImplementation(async ({ leagueId }: { leagueId: string }) => (leagueId === 'L2' ? never() : teamWith('X')))
+    const out = await buildMyRosterInjuriesContext({ userId: 'u1', sport: 'NFL', scan: { perItemTimeoutMs: 30 } })
+    const partial = out.split('\n').find((l) => l.startsWith('⚠ PARTIAL SCAN'))!
+    expect(partial).toContain(NAME_EVERY_LEAGUE)
+    expect(out).not.toContain('(or counting)')
   })
 })
