@@ -2,6 +2,7 @@ import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/p
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY } from '@/lib/chimmy/currentRequestFocus'
+import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { chimmyDecisionKind, decisionAnswerMeta, decisionAnswer as createDecisionAnswer } from '@/lib/chimmy/decisionAnswerContract'
 import { z } from 'zod'
@@ -448,6 +449,8 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
    * to the engine that already answers it on a /core screen.
    */
   'For "who should I start", "set my lineup" or "is my lineup right", call optimize_my_lineup: it prices the whole roster for this week under the league\'s own scoring and flags starters on a bye, injured or missing. For "A or B?" between two named players call compare_start_options. get_my_roster is roster FACTS only — it carries NO projections — so never quote projected points from it.',
+  /* One text with the roster and injury tools, so the prompt and the tool blocks cannot disagree. */
+  `Stored starters are not a live read of the platform. ${LINEUP_ACTION_RULES}`,
   'To grade a trade the user describes, call evaluate_trade with what they give and what they get. Before you suggest a counter-offer, evaluate that one too and quote its grade.',
   'For "find me a trade", "who should I trade with", "who has a running back I can get" or "what can I get for X", call find_trade_ideas — with position or trade_away when they named one. It searches every roster in the league; present its ideas with its names and numbers, lead with the first, and offer to grade one with evaluate_trade.',
   'For waiver pickups, call get_available_players, then evaluate_waiver_move on the best fit (with the drop, if they named one) before recommending an add.',
