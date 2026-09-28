@@ -18782,3 +18782,26 @@ model ProviderTradeOfferAsset {
   @@index([offerId, assetType])
   @@map("provider_trade_offer_assets")
 }
+
+/// Private request deduplication and crash recovery for Chimmy answers.
+model ChimmyRequestReceipt {
+  id                String   @id
+  userId            String   @map("user_id")
+  fingerprint       String
+  ownerToken        String   @map("owner_token")
+  status            String   @default("processing")
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  response          Json?
+  httpStatus        Int?     @map("http_status")
+  billKind          String?  @map("bill_kind")
+  billState         String?  @map("bill_state")
+  allowanceEndpoint String?  @map("allowance_endpoint")
+  windowStart       DateTime? @map("window_start") @db.Timestamptz(6)
+  windowEnd         DateTime? @map("window_end") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt], map: "chimmy_receipts_user_created")
+  @@index([status, expiresAt], map: "chimmy_receipts_recovery")
+  @@map("chimmy_request_receipts")
+}
