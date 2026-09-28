@@ -39,7 +39,7 @@ describe('Trade Center renders and is reachable', () => {
      * new surface settles.
      */
     expect(PAGE).toContain('<TradeCenter')
-    expect(PAGE).toContain('<Trades data={trades} />')
+    expect(PAGE).toContain('<Trades data={trades} hidePending />')
   })
 
   it('⚠ posts to the EXISTING analyze route, not a new one', () => {
