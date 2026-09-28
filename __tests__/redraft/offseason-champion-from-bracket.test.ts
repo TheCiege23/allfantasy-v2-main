@@ -13,6 +13,8 @@ const m = vi.hoisted(() => ({
   franchiseUpsert: vi.fn(),
   fanout: vi.fn(),
   season: null as any,
+  tournament: false,
+  contest: null as any,
 }))
 
 vi.mock('@/lib/prisma', () => {
@@ -27,6 +29,8 @@ vi.mock('@/lib/prisma', () => {
       league: {
         findUnique: vi.fn(async () => ({
           lifecycleState: 'completed',
+          bestBallMode: m.tournament, bbContestId: m.tournament ? 'contest' : null,
+          bbTiebreaker: 'advance_all', settings: { best_ball_settings: { contestStructure: 'tournament' } },
           platformLeagueId: null,
           scoring: 'ppr',
           isDynasty: false,
@@ -34,6 +38,7 @@ vi.mock('@/lib/prisma', () => {
           teams: [],
         })),
       },
+      bestBallContest: { findUnique: vi.fn(async () => m.contest) },
       leagueSeason: { findUnique: vi.fn(async () => null) },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
@@ -65,6 +70,8 @@ function roster(id: string, wins: number, pointsFor: number) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  m.tournament = false
+  m.contest = null
   m.season = {
     id: 'season-1',
     leagueId: 'L1',
@@ -141,5 +148,46 @@ describe('readBracketResult', () => {
     const r = readBracketResult({ championRosterId: 'X', runnerUpRosterId: 'Y' })!
     expect(r.finishByRosterId.get('X')).toBe(1)
     expect(r.finishByRosterId.get('Y')).toBe(2)
+  })
+})
+
+
+describe('Native tournament archive', () => {
+  function contest(tied = false) {
+    m.tournament = true
+    m.season.playoffBracket = null
+    m.contest = { id: 'contest', status: 'complete', rounds: 2, entries: [
+      { id: 'contest:A', currentRound: 1, overallRank: null, totalPoints: 900, weeklyScores: [] },
+      { id: 'contest:D', currentRound: 1, overallRank: null, totalPoints: 800, weeklyScores: [] },
+      { id: 'contest:C', currentRound: 2, overallRank: 1, totalPoints: 100, weeklyScores: [] },
+      { id: 'contest:B', currentRound: 2, overallRank: tied ? 1 : 2, totalPoints: tied ? 100 : 90, weeklyScores: [] },
+    ] }
+  }
+  it('archives the contest winner despite higher points from an earlier exit', async () => {
+    contest()
+    expect((await enterRedraftOffseason('season-1', 'system:tournament')).ok).toBe(true)
+    const data = m.seasonCreate.mock.calls[0][0].data
+    expect(data.championName).toBe('Team C')
+    expect(data.regularSeasonWinnerName).toBeNull()
+    expect(data.teamRecords.map((r: any) => [r.rosterId, r.rank])).toEqual([['C', 1], ['B', 2], ['A', 3], ['D', 4]])
+  })
+  it('credits each tied champion without fabricating a runner-up', async () => {
+    contest(true)
+    await enterRedraftOffseason('season-1', 'system:tournament')
+    const data = m.seasonCreate.mock.calls[0][0].data
+    expect(data.championName).toContain('Team B')
+    expect(data.championName).toContain('Team C')
+    expect(data.championTeamId).toBeNull()
+    expect(data.runnerUpName).toBeNull()
+    const titles = m.franchiseUpsert.mock.calls.filter(c => c[0].create.wonChampionship)
+    expect(titles.map(c => c[0].create.rosterId).sort()).toEqual(['B', 'C'])
+    expect(titles.every(c => c[0].create.finalRank === 1)).toBe(true)
+  })
+  it('refuses incomplete entries instead of falling back to standings', async () => {
+    contest()
+    m.contest.entries.pop()
+    expect(await enterRedraftOffseason('season-1', 'system:tournament')).toEqual({ ok: false, code: 'TOURNAMENT_RESULT_INCOMPLETE' })
+    expect(m.seasonCreate).not.toHaveBeenCalled()
+    expect(m.fanout).not.toHaveBeenCalled()
   })
 })

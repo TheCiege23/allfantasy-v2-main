@@ -141,7 +141,7 @@ describe('score-sync â€” a season in its playoffs', () => {
 
   it('includes playoff seasons in the sweep', async () => {
     await GET(new Request('http://localhost/api/redraft/score-sync'))
-    expect(m.seasons.mock.calls[0][0].where.status.in).toContain('playoffs')
+    expect(m.seasons.mock.calls[0][0].where.AND[0].status.in).toContain('playoffs')
   })
 
   it('scores the bracket with the calendar week, and skips the regular-season steps for that season', async () => {
@@ -183,5 +183,31 @@ describe('score-sync tournament integration', () => {
     expect(body.result.redraft.tournamentFailed).toBe(1)
     expect(body.summary.status).toBe('partial')
     expect(m.guillotine).toHaveBeenCalled()
+  })
+})
+
+
+describe('score-sync — completed tournament recovery', () => {
+  it('repairs archival before resolving a calendar or syncing player stats', async () => {
+    m.seasons.mockResolvedValue([{ id: 'finished', leagueId: 'L', status: 'complete', sport: 'NFL', league: { bestBallMode: true, bbContestId: 'c', settings: { best_ball_settings: { contestStructure: 'tournament' } } } }])
+    m.tournament.mockResolvedValue('complete')
+    const { resolveSeasonWeekForRedraftSeason } = await import('@/lib/season-week')
+    const { syncPlayerWeeklyScoresForRedraftSeason } = await import('@/lib/redraft/playerWeeklyScoreService')
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = await res.json()
+    expect(m.tournament).toHaveBeenCalledWith('finished', 1)
+    expect(resolveSeasonWeekForRedraftSeason).not.toHaveBeenCalled()
+    expect(syncPlayerWeeklyScoresForRedraftSeason).not.toHaveBeenCalled()
+    expect(body.result.redraft.tournamentOutcomes).toEqual({ complete: 1 })
+    const scope = m.seasons.mock.calls[0][0].where
+    expect(JSON.stringify(scope)).toContain('contestStructure')
+    expect(JSON.stringify(scope)).toContain('completed')
+  })
+  it('reports an archive failure as partial so the next tick can retry', async () => {
+    m.seasons.mockResolvedValue([{ id: 'finished', leagueId: 'L', status: 'complete', league: { bestBallMode: true, bbContestId: 'c', settings: { best_ball_settings: { contestStructure: 'tournament' } } } }])
+    m.tournament.mockRejectedValue(new Error('archive transient'))
+    const body = await (await GET(new Request('http://localhost/api/redraft/score-sync'))).json()
+    expect(body.result.redraft.tournamentFailed).toBe(1)
+    expect(body.summary.status).toBe('partial')
   })
 })
