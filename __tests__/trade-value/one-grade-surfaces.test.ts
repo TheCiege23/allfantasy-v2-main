@@ -22,6 +22,8 @@ const code = (rel: string) =>
 const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/trade-value-console/runTradeConsoleAnalysis.ts', entry: /gradePricedSides\(/, what: 'the Trade Center verdict' },
   { file: 'app/api/league/trades-panel/route.ts', entry: /gradeDeal\(/, what: 'pending offers on the league page and the inbox' },
+  /* 2026-09-27: the Trade Center's "Best trade partners" suggestions (see lib/trade-intel/partnerSuggestionGrades.ts). */
+  { file: 'app/api/leagues/[leagueId]/trades/rosters/route.ts', entry: /gradeDeal\(/, what: 'the Trade Center partner suggestions' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade between rostered players' },
   { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade described in prose' },

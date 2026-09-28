@@ -17,6 +17,8 @@ import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
+import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
@@ -46,6 +48,9 @@ import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
 
 export const dynamic = 'force-dynamic'
+
+/** How many ranked partners' suggested deals are graded — the cards the Trade Center shows, plus headroom. */
+const GRADED_PARTNER_SUGGESTIONS = 5
 
 /**
  * A player the picker can offer.
@@ -857,6 +862,32 @@ export async function GET(
       })
     } catch {
       partnerRanking = null
+    }
+  }
+
+  /*
+   * 🛑 THE GRADE ON A SUGGESTED DEAL (2026-09-27). The finder called a package "fair" on its own
+   * roster-value gap (`percentApart`) — and the same deal, loaded into the builder, could grade
+   * "Major overpay" (2026-09-25 field test: picks 515 vs 4,818). Each shown suggestion is now graded
+   * HERE by the one grader, with exactly the inputs the builder sends for it (`toInput` in
+   * TradeCenter.tsx: `{ playerId, name }`, `{ year, round, label }`), on the viewer's side — so the
+   * card and the builder read one letter.
+   *
+   * ⚠ BOUNDED to the cards the screen shows, and FAILURE-CONTAINED like the ranking: a grader that
+   * cannot load costs the letter, never the rosters.
+   */
+  if (partnerRanking) {
+    try {
+      const grader = await createLeagueTradeGrader({ leagueId, userId }).catch(() => null)
+      await gradePartnerSuggestions({
+        ranking: partnerRanking,
+        picks: new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
+        // The viewer's side, roster need included — the same call the builder's verdict makes.
+        grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+        limit: GRADED_PARTNER_SUGGESTIONS,
+      })
+    } catch {
+      /* The ranking stands without letters. */
     }
   }
 
