@@ -43,6 +43,21 @@ function stateOfSlot(slot: LeagueSlot): StripState {
 
 const BADGE: Record<Exclude<StripState, 'other'>, string> = { start: 'START', bench: 'BENCH', ir: 'IR', taxi: 'TAXI', free: 'FA', unknown: '?' }
 
+/**
+ * The leagues where he is a FREE AGENT: in scope, read (not in `unmatched`), and on no roster.
+ * THE one rule — the strip's FA chip and the free-agent bid list (freeAgentBids.ts) both ask it, so
+ * they can never disagree about where he is available.
+ */
+export function freeLeagueIds(
+  leagueIds: readonly string[],
+  slots: ReadonlyArray<{ leagueId: string }>,
+  unmatched: ReadonlyArray<{ leagueId: string }>,
+): string[] {
+  const held = new Set(slots.map((s) => s.leagueId))
+  const unreadable = new Set(unmatched.map((u) => u.leagueId))
+  return leagueIds.filter((id) => !held.has(id) && !unreadable.has(id))
+}
+
 export function buildLeagueStrip(args: {
   /** Every league you play, as the finder's scope sees them. */
   leagues: ReadonlyArray<{ id: string; name: string }>
@@ -57,6 +72,7 @@ export function buildLeagueStrip(args: {
   const inScope = args.scope ? new Set(args.scope) : null
   const slotById = new Map(args.slots.map((s) => [s.leagueId, s]))
   const unreadable = new Set(args.unmatched.map((u) => u.leagueId))
+  const free = new Set(freeLeagueIds(args.leagues.map((l) => l.id), args.slots, args.unmatched))
   const last = args.playerName.trim().split(/\s+/).slice(-1)[0] || args.playerName
 
   const chips: StripChip[] = []
@@ -98,6 +114,8 @@ export function buildLeagueStrip(args: {
       chips.push({ leagueId: l.id, leagueName: l.name, state: 'unknown', badge: BADGE.unknown, sentence: `${l.name}: we can't read this league's rosters, so we can't say where ${last} is.`, tone: 'none', bestBall: false })
       continue
     }
+    // FA only by the shared rule (freeLeagueIds) — the bid list reads the same answer.
+    if (!free.has(l.id)) continue
     chips.push({ leagueId: l.id, leagueName: l.name, state: 'free', badge: BADGE.free, sentence: `${l.name}: nobody has ${last} — he's available.`, tone: 'none', bestBall: false })
   }
   return chips.sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.leagueName.localeCompare(b.leagueName))

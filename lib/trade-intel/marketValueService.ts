@@ -297,6 +297,26 @@ export function pickValue(
   return values.pickByRound[`${season}:${round}`] ?? null
 }
 
+/** The most of a FAAB budget any one market-value bid is allowed to be. */
+export const FAAB_BID_CAP_PCT = 0.6
+
+/**
+ * Value points → a FAAB bid: `faabValue` run backwards, capped at `FAAB_BID_CAP_PCT` of the budget,
+ * at least $1. Null when the anchor or the budget is unknown.
+ *
+ * ⚠ MARKET-ANCHORED, NOT HISTORY-PRICED. A league's own winning bids are CONTEXT beside this
+ * number (median / p75), never blended into it — say "calibrate against the room", not "priced
+ * from history".
+ *
+ * ⚠ `lib/waiver-intel/waiverIntelService.ts` (WaiverIntel) still carries this formula inline. That
+ * file is a standing DB-first-boundary violation (it calls the Sleeper API), so any edit to it fails
+ * the guard; switch it to this helper when it is migrated. A parity test pins the two together.
+ */
+export function faabBidFor(value: number, budget: number | null | undefined, anchorValue: number | null | undefined): number | null {
+  if (budget == null || budget <= 0 || anchorValue == null || anchorValue <= 0 || !(value > 0)) return null
+  return Math.max(1, Math.min(Math.round(budget * FAAB_BID_CAP_PCT), Math.round((value / anchorValue) * budget)))
+}
+
 /** FAAB → value points via the documented heuristic. Null when no anchor resolved. */
 export function faabValue(values: MarketValuesPayload, dollars: number, budget = 100): number | null {
   if (values.faab.anchorValue == null || budget <= 0) return null

@@ -48,6 +48,8 @@ import { PlayerSharesBoard } from '@/components/core-app/player-finder/PlayerSha
 import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
 import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
+import { FreeAgentBids } from '@/components/core-app/player-finder/FreeAgentBids'
+import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
 import { buildLeagueStrip } from '@/lib/core-app/leagueStrip'
 import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
@@ -177,6 +179,11 @@ export type PlayerFinderProps = {
   pickLeagues?: Array<{ id: string; name: string; platform: string | null }>
   /** The account's saved pick (already intersected with `pickLeagues`); null = all. */
   savedPicks?: string[] | null
+  /**
+   * Every league where he is a free agent, with a claim link and — AF Pro — a suggested FAAB bid
+   * (lib/core-app/freeAgentBids.ts). The page withholds the bids for a locked viewer.
+   */
+  freeAgentBids?: FreeAgentBidsData | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -370,6 +377,7 @@ export function PlayerFinder({
   leagueShares = null,
   pickLeagues = [],
   savedPicks = null,
+  freeAgentBids = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -1155,6 +1163,12 @@ export function PlayerFinder({
                 </p>
               ) : null}
             </section>
+
+            {/*
+              ── Available in your leagues ──: every league where he is a free agent, with where to
+              claim him (free) and a suggested FAAB bid (AF Pro, withheld server-side when locked).
+            */}
+            {signedIn ? <FreeAgentBids data={freeAgentBids} playerName={detail.player.name} access={depthAccess} /> : null}
 
             {/* ── This season: projected against scored, week by week (Phase 1) ── */}
             {depth ? <PlayerSeasonCard state={depth.season} name={detail.player.name} /> : null}
