@@ -83,6 +83,12 @@ describe('BUG-4 · the Sleeper mapper captures keeper, not just dynasty', () => 
 })
 
 describe('BUG-4 · the grounding packet reads the captured keeper flag', () => {
+  it('Best Ball scoring stays independent of dynasty lifecycle in intelligence grounding', () => {
+    const settings = resolveSettings({ leagueType: 'dynasty', settings: { best_ball: 1 } })
+    expect(settings.isBestBall).toBe(true)
+    expect(settings.isDynasty).toBe(true)
+    expect(resolveSettings({ name: 'Best Ball friends', leagueType: 'dynasty', settings: { best_ball: 0 } }).isBestBall).toBe(false)
+  })
   it('settings.is_keeper is honoured', () => {
     const s = resolveSettings({ leagueType: 'redraft', settings: { is_keeper: true } })
     expect(s.isKeeper).toBe(true)

@@ -286,7 +286,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
    */
   const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
   const total = pulse.considered
-  const activeTotal = total - (pulse.paused ?? 0)
+  const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
   /*
    * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
@@ -323,7 +323,8 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   }
 
   const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup
-  const hidden = Math.max(0, total - rows.length)
+  const hidden = Math.max(0, activeTotal - rows.length)
+  const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
 
   return (
     <div className="af-bd">
@@ -422,11 +423,17 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         clean; putting it in the same sentence as "nothing needs you there" is
         the claim this whole loader refuses to make.
       */}
+      {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
+        <p className="af-bd-note">
+          {(pulse.automatic ?? 0) > 0 ? `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
+          {(pulse.notChecked.inactive ?? 0) > 0 ? `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
+        </p>
+      ) : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
-            {unreadable} of your {total.toLocaleString()} claimed{' '}
-            {total === 1 ? 'team' : 'teams'} could not be checked.
+            {unreadable} of your {activeTotal.toLocaleString()} {pulse.paused ? 'active ' : ''}claimed{' '}
+            {activeTotal === 1 ? 'team' : 'teams'} could not be checked.
           </strong>{' '}
           {/* Singular counts read as broken copy on a screen full of real numbers. */}
           {pulse.notChecked.noRoster > 0
@@ -457,10 +464,15 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         hidden={hidden}
         total={total}
         href={allHref}
+        emptyText={pulse.paused ? 'Every active league is on this board.' : undefined}
         quiet={
-          unreadable > 0
-            ? 'are either set or could not be read — the line above says which.'
-            : 'are set — nothing needs you there.'
+          hiddenNeeds > 0
+            ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
+            : unreadable > 0
+              ? 'are either set or could not be read — the line above says which.'
+            : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+              ? 'have no remaining manual lineup task.'
+              : 'are set — nothing needs you there.'
         }
       />
     </div>

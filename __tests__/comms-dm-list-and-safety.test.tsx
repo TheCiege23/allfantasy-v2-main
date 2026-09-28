@@ -128,6 +128,25 @@ async function renderList(kind: 'dm' | 'group' = 'dm') {
 }
 
 describe('list rows', () => {
+  it('refreshes the unread count when returning from a read DM', async () => {
+    let read = false
+    override = (url) => {
+      if (url === '/api/shared/chat/threads') return json({ threads: [{ ...DM, unreadCount: read ? 0 : 3 }] })
+      if (url.startsWith('/api/shared/chat/threads/t1/messages')) read = true
+      return undefined
+    }
+    const row = await renderList('dm')
+    expect(row.querySelector('.af-cm-threadrow-unread')?.textContent).toBe('3 unread')
+    fireEvent.click(row)
+    await screen.findByText('u up')
+    fireEvent.click(screen.getByRole('button', { name: /All DMs/ }))
+    await waitFor(() => {
+      const refreshed = screen.getByRole('button', { name: /Jordan Love/ })
+      expect(refreshed.querySelector('.af-cm-threadrow-unread')).toBeNull()
+    })
+    expect(calls((url) => url === '/api/shared/chat/threads')).toHaveLength(2)
+  })
+
   it('shows the other person’s avatar, "You:" on your own last message, a short time and the unread count', async () => {
     const row = await renderList('dm')
     expect(row.querySelector('.af-cm-dmrow-av img')!.getAttribute('src')).toBe('https://cdn.test/j.png')

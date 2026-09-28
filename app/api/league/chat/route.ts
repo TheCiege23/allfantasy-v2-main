@@ -520,14 +520,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  void syncOutboundLeagueChat({
+  // Keep the outbound relay alive until Discord accepts or rejects it. Returning
+  // first can cancel an unawaited task in a serverless request.
+  await syncOutboundLeagueChat({
     leagueId,
     messageId: created.id,
     authorName: created.senderName ?? 'Manager',
     authorAvatarUrl: created.senderAvatarUrl ?? null,
     text: created.body,
     gifUrl: gifUrlFromMetadata(metadata),
-  }).catch(() => {})
+  }).catch((error) => {
+    console.warn('[league/chat] Discord relay failed', error)
+  })
 
   /*
    * "New message in your league chat" — bell/push/email/text for members who turned the League chat

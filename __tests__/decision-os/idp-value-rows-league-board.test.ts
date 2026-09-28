@@ -73,6 +73,7 @@ vi.mock('@/lib/idp-projections/loadIdpProjections', () => ({
 import { prisma } from '@/lib/prisma'
 import { loadIdpValueRows } from '@/lib/decision-os/world/port'
 import { clearIdpBoardMemo } from '@/lib/idp-projections/idpBoardMemo'
+import { loadIdpProjections } from '@/lib/idp-projections/loadIdpProjections'
 
 const ARGS = { leagueId: 'L1', starterSlots: ['QB', 'WR', 'LB', 'DL', 'DB'], numTeams: 2, isDynasty: true }
 
@@ -83,6 +84,16 @@ beforeEach(() => {
 })
 
 describe('loadIdpValueRows prices traded defenders against the whole league', () => {
+  it('uses the imported week and invalidates the memo when that week changes', async () => {
+    const lookup = vi.mocked(prisma.league.findUnique)
+    lookup.mockResolvedValueOnce({ id: 'L1', settings: { ...SCORING, season: '2026', current_week: 3 } } as never)
+    await loadIdpValueRows({ ...ARGS, sleeperIds: ['lb1'] })
+    expect(loadIdpProjections).toHaveBeenLastCalledWith(expect.objectContaining({ season: 2026, week: 3 }))
+    lookup.mockResolvedValueOnce({ id: 'L1', settings: { ...SCORING, season: '2026', current_week: 4 } } as never)
+    await loadIdpValueRows({ ...ARGS, sleeperIds: ['lb1'] })
+    expect(loadIdpProjections).toHaveBeenLastCalledWith(expect.objectContaining({ season: 2026, week: 4 }))
+    expect(calls.projectedFor).toHaveLength(2)
+  })
   it('prices a traded defender that a trade-only board could not', async () => {
     // lb1 and dl1 alone: each is the only player at his position, so no replacement level exists.
     const rows = await loadIdpValueRows({ ...ARGS, sleeperIds: ['lb1', 'dl1'] })

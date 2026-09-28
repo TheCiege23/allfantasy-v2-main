@@ -252,6 +252,24 @@
   color: var(--faint);
 }
 
+/* THE league grade, per side — see TradeCard. */
+.af-tr-leaguegrade { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.af-tr-leaguegrade-letter {
+  display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px;
+  font-size: 18px; font-weight: 800; background: var(--chip); color: var(--text);
+}
+.af-tr-leaguegrade[data-letter='A'] .af-tr-leaguegrade-letter,
+.af-tr-leaguegrade[data-letter='B'] .af-tr-leaguegrade-letter { background: var(--good-soft); color: var(--good); }
+.af-tr-leaguegrade[data-letter='D'] .af-tr-leaguegrade-letter,
+.af-tr-leaguegrade[data-letter='F'] .af-tr-leaguegrade-letter { background: var(--bad-soft); color: var(--bad); }
+.af-tr-leaguegrade-line { font-size: 11px; line-height: 1.45; color: var(--muted); }
+.af-tr-asset-value { margin-left: 4px; font-size: 11px; font-style: normal; font-weight: 700; color: var(--text2); }
+.af-tr-pick-drafted { color: var(--faint); font-size: 11px; }
+.af-tr-leaguegrade-why { display: grid; gap: 3px; margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--chip); list-style: none; }
+.af-tr-leaguegrade-why li { font-size: 11px; line-height: 1.45; color: var(--muted); }
+.af-tr-leaguegrade-why li:first-child { color: var(--text2); font-weight: 600; }
+.af-tr-leaguegrade-withheld { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--faint); }
+
 .af-tr-unavailable {
   margin: 0;
   font-size: 12px;
@@ -493,4 +511,43 @@
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   box-shadow: 0 0 0 6px var(--accent-soft);
+}
+
+/* Nightly trade ideas (design step 9). Top level on purpose — never inside a media query. */
+.af-tr-ideas {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-tr-ideas-why {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-tr-ideas-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-tr-idea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.af-tr-idea-deal {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-tr-idea-grade {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text2);
 }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-trade.css'
 import type { RecentTrade } from '@/lib/core-app/recentTrades'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 
@@ -46,7 +47,8 @@ function verdictSentence(t: RecentTrade): string {
   const v = t.verdict
   if (!v) return ''
   if (v.favoursRosterId == null) return 'An even deal on paper'
-  const side = t.sides.find((s) => s.rosterId === v.favoursRosterId)
+  // String-compared: a durable-feed side carries its roster id as a string, the verdict as a number.
+  const side = t.sides.find((s) => String(s.rosterId) === String(v.favoursRosterId))
   const who = side ? side.teamName || side.managerName : null
   const strength = v.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
   /* No name resolved: say the shape of the verdict, never a placeholder. */
@@ -90,7 +92,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
       <div className="af-trade-head">
         <span className="af-label af-trade-kicker">Latest league trades</span>
         <span className="af-trade-count af-num">
-          {trades.length === 1 ? '1 in the last 2 weeks' : `${trades.length} in the last 2 weeks`}
+          {`${trades.length} latest · past 2 weeks`}
         </span>
       </div>
 
@@ -132,14 +134,16 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                         </li>
                       ) : null}
                       {s.received.length === 0 ? (
-                        /* Never an empty column with an arrow pointing into it. */
-                        <li className="af-trade-more">nothing we can name</li>
+                        /* Never an empty column with an arrow pointing into it. "Nothing we can name" read
+                           as a defect under a real trade; the Trades board's wording says what it is —
+                           a FAAB-only side, or one the import did not capture. */
+                        <li className="af-trade-more">No players or picks on record — FAAB only, or not captured</li>
                       ) : null}
                     </ul>
                     {s.gradeBasis || s.gradeReason ? (
                       <div className="af-trade-side-grade" data-ungraded={!s.grade}>
                         <span className="af-trade-side-letter">{s.grade ?? '—'}</span>
-                        <span><strong>{s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
+                        <span><strong>{s.gradeBasis === 'League' ? 'League grade' : s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
                       </div>
                     ) : null}
                   </div>
@@ -164,7 +168,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                   </span>
                   <span className="af-trade-conf af-num">
                     {' '}
-                    · on this league’s values today
+                    · on this league’s values {gradeMoment({ frozenAt: t.gradedAt })}
                     {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
                   </span>
                 </p>

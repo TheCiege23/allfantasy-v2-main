@@ -1,8 +1,9 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
-import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/describedTradeEvaluator'
+import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
+import { evaluateTrade, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { extractPickMentions, pickLabel, type PickMention } from './tradePickMentions'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
@@ -54,8 +55,8 @@ import type {
  * mistake absence for a number.
  */
 
-/** A league the size anyone plays; bounds the one name read. */
-const MAX_LEAGUE_PLAYER_IDS = 800
+/** Covers large 32-team IDP leagues without dropping the later teams' assets. */
+const MAX_LEAGUE_PLAYER_IDS = 4096
 
 export type {
   ReadyTradeScenario,
@@ -71,6 +72,8 @@ export interface TradeScenarioDeps {
   evaluate: (args: EvaluateCanonicalTradeArgs, deps: { resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null> }) => Promise<CanonicalTradeEvaluation>
   /** THE grade for the deal, from the viewer's side. */
   grade: (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeGradeView>
+  /** Save the receipt. Default: the one trade engine's own receipt store. */
+  saveReceipt?: (receipt: TradeEvaluationReceipt) => Promise<{ id: string }>
 }
 
 const defaultDeps: TradeScenarioDeps = {
@@ -284,44 +287,46 @@ export async function buildTradeScenario(
     ],
     unpriceable: [],
   })
-  const gradePromise = deps
-    .grade({
+  /*
+   * ONE CALL TO THE ONE TRADE ENGINE (design step 7, 2026-09-27). `evaluateTrade` joins the grade and
+   * the canonical lineup effect — both the same halves this used to call separately — and saves the
+   * receipt every other surface reads, so the letter Chimmy states is a record, not a recital. The
+   * already-loaded world is handed to the evaluator so the league is not read twice.
+   *
+   * ⚠ A LINEUP THAT CANNOT BE COMPUTED NO LONGER REFUSES THE TRADE. It used to return
+   * `evaluation_failed` and drop a perfectly good grade with it; the engine now keeps the grade and
+   * says why the lineup is missing (`canonicalError`).
+   */
+  const receipt = await evaluateTrade(
+    {
+      surface: 'chimmy',
       leagueId: args.leagueId,
       userId: args.userId,
       give: gradeSide(chosen.give, chosen.givePicks),
       get: gradeSide(chosen.get, chosen.getPicks),
-    })
-    .catch((): TradeGradeView => ({ graded: false, reason: 'The trade could not be graded just now.', basis: null }))
-
-  let evaluation: CanonicalTradeEvaluation
-  try {
-    evaluation = await deps.evaluate(
-      {
-        leagueId: args.leagueId,
-        proposalId: 'chimmy-scenario',
+      viewerSide: true,
+      canonical: {
         proposerRosterId: viewerRoster.rosterId,
         receiverRosterId: chosen.partnerRosterId,
-        viewerRosterId: viewerRoster.rosterId,
+        participantRosterIds: [viewerRoster.rosterId, chosen.partnerRosterId],
         assets,
-        currentSeason: world.league.season ?? undefined,
+        currentSeason: world.league.season ?? null,
         includeRosterImpact: true,
       },
+    },
+    {
+      grade: (input) => deps.grade({ leagueId: args.leagueId, userId: args.userId, give: input.give, get: input.get }),
       // The world is already loaded; the evaluator must not load it a second time.
-      { resolveWorld: async () => world },
-    )
-  } catch {
-    return {
-      status: 'unresolved',
-      reason: 'evaluation_failed',
-      detail: 'The trade could not be evaluated against this league right now.',
-    }
-  }
-
-  const grade = await gradePromise
+      evaluateCanonical: (a) => deps.evaluate(a, { resolveWorld: async () => world }),
+      ...(deps.saveReceipt ? { saveReceipt: deps.saveReceipt } : {}),
+    },
+  )
+  const grade = receipt.grade
   const partnerTeamId = world.rosters.find((r) => r.rosterId === chosen.partnerRosterId)?.teamId ?? null
   const partnerTeam = world.teams.find((t) => t.teamId === partnerTeamId) ?? null
 
-  const impact = evaluation.rosterImpact ?? null
+  const viewerTeam = world.teams.find(t => t.teamId === viewerRoster.teamId)
+  const impact = receipt.canonical?.participants.find((p) => p.rosterId === viewerRoster.rosterId)?.rosterImpact ?? null
   const lineup: TradeScenarioLineup | null =
     impact &&
     impact.startingPointsBefore != null &&
@@ -348,6 +353,11 @@ export async function buildTradeScenario(
     give: [...chosen.give.map(strip), ...chosen.givePicks.map((p) => stripPick(p, viewerRoster.rosterId))],
     get: [...chosen.get.map(strip), ...chosen.getPicks.map((p) => stripPick(p, chosen.partnerRosterId))],
     partnerTeamName: partnerTeam?.displayName || partnerTeam?.ownerName || 'the other team',
+    ...(grade.graded ? { recommendation: { action: grade.action, explanation: grade.recommendation } } : {}),
+    ...(viewerTeam?.record ? { competitiveContext: { ...viewerTeam.record, rank: viewerTeam.rank } } : {}),
+    unpricedExcluded: impact?.unpricedExcluded ?? 0,
+    depthChanges: impact?.depth?.filter(d => d.rosteredDelta !== 0).map(d => ({ position: d.position,
+      before: d.rosteredBefore, after: d.rosteredAfter })) ?? [],
     ...(tradedPicks > 0 ? { picks: tradedPicks } : {}),
     value: grade.graded
       ? {
@@ -360,6 +370,7 @@ export async function buildTradeScenario(
           label: grade.label,
           basis: grade.basis,
           withheld: null,
+          partnerGrade: receipt.partnerGrade.graded ? receipt.partnerGrade.letter : null,
         }
       : {
           given: null,
@@ -372,9 +383,10 @@ export async function buildTradeScenario(
           basis: grade.basis,
           withheld: grade.reason,
         },
+    receiptId: receipt.receiptId,
     lineup,
     lineupWeek: impact?.week ?? null,
-    lineupUnavailable: lineup ? null : impact?.blockedReason ?? 'The starting lineup could not be priced for this league.',
+    lineupUnavailable: lineup ? null : impact?.blockedReason ?? receipt.canonicalError ?? 'The starting lineup could not be priced for this league.',
     playoffOdds: { available: false, reason: PLAYOFF_ODDS_UNAVAILABLE },
   }
 }
@@ -460,7 +472,9 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
     s.value.grade
       ? `- League value (${s.value.basis ?? "this league's chart"}): you send ${fmt(s.value.given, 0)}, you receive ${fmt(s.value.received, 0)}` +
         (s.value.delta != null ? ` (${signed(s.value.delta, 0)})` : '') +
-        `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}. This is the same grade the Trade Center gives this trade.`
+        `; grade ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}` +
+        (s.value.partnerGrade ? ` (${s.partnerTeamName}'s side grades ${s.value.partnerGrade})` : '') +
+        '. This is the same grade the Trade Center gives this trade. Quote these letters exactly; state no other grade.'
       : `- Grade: NOT GRADED — ${(s.value.withheld ?? "the trade could not be priced on this league's chart").replace(/\.$/, '')}. Do not grade it yourself.`,
     /*
      * The week and the rules are named in the line itself: this is ONE week under the league's own
@@ -469,12 +483,14 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
     s.lineup
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
-    `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
+    s.playoffOdds.available ? `- Playoff scenario estimate: ${s.playoffOdds.before}% before, ${s.playoffOdds.after}% after. ${s.playoffOdds.reason}` : `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
     ...(s.picks
       ? [
           "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
         ]
       : []),
+    // The saved evaluation, so the answer is a record every surface can read back.
+    ...(s.receiptId ? [`- Evaluation receipt: ${s.receiptId}.`] : []),
   ]
   return lines.join('\n')
 }

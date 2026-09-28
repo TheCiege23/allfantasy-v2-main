@@ -45,6 +45,7 @@ export async function PATCH(req: NextRequest) {
       id: true,
       sport: true,
       bestBallMode: true,
+      bbContestId: true,
       settings: true,
       bbWaiversEnabled: true,
       bbTradesEnabled: true,
@@ -90,6 +91,13 @@ export async function PATCH(req: NextRequest) {
     timezone: typeof settingsRecord.timezone === 'string' ? settingsRecord.timezone : null,
     language: typeof settingsRecord.language === 'string' ? settingsRecord.language : null,
   })
+
+  if (current.bbContestId && body.bestBall) {
+    const fixed = ['contestStructure', 'podSize', 'tournamentAdvancementRounds', 'regularSeasonLength', 'roundEndWeeks', 'advancersPerPod', 'resetBetweenRounds', 'cumulativeScoring', 'scoringPeriod']
+    if (fixed.some(key => Object.prototype.hasOwnProperty.call(body.bestBall, key) && JSON.stringify(body.bestBall![key]) !== JSON.stringify(existingBestBall?.[key]))) {
+      return NextResponse.json({ error: 'Tournament structure is fixed after contest creation; scoring and transaction settings remain editable.' }, { status: 409 })
+    }
+  }
 
   const nextWaivers =
     typeof body.bbWaiversEnabled === 'boolean' ? body.bbWaiversEnabled : normalizedBestBall.waiversEnabled

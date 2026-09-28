@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import SyncNowButton from '../SyncNowButton'
 import SyncPauseButton from '../SyncPauseButton'
+import RemoveLeagueButton from '../RemoveLeagueButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
 
@@ -57,12 +58,16 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
     seasonsOnFile,
     status,
     lastReadAt,
+    rostersReadAt,
     consecutiveFailures,
     lastError,
     rows,
     coarse,
     orphanedRun,
+    providerGone,
+    canRemove,
   } = data
+  const platformLabel = platformName(league.platform)
 
   return (
     <div className="af-sy">
@@ -71,7 +76,15 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-title-row">
           <h1 className="af-display af-sy-title">Sync</h1>
           <span className="af-sy-status af-label" data-status={status}>
-            {status === 'paused' ? 'Account sync paused' : status === 'ok' ? 'All synced' : status === 'attention' ? 'Needs attention' : 'Never synced'}
+            {status === 'paused'
+              ? 'Account sync paused'
+              : status === 'gone'
+                ? `Gone from ${platformLabel}`
+                : status === 'ok'
+                  ? 'All synced'
+                  : status === 'attention'
+                    ? 'Needs attention'
+                    : 'Never synced'}
           </span>
         </div>
         <p className="af-sy-sub">
@@ -99,7 +112,34 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </div>
       ) : null}
 
-      {consecutiveFailures > 0 && !data.syncPaused ? (
+      {/*
+        ── The provider no longer has this league ──────────────────────
+        Not a failure and not a retry loop: the provider answered, and the answer was "no such
+        league". Faster collection cannot fix that, so this says what happened and offers the three
+        things that can — check now, import the league's new home, or remove this copy.
+      */}
+      {providerGone && !data.syncPaused ? (
+        <div className="af-sy-alert" data-tone="warn" data-testid="league-sync-provider-gone">
+          <span className="af-label">{platformLabel} no longer has this league</span>
+          <p>
+            When we last asked {platformLabel} ({new Date(providerGone.checkedAt).toLocaleString()}), it
+            said this league does not exist. That usually means it was deleted, or the commissioner
+            started a new season under a new league ID. Nothing on this page is being refreshed until
+            that changes. We check again once a day on our own; "Sync this league" above checks now.
+          </p>
+          <p>Everything already imported — history, trades, standings — stays readable here.</p>
+          <div className="af-sy-alert-actions">
+            <Link href={manageHref} className="af-btn af-sy-alert-cta">
+              Import the new league
+            </Link>
+            {canRemove ? (
+              <RemoveLeagueButton leagueId={league.id} leagueName={league.name} platformLabel={platformLabel} />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {consecutiveFailures > 0 && !data.syncPaused && !providerGone ? (
         <div className="af-sy-alert" data-tone="warn">
           <span className="af-label">
             {consecutiveFailures} failed {consecutiveFailures === 1 ? 'run' : 'runs'} in a row
@@ -137,13 +177,24 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </div>
 
         <div className="af-sy-conn-read">
-          <span className="af-label">Last read</span>
+          <span className="af-label">{rostersReadAt ? 'Last full read' : 'Last read'}</span>
           {/*
             ⚠ "WE LAST READ", NOT "DATA IS N OLD". The stored value is our own
             collection time; the provider publishes no per-league data
             timestamp, and the column reserved for one is deliberately null.
           */}
           <span className="af-sy-conn-when af-num">{describeWhen(lastReadAt)}</span>
+          {/*
+            The five-minute lane's read of rosters and transactions, which runs far more often
+            than the full read above. Shown only when it has completed here — a league outside
+            the lane (offseason, an older season) has nothing honest to put on this line.
+          */}
+          {rostersReadAt ? (
+            <span className="af-sy-conn-lane">
+              Rosters &amp; transactions{' '}
+              <span className="af-num">{describeWhen(rostersReadAt)}</span>
+            </span>
+          ) : null}
           {coarse ? (
             <span className="af-sy-conn-coarse">
               from the league record — no per-run history has been written for this connection, so
@@ -173,6 +224,19 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
       </p>
     </div>
   )
+}
+
+const PLATFORM_NAMES: Record<string, string> = {
+  sleeper: 'Sleeper',
+  espn: 'ESPN',
+  yahoo: 'Yahoo',
+  mfl: 'MyFantasyLeague',
+  fantrax: 'Fantrax',
+  fleaflicker: 'Fleaflicker',
+}
+
+function platformName(platform: string): string {
+  return PLATFORM_NAMES[platform] ?? (platform === 'manual' ? 'your platform' : platform)
 }
 
 function DataRow({ row }: { row: SyncDataRow }) {

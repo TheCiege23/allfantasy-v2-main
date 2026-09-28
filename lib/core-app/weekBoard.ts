@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom, resolveStatedWeek } from './currentWeek'
+import { realManagerName } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
@@ -143,6 +144,23 @@ export type WeekMatchup = {
   } | null
   /** Completed weeks behind YOUR side of the projection. */
   yourSampleWeeks: number
+  /**
+   * THIS week's actual points, once either side has put one up. Null before kickoff.
+   *
+   * 🛑 WITHOUT THIS THE BOARD RANKED A MONDAY ON A SUNDAY-MORNING GUESS. Measured on production
+   * 2026-09-28: Cream Bowl showed "+29.6 · 78% to win" (the mean of prior weeks) while /core/matchup
+   * had its actual week-3 margin at +68.0. Once points exist the surfaces rank on them, the same as
+   * the Matchup screen, and the pre-week probability is no longer shown — it describes a game that
+   * has since been played.
+   */
+  live: {
+    you: number
+    them: number
+    /** Signed: positive means you are ahead on the scoreboard. */
+    margin: number
+    /** Both sides' week is settled (`finalized`). False while any game is still to play. */
+    final: boolean
+  } | null
   href: string
 }
 
@@ -520,7 +538,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     if (!pid || !t.externalId) continue
     // teamName is what shows in the platform's own UI; ownerName is the person.
     // Prefer the team, fall back to the person, never to a placeholder.
-    const label = t.teamName?.trim() || t.ownerName?.trim()
+    const label = realManagerName(t.teamName) || realManagerName(t.ownerName)
     if (label) rosterNames.set(`${pid}:${t.externalId}`, label)
     const avatar = managerArtUrl({ avatarUrl: t.avatarUrl, platform: platformOf(t, pid) })
     if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
@@ -1062,6 +1080,14 @@ export async function getWeekBoard(
       projection: null,
       form: null,
       yourSampleWeeks: mineProfile?.n ?? 0,
+      live: isScored(you)
+        ? {
+            you: you.pointsFor,
+            them: them.pointsFor,
+            margin: you.pointsFor - them.pointsFor,
+            final: you.finalized === true && them.finalized === true,
+          }
+        : null,
       href: `/core/matchup?league=${encodeURIComponent(meta.id)}`,
     }
 

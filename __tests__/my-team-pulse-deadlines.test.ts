@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({
+ guillotineElimination: { findMany: vi.fn(async () => []) },
  leagueTeam: { findMany: vi.fn(async () => Array.from({length: 65}, (_, i) => ({leagueId: `L${i}`, externalId: '4', platformUserId: 'su', teamName: 'Mine', league: {id: `L${i}`, name: `League ${i}`, sport: 'NFL', platform: 'sleeper', platformLeagueId: `${1000+i}`, userId: 'user', season: 2026, updatedAt: new Date()}}))) },
  roster: { findMany: vi.fn(async () => Array.from({length:65}, (_,i) => ({leagueId:`L${i}`,platformUserId:'su',playerData:{players:['healthy','out'],starters:['healthy','out']}}))) },
  sportsPlayer: { findMany: vi.fn(async () => [{sleeperId:'healthy',name:'Healthy Player',team:'ATL'},{sleeperId:'out',name:'Omar Cooper',team:'NYJ'}]) },

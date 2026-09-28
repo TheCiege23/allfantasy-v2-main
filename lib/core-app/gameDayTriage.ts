@@ -134,7 +134,24 @@ export function triageRows(args: {
   const byPlayer = new Map<string, TriageRow>()
 
   for (const s of starters) {
-    const inj = injuries.get(s.name.trim().toLowerCase()) ?? null
+    const reported = injuries.get(s.name.trim().toLowerCase()) ?? null
+    // A designation explicitly for another week is not a current lineup warning.
+    // Match the designation phrase, not "Expected Return Week 7": a player on
+    // IR with that return date is still unavailable this week. Old Week 1
+    // Questionable reports must not survive into a Week 3 game-day triage.
+    const reportWeek = reported?.description?.match(/\b(?:Out|Questionable|Doubtful|Probable|Inactive|Active)\s+for\s+Week\s+(\d{1,2})\b/i)
+    /*
+     * ⚠ AND A GAME-DAY WORD ABOUT TRAINING CAMP IS A JULY REPORT. Production 2026-09-28, week 3:
+     * Jeremy Chinn "Back - Questionable for start of Training Camp" was flagged in War Room and
+     * Player Finder, "reported Mon" — the feed re-stamps the row's date, so the 45-day age gate
+     * cannot see it. Only the game-day designations are dropped: IR / PUP / NFI carry over from
+     * camp into the season and stay true.
+     */
+    const campReport =
+      week != null &&
+      /^(?:questionable|doubtful|probable)$/i.test(String(reported?.status ?? '').trim()) &&
+      /\btraining\s+camp\b/i.test(reported?.description ?? '')
+    const inj = campReport || (week != null && reportWeek && Number(reportWeek[1]) !== week) ? null : reported
     const readyBase = readiness(inj?.status ?? null, Boolean(inj))
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null

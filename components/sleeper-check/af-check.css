@@ -1,0 +1,425 @@
+/*
+ * /check — the public Sleeper lookup. Scoped under `.af-core` like every af-*.css file (see
+ * af-core.css for why the scope is load-bearing), and built only from its tokens so light, dark
+ * and af modes follow the rest of the product.
+ *
+ * ⚠ ONE @media BLOCK, AT THE END, AND NOTHING NESTED IN IT. A query inserted inside another closes
+ * the outer one early and silently moves every rule below it (CLAUDE.md, af-matchup.css).
+ */
+
+.af-core.af-ck {
+  min-height: 100vh;
+  border-radius: 0;
+  max-width: none;
+}
+
+.af-core .af-ck-nav {
+  justify-content: space-between;
+}
+
+.af-core .af-ck-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── Hero + form ─────────────────────────────────────────────────────── */
+
+.af-core .af-ck-hero {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 56px 24px 28px;
+  box-sizing: border-box;
+}
+
+.af-core .af-ck-h1 {
+  margin: 18px 0 0;
+  font-size: 48px;
+  line-height: 1.02;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+.af-core .af-ck-form {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af-core .af-ck-form:focus-within {
+  border-color: var(--accent-line);
+}
+
+.af-core .af-ck-at {
+  color: var(--faint);
+  font-size: 16px;
+}
+
+.af-core .af-ck-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px; /* 16px stops iOS zooming the page on focus */
+}
+
+.af-core .af-ck-submit {
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+.af-core .af-ck-hp,
+.af-core .af-ck-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+.af-core .af-ck-error {
+  margin: 12px 0 0;
+  color: var(--bad);
+  font-size: 14px;
+}
+
+.af-core .af-ck-loading {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px;
+  color: var(--muted);
+}
+
+/* ── Results ─────────────────────────────────────────────────────────── */
+
+.af-core .af-ck-results {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px 56px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.af-core .af-ck-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.af-core .af-ck-avatar {
+  border-radius: 50%;
+  flex: none;
+}
+
+.af-core .af-ck-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.af-core .af-ck-summary-name {
+  font-size: 17px;
+  color: var(--text);
+}
+
+.af-core .af-ck-summary-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-ck-notes {
+  margin: 0;
+  padding: 0 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.af-core .af-ck-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-core .af-ck-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-ck-alerts,
+.af-core .af-ck-players,
+.af-core .af-ck-leagues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.af-core .af-ck-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-core .af-ck-alert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.af-core .af-ck-alert-where {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.af-core .af-ck-alert-empty {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--text2);
+}
+
+.af-core .af-ck-more {
+  align-self: flex-start;
+}
+
+.af-core .af-ck-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-ck-cta p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-ck-cta strong {
+  color: var(--text);
+}
+.af-core .af-ck-cta .af-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.af-core .af-ck-filters {
+  display: flex;
+  gap: 6px;
+}
+.af-core .af-ck-filter {
+  cursor: pointer;
+  min-height: 32px;
+}
+.af-core .af-ck-filter[aria-pressed='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-core .af-ck-players {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.af-core .af-ck-row-wrap + .af-ck-row-wrap {
+  border-top: 1px solid var(--line);
+}
+
+.af-core .af-ck-row {
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.af-core .af-ck-row:hover,
+.af-core .af-ck-row[aria-expanded='true'] {
+  background: var(--chip);
+}
+
+.af-core .af-ck-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.af-core .af-ck-headshot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+  background: var(--chip);
+}
+
+.af-core .af-ck-player-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-ck-player-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-ck-player-meta {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-core .af-ck-status {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.af-core .af-ck-status[data-severity='bad'] {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-ck-status[data-severity='warn'] {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.af-core .af-ck-count {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-ck-leagues {
+  padding: 4px 14px 12px 56px;
+  background: var(--chip);
+}
+
+.af-core .af-ck-league {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.af-core .af-ck-league-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-ck-bb {
+  flex: none;
+  font-size: 10px;
+}
+
+.af-core .af-ck-slot {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.af-core .af-ck-slot[data-slot='starter'] {
+  color: var(--good);
+}
+.af-core .af-ck-slot[data-slot='ir'] {
+  color: var(--bad);
+}
+
+.af-core .af-ck-empty {
+  padding: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.af-core .af-ck-foot {
+  margin: 0;
+}
+
+/* ── Phones ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .af-core .af-ck-nav {
+    padding: 0 16px;
+    height: 60px;
+  }
+  .af-core .af-ck-nav-right .af-lp-signin {
+    display: none;
+  }
+  .af-core .af-ck-hero {
+    padding: 32px 16px 20px;
+  }
+  .af-core .af-ck-h1 {
+    font-size: 34px;
+  }
+  .af-core .af-ck-form {
+    flex-wrap: wrap;
+    padding: 6px 6px 6px 12px;
+  }
+  .af-core .af-ck-submit {
+    width: 100%;
+  }
+  .af-core .af-ck-results,
+  .af-core .af-ck-loading {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .af-core .af-ck-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .af-core .af-ck-cta .af-btn {
+    justify-content: center;
+  }
+  .af-core .af-ck-leagues {
+    padding-left: 14px;
+  }
+}

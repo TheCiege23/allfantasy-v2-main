@@ -8,6 +8,7 @@ import type {
   FleaflickerRulesResponse,
   FleaflickerDraftBoardResponse,
   FleaflickerTransactionsResponse,
+  FleaflickerRosterResponse,
 } from '@/lib/league-import/fleaflicker/types'
 
 const API_BASE = 'https://www.fleaflicker.com/api'
@@ -170,6 +171,13 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     throw new FleaflickerImportLeagueNotFoundError('Fleaflicker response missing league object.')
   }
 
+  /*
+   * Lineups last, because they need the team ids and the SERVED season: a lineup read for a
+   * clamped season would describe a different year from the rosters beside it.
+   */
+  const teamIds = (standings.divisions ?? []).flatMap((d) => (d.teams ?? []).map((t) => t.id))
+  const lineups = await fetchFleaflickerLineups(sport, leagueId, season, teamIds)
+
   return {
     sport,
     season,
@@ -178,6 +186,7 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     rules,
     draftBoard,
     transactions,
+    lineups,
   }
 }
 
@@ -396,4 +405,47 @@ export async function fetchFleaflickerDraftBoard(
     `${API_BASE}/FetchLeagueDraftBoard?sport=${encodeURIComponent(sport)}` +
     `&league_id=${leagueId}&season=${season}&draft_number=${draftNumber}`
   return fetchJson<FleaflickerDraftBoardResponse>(url)
+}
+
+/**
+ * `FetchRoster` — one team's lineup (START / INJURED / TAXI groups; the bench group names no
+ * `group`). Shape: contracts/fleaflicker/fixtures/roster.NFL.2021.week1.team1371776.json.
+ *
+ * No `scoring_period`: the endpoint then serves the current lineup period, which is the lineup an
+ * import is for. The captured fixture pinned week 1 only because a finished season has no "current".
+ */
+export async function fetchFleaflickerTeamRoster(
+  sport: FleaflickerSport,
+  leagueId: number,
+  teamId: number,
+  season: number,
+): Promise<FleaflickerRosterResponse> {
+  const url =
+    `${API_BASE}/FetchRoster?sport=${encodeURIComponent(sport)}` +
+    `&league_id=${leagueId}&team_id=${teamId}&season=${season}`
+  return fetchJson<FleaflickerRosterResponse>(url)
+}
+
+/**
+ * Every team's lineup, keyed by team id. ONE REQUEST PER TEAM — the endpoint takes a single
+ * `team_id` — so a 12-team league costs 12 calls; they run a few at a time because the contract
+ * records no rate limit ("be polite"). Each team fails soft to `null` on its own: a lineup is an
+ * enrichment of the roster, and one team's bad response must not blank the other eleven.
+ */
+export async function fetchFleaflickerLineups(
+  sport: FleaflickerSport,
+  leagueId: number,
+  season: number,
+  teamIds: readonly number[],
+  concurrency = 4,
+): Promise<Record<string, FleaflickerRosterResponse | null>> {
+  const out: Record<string, FleaflickerRosterResponse | null> = {}
+  const queue = [...new Set(teamIds)]
+  const worker = async () => {
+    for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+      out[String(id)] = await fetchFleaflickerTeamRoster(sport, leagueId, id, season).catch(() => null)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker))
+  return out
 }

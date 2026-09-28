@@ -10,7 +10,7 @@ import { rankToValue } from '@/lib/projections/tradeGrading'
  * deadline. 14 trades on file here.") and says nothing about the trade at all.
  *
  * 🛑 TEMPLATED FROM THE COMPUTED NUMBERS. NO GENERATED PROSE. This is the same rule
- * `lib/trade-value/grader.ts` states in its own header, and it is not a style preference:
+ * `lib/decision-os/trade/fairnessGrader.ts` (formerly `lib/trade-value/grader.ts`) states in its own header, and it is not a style preference:
  * a sentence a model writes about a trade can disagree with the letter printed beside it,
  * and the reader has no way to tell which one is lying.
  */

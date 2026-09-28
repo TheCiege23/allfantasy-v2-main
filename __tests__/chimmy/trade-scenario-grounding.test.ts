@@ -93,6 +93,7 @@ const resolveWorld = vi.fn()
 const loadPlayerNames = vi.fn()
 const evaluate = vi.fn()
 const grade = vi.fn()
+const saveReceipt = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -100,13 +101,51 @@ beforeEach(() => {
   loadPlayerNames.mockResolvedValue(NAMES)
   evaluate.mockResolvedValue(evaluation())
   grade.mockResolvedValue(ONE_GRADE)
-  deps = { resolveWorld, loadPlayerNames, evaluate, grade }
+  saveReceipt.mockResolvedValue({ id: 'rcpt_chimmy' })
+  deps = { resolveWorld, loadPlayerNames, evaluate, grade, saveReceipt }
 })
 
 const run = (message: string, userId = 'viewer-1') =>
   buildTradeScenario({ message, leagueId: 'league-1', userId }, deps)
 
 describe('a described trade is resolved against real rosters', () => {
+  it('resolves a trade when both stores carry identical rosters for the same teams', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, rosters: [
+      ...WORLD.rosters,
+      roster('r1-copy', 't1', [...WORLD.rosters[0]!.playerIds].reverse()),
+      roster('r2-copy', 't2', [...WORLD.rosters[1]!.playerIds].reverse()),
+    ] })
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    expect(s?.status).toBe('ready')
+    expect(evaluate.mock.calls[0]?.[0]).toMatchObject({ proposerRosterId: 'r1', receiverRosterId: 'r2' })
+  })
+
+  it('keeps conflicting snapshots of the same team ambiguous', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, rosters: [
+      ...WORLD.rosters,
+      roster('r2-conflict', 't2', ['p-puka']),
+    ] })
+    expect(await run('Should I trade Bijan Robinson for Puka Nacua?')).toMatchObject({ status: 'unresolved', reason: 'ambiguous_player' })
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  it('does not collapse the same player across different or unidentified teams', async () => {
+    for (const teamId of ['t3', null]) {
+      resolveWorld.mockResolvedValue({ ...WORLD, rosters: [
+        ...WORLD.rosters,
+        roster('r2-copy', teamId as string, [...WORLD.rosters[1]!.playerIds]),
+      ] })
+      expect(await run('Should I trade Bijan Robinson for Puka Nacua?')).toMatchObject({ status: 'unresolved', reason: 'ambiguous_player' })
+    }
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  it('counts a repeated player id within one roster once', async () => {
+    resolveWorld.mockResolvedValue({ ...WORLD, rosters: WORLD.rosters.map(r =>
+      r.rosterId === 'r2' ? { ...r, playerIds: [...r.playerIds, 'p-puka'] } : r) })
+    expect((await run('Should I trade Bijan Robinson for Puka Nacua?'))?.status).toBe('ready')
+  })
+
   it('gives the viewer\'s player and receives the partner\'s', async () => {
     const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
     expect(s?.status).toBe('ready')
@@ -153,6 +192,20 @@ describe('a described trade is resolved against real rosters', () => {
     expect(s.lineupWeek).toBe(3)
     expect(s.playoffOdds.available).toBe(false)
   })
+
+  it('goes through the one trade engine: the receipt is saved and named, and the partner letter is its exact mirror', async () => {
+    const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
+    if (s?.status !== 'ready') throw new Error('not ready')
+    expect(saveReceipt).toHaveBeenCalledTimes(1)
+    expect(saveReceipt.mock.calls[0]![0]).toMatchObject({ surface: 'chimmy', leagueId: 'league-1', userId: 'viewer-1' })
+    expect(s.receiptId).toBe('rcpt_chimmy')
+    expect(s.value.partnerGrade).toBeTruthy()
+    const block = renderTradeScenarioBlock(s)
+    expect(block).toContain('Evaluation receipt: rcpt_chimmy.')
+    expect(block).toMatch(/side grades /)
+    // Both rosters' lineup effects are measured; the viewer's is the one shown.
+    expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ viewerRosterId: 'r1' }), expect.anything())
+  })
 })
 
 describe('the same name on two rosters (the QB and the IDP Josh Allen)', () => {
@@ -194,10 +247,13 @@ describe('it refuses rather than guessing', () => {
     expect(s).toMatchObject({ status: 'unresolved', reason: 'no_league_world' })
   })
 
-  it('an evaluator that throws', async () => {
+  it('a lineup evaluator that throws keeps the grade, and says why the lineup is missing', async () => {
     evaluate.mockRejectedValue(new Error('boom'))
     const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
-    expect(s).toMatchObject({ status: 'unresolved', reason: 'evaluation_failed' })
+    if (s?.status !== 'ready') throw new Error('not ready')
+    expect(s.value.grade).toBe('C')
+    expect(s.lineup).toBeNull()
+    expect(s.lineupUnavailable).toBe('boom')
   })
 })
 
@@ -316,7 +372,7 @@ describe('the prompt block', () => {
     const block = renderTradeScenarioBlock(s!)
     expect(block).toContain('You give: Bijan Robinson (RB). You get: Puka Nacua (WR) from Rival.')
     expect(block).toContain(
-      'League value (Dynasty · 1QB · 12 teams · PPR): you send 8450, you receive 7900 (-550); grade C — Even. This is the same grade the Trade Center gives this trade.',
+      "League value (Dynasty · 1QB · 12 teams · PPR): you send 8450, you receive 7900 (-550); grade C — Even (Rival's side grades C). This is the same grade the Trade Center gives this trade. Quote these letters exactly; state no other grade.",
     )
     expect(block).toContain(
       "Starting lineup, week 3 projections scored under this league's own rules: 118.4 before, 116.9 after (-1.5). This is one week, not the rest of the season",
@@ -402,5 +458,25 @@ describe('draft picks in a dynasty league', () => {
     const s = await run(message)
     expect(s).toMatchObject({ status: 'unresolved', reason })
     expect(evaluate).not.toHaveBeenCalled()
+  })
+})
+
+describe('reported KBFL screenshot package', () => {
+  it.each([
+    'Should I trade Quincy Williams and Carson Schwesinger for Tyrone Tracy and Ryan Fitzgerald and 2027 1st?',
+    'Should I trade Tyrone Tracy and Ryan Fitzgerald and 2027 1st for Quincy Williams and Carson Schwesinger?',
+  ])('preserves IDP, kicker and future pick, oriented by actual ownership: %s', async message => {
+    resolveWorld.mockResolvedValue({ ...WORLD, league: { ...WORLD.league, isDynasty: true }, rosters: [roster('r1', 't1', ['qw', 'cs']), roster('r2', 't2', ['tt', 'rf'])] })
+    loadPlayerNames.mockResolvedValue(new Map([
+      ['qw', { name: 'Quincy Williams', position: 'LB' }], ['cs', { name: 'Carson Schwesinger', position: 'LB' }],
+      ['tt', { name: 'Tyrone Tracy Jr.', position: 'RB' }], ['rf', { name: 'Ryan Fitzgerald', position: 'K' }],
+    ]))
+    const out = await run(message)
+    expect(out?.status).toBe('ready')
+    if (out?.status !== 'ready') return
+    expect(out.give.map(p => p.playerId)).toEqual(['qw', 'cs'])
+    expect(out.get.map(p => p.name)).toEqual(['Tyrone Tracy Jr.', 'Ryan Fitzgerald', '2027 1st-round pick'])
+    expect(grade.mock.calls[0][0].get.assets).toContainEqual({ kind: 'pick', year: 2027, round: 1 })
+    expect(evaluate.mock.calls[0][0].assets).toHaveLength(5)
   })
 })

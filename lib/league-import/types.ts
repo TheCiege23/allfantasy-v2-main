@@ -103,6 +103,10 @@ export interface NormalizedLeagueSettings {
    * 43 NFL leagues were named best ball, so every lineup surface treated them as set-your-own
    * lineups. Persisted into `League.settings.best_ball` by the settings spread and onto
    * `League.bestBallMode` by `buildTier0LeagueColumnPatch`.
+   *
+   * Absent leaves existing settings intact (#1372). ⚠ ONE declaration: #1372 and #1373 each added
+   * this field (`boolean` and `0 | 1 | boolean`) and a clean merge kept both — a duplicate
+   * identifier. The wider type stands; `boolean` is a subset of it.
    */
   best_ball?: 0 | 1 | boolean
   reserve_allow_cov?: boolean
@@ -241,6 +245,8 @@ export interface NormalizedDraftPick {
 
 /** Normalized transaction (waiver/trade). */
 export interface NormalizedTransaction {
+  /** Provider completion time, separate from proposal creation. */
+  completed_at?: string
   source_transaction_id: string
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string

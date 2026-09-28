@@ -244,3 +244,40 @@ describe('loadAdpBySleeperId — what it refuses', () => {
     expect(res.size).toBe(0)
   })
 })
+
+describe('seven-sport ADP isolation and validity', () => {
+  it('does not reuse the first sport placeholder filter for other sports', async () => {
+    const sports = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp: 10 })]) as any
+    db.adpDataRecord.groupBy.mockImplementation(async ({ where }: any) => [{ format: 'dynasty', adp: where.sport === 'NFL' ? 10 : 170, _count: { _all: 100 } }])
+    for (const sport of sports) {
+      const result = await loadAdpBySleeperId({ prisma: db, sport, sleeperIds: ['111'] })
+      expect(result.has('111'), sport).toBe(sport !== 'NFL')
+    }
+    expect(db.adpDataRecord.groupBy).toHaveBeenCalledTimes(7)
+  })
+  it.each([0, -1, NaN, Infinity])('refuses invalid draft position %s', async adp => {
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp })])
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(0)
+  })
+  it('retries placeholder detection after a transient database failure', async () => {
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp: 170 })]) as any
+    db.adpDataRecord.groupBy.mockRejectedValueOnce(new Error('temporary')).mockResolvedValue([{ format: 'dynasty', adp: 170, _count: { _all: 100 } }])
+    await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(0)
+    expect(db.adpDataRecord.groupBy).toHaveBeenCalledTimes(2)
+  })
+})
+
+
+it('refreshes ADP placeholder detection after ingestion can change the board', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+  try {
+    const db = fakePrisma([player()], [row({ playerId: 'uuid-1', adp: 170 })]) as any
+    db.adpDataRecord.groupBy.mockResolvedValueOnce([]).mockResolvedValue([{ format: 'dynasty', adp: 170, _count: { _all: 100 } }])
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(1)
+    clock.mockReturnValue(1000 + 6 * 60 * 1000)
+    expect((await loadAdpBySleeperId({ prisma: db, sport: 'NFL', sleeperIds: ['111'] })).size).toBe(0)
+    expect(db.adpDataRecord.groupBy).toHaveBeenCalledTimes(2)
+  } finally { clock.mockRestore() }
+})

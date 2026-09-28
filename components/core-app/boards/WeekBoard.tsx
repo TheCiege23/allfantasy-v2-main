@@ -107,6 +107,16 @@ function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
   const abs = Math.abs(row.margin).toFixed(1)
   const win = Math.round(m.projection ? m.projection.winProbability * 100 : 0)
   const sign = ahead ? '+' : '−'
+  /*
+   * A scored week says what happened; it no longer carries the pre-week probability, which
+   * describes a game that has since been played. See `WeekMatchup.live`.
+   */
+  const live = m.live
+  const result = live?.final ? (live.margin > 0 ? 'won' : live.margin < 0 ? 'lost' : 'tied') : null
+  const valueSub = live ? (result ?? 'so far') : `${win}% to win`
+  const valueLabel = live
+    ? `${sign}${abs} on the scoreboard, ${live.you.toFixed(1)} to ${live.them.toFixed(1)}${result ? ` — you ${result}` : ' so far'}`
+    : `${sign}${abs} projected margin, ${win}% to win`
   return (
     <li>
       <Link className="af-bd-row" href={m.href}>
@@ -128,15 +138,15 @@ function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
         <span
           className="af-bd-val"
           data-sev={ahead ? 'good' : 'bad'}
-          aria-label={`${sign}${abs} projected margin, ${win}% to win`}
-          title="Projected margin this week"
+          aria-label={valueLabel}
+          title={live ? 'Scored margin this week' : 'Projected margin this week'}
         >
           <span aria-hidden>
             {sign}
             {abs}
           </span>
           <span className="af-bd-val-sub" aria-hidden>
-            {win}% to win
+            {valueSub}
           </span>
         </span>
       </Link>
@@ -195,15 +205,21 @@ export function WeekBoard({
    * not — on an account where 47 of 65 leagues land here that left one row on
    * screen. They get their own section below, with no margin and no probability.
    */
-  const projected: Row[] = [...board.coinFlips, ...board.leaning]
-    .filter((m): m is WeekMatchup & { projection: NonNullable<WeekMatchup['projection']> } =>
-      m.projection != null,
-    )
+  /*
+   * 🛑 ONCE THE WEEK HAS POINTS, THE COLUMNS RANK ON THEM. See `WeekMatchup.live`: on a Monday this
+   * board said "+29.6 · 78% to win" for a league /core/matchup had at +68.0 on the scoreboard.
+   * A league with a score but too little history for a projection joins the columns too — it has a
+   * real margin now, which is exactly what it lacked.
+   */
+  const projected: Row[] = [...board.coinFlips, ...board.leaning, ...board.unprojected]
+    .filter((m) => m.live != null || m.projection != null)
     .map((m) => ({
       m,
-      margin: m.projection.margin,
+      margin: m.live ? m.live.margin : m.projection!.margin,
       playoffPct: pctByLeague.has(m.leagueId) ? (pctByLeague.get(m.leagueId) as number) : null,
     }))
+  /* The "not enough history" section keeps only the matchups that still have nothing to rank on. */
+  const unprojected = board.unprojected.filter((m) => m.live == null)
 
   const leading = projected
     .filter((r) => r.margin > 0)
@@ -237,7 +253,7 @@ export function WeekBoard({
   const shown =
     leading.length +
     trailing.length +
-    Math.min(board.unprojected.length, UNPROJECTED_SHOWN) +
+    Math.min(unprojected.length, UNPROJECTED_SHOWN) +
     /*
      * ⚠ THE FOURTH SECTION TOO, FOR THE REASON DIRECTLY ABOVE — and it is listed in
      * full rather than capped, so the whole length counts. These leagues used to be
@@ -316,18 +332,18 @@ export function WeekBoard({
         is the one genuinely useful thing about an unprojectable matchup: it
         tells a reader whether this is next week's problem or this season's.
       */}
-      {board.unprojected.length > 0 ? (
+      {unprojected.length > 0 ? (
         <section className="af-bd-sec">
           <SectionHead
             label="On the schedule · not enough history to call"
             count={
-              board.unprojected.length > UNPROJECTED_SHOWN
-                ? `${UNPROJECTED_SHOWN} of ${board.unprojected.length}`
-                : `${board.unprojected.length}`
+              unprojected.length > UNPROJECTED_SHOWN
+                ? `${UNPROJECTED_SHOWN} of ${unprojected.length}`
+                : `${unprojected.length}`
             }
           />
           <ul className="af-bd-rows af-bd-rows--compact">
-            {board.unprojected.slice(0, UNPROJECTED_SHOWN).map((m) => (
+            {unprojected.slice(0, UNPROJECTED_SHOWN).map((m) => (
               <li key={m.leagueId}>
                 <Link className="af-bd-row" href={m.href}>
                   <LeagueCrest
@@ -492,8 +508,13 @@ export function WeekBoard({
           sample the basis stands alone; with one it is a clause.
         */}
         {board.model.sampleSize > 0
-          ? `Margins are projected from each league's own completed weeks — ${board.model.basis}, fitted on ${board.model.sampleSize.toLocaleString()} roster-weeks.`
+          ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
+               a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
+               on 40,396 roster-weeks." on production, 2026-09-28. */
+            `${board.model.basis} Fitted on ${board.model.sampleSize.toLocaleString()} roster-weeks.`
           : board.model.basis}{' '}
+        {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
+        Once a league's week has points on the board, its margin is the actual score, not a projection.{' '}
         {outlook
           ? ` Playoff odds are a simulated probability over the remaining schedule; a league below ${DEAD_PATH_PCT}% is left out of the trailing column.`
           : ' The playoff filter did not run this time, so the trailing column is every league you are behind in — not only the ones still live.'}
@@ -505,7 +526,7 @@ export function WeekBoard({
         below the cut — and collapsing them into one number is how a board stops
         being trustworthy at sixty leagues.
       */}
-      {dead > 0 || board.unprojected.length > UNPROJECTED_SHOWN || board.withoutSchedule > 0 ? (
+      {dead > 0 || unprojected.length > UNPROJECTED_SHOWN || board.withoutSchedule > 0 ? (
         <p className="af-bd-note af-bd-note--plain">
           {dead > 0 ? (
             <>
@@ -523,8 +544,8 @@ export function WeekBoard({
             hiding. The count is now explicitly the REMAINDER, and disappears
             when the section showed all of them.
           */}
-          {board.unprojected.length > UNPROJECTED_SHOWN
-            ? `${board.unprojected.length - UNPROJECTED_SHOWN} more could not be projected either — too few completed weeks on one side or the other. `
+          {unprojected.length > UNPROJECTED_SHOWN
+            ? `${unprojected.length - UNPROJECTED_SHOWN} more could not be projected either — too few completed weeks on one side or the other. `
             : ''}
           {board.withoutSchedule > 0
             ? `${board.withoutSchedule} carry no schedule for this week at all.`

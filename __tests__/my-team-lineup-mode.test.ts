@@ -9,6 +9,6 @@ it('uses explicit provider rules rather than the league name', () => {
 })
 it('preserves the provider Best Ball flag through import normalization', () => {
  const source={league:{league_id:'123',name:'Neutral name',season:'2026',sport:'nfl',total_rosters:12,settings:{type:2,best_ball:1},roster_positions:['QB','BN']}}
- expect(SleeperLeagueMapper.map(source as any)?.best_ball).toBe(1)
- expect(SleeperLeagueMapper.map({...source,league:{...source.league,settings:{type:2,best_ball:0}}} as any)?.best_ball).toBe(0)
+ expect(SleeperLeagueMapper.map(source as any)?.best_ball).toBe(true)
+ expect(SleeperLeagueMapper.map({...source,league:{...source.league,settings:{type:2,best_ball:0}}} as any)?.best_ball).toBe(false)
 })

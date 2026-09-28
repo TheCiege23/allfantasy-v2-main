@@ -1,3 +1,4 @@
+import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
  * Single-transaction canonical league creation (concept-first preset pipeline).
  * Mirrors redraft shell: League + settings + commissioner + draft + homepage + slots + draft session.
@@ -305,6 +306,12 @@ export async function createCanonicalLeagueInTransaction(
       minRankLevel,
       maxRankLevel,
     },
+  }
+
+  if (bestBallSettings?.contestStructure === 'tournament') {
+    const end = tournamentRoundEnds(bestBallSettings).at(-1)!
+    mergedSettings.playoff_team_count = 0
+    mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoff_team_count: 0, playoff_start_week: end + 1 }
   }
 
   // The concept choice must replace the preset's inherited standings mode before bootstrap.
@@ -1140,6 +1147,19 @@ export async function createCanonicalLeagueInTransaction(
     allowInviteLink: true,
     zombieUniverseTier: zombieTier,
   })
+
+  if (bestBallSettings?.contestStructure === 'tournament') {
+    const ends = tournamentRoundEnds(bestBallSettings)
+    const contest = await tx.bestBallContest.create({ data: {
+      name: league.name ?? 'Best Ball Tournament', sport, variant: 'tournament',
+      podSize: bestBallSettings.podSize, rosterSize: draftRounds,
+      rounds: ends.length, advancersPerPod: bestBallSettings.advancersPerPod ?? 1,
+      cumulativeScoring: bestBallSettings.cumulativeScoring,
+      resetBetweenRounds: bestBallSettings.resetBetweenRounds,
+      scoringPeriod: bestBallSettings.scoringPeriod, draftType: coreDraft,
+    } })
+    await tx.league.update({ where: { id: league.id }, data: { bbContestId: contest.id, playoffTeams: 0, playoffStartWeek: ends.at(-1)! + 1 } })
+  }
 
   log?.('canonical_transaction_success', { leagueId: league.id })
 

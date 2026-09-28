@@ -12,6 +12,10 @@ import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { mirrorLetter, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues, gradeReasons, type importedTradeTimelineRows, type TimelineAsset } from '@/lib/core-app/importedTradeTimeline'
+
+/** One completed trade from an imported league's history, as the panel returns it (`?history=1`). */
+type ImportedHistoryRow = ReturnType<typeof importedTradeTimelineRows>[number]
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
@@ -22,6 +26,8 @@ import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 import {
   groupTradeTimelineBySeason,
@@ -37,9 +43,9 @@ import {
  *   1. Needs your action — offers waiting on the viewer, provider offers that
  *      can only be answered on the provider, and reviews waiting on the
  *      commissioner.
- *   2. Your trades — active, then (native leagues) completed.
- *   3. League trade log — native leagues only. An imported league's completed trades are in the
- *      /core Trade Center instead; see "🛑 RETIRED FOR IMPORTED LEAGUES" below.
+ *   2. Your trades — active, then completed.
+ *   3. League trade log — every league. An imported league's completed trades come from the graded
+ *      history (`?history=1`); see "RESTORED ON THE ONE GRADE" below.
  *   4. Trade block — what managers have flagged available.
  *
  * One read: `/api/league/trades-panel` (pending + completed offers + native history + block).
@@ -50,6 +56,12 @@ import {
  * therefore appeared twice (once "COMPLETED", once falling through to "Pending"), and the ledger's
  * copy printed "COMPLETED · EVEN" beside a board that graded it F. That read is gone. An imported
  * league's full history, on the one grade, lives in the Trade Center; this tab links there.
+ *
+ * ✅ RESTORED ON THE ONE GRADE (Guap, 2026-09-27: "bring them back, graded"). The retirement was about
+ * the SECOND letter, not about showing history. The panel now returns the league's completed history
+ * carrying THE grade (`leagueGrade`, the Trade Center's letter for the same trade), built by the same
+ * `importedTradeTimelineRows`. The realized-points ledger is still never read, and `realizedGrade` is
+ * deliberately not drawn here — see `rowFromImportedTimeline`.
  * ⚠ A NATIVE league keeps its log here: its trades are never written to `transactionFact`, so the
  * Trade Center's history cannot show them.
  *
@@ -82,6 +94,8 @@ type PanelResponse = {
   activeTrades?: LeagueTradeHistoryItem[]
   /** Native completed and closed negotiation history, privacy-filtered by the server. */
   historyTrades?: LeagueTradeHistoryItem[]
+  /** An imported league's completed history on the one grade. Only on a `?history=1` read. */
+  importedHistory?: { rows: ImportedHistoryRow[]; available: boolean }
   /** Commissioner-only, native leagues only: trades that have executed and may be reversed. */
   executedTrades?: LeagueTradeHistoryItem[]
   activeCount?: number
@@ -159,6 +173,8 @@ type LogRow = {
   /** Viewer-relative direction, only for the viewer's own rows. */
   direction: 'incoming' | 'outgoing' | 'done' | null
   receiptNote?: string | null
+  /** THE grade's own sentences — why it graded this way. Imported history only, for now. */
+  why?: string[] | null
 }
 
 function watchStorageKey(leagueId: string): string {
@@ -404,6 +420,76 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   }
 }
 
+/** "Woody Marks · 1,240, 2027 round 3 · 610" — each asset with the league value THE grade priced it at. */
+function sendsWithValues(assets: TimelineAsset[], values: Array<number | null>): string {
+  if (assets.length === 0) return '—'
+  return assets
+    .map((a, i) => {
+      const drafted = a.gradedAs ? ` (drafted ${a.gradedAs})` : ''
+      const v = values[i]
+      return `${a.label}${drafted}${v != null ? ` · ${Math.round(v).toLocaleString()}` : ''}`
+    })
+    .join(', ')
+}
+
+/**
+ * A completed trade from an imported league's history (2026-09-27).
+ *
+ * 🛑 THE ONE GRADE ONLY. The 2026-09-25 retirement was about a SECOND letter — the realized-points
+ * ledger printing "EVEN" beside a board that said F. This row carries `leagueGrade`, the letter the
+ * Trade Center shows for the same trade, and deliberately drops the row's `realizedGrade`: bringing
+ * that back here would rebuild exactly the contradiction that was retired.
+ *
+ * "Then" stays an em dash with its reason: nothing recorded a grade when the trade was made on Sleeper.
+ */
+function rowFromImportedTimeline(t: ImportedHistoryRow): LogRow {
+  const g = t.leagueGrade
+  const graded = g?.graded ? g : null
+  const sentValues = graded ? assetValues(t.sent, graded.lines, 'give') : []
+  const receivedValues = graded ? assetValues(t.received, graded.lines, 'get') : []
+  const aYou = t.sideAYou === true
+  const bYou = t.sideBYou === true
+  const noThen = 'no grade was recorded when this trade was made'
+  const nowWhy = g && !g.graded ? g.reason : graded ? null : 'league values could not be read for this trade'
+  return {
+    id: `imported:${t.id}`,
+    kind: 'completed',
+    season: tradeSeasonFromIso(t.timestamp),
+    when: whenLabel(t.timestamp),
+    sortKey: Date.parse(t.timestamp) || 0,
+    a: {
+      name: aYou ? 'You' : t.sideAName,
+      you: aYou,
+      sends: sendsWithValues(t.sent, sentValues),
+      initialGrade: null,
+      initialLabel: 'Then',
+      initialWhy: noThen,
+      grade: graded ? graded.letter : null,
+      gradeWhy: nowWhy,
+    },
+    b: {
+      name: bYou ? 'You' : t.sideBName,
+      you: bYou,
+      sends: sendsWithValues(t.received, receivedValues),
+      initialGrade: null,
+      initialLabel: 'Then',
+      initialWhy: noThen,
+      grade: graded ? graded.partnerLetter : null,
+      gradeWhy: nowWhy,
+    },
+    extraSides: 0,
+    status: { label: 'Completed · on Sleeper', tone: 'good' },
+    mine: aYou || bYou,
+    direction: aYou || bYou ? 'done' : null,
+    why: graded ? gradeReasons(graded, aYou ? 'You' : t.sideAName, bYou ? 'You' : t.sideBName) : null,
+  }
+}
+
+/** The platform transaction a log row stands for, whichever feed produced it. */
+function transactionKey(rowId: string): string {
+  return rowId.split(':').at(-1) ?? rowId
+}
+
 function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; why: string | null; size?: 'sm' | 'md' }) {
   const dim = size === 'sm' ? 'h-6 w-6 text-[12px] rounded-md' : 'h-7 w-7 text-[14px] rounded-lg'
   if (!letter) {
@@ -421,6 +507,20 @@ function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; w
     <span title={why ?? undefined} className={`inline-flex items-center justify-center border font-black ${dim} ${tone.text} ${tone.box}`}>
       {letter}
     </span>
+  )
+}
+
+/** Why a completed trade graded the way it did — THE grade's own sentences, full width under the row. */
+function GradeWhy({ lines }: { lines: string[] | null | undefined }) {
+  if (!lines || lines.length === 0) return null
+  return (
+    <ul className="col-span-full flex flex-col gap-0.5 rounded-lg bg-white/[0.03] px-3 py-2" aria-label="Why it graded this way">
+      {lines.map((line, i) => (
+        <li key={line} className={`text-[10.5px] leading-snug ${i === 0 ? 'font-semibold text-[#CBD5E1]' : 'text-white/45'}`}>
+          {line}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -707,6 +807,8 @@ function ManagerBlock({
 
 export function PendingTradeCard(props: {
   trade: LeagueTradeHistoryItem
+  /** The AllFantasy league id — set where a commissioner may review the trade (design step 6). */
+  leagueId?: string
   offer: BuilderOffer | null
   verdict: PendingVerdict | undefined
   sport: string
@@ -919,6 +1021,12 @@ export function PendingTradeCard(props: {
           </>
         ) : props.canAct && review ? (
           <>
+            {/* The commissioner review — flags computed in code, advice only; the buttons log what it said. */}
+            {t.viewerIsCommissioner && props.leagueId ? (
+              <div className="basis-full">
+                <TradeReviewPanel leagueId={props.leagueId} tradeId={t.id} kind="af" />
+              </div>
+            ) : null}
             <button type="button" disabled={props.busy} onClick={props.onApprove} className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50" data-testid="trade-action-commissioner-approve">
               Approve
             </button>
@@ -961,6 +1069,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [tradeBlockReadable, setTradeBlockReadable] = useState(true)
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [historyTrades, setHistoryTrades] = useState<LeagueTradeHistoryItem[]>([])
+  /* null: not read, or the read failed — distinct from a league with no completed trades. */
+  const [importedHistory, setImportedHistory] = useState<ImportedHistoryRow[] | null>(null)
   const [executedTrades, setExecutedTrades] = useState<LeagueTradeHistoryItem[]>([])
   /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
   const [providerPending, setProviderPending] = useState(0)
@@ -1009,7 +1119,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setErr(null)
     }
     try {
-      const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}`, {
+      /*
+       * The graded history is asked for on a full load only: it grades up to sixty trades, and the
+       * once-a-minute background refresh exists to see new OFFERS. A background read that omits it
+       * leaves the last history on screen (see below).
+       */
+      const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}${background ? '' : '&history=1'}`, {
         credentials: 'include',
         cache: 'no-store',
       })
@@ -1035,6 +1150,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setTradeBlockReadable(data?.tradeBlockReadable !== false)
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
       setHistoryTrades(Array.isArray(data?.historyTrades) ? (data.historyTrades as LeagueTradeHistoryItem[]) : [])
+      if (data?.importedHistory && typeof data.importedHistory === 'object') {
+        setImportedHistory(data.importedHistory.available && Array.isArray(data.importedHistory.rows) ? data.importedHistory.rows : null)
+      }
       setExecutedTrades(Array.isArray(data?.executedTrades) ? (data.executedTrades as LeagueTradeHistoryItem[]) : [])
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
@@ -1112,7 +1230,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/commissioner`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision }),
+          // The review the commissioner was shown, logged with the decision. Null when there was none.
+          body: JSON.stringify({ decision, reviewId: reviewIdFor(tradeId) }),
         })
         await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -1160,14 +1279,19 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
 
   /*
-   * An imported league's completed trades are the Trade Center's to show (see the header note), so
-   * this tab lists none for it — the history card links there instead.
+   * An imported league's completed trades (2026-09-27, restored on the one grade — see the header).
+   * Two feeds can hold the same trade: this season's live Sleeper read (`historyTrades`) and the graded
+   * history (`importedHistory`). One row per transaction, and the HISTORY copy wins — both carry the
+   * same letter from the same grader, but only the history copy names both managers and says why.
    */
   const importedLeague = tradeShadowNotice != null
-  const completedRows = useMemo<LogRow[]>(
-    () => (importedLeague ? [] : historyTrades.map(rowFromNativeHistory)),
-    [importedLeague, historyTrades],
-  )
+  const completedRows = useMemo<LogRow[]>(() => {
+    const live = historyTrades.map(rowFromNativeHistory)
+    if (!importedLeague || !importedHistory) return live
+    const graded = importedHistory.map(rowFromImportedTimeline)
+    const seen = new Set(graded.map((r) => transactionKey(r.id)))
+    return [...graded, ...live.filter((r) => !seen.has(transactionKey(r.id)))]
+  }, [importedLeague, historyTrades, importedHistory])
 
   const pendingRows = useMemo<LogRow[]>(() => activeTrades.map(rowFromActive), [activeTrades])
 
@@ -1358,6 +1482,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 offer={offerById.get(t.id) ?? null}
                 verdict={verdictFor(t)}
                 sport={sport}
+                leagueId={league.id}
                 tradeCenterHref={tradeCenterHref}
                 providerUrl={providerUrl}
                 canAct={nflRedraftTradesShell}
@@ -1466,7 +1591,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="flex flex-wrap items-center gap-3">
             <span className={`${EYEBROW} text-[10px] text-white/40`}>Your trades</span>
             <div className="flex gap-0.5 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
-              {(importedLeague ? (['active'] as const) : (['active', 'completed'] as const)).map((k) => (
+              {(['active', 'completed'] as const).map((k) => (
                 <button
                   key={k}
                   type="button"
@@ -1483,10 +1608,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             <span className="text-[10px] text-white/35">
               {yourTab === 'active'
                 ? 'Offers with your name on them'
-                : 'Realized grades — scored on what each side has produced since'}
+                : importedLeague
+                  ? 'Each trade keeps the grade it got when first graded on this league’s values — the same grade as the Trade Center'
+                  : 'Realized grades — scored on what each side has produced since'}
             </span>
           </div>
-          {yourTab === 'active' || importedLeague ? (
+          {yourTab === 'active' ? (
             yourActiveTrades.length === 0 ? (
               <p className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-6 text-center text-[12px] text-white/40">
                 Nothing active with your name on it.
@@ -1500,6 +1627,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     offer={offerById.get(t.id) ?? null}
                     verdict={verdictFor(t)}
                     sport={sport}
+                    leagueId={league.id}
                     tradeCenterHref={tradeCenterHref}
                     providerUrl={providerUrl}
                     canAct={nflRedraftTradesShell}
@@ -1561,6 +1689,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     <div className="md:justify-self-end">
                       <StatusChip status={r.status} />
                     </div>
+                    <GradeWhy lines={r.why} />
                   </div>
                 )
                   })}
@@ -1581,8 +1710,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <span className={`${EYEBROW} text-[10px] text-white/40`}>Completed trades</span>
             <p className="max-w-[62ch] text-[12px] leading-relaxed text-[#8B9DB8]">
-              Every completed trade in this league, graded on this league&rsquo;s values &mdash; the same
-              grade as your trade emails.
+              {importedHistory
+                ? 'The log below grades every completed trade on this league’s values. The Trade Center shows the same grades with player photos and a full breakdown.'
+                : 'Every completed trade in this league, graded on this league’s values — the same grade as your trade emails.'}
             </p>
           </div>
           <Link
@@ -1594,8 +1724,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         </section>
       ) : null}
 
-      {/* ── League trade log (native leagues) ────────────────────────── */}
-      {!loading && !err && !nothingAtAll && !importedLeague ? (
+      {/* ── League trade log ─────────────────────────────────────────── */}
+      {!loading && !err && !nothingAtAll ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
             <span className={`${EYEBROW} text-[10px] text-white/40`}>League trade log</span>
@@ -1718,6 +1848,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     <StatusChip status={r.status} />
                     {r.receiptNote ? <span className="max-w-[120px] text-[9px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
                   </div>
+                  <GradeWhy lines={r.why} />
                 </div>
                   ))}
                 </div>

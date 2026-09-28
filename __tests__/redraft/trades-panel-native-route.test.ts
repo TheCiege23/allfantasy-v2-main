@@ -99,6 +99,12 @@ vi.mock('@/lib/decision-os/world', () => ({
 vi.mock('@/lib/decision-os/trade/canonicalEvaluator', () => ({
   evaluateCanonicalTrade: (...args: unknown[]) => evaluateCanonicalTrade(...args),
 }))
+/* Trade OS: each row records the letter it shows as a receipt. The real link builder, a stubbed save. */
+const receiptIdForGrade = vi.fn(async (_input: Record<string, unknown>) => 'rcpt_row')
+vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/decision-os/trade/recordTradeGrade')>()),
+  receiptIdForGrade: (input: Record<string, unknown>) => receiptIdForGrade(input),
+}))
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -121,6 +127,9 @@ function censusPrismaUsage(src: string): Map<string, Set<string>> {
   }
   return out
 }
+
+/** A "Now" grade as the one grader returns it, for the history row's receipt. */
+const NOW_VIEW = { graded: true, letter: 'A', partnerLetter: 'F', percentDiff: 37, giveValue: 3000, getValue: 4800 }
 
 function makeRequest(leagueId: string): NextRequest {
   return new NextRequest(`http://localhost/api/league/trades-panel?leagueId=${leagueId}`)
@@ -279,6 +288,16 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     })
     expect((trade.received as Array<{ teamLogoUrl: string | null }>)[0].teamLogoUrl).toBeTruthy()
     expect((trade.sent as Array<{ label: string }>)[0].label).toBe('Player Two')
+
+    // Trade OS: the row points at the receipt for exactly the letter it shows, linked to its trade.
+    expect(trade.receiptId).toBe('rcpt_row')
+    const recorded = receiptIdForGrade.mock.calls.map((c) => c[0])
+    expect(recorded).toContainEqual(expect.objectContaining({
+      surface: 'trades-panel',
+      leagueId: 'league-1',
+      grade: trade.leagueGrade,
+      stored: expect.objectContaining({ ref: { kind: 'af', tradeId: 'trade-1' }, rosterCheck: 'unverified' }),
+    }))
   })
 
   it('regression guard: still returns an empty, well-formed response when there are no active trades', async () => {
@@ -323,6 +342,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         pricedAt: '2026-09-13T13:00:00.000Z',
         fullyPriced: true,
         unresolvedAssets: [],
+        graded: { view: NOW_VIEW, give: { assets: [], unpriceable: [] }, get: { assets: [], unpriceable: [] } },
       }],
     ]))
 
@@ -346,8 +366,16 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         currentValueGiven: 3000,
         currentValueReceived: 4800,
         currentPricingComplete: true,
+        receiptId: 'rcpt_row',
       }),
     ])
+    // The "Now" letter's receipt: the proposer's side, no roster need, the grade that was priced.
+    expect(receiptIdForGrade).toHaveBeenCalledWith(expect.objectContaining({
+      surface: 'trades-panel',
+      viewerSide: false,
+      grade: NOW_VIEW,
+      stored: expect.objectContaining({ ref: { kind: 'af', tradeId: 'trade-done' } }),
+    }))
   })
 
   /*

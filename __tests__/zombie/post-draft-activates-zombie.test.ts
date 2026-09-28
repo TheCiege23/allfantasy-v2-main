@@ -8,12 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   finalizeRosterAssignments: vi.fn(),
   sync: vi.fn(),
+  tournament: vi.fn(),
   ensureGuillotineSeason: vi.fn(),
   activate: vi.fn(),
   rankings: vi.fn(),
 }))
 vi.mock('@/lib/live-draft-engine/RosterAssignmentService', () => ({ finalizeRosterAssignments: m.finalizeRosterAssignments }))
 vi.mock('@/lib/redraft/finalizeDraftToRedraftSeason', () => ({ syncCompletedDraftToRedraftSeason: m.sync }))
+vi.mock('@/lib/bestball/nativeTournament', () => ({ ensureNativeTournamentEntries: m.tournament }))
 vi.mock('@/lib/guillotine/ensureGuillotineSeason', () => ({ ensureGuillotineSeason: m.ensureGuillotineSeason }))
 vi.mock('@/lib/zombie/activateNativeZombieLeague', () => ({ ensureZombieSeasonActivated: m.activate }))
 vi.mock('@/lib/post-draft-manager-ranking', () => ({ computeAndPersistDraftRankings: m.rankings }))
@@ -24,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.finalizeRosterAssignments.mockResolvedValue({})
   m.sync.mockResolvedValue({ skipped: false, seasonId: 's1', redraftRostersCreated: 8, redraftPlayersCreated: 128, redraftPlayersAlreadyPresent: 0, skippedPicks: 0 })
+  m.tournament.mockResolvedValue(undefined)
   m.ensureGuillotineSeason.mockResolvedValue({ ok: false, reason: 'NOT_GUILLOTINE' })
   m.activate.mockResolvedValue({ ok: false, reason: 'NOT_ZOMBIE' })
   m.rankings.mockResolvedValue(undefined)
@@ -38,6 +41,13 @@ describe('runPostDraftFinalizationArtifacts — zombie', () => {
   it('a failed activation does not cost the rest of the post-draft work', async () => {
     m.activate.mockRejectedValue(new Error('db blip'))
     await runPostDraftFinalizationArtifacts('L1')
+    expect(m.rankings).toHaveBeenCalledWith('L1')
+  })
+
+  it('a tournament entry failure does not stop zombie activation or rankings', async () => {
+    m.tournament.mockRejectedValue(new Error('tournament unavailable'))
+    await runPostDraftFinalizationArtifacts('L1')
+    expect(m.activate).toHaveBeenCalledWith({ leagueId: 'L1', redraftSeasonId: 's1' })
     expect(m.rankings).toHaveBeenCalledWith('L1')
   })
 

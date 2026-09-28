@@ -133,9 +133,9 @@ describe('steps', () => {
     expect(tag('.af-tc-draft')).toBe('offers review')
   })
 
-  it('the league history, passed in, belongs to Offers too — not trailing every step', () => {
+  it('the league history follows the builder on Review', () => {
     const { container } = render(<TradeCenter league={LEAGUE} history={<section className="history-probe">History</section>} />)
-    expect(container.querySelector('.history-probe')?.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('offers')
+    expect(container.querySelector('.history-probe')?.closest('[data-mstep]')?.getAttribute('data-mstep')).toBe('review')
   })
 })
 

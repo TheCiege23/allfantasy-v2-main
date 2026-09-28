@@ -21,6 +21,20 @@ describe('pending email uses the shared proposal grade', () => {
     expect(html).toContain('&lt;script&gt;player&lt;/script&gt;')
     expect(html).toContain('values at email time')
   })
+  it('shows personal utility separately without replacing the trade-value letter', () => {
+    const grade = gradeTrade({ giveValue: 1766, getValue: 1584, giveMarket: 1766, getMarket: 1584,
+      unpriced: 0, giveCount: 1, getCount: 1, basis: 'Dynasty', scoringApplied: false,
+      needApplied: false, needGap: null, lines: [], moves: [] })
+    if (!grade.graded) throw new Error('expected a grade')
+    const { subject, html } = buildPendingTradeOfferEmail({ ...params, grade: { ...grade,
+      rosterFit: { giveValue: 1695, getValue: 1584, percentDiff: -7,
+        moves: [{ side: 'give', name: '<script>player</script>', base: 1766, leagueValue: 1695, reasons: ['surplus WR depth'] }] } } })
+    expect(subject).toContain('D for you')
+    expect(html).toContain('Your roster fit · separate from the trade-value grade')
+    expect(html).toContain('1,695')
+    expect(html).toContain('&lt;script&gt;player&lt;/script&gt;')
+    expect(html).not.toContain('<script>player</script>')
+  })
   it('shows a missing-value reason instead of inventing a letter', () => {
     const { html } = buildPendingTradeOfferEmail({ ...params,
       grade: { graded: false, reason: 'Missing defender projection', basis: null },

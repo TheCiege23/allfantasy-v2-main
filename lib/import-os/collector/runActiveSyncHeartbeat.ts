@@ -5,7 +5,7 @@ import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJo
 export const ACTIVE_SYNC_JOB = 'cron-fantasy-os-active-sync'
 
 /** Shared by the manual route and the existing five-minute notification heartbeat. */
-export async function runActiveSyncHeartbeat(limitPerProvider = 4) {
+export async function runActiveSyncHeartbeat(limitPerProvider = 50) {
   if (process.env.FANTASY_OS_EXEC_SYNC_LIVE !== 'true') {
     await recordSyncJobRun(
       { jobName: ACTIVE_SYNC_JOB, provider: 'multi', trigger: 'cron' },
@@ -32,11 +32,18 @@ export async function runActiveSyncHeartbeat(limitPerProvider = 4) {
       status: summary.failed > 0 || summary.errored > 0 ? 'partial' : 'success',
       rowsRead: summary.selected,
       rowsWritten: summary.completed,
-      rowsSkipped: summary.notDue + summary.locked + summary.skipped,
+      rowsSkipped: summary.notDue + summary.locked + summary.skipped + summary.deferred,
       metadata: {
         enabled: true,
         cadenceMinutes: 5,
-        scopes: ['transactions', 'teams_rosters'],
+        /*
+         * Recorded so "did game-day sizing fire, and did it keep up" is a query, not an inference:
+         * `gameDay` true with `deferred` above zero means the slice outran the start budget and
+         * the 20-minute promise is not being met.
+         */
+        gameDay: summary.gameDay,
+        deferred: summary.deferred,
+        scopes: ['league_state', 'transactions', 'teams_rosters'],
         eligible: summary.eligible,
         selected: summary.selected,
         recentlyViewedSelected: summary.recentlyViewedSelected,

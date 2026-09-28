@@ -129,7 +129,10 @@ export async function backfillHistoricalTradeDecisionSnapshots(limit = 50): Prom
         evidence: snapshot.evidence as Prisma.InputJsonValue,
         readiness: snapshot.readiness as Prisma.InputJsonValue,
         decisionResult: snapshot.decisionResult as Prisma.InputJsonValue,
-      } })
+      },
+      // Only the id back: an insert that RETURNs every column fails on a database the receipt
+      // migration has not reached, and this loop's catch would count every trade as unrecovered.
+      select: { id: true } })
       created += 1
       if (snapshot.readiness.marketGradeAllowed) recoveredMarketGrades += 1
     } catch (error) {

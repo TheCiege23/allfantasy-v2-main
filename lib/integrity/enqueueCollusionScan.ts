@@ -5,13 +5,17 @@ import { getRedisConnection, isRedisConfigured } from "@/lib/queues/bullmq"
 import { QUEUE_NAMES } from "@/lib/jobs/types"
 import type { IntegrityJobPayload } from "@/lib/jobs/types"
 
+type CollusionScanRef = NonNullable<IntegrityJobPayload["tradeRef"]>
+
 /**
- * Queue a post-trade collusion scan (delayed so the trade row is fully committed).
+ * Queue a post-trade collusion scan of a settled trade (delayed so the trade row is fully committed).
+ * The scan reviews the REAL trade — `AfLeagueTrade` or `RedraftTradeProposal` — and flags are keyed
+ * on that trade's id.
  * PRIVACY: job only carries trade ids and roster ids — no chat payloads.
  */
 export async function enqueueCollusionScan(
   leagueId: string,
-  tradeTransactionId: string,
+  tradeRef: CollusionScanRef,
   tradingRosterIds: string[]
 ): Promise<void> {
   if (!isRedisConfigured()) return
@@ -24,7 +28,8 @@ export async function enqueueCollusionScan(
     {
       type: "collusion_scan_trade",
       leagueId,
-      tradeTransactionId,
+      tradeTransactionId: tradeRef.kind === "af" ? tradeRef.tradeId : tradeRef.proposalId,
+      tradeRef,
       tradingRosterIds,
     },
     {

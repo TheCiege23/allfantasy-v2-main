@@ -46,17 +46,10 @@ export type PlayerProjection = {
    * without them is showing a projection whose provenance it is choosing not to state.
    */
   idpProjection?: IdpProjectionSuccess
-  /**
-   * Set when this number describes a SEASON, not the coming week.
-   *
-   * ⚠ ONLY COLLEGE SETS IT TODAY, AND A SURFACE THAT IGNORES IT IS OFF BY A SEASON.
-   * NCAAF has no weekly projection feed at all, so `/core` serves the computed
-   * season-long figure instead — which is a real number, and roughly twelve times a
-   * weekly one. Rendering it unlabelled next to an NFL weekly projection invites
-   * exactly the comparison it cannot survive.
-   * `lib/projections/projectionCoverage.ts` carries the copy that explains it.
-   */
+  /** Reserved for explicit season totals; per-game baseline readers must not set this. */
   seasonLong?: true
+  /** Baseline points per game, without a game-specific opponent or weather adjustment. */
+  perGame?: true
 }
 
 type ProjectionStats = {
@@ -99,7 +92,7 @@ export async function latestProjectionWeek(): Promise<{ season: string; week: nu
   /*
    * ⚠ NO SPORT PARAMETER, AND THAT IS THE CORRECTED DESIGN. A first cut gave this a
    * `sport` and returned a college week for NCAAF. There is no college week to
-   * return: every `AFProjectionSnapshot` row is season-long (`week = null`), because
+   * return: college baseline `AFProjectionSnapshot` rows have `week = null`, because
    * the writer gates week-scoped rows on Sleeper's season state, which is the NFL's.
    * A sport-aware version here could only have invented a number or returned null and
    * switched college projections off entirely. `lookupProjections` resolves the

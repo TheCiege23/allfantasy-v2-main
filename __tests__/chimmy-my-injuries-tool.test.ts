@@ -72,6 +72,33 @@ beforeEach(() => {
 })
 
 describe('buildMyRosterInjuriesContext', () => {
+  it('reads only the authorized selected roster and treats Best Ball injuries as depth concerns', async () => {
+    h.leagues.mockResolvedValue([
+      { id: 'L1', name: 'Best Ball dynasty', sport: 'NFL', season: 2026 },
+      { id: 'L2', name: 'Another league', sport: 'NFL', season: 2026 },
+    ])
+    h.platforms.mockResolvedValue([{ id: 'L1', platform: 'sleeper', leagueType: 'dynasty', settings: { best_ball: 1 } }])
+    h.team.mockResolvedValue(team({ starters: [ref('1', 'Omar Cooper', { position: 'WR', team: 'NYJ' }), ref('0', null, { position: null })] }))
+    h.injuries.mockResolvedValue(injuryResult({ 'Omar Cooper': fact('IR', 4) }))
+    const result = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'L1' })
+    expect(h.team).toHaveBeenCalledTimes(1)
+    expect(h.team.mock.calls[0][0].leagueId).toBe('L1')
+    expect(result).toContain('SELECTED-LEAGUE INJURY CHECK')
+    expect(h.identities).not.toHaveBeenCalled()
+    expect(result).not.toContain('could not be identified by name')
+    expect(result).toContain('Omar Cooper WR NYJ: IR')
+    expect(result).toContain('AUTOMATIC BEST BALL LINEUP')
+    expect(result).toContain('not requests for manual starter swaps')
+    expect(result).not.toContain('ROSTER PLACEMENT:')
+    expect(result).not.toContain('Another league')
+  })
+  it('does not read an unlisted selected league or substitute another roster', async () => {
+    h.leagues.mockResolvedValue([{ id: 'L1', name: 'My league', sport: 'NFL', season: 2026 }])
+    const result = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'private-league' })
+    expect(result).toContain('No authorized current-season roster')
+    expect(h.team).not.toHaveBeenCalled()
+    expect(h.injuries).not.toHaveBeenCalled()
+  })
   it('refuses without a signed-in user', async () => {
     const out = await buildMyRosterInjuriesContext({ userId: '' })
     expect(out).toMatch(/cannot tell who is signed in/)
@@ -115,6 +142,14 @@ describe('buildMyRosterInjuriesContext', () => {
     expect(h.identities).toHaveBeenCalledWith('espn', 'NFL', ['3916387'])
     const lines = out.split('\n').filter((l) => l.startsWith('- '))
     expect(lines).toHaveLength(2)
+    expect(out).toContain('CURRENT INJURY COUNTS: 2 distinct players')
+    expect(out).toContain('RB: 1; WR: 1')
+    /* The mocked prisma has no sportsGame, so the schedule read fails: unverified, never "not started". */
+    expect(out).toContain('does not verify provider lock timing')
+    expect(out).toContain('Christian McCaffrey (KBFL, Work League) — KICKOFF UNVERIFIED')
+    expect(out).not.toContain('— NOT STARTED')
+    expect(out).toContain('Stored starter placement is not proof a replacement is still allowed')
+    expect(out).not.toContain('Lead with these')
     /* Most serious first, and one line for McCaffrey even though he is on two rosters. */
     expect(lines[0]).toContain('Christian McCaffrey')
     expect(lines[0]).toContain('Out')
@@ -123,7 +158,7 @@ describe('buildMyRosterInjuriesContext', () => {
     expect(lines[0]).toMatch(/reported \d{4}-\d{2}-\d{2}\]/)
     expect(lines[1]).toContain('Justin Jefferson')
     expect(lines[1]).toContain('MAY BE OUT OF DATE')
-    expect(out).toMatch(/⚠ ACTION: 1 player\(s\) listed Out\/IR are in a STARTING lineup: Christian McCaffrey \(KBFL, Work League\)/)
+    expect(out).toMatch(/ROSTER PLACEMENT: 1 player\(s\) listed Out\/IR are among stored STARTERS: Christian McCaffrey \(KBFL, Work League\)/)
     /* One injury lookup per distinct player, not per roster spot. */
     expect(h.injuries.mock.calls[0][0].players).toHaveLength(2)
   })
@@ -193,4 +228,29 @@ describe('buildMyRosterInjuriesContext', () => {
     expect(h.team).toHaveBeenCalledTimes(1)
     expect(h.team.mock.calls[0][0].leagueId).toBe('L9')
   })
+})
+
+it('reports two injured tight ends among six designations rather than repeating old depth counts', async () => {
+  h.leagues.mockResolvedValue([{ id: 'L1', name: 'Best Ball', sport: 'NFL', season: 2026 }])
+  h.platforms.mockResolvedValue([{ id: 'L1', platform: 'sleeper', settings: { best_ball: 1 } }])
+  const designated = [['Caleb Williams','QB'],['DJ Giddens','RB'],['Jeremy McNichols','RB'],['Omar Cooper','WR'],['Dallas Goedert','TE'],['Mason Taylor','TE']] as const
+  h.team.mockResolvedValue(team({ bench: designated.map(([name, position], i) => ref(String(i + 1), name, { position })) }))
+  h.injuries.mockResolvedValue(injuryResult(Object.fromEntries(designated.map(([name]) => [name, fact('Out', 4)]))))
+  const out = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'L1' })
+  expect(out).toContain('CURRENT INJURY COUNTS: 6 distinct players')
+  expect(out).toContain('QB: 1; RB: 2; TE: 2; WR: 1')
+  expect(out).toContain('No report does not mean healthy or available')
+  expect(h.injuries).toHaveBeenCalledTimes(1)
+})
+it('excludes roster activity states from both injury facts and feed fallback while retaining a real IR', async () => {
+  h.leagues.mockResolvedValue([{ id: 'L1', name: 'My league', sport: 'NFL', season: 2026 }])
+  const tokens = ['ACT', 'INACT', 'Active', 'NA']
+  const entries = tokens.flatMap((status) => [ref(`feed-${status}`, `Feed ${status}`, { injuryStatus: status }), ref(`canonical-${status}`, `Canonical ${status}`)])
+  h.team.mockResolvedValue(team({ bench: [...entries, ref('real-ir', 'Real Injury', { injuryStatus: 'IR' })] }))
+  h.injuries.mockResolvedValue(injuryResult(Object.fromEntries(tokens.map((status) => [`Canonical ${status}`, fact(status, 4)]))))
+  const out = await buildMyRosterInjuriesContext({ userId: 'u1', leagueId: 'L1' })
+  expect(out).toContain('CURRENT INJURY COUNTS: 1 distinct players')
+  const findings = out.split('\n').filter((line) => line.startsWith('- '))
+  expect(findings).toHaveLength(1)
+  expect(findings[0]).toContain('Real Injury RB KC: IR')
 })

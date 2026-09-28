@@ -13,6 +13,13 @@ import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
 import type { ResolvedPlayerMedia } from '@/lib/player-media'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import {
+  loadFrozenCompletedGrades,
+  saveFrozenCompletedGrades,
+  type FrozenCompletedGrade,
+} from '@/lib/decision-os/trade/frozenCompletedGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { TradeRecord } from './trades'
 
 function expectationNote(expectation: TradeExpectation | null, rosterId: number): string {
@@ -40,6 +47,8 @@ export function toTradeRecord(
   viewerOwnerId: string | null,
   expectation: TradeExpectation | null,
   mediaByPlayerId: Map<string, ResolvedPlayerMedia> = new Map(),
+  /** THE grade, from `trade.sides[0]`'s side — see `TradeRecord.leagueGrade`. */
+  leagueGrade: TradeGradeView | null = null,
 ): TradeRecord {
   const mine = trade.sides.find((s) => viewerOwnerId != null && s.ownerId === viewerOwnerId)
   const side = mine ?? trade.sides[0]
@@ -72,6 +81,7 @@ export function toTradeRecord(
           }
         }),
         picks: s.picksIn.map((p) => p.label),
+        pickDrafted: s.picksIn.map((p) => p.resolved?.name?.trim() || null),
         grade: provisional ? projected?.letter ?? null : s.currentGrade,
         gradeBasis: provisional ? 'Market' : 'Realized',
         gradeNote: provisional
@@ -79,6 +89,7 @@ export function toTradeRecord(
           : `Realized under this league's scoring: net ${s.cumulativeNet.toFixed(1)} fantasy points while the assets were held. This result grade does not claim a team-needs or playoff-probability adjustment.`,
       }
     }),
+    leagueGrade,
   }
 }
 
@@ -145,16 +156,36 @@ export async function getSleeperTradeHistory(
       .map((playerId) => ({ playerId, sport: 'nfl' })),
   ).catch(() => new Map<string, ResolvedPlayerMedia>())
   const history: TradeRecord[] = []
+  const currentSeason = new Date().getUTCFullYear()
+  // Each trade's frozen original on the viewer's row — one read, one insert (`frozenCompletedGrade.ts`).
+  const frozen = opts.afLeagueId
+    ? await loadFrozenCompletedGrades(opts.afLeagueId, trades.map((t) => t.id))
+    : new Map<string, FrozenCompletedGrade>()
+  const toFreeze: FrozenCompletedGrade[] = []
+  const now = new Date()
   // Only trades without realized points need the same market projection used
   // in the email. Bound expensive enrichment to four concurrent trades.
   for (let i = 0; i < trades.length; i += 4) {
     history.push(...await Promise.all(trades.slice(i, i + 4).map(async (trade) => {
-      const expectation = hasNoSignal(trade)
-        ? await loadTradeExpectation(leagueId, trade, { afLeagueId: opts.afLeagueId ?? null }).catch(() => null)
-        : null
-      return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId)
+      const [expectation, leagueGrade] = await Promise.all([
+        hasNoSignal(trade)
+          ? loadTradeExpectation(leagueId, trade, { afLeagueId: opts.afLeagueId ?? null }).catch(() => null)
+          : Promise.resolve(null),
+        /*
+         * 🛑 THE ONE GRADE, WHICH THIS HISTORY NEVER CARRIED (2026-09-27). Every archived trade on
+         * the Trade Center timeline read "— → —" with no value on any asset, because the only
+         * letter on the record was the realized-points one. This is the letter the grade email,
+         * the league grade list and the live-scan rows already show — graded on the viewer's own
+         * AF row, memoised grader, so sixty trades cost one chart read.
+         */
+        opts.afLeagueId
+          ? oneGradeForCompletedTrade(opts.afLeagueId, trade, currentSeason, { frozen, onFreeze: (f) => toFreeze.push(f), now }).catch(() => null)
+          : Promise.resolve(null),
+      ])
+      return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId, leagueGrade)
     })))
   }
+  if (opts.afLeagueId) await saveFrozenCompletedGrades(opts.afLeagueId, toFreeze)
   return {
     history,
     notice: grades.staleAsOf || reconciled.incomplete

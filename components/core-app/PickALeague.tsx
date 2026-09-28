@@ -53,6 +53,8 @@ export type PickALeagueProps = {
    * second copy of this screen for one tab.
    */
   above?: ReactNode
+  /** Inventory-only views do not compute a decision queue or claim that it is clear. */
+  showQueue?: boolean
 }
 
 /** Most severe first, and only rows that name a league — a row we cannot route is noise here. */
@@ -65,6 +67,7 @@ export function PickALeague({
   issues,
   leagues,
   above,
+  showQueue = true,
 }: PickALeagueProps) {
   const routable = issues
     .filter((i) => i.leagueId != null)
@@ -83,7 +86,7 @@ export function PickALeague({
 
       {above}
 
-      {routable.length > 0 ? (
+      {showQueue ? routable.length > 0 ? (
         <section className="af-pl-panel" aria-labelledby="af-pl-queue">
           <header className="af-pl-panel-head">
             <h2 className="af-label" id="af-pl-queue">
@@ -131,12 +134,12 @@ export function PickALeague({
             around anyway.
           </p>
         </section>
-      )}
+      ) : null}
 
       <section className="af-pl-panel" aria-labelledby="af-pl-leagues">
         <header className="af-pl-panel-head">
           <h2 className="af-label" id="af-pl-leagues">
-            Or pick a league
+            {showQueue ? 'Or pick a league' : 'Pick a league'}
           </h2>
           <span className="af-pl-panel-note">{leagues.length} on file</span>
         </header>
@@ -148,6 +151,7 @@ export function PickALeague({
                 key={l.id}
                 className="af-pl-league"
                 href={`/core/${tabKey}?league=${encodeURIComponent(l.id)}`}
+                prefetch={false}
               >
                 {/*
                   The crest, with the rail's own letter mark as the fallback —
