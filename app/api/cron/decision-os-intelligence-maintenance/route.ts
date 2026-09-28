@@ -74,6 +74,8 @@ export async function GET(request: Request) {
   }
 
   const sweep = await sweepLineupShadow()
+  const chimmyRecovered = await (await import('@/lib/chimmy/requestReceipts')).reconcileExpiredRequests(20)
+    .catch(() => null)
 
   /*
    * Fill in `followed` for draft recommendations whose manager has since picked.
@@ -113,7 +115,7 @@ export async function GET(request: Request) {
   if (!maintenanceEnabled()) {
     // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
     // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites, draftOutcomes, adviceLearning })
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -124,7 +126,7 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites, draftOutcomes, adviceLearning })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep, draftOutcomes, adviceLearning },

@@ -78,6 +78,17 @@ describe('triageRows', () => {
     expect(rows.every((r) => r.kickoff === null && r.noGame === false)).toBe(true)
   })
 
+  it('does not flag this week from an injury report explicitly about next week', () => {
+    const rows = triageRows({
+      starters: [starter('10', 'Future Report', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['future report', inj('Questionable', 'Questionable for Week 13 at Miami')]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 12,
+    })
+    expect(rows).toEqual([])
+  })
+
   it('breaks a tie on the same kickoff by severity, then name', () => {
     const same = [starter('7', 'Zed Questionable', 'BUF', 'L-a', 'A'), starter('8', 'Abe Questionable', 'BUF', 'L-a', 'A'), starter('9', 'Out Guy', 'BUF', 'L-a', 'A')]
     const map = new Map<string, TriageInjury>([

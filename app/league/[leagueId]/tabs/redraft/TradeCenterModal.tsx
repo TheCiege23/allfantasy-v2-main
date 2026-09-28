@@ -18,6 +18,17 @@ import {
 
 type Step = 'partner' | 'assets' | 'review'
 
+/** `receiptGradeFields` from the preview route: the one grade, from the proposer's side. */
+type PreviewGrade = {
+  grade: string | null
+  partnerGrade: string | null
+  gradeLabel: string | null
+  gradeWithheld: string | null
+  giveValue: number | null
+  getValue: number | null
+  evaluationReceiptId: string | null
+}
+
 type Side = 'mine' | 'theirs'
 
 function initials(name: string): string {
@@ -285,11 +296,18 @@ export function TradeCenterModal({
    * function rather than two that drift.
    */
   const [serverPreview, setServerPreview] = useState<TradeValueSnapshot | null>(null)
+  /*
+   * 🛑 THE ONE GRADE, from the preview route (Trade OS, 2026-09-27) — the letter and the totals shown
+   * beside it. The snapshot's own letter is another scale, and the client estimate is projections
+   * only; neither is shown as a letter any more. No server grade means no letter.
+   */
+  const [serverGrade, setServerGrade] = useState<PreviewGrade | null>(null)
   const [previewPending, setPreviewPending] = useState(false)
 
   useEffect(() => {
     if (!proposerRosterId || !receiverRosterId || apiAssets.length === 0) {
       setServerPreview(null)
+      setServerGrade(null)
       return
     }
 
@@ -308,13 +326,17 @@ export function TradeCenterModal({
         signal: ac.signal,
       })
         .then((r) => (r.ok ? r.json() : null))
-        .then((j) => { if (!ac.signal.aborted) setServerPreview(j?.snapshot ?? null) })
+        .then((j) => {
+          if (ac.signal.aborted) return
+          setServerPreview(j?.snapshot ?? null)
+          setServerGrade(j?.tradeGrade ?? null)
+        })
         /*
          * Deliberately silent: a failed preview falls back to the client estimate, which is
          * labelled as an estimate. Surfacing a red error for a number that is still shown would
          * be noise, and the label already tells the truth.
          */
-        .catch(() => { if (!ac.signal.aborted) setServerPreview(null) })
+        .catch(() => { if (!ac.signal.aborted) { setServerPreview(null); setServerGrade(null) } })
         .finally(() => { if (!ac.signal.aborted) setPreviewPending(false) })
     }, 400)
 
@@ -556,33 +578,30 @@ export function TradeCenterModal({
             <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3" data-testid="trade-value-panel">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[12px] font-semibold text-white">Trade Value</p>
-                <span
-                  className="rounded-md border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-2 py-0.5 text-[13px] font-bold text-[#ffd7e5]"
-                  data-testid="trade-value-grade"
-                >
-                  {valuePreview.grade.grade}
-                </span>
+                {serverGrade?.grade ? (
+                  <span
+                    className="rounded-md border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-2 py-0.5 text-[13px] font-bold text-[#ffd7e5]"
+                    data-testid="trade-value-grade"
+                  >
+                    {serverGrade.grade}
+                  </span>
+                ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded border border-white/10 bg-black/20 p-2">
-                  <p className="text-white/50">{proposerName} value</p>
-                  <p className="text-[15px] font-bold text-white">{valuePreview.sides[0]?.total ?? 0}</p>
+              {serverGrade?.grade && serverGrade.giveValue != null && serverGrade.getValue != null ? (
+                <div className="grid grid-cols-2 gap-2 text-[11px]" data-testid="trade-value-grade-totals">
+                  <div className="rounded border border-white/10 bg-black/20 p-2">
+                    <p className="text-white/50">{proposerName} sends</p>
+                    <p className="text-[15px] font-bold text-white">{Math.round(serverGrade.giveValue)}</p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-black/20 p-2">
+                    <p className="text-white/50">{proposerName} gets</p>
+                    <p className="text-[15px] font-bold text-white">{Math.round(serverGrade.getValue)}</p>
+                  </div>
                 </div>
-                <div className="rounded border border-white/10 bg-black/20 p-2">
-                  <p className="text-white/50">{receiverName} value</p>
-                  <p className="text-[15px] font-bold text-white">{valuePreview.sides[1]?.total ?? 0}</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 text-[10px] text-white/60">
-                <span className="rounded border border-white/10 px-2 py-0.5">Fairness {valuePreview.grade.fairnessScore}/100</span>
-                <span className="rounded border border-white/10 px-2 py-0.5">Confidence {valuePreview.grade.confidenceScore}/100</span>
-                <span className="rounded border border-white/10 px-2 py-0.5">Δ {Math.abs(valuePreview.grade.valueDifference)}</span>
-              </div>
-              <ul className="space-y-0.5 text-[11px] text-white/70">
-                {valuePreview.grade.bullets.map((b, i) => (
-                  <li key={i}>• {b}</li>
-                ))}
-              </ul>
+              ) : serverGrade?.gradeWithheld ? (
+                <p className="text-[11px] text-white/60" data-testid="trade-value-grade-withheld">Not graded: {serverGrade.gradeWithheld}</p>
+              ) : null}
+              {serverGrade?.gradeLabel ? <p className="text-[11px] text-white/70">{serverGrade.gradeLabel}</p> : null}
               {/*
                 * Phase 6.2/6.3/6.4 — the derivation, not just the verdict. Everything below was
                 * already computed and stored by the engine and rendered nowhere, which made the
@@ -590,8 +609,8 @@ export function TradeCenterModal({
                 */}
               <details className="group" data-testid="trade-value-why">
                 <summary className="cursor-pointer list-none text-[11px] font-medium text-[#ffd7e5]/80 hover:text-[#ffd7e5]">
-                  <span className="group-open:hidden">Why these numbers? ▸</span>
-                  <span className="hidden group-open:inline">Why these numbers? ▾</span>
+                  <span className="group-open:hidden">The valuation recorded with the proposal ▸</span>
+                  <span className="hidden group-open:inline">The valuation recorded with the proposal ▾</span>
                 </summary>
                 <div className="mt-2">
                   <TradeValueBreakdown

@@ -40,7 +40,6 @@ const AREAS = [
       "POST /api/trade-evaluator",
       "POST /api/dynasty-trade-analyzer",
       "POST /api/legacy/trade/analyze",
-      "POST /api/ai/trade-eval",
       "POST /api/leagues/[leagueId]/trade/ai-decision",
     ],
   },

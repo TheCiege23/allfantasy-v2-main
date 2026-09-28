@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
 import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import { transitionLeagueStateInTransaction } from '@/server/services/leagueLifecycleService'
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { readNativeTournamentResult } from '@/lib/bestball/nativeTournamentResult'
 import { auditUserId } from '@/lib/league/systemActor'
 
 export type EnterRedraftOffseasonResult = {
@@ -11,7 +13,7 @@ export type EnterRedraftOffseasonResult = {
   alreadyInOffseason: boolean
 } | {
   ok: false
-  code: 'SEASON_NOT_FOUND' | 'SEASON_NOT_COMPLETE' | 'LEAGUE_NOT_COMPLETED'
+  code: 'SEASON_NOT_FOUND' | 'SEASON_NOT_COMPLETE' | 'LEAGUE_NOT_COMPLETED' | 'TOURNAMENT_RESULT_INCOMPLETE'
 }
 
 /**
@@ -65,6 +67,10 @@ export async function enterRedraftOffseason(
     where: { id: season.leagueId },
     select: {
       lifecycleState: true,
+      bbContestId: true,
+      bestBallMode: true,
+      settings: true,
+      bbTiebreaker: true,
       platformLeagueId: true,
       scoring: true,
       isDynasty: true,
@@ -85,6 +91,14 @@ export async function enterRedraftOffseason(
     return { ok: true, snapshotId: existing.id, alreadyInOffseason: true }
   }
 
+  const nativeTournament = isNativeTournamentLeague(league)
+  const contest = nativeTournament && league.bbContestId
+    ? await prisma.bestBallContest.findUnique({ where: { id: league.bbContestId }, include: { entries: true } })
+    : null
+  const tournament = nativeTournament ? readNativeTournamentResult(contest, season.rosters.map(r => r.id),
+    league.bbTiebreaker === 'max_week' || league.bbTiebreaker === 'points_for' ? league.bbTiebreaker : 'advance_all') : null
+  if (nativeTournament && !tournament) return { ok: false, code: 'TOURNAMENT_RESULT_INCOMPLETE' }
+
   const teamByOwner = new Map<string, (typeof league.teams)[number]>()
   for (const team of league.teams) {
     if (team.claimedByUserId) teamByOwner.set(team.claimedByUserId, team)
@@ -101,7 +115,9 @@ export async function enterRedraftOffseason(
    */
   const bracketResult = readBracketResult(season.playoffBracket?.structure)
   const standingsLeader = season.rosters[0] ?? null
-  const ranked = bracketResult
+  const ranked = tournament
+    ? [...season.rosters].sort((a, b) => tournament.finishByRosterId.get(a.id)! - tournament.finishByRosterId.get(b.id)!)
+    : bracketResult
     ? season.rosters
         .map((roster, index) => ({ roster, index, finish: bracketResult.finishByRosterId.get(roster.id) }))
         .sort((a, b) => (a.finish ?? Number.MAX_SAFE_INTEGER) - (b.finish ?? Number.MAX_SAFE_INTEGER) || a.index - b.index)
@@ -119,7 +135,11 @@ export async function enterRedraftOffseason(
       managerUserId: roster.ownerId,
       managerName: roster.ownerName,
       rosterId: roster.id,
-      rank: index + 1,
+      rank: tournament?.finishByRosterId.get(roster.id) ?? index + 1,
+      tournamentContestId: contest?.id ?? null,
+      tournamentRound: tournament?.entryByRosterId.get(roster.id)?.currentRound ?? null,
+      tournamentPoints: tournament?.entryByRosterId.get(roster.id)?.totalPoints ?? null,
+      tournamentChampion: tournament?.championRosterIds.includes(roster.id) ?? false,
       wins: roster.wins,
       losses: roster.losses,
       ties: roster.ties,
@@ -132,13 +152,14 @@ export async function enterRedraftOffseason(
       completedAt: season.updatedAt.toISOString(),
     }
   })
-  const champion = bracketResult
+  const champion = tournament ? records.find(r => tournament.championRosterIds.includes(r.rosterId)) : bracketResult
     ? records.find((r) => r.rosterId === bracketResult.championRosterId) ?? records[0]
     : records[0]
-  const runnerUp = bracketResult
+  const runnerUp = tournament ? records.find(r => tournament.runnerUpRosterIds.includes(r.rosterId)) : bracketResult
     ? records.find((r) => r.rosterId === bracketResult.runnerUpRosterId) ?? records[1]
     : records[1]
-  const regularSeasonWinner = standingsLeader
+  const championNames = tournament ? records.filter(r => tournament.championRosterIds.includes(r.rosterId)).map(r => r.franchiseName).join(" & ") : champion?.franchiseName
+  const regularSeasonWinner = !tournament && standingsLeader
     ? records.find((r) => r.rosterId === standingsLeader.id) ?? null
     : null
 
@@ -152,8 +173,8 @@ export async function enterRedraftOffseason(
           season: season.season,
           platformLeagueId: league.platformLeagueId,
           status: 'complete',
-          championTeamId: champion?.franchiseId ?? null,
-          championName: champion?.franchiseName ?? null,
+          championTeamId: tournament && tournament.championRosterIds.length > 1 ? null : champion?.franchiseId ?? null,
+          championName: championNames ?? null,
           runnerUpName: runnerUp?.franchiseName ?? null,
           regularSeasonWinnerName: regularSeasonWinner?.franchiseName ?? null,
           teamRecords: records as unknown as Prisma.InputJsonValue,
@@ -188,9 +209,9 @@ export async function enterRedraftOffseason(
             ties: record.ties,
             pointsFor: record.pointsFor,
             pointsAgainst: record.pointsAgainst,
-            madePlayoffs: record.playoffSeed != null && record.playoffSeed > 0,
-            wonChampionship: record.rosterId === champion?.rosterId,
-            runnerUp: record.rosterId === runnerUp?.rosterId,
+            madePlayoffs: tournament ? (record.tournamentRound ?? 1) > 1 : record.playoffSeed != null && record.playoffSeed > 0,
+            wonChampionship: tournament ? record.tournamentChampion : record.rosterId === champion?.rosterId,
+            runnerUp: tournament ? tournament.runnerUpRosterIds.includes(record.rosterId) : record.rosterId === runnerUp?.rosterId,
             finalRank: record.rank,
           },
           create: {
@@ -203,9 +224,9 @@ export async function enterRedraftOffseason(
             ties: record.ties,
             pointsFor: record.pointsFor,
             pointsAgainst: record.pointsAgainst,
-            madePlayoffs: record.playoffSeed != null && record.playoffSeed > 0,
-            wonChampionship: record.rosterId === champion?.rosterId,
-            runnerUp: record.rosterId === runnerUp?.rosterId,
+            madePlayoffs: tournament ? (record.tournamentRound ?? 1) > 1 : record.playoffSeed != null && record.playoffSeed > 0,
+            wonChampionship: tournament ? record.tournamentChampion : record.rosterId === champion?.rosterId,
+            runnerUp: tournament ? tournament.runnerUpRosterIds.includes(record.rosterId) : record.rosterId === runnerUp?.rosterId,
             finalRank: record.rank,
           },
         })
@@ -263,9 +284,9 @@ export async function enterRedraftOffseason(
     eventType: 'league_entered_offseason',
     // The champion is named in the one message every member receives at season's end — nothing
     // else announced the result (the playoff events go to the event log only).
-    title: champion?.franchiseName ? `${champion.franchiseName} won the championship` : 'League entered offseason',
-    message: champion?.franchiseName
-      ? `${champion.franchiseName} are your ${season.season} champions. The league has entered the offseason — renewal and next-season planning are now available.`
+    title: championNames ? `${championNames} won the championship` : 'League entered offseason',
+    message: championNames
+      ? `${championNames} are your ${season.season} champions. The league has entered the offseason — renewal and next-season planning are now available.`
       : 'The season is complete and the league has entered the offseason. Renewal and next-season planning are now available.',
     category: 'league_announcements',
     visibility: 'all_members',

@@ -111,6 +111,7 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       rosterSize,
       scoring: scoring || null,
       isDynasty,
+      best_ball: toBoolFromNumeric(settings.best_ball),
       // Sleeper's real league.status ('pre_draft' | 'drafting' | 'in_season' | 'complete').
       // Never omit this: `League.status` has no DB default, so a missing value here
       // leaves the row `status: null`, which `leagueListFilter.ts` reads as an
@@ -145,8 +146,6 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       max_keepers: maxKeepers,
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
-      // Preserve the provider's automatic-lineup rule across import and re-sync.
-      best_ball: settings.best_ball === 1 ? 1 : 0,
       reserve_allow_cov: reserveAllowCov,
       reserve_allow_sus: reserveAllowSus,
       reserve_allow_out: reserveAllowOut,

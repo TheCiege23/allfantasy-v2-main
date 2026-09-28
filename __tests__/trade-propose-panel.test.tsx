@@ -259,10 +259,11 @@ describe('⚠ no new API route, and the panel earns its request', () => {
     expect(DISPATCH).toContain("'trades': () => import('../trades/handler')")
   })
 
-  it('does not fetch until the manager starts building', () => {
-    // Enriching every roster in the league is an expensive read, and a manager
-    // who only reads the verdict never needs it.
-    expect(HOOK).toContain('if (!leagueId || !enabled || data != null')
+  it('only fetches rosters for a selected league', () => {
+    // League pick previews need the roster quote book before analysis; a global
+    // trade screen still has no league roster to load.
+    expect(HOOK).toContain('if (!leagueId || !enabled)')
+    expect(CENTER).toContain('Boolean(props.league?.id)')
   })
 
   it('⚠ reads the rosters ONCE for the whole screen', () => {

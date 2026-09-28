@@ -595,6 +595,38 @@
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+/* THE grade for the trade: the side that got him, then the side that paid. */
+.af-pc-trade-grade {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font: 500 11px/1.4 'Archivo', system-ui, sans-serif;
+}
+.af-pc-trade-letter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 3px 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+}
+.af-pc-trade-letter b {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-pc-trade-letter[data-letter='A'] b { color: #34d399; }
+.af-pc-trade-letter[data-letter='B'] b { color: #5eead4; }
+.af-pc-trade-letter[data-letter='C'] b { color: #fbbf24; }
+.af-pc-trade-letter[data-letter='D'] b { color: #fb923c; }
+.af-pc-trade-letter[data-letter='F'] b { color: #fb5b78; }
 
 /* Platform tints, matching the badge vocabulary used across core. */
 .af-pc-plat--sleeper {

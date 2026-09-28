@@ -281,10 +281,10 @@ export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDeni
 
 /**
  * ⚠ COLLUSION AND TANKING DO NOT RUN ON IMPORTED LEAGUES, SO THE DESIGN'S
- * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` reads
- * `RedraftLeagueTrade` and `TankingDetectionEngine` reads `RedraftMatchup` —
- * both AF-native-only tables — so an imported Sleeper league has zero rows and
- * the scan always finds nothing. Tanking has no enqueuer at all.
+ * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` scans
+ * settled `AfLeagueTrade` / `RedraftTradeProposal` trades and
+ * `TankingDetectionEngine` reads `RedraftMatchup` — all AF-native-only tables —
+ * so an imported Sleeper league is never scanned. Tanking has no enqueuer at all.
  *
  * A tile reading "0 open disputes" off a scan that structurally cannot find one
  * is the most confident wrong number this screen could show a commissioner, so

@@ -73,7 +73,7 @@ export function buildTradeIntelligence(args: {
   const whoWinsLongTerm: TradeIntelligence['whoWinsLongTerm'] = args.proposalGraded === false ? 'unknown' : marketWho
 
   const fairnessVerdict = proposalGraded
-    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The grade uses the displayed league values, including scoring and roster-need adjustments. Asset projections describe production, not a change in starting-lineup points or win probability. Data confidence: ${args.confidenceLabel ?? 'MEDIUM'} (quality score ${Math.round(args.confidenceScore)}/100).${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
+    ? `${args.fairnessLabel} · League value delta ${args.percentDiff}%. The trade-value grade uses the displayed asset values and league scoring. Personal roster fit is separate and does not change the letter. Asset projections describe production, not a change in starting-lineup points or win probability. Data confidence: ${args.confidenceLabel ?? 'MEDIUM'} (quality score ${Math.round(args.confidenceScore)}/100).${args.scoringSummary ? ` ${args.scoringSummary}` : ''}`
     : 'Proposal grade unavailable. The shared evaluator withheld this grade; priced assets and roster context alone do not establish that the complete trade is fair.'
 
   const tradeWarnings: string[] = []

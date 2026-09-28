@@ -18,6 +18,7 @@ import {
   NO_PROBE,
   PROBES,
 } from '../scripts/cron-freshness-check.mjs'
+import { withFastTierOperationalOverlays } from '../scripts/cron-fast-tier-loop.mjs'
 // The canonical status vocabulary. Imported here — and only here — because this test file is the
 // one place that can see both it and the `.mjs` checker that has to duplicate it.
 import { normalizeRunStatus } from '../lib/production-health/productionHealthCore'
@@ -180,7 +181,8 @@ describe('age is computed by Postgres, not by the client clock', () => {
 })
 
 describe('freshness coverage is total', () => {
-  const crons = readVercelCrons()
+  // The checker audits both the registry and the operational fast-tier overlay.
+  const crons = withFastTierOperationalOverlays(readVercelCrons())
 
   it('classifies every declared cron as probed, deliberately unprobed, or excluded', () => {
     // The invariant that keeps the coverage list honest. A cron that is none of these is a silent
@@ -217,7 +219,7 @@ describe('freshness coverage is total', () => {
   })
 
   it('only names crons that are actually declared', () => {
-    // A probe for a path removed from vercel.json is dead config that reads as coverage.
+    // A probe for a path removed from both schedulers is dead config that reads as coverage.
     const declared = new Set(crons.map((c) => c.path))
     const orphans = [...Object.keys(PROBES), ...Object.keys(NO_PROBE)].filter((p) => !declared.has(p))
     expect(orphans, `probe entries with no matching cron:\n  ${orphans.join('\n  ')}`).toEqual([])

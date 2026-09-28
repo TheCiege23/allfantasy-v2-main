@@ -11,8 +11,14 @@ import { NegotiationSheet } from '@/components/negotiation'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { NegotiationData } from '@/components/negotiation'
 import type { TradeCandidate as PatchTradeCandidate, TradeAsset as PatchTradeAsset } from '@/lib/trade-finder/apply-counter'
-import { computeValueDeltaPct, previewFairnessLabel, FAIRNESS_DISPLAY } from '@/lib/trade-finder/score-candidate'
-import type { FairnessLabel } from '@/lib/trade-finder/score-candidate'
+/**
+ * THE grade `/api/trade-finder` attaches to a candidate. Declared here rather than imported so this
+ * component does not depend on the route's module; it MUST match `FinderCandidateGrade` in
+ * lib/trade-finder/candidateGrades.ts.
+ */
+type FinderCandidateGrade =
+  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
+  | { graded: false; reason: string }
 import { getTradeAnalyzerAIChatUrl } from '@/lib/trade-analyzer/TradeToAIContextBridge'
 import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
@@ -130,6 +136,42 @@ interface TradeCandidate {
   teamA: TradeSide
   teamB: TradeSide
   scoreBreakdown?: Record<string, number>
+  /** THE grade from your side, set by `/api/trade-finder` (lib/trade-finder/candidateGrades.ts). */
+  leagueGrade?: FinderCandidateGrade | null
+  /** The partner's team name, from our own league rows. */
+  partnerName?: string | null
+}
+
+/**
+ * THE grade on a finder trade (2026-09-27): your letter, theirs, and the league values it was taken
+ * on — the same letter the Trade Center, /trade-finder and every other trade surface show. A withheld
+ * grade says why and draws no letter; no grade draws nothing. Exported for its render test.
+ */
+export function LeagueGradeLine({ grade, partnerName }: { grade: FinderCandidateGrade | null | undefined; partnerName: string }) {
+  if (!grade) return null
+  if (!grade.graded) {
+    return <p className="text-[11px] text-white/45" data-testid="finder-grade-withheld">Not graded: {grade.reason}</p>
+  }
+  const color = FINDER_GRADE_COLOR[grade.letter]
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-black/20 border border-white/5" data-testid="finder-grade">
+      <span className="text-xs font-black px-2 py-0.5 rounded-lg" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+        {grade.letter} for you · {partnerName} {grade.partnerLetter}
+      </span>
+      <span className="text-[11px] text-white/60">{grade.label}</span>
+      <span className="text-[11px] text-white/40">
+        you get {grade.getValue.toLocaleString()} for {grade.giveValue.toLocaleString()} in league value
+      </span>
+    </div>
+  )
+}
+
+const FINDER_GRADE_COLOR: Record<'A' | 'B' | 'C' | 'D' | 'F', string> = {
+  A: '#34d399',
+  B: '#5eead4',
+  C: '#fbbf24',
+  D: '#fb923c',
+  F: '#fb5b78',
 }
 
 interface AssetIndexEntry {
@@ -396,7 +438,17 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 function buildConfidenceDrivers(rec: TradeRecommendation, candidate?: TradeCandidate): string[] {
   const drivers: string[] = []
 
-  if (candidate?.valueDeltaPct !== undefined) {
+  /*
+   * THE grade first, when the route supplied one — it is the fairness statement every other surface
+   * makes. The finder's own value gap is a DIFFERENT measure on different values, so it is shown only
+   * when there is no grade, and never alongside one where the two could disagree.
+   */
+  const g = candidate?.leagueGrade
+  if (g?.graded) {
+    drivers.push(`League grade: ${g.letter} for you — you get ${g.getValue.toLocaleString()} for ${g.giveValue.toLocaleString()}`)
+  } else if (g && !g.graded) {
+    drivers.push(`League grade withheld: ${g.reason}`)
+  } else if (candidate?.valueDeltaPct !== undefined) {
     const gap = Math.abs(candidate.valueDeltaPct)
     drivers.push(gap < 10
       ? `Value gap is narrow (${candidate.valueDeltaPct > 0 ? '+' : ''}${candidate.valueDeltaPct.toFixed(1)}%)`
@@ -458,29 +510,26 @@ function buildEnrichedIndex(
   return enriched
 }
 
-function FairnessPreview({ label, deltaPct, isPatched, onReset }: {
-  label: FairnessLabel
-  deltaPct: number
-  isPatched: boolean
-  onReset?: () => void
-}) {
-  const display = FAIRNESS_DISPLAY[label]
+/**
+ * A countered deal, said honestly (2026-09-27).
+ *
+ * 🛑 THIS USED TO PRINT A FAIRNESS LABEL OF THE FINDER'S OWN ("Fair Trade", "Leans Your Way",
+ * `previewFairnessLabel` over the finder's values) — a second scale beside the one grade, on a deal
+ * nobody had graded. The league grade belongs to the ORIGINAL deal, so for a countered one the card
+ * says exactly that and makes no fairness claim at all. Exported for its render test.
+ */
+export function CounterAppliedNote({ onReset }: { onReset?: () => void }) {
   return (
-    <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/20 border border-white/5">
+    <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/20 border border-white/5" data-testid="finder-counter-applied">
       <div className="flex items-center gap-2">
-        <div className={cx('text-xs font-bold', display.color)}>
-          {display.text}
-        </div>
-        <span className={cx('text-[11px] font-medium', deltaPct >= 0 ? 'text-emerald-400/80' : 'text-amber-400/80')}>
-          ({deltaPct > 0 ? '+' : ''}{deltaPct}%)
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/20 text-purple-300">
+          Counter Applied
         </span>
-        {isPatched && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/20 text-purple-300">
-            Counter Applied
-          </span>
-        )}
+        <span className="text-[11px] text-white/50">
+          The league grade was for the original deal — re-check this version before sending it.
+        </span>
       </div>
-      {isPatched && onReset && (
+      {onReset && (
         <button onClick={onReset} className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/60 transition-colors touch-manipulation">
           <RotateCcw className="w-3 h-3" />
           Reset
@@ -533,9 +582,8 @@ function TradeCard({
     assetId: a.id, name: a.label, value: a.value ?? 0, tier: a.tier ?? '', position: a.position ?? '', isPick: a.kind === 'PICK',
   })) : originalReceives
 
-  const previewDelta = patchedTrade ? computeValueDeltaPct(patchedTrade) : null
-  const previewLabel = previewDelta !== null ? previewFairnessLabel(previewDelta) : null
   const isPatched = patchedTrade !== null
+  const partnerName = candidate?.partnerName?.trim() || (partnerTeamId ? `Team ${partnerTeamId}` : 'Your partner')
 
   const handleRecheck = useCallback(async () => {
     if (!onRecheck) return
@@ -591,14 +639,22 @@ function TradeCard({
         <div className="flex items-center gap-2 mb-4 text-xs text-white/50">
           <span>You</span>
           <ArrowRight className="w-3 h-3" />
-          <span>Team {partnerTeamId}</span>
+          <span>{partnerName}</span>
         </div>
 
-        {previewLabel && previewDelta !== null && (
+        {/*
+          THE grade for the deal as the finder built it. Once a counter changes the deal, that letter
+          no longer describes it — the note below says so, and no fairness claim is made.
+        */}
+        {isPatched ? (
           <div className="mb-3">
-            <FairnessPreview label={previewLabel} deltaPct={previewDelta} isPatched={isPatched} onReset={onResetPatch} />
+            <CounterAppliedNote onReset={onResetPatch} />
           </div>
-        )}
+        ) : candidate?.leagueGrade ? (
+          <div className="mb-3">
+            <LeagueGradeLine grade={candidate.leagueGrade} partnerName={partnerName} />
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-1">
           <div>
@@ -754,7 +810,13 @@ function DeepDiveModal({ open, onClose, recommendation, candidate }: {
               ))}
             </div>
           )}
-          {candidate && (
+          {/*
+            THE grade when there is one; the finder's own value gap only when there is not — the two are
+            different measures on different values and must not sit side by side disagreeing.
+          */}
+          {candidate?.leagueGrade ? (
+            <LeagueGradeLine grade={candidate.leagueGrade} partnerName={candidate.partnerName?.trim() || 'Your partner'} />
+          ) : candidate && (
             <div className="p-3 bg-black/20 rounded-xl space-y-2">
               <div className="text-xs text-white/50">Value Gap</div>
               <div className="text-lg font-bold text-white">

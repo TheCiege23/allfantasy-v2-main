@@ -53,6 +53,7 @@ export type FantasyValueSnapshotInput = {
 }
 
 export type FantasyValueSnapshotRequest = {
+  season?: number
   sport: string
   playerId?: string | null
   playerName?: string | null
@@ -139,7 +140,6 @@ function shortTermFromInput(input: FantasyValueSnapshotInput): number | null {
     objectValue(input.projections, [
       "fantasyPoints",
       "projectedFantasyPoints",
-      "points",
       "projection",
       "projected_points",
       "fpts",
@@ -153,7 +153,7 @@ function shortTermFromInput(input: FantasyValueSnapshotInput): number | null {
     null
   const statTotal =
     input.seasonStats?.fantasyPoints ??
-    objectValue(input.stats, ["fantasyPoints", "fantasy_points", "points", "fpts"]) ??
+    objectValue(input.stats, ["fantasyPoints", "fantasy_points", "fpts"]) ??
     null
   const games =
     input.seasonStats?.gamesPlayed ??
@@ -368,6 +368,7 @@ export async function getFantasyValueSnapshot(
     safeFindFirst("playerSeasonStats", {
       where: {
         sport,
+        season: String(request.season ?? new Date().getUTCFullYear()),
         OR: playerOrNameWhere,
       },
       orderBy: { updatedAt: "desc" },

@@ -33,3 +33,17 @@ describe('Live Draft Brain (deterministic)', () => {
     expect(envelope.deterministicMeta.sport).toBe('NFL')
   })
 })
+
+
+describe('Draft brain ADP evidence', () => {
+  it.each(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const)('does not invent observed market or site ADP for %s', sport => {
+    const envelope = runLiveDraftBrainDeterministic({
+      context: { sport, draftFormat: 'SNAKE', round: 1, pick: 1, totalTeams: 4, overallPick: 1 },
+      mode: 'balanced',
+      available: [{ name: 'Evidence Missing', position: sport === 'SOCCER' ? 'FWD' : sport === 'NHL' ? 'C' : sport === 'MLB' ? 'OF' : sport === 'NBA' ? 'PG' : sport === 'NCAAB' ? 'G' : 'WR', team: 'TST', adp: null }],
+      myTeam: { teamRoster: [], rosterSlots: ['BN'] },
+    })
+    expect(envelope.pickRecommendation.externalAdp).toBeNull()
+    expect(envelope.pickRecommendation.siteAdp).toBeNull()
+  })
+})

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveAiTeamContext } from '@/lib/ai-payload/resolveAiTeamContext'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
+import { rosterCountEvidence } from '@/lib/chimmy/rosterCounts'
 
 /**
  * THE USER'S OWN ROSTER, FOR THE LEAGUE IN SCOPE.
@@ -28,6 +29,7 @@ import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 const MAX_PER_GROUP = 30
 
 function describePlayer(p: AiRosterPlayerRef): string {
+  if (p.playerId?.trim() === '0') return '(empty slot)'
   const bits = [p.position, p.team].filter(Boolean).join(' ')
   const injury = p.injuryStatus ? ` — ${p.injuryStatus}` : ''
   const name = p.name ?? `(unnamed player ${p.playerId})`
@@ -110,6 +112,7 @@ export async function buildMyRosterContext(
     ].join(' ')
   }
 
+  lines.push(rosterCountEvidence([...team.starters, ...team.bench, ...team.injuredReserve, ...team.taxi]))
   lines.push(...groups)
 
   /*

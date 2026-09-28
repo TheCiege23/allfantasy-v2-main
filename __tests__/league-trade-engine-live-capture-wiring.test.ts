@@ -130,6 +130,9 @@ vi.mock('@/lib/league-events/publisher', () => ({
   publishLeagueFanoutEvent: vi.fn().mockResolvedValue(undefined),
 }))
 
+const mockEnqueueCollusionScan = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/integrity/enqueueCollusionScan', () => ({ enqueueCollusionScan: mockEnqueueCollusionScan }))
+
 import {
   createAfLeagueTrade,
   finalizeAfLeagueTradeProcessing,
@@ -254,6 +257,8 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
       leagueId: LEAGUE_ID,
       status: 'processed',
     })
+    // The integrity scan reviews the settled native trade itself (2026-09-27): native trades were never scanned before.
+    expect(mockEnqueueCollusionScan).toHaveBeenCalledWith(LEAGUE_ID, { kind: 'af', tradeId: 'trade-1' }, [PROPOSER_ROSTER, RECEIVER_ROSTER])
   })
 
   /*

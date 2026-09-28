@@ -38,6 +38,8 @@ export interface IdpNamedValue {
   /** Normalised IDP group (LB / DL / DB) as the board resolved it. */
   position: string
   sleeperId: string
+  /** League-scored history estimate, in points for the board's target week. */
+  projection?: { points: number; season: number; week: number }
 }
 
 export interface IdpTradeValueMap {
@@ -194,7 +196,13 @@ export async function loadIdpTradeValuesByName(
     const ambiguousNames: string[] = []
     for (const [sleeperId, value] of board.valueBySleeperId) {
       const info = players?.[sleeperId]
-      const entry = { value, name: info?.full_name?.trim(), position: (info?.position ?? '').toUpperCase() || 'IDP', sleeperId }
+      const points = board.projectionBySleeperId?.get(sleeperId)
+      const scope = board.projectedFor
+      const entry: IdpNamedValue = {
+        value, name: info?.full_name?.trim(), position: (info?.position ?? '').toUpperCase() || 'IDP', sleeperId,
+        ...(points != null && Number.isFinite(points) && scope
+          ? { projection: { points, season: scope.season, week: scope.week } } : {}),
+      }
       bySleeperId.set(sleeperId, entry)
       const nm = info?.full_name?.trim().toLowerCase()
       if (!nm) continue

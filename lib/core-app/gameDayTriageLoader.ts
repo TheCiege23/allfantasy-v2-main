@@ -6,7 +6,8 @@ import { designationOnset, type InjuryRowLike } from './designationOnset'
 import { triageRows, type GameDayTriage, type TriageInjury, type TriageStarter } from './gameDayTriage'
 import type { SectionState } from './leagueHome'
 import { isBestBallLeagueRow } from './leagueBestBall'
-import { asHeadshotUrl } from './playerIdentityCompose'
+import { composePlayerIdentities } from './playerIdentityCompose'
+import { displayPosition } from './positionLabels'
 import { unresolvedClubNames, weekKickoffs } from './playerGame'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import { resolveSportsWeek } from './sportsWeek'
@@ -39,19 +40,21 @@ import { resolveSportsWeek } from './sportsWeek'
  * accounts hold 20+; the finder read "40 of 65 lineups" for exactly the user this
  * screen is for. Every read below is one `IN (…)` query whatever the count, so the
  * bound exists only to stop a pathological account, and reaching it is said on
- * screen (`leaguesNotRead`) rather than swallowed.
+ * screen (`leaguesNotRead`) rather than swallowed. Ids are de-duplicated first
+ * (559c56580), so a repeated id cannot spend the bound.
  */
 const MAX_LEAGUES = 250
 
 export async function loadGameDayTriage(userId: string | null | undefined, leagueIds: string[], nowIso: string = new Date().toISOString()): Promise<SectionState<GameDayTriage>> {
   if (!userId) return { available: false, reason: 'sign in to see your flagged starters' }
-  const ids = leagueIds.slice(0, MAX_LEAGUES)
-  const leaguesNotRead = Math.max(0, leagueIds.length - ids.length)
+  const unique = [...new Set(leagueIds)]
+  const ids = unique.slice(0, MAX_LEAGUES)
+  const leaguesNotRead = Math.max(0, unique.length - ids.length)
   if (ids.length === 0) return { available: false, reason: 'connect a league to see your starters here' }
 
   const teams = await prisma.leagueTeam
-    .findMany({ where: { claimedByUserId: userId, leagueId: { in: ids } }, select: { leagueId: true, platformUserId: true, externalId: true } })
-    .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; externalId: string }>)
+    .findMany({ where: { claimedByUserId: userId, leagueId: { in: ids } }, select: { id: true, leagueId: true, platformUserId: true, externalId: true } })
+    .catch(() => [] as Array<{ id: string; leagueId: string; platformUserId: string | null; externalId: string }>)
   const candidatesByLeague = new Map<string, Set<string>>()
   for (const t of teams) {
     const set = candidatesByLeague.get(t.leagueId) ?? new Set<string>()
@@ -71,21 +74,42 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     platform: string | null
     platformLeagueId: string | null
     season: number | null
+    status: string | null
+    lifecycleState: string | null
     bestBallMode: boolean | null
     leagueVariant: string | null
+    guillotineMode: boolean | null
     leagueType: string | null
     settings: unknown
   }
-  const [leagues, rawRosters] = await Promise.all([
+  const [leagues, rawRosters, chopped, eliminations] = await Promise.all([
     prisma.league
       .findMany({
         where: { id: { in: claimedLeagueIds } },
-        select: { id: true, name: true, platform: true, platformLeagueId: true, season: true, bestBallMode: true, leagueVariant: true, leagueType: true, settings: true },
+        select: {
+          id: true,
+          name: true,
+          platform: true,
+          platformLeagueId: true,
+          season: true,
+          status: true,
+          lifecycleState: true,
+          bestBallMode: true,
+          leagueVariant: true,
+          guillotineMode: true,
+          leagueType: true,
+          settings: true,
+        },
       })
       .catch(() => [] as LeagueRow[]),
     prisma.roster
-      .findMany({ where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } }, select: { leagueId: true, platformUserId: true, playerData: true } })
-      .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
+      .findMany({ where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } }, select: { id: true, leagueId: true, platformUserId: true, playerData: true } })
+      .catch(() => [] as Array<{ id: string; leagueId: string; platformUserId: string | null; playerData: unknown }>),
+    prisma.guillotineRosterState.findMany({ where: { leagueId: { in: claimedLeagueIds }, choppedAt: { not: null } }, select: { leagueId: true, rosterId: true } }).catch(() => []),
+    prisma.guillotineElimination.findMany({
+      where: { leagueId: { in: claimedLeagueIds }, eliminatedOwnerId: { in: [userId, ...teams.map((t) => t.platformUserId).filter((id): id is string => Boolean(id))] } },
+      select: { leagueId: true, season: { select: { season: true } } },
+    }).catch(() => []),
   ])
   const leagueById = new Map<string, LeagueRow>(leagues.map((l) => [l.id, l]))
 
@@ -115,6 +139,8 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     collectRosterIds(readable.filter((r) => rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn').map((r) => r.playerData)),
   )
   const otherLeagues = new Set(leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
+  const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
+  const choppedTeams = new Set(chopped.map((row) => `${row.leagueId}:${row.rosterId}`))
 
   // One roster per league — the first that matches your candidates — and its starters.
   const startersByLeague = new Map<string, string[]>()
@@ -122,6 +148,25 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     if (startersByLeague.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
     const pd = (r.playerData ?? {}) as Record<string, unknown>
+    const league = leagueById.get(r.leagueId)
+    if (!league) continue
+    // A league that is not in season has no lineup to fix (559c56580).
+    const stage = String(pd.leagueStatus ?? league.status ?? league.lifecycleState ?? '').toLowerCase()
+    if (['pre_draft', 'predraft', 'setup', 'drafting', 'draft', 'complete', 'completed', 'season_over', 'archived'].includes(stage)) continue
+    // The roster's own best-ball flag, for a league the column/settings rule above missed — counted like the rest.
+    if (pd.bestBall === true) {
+      bestBall.add(r.leagueId)
+      continue
+    }
+    // A guillotine team already chopped has no lineup left to set (559c56580).
+    const team = teamByLeague.get(r.leagueId)
+    const guillotine = league.guillotineMode === true || league.leagueVariant === 'guillotine' || String(league.leagueType).toLowerCase() === 'guillotine'
+    const all = Array.isArray(pd.players) ? pd.players.filter((id) => id && id !== '0') : []
+    const eliminated = pd.eliminated === true || pd.chopped === true ||
+      [team?.externalId, team?.id, r.id].some((id) => id && choppedTeams.has(`${r.leagueId}:${id}`)) ||
+      eliminations.some((e) => e.leagueId === r.leagueId && e.season.season === league.season) ||
+      (guillotine && all.length === 0)
+    if (eliminated) continue
     const raw = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== '0') : []
     const isEspn = rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn'
     const starters = isEspn ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
@@ -139,15 +184,17 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
     })
     .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
-  // The catalog holds a row per source; keep one per id, preferring the row with a headshot.
+  // The catalog holds several provider rows per Sleeper id. Compose fields, as My Team and
+  // Matchup do; the arbitrary headshot-first row can carry the wrong club or position.
+  const identities = composePlayerIdentities(players)
   const playerById = new Map<string, (typeof players)[number]>()
   for (const p of players) {
     if (!p.sleeperId) continue
     const cur = playerById.get(p.sleeperId)
-    if (!cur || (!cur.imageUrl && p.imageUrl)) playerById.set(p.sleeperId, p)
+    if (!cur || p.externalId === p.sleeperId) playerById.set(p.sleeperId, p)
   }
 
-  const names = [...new Set([...playerById.values()].map((p) => p.name))]
+  const names = [...new Set([...identities.values()].map((p) => p.name).filter((name): name is string => Boolean(name)))]
   const sport = [...playerById.values()][0]?.sport ?? 'NFL'
   const [injuryRows, sportsWeek] = await Promise.all([
     prisma.sportsInjury
@@ -160,7 +207,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     resolveSportsWeek(sport).catch(() => null),
   ])
   const clubByName = new Map<string, string | null>()
-  for (const p of playerById.values()) clubByName.set(p.name.trim().toLowerCase(), normalizeTeamAbbrev(p.team))
+  for (const p of identities.values()) if (p.name) clubByName.set(p.name.trim().toLowerCase(), normalizeTeamAbbrev(p.team))
   // Every source's row per name (a namesake on another club dropped), then one
   // claim per name: the freshest word, the earliest report of it (designationOnset.ts).
   const rowsByName = new Map<string, InjuryRowLike[]>()
@@ -198,14 +245,16 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     for (const id of ids) {
       const p = playerById.get(id)
       if (!p || !p.sleeperId) continue
+      const identity = identities.get(id)
+      if (!identity?.name) continue
       starters.push({
         sleeperId: p.sleeperId,
-        sport: p.sport,
+        sport: identity.sport ?? p.sport,
         externalId: p.externalId,
-        name: p.name,
-        position: p.position,
-        team: p.team,
-        imageUrl: asHeadshotUrl(p.imageUrl),
+        name: identity.name,
+        position: displayPosition(identity.position),
+        team: identity.team,
+        imageUrl: identity.imageUrl,
         leagueId,
         leagueName: league?.name ?? 'League',
         platform: String(league?.platform ?? 'manual').toLowerCase(),

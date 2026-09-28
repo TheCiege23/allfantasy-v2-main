@@ -4,15 +4,14 @@ import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-lin
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
-import { LATEST_TRADE_ORDER, pickAssets } from './tradePicks'
+import { LATEST_TRADE_ORDER } from './tradePicks'
 import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
-import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
-import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
-import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
+import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
+import { gradeArchivedTradeRows } from './archivedTradeGrade'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -121,10 +120,24 @@ export type TradeRecord = {
     isYou: boolean
     received: TradePlayerRef[]
     picks?: string[]
+    /**
+     * Parallel to `picks`: the player drafted with each pick, when its draft has been held. A used
+     * pick is GRADED as that player (see completedTradeGrade.ts), so the timeline names him beside it.
+     */
+    pickDrafted?: Array<string | null>
     grade?: 'A' | 'B' | 'C' | 'D' | 'F' | null
     gradeBasis?: 'Market' | 'Realized'
     gradeNote?: string
   }>
+  /**
+   * THE grade (`oneGradeForCompletedTrade`) — today's league values, no roster need — from
+   * `players[0]`'s side: `give` is what players[0] sent. Absent when no AF league was in hand to
+   * grade on; a withheld view (`graded: false`) carries its reason and never a letter.
+   *
+   * ⚠ NOT THE SAME FACT AS `players[].grade`. That is the realized-points / market-projection
+   * letter from the grade ledger; this is the one letter every other trade surface shows.
+   */
+  leagueGrade?: TradeGradeView | null
 }
 
 export type GradedTrade = {
@@ -136,6 +149,8 @@ export type GradedTrade = {
   sharePct: number | null
   /** Why no letter — shown INSTEAD of a grade, never alongside one. */
   withheldReason: string | null
+  /** The saved receipt for this letter (Trade OS). Null until the receipts migration is applied. */
+  receiptId?: string | null
   playersIn: number
   playersOut: number
   /**
@@ -178,6 +193,8 @@ async function resolveGrades(
   leagueId: string,
   platformLeagueId: string | null,
   viewerPlatformUserId: string | null,
+  /** The viewer, recorded on each grade's receipt. */
+  userId: string | null = null,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -291,45 +308,28 @@ async function resolveGrades(
    * (the trade has happened). The honesty rule survives unchanged: any asset that cannot be priced
    * — an unnamed player, a pick whose draft has been held — withholds the letter; it is never zero.
    */
-  const grader = await completedTradeGraderFor(leagueId)
-  const currentSeason = new Date().getUTCFullYear()
   const nameOf = (id: string) => playerById.get(id)?.name?.trim() || null
   // Warm the per-player analytics cache the pricer reads, in ONE query, before sixty deals hit it.
   await getPlayerAnalyticsBatch([...playerById.values()].map((p) => p.name)).catch(() => null)
 
   /*
-   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). This row stores a pick
-   * as `{ season, round }`, which cannot name the player; the league's graded ledger already did
-   * (`archivedPickOutcomes.ts`). One DB read, only for trades that moved a pick. A league with no
-   * ledger (every non-Sleeper platform today) gets nothing back and grades exactly as before.
+   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). The grading itself —
+   * drafted-pick names from the league's ledger, then the one grader — lives in
+   * `archivedTradeGrade.ts`, shared with the player card so one trade reads one letter on both.
    */
-  const ledgerSides = await loadLedgerSidesForTrades(
-    distinctTrades
-      .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
-      .map((t) => ({ sleeperLeagueId: platformLeagueId, transactionId: t.transactionId })),
-  )
+  const gradedRows = await gradeArchivedTradeRows({ afLeagueId: leagueId, platformLeagueId, rows: distinctTrades, nameOf })
 
   const graded: GradedTrade[] = await Promise.all(distinctTrades.map(async (t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
-    const pickRef = (p: { pickSeason?: string; pickRound?: number }) => ({ season: p.pickSeason ?? null, round: p.pickRound ?? null })
-    const drafted = draftedPickNamesForRow(
-      {
-        picksIn: pickAssets(t.picksReceived).map(pickRef),
-        picksOut: pickAssets(t.picksGiven).map(pickRef),
-        partnerRosterId: t.partnerRosterId ?? null,
-      },
-      ledgerSides.get(ledgerKey(platformLeagueId, t.transactionId)),
-    )
-    const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
-    const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
-    const g = await gradeArchivedTrade(grader, {
-      received: recv.map(nameOf),
-      gave: gave.map(nameOf),
-      picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
-      picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
-      currentSeason,
-    })
+    const row = gradedRows.get(t.transactionId)
+    const g: TradeGradeView = row?.grade ?? { graded: false, reason: 'This trade could not be graded just now.', basis: null }
+    const picksIn = row?.picksIn ?? []
+    const picksOut = row?.picksOut ?? []
+    // The receipt for this letter (Trade OS). No stored link: a completed `LeagueTrade` has no loader yet.
+    const receiptId = row
+      ? await receiptIdForGrade({ surface: 'core-trades', leagueId, userId, give: row.give, get: row.get, viewerSide: false, grade: g })
+      : null
 
     /*
      * 🛑 ONLY THE VIEWER'S OWN ROW, because only there do we hold a name for both sides.
@@ -348,6 +348,7 @@ async function resolveGrades(
       // The received side's share of the league value that changed hands — the same totals as the letter.
       sharePct: g.graded ? Math.round((g.getValue / Math.max(1, g.getValue + g.giveValue)) * 1000) / 10 : null,
       withheldReason: g.graded ? null : g.reason,
+      receiptId,
       playersIn: recv.length,
       playersOut: gave.length,
       picksIn: picksIn.length,
@@ -444,6 +445,8 @@ export type PendingOffer = {
    * share-of-traded-value letter (65/55/45/35) that graded a 1.5x deal B while the builder said A.
    */
   evaluation: TradeGradeView
+  /** The saved receipt for `evaluation` (Trade OS). Null until the receipts migration is applied. */
+  receiptId?: string | null
 }
 
 export type TradeDeadline = {
@@ -571,11 +574,27 @@ async function resolvePendingOffers(
     ? await createLeagueTradeGrader({ leagueId: league.id, userId }).catch(() => null)
     : null
   const grades = new Map<string, TradeGradeView>()
+  const receiptIds = new Map<string, string | null>()
   await Promise.all(scan.trades.map(async (t) => {
-    grades.set(t.transactionId, await gradeDeal(grader, {
-      give: gradeInputsFromPending(t.assetsGiven, t.provider ?? 'sleeper'),
-      get: gradeInputsFromPending(t.assetsReceived, t.provider ?? 'sleeper'),
+    const provider = t.provider ?? 'sleeper'
+    const give = gradeInputsFromPending(t.assetsGiven, provider)
+    const get = gradeInputsFromPending(t.assetsReceived, provider)
+    const grade = await gradeDeal(grader, { give, get, viewerSide: true })
+    grades.set(t.transactionId, grade)
+    // The receipt for this letter (Trade OS); linked to the offer when it is a Sleeper one — the only provider a stored-trade link names.
+    receiptIds.set(t.transactionId, await receiptIdForGrade({
+      surface: 'core-trades',
+      leagueId: league.id,
+      userId,
+      give,
+      get,
       viewerSide: true,
+      grade,
+      stored: provider !== 'sleeper' ? null : storedTradeLink({ kind: 'provider', provider: 'sleeper', providerTradeId: t.transactionId }, {
+        source: 'provider',
+        platform: 'sleeper',
+        status: t.lifecycleStatus ?? 'pending',
+      }),
     }))
   }))
 
@@ -588,6 +607,7 @@ async function resolvePendingOffers(
     give: t.assetsGiven.map(offerLine),
     get: t.assetsReceived.map(offerLine),
     evaluation: grades.get(t.transactionId) ?? { graded: false, reason: 'This offer could not be graded.', basis: null },
+    receiptId: receiptIds.get(t.transactionId) ?? null,
   })
 
   return {
@@ -616,6 +636,7 @@ export async function getTradesData(
     league.id,
     league.platformLeagueId ?? null,
     myTeam?.platformUserId?.trim() || null,
+    userId,
   )
 
   const base = {

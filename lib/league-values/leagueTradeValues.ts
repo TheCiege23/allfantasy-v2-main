@@ -51,6 +51,7 @@ export interface LeagueNamedValue {
   position: string
   /** Which of the two constructions produced this number. Never collapse these. */
   basis: LeagueValueBasis
+  projection?: { points: number; season: number; week: number }
 }
 
 export interface LeagueTradeValues {

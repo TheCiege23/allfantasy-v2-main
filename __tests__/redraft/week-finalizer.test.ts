@@ -35,8 +35,11 @@ const LAST_KICKOFF = '2026-09-21T20:15:00.000Z'
 const AFTER_GRACE = new Date('2026-09-22T09:15:00.000Z')
 
 function starter(playerId: string, sport = 'NFL') {
-  return { playerId, sport, slotType: 'QB' }
+  return { rosterId: 'roster-1', playerId, sport, slotType: 'QB', position: 'QB' }
 }
+
+type AfRosterLink = { id: string; redraftRosterId: string | null; league: { platform: string | null } | null }
+type Assignment = { rosterId: string; season: number; week: number; section: string; playerId: string }
 
 /** A slate row as the selection helper needs to see it: feed, freshness, season and week. */
 function game(
@@ -57,8 +60,12 @@ function makePrisma(overrides: {
   matchupsBefore?: Array<{ id: string; status: string }>
   matchupsAfter?: Array<{ status: string }>
   games?: Array<ReturnType<typeof game>>
-  rosterPlayers?: Array<{ playerId: string; sport: string; slotType: string }>
+  rosterPlayers?: Array<{ rosterId?: string; playerId: string; sport: string; slotType: string; position?: string }>
   existingScores?: Array<{ playerId: string; sport: string }>
+  /** AF rosters linked to redraft rosters. Default none — every roster falls back to `slotType`. */
+  afRosters?: AfRosterLink[]
+  /** `af_roster_lineup_assignments` rows; the fake honours the WHERE clause, so a wrong week reads nothing. */
+  assignments?: Assignment[]
   season?: typeof SEASON | null
   league?: { bestBallMode?: boolean; leagueType?: string | null; leagueVariant?: string | null } | null
 } = {}) {
@@ -106,6 +113,22 @@ function makePrisma(overrides: {
       findMany: vi.fn(async (args: AnyArgs) => {
         record('redraftRosterPlayer.findMany')(args)
         return overrides.rosterPlayers ?? [starter('p1'), starter('p2')]
+      }),
+    },
+    roster: {
+      findMany: vi.fn(async (args: AnyArgs) => {
+        record('roster.findMany')(args)
+        const wanted: string[] = args.where.redraftRosterId.in
+        return (overrides.afRosters ?? []).filter((r) => r.redraftRosterId && wanted.includes(r.redraftRosterId))
+      }),
+    },
+    afRosterLineupAssignment: {
+      findMany: vi.fn(async (args: AnyArgs) => {
+        record('afRosterLineupAssignment.findMany')(args)
+        const { rosterId, season, week } = args.where
+        return (overrides.assignments ?? [])
+          .filter((a) => rosterId.in.includes(a.rosterId) && a.season === season && a.week === week)
+          .map((a) => ({ rosterId: a.rosterId, section: a.section, playerId: a.playerId }))
       }),
     },
     playerWeeklyScore: {
@@ -522,6 +545,8 @@ describe('finalizeCompletedWeeksForSeason — backfilling a past week', () => {
       },
       sportsGame: { findMany: vi.fn(async () => [game('final')]) },
       redraftRoster: { findMany: vi.fn(async () => [{ id: 'roster-1' }]) },
+      roster: { findMany: vi.fn(async () => []) },
+      afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
       redraftRosterPlayer: {
         findMany: vi.fn(async () => [starter('p1'), starter('p2'), starter('p3'), starter('p4')]),
       },
@@ -695,5 +720,84 @@ describe('rosterIds — sealing a week only some teams play', () => {
     const { prisma, calls } = makePrisma()
     await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
     expect(argsFor(calls, 'redraftRoster.findMany')?.where).toEqual({ seasonId: 'season-1' })
+  })
+})
+
+/*
+ * 🛑 THE WEEK SEALED IS THE LINEUP SET FOR THAT WEEK. `slotType` is current state, and the seal
+ * runs twelve hours after the last kickoff. The shape below is a manager who, inside that grace,
+ * sets WEEK 3: benches p1 for p9. `slotType` already says so (the engine syncs it on save) — but
+ * week 2 was played with p1, and week 2's own saved lineup still says so.
+ */
+describe('the week sealed is the lineup set for that week', () => {
+  const NATIVE_LINK: AfRosterLink[] = [{ id: 'af-1', redraftRosterId: 'roster-1', league: { platform: 'manual' } }]
+  const AFTER_WEEK3_SAVE = [
+    { rosterId: 'roster-1', playerId: 'p1', sport: 'NFL', slotType: 'bench', position: 'QB' },
+    starter('p2'),
+    { rosterId: 'roster-1', playerId: 'p9', sport: 'NFL', slotType: 'QB', position: 'QB' },
+  ]
+  const a = (week: number, section: string, playerId: string): Assignment => ({ rosterId: 'af-1', season: 2026, week, section, playerId })
+  const WEEK2 = [a(2, 'starters', 'p1'), a(2, 'starters', 'p2'), a(2, 'bench', 'p9')]
+  const WEEK3 = [a(3, 'bench', 'p1'), a(3, 'starters', 'p2'), a(3, 'starters', 'p9')]
+
+  const sealed = (calls: Array<{ key: string; args: AnyArgs }>) =>
+    [...(argsFor(calls, 'playerWeeklyScore.findMany')?.where.playerId.in ?? [])].sort()
+
+  it('a week-3 save during week 2 grace does not change who week 2 seals', async () => {
+    const { prisma, calls } = makePrisma({ rosterPlayers: AFTER_WEEK3_SAVE, afRosters: NATIVE_LINK, assignments: [...WEEK2, ...WEEK3] })
+
+    const res = await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+
+    expect(res.finalized).toBe(true)
+    expect(sealed(calls)).toEqual(['p1', 'p2'])
+    // It asked for THIS week's lineup, through the linked AF roster.
+    expect(argsFor(calls, 'afRosterLineupAssignment.findMany')?.where).toEqual({ rosterId: { in: ['af-1'] }, season: 2026, week: 2 })
+  })
+
+  it('falls back to slotType when the week has no saved lineup', async () => {
+    const { prisma, calls } = makePrisma({ rosterPlayers: AFTER_WEEK3_SAVE, afRosters: NATIVE_LINK, assignments: WEEK3 })
+    await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+    expect(sealed(calls)).toEqual(['p2', 'p9'])
+  })
+
+  it('falls back to slotType for a redraft roster no AF roster links to — and never asks for assignments', async () => {
+    const { prisma, calls } = makePrisma({ rosterPlayers: AFTER_WEEK3_SAVE, assignments: [...WEEK2, ...WEEK3] })
+    await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+    expect(sealed(calls)).toEqual(['p2', 'p9'])
+    expect(argsFor(calls, 'afRosterLineupAssignment.findMany')).toBeUndefined()
+  })
+
+  it('never scores an IMPORTED league from its AllFantasy-side lineup rows', async () => {
+    const { prisma, calls } = makePrisma({
+      rosterPlayers: AFTER_WEEK3_SAVE,
+      afRosters: [{ id: 'af-1', redraftRosterId: 'roster-1', league: { platform: 'sleeper' } }],
+      assignments: [...WEEK2, ...WEEK3],
+    })
+    await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+    expect(sealed(calls)).toEqual(['p2', 'p9'])
+    expect(argsFor(calls, 'afRosterLineupAssignment.findMany')).toBeUndefined()
+  })
+
+  it('a player the saved lineup never named — a later waiver add — keeps his slotType', async () => {
+    const { prisma, calls } = makePrisma({
+      rosterPlayers: [...AFTER_WEEK3_SAVE, { rosterId: 'roster-1', playerId: 'w1', sport: 'NFL', slotType: 'WR', position: 'WR' }],
+      afRosters: NATIVE_LINK,
+      assignments: WEEK2,
+      existingScores: [{ playerId: 'p1', sport: 'NFL' }, { playerId: 'p2', sport: 'NFL' }, { playerId: 'w1', sport: 'NFL' }],
+    })
+    await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+    expect(sealed(calls)).toEqual(['p1', 'p2', 'w1'])
+  })
+
+  it('best ball: whoever sat on IR in that week\'s lineup stays out, though he is on the bench now', async () => {
+    const { prisma, calls } = makePrisma({
+      league: { bestBallMode: true, leagueType: 'best_ball', leagueVariant: null },
+      rosterPlayers: [starter('p1'), { rosterId: 'roster-1', playerId: 'ir1', sport: 'NFL', slotType: 'bench', position: 'RB' }],
+      afRosters: NATIVE_LINK,
+      assignments: [a(2, 'starters', 'p1'), a(2, 'ir', 'ir1')],
+      existingScores: [{ playerId: 'p1', sport: 'NFL' }],
+    })
+    await finalizeRedraftWeek({ seasonId: 'season-1', week: 2 }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc })
+    expect(sealed(calls)).toEqual(['p1'])
   })
 })

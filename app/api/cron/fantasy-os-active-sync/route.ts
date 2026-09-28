@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const url = new URL(request.url)
   const rawLimit = Number(url.searchParams.get('limit'))
-  const limitPerProvider = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 50) : 4
+  const limitPerProvider = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 50) : 50
 
   try {
     return NextResponse.json({ ok: true, ...(await runActiveSyncHeartbeat(limitPerProvider)) })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 /**
  * WHAT AN ANSWER WAS BUILT FROM, RENDERED WHERE THE ANSWER IS.
@@ -200,6 +200,7 @@ function freshnessWord(
 
 export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) {
   const [expanded, setExpanded] = useState(false)
+  const detailId = useId()
 
   const {
     confidencePct,
@@ -243,7 +244,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
         {level ? (
           <span className="af-cm-ev-level af-num" data-level={level}>
             {level} confidence
-            {confidencePct != null ? ` · ${confidencePct}%` : ''}
+
           </span>
         ) : null}
 
@@ -277,7 +278,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
             className="af-cm-ev-toggle"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-controls="af-cm-ev-detail"
+            aria-controls={detailId}
           >
             {expanded ? 'Hide' : 'What is this based on?'}
           </button>
@@ -285,7 +286,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
       </div>
 
       {expanded ? (
-        <div className="af-cm-ev-detail" id="af-cm-ev-detail" data-testid="chimmy-evidence-detail">
+        <div className="af-cm-ev-detail" id={detailId} data-testid="chimmy-evidence-detail">
           {rationale ? <p className="af-cm-ev-why">{rationale}</p> : null}
 
           {dataSources.length > 0 ? (
