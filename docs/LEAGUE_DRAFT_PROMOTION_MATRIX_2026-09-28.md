@@ -45,10 +45,10 @@ promotion; see §6 for why they must stay unoffered.
 | Best ball | DB | DB | E2E | DB | DB (optimal lineup inside `updateMatchupScores`) | `runNativeTournamentWeek` via score-sync */5 — DB | DB (`finalizeNativeTournamentSeason`) | unverified |
 | Guillotine | mock | DB | DB | mock | DB (via `runElimination` directly) | chop via `runNativeGuillotineWeek` in score-sync */5 — **mock only**; the DB smokes bypass it | **DB** (this PR): `finishGuillotineSeason` crowns the last team standing, archives by survival order, enters offseason; score-sync retries an unarchived finish for 7 days | **DB** (this PR): next draft created, year-two shell clears last season's chops, eliminations kept |
 
-**Draft modes.** Snake / linear: DB + E2E. **Auction: not built server-side** —
-`processExpiredDraftPicks` returns `auction_not_supported`, and
-`runAuctionAutomationTick` only runs off client polls; nearly no tests.
-**Slow drafts:** see §4.
+**Draft modes.** Snake / linear: DB + E2E, and the server tick autopicks them (§4).
+**Auction:** the server tick skipped auctions (`auction_not_supported`), so a bid
+only closed while someone had the room open — fixed in #1479, DB-proven with two
+ticks racing (exactly one sale). **Slow drafts:** covered by the server tick (§4).
 
 ## 3. Sport × stage
 
@@ -58,14 +58,15 @@ promotion; see §6 for why they must stay unoffered.
 | NHL | E2E (synthetic pool) | **vendor** | partial, identity unverified | RI game logs daily 07:00 (prod-ro ran 2026-09-27) | wired; opener 2026-09-29 — **unverified live** | TSDB slate | yes (per `SEASON_CAPABLE_SPORTS`) |
 | NBA | E2E (synthetic pool) | **vendor** | partial | RI game logs daily | wired; opener 2026-10-20 — unverified | slate; fails open on team-name mismatch | yes, unexercised |
 | NCAAB | E2E (synthetic pool) | **vendor** | weakest coverage | RI game logs daily | wired | **none** | blocked: RI 2026-27 schedule unpublished (GAPS N-16) |
-| NCAAF | E2E (synthetic pool) | **vendor** | partial; `cron-sync-player-images-ncaaf` **failed** last run (prod-ro) | CFBD `import-stat-lines` 30 */6 | **not built** — `playerWeeklyScoreService.ts:190` throws for `NCAAFB` | none | **no** — held at week 1 |
+| NCAAF | E2E (synthetic pool) | **vendor** | partial; `cron-sync-player-images-ncaaf` runs end `partial`, no error recorded (prod-ro) | CFBD `import-stat-lines` 30 */6 | **not built** — `playerWeeklyScoreService.ts:190` throws for `NCAAFB` | none | **no** — held at week 1 |
 | MLB | E2E (synthetic pool) | **vendor** | partial | RI game logs daily (~66k rows) | **not built** — throws; no normalizer, no singles/doubles/triples/holds/batter-K categories | none | **no** |
 | SOCCER | E2E (synthetic pool) | **vendor** | partial | RI game logs daily | **not built** — throws; finalizer `sport_not_week_keyed` | none | **no** |
 
 The wizard **labels** NCAAF / MLB / SOCCER "Draft and league tools only — weekly
 scoring is not wired" at the sport step (deliberately labelled, not disabled).
-Production has one NCAAF redraft season sitting in `in_season` (prod-ro); it
-cannot score.
+Production has one NCAAF redraft season sitting in `in_season` (prod-ro) — it
+belongs to an imported league, which the native scorer does not run. There is
+no native NCAAF league in production (prod-ro, Sep 28).
 
 **The seven-sport promotion claim is therefore at most four sports for a
 season**, and one of those four (NCAAB) cannot seal a week until its vendor
@@ -82,17 +83,18 @@ Dispatch: GitHub Actions fast/slow tiers → HTTP to the worker service, from
 |---|---|---|---|
 | `cron-redraft-score-sync` | 248 | 2 | the production scorer |
 | `cron-season-week-roll` | 24 | 0 | week roll + postseason |
-| `cron-draft-tick` | 1214 | 1 | server autopick gated by `DRAFT_TICK_CRON_ENABLED`; metadata cannot distinguish off from idle |
+| `cron-draft-tick` | 1214 | 1 | server autopick **on**: a run with `DRAFT_TICK_CRON_ENABLED` off writes `autopickDisabled`, and 0 of 9,181 runs in 7 days did (prod-ro, Sep 28) |
 | `cron-live-score-tick` | 512 | 6 | NFL only |
 | `cron-keeper-session` / `cron-waivers` / `cron-redraft-waiver-process` | 24 / 260 / 24 | 0 | |
 | `cron-tournament-automation` | 24 | 0 | |
 | `cron-import-player-game-stats-multisport` | 1 | 0 | daily |
-| `cron-sync-player-images-ncaaf` | 1 | **1** | no success recorded |
+| `cron-sync-player-images-ncaaf` | 1 | 1 | `partial`, no error recorded (last 3 runs, Sep 26–28) |
 
 Open draft sessions (prod-ro): 38 total, 1 in progress, 0 with a pick clock
-expired more than 10 minutes. **No stall today, but the stall is structural:**
-with the flag off, an expired clock only resolves when someone has the room
-open. A slow draft or an auction with nobody present waits indefinitely.
+expired more than 10 minutes. With the flag on, an expired snake/linear clock
+resolves on the server within a minute (the tick made 0 picks in 7 days only
+because no native clock expired). Auctions were the exception — the tick
+skipped them — until #1479. Native auction drafts in production today: 0.
 
 ## 5. Unscheduled writers (the fatal-and-silent class)
 
@@ -119,7 +121,7 @@ any of these means folding, not adding.
   - guillotine, any sport — the season end and year two are now DB-proven (§2), but the weekly chop through the scheduled `runNativeGuillotineWeek` path (sealing, scoring, cutoff) is still mock-only; and NCAAF/MLB guillotine is offered in sports that cannot score a week (§3);
   - any season claim for NCAAF / MLB / SOCCER (§3);
   - NBA / NHL / NCAAB season claims until a real week has finalized in production;
-  - auction drafts, and slow drafts without the server tick;
+  - auction drafts, until #1479 lands (slow snake/linear drafts are covered by the server tick);
   - Survivor / zombie / salary cap / Big Brother — correctly unoffered; keep them so until their jobs are scheduled.
 - **Blocked on vendor data:** market ADP for six sports; the licensed-export
   path is built and tested with a synthetic fixture only.
@@ -132,10 +134,10 @@ any of these means folding, not adding.
    `conceptCatalog`, and neither sport can score a week. A product call: NCAAF
    guillotine has deliberate defaults and tests, so this is "which sports do we
    offer", not a bug fix. Same question applies to every concept in those sports.
-3. **Server-side draft clock** — decide `DRAFT_TICK_CRON_ENABLED` with
-   lease/idempotency evidence; add auction resolution to the tick or stop
-   offering auction until it has one.
-4. **NCAAF weekly scoring** — CFBD stat lines exist; the weekly sync throws on
-   `NCAAFB`. Largest sport unlock that needs no new vendor.
-5. **NCAAF image sync failure** — read its `sync_job_runs.error_message`.
+3. ~~**Server-side draft clock**~~ — the flag was already on (§4); auction
+   resolution added to the tick in #1479.
+4. ~~**NCAAF weekly scoring**~~ — #1468; its lineup lock is #1474. Dry-run on
+   production's CFBD rows (20,000): zero unmapped stat keys.
+5. ~~**NCAAF image sync failure**~~ — its last three runs are `partial` with no
+   error recorded, not failed.
 6. Survivor / Big Brother scheduling — only if the product decides to offer them.
