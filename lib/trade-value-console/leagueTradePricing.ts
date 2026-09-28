@@ -5,7 +5,7 @@ import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcChartDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
@@ -523,6 +523,8 @@ export type LeagueTradeChart = {
   /** The reception weight the chart was REQUESTED with — `scoringFit` measures against this. */
   pprNfl: 0 | 0.5 | 1
   fcPlayers: FantasyCalcPlayer[]
+  /** When `fcPlayers` was synced from FantasyCalc (ISO) — the age of every market value on the chart. */
+  fcSyncedAt?: string | null
   nflCtx: ValuationContext
   valuationGaps?: string[]
 }
@@ -597,7 +599,7 @@ export async function resolveLeagueTradeChart(args: {
    * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
    * retired, this number has to come back DOWN to 6 h or lower, not up.
    */
-  const fcPlayers = await getFantasyCalcValuesDbFirst(
+  const { players: fcPlayers, syncedAt: fcSyncedAt } = await getFantasyCalcChartDbFirst(
     {
       isDynasty: chartIsDynasty,
       numQbs: isSuperFlex ? 2 : 1,
@@ -647,6 +649,7 @@ export async function resolveLeagueTradeChart(args: {
     waiverBudget,
     pprNfl,
     fcPlayers,
+    fcSyncedAt,
     nflCtx,
     valuationGaps: coverage.gaps,
   }

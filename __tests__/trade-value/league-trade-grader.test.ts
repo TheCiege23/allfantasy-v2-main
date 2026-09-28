@@ -34,7 +34,11 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
   }),
 }))
 vi.mock('@/lib/league-context-engine', () => ({ resolveNormalizedLeagueContext: async () => ({ ok: false }) }))
-vi.mock('@/lib/fantasycalc-db', () => ({ getFantasyCalcValuesDbFirst: async () => h.chart }))
+vi.mock('@/lib/fantasycalc-db', () => ({
+  getFantasyCalcValuesDbFirst: async () => h.chart,
+  // The chart now carries its sync time, so every grade line can date its market value.
+  getFantasyCalcChartDbFirst: async () => ({ players: h.chart, syncedAt: '2026-09-28T14:27:28.097Z' }),
+}))
 vi.mock('@/lib/league-values/leagueTradeValues', () => ({ loadLeagueTradeValues: async () => null }))
 vi.mock('@/lib/data/players', () => ({ getPlayer: async () => null, searchPlayers: async () => [] }))
 vi.mock('@/lib/shared-services/player-identity/PlayerIdentityResolver', () => ({ resolvePlayer: async () => ({ confidence: 'none' }) }))
@@ -177,6 +181,17 @@ describe('createLeagueTradeGrader', () => {
     expect(v.lines.map((l) => [l.side, l.name, l.leagueValue])).toEqual([
       ['give', 'Drake London', 4000],
       ['get', 'Puka Nacua', 6000],
+    ])
+  })
+
+  it('every line records WHICH evidence priced it and WHEN — through the real grader (2026-09-28)', async () => {
+    const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const v = graded(
+      await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: true }),
+    )
+    expect(v.lines.map((l) => [l.name, l.valueSource, l.valueAsOf])).toEqual([
+      ['Drake London', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
+      ['Puka Nacua', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
     ])
   })
 
