@@ -1108,6 +1108,17 @@ async function main() {
                  (state."lastSuccessfulSyncAt" IS NULL OR
                   state."lastSuccessfulSyncAt" < now() - INTERVAL '1 hour')
              )::int AS stale,
+             count(*) FILTER (
+               WHERE connected.external_id IS NOT NULL AND state."lastSuccessfulSyncAt" IS NULL
+             )::int AS never,
+             count(*) FILTER (
+               WHERE connected.external_id IS NOT NULL AND state."lastSuccessfulSyncAt" IS NULL
+                 AND state."lastAttemptedSyncAt" IS NULL
+             )::int AS never_attempted,
+             string_agg(DISTINCT connected.provider, ', ' ORDER BY connected.provider)
+               FILTER (WHERE connected.external_id IS NOT NULL AND
+                 (state."lastSuccessfulSyncAt" IS NULL OR
+                  state."lastSuccessfulSyncAt" < now() - INTERVAL '1 hour')) AS stale_providers,
              max(EXTRACT(EPOCH FROM (now() - state."lastSuccessfulSyncAt")))
                FILTER (WHERE connected.external_id IS NOT NULL) AS oldest_age_seconds
         FROM game_day
@@ -1121,7 +1132,7 @@ async function main() {
       path: '/api/cron/fantasy-os-active-sync#league-coverage',
       tier: 'fast', kind: 'coverage', table: 'league_sync_state',
       state: !active.game_day ? 'IDLE' : active.connected === 0 ? 'EMPTY' : active.stale > 0 ? 'STALE' : 'OK',
-      detail: `${active.stale} of ${active.connected} connected current-season NFL leagues last read over 1h ago or never; oldest ${active.oldest_age_seconds == null ? 'never' : Math.round(active.oldest_age_seconds / 60) + 'm'}; game day ${active.game_day}`,
+      detail: `${active.stale} of ${active.connected} connected current-season NFL leagues last read over 1h ago or never (${active.never} never successful, ${active.never_attempted} never attempted; providers: ${active.stale_providers ?? 'none'}); oldest successful read ${active.oldest_age_seconds == null ? 'never' : Math.round(active.oldest_age_seconds / 60) + 'm'}; game day ${active.game_day}`,
     })
   } finally {
     await client.end()
