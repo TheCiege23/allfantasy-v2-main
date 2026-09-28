@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { fetchChannelMessages, getBotUserId, isBotConfigured } from '@/lib/discord/bot'
-import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { discordAvatarUrl } from '@/lib/discord/avatar'
 
 export { DISCORD_INBOUND_SCHEDULED } from '@/lib/discord/inboundStatus'
@@ -10,10 +9,7 @@ export { DISCORD_INBOUND_SCHEDULED } from '@/lib/discord/inboundStatus'
  * into its AllFantasy chat. Opt-in per league, and OFF by default
  * (`DiscordLeagueChannel.syncInbound` defaults false).
  *
- * Not scheduled yet — see `DISCORD_INBOUND_SCHEDULED` in ./inboundStatus. To wire it,
- * call `runDiscordInboundPass({ budgetMs })` from an existing frequent cron with its
- * own small budget, inside a try/catch that can never fail the host, and flip that
- * constant in the same commit.
+ * Runs from the authenticated notification-outbox-relay cron every five minutes.
  *
  * ⚠ IT ALSO NEEDS DISCORD'S MESSAGE CONTENT INTENT. Without it Discord returns every
  * message with an empty `content`, and this pass (correctly) skips empty lines — so a
@@ -83,7 +79,7 @@ export async function runDiscordInboundPass(opts: PassOptions): Promise<InboundP
 
 async function loadRows() {
   const rows = await prisma.discordLeagueChannel.findMany({
-    where: { syncEnabled: true, syncInbound: true, surface: 'league_chat' },
+    where: { syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
     include: { guild: { select: { linkedByUserId: true } } },
   })
   // Oldest cursor first (never-seen channels before all), so a channel deferred by the
@@ -108,8 +104,8 @@ async function importChannel(row: Row, botId: string): Promise<number> {
   if (!row.lastSyncedMessageId) {
     const latest = await fetchChannelMessages(row.channelId, { limit: 1 })
     if (latest[0]?.id) {
-      await prisma.discordLeagueChannel.update({
-        where: { id: row.id },
+      await prisma.discordLeagueChannel.updateMany({
+        where: { id: row.id, syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
         data: { lastSyncedMessageId: latest[0].id },
       })
     }
@@ -126,28 +122,45 @@ async function importChannel(row: Row, botId: string): Promise<number> {
 
   for (const m of sorted) {
     maxId = m.id
-    if (!m.author?.id || m.author.id === botId) continue
+    const author = m.author
+    if (!author?.id || author.id === botId) continue
     const text = (m.content ?? '').trim()
     if (!text) continue
 
-    const existing = await prisma.discordMessageLink.findFirst({
-      where: { discordMessageId: m.id, direction: 'from_discord' },
-      select: { id: true },
-    })
-    if (existing) continue
+    const authorName = author.global_name ?? author.username ?? 'Discord user'
+    // Serialize this Discord message across overlapping cron invocations. The chat row
+    // and its dedup link commit together, so a crash cannot leave a visible duplicate
+    // without its link. The advisory lock is transaction-scoped and auto-released.
+    const didImport = await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`discord-inbound:${m.id}`}))`
+      const stillOptedIn = await tx.discordLeagueChannel.findFirst({
+        where: { id: row.id, syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
+        select: { id: true },
+      })
+      if (!stillOptedIn) return false
+      const existing = await tx.discordMessageLink.findFirst({
+        where: { discordMessageId: m.id, direction: 'from_discord' },
+        select: { id: true },
+      })
+      if (existing) return false
 
-    const authorName = m.author.global_name ?? m.author.username ?? 'Discord user'
-    const created = await createLeagueChatMessage(row.leagueId, row.guild.linkedByUserId, text, {
-      sourceDiscord: true,
-      discordMessageId: m.id,
-      metadata: {
-        discordAuthorName: authorName,
-        discordAuthorAvatarUrl: discordAvatarUrl(m.author.id, m.author.avatar ?? null),
-        discordInbound: true,
-      },
-    })
-    if (created) {
-      await prisma.discordMessageLink.create({
+      const created = await tx.leagueChatMessage.create({
+        data: {
+          leagueId: row.leagueId,
+          userId: row.guild.linkedByUserId,
+          message: text,
+          type: 'text',
+          sourceDiscord: true,
+          discordMessageId: m.id,
+          metadata: {
+            discordAuthorName: authorName,
+            discordAuthorAvatarUrl: discordAvatarUrl(author.id, author.avatar ?? null),
+            discordInbound: true,
+          },
+        },
+        select: { id: true },
+      })
+      await tx.discordMessageLink.create({
         data: {
           leagueMessageId: created.id,
           discordMessageId: m.id,
@@ -156,13 +169,14 @@ async function importChannel(row: Row, botId: string): Promise<number> {
           channelId: row.channelId,
         },
       })
-      imported += 1
-    }
+      return true
+    })
+    if (didImport) imported += 1
   }
 
   if (maxId && maxId !== row.lastSyncedMessageId) {
-    await prisma.discordLeagueChannel.update({
-      where: { id: row.id },
+    await prisma.discordLeagueChannel.updateMany({
+      where: { id: row.id, syncEnabled: true, syncInbound: true, surface: 'league_chat', commissionerOnly: false },
       data: { lastSyncedMessageId: maxId },
     })
   }

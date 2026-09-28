@@ -1,8 +1,10 @@
+import { normalizeTeamAbbrev, getTeamInfo } from '@/lib/team-abbrev'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import type { SectionState } from './leagueHome'
+import { getTeamLogoUrl } from '@/lib/player-media-urls'
 
 /**
  * The three cross-league cards that sit at the top of Dashboard v2: today's
@@ -48,6 +50,7 @@ export type HealthReading = {
 /* ── Next 24 hours ───────────────────────────────────────────────────────── */
 
 export type Next24Row = {
+  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsAt: string | null }
   kind: 'game' | 'waiver'
   text: string
   /** League name for a waiver run; sport and week for a game. */
@@ -342,6 +345,16 @@ async function resolveHealth(
  *   is emitted rather than one derived from a review window with nothing under
  *   review.
  */
+/** A line younger than this is shown plainly. */
+const ODDS_FRESH_MS = 60 * 60_000
+/** A line older than this is not shown at all. See the note in `resolveNext24`. */
+const ODDS_SHOW_MS = 3 * 60 * 60_000
+
+/** "11:33 AM ET" — pinned zone and locale, so the server paint and the client agree. */
+function oddsClock(at: Date): string {
+  return `${at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`
+}
+
 async function resolveNext24(
   leagues: TodayStripLeague[],
   now: Date,
@@ -359,11 +372,28 @@ async function resolveNext24(
       where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
       orderBy: { startTime: 'asc' },
       take: 200,
-      select: { sport: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
+      select: { sport: true, externalId: true, source: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
     })
     .catch(() => [])
 
   const rows: Next24Row[] = []
+  /*
+   * 🛑 A ONE-HOUR WINDOW ON AN HOURLY JOB THAT RUNS LATE BLANKS THE LINE EVERY FEW HOURS. The
+   * `?odds=1` slot is nominally `25 * * * *` on the GitHub slow tier, which fires it 20-27 minutes
+   * late and irregularly: measured 2026-09-28 at 07:51, 08:48, 09:44, 10:34, 11:32, 12:47 UTC. The
+   * 11:32 rows aged out at 12:32 and nothing landed until 12:48, so the band read "Odds unavailable"
+   * for a line we held, minutes before a primetime game.
+   *
+   * So the band reads up to ODDS_SHOW_MS back and SAYS the age once it passes ODDS_FRESH_MS — the
+   * "show it, marked" choice gameOddsReads.ts describes. `expiresAt` (1h) is deliberately NOT
+   * consulted here and NOT lengthened in the writer: it is the freshness contract `readGameOdds`'
+   * `isStale` gives the matchup-prep surfaces, and those must keep treating a 2h line as stale.
+   */
+  const odds = games.length && prisma.gameOdds ? await prisma.gameOdds.findMany({
+    where: { OR: games.map(g => ({ sport: g.sport, gameExternalId: g.externalId, source: g.source })), fetchedAt: { gte: new Date(now.getTime() - ODDS_SHOW_MS) } },
+    orderBy: { fetchedAt: 'desc' },
+    select: { sport: true, gameExternalId: true, source: true, spreadHome: true, totalPoints: true, fetchedAt: true },
+  }).catch(() => []) : []
 
   /*
    * No waiver rows. See the header — the timing columns hold our own sport
@@ -375,7 +405,7 @@ async function resolveNext24(
   const seenFixtures = new Set<string>()
   for (const g of games) {
     if (!g.startTime) continue
-    const teamKey = (team: string | null) => String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const teamKey = (team: string | null) => g.sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
     const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
     if (seenFixtures.has(key)) continue
     seenFixtures.add(key)
@@ -385,6 +415,23 @@ async function resolveNext24(
       sub: [g.sport, g.week != null ? `Week ${g.week}` : null].filter(Boolean).join(' · ') || null,
       time: g.startTime.toISOString(),
       tone: 'accent',
+      game: (() => {
+        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && teamKey(peer.homeTeam) === teamKey(g.homeTeam) && teamKey(peer.awayTeam) === teamKey(g.awayTeam))
+        const market = odds.find(o => peers.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
+        const spread = market?.spreadHome
+        const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
+        return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
+          homeLogo: getTeamLogoUrl(teamKey(g.homeTeam), g.sport), awayLogo: getTeamLogoUrl(teamKey(g.awayTeam), g.sport),
+          href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
+          odds: [
+            favorite,
+            market?.totalPoints != null ? `O/U ${market.totalPoints}` : null,
+            (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
+              ? `line as of ${oddsClock(market.fetchedAt)}`
+              : null,
+          ].filter(Boolean).join(' · ') || 'Odds unavailable',
+          oddsAt: market?.fetchedAt.toISOString() ?? null }
+      })(),
     })
   }
 

@@ -78,6 +78,54 @@ describe('triageRows', () => {
     expect(rows.every((r) => r.kickoff === null && r.noGame === false)).toBe(true)
   })
 
+  it('does not flag this week from an injury report explicitly about next week', () => {
+    const rows = triageRows({
+      starters: [starter('10', 'Future Report', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['future report', inj('Questionable', 'Questionable for Week 13 at Miami')]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 12,
+    })
+    expect(rows).toEqual([])
+  })
+
+  it('does not flag a stale earlier-week designation, but keeps a current-week ruling', () => {
+    const make = (description: string) => triageRows({
+      starters: [starter('10', 'Old Report', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['old report', inj('Questionable', description)]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 3,
+    })
+    expect(make('Questionable For Week 1 At Carolina')).toEqual([])
+    expect(make('Questionable For Week 3 At Miami')).toHaveLength(1)
+  })
+
+  it('does not flag a game-day designation that is about training camp, but keeps camp-era IR/PUP', () => {
+    const make = (status: string, description: string) => triageRows({
+      starters: [starter('10', 'Camp Report', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['camp report', inj(status, description)]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 3,
+    })
+    // Production 2026-09-28: Jeremy Chinn, week 3, flagged from a July camp note.
+    expect(make('Questionable', 'Back - Questionable for start of Training Camp')).toEqual([])
+    expect(make('PUP', 'Placed on PUP to start Training Camp')).toHaveLength(1)
+    expect(make('Questionable', 'Hamstring - Questionable for Sunday')).toHaveLength(1)
+  })
+
+  it('does not mistake an expected return week for the designation week', () => {
+    const rows = triageRows({
+      starters: [starter('10', 'IR Player', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['ir player', inj('IR', 'IR. Injured Reserve. Expected Return Week 7')]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 3,
+    })
+    expect(rows).toHaveLength(1)
+  })
+
   it('breaks a tie on the same kickoff by severity, then name', () => {
     const same = [starter('7', 'Zed Questionable', 'BUF', 'L-a', 'A'), starter('8', 'Abe Questionable', 'BUF', 'L-a', 'A'), starter('9', 'Out Guy', 'BUF', 'L-a', 'A')]
     const map = new Map<string, TriageInjury>([

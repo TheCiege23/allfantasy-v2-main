@@ -34,22 +34,7 @@ import type { PlayerProjection } from './playerProjections'
  * raises P2022 rather than degrading quietly.
  */
 
-/**
- * The newest season the college snapshot holds. There is no week.
- *
- * 🛑 COLLEGE ROWS ARE SEASON-LONG, AND ASKING FOR A WEEK RETURNS NOTHING. Measured in
- * production 2026-08-30: every `AFProjectionSnapshot` row has `week = null`, in both
- * sports. The writer's `writeWeekly` is gated on Sleeper's season state — which is the
- * NFL's — so before NFL week 1 nothing week-scoped is written for any sport. A first
- * cut of this module filtered on `week: { not: null }` and would have returned an
- * empty map on every college lineup in production.
- *
- * ⚠ AND WHEN NFL WEEK 1 ARRIVES, THE WEEK IT STAMPS ON COLLEGE ROWS WILL BE THE NFL'S.
- * `targetWeek` comes from Sleeper too, and college weeks do not line up with it. So
- * this reads the season baseline deliberately rather than opportunistically taking a
- * week row if one appears — a college projection labelled with an NFL week number is
- * worse than one labelled as season-long, which is what it honestly is.
- */
+/** The latest college baseline season. Null week denotes row scope, not point units. */
 export async function latestNcaafProjectionSeason(): Promise<{ season: string } | null> {
   const row = await prisma.aFProjectionSnapshot
     .findFirst({
@@ -180,15 +165,8 @@ export async function lookupNcaafProjections(
       // the surfaces already resolve team from the roster row.
       team: null,
       componentStats: readComponentStats(row.adjustmentFactors),
-      /*
-       * ⚠ SAY WHAT THIS NUMBER IS. It is a SEASON-LONG projection being handed to
-       * screens built for a weekly one, and rendering it unlabelled beside an NFL
-       * team's weekly number invites a comparison that is off by a factor of the
-       * season length. `lib/projections/projectionCoverage.ts` already promises the
-       * reader that season-long AllFantasy numbers are shown for college instead of a
-       * weekly feed; this flag is what lets a surface keep that promise.
-       */
-      seasonLong: true,
+      // A null week identifies the baseline row, not the unit of afProjection.
+      perGame: true,
     })
   }
   return out

@@ -116,6 +116,7 @@ export async function resolveLeagueIdpScoring(
       scoring: NonNullable<ReturnType<typeof extractScoringSettings>>
       /** The `League.id` the rules came from, whichever id space the caller asked in. */
       leagueId: string
+      projectionWindow?: { season: number; week: number }
     }
   | { ok: false; reason: 'no_scoring_settings' | 'not_an_idp_league' }
 > {
@@ -134,7 +135,13 @@ export async function resolveLeagueIdpScoring(
   const scoring = extractScoringSettings(league?.settings)
   if (!league || !scoring) return { ok: false, reason: 'no_scoring_settings' }
   if (!hasIdpScoring(scoring)) return { ok: false, reason: 'not_an_idp_league' }
-  return { ok: true, scoring, leagueId: league.id }
+  const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+    ? league.settings as Record<string, unknown> : {}
+  const season = Number(settings.season)
+  const week = Number(settings.current_week)
+  const projectionWindow = Number.isInteger(season) && season >= 2000 &&
+    Number.isInteger(week) && week >= 1 && week <= 18 ? { season, week } : undefined
+  return { ok: true, scoring, leagueId: league.id, ...(projectionWindow ? { projectionWindow } : {}) }
 }
 
 export async function loadLeagueIdpVorp(
@@ -156,6 +163,7 @@ export async function loadLeagueIdpVorp(
     rosterSlots: args.rosterPositions,
     numTeams: args.numTeams,
     isDynasty: args.isDynasty,
+    projectionWindow: resolved.projectionWindow,
   })
 }
 
@@ -169,6 +177,8 @@ export interface PriceIdpBoardArgs {
   rosterSlots: readonly string[] | null | undefined
   numTeams: number
   isDynasty?: boolean
+  /** Imported league period; an early game must not advance the entire board. */
+  projectionWindow?: { season: number; week: number }
 }
 
 /**
@@ -213,7 +223,7 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
    * than a clock — the ingest runs on its own schedule and the offseason stalls it entirely.
    */
   let historyUnavailable = false
-  const newest = await args.prisma.playerGameStat
+  const newest = args.projectionWindow ? { _max: { season: args.projectionWindow.season } } : await args.prisma.playerGameStat
     .aggregate({ where: { sportType: 'NFL' }, _max: { season: true } })
     .catch(() => { historyUnavailable = true; return null })
   const season = newest?._max.season
@@ -222,7 +232,7 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
     unpricedReasonBySleeperId: new Map(defenders.map((d) => [d.sleeperId, idpProjectionUnpricedReason(historyUnavailable ? 'history_unavailable' : 'no_history')])),
   }
 
-  const newestWeek = await args.prisma.playerGameStat
+  const newestWeek = args.projectionWindow ? { _max: { weekOrRound: args.projectionWindow.week - 1 } } : await args.prisma.playerGameStat
     .aggregate({ where: { sportType: 'NFL', season }, _max: { weekOrRound: true } })
     .catch(() => { historyUnavailable = true; return null })
   if (historyUnavailable) return {

@@ -67,6 +67,7 @@ describe('chat bubble Chimmy — token consent', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionStorage.clear()
     Element.prototype.scrollIntoView = vi.fn()
     fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

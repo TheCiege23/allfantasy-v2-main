@@ -39,9 +39,12 @@ import { createPhaseTimer, unattributedMs } from '@/lib/logging/phaseTimer'
 import { logUsageEvent } from '@/lib/telemetry/usage'
 import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
 import { applyTradeAnalysisDepth } from '@/lib/trade-value-console/tradeAnalysisDepth'
+import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
 import { loadTradeEdge } from '@/lib/competitive-edge/tradeEdgeLoader'
 import type { EdgeDealAsset } from '@/lib/competitive-edge/tradeEdge'
+import { captureConsoleEvaluation } from '@/lib/decision-os/trade/captureConsoleEvaluation'
+import { readTradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluationReceiptStore'
 
 /** A priced line, as Competitive Edge reads the deal: picks count as picks, FAAB is not an asset it tracks. */
 function edgeAssets(lines: Array<{ position?: string | null }>): EdgeDealAsset[] {
@@ -428,7 +431,22 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * try block by the parsed REQUEST. Two `const payload` in one block is an ECMAScript
        * early error, so the module would not parse and every request to this route would
        * 500. ignoreBuildErrors:true means the build would not have stopped it. */
-      const responseBody = hasContext ? { ...analysis, ...notes } : analysis
+      /*
+       * The receipt for the grade this response shows (Trade OS, design step 5). The Trade Center
+       * already graded the deal through the one grader (`gradePricedSides`); this records that grade
+       * rather than pricing the deal twice. Null until the receipts migration is applied.
+       */
+      const receiptId = await receiptIdForGrade({
+        surface: 'trade-center',
+        leagueId: parsed.data.leagueId ?? null,
+        userId,
+        give: { assets: parsed.data.sideGive, unpriceable: [] },
+        get: { assets: parsed.data.sideGet, unpriceable: [] },
+        // Roster need is priced only for a signed-in viewer in a league (`runTradeConsoleAnalysis`).
+        viewerSide: Boolean(parsed.data.leagueId && userId),
+        grade: out.grade,
+      })
+      const responseBody = { ...(hasContext ? { ...analysis, ...notes } : analysis), receiptId }
 
       /*
        * Phase attribution for this request.
@@ -484,10 +502,32 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
       const withOpinion = decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit
       // Its own depth, so the trade-depth filter below keeps it (tradeAnalysisDepth.ts, SEPARATELY_GATED).
       const withEdge = competitiveEdge ? { ...withOpinion, competitiveEdge } : withOpinion
-      return NextResponse.json(applyTradeAnalysisDepth(withEdge, paywall.trade_depth))
+      // Preserve this exact result. A failed receipt write must not erase a valid
+      // evaluation or tell the manager that it was saved when it was not.
+      const saved = await captureConsoleEvaluation(payload, analysis, notes).catch(() => null)
+      const evaluationReceipt = saved ? { status: 'saved' as const, ...saved }
+        : out.league ? { status: 'unavailable' as const } : null
+      return NextResponse.json(applyTradeAnalysisDepth({ ...withEdge, evaluationReceipt }, paywall.trade_depth))
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })
     }
   },
 )
+
+/** Read an original evaluation. Account ownership and current league access are both required. */
+export async function GET(req: Request) {
+  const headers = { 'Cache-Control': 'private, no-store' }
+  const session = await getServerSession(authOptions)
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Sign in to view your saved evaluation.' }, { status: 401, headers })
+  const id = new URL(req.url).searchParams.get('evaluation')
+  if (!id || id.length > 128) return NextResponse.json({ error: 'Evaluation not found.' }, { status: 404, headers })
+  try {
+    const receipt = await readTradeEvaluationReceipt(userId, id)
+    if (!receipt) return NextResponse.json({ error: 'Evaluation not found.' }, { status: 404, headers })
+    return NextResponse.json({ receipt }, { headers })
+  } catch {
+    return NextResponse.json({ error: 'Saved evaluations are temporarily unavailable.' }, { status: 503, headers })
+  }
+}

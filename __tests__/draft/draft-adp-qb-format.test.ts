@@ -7,7 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type AdpRow = { playerName: string; position: string; team: string; source: string; adp: number; scoring: string }
+type AdpRow = { playerName: string; position: string; team: string; source: string; adp: number; scoring: string; season?: number; createdAt?: Date }
 
 const state = vi.hoisted(() => ({
   rows: [] as AdpRow[],
@@ -24,11 +24,11 @@ function matchesScoring(row: AdpRow, scoring: { in?: string[]; notIn?: string[] 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     adpDataRecord: {
-      findFirst: vi.fn(async ({ where }: { where: { scoring?: { in?: string[]; notIn?: string[] } } }) =>
-        state.rows.some((r) => matchesScoring(r, where.scoring)) ? { season: 2026, week: 1 } : null,
+      findFirst: vi.fn(async ({ where }: { where: { scoring?: { in?: string[]; notIn?: string[] }; season?: number; source?: { notIn:string[] }; createdAt?: { gte:Date } } }) =>
+        state.rows.some((r) => matchesScoring(r, where.scoring) && (where.season == null || (r.season ?? 2026) === where.season) && !where.source?.notIn.includes(r.source) && (!where.createdAt || (r.createdAt ?? new Date()) >= where.createdAt.gte)) ? { season: 2026, week: 1 } : null,
       ),
-      findMany: vi.fn(async ({ where }: { where: { scoring?: { in?: string[]; notIn?: string[] } } }) =>
-        state.rows.filter((r) => matchesScoring(r, where.scoring)),
+      findMany: vi.fn(async ({ where }: { where: { scoring?: { in?: string[]; notIn?: string[] }; season?: number; source?: { notIn:string[] }; createdAt?: { gte:Date } } }) =>
+        state.rows.filter((r) => matchesScoring(r, where.scoring) && (where.season == null || (r.season ?? 2026) === where.season) && !where.source?.notIn.includes(r.source) && (!where.createdAt || (r.createdAt ?? new Date()) >= where.createdAt.gte)),
       ),
     },
   },
@@ -80,5 +80,41 @@ describe('reading two quarterbacks off the lineup', () => {
   ])('%j → %s', async (slots, expected) => {
     state.slots = slots
     expect(await leagueStartsTwoQuarterbacks('L')).toBe(expected)
+  })
+})
+
+describe('seven-sport draft ADP values', () => {
+  it.each(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])('excludes invalid imported values before averaging for %s', async sport => {
+    state.rows = [
+      { playerName: 'Valid Player', position: 'QB', team: 'TEST', source: 'one', adp: 20, scoring: 'standard' },
+      { playerName: 'Valid Player', position: 'QB', team: 'TEST', source: 'two', adp: 0, scoring: 'standard' },
+      ...[0, -10, NaN, Infinity].map((adp, index) => ({ playerName: `Invalid ${index}`, position: 'QB', team: 'TEST', source: 'one', adp, scoring: 'standard' })),
+    ]
+    expect(await loadLatestAveragedAdpRowsFromDb(sport as never, 'redraft')).toEqual([{ name: 'Valid Player', position: 'QB', team: 'TEST', adp: 20 }])
+  })
+})
+
+
+describe('ADP season and scoring fidelity', () => {
+  it.each(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])('refuses a previous-season board for %s', async sport => {
+    state.rows = [{ playerName: 'Old Board', position: 'QB', team: 'TEST', source: 'market', adp: 10, scoring: 'standard', season: 2025 }]
+    expect(await loadLatestAveragedAdpRowsFromDb(sport as never, 'redraft', false, { season: 2026, scoring: 'standard' })).toEqual([])
+  })
+  it.each([['ppr', 8], ['half_ppr', 16], ['standard', 30]])('keeps %s separate from other reception boards', async (scoring, expected) => {
+    state.rows = ['ppr', 'halfPPR', 'standard'].map((value, index) => ({ playerName: 'Market Player', position: 'RB', team: 'TEST', source: 'market', adp: [8,16,30][index], scoring: value }))
+    const [row] = await loadLatestAveragedAdpRowsFromDb('NFL' as never, 'redraft', false, { season: 2026, scoring })
+    expect(row.adp).toBe(expected)
+  })
+})
+
+
+describe('observed board freshness', () => {
+  it('does not republish undated NFL CSV columns as current market evidence', async () => {
+    state.rows = [{playerName:'Export Player',position:'WR',team:'TST',source:'fantrax',adp:12,scoring:'ppr'}]
+    expect(await loadLatestAveragedAdpRowsFromDb('NFL' as never,'redraft',false,{season:2026,scoring:'ppr'})).toEqual([])
+  })
+  it('refuses observations older than seven days', async () => {
+    state.rows = [{playerName:'Old Market',position:'PG',team:'TST',source:'licensed-export',adp:12,scoring:'points',createdAt:new Date(Date.now()-8*86400000)}]
+    expect(await loadLatestAveragedAdpRowsFromDb('NBA' as never,'redraft',false,{season:2026,scoring:'points'})).toEqual([])
   })
 })

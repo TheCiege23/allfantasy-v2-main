@@ -230,7 +230,7 @@ export function MatchupPulseBoard({
           </h2>
           <span className="af-mp-rule" aria-hidden />
           <span className="af-mp-count">
-            {pulse.leading.length} leading · {pulse.trailing.length} trailing
+            {pulse.leadingTotal ?? pulse.leading.length} leading · {pulse.trailingTotal ?? pulse.trailing.length} trailing
           </span>
           {/*
             Only when there is something to keep current. On a board with nothing
@@ -339,7 +339,9 @@ export function MatchupPulseBoard({
         hidden={hidden}
         total={totalLeagues}
         href={allHref}
-        quiet="have no game this week or could not be scored."
+        /* Most of the rest ARE scored — they sit between the top and bottom five. This said "have no
+           game this week or could not be scored", which was false for ~43 of 55 on the measured account. */
+        quiet="sit between the five shown on each side, have no game this week, or could not be scored."
       />
     </div>
   )

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
-import { evaluateCounterOffers } from './counterOffers'
+import { availableRosterTargets, evaluateCounterOffers } from './counterOffers'
 import { prepareProposalCap, proposalCapNote } from './proposalCap'
 import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
@@ -43,6 +43,10 @@ import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/int
 import { clamp } from './sports-db-valuation'
 import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './leagueTradePricing'
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
+import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
+import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
+import { DEVY_BASIS_NOTE } from '@/lib/decision-os/trade/leagueAssetRules'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
 import {
   benchAssetsNotInGive,
@@ -255,6 +259,7 @@ export async function runTradeConsoleAnalysis(
     },
     mark,
   })
+  dataGaps.push(...(chart.valuationGaps ?? []))
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
   const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
 
@@ -288,6 +293,32 @@ export async function runTradeConsoleAnalysis(
   }
 
   mark('assets_get')
+  /*
+   * Phase 9: the same league asset rules `createLeagueTradeGrader` applies — a devy prospect this league
+   * holds is priced, and a pick is refused where nothing prices it — so the console cannot disagree.
+   */
+  const assetPolicy =
+    leagueRow && input.leagueId
+      ? createLeagueAssetPolicy({
+          id: input.leagueId.trim(),
+          sport: String(effectiveSport),
+          leagueType: leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, platform: leagueRow.platform ?? null }),
+          season: leagueRow.season ?? null,
+          status: leagueRow.status ?? null,
+        })
+      : null
+  let devyPricedCount = 0
+  if (assetPolicy) {
+    const [gd, td] = await Promise.all([
+      assetPolicy.priceDevy({ inputs: give, lines: giveLines, priced: givePriced }),
+      assetPolicy.priceDevy({ inputs: get, lines: getLines, priced: getPriced }),
+    ])
+    giveLines = gd.lines
+    givePriced = gd.priced
+    getLines = td.lines
+    getPriced = td.priced
+    devyPricedCount = gd.devyPriced + td.devyPriced
+  }
   const [giveEnriched, getEnriched] = await Promise.all([
     enrichTradeConsolePlayerLines({
       prisma,
@@ -325,8 +356,8 @@ export async function runTradeConsoleAnalysis(
    * graded in another, and a manager checking the arithmetic could never make it add up.
    *
    * Now each line starts from its market value on THIS league's chart, is moved by this league's
-   * scoring and the viewer's roster need (each factor carried with its reason, see
-   * `lib/trade-value/leagueTradeValue.ts`), and the grade is the difference of those totals. The
+   * scoring, and the grade is the difference of those totals. The viewer's roster need is
+   * a separate personal-utility estimate so a completed email cannot drop a grading factor. The
    * composite survives only where it always belonged: the driver model below (accept probability,
    * lineup simulation), which is secondary and labelled as such.
    */
@@ -340,23 +371,31 @@ export async function runTradeConsoleAnalysis(
       marketCtx && leagueRow && input.leagueId && input.userId
         ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
         : null,
+    withheld: assetPolicy?.pickRefusal([...give, ...get]) ?? null,
+    basisNotes: devyPricedCount > 0 ? [DEVY_BASIS_NOTE] : [],
     mark,
   })
   const leagueGrade = graded.leagueGrade
+  const consoleLeagueType = leagueRow
+    ? leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, platform: leagueRow.platform ?? null })
+    : null
+  /*
+   * A college league takes the same college grade `createLeagueTradeGrader` gives it (Phase 8), and the
+   * console's own numbers are rewritten from it, so the letter and the values beside it are one basis.
+   */
+  const collegeGrader =
+    leagueRow && consoleLeagueType && effectiveSport === 'NCAAF' && input.leagueId
+      ? createNcaafLeagueGrader({ id: input.leagueId.trim(), platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType: consoleLeagueType })
+      : null
+  const collegeView = collegeGrader ? await collegeGrader.grade(input.sideGive, input.sideGet) : null
+  if (collegeView) applyCollegeGrade(leagueGrade, collegeView)
   /**
    * THE grade — the same object every other trade surface shows for this deal — with the league type
    * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
    * league) has no league type to name.
    */
-  const grade = leagueRow
-    ? {
-        ...graded.grade,
-        leagueType: leagueTypeBasis({
-          settings: leagueRow.settings,
-          leagueType: leagueRow.leagueType,
-          platform: leagueRow.platform ?? null,
-        }),
-      }
+  const grade = consoleLeagueType
+    ? { ...(collegeView ?? graded.grade), leagueType: consoleLeagueType }
     : graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines
@@ -458,8 +497,9 @@ export async function runTradeConsoleAnalysis(
     dataGaps.length > 0 ||
     [...giveLines, ...getLines].some((l) => l.dataSource === 'placeholder')
 
-  const giveProjSum = sumEffectiveProjections(giveLines)
-  const getProjSum = sumEffectiveProjections(getLines)
+  const comparableProjections = sumEffectiveProjections([...giveLines, ...getLines]) != null
+  const giveProjSum = comparableProjections ? sumEffectiveProjections(giveLines) : null
+  const getProjSum = comparableProjections ? sumEffectiveProjections(getLines) : null
   const netProj =
     giveProjSum != null && getProjSum != null
       ? Math.round((getProjSum - giveProjSum) * 10) / 10
@@ -471,8 +511,8 @@ export async function runTradeConsoleAnalysis(
     net: netProj,
     summary:
       giveProjSum != null && getProjSum != null
-        ? 'Net = sum(get) − sum(give) of league-scored weekly projections (injury → weather → scoring stack) for players with DB rows — short-term add/drop signal, not dynasty market value.'
-        : 'Add league + player rows with projections to unlock scoring-adjusted weekly impact alongside market composites.',
+        ? 'Net compares combined player production, not starting-lineup improvement or win probability. Picks and FAAB are excluded. Defensive history estimates use league scoring; review each estimate for its week and injury/weather coverage.'
+        : 'Complete, comparable player projections are required on both sides. Missing players are not counted as zero; picks and FAAB have no weekly production estimate.',
   }
 
   const scoringSummaryLine = leagueNormCtx
@@ -647,10 +687,14 @@ export async function runTradeConsoleAnalysis(
     : { bullets: drivers.acceptBullets, sensitivity: drivers.sensitivitySentence }
 
   let opponentRosterTargets: TradeConsoleOpponentRosterTarget[] | undefined
+  // Only align by selection order when every input has a resolved line.
+  const selectedProviderIds = input.sideGive.length + input.sideGet.length === giveLines.length + getLines.length
+    ? [...giveLines, ...getLines].map(line =>
+    line.sport === 'NFL' && line.enrichmentPlayerId
+      ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null) : undefined
   if (rosterCtxForDrivers?.theirRoster?.length) {
-    const receiveIds = new Set(receiveAssets.map((a) => a.id))
-    opponentRosterTargets = rosterCtxForDrivers.theirRoster
-      .filter((a) => a.type === 'PLAYER' && !receiveIds.has(a.id))
+    const rosterTargets = rosterCtxForDrivers.theirRoster
+      .filter((a) => a.type === 'PLAYER')
       .map((a) => ({
         id: a.rosterPlayerId ?? a.id,
         name: a.name ?? a.id,
@@ -660,6 +704,8 @@ export async function runTradeConsoleAnalysis(
         playerId: a.valuationPlayerId,
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
+    opponentRosterTargets = availableRosterTargets({ targets: rosterTargets,
+      selected: [...input.sideGive, ...input.sideGet], selectedProviderIds })
   }
 
   const evaluateCap = input.leagueId && input.userId
@@ -679,19 +725,32 @@ export async function runTradeConsoleAnalysis(
       ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
     give: input.sideGive,
     get: input.sideGet,
+    selectedProviderIds,
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')
       .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0,
         providerIdentity: a.valuationIdentity, playerId: a.valuationPlayerId })),
     evaluate: async (counterGive, counterGet) => {
+      // A counter in a college league is graded on the same basis as the deal it counters.
+      const collegeCounter = collegeGrader ? await collegeGrader.grade(counterGive, counterGet) : null
+      if (collegeCounter) return collegeCounter
+      const counterPickWhy = assetPolicy?.pickRefusal([...counterGive, ...counterGet]) ?? null
+      if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
+      const [gd, td] = assetPolicy
+        ? await Promise.all([
+            assetPolicy.priceDevy({ inputs: counterGive, lines: g.lines, priced: g.priced }),
+            assetPolicy.priceDevy({ inputs: counterGet, lines: t.lines, priced: t.priced }),
+          ])
+        : [{ ...g, devyPriced: 0 }, { ...t, devyPriced: 0 }]
       return (await gradePricedSides({
-        chart, giveLines: g.lines, getLines: t.lines,
-        givePriced: applyChartTePremium(chart, g.priced), getPriced: applyChartTePremium(chart, t.priced),
+        chart, giveLines: gd.lines, getLines: td.lines,
+        givePriced: applyChartTePremium(chart, gd.priced), getPriced: applyChartTePremium(chart, td.priced),
+        basisNotes: gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : [],
         need: marketCtx && leagueRow && input.leagueId && input.userId
           ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
           : null,

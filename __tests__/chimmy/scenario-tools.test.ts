@@ -71,6 +71,31 @@ describe('runTradeScenarioTool', () => {
     h.trade.mockResolvedValue(null)
     expect(await runTradeScenarioTool({ give: ['Bijan Robinson'], get: ['Puka Nacua'], ...LEAGUE })).toMatch(/do not grade it/)
   })
+
+  const ready = (value: Record<string, unknown>) => ({
+    status: 'ready',
+    give: [{ playerId: 'p1', name: 'Bijan Robinson', position: 'RB' }],
+    get: [{ playerId: 'p2', name: 'Puka Nacua', position: 'WR' }],
+    partnerTeamName: 'Rival',
+    value,
+  })
+
+  it('tells the route the letters the one engine gave, with a plain summary', async () => {
+    h.trade.mockResolvedValue(ready({ grade: 'B', partnerGrade: 'C-' }))
+    const onGrade = vi.fn()
+    await runTradeScenarioTool({ give: ['Bijan Robinson'], get: ['Puka Nacua'], ...LEAGUE, onGrade })
+    expect(onGrade).toHaveBeenCalledWith({
+      letters: ['B', 'C-'],
+      summary: 'AllFantasy grades giving Bijan Robinson for Puka Nacua: B for you, C- for Rival.',
+    })
+  })
+
+  it('a withheld grade reports no letters — there are none to allow', async () => {
+    h.trade.mockResolvedValue(ready({ grade: null, withheld: 'Puka Nacua has no value here.' }))
+    const onGrade = vi.fn()
+    await runTradeScenarioTool({ give: ['Bijan Robinson'], get: ['Puka Nacua'], ...LEAGUE, onGrade })
+    expect(onGrade).not.toHaveBeenCalled()
+  })
 })
 
 describe('runStartSitScenarioTool', () => {

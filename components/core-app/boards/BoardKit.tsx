@@ -121,19 +121,21 @@ export function FooterSummary({
   total,
   href,
   quiet,
+  emptyText = 'Every league you hold is on this board.',
 }: {
   hidden: number
   total: number
   href: string
   /** What the hidden leagues are doing. Screen-specific; state a fact, not a mood. */
   quiet: string
+  emptyText?: string
 }) {
   return (
     <div className="af-bd-foot">
       <p className="af-bd-foot-text">
         {hidden > 0
           ? `${hidden.toLocaleString()} more ${hidden === 1 ? 'league' : 'leagues'} ${quiet}`
-          : `Every league you hold is on this board.`}
+          : emptyText}
       </p>
       <Link className="af-bd-foot-cta" href={href}>
         View all {total.toLocaleString()} &rarr;

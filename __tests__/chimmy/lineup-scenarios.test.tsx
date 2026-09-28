@@ -389,8 +389,10 @@ describe('prompt blocks', () => {
     const block = renderWaiverScenarioBlock((await waiver('Add Rashod Bateman?'))!)
     expect(block).toContain('Add: Rashod Bateman (WR), 14.0 points in week 3.')
     expect(block).toContain('whether the roster has room was NOT checked')
-    expect(block).toContain('Starting lineup, week 3: 106.0 before, 109.0 after (+3.0)')
+    expect(block).toContain('Hypothetical optimized lineup projection, week 3: 106.0 before, 109.0 after (+3.0)')
     expect(block).toContain('This is ONE week')
+    expect(block).toContain('not the provider')
+    expect(block).toContain('actual/live scores')
   })
 
   it('an unresolved block tells the model not to invent a comparison', async () => {
@@ -466,7 +468,12 @@ describe('the cards', () => {
     render(<ChimmyScenarioCard scenario={s} />)
     expect(screen.getByTestId('chimmy-scenario').textContent).toContain('Tank Bigsby (RB)')
     expect(screen.queryByTestId('chimmy-scenario-room')).toBeNull()
-    expect(screen.getByTestId('chimmy-scenario-unfilled').textContent).toContain('Totals leave out DEF')
+    expect(s.lineup).toBeNull()
+    expect(s.lineupUnavailable).toContain('after-trade lineup cannot fill DEF')
+    expect(screen.getByTestId('chimmy-scenario').textContent).toContain(s.lineupUnavailable!)
+    expect(screen.queryByTestId('chimmy-scenario-unfilled')).toBeNull()
+    expect(renderWaiverScenarioBlock(s)).toContain('Starting lineup: not computed')
+    expect(renderWaiverScenarioBlock(s)).not.toContain('Every total leaves out')
   })
 })
 

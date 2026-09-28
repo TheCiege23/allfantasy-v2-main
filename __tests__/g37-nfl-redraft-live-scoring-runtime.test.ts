@@ -178,6 +178,35 @@ describe('G37 canonical NFL redraft live scoring runtime', () => {
     expect(dst.points).toBe(17)
   })
 
+  it('scores stored team-defense sacks, interceptions and defensive touchdowns through the live scorer', () => {
+    const settings = resolveNflRedraftScoringSettings({ rules })
+    const stats = normalizeNflRedraftPlayerStats({ playerId: 'nfl:def:KC', position: 'DEF',
+      rawStats: { dst_sack: 3, dst_interception: 1, fum_rec: 1,
+        idp_defensive_touchdown: 1, td: 4, pts_allow: 10 } })
+    expect(calculateNflRedraftFantasyPoints({ settings, position: 'DEF', stats }).points).toBe(17)
+    expect(stats.def_td).toBe(1)
+  })
+
+  it('never rewards a team defense for the opponent offensive touchdowns in its stored td field', () => {
+    const settings = resolveNflRedraftScoringSettings({ rules })
+    const stats = normalizeNflRedraftPlayerStats({ playerId: 'nfl:def:KC', position: 'DEF',
+      rawStats: { td: 4, pts_allow: 10 } })
+    expect(stats.def_td).toBeUndefined()
+    expect(calculateNflRedraftFantasyPoints({ settings, position: 'DEF', stats }).points).toBe(4)
+  })
+
+  it.each([
+    { raw: { st_td: 2, kr_td: 1, pr_td: 1 }, points: 16 },
+    { raw: { def_st_td: 2, st_td: 2, ret_td: 2, kr_td: 1, pr_td: 1 }, points: 16 },
+    { raw: { kr_td: 1, pr_td: 1 }, points: 16 },
+    { raw: { st_td: 0, kr_td: 1 }, points: 4 },
+  ])('counts return touchdowns once with aggregate/component inputs: $raw', ({ raw, points }) => {
+    const settings = resolveNflRedraftScoringSettings({ rules })
+    const stats = normalizeNflRedraftPlayerStats({ playerId: 'nfl:def:KC', position: 'DEF',
+      rawStats: { ...raw, pts_allow: 10 } })
+    expect(calculateNflRedraftFantasyPoints({ settings, position: 'DEF', stats }).points).toBe(points)
+  })
+
   it('applies starters to matchup totals while keeping bench and IR visible only', () => {
     const tePremiumRules = {
       ...rules,

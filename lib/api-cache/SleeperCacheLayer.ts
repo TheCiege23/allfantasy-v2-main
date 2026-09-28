@@ -69,61 +69,72 @@ async function cachedFetch<T>(
     return memEntry.data as T
   }
 
-  // 2. Check DB cache
-  const dbEntry = await prisma.sportsDataCache?.findUnique?.({
-    where: { cacheKey },
-    select: { data: true, expiresAt: true },
-  }).catch(() => null)
-
-  /*
-   * ⚠ A ROW RECORDS WHEN IT EXPIRES, NOT WHEN IT WAS FETCHED. Every writer of a key family uses the
-   * same TTL (this module is the only writer), so the fetch happened `ttlMs` before expiry — which is
-   * what a `maxAgeMs` read has to measure. And the memory copy keeps THAT time, not "now": stamping a
-   * five-minute-old row as fetched now would let a fresh reader accept it for another full window.
-   */
-  const dbFetchedAt = dbEntry?.expiresAt ? dbEntry.expiresAt.getTime() - ttlMs : null
-  if (dbEntry?.expiresAt && dbFetchedAt != null && Date.now() < dbEntry.expiresAt.getTime() && Date.now() - dbFetchedAt < maxAgeMs) {
-    const data = dbEntry.data as T
-    setMemoryCache(cacheKey, data, ttlMs, dbFetchedAt)
-    return data
-  }
-
-  // 3. Deduplicate concurrent requests
-  const inflight = inflightRequests.get(cacheKey)
+  // Coalesce the DB read too: a cold process otherwise returns the same large
+  // players payload once per concurrent request before its memory cache fills.
+  // Freshness contracts stay separate; a stricter reader cannot join an older one.
+  const inflightKey = JSON.stringify([cacheKey, ttlMs, maxAgeMs])
+  const inflight = inflightRequests.get(inflightKey)
   if (inflight) return inflight as Promise<T>
 
-  // 4. Fetch from external API
-  const promise = fetchFn().then(async (data) => {
-    // Persist to DB
-    await prisma.sportsDataCache?.upsert?.({
+  const promise = (async (): Promise<T> => {
+    // 2. Check DB cache
+    const dbEntry = await prisma.sportsDataCache?.findUnique?.({
       where: { cacheKey },
-      create: {
-        cacheKey,
-        data: data as object,
-        expiresAt: new Date(Date.now() + ttlMs),
-      },
-      update: {
-        data: data as object,
-        expiresAt: new Date(Date.now() + ttlMs),
-      },
-      // Keep RETURNING to the key: `players:all` is 15 MB and was echoed back on every write.
-      select: { cacheKey: true },
-    }).catch(() => {})
+      select: { data: true, expiresAt: true },
+    }).catch(() => null)
 
-    // Persist to memory
-    setMemoryCache(cacheKey, data, ttlMs)
-    inflightRequests.delete(cacheKey)
-    return data
-  }).catch((err) => {
-    inflightRequests.delete(cacheKey)
-    // If fetch fails, return stale cache if available
-    if (memEntry) return memEntry.data as T
-    if (dbEntry?.data) return dbEntry.data as T
-    throw err
-  })
+    /*
+     * ⚠ A ROW RECORDS WHEN IT EXPIRES, NOT WHEN IT WAS FETCHED. Every writer of a key family uses the
+     * same TTL (this module is the only writer), so the fetch happened `ttlMs` before expiry — which is
+     * what a `maxAgeMs` read has to measure. And the memory copy keeps THAT time, not "now": stamping a
+     * five-minute-old row as fetched now would let a fresh reader accept it for another full window.
+     */
+    const dbFetchedAt = dbEntry?.expiresAt ? dbEntry.expiresAt.getTime() - ttlMs : null
+    if (dbEntry?.expiresAt && dbFetchedAt != null && Date.now() < dbEntry.expiresAt.getTime() && Date.now() - dbFetchedAt < maxAgeMs) {
+      const data = dbEntry.data as T
+      // A late older DB read must not replace a newer provider response in memory.
+      if ((memoryCache.get(cacheKey)?.fetchedAt ?? -Infinity) <= dbFetchedAt) {
+        setMemoryCache(cacheKey, data, ttlMs, dbFetchedAt)
+      }
+      return data
+    }
 
-  inflightRequests.set(cacheKey, promise)
-  return promise
+    // 3. Fetch from external API
+    try {
+      const data = await fetchFn()
+      // Persist to DB
+      await prisma.sportsDataCache?.upsert?.({
+        where: { cacheKey },
+        create: {
+          cacheKey,
+          data: data as object,
+          expiresAt: new Date(Date.now() + ttlMs),
+        },
+        update: {
+          data: data as object,
+          expiresAt: new Date(Date.now() + ttlMs),
+        },
+        // Keep RETURNING to the key: `players:all` is 15 MB and was echoed back on every write.
+        select: { cacheKey: true },
+      }).catch(() => {})
+
+      // Persist to memory
+      setMemoryCache(cacheKey, data, ttlMs)
+      return data
+    } catch (err) {
+      // If fetch fails, return stale cache if available
+      if (memEntry) return memEntry.data as T
+      if (dbEntry?.data) return dbEntry.data as T
+      throw err
+    }
+  })()
+
+  inflightRequests.set(inflightKey, promise)
+  try {
+    return await promise
+  } finally {
+    if (inflightRequests.get(inflightKey) === promise) inflightRequests.delete(inflightKey)
+  }
 }
 
 /** Exported only as a test seam for the eviction order; callers go through cachedFetch. */

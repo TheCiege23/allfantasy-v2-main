@@ -13,6 +13,9 @@ import {
   NO_LEAGUE_SCORING_REASON,
 } from '@/lib/projections/leagueScoring'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
+import { isBestBallSettings } from './lineupMode'
+import { startingSlotTemplate } from './rosterSlots'
+import { displayPosition } from './positionLabels'
 
 /**
  * Turns stored rosters + projections into the numbers the Matchup screen was
@@ -66,6 +69,19 @@ export type SideProjections = {
   you: SideProjection
   opponent: SideProjection
   leagueScoring: { available: true } | { available: false; reason: string }
+  bestBall?: {
+    slots: string[] | null
+    you: BestBallCandidate[]
+    opponent: BestBallCandidate[]
+  }
+}
+
+export type BestBallCandidate = {
+  playerId: string
+  position: string | null
+  projected: number | null
+  unavailable: Unavailable | null
+  inactive: boolean
 }
 
 /**
@@ -84,6 +100,14 @@ function startersOf(playerData: unknown): string[] {
   if (!playerData || typeof playerData !== 'object') return []
   const s = (playerData as Record<string, unknown>).starters
   return Array.isArray(s) ? s.map(String) : []
+}
+
+function rosterList(playerData: unknown, key: string): string[] {
+  if (!playerData || typeof playerData !== 'object') return []
+  const value = (playerData as Record<string, unknown>)[key]
+  // Keep unresolved `name:` entries in the FULL roster. Excluding one would let a
+  // forecast claim complete coverage while silently omitting an eligible player.
+  return Array.isArray(value) ? value.map(String).filter((id) => id && id !== '0') : []
 }
 
 /**
@@ -122,9 +146,10 @@ export async function loadSideProjections(args: {
   // league's rules or one player's price.
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { settings: true, platform: true, sport: true },
+    select: { settings: true, platform: true, sport: true, bestBallMode: true, leagueVariant: true },
   })
   const scoring = extractScoringSettings(league?.settings)
+  const bestBall = league?.bestBallMode === true || league?.leagueVariant === 'best_ball' || isBestBallSettings(league?.settings)
 
   const byUser = new Map(rosters.map((r) => [r.platformUserId, startersOf(r.playerData)]))
   /*
@@ -137,7 +162,11 @@ export async function loadSideProjections(args: {
   const oppIds = args.liveLineups?.opponent ? [...args.liveLineups.opponent] : byUser.get(args.opponentPlatformUserId) ?? []
   if (yourIds.length === 0 || oppIds.length === 0) return null
 
-  const rosterIds = [...yourIds, ...oppIds].filter(isResolvableId)
+  const dataByUser = new Map(rosters.map((r) => [r.platformUserId, r.playerData]))
+  const rosterPlayers = (key: string) => [...new Set(rosterList(dataByUser.get(key), 'players'))]
+  const yourPlayers = bestBall ? rosterPlayers(args.yourPlatformUserId) : []
+  const oppPlayers = bestBall ? rosterPlayers(args.opponentPlatformUserId) : []
+  const rosterIds = [...yourIds, ...oppIds, ...yourPlayers, ...oppPlayers].filter(isResolvableId)
 
   /*
    * ⚠ `fantasyProjection.playerId` IS A SLEEPER ID, so an ESPN roster priced
@@ -189,7 +218,7 @@ export async function loadSideProjections(args: {
     try {
       const playerRows = await prisma.sportsPlayer.findMany({
         where: { sleeperId: { in: lookupIds } },
-        select: { sleeperId: true, name: true, team: true, sport: true },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true },
       })
       const [statuses, byes] = await Promise.all([
         readInjuryStatusById(sport, namesBySleeperId(playerRows)),
@@ -266,9 +295,38 @@ export async function loadSideProjections(args: {
     }
   }
 
+  const positions = bestBall && lookupIds.length > 0
+    ? composePlayerIdentities(await prisma.sportsPlayer.findMany({
+        where: { sleeperId: { in: lookupIds } },
+        select: { sleeperId: true, name: true, team: true, sport: true, position: true },
+      }))
+    : new Map()
+  const candidates = (ids: string[], key: string): BestBallCandidate[] => {
+    const data = dataByUser.get(key)
+    const inactive = new Set([...rosterList(data, 'reserve'), ...rosterList(data, 'taxi')])
+    return ids.map((id) => {
+      const sleeperId = sleeperIdByRosterId.get(id) ?? id
+      const unavailable = unavailableBySleeperId.get(sleeperId) ?? null
+      const stats = (byPlayer.get(sleeperId)?.stats ?? {}) as Record<string, unknown>
+      const scored = scoring ? computeLeagueProjectedPoints((stats.stats ?? null) as Record<string, unknown> | null, scoring) : null
+      return {
+        playerId: id,
+        position: displayPosition(positions.get(sleeperId)?.position),
+        projected: unavailable ? 0 : scored?.points ?? null,
+        unavailable,
+        inactive: inactive.has(id),
+      }
+    })
+  }
+
   return {
     you: build(yourIds),
     opponent: build(oppIds),
+    ...(bestBall ? { bestBall: {
+      slots: startingSlotTemplate(league?.settings),
+      you: candidates(yourPlayers, args.yourPlatformUserId),
+      opponent: candidates(oppPlayers, args.opponentPlatformUserId),
+    } } : {}),
     // A metadata-only settings object is "no rules" too — see `hasScoringRules`. Without this the
     // eight label-only leagues read "N starters could not be priced", blaming the feed.
     leagueScoring: hasScoringRules(scoring)

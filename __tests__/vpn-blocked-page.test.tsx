@@ -46,3 +46,40 @@ describe("/vpn-blocked", () => {
     expect(html).toContain("Show IP Address")
   })
 })
+
+describe("/vpn-blocked names what it saw", () => {
+  const render = async (why?: string) =>
+    renderToStaticMarkup(await VpnBlockedPage({ searchParams: why === undefined ? {} : { why } }))
+
+  it("tells a Private Relay user it is the relay, not their VPN", async () => {
+    const html = await render("privacy_relay")
+    expect(html).toContain("Turn off iCloud Private Relay to use AllFantasy.ai")
+    expect(html).toContain("We can see iCloud Private Relay")
+  })
+
+  it("tells a VPN user their app may have reconnected", async () => {
+    expect(await render("vpn")).toContain("Connect On Demand")
+  })
+
+  it("falls back to the general page for anything unrecognised", async () => {
+    for (const why of [undefined, "", "constructor", "<script>"]) {
+      const html = await render(why)
+      expect(html, String(why)).toContain("Turn off your VPN to use AllFantasy.ai")
+      expect(html, String(why)).not.toContain("We can see")
+    }
+  })
+})
+
+describe("/vpn-blocked for a Mountain-time Private Relay user on a paid page", () => {
+  it("says free features work and only paid ones need the relay off", async () => {
+    const html = renderToStaticMarkup(await VpnBlockedPage({ searchParams: { why: "privacy_relay", scope: "paid", from: "/pro" } }))
+    expect(html).toContain("Turn off iCloud Private Relay to use paid features")
+    expect(html).toContain("Everything free on AllFantasy.ai still works with Private Relay on")
+  })
+
+  it("ignores scope=paid for anything but Private Relay", async () => {
+    const html = renderToStaticMarkup(await VpnBlockedPage({ searchParams: { why: "vpn", scope: "paid" } }))
+    expect(html).toContain("Turn off your VPN to use AllFantasy.ai")
+    expect(html).not.toContain("paid features")
+  })
+})

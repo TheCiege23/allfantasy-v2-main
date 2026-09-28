@@ -42,6 +42,12 @@ export type CollusionEvidenceLike = {
   priorTradesBetweenPair?: number
   isPlayoffContender?: { team1?: boolean; team2?: boolean }
   redFlags?: string[]
+  /**
+   * Set when the flag was raised by the trade review (2026-09-27 on). Its `redFlags` are then the
+   * review's own sentences — they already say repeat partners and elimination — and it has no model
+   * confidence, because a code-computed check is not a guess.
+   */
+  reviewModel?: string
 }
 
 export type TankingEvidenceLike = {
@@ -212,13 +218,15 @@ export function IntegrityFlagCard({
     const bullets: string[] = []
     if (isCollusion) {
       const c = ev as CollusionEvidenceLike
+      // A review-made flag's red flags already say these in full; the derived lines would repeat them.
+      const derived = typeof c.reviewModel !== 'string'
       const t1Out = c.isPlayoffContender?.team1 === false
       const t2Out = c.isPlayoffContender?.team2 === false
-      if (t1Out && t2Out) bullets.push('Both managers are eliminated from playoff contention.')
-      else if (t1Out || t2Out) bullets.push('One of the two managers is eliminated from playoff contention.')
+      if (derived && t1Out && t2Out) bullets.push('Both managers are eliminated from playoff contention.')
+      else if (derived && (t1Out || t2Out)) bullets.push('One of the two managers is eliminated from playoff contention.')
 
       const prior = c.priorTradesBetweenPair
-      if (typeof prior === 'number' && prior > 0) {
+      if (derived && typeof prior === 'number' && prior > 0) {
         bullets.push(
           `${prior + 1}${prior + 1 === 2 ? 'nd' : prior + 1 === 3 ? 'rd' : 'th'} trade between this pair this season — repeat-partner signal.`,
         )
@@ -268,7 +276,8 @@ export function IntegrityFlagCard({
   }, [ev, isCollusion])
 
   const age = ageLabel(flag.createdAt)
-  const confidencePct = Number.isFinite(flag.aiConfidence) ? Math.round(flag.aiConfidence * 100) : null
+  const fromReview = isCollusion && typeof (ev as CollusionEvidenceLike).reviewModel === 'string'
+  const confidencePct = !fromReview && Number.isFinite(flag.aiConfidence) ? Math.round(flag.aiConfidence * 100) : null
 
   /*
    * ⚠ BUILD RULE 3, ENFORCED HERE RATHER THAN BY THE CALLER. A flag whose
@@ -299,7 +308,9 @@ export function IntegrityFlagCard({
           <span className="af-cm-state af-num">{flag.status}</span>
         </div>
         <div className="af-cm-flagcard-meta af-num">
-          {[confidencePct != null ? `Confidence ${confidencePct}%` : null, age].filter(Boolean).join(' · ')}
+          {[fromReview ? 'Found by the trade review' : confidencePct != null ? `Confidence ${confidencePct}%` : null, age]
+            .filter(Boolean)
+            .join(' · ')}
         </div>
       </div>
 

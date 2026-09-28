@@ -137,9 +137,10 @@ describe('a searched player with no value says why (item #5)', () => {
   })
 
   it('[control] a valued row carries no reason', async () => {
-    searchRows.current = [record('Jaylen Brown', 'NBA', 4200)]
+    // Stored sport values use the grader's conversion before they reach search.
+    searchRows.current = [record('Jaylen Brown', 'NBA', 20)]
     const body = await (await (await route())(req('jaylen', 'NBA'))).json()
-    expect(body[0].value).toBe(4200)
+    expect(body[0].value).toBe(1500)
     expect(body[0].unpricedReason).toBeNull()
   })
 

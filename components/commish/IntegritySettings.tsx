@@ -20,7 +20,6 @@
 
 import { useEffect, useState } from 'react'
 import {
-  COLLUSION_VALUE_GAP_PCT,
   describeCollusionSensitivity,
   describeTankingSensitivity,
   INTEGRITY_SENSITIVITIES,
@@ -128,7 +127,7 @@ export function IntegritySettings({
             does nothing would be worse than surfacing no toggle.
           */}
           <p className="af-cm-setgroup-note">
-            Always on. Analyzes trade values and partner frequency &mdash; no chat access.
+            Always on. Runs the trade review on every settled trade &mdash; value, partners, activity, standings; no chat access.
           </p>
           <div className="af-label">Sensitivity</div>
           <Segmented
@@ -244,8 +243,8 @@ export function IntegritySettings({
       </button>
 
       <p className="af-cm-rail-foot">
-        Flags are private to commissioners until you act on one. Dismissals are logged. A trade is reviewed once the two
-        sides differ by about {COLLUSION_VALUE_GAP_PCT[draft.collusionSensitivity]}%.
+        Flags are private to commissioners until you act on one. Dismissals are logged. Every settled trade is checked
+        with the same review you see on a pending trade; nothing is ever vetoed automatically.
       </p>
     </>
   )

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { evaluateTrade } from '@/lib/decision-os/trade/evaluateTrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { explainPlayerValue, type ScoringContext, type ValueBasis } from '@/lib/trade-value/valueEngine'
@@ -181,10 +181,21 @@ const BASIS_PHRASE: Record<ValueBasis, string> = {
  * Grade a trade described in the message. Returns null when the message is not
  * about a trade at all, so the prompt gains no empty section.
  */
-type DescribedGrade = (args: { leagueId: string; userId: string; give: GradeInputs; get: GradeInputs }) => Promise<TradeGradeView>
+type DescribedGrade = (args: {
+  leagueId: string
+  userId: string
+  give: GradeInputs
+  get: GradeInputs
+}) => Promise<TradeGradeView & { receiptId?: string | null }>
 
-const defaultDescribedGrade: DescribedGrade = async ({ leagueId, userId, give, get }) =>
-  gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), { give, get, viewerSide: false })
+/*
+ * Through the one trade engine (design step 7, 2026-09-27): the same letter `gradeDeal` gave, now saved
+ * as a receipt the answer can name. Not the viewer's side — a prose trade does not say whose it is.
+ */
+const defaultDescribedGrade: DescribedGrade = async ({ leagueId, userId, give, get }) => {
+  const receipt = await evaluateTrade({ surface: 'chimmy-described', leagueId, userId, give, get, viewerSide: false })
+  return { ...receipt.grade, receiptId: receipt.receiptId }
+}
 
 export async function buildDescribedTradeContext(args: {
   message: string
@@ -436,7 +447,7 @@ export async function buildDescribedTradeContext(args: {
           userId: args.userId,
           give: { assets: left.map((p) => ({ kind: 'player' as const, name: p.playerName })), unpriceable: [] },
           get: { assets: right.map((p) => ({ kind: 'player' as const, name: p.playerName })), unpriceable: [] },
-        }).catch((): TradeGradeView => ({ graded: false, reason: 'the trade could not be graded just now.', basis: null }))
+        }).catch((): TradeGradeView & { receiptId?: string | null } => ({ graded: false, reason: 'the trade could not be graded just now.', basis: null }))
       : null
 
   if (!oneGrade) {
@@ -460,7 +471,8 @@ export async function buildDescribedTradeContext(args: {
       `- Side 1 (${sideNames(left)}) gets ${oneGrade.letter} — ${oneGrade.label} for side 1. Side 2 (${sideNames(right)}) gets ${oneGrade.partnerLetter}.`,
       `- League value: side 1 sends ${oneGrade.giveValue.toLocaleString()} (${valueOf('give')}); side 2 sends ${oneGrade.getValue.toLocaleString()} (${valueOf('get')}).`,
       ...oneGrade.moves.map((m) => `- ${m.name}: ${m.base.toLocaleString()} market → ${m.leagueValue.toLocaleString()} here, because ${m.reasons.join('; ')}.`),
-      '- The per-player values listed earlier are context on a different basis. Quote these league values and this letter as the verdict.',
+      '- The per-player values listed earlier are context on a different basis. Quote these league values and this letter as the verdict; state no other grade.',
+      ...(oneGrade.receiptId ? [`- Evaluation receipt: ${oneGrade.receiptId}.`] : []),
     )
   }
 

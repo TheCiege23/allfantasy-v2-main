@@ -52,6 +52,7 @@ already applies to the Neon sandbox's copy of production data.
 | `ENDPOINTS.yaml` | Endpoint × sport registry, params, envelope shape | **Normative** |
 | `fixtures/` | Real captured responses, one per endpoint | **Normative for shape** |
 | `scripts/probe.sh` | One-time fixture capture. Not for runtime. | Tooling |
+| `scripts/trim-fixture.mjs` | Trims a capture to a key-union cover; refuses to lose a key path. | Tooling |
 | `GAPS.md` | Known-unknowns. Append here instead of probing. | Living |
 
 ---

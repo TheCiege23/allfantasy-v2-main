@@ -1,3 +1,4 @@
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 ﻿import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
@@ -164,6 +165,9 @@ async function ensureRedraftSeason(leagueId: string) {
       playoffTeams: true,
       playoffWeeksPerRound: true,
       dynastyConfig: { select: { regularSeasonWeeks: true } },
+      bbContestId: true,
+      bestBallMode: true,
+      settings: true,
     },
   })
   if (!league) throw new Error('League not found')
@@ -176,7 +180,7 @@ async function ensureRedraftSeason(leagueId: string) {
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek =
+  const playoffStartWeek = isNativeTournamentLeague(league) ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15

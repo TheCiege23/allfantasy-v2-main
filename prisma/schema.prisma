@@ -12207,13 +12207,18 @@ model TradeManagerStrategy {
   @@map("trade_manager_strategies")
 }
 
-/// Append-only evidence captured when an AllFantasy trade proposal is created.
+/// Append-only evidence captured when an AllFantasy trade proposal is created — and, since
+/// 2026-09-26, THE one receipt table for every `evaluateTrade()` call: a proposal's receipt is in its
+/// own row, an evaluation that is not a trade gets a row with `tradeId` NULL.
 /// Historical decision grades may use this row; current data must never overwrite it.
 model TradeDecisionSnapshot {
   id                 String   @id @default(cuid())
-  tradeId            String   @unique
-  leagueId           String
-  proposedByUserId   String
+  /// The AfLeagueTrade this receipt belongs to. NULL for an evaluation that is not a trade — an ad-hoc
+  /// `evaluateTrade()` call from /trade-evaluator or the legacy analyzer (2026-09-26). Every reader
+  /// selects by `tradeId`, so those rows are invisible to trade screens by construction.
+  tradeId            String?  @unique
+  leagueId           String?
+  proposedByUserId   String?
   policyVersion      String   @db.VarChar(48)
   format             String   @db.VarChar(32)
   leagueContext      Json
@@ -12229,10 +12234,56 @@ model TradeDecisionSnapshot {
   /// ⚠ Timestamptz for the same reason as TradeManagerStrategy above — the migration that
   /// created this table was hand-written with `TIMESTAMPTZ`.
   capturedAt         DateTime @default(now()) @db.Timestamptz(6)
+  /// Which surface evaluated it: `proposal`, `trade-evaluator`, `legacy-trade-analyze`. NULL on rows
+  /// written before the one trade engine.
+  surface            String?  @db.VarChar(48)
+  /// sha256 of the normalized deal, so the same deal evaluated twice can be found.
+  inputHash          String?  @db.VarChar(64)
+  /// The full `TradeEvaluationReceipt` from `lib/decision-os/trade/evaluateTrade.ts`, as computed.
+  evaluationReceipt  Json?
 
   @@index([leagueId, capturedAt])
   @@index([proposedByUserId, capturedAt])
+  @@index([inputHash])
+  @@index([surface, capturedAt])
   @@map("trade_decision_snapshots")
+}
+
+/// Nightly trade agent suggestions (design build step 9, 2026-09-27). One row per deal suggested to
+/// one AllFantasy user in one league on one night. Suggest-only: nothing here proposes a trade. A deal
+/// qualifies when the one grade reads C for both sides (within 10% on league value) AND each side's
+/// own roster fit gains. Shown only to `userId`; the partner is never told.
+model TradeAgentSuggestion {
+  id              String    @id @default(cuid())
+  leagueId        String    @db.VarChar(64)
+  userId          String    @db.VarChar(64)
+  /// The viewer's roster and the partner's, in `Roster.platformUserId` terms.
+  rosterId        String    @db.VarChar(128)
+  partnerRosterId String    @db.VarChar(128)
+  partnerName     String?   @db.VarChar(128)
+  /// What the viewer sends and receives: [{ playerId, name, position }].
+  give            Json
+  get             Json
+  /// Sorted player ids of both sides — the de-duplication key within a night.
+  dealKey         String    @db.VarChar(512)
+  letter          String    @db.VarChar(2)
+  partnerLetter   String    @db.VarChar(2)
+  percentDiff     Int
+  giveValue       Int
+  getValue        Int
+  /// Signed roster-fit gap for each side, on its own need-weighted values (> 0 = that roster gains).
+  viewerFitPct    Int
+  partnerFitPct   Int
+  basis           String    @db.Text
+  /// The night the suggestion was made (YYYY-MM-DD, UTC).
+  runDate         String    @db.VarChar(10)
+  rank            Int
+  dismissedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([leagueId, userId, runDate, dealKey])
+  @@index([userId, leagueId, runDate])
+  @@map("trade_agent_suggestions")
 }
 
 /// One processing batch (scheduled, manual, FCFS immediate, etc.).
@@ -18781,4 +18832,27 @@ model ProviderTradeOfferAsset {
   @@index([playerId])
   @@index([offerId, assetType])
   @@map("provider_trade_offer_assets")
+}
+
+/// Private request deduplication and crash recovery for Chimmy answers.
+model ChimmyRequestReceipt {
+  id                String   @id
+  userId            String   @map("user_id")
+  fingerprint       String
+  ownerToken        String   @map("owner_token")
+  status            String   @default("processing")
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  response          Json?
+  httpStatus        Int?     @map("http_status")
+  billKind          String?  @map("bill_kind")
+  billState         String?  @map("bill_state")
+  allowanceEndpoint String?  @map("allowance_endpoint")
+  windowStart       DateTime? @map("window_start") @db.Timestamptz(6)
+  windowEnd         DateTime? @map("window_end") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt], map: "chimmy_receipts_user_created")
+  @@index([status, expiresAt], map: "chimmy_receipts_recovery")
+  @@map("chimmy_request_receipts")
 }

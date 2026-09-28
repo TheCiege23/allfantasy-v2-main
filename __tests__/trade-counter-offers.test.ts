@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { evaluateCounterOffers } from '@/lib/trade-value-console/counterOffers'
+import { availableRosterTargets, evaluateCounterOffers } from '@/lib/trade-value-console/counterOffers'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 
 const grade = (give: number, get: number) => gradeTrade({ giveValue: give, getValue: get,
@@ -8,6 +8,37 @@ const grade = (give: number, get: number) => gradeTrade({ giveValue: give, getVa
 const target = (name: string, marketValue: number) => ({ id: name, name, position: 'WR', marketValue })
 
 describe('counteroffer package evaluation', () => {
+  it('excludes both the selected Yahoo identity and its verified Sleeper alias without conflating equal numeric IDs', () => {
+    const targets = [
+      { id: 'selected-yahoo', name: 'Same Name', position: 'LB', marketValue: 300, providerIdentity: { provider: 'yahoo' as const, id: '42' } },
+      { id: 'same-canonical', name: 'Same Name', position: 'LB', marketValue: 300, providerIdentity: { provider: 'sleeper' as const, id: '999' } },
+      { id: 'distinct-sleeper', name: 'Same Name', position: 'DB', marketValue: 300, providerIdentity: { provider: 'sleeper' as const, id: '42' } },
+    ]
+    expect(availableRosterTargets({ targets,
+      selected: [{ kind: 'player', name: 'Same Name', providerIdentity: { provider: 'yahoo', id: '42' } }],
+      selectedProviderIds: [{ provider: 'sleeper', id: '999' }],
+    }).map(t => t.id)).toEqual(['distinct-sleeper'])
+  })
+  it('keeps the visible target list free of selected players without dropping distinct same-name players', () => {
+    const targets = ['42', '43', '44'].map(id => ({ id, name: 'Same Name', position: 'LB', marketValue: id === '44' ? 0 : 300,
+      providerIdentity: { provider: 'sleeper' as const, id } }))
+    expect(availableRosterTargets({ targets: [...targets, targets[1]],
+      selected: [{ kind: 'player', name: 'Same Name', playerId: 'NFL:42' }],
+      selectedProviderIds: [{ provider: 'sleeper', id: '42' }],
+    }).map(t => t.id)).toEqual(['43'])
+    expect(availableRosterTargets({ targets, selected: [{ kind: 'player', name: 'Same Name' }] })).toEqual([])
+  })
+  it('excludes an already selected canonical player across record and provider namespaces', async () => {
+    const evaluate = vi.fn(async () => grade(1000, 980))
+    const offers = await evaluateCounterOffers({ grade: grade(1000, 700),
+      give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Same Name', playerId: 'NFL:42' }],
+      selectedProviderIds: [null, { provider: 'sleeper', id: '42' }], yourTargets: [],
+      theirTargets: ['42', '43'].map(id => ({ id, name: 'Same Name', position: 'LB', marketValue: 300,
+        providerIdentity: { provider: 'sleeper' as const, id } })), evaluate })
+    expect(evaluate).toHaveBeenCalledTimes(1)
+    expect(offers.map(o => o.rosterPlayerId)).toEqual(['43'])
+  })
   it('retains verified IDs for same-name roster candidates and reads the added line value', async () => {
     const current = grade(1000, 700)
     const evaluate = vi.fn(async (_give, get) => {

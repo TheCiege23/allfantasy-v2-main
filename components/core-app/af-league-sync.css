@@ -47,6 +47,11 @@
   border: 1px solid var(--warn);
   color: var(--warn);
 }
+.af-sy-status[data-status='gone'] {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
 .af-sy-status[data-status='never'] {
   background: var(--chip);
   border: 1px solid var(--chip-line);
@@ -114,6 +119,23 @@
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--text2);
+}
+.af-sy-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.af-core .af-sy-alert-actions .af-btn.af-sy-alert-cta {
+  margin-top: 0;
+}
+.af-core .af-btn.af-sy-alert-cta[data-variant='danger'] {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.af-sy-alert .af-sy-alert-error {
+  flex-basis: 100%;
+  color: var(--bad);
 }
 .af-core .af-btn.af-sy-alert-cta {
   align-self: flex-start;
@@ -184,6 +206,16 @@
 .af-sy-conn-when {
   font-size: 16px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+/* The five-minute rosters/transactions read, under the full read it runs far more often than. */
+.af-sy-conn-lane {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.af-sy-conn-lane .af-num {
+  color: var(--text2);
   font-variant-numeric: tabular-nums;
 }
 .af-sy-conn-coarse {

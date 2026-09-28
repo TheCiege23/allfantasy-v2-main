@@ -213,3 +213,32 @@ describe('IntegrityFlagCard — tanking', () => {
     expect(screen.getByRole('button', { name: 'Message @lex' })).toBeTruthy()
   })
 })
+
+describe('IntegrityFlagCard — a flag raised by the trade review (2026-09-27 on)', () => {
+  const REVIEW_EVIDENCE = {
+    ...COLLUSION_EVIDENCE,
+    reviewModel: 'trade-review-v1',
+    redFlags: [
+      '@pav receives 63% more league value.',
+      'These two teams have made 4 trades this season, and every one favours @pav.',
+    ],
+  }
+
+  it('names the review, not a model confidence it does not have', () => {
+    render(<IntegrityFlagCard flag={flag({ aiConfidence: 0, evidenceJson: REVIEW_EVIDENCE })} onDismiss={() => {}} />)
+    expect(screen.getByText(/Found by the trade review/)).toBeTruthy()
+    expect(screen.queryByText(/Confidence/)).toBeNull()
+  })
+
+  it("shows the review's own sentences once — no derived repeat-partner or elimination line beside them", () => {
+    render(<IntegrityFlagCard flag={flag({ aiConfidence: 0, evidenceJson: REVIEW_EVIDENCE })} onDismiss={() => {}} />)
+    expect(screen.getByText(/every one favours @pav/)).toBeTruthy()
+    expect(screen.queryByText(/repeat-partner signal/)).toBeNull()
+    expect(screen.queryByText(/eliminated from playoff contention/)).toBeNull()
+  })
+
+  it('an older, model-scored flag still shows its confidence', () => {
+    render(<IntegrityFlagCard flag={flag({ evidenceJson: COLLUSION_EVIDENCE })} onDismiss={() => {}} />)
+    expect(screen.getByText(/Confidence 71%/)).toBeTruthy()
+  })
+})

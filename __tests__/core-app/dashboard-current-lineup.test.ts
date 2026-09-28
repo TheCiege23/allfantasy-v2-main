@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const live = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/core-app/currentSleeperRoster', () => ({ currentSleeperRoster: live }))
 vi.mock('next/cache', () => ({ unstable_cache: (fn: unknown) => fn }))
+vi.mock('@/lib/injuries/injurySyncState', () => ({ readInjurySyncFreshness: async () => null }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
+  league: { findMany: async () => [] },
+  guillotineRosterState: { findMany: async () => [] },
+  guillotineElimination: { findMany: async () => [] },
   leagueTeam: { findMany: async () => [{ leagueId: 'af-league', platformUserId: 'owner', externalId: '3', teamName: 'NFC Dreaming' }] },
   roster: { findMany: async () => [{ leagueId: 'af-league', playerData: { players: ['sampson', 'hill'], starters: ['sampson'] } }] },
   sportsGame: { findMany: async () => [] },
