@@ -25,6 +25,49 @@ import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { isLeagueConceptType, leagueConceptLabel, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { getConceptById } from '@/lib/league-rules/conceptCatalog'
+import { parseStandingsDivisions } from '@/lib/league-import/standingsDivisions'
+
+/**
+ * The league's named team groups (provider divisions), with the teams in each.
+ *
+ * ⚠ NOTHING IN CHIMMY READ THESE. `settings.standings_divisions` has been stored since 2026-09-17 and
+ * the /core standings screen groups by it, but the grounding packet listed no team at all
+ * ("standings: 20 items (not itemised here)"). So "which teams are New Era?" had no answer in any
+ * context the model saw, although the league had been synced with exactly that split.
+ *
+ * ⚠ A DIVISION IS WHAT THE PROVIDER SAYS, AS OF THE LAST SYNC. In a survivor-style format the
+ * commissioner usually runs the tribes as divisions, but tribes are reshuffled mid-season, and the
+ * split is only as current as whoever last edited it on the host. The line says both.
+ */
+async function describeLeagueGroups(leagueId: string, settings: unknown, concept: unknown): Promise<string | null> {
+  const divisions = parseStandingsDivisions(settings)
+  if (!divisions) return null
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId },
+    select: { externalId: true, teamName: true, ownerName: true },
+  })
+  const members = new Map<string, string[]>()
+  for (const t of teams) {
+    const key = divisions.teams[t.externalId]
+    if (!key) continue
+    const owner = t.ownerName && t.ownerName !== 'Unknown' ? t.ownerName : null
+    const label = t.teamName && t.teamName !== 'Unknown'
+      ? (owner && owner !== t.teamName ? `${t.teamName} (${owner})` : t.teamName)
+      : owner ?? `roster ${t.externalId}, owner not on file`
+    members.set(key, [...(members.get(key) ?? []), label])
+  }
+  if (members.size < 2) return null
+  const survivorStyle = typeof concept === 'string' && /survivor/.test(concept)
+  const groups = [...members.entries()]
+    .map(([key, names]) => `${divisions.names[key] ?? `Division ${key}`} (${names.length}): ${names.join(', ')}`)
+    .join('. ')
+  return `Team groups, from the league's ${divisions.source === 'sleeper' ? 'Sleeper' : 'ESPN'} divisions as of the last sync: ${groups}.${
+    survivorStyle
+      ? ' In a survivor-style league these divisions are usually the tribes. Tribes are reshuffled during the season, so present this as the last synced split, which may predate a shuffle.'
+      : ''
+  }`
+}
 
 function withTimeout<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -77,7 +120,20 @@ export async function resolveLeagueIntelligenceGrounding(args: {
       lines.push(
         `AllFantasy league concept: ${leagueConceptLabel(leagueConcept)}. Use this concept when reasoning about roster horizon, trade value, elimination risk, and league-specific strategy.`,
       )
+      /*
+       * ⚠ THE LABEL ALONE TOLD THE MODEL NOTHING. Asked about the "New Era" and "Old School" tribes of
+       * a confirmed Survivor All-Stars Guillotine league (2026-09-28), Chimmy said "guillotine as a
+       * format has no factions". It had the name of the format and none of its rules. The catalog
+       * entry's own summary, and any action the format forbids, go in with it.
+       */
+      const entry = getConceptById(leagueConcept)
+      if (entry) {
+        const banned = entry.actions.filter((a) => a.legalInFormat === false).map((a) => `${a.label}${a.note ? ` (${a.note})` : ''}`)
+        lines.push(`What ${entry.label} means: ${entry.summary}${banned.length ? ` Not part of this format: ${banned.join('; ')}.` : ''}`)
+      }
     }
+    const groups = await withTimeout(describeLeagueGroups(leagueId, league.settings, leagueConcept), 1500)
+    if (groups) lines.push(groups)
     if (context.houseRules.pirate?.active) {
       lines.push(
         'HOUSE RULE (declared): PIRATE league — every matchup winner steals a player from the loser. Weekly floor beats season ceiling; concentrated value is risk; weigh every roster/trade/draft answer accordingly.',
