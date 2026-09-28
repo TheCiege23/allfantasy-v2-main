@@ -37,9 +37,9 @@ jobs:
       run:
         working-directory: ios-app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -71,11 +71,17 @@ jobs:
           umask 077
           printf '%s\n' "$P8" > "$RUNNER_TEMP/AuthKey.p8"
 
-      - name: Archive
+      # ⚠ The archive is built UNSIGNED, on purpose. Automatic signing during
+      # `archive` signs for DEVELOPMENT, and Apple only issues a development
+      # profile to a team with at least one registered device — this team has
+      # none, so the first run died with "Your team has no devices from which to
+      # generate a provisioning profile". The only signature that ships is the
+      # App Store distribution one, and the export step below applies it
+      # (cloud-managed certificate + App Store profile, via the API key). No
+      # device is needed for that.
+      - name: Archive (unsigned)
         env:
           TEAM: ${{ secrets.APPLE_TEAM_ID }}
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           MARKETING_VERSION: ${{ inputs.marketing_version }}
         run: |
           xcodebuild archive \
@@ -84,12 +90,10 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER" \
             DEVELOPMENT_TEAM="$TEAM" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             MARKETING_VERSION="$MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
