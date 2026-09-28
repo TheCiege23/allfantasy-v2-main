@@ -60,10 +60,14 @@ async function main() {
       return Array.isArray(pd?.players) ? pd!.players.map(String) : []
     }))]
     const rows = await prisma.$queryRawUnsafe<Array<{ sid: string; name: string | null; position: string | null }>>(
-      `SELECT s.sid, coalesce(sp.name, p.name) AS name, coalesce(sp.position, p.position) AS position
+      // Labels come from Sleeper's own record. A `sports_players` `NFL:<id>` row is NOT a safe label:
+      // other providers' ids were written in that form, so 6770 read as Trent McDuffie, not Joe
+      // Burrow, and the first run of this audit mis-grouped those slots as defenders (see #1511).
+      `SELECT s.sid, p.name, p.position
          FROM unnest($1::text[]) AS s(sid)
-         LEFT JOIN sports_players sp ON sp.id = 'NFL:' || s.sid
-         LEFT JOIN LATERAL (SELECT name, position FROM "SportsPlayer" WHERE "sleeperId" = s.sid LIMIT 1) p ON true`, ids)
+         LEFT JOIN LATERAL (SELECT name, position FROM "SportsPlayer"
+                             WHERE "sleeperId" = s.sid AND sport = 'NFL'
+                             ORDER BY (source = 'sleeper') DESC, "updatedAt" DESC LIMIT 1) p ON true`, ids)
     const idpLineup = JSON.stringify((league.settings as { roster_positions?: unknown } | null)?.roster_positions ?? []).match(/"(LB|DL|DB|IDP_FLEX|DE|DT|CB|S)"/) != null
     const base = { leagueId, league: league.name, leagueType: league.leagueType ?? '?', idpLineup }
     const opts = {
