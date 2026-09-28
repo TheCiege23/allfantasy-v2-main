@@ -232,6 +232,20 @@ describe('computeRosterImpact', () => {
     expect(r.startingPointsAfter! - r.startingPointsBefore!).toBe(19)
   })
 
+  it('reports WHO starts before and after — the lineup the points were computed on (commissioner review)', () => {
+    const r = computeRosterImpact({
+      roster,
+      slots: SLOTS,
+      incoming: [p('wr9', 'WR', 25)],
+      outgoingPlayerIds: ['rb3'],
+    })
+    expect(r.startersBefore).toContain('rb3')
+    expect(r.startersAfter).toContain('wr9')
+    expect(r.startersAfter).not.toContain('rb3')
+    // One starter per starting slot, never a bench slot.
+    expect(r.startersBefore).toHaveLength(SLOTS.filter((s) => s !== 'BN').length)
+  })
+
   it('reports a negative delta when the trade weakens the lineup', () => {
     const r = computeRosterImpact({
       roster,

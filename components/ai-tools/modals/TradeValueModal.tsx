@@ -21,7 +21,6 @@ import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { buildLeagueFormatLabel } from '@/lib/leagues/leagueFormatLabel'
-import { describeTradeCanonicalOpinion } from '@/lib/decision-os/trade/canonicalVisibility'
 import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
@@ -458,29 +457,18 @@ export function TradeValueModal({
     }
   }, [detailId])
 
-  const proposalGrade = result?.grade as { graded?: boolean; reason?: string } | undefined
+  /*
+   * 🛑 THE ONE GRADE, SHOWN AS A LETTER (Trade OS, 2026-09-27). This modal used to print no letter of
+   * the one grade at all — its only letter was the canonical memo's "Decision OS" second opinion, a
+   * scale of its own that could "disagree with the console". That block is gone; this is the letter
+   * every other trade screen shows for the same deal.
+   */
+  const proposalGrade = result?.grade as
+    | { graded?: boolean; reason?: string; letter?: string; partnerLetter?: string }
+    | undefined
   const proposalUnavailable = proposalGrade?.graded === false
   const fairnessScore = !proposalUnavailable && typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
   const labels = result?.labels as { fairnessLabel?: string; confidenceLabel?: string } | undefined
-  /**
-   * Phase 3B (alongside). Absent unless DECISION_OS_TRADE_CANONICAL_VISIBLE is on AND the
-   * canonical engine produced a comparison, so `undefined` here means "no second opinion"
-   * rather than "an opinion of nothing".
-   */
-  const decisionOs = result?.decisionOs as
-    | {
-        grade: string | null
-        confidence: number
-        advantage: 'even' | 'you' | 'opponent' | null
-        agreesWithConsole: boolean | null
-      }
-    | undefined
-  /**
-   * The three honesty states, resolved by a tested pure function rather than decided in JSX. The
-   * previous version named all three in a comment and branched on `grade` alone, so `confidence: 0`
-   * — which is EVERY trade observation production has recorded — rendered as a confident grade.
-   */
-  const decisionOsState = describeTradeCanonicalOpinion(decisionOs ?? null)
   const secondary = result?.secondary as Record<string, unknown> | undefined
   // Trade depth (AF Pro): the route withheld the breakdown below the verdict for a locked viewer.
   const tradeDepth = (result?.depth ?? null) as CoreDepthAccess | null
@@ -912,42 +900,12 @@ export function TradeValueModal({
           <span className="font-semibold text-[#00d4aa]">{proposalUnavailable ? 'Grade unavailable' : labels?.fairnessLabel ?? 'Run analysis to score this deal.'}</span>{' '}
           {proposalUnavailable ? proposalGrade.reason : labels?.confidenceLabel ? <span className="text-[#5c6480]">· {labels.confidenceLabel}</span> : null}
         </p>
-        {/*
-          * A SECOND OPINION, NEVER THE VERDICT. The console's own answer above is unchanged; this
-          * sits beneath it, clearly attributed.
-          *
-          * ⚠ The three states are resolved by `describeTradeCanonicalOpinion`, NOT here. An earlier
-          * version listed all three in this comment and then branched on `grade` alone — the
-          * comment was right and the code was wrong, and nothing caught it because this modal has
-          * no test. Keep the branching in the tested function; this block only chooses words.
-          */}
-        {!proposalUnavailable && decisionOsState ? (
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#9ba3bf]">
-            <span className="rounded-[3px] bg-[#1b2030] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-[#7c88ad]">
-              Decision OS
-            </span>
-            {decisionOsState?.kind === 'opinion' ? (
-              <>
-                <span className="font-semibold text-[#c8d4f0]">Grade {decisionOsState.grade}</span>
-                <span className="text-[#5c6480]">{'·'} confidence {decisionOsState.confidence}/100</span>
-                {decisionOsState.agreesWithConsole === true ? (
-                  <span className="text-[#00d4aa]">{'·'} agrees with the console</span>
-                ) : decisionOsState.agreesWithConsole === false ? (
-                  <span className="text-[#d98b7c]">{'·'} disagrees with the console</span>
-                ) : (
-                  <span className="text-[#5c6480]">{'·'} not comparable to the console verdict</span>
-                )}
-              </>
-            ) : decisionOsState?.kind === 'no_signal' ? (
-              <span className="text-[#5c6480]">
-                nothing in this deal could be priced {'·'} confidence 0/100, so there is no second
-                opinion {'—'} not a neutral one
-              </span>
-            ) : (
-              <span className="text-[#5c6480]">
-                could not price this deal {'·'} no second opinion, not a neutral one
-              </span>
-            )}
+        {proposalGrade?.graded && proposalGrade.letter ? (
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[#9ba3bf]" data-testid="trade-value-one-grade">
+            <span className="font-semibold text-[#c8d4f0]">Your grade {proposalGrade.letter}</span>
+            {proposalGrade.partnerLetter ? (
+              <span className="text-[#5c6480]">{'·'} theirs {proposalGrade.partnerLetter}</span>
+            ) : null}
           </p>
         ) : null}
         {rosterSummary?.lineupSimulation ? (

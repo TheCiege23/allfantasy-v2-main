@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { resolvePlayerNamesForSport } from "@/lib/roster/resolvePlayerNames"
 import type { ActivityFeedItem, ActivityLeagueEntry, ActivitySourceContext } from "@/lib/activity/types"
 import { isNativePlatform } from "@/lib/league/isNativeLeague"
+import { nativeTradeReceiptGrades } from "@/lib/activity/tradeGrades"
 
 
 /** Only surface recent native events — matches the ~2-week window the Sleeper source uses. */
@@ -190,6 +191,15 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
 
     const items: ActivityFeedItem[] = []
 
+    /*
+     * Each trade's letters, AT PROPOSAL, from its frozen receipt — one query for every trade here
+     * (`lib/activity/tradeGrades.ts`). A trade without a readable receipt simply has no grade line.
+     */
+    const receiptGrades = await nativeTradeReceiptGrades(
+      trades.map((t) => t.id),
+      (rosterId) => managerNames.get(rosterId) ?? "A manager",
+    )
+
     // Completed trades → "Manager A gets X · Manager B gets Y".
     for (const trade of trades) {
       const byReceiver = new Map<string, string[]>()
@@ -215,6 +225,8 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
         leagueName: nameForLeague(trade.leagueId),
         href: `/league/${trade.leagueId}`,
         source: "native",
+        // Only when there is one — an item without a grade keeps its old shape exactly.
+        ...(receiptGrades.has(trade.id) ? { tradeGrade: receiptGrades.get(trade.id)! } : {}),
       })
     }
 

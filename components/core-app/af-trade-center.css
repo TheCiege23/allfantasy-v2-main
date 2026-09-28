@@ -2401,6 +2401,14 @@
   font-size: 11px;
   line-height: 1.45;
 }
+/* THE grade for a suggested deal — see TradePartnerSuggestions. */
+.af-tc-fit-grade { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
+.af-tc-fit-grade strong { font-size: 18px; font-weight: 800; color: var(--text); }
+.af-tc-fit-grade[data-letter='A'] strong { color: #34d399; }
+.af-tc-fit-grade[data-letter='B'] strong { color: #5eead4; }
+.af-tc-fit-grade[data-letter='C'] strong { color: #fbbf24; }
+.af-tc-fit-grade[data-letter='D'] strong { color: #fb923c; }
+.af-tc-fit-grade[data-letter='F'] strong { color: #fb5b78; }
 .af-tc-fit-actions {
   display: flex;
   flex-wrap: wrap;

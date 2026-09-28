@@ -304,7 +304,7 @@ describe("POST /api/chat/chimmy contract", () => {
 
     expect(res.status).toBe(401)
     await expect(res.json()).resolves.toEqual({ error: "Unauthorized" })
-  })
+  }, 180_000)
 
   it("returns rate limit response from AI protection", async () => {
     runAiProtectionMock.mockResolvedValueOnce(

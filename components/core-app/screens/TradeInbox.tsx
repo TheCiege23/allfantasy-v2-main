@@ -1,6 +1,6 @@
 'use client'
 import type { TradeRecord } from '@/lib/core-app/trades'
-import { assetValues, gradeReasons, importedTradeTimelineRows, type TimelineAsset } from '@/lib/core-app/importedTradeTimeline'
+import { assetValues, gradeReasons, importedTradeTimelineRows, mergeImportedTradeTimelineRows, type TimelineAsset } from '@/lib/core-app/importedTradeTimeline'
 
 import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
@@ -540,8 +540,8 @@ export function TradeInbox(props: {
   const nativeIncoming = nativeOpen.filter((t) => t.direction === 'incoming')
 
   const timeline = (() => {
-    const rows: NativeRow[] = [...importedTradeTimelineRows(props.importedHistory ?? []), ...(data?.activeTrades ?? []), ...(data?.historyTrades ?? [])]
-    const unique = Array.from(new Map(rows.map((row) => [row.id, row])).values())
+    const unique: NativeRow[] = mergeImportedTradeTimelineRows(importedTradeTimelineRows(props.importedHistory ?? []),
+      [...(data?.activeTrades ?? []), ...(data?.historyTrades ?? [])])
     return unique
       .filter((row) => {
         if (timelineFilter === 'needs_you') return row.direction === 'incoming' && !isCompleteStatus(row.status) && !isClosedStatus(row.status)

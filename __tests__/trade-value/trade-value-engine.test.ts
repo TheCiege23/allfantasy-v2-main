@@ -8,7 +8,7 @@ import {
   FAAB_FULL_BUDGET_VALUE,
 } from '@/lib/trade-value/valueEngine'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
-import { gradeTrade } from '@/lib/trade-value/grader'
+import { canonicalFairnessGrade as gradeTrade } from '@/lib/decision-os/trade/fairnessGrader'
 import { buildTradeValueSnapshot } from '@/lib/trade-value/snapshot'
 import type { SideTotals } from '@/lib/trade-value/types'
 

@@ -1627,7 +1627,7 @@ export default async function AfCorePage({
           }
           recommendationSlot={
             <Suspense key={selectedLeagueId} fallback={null}>
-              <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} />
+              {activeKey === 'home' ? <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} /> : null}
             </Suspense>
           }
         />
@@ -3793,7 +3793,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <>
-            {myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
+            {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
               leagueId: myTeam.league.id,
               leagueName: myTeam.league.name,
               starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
@@ -4107,7 +4107,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             */
             blurb={
               gamePlan?.available
-                ? 'Every decision still open across all your leagues, soonest deadline first. Scouting a room is per-league — pick one below for that.'
+                ? 'Flagged starters in active manual lineups, soonest deadline first; locked players follow. Scouting a room is per-league — pick one below for that.'
                 : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
             }
             issues={issues}

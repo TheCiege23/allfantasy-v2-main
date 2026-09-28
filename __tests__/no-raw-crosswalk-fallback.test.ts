@@ -51,7 +51,9 @@ describe('no raw crosswalk fallback', () => {
         })
     }
     expect(offenders).toEqual([])
-  })
+    // It reads every file under lib/ — thousands. Measured 86s on a contended USB checkout against
+    // vitest's 30s default; CI is far faster, but a timeout here is not a pass and must not look like one.
+  }, 180_000)
 
   it('the pattern catches the shape it bans, and only that (positive and negative controls)', () => {
     expect(RAW_FALLBACK.test('const x = sleeperIdByRosterId.get(id) ?? id')).toBe(true)

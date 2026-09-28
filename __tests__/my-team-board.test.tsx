@@ -60,6 +60,12 @@ function pulse(over: Partial<MyTeamPulse> = {}): MyTeamPulse {
 }
 
 describe('paused league accounting', () => {
+  it('reports checked automatic teams separately from excluded inactive teams', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({ considered: 12, checked: 3, automatic: 2, notChecked: { noRoster: 0, noLineup: 0, automatic: 0, inactive: 9 } })} now={NOW} allHref={ALL_HREF} />)
+    expect(container.textContent).toContain('2 Best Ball teams use automatic lineups')
+    expect(container.textContent).not.toContain('0 Best Ball teams')
+    expect(container.textContent).not.toContain('12 teams read')
+  })
   it('does not turn an inventory-only picker into a healthy lineup verdict', () => {
     const { container } = render(<PickALeague tabKey="my-team" title="My team" blurb="Choose a league" issues={[]} leagues={[{ id: 'l1', name: 'My league' }]} showQueue={false} />)
     expect(container.textContent).not.toContain('Nothing in your leagues is waiting')

@@ -8,7 +8,14 @@ import {
   pickPricerFrom,
   withheldTradeReason,
 } from '@/lib/core-app/tradePicks'
-import { gradeTrade } from '@/lib/projections/tradeGrading'
+import { hasNoSignal, sideMath, type TradeSide } from '@/lib/projections/tradeGrading'
+
+/*
+ * These were written against the rank-space `gradeTrade`, deleted on 2026-09-26 with no runtime
+ * caller (the one trade engine is `lib/decision-os/trade/evaluateTrade.ts`). What they assert was
+ * always COVERAGE — can this trade be priced at all — and that is `hasNoSignal`, which stays.
+ */
+const priceable = (received: TradeSide, gave: TradeSide) => !hasNoSignal(received, gave)
 
 /*
  * The KBFL trade these rules were written from, read off Sleeper on 2026-09-20:
@@ -85,20 +92,22 @@ describe('gradeableSide', () => {
    * 2027 1st at ZERO and hands the letter to whichever side gave it away.
    */
   it('refuses a letter when the unpriced half of a trade is draft picks', () => {
-    const g = gradeTrade(
-      { label: 'received', assets: gradeableSide(['brown'], priced, pickAssets([])) },
-      { label: 'gave', assets: gradeableSide(['monty'], priced, pickAssets(TITANUP_GOT)) },
-    )
-    expect(g.graded).toBe(false)
+    expect(
+      priceable(
+        { label: 'received', assets: gradeableSide(['brown'], priced, pickAssets([])) },
+        { label: 'gave', assets: gradeableSide(['monty'], priced, pickAssets(TITANUP_GOT)) },
+      ),
+    ).toBe(false)
   })
 
   /* The control: the same shape with no picks still grades, so the test above can fail. */
   it('still grades a players-only trade', () => {
-    const g = gradeTrade(
-      { label: 'received', assets: gradeableSide(['brown'], priced, []) },
-      { label: 'gave', assets: gradeableSide(['monty'], priced, []) },
-    )
-    expect(g.graded).toBe(true)
+    expect(
+      priceable(
+        { label: 'received', assets: gradeableSide(['brown'], priced, []) },
+        { label: 'gave', assets: gradeableSide(['monty'], priced, []) },
+      ),
+    ).toBe(true)
   })
 
   /*
@@ -106,12 +115,12 @@ describe('gradeableSide', () => {
    * card gave — "one side has no assets on record" — about a side holding three picks.
    */
   it('does not report a picks-only side as having no assets', () => {
-    const g = gradeTrade(
-      { label: 'received', assets: gradeableSide([], priced, pickAssets(TITANUP_GOT)) },
-      { label: 'gave', assets: gradeableSide(['brown', 'monty'], priced, pickAssets(TITANUP_GAVE)) },
-    )
-    expect(g.graded).toBe(false)
-    if (!g.graded) expect(g.reason).not.toBe('NO_ASSETS')
+    const received = { label: 'received', assets: gradeableSide([], priced, pickAssets(TITANUP_GOT)) }
+    const gave = { label: 'gave', assets: gradeableSide(['brown', 'monty'], priced, pickAssets(TITANUP_GAVE)) }
+    expect(priceable(received, gave)).toBe(false)
+    // Refused for coverage (unpriced picks), not because the side is empty.
+    expect(received.assets.length).toBeGreaterThan(0)
+    expect(sideMath(received).covered).toBeLessThan(sideMath(received).total)
   })
 })
 
@@ -350,14 +359,11 @@ describe('pricing the KBFL trade', () => {
   const priced = (id: string) => (id === 'brown' ? 12 : id === 'monty' ? 60 : null)
   const price = pickPricerFrom(PICK_ROWS)
 
-  const kbfl = (p?: ReturnType<typeof pickPricerFrom>) =>
-    gradeTrade(
-      { label: 'received', assets: gradeableSide([], priced, pickAssets(TITANUP_GOT, p), p) },
-      {
-        label: 'gave',
-        assets: gradeableSide(['brown', 'monty'], priced, pickAssets(TITANUP_GAVE, p), p),
-      },
-    )
+  const kbfl = (p?: ReturnType<typeof pickPricerFrom>) => {
+    const received = { label: 'received', assets: gradeableSide([], priced, pickAssets(TITANUP_GOT, p), p) }
+    const gave = { label: 'gave', assets: gradeableSide(['brown', 'monty'], priced, pickAssets(TITANUP_GAVE, p), p) }
+    return { graded: priceable(received, gave), received: sideMath(received), gave: sideMath(gave) }
+  }
 
   /*
    * 🛑 THE HEADLINE. This is the real trade the board showed as "ungraded: one side has no
@@ -366,13 +372,14 @@ describe('pricing the KBFL trade', () => {
   it('grades a trade whose whole side is draft picks', () => {
     const g = kbfl(price)
     expect(g.graded).toBe(true)
-    if (g.graded) expect(['A', 'B', 'C', 'D', 'F']).toContain(g.letter)
+    expect(g.received.value).toBeGreaterThan(0)
+    expect(g.gave.value).toBeGreaterThan(0)
   })
 
   /*
    * THE POSITIVE CONTROL, and it is the same trade. Take the pricer away and the letter goes
    * away with it — so the test above is reporting the pricing and not merely the fact that
-   * `gradeTrade` returns something.
+   * the trade has assets at all.
    */
   it('withholds the same trade when the book prices no picks', () => {
     expect(kbfl(undefined).graded).toBe(false)
@@ -384,11 +391,12 @@ describe('pricing the KBFL trade', () => {
    * than no grade: it would price the covered picks and treat the uncovered one as worthless.
    */
   it('withholds when only some of the picks are covered', () => {
-    const g = gradeTrade(
-      { label: 'received', assets: gradeableSide([], priced, pickAssets([{ season: '2029', round: 1 }], price), price) },
-      { label: 'gave', assets: gradeableSide(['brown'], priced, [], price) },
-    )
-    expect(g.graded).toBe(false)
+    expect(
+      priceable(
+        { label: 'received', assets: gradeableSide([], priced, pickAssets([{ season: '2029', round: 1 }], price), price) },
+        { label: 'gave', assets: gradeableSide(['brown'], priced, [], price) },
+      ),
+    ).toBe(false)
   })
 
   it('puts a market value on the pick it prices, for the card to show', () => {

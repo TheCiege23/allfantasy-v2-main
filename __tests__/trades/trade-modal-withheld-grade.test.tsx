@@ -8,7 +8,9 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 async function analyze(graded: boolean) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => String(url).includes('/api/trade-value/analyze')
     ? { ok: true, status: 200, json: async () => ({
-      grade: { graded, reason: 'One asset has no recorded value.' },
+      grade: graded ? { graded, letter: 'C', partnerLetter: 'C' } : { graded, reason: 'One asset has no recorded value.' },
+      // The canonical memo's second opinion, on a scale of its own. The modal must not print it.
+      decisionOs: { grade: 'A', confidence: 80, advantage: 'you', agreesWithConsole: false },
       fairnessScore: graded ? 49 : 100, confidenceScore: 72,
       labels: { fairnessLabel: 'Even', confidenceLabel: 'MEDIUM' },
       players: { give: [], get: [] },
@@ -44,5 +46,16 @@ describe('trade modal withheld grade', () => {
     expect(screen.getByText('49')).toBeTruthy()
     expect(screen.getByText('Confidence 72%')).toBeTruthy()
     expect(screen.queryByText('Grade unavailable')).toBeNull()
+  })
+  it('shows the ONE grade as a letter, and never the canonical memo second opinion', async () => {
+    await analyze(true)
+    expect(screen.getByTestId('trade-value-one-grade').textContent).toContain('Your grade C')
+    expect(screen.queryByText('Grade A')).toBeNull()
+    expect(screen.queryByText(/disagrees with the console/)).toBeNull()
+    expect(screen.queryByText('Decision OS')).toBeNull()
+  })
+  it('a withheld grade shows no letter at all', async () => {
+    await analyze(false)
+    expect(screen.queryByTestId('trade-value-one-grade')).toBeNull()
   })
 })

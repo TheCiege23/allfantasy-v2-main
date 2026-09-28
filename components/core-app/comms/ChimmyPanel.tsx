@@ -589,6 +589,7 @@ export function ChimmyPanel({
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
+  const retryRequestRef = useRef<{key:string;file:File|null;form:FormData}|null>(null)
   const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -642,6 +643,10 @@ export function ChimmyPanel({
       const question = text.trim()
       /* Captured once: the retry after a consent prompt must send the same file. */
       const attached = screenshot
+      const requestKey = JSON.stringify([question,scopeId,answerMode,publicMode,source,sport])
+      const retained = retryRequestRef.current
+      const retryForm = retained?.key === requestKey && retained.file === attached ? retained.form : null
+      const requestId = String(retryForm?.get('requestId') ?? crypto.randomUUID())
       if ((!question && !attached) || busy) return
       setDraft('')
       setError(null)
@@ -664,7 +669,9 @@ export function ChimmyPanel({
          * drawer is not worth one.
          */
         const buildForm = (confirmed: boolean) => {
+          if (retryForm) { if (confirmed) retryForm.set('confirmTokenSpend','true'); return retryForm }
           const form = new FormData()
+          form.append('requestId', requestId)
           form.append('message', question)
           if (confirmed) form.append('confirmTokenSpend', 'true')
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
@@ -694,12 +701,13 @@ export function ChimmyPanel({
               })),
             ),
           )
+          retryRequestRef.current = {key:requestKey,file:attached,form}
           return form
         }
 
         /* Only the request itself failing means the connection — a bug further down is not a network error. */
         const post = (confirmed: boolean) =>
-          fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(confirmed) }).catch(() => {
+          import('@/lib/chimmy/postRequest').then(({ postChimmyRequest }) => postChimmyRequest(buildForm(confirmed))).catch(() => {
             throw new ChimmyAskError(describeChimmyFailure(null, null))
           })
         let res = await post(false)
@@ -719,6 +727,7 @@ export function ChimmyPanel({
          * from what this drawer last knew.
          */
         const outOfTokens = (from: ChimmyEnvelope) => {
+          retryRequestRef.current = null
           setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
           setDraft(question)
           if (activeScope.current === scopeId) {
@@ -760,6 +769,8 @@ export function ChimmyPanel({
           outOfTokens(payload)
           return
         }
+
+        if (payload.code !== 'chimmy_request_recovery_pending') retryRequestRef.current = null
 
         if (!res.ok) {
           /*

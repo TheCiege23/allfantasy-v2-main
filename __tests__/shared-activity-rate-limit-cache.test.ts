@@ -27,6 +27,14 @@ vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 vi.mock("@/lib/dashboard/get-dashboard-league-list", () => ({
   getDashboardLeagueListForUser: getLeagueListMock,
+  /*
+   * ⚠ THE ROUTE MOVED TO THIS RESOLVER (d220c6e650) AND THE MOCK DID NOT. Every request then threw
+   * "No getActivityLeaguesForUser export" inside the route's catch, so the cache and rate-limit
+   * assertions below were failing on main against a 500, not testing the guard. Delegating to the
+   * same mock keeps "the DB was resolved N times" counting the resolver the route actually calls.
+   */
+  getActivityLeaguesForUser: async (...args: unknown[]) =>
+    ((await getLeagueListMock(...args)) as { leagues: unknown[] }).leagues,
 }))
 vi.mock("@/lib/activity/sources/nativeLeagueActivity", () => ({
   collectNativeLeagueActivity: nativeSourceMock,

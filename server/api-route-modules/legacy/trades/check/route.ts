@@ -1,11 +1,15 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
-import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { getAllPlayers, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/sleeper-client'
-import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
-import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { requireLegacySleeperIdentity, type LegacyIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { evaluateTrade } from '@/lib/decision-os/trade/evaluateTrade'
+import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
+import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
+import { legacyVerdictFromGrade } from '@/lib/decision-os/trade/receiptViews'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { shownTradeGrade, type EngineTradeAnalysis, ENGINE_ANALYSIS_MARKER } from '@/lib/decision-os/trade/legacyTradeNotificationGrade'
 
 type SleeperTransaction = {
   transaction_id: string
@@ -51,100 +55,76 @@ function getPlayerName(playerId: string, players: Record<string, SleeperPlayer>)
   return p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || playerId
 }
 
-const openai = getOpenAIRouteClient()
+/**
+ * The one engine's grade for a completed trade, from the SENDER's side (the first roster id), plus the
+ * explanation of it. Stored on `TradeNotification` as `aiGrade` / `aiVerdict` / `aiAnalysis`.
+ *
+ * 🛑 THIS USED TO ASK GPT FOR A LETTER FROM PLAYER NAMES ALONE (temperature 0.7, no values, no league),
+ * on its own A+..F scale — and Chimmy's auto trade evaluation turned that letter into a "Trade score".
+ * Now the letter is `evaluateTrade()`'s, priced on the league's own values, and the text is
+ * `explainTrade()`'s validated explanation of that receipt.
+ *
+ * ⚠ ONLY A SIGNED-IN VIEWER'S OWN LEAGUE IS GRADED. `evaluateTrade` trusts its caller to have proven
+ * membership; `resolveEvaluationLeagueId` is that proof, and it needs an AllFantasy user id. A guest
+ * session has none, so its trades are stored with the grade withheld and the reason — never a guess.
+ */
+const PICK_LABEL = /^(\d{4}) Round (\d+)$/
 
-async function analyzeTrade(
-  playersGiven: string[],
-  playersReceived: string[],
-  picksGiven: string[],
-  picksReceived: string[],
-  leagueName: string,
-  opts?: { leagueId?: string | null; userId?: string | null }
-) {
-  const prompt = `Analyze this trade for the "sender" perspective (first person):
-
-League: ${leagueName}
-
-SENDER GIVES: ${[...playersGiven, ...picksGiven].join(', ') || 'Nothing'}
-SENDER RECEIVES: ${[...playersReceived, ...picksReceived].join(', ') || 'Nothing'}
-
-Provide a quick analysis with:
-1. A letter grade (A+, A, A-, B+, B, B-, C+, C, C-, D, F) for the sender
-2. A verdict (Fair, Slightly favors Sender, Slightly favors Receiver, Strongly favors Sender, Strongly favors Receiver)
-3. A brief 2-3 sentence expert analysis
-4. One counter-offer suggestion if the grade is C or lower
-
-Return JSON only:
-{
-  "grade": "B+",
-  "verdict": "Fair",
-  "expertAnalysis": "Brief analysis...",
-  "counterOffer": "Optional counter..."
-}`
-
-  const cachePayload = {
-    feature: 'legacy-trades-check-analysis',
-    leagueId: opts?.leagueId ?? null,
-    userId: opts?.userId ?? null,
-    leagueName,
-    playersGiven: [...playersGiven].sort(),
-    playersReceived: [...playersReceived].sort(),
-    picksGiven: [...picksGiven].sort(),
-    picksReceived: [...picksReceived].sort(),
-    promptVersion: 'v1',
+function sideInputs(players: string[], picks: string[]): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const name of players) {
+    if (name.trim()) out.assets.push({ kind: 'player', name: name.trim() })
+    else out.unpriceable.push('a player with no name')
   }
+  for (const label of picks) {
+    const m = PICK_LABEL.exec(label.trim())
+    if (m) out.assets.push({ kind: 'pick', year: Number(m[1]), round: Number(m[2]) })
+    else out.unpriceable.push(label)
+  }
+  return out
+}
 
-  const aiResult = await getOrCreateAiResult({
-    feature: 'legacy-trades-check-analysis',
-    scopeType: 'league',
-    scopeId: opts?.leagueId ?? `global:${leagueName.toLowerCase()}`,
-    provider: 'openai',
-    model: 'gpt-4o',
-    payload: cachePayload,
-    ttlSeconds: 2 * 60 * 60,
-    onCacheMiss: async () => {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: 'You are an elite dynasty fantasy football analyst. Return valid JSON only.' },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: 500,
-        temperature: 0.7,
-      })
-
-      const content = completion.choices[0]?.message?.content || '{}'
-      return {
-        resultText: content,
-        resultJson: { content },
-        tokenPrompt: completion.usage?.prompt_tokens ?? null,
-        tokenOutput: completion.usage?.completion_tokens ?? null,
-      }
+async function gradeCompletedTrade(args: {
+  playersGiven: string[]
+  playersReceived: string[]
+  picksGiven: string[]
+  picksReceived: string[]
+  sleeperLeagueId: string
+  identity: LegacyIdentity
+  senderName: string
+  receiverName: string
+}): Promise<EngineTradeAnalysis> {
+  const userId = args.identity.source === 'session' ? args.identity.actorId : null
+  const leagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: args.sleeperLeagueId, userId })
+  const receipt = await evaluateTrade(
+    {
+      surface: 'legacy-trades-check',
+      leagueId,
+      userId,
+      give: sideInputs(args.playersGiven, args.picksGiven),
+      get: sideInputs(args.playersReceived, args.picksReceived),
+      viewerSide: false,
     },
+    leagueId ? {} : { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) },
+  )
+  const explanation = await explainTrade({
+    receipt,
+    teamNames: { teamA: args.senderName, teamB: args.receiverName },
   })
-
-  if (aiResult.cacheHit) {
-    console.log(`[legacy-trades/check] AI cache hit { leagueId: '${opts?.leagueId ?? 'unknown'}' }`)
-  } else {
-    console.log(`[legacy-trades/check] AI cache miss { leagueId: '${opts?.leagueId ?? 'unknown'}', modelCallMs: ${aiResult.modelDurationMs ?? -1} }`)
-    console.log(`[legacy-trades/check] saved AiResult { id: '${aiResult.row.id}', resultKey: '${aiResult.row.resultKey}' }`)
-  }
-
-  const cachedContent =
-    (typeof aiResult.row.resultText === 'string' && aiResult.row.resultText.trim()) ||
-    ((aiResult.row.resultJson as any)?.content as string | undefined) ||
-    '{}'
-
-  try {
-    const cleaned = cachedContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return JSON.parse(cleaned)
-  } catch {
-    return {
-      grade: 'N/A',
-      verdict: 'Unable to analyze',
-      expertAnalysis: 'AI analysis failed',
-      counterOffer: null,
-    }
+  const g = receipt.grade
+  const legacy = legacyVerdictFromGrade(g)
+  return {
+    engine: ENGINE_ANALYSIS_MARKER,
+    receiptId: receipt.receiptId,
+    grade: g.graded ? g.letter : null,
+    partnerGrade: g.graded ? g.partnerLetter : null,
+    gradeWithheld: g.graded ? null : g.reason,
+    // "Strongly favors A" in the managers' names: A is the sender, B the receiver.
+    verdict: legacy ? legacy.replace(/ A$/, ` ${args.senderName}`).replace(/ B$/, ` ${args.receiverName}`) : null,
+    expertAnalysis: explanation.verdict.headline,
+    reasons: explanation.verdict.reasons.map((r) => r.text),
+    risks: explanation.verdict.risks,
+    explanationSource: explanation.source,
   }
 }
 
@@ -261,9 +241,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "
               playersReceived: existing.playersReceived,
               picksGiven: existing.picksGiven,
               picksReceived: existing.picksReceived,
-              aiGrade: existing.aiGrade,
-              aiVerdict: existing.aiVerdict,
-              aiAnalysis: existing.aiAnalysis,
+              ...shownTradeGrade(existing),
               createdAt: existing.sleeperCreatedAt || existing.createdAt,
               tradeStatus: existing.status === 'pending' ? 'pending' : 'complete',
               tradeDirection: existingTradeDirection,
@@ -330,20 +308,22 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "
         // Promise.all → outer catch → 500. Without this guard, a failing AI call prevents
         // the tradeNotification record from ever being saved, causing the hook to retry the
         // same failing path every 30 s indefinitely (infinite 500 loop).
-        let analysis = null
+        let analysis: EngineTradeAnalysis | null = null
         if (!isPending) {
           try {
-            analysis = await analyzeTrade(
+            analysis = await gradeCompletedTrade({
               playersGiven,
               playersReceived,
               picksGiven,
               picksReceived,
-              league.name,
-              { leagueId: league.sleeperLeagueId, userId: legacyUser.id }
-            )
+              sleeperLeagueId: league.sleeperLeagueId,
+              identity: gate.identity,
+              senderName,
+              receiverName,
+            })
           } catch (err) {
             console.warn(
-              '[legacy-trades/check] analyzeTrade failed, saving without AI grade:',
+              '[legacy-trades/check] grading failed, saving without a grade:',
               err instanceof Error ? err.message : String(err)
             )
             // analysis stays null — trade is recorded without a grade.
@@ -375,7 +355,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "
             picksReceived,
             aiGrade: analysis?.grade || null,
             aiVerdict: analysis?.verdict || null,
-            aiAnalysis: analysis,
+            aiAnalysis: analysis ?? undefined,
             aiAnalyzedAt: analysis ? new Date() : null,
             sleeperCreatedAt: trade.created ? new Date(trade.created) : null,
           },
@@ -516,9 +496,7 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "L
           playersReceived: t.playersReceived,
           picksGiven: t.picksGiven,
           picksReceived: t.picksReceived,
-          aiGrade: t.aiGrade,
-          aiVerdict: t.aiVerdict,
-          aiAnalysis: t.aiAnalysis,
+          ...shownTradeGrade(t),
           createdAt: t.sleeperCreatedAt || t.createdAt,
           seen: !!t.seenAt,
           tradeStatus: t.status === 'pending' ? 'pending' : 'complete',

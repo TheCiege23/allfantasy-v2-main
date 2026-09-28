@@ -8,6 +8,7 @@ import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeason
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
+import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -410,9 +411,19 @@ export async function finalizeRedraftWeek(
   const rosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
-        select: { playerId: true, sport: true, slotType: true },
+        select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true },
       })
     : []
+  /*
+   * ⚠ SEAL THE LINEUP THAT WAS SET FOR THIS WEEK. `slotType` is current state, and this runs
+   * twelve hours after the last kickoff — long enough for a manager to have set NEXT week's lineup.
+   * `weekLineupSlots.ts` reads the week's own saved lineup and falls back to `slotType`.
+   */
+  const weekLineups = await loadWeekLineups(prisma, {
+    redraftRosterIds: rosterIds,
+    season: season.season,
+    week: params.week,
+  })
 
   /*
    * ⚠ IN BEST BALL THE BENCH SCORES TOO. The matchup starts each team's best lineup from every
@@ -432,7 +443,7 @@ export async function finalizeRedraftWeek(
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
   for (const p of rosterPlayers) {
-    if (!countsTowardScore(p.slotType, bestBall)) continue
+    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
     starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
   }
   if (starters.size === 0) {
