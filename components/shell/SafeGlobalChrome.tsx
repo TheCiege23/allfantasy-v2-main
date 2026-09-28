@@ -202,7 +202,7 @@ export function SafeGlobalChrome({
   // against React hydration.
   const allowThirdPartyScripts = !shouldBailThirdPartyScripts(pathname)
   const renderFacebookSdk = allowThirdPartyScripts && Boolean(fbAppId)
-  // The SDK sets Facebook cookies — tracking — so the iOS app never loads it
+  // The SDK sets Facebook cookies â€” tracking â€” so the iOS app never loads it
   // (lib/platform/iosApp). Only the <Script> is gated: it renders no DOM, so
   // the server/client difference cannot cause a hydration mismatch.
   const loadFacebookSdk = renderFacebookSdk && !isInIosAppClient()
