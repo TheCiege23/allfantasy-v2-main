@@ -285,13 +285,14 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
  * of coverage — and "you are favoured by 12" is exactly the sentence someone
  * would act on.
  */
-function edge(m: NextMatchup): string | null {
+function edge(m: NextMatchup, bestBall: boolean): string | null {
   const you = m.you
   const them = m.opponent
   if (!them || you.projected == null || them.projected == null) return null
   if (you.projectedFrom < you.starterCount || them.projectedFrom < them.starterCount) return null
 
   const diff = Math.round((you.projected - them.projected) * 10) / 10
+  if (bestBall) return `Listed starters project ${Math.abs(diff).toFixed(1)} ${diff >= 0 ? 'ahead' : 'behind'}; eligible Best Ball bench replacements are not included.`
   if (Math.abs(diff) < 3) return 'Projected within three points — this is a coin flip.'
   return diff > 0
     ? `You are projected ahead by ${Math.abs(diff).toFixed(1)}.`
@@ -978,8 +979,8 @@ export function MyTeam({ data }: MyTeamProps) {
               </div>
             )}
           </div>
-          {edge(data.nextMatchup.data) ? (
-            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data)}</p>
+          {edge(data.nextMatchup.data, bestBall) ? (
+            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall)}</p>
           ) : data.nextMatchup.data.unpricedReason ? (
             // Two dashes and nothing else read as a broken screen; say why, where the read goes.
             <p className="af-mt-mu-edge">

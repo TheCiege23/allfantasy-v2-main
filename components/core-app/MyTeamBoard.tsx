@@ -471,7 +471,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             : unreadable > 0
               ? 'are either set or could not be read — the line above says which.'
             : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
-              ? 'have no remaining manual lineup task or are excluded — the line above explains why.'
+              ? 'have no remaining manual lineup task.'
               : 'are set — nothing needs you there.'
         }
       />

@@ -557,11 +557,14 @@ export function Matchup({ data }: MatchupProps) {
             <span className="af-mu-missing-why">{data.yetToPlay.reason}</span>
           </li>
           <li>
-            <span className="af-mu-missing-key">Projected final</span>
+            <span className="af-mu-missing-key">{data.projectedFinal.available && data.projectedFinal.data.model === 'best_ball_full_roster' ? 'Projected Best Ball final' : 'Projected final'}</span>
             {data.projectedFinal.available ? (
               <span className="af-mu-missing-value af-num">
                 {data.projectedFinal.data.you.toFixed(1)} –{' '}
                 {data.projectedFinal.data.opponent.toFixed(1)}
+                {data.projectedFinal.data.model === 'best_ball_full_roster' ? (
+                  <em className="af-mu-missing-caveat"> — highest projected legal lineup from each eligible full roster</em>
+                ) : null}
                 {/*
                   ⚠ SHOWN WHENEVER EITHER SIDE IS SHORT, BECAUSE THE TWO SIDES CAN
                   BE SHORT BY DIFFERENT AMOUNTS. That does not just make both totals
