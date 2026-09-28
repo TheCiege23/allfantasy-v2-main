@@ -468,6 +468,18 @@ describe('Player Finder — game day', () => {
     expect(card.querySelector('.af-pf-gameday + .af-pf-compare-entry')).not.toBeNull()
   })
 
+  it('offers no Open-lineup button for a best-ball league — the platform sets that lineup itself', () => {
+    const leagues = DETAIL.leagues.available ? DETAIL.leagues.data : []
+    const bestBall = {
+      ...DETAIL,
+      injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } },
+      leagues: { available: true, data: leagues.map((l) => (l.leagueId === 'L-warriors' ? { ...l, bestBall: true } : l)) },
+    } as PlayerDetail
+    renderCore({ detail: bestBall, nowIso: NOW })
+    const banner = screen.queryByRole('region', { name: 'Game day' })
+    expect(banner ? within(banner).queryAllByRole('link') : []).toHaveLength(0)
+  })
+
   it('says there is nothing to move when he is benched everywhere, and stays quiet with no kickoff on file', () => {
     const benched = { ...DETAIL, injury: { available: true, data: { status: 'Questionable', description: 'Knee', reportedAt: null } }, impact: { available: true, data: IMPACT.map((i) => ({ ...i, slot: 'BENCH', isStarting: false })) } }
     renderCore({ detail: benched, nowIso: NOW })

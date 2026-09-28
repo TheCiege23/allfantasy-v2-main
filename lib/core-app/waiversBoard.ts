@@ -8,7 +8,7 @@ import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
-import { isOutDesignation, isRuledOut } from './injuryStatus'
+import { ruledOutByFact } from './injuryStatus'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
@@ -395,10 +395,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
         : null
     if (injuries) {
       for (const [playerId, lookup] of lookups) {
-        const fact = injuries.byPlayer.get(normalizeMatchName(lookup.name))
-        if (!fact || !isRuledOut(fact.status)) continue
-        if (fact.stale && isOutDesignation(fact.status)) continue
-        ruledOut.add(playerId)
+        if (ruledOutByFact(injuries.byPlayer.get(normalizeMatchName(lookup.name)))) ruledOut.add(playerId)
       }
     }
   }

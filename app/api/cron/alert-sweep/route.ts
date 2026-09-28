@@ -429,7 +429,7 @@ async function handle(req: NextRequest) {
         // leagues is how someone turns notifications off permanently.
         const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
         const dedupePrefix = injuredStarterDedupeKey(top, new Date())
-        const href = injuredStarterHref(top)
+        const href = injuredStarterHref(top, await alertPlayerRef(top))
         // Today's message about this player and designation already went out: say nothing again.
         const already = await prisma.platformNotification
           .findFirst({ where: { sourceKey: `${dedupePrefix}:${sub.userId}` }, select: { id: true } })
@@ -628,4 +628,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   return handle(req)
+}
+
+/**
+ * The Player Finder ref (`NFL:<externalId>`) for the alert's player, from the Sleeper id the
+ * detector carries — so the tap opens HIS card, not a name search. Null when the alert names no
+ * Sleeper id (an ESPN-only player) or the catalog has no row; the href then falls back to `q=`.
+ */
+async function alertPlayerRef(top: { metadata?: Record<string, unknown> | null }): Promise<string | null> {
+  const sleeperId = typeof top.metadata?.sleeperId === 'string' && top.metadata.sleeperId ? top.metadata.sleeperId : null
+  if (!sleeperId) return null
+  const sport = typeof top.metadata?.sport === 'string' && top.metadata.sport ? top.metadata.sport : 'NFL'
+  const { resolvePublicPlayer } = await import('@/lib/core-app/playerFinder')
+  const resolved = await resolvePublicPlayer(sport, sleeperId).catch(() => null)
+  return resolved?.playerReference ?? null
 }
