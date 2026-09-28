@@ -780,6 +780,37 @@ export function classifyFreshness({ rowCount, timestampCount, ageMs, allowanceMs
 export const HEALTHY_STATES = new Set(['OK', 'IDLE'])
 
 /**
+ * The league-coverage verdict: are the leagues we CAN read being read within the hour on a game day.
+ *
+ * 🛑 A LEAGUE THE PROVIDER HAS DELETED IS NOT A STALE LEAGUE, AND COUNTING IT AS ONE MADE THIS PROBE
+ * UNABLE TO PASS. Two Sleeper leagues deleted after import kept #1453 red through a whole game day
+ * while all 313 reachable leagues were inside the target. No cadence can refresh a league that
+ * answers 404, so the alarm carried no action — and an alarm that is always red is muted by the
+ * people it exists to reach, which is the silence this monitor was built to end.
+ *
+ * So a gone league is subtracted ONLY while its tracking is provably alive:
+ *   - `trackedGone` = stale leagues whose last run recorded `league gone at provider:` AND whose
+ *     daily re-check (`LEAGUE_GONE_RECHECK_MS`, 24h) happened inside the slack window. A gone league
+ *     whose re-check has lapsed stays STALE — the re-check is what would notice a restored league.
+ *   - More than `goneCeiling` gone leagues is STALE regardless. A handful of deleted leagues is
+ *     normal; a wave of them is a misclassification (a provider outage read as LEAGUE_NOT_FOUND),
+ *     and subtracting it would hide exactly the failure this probe exists to catch.
+ * The gone count is still printed on every run, including OK ones.
+ */
+export function leagueCoverageVerdict({ gameDay, connected, stale, trackedGone }) {
+  const goneCeiling = Math.max(3, Math.ceil(connected * 0.02))
+  const reachableStale = Math.max(0, stale - trackedGone)
+  const state = !gameDay
+    ? 'IDLE'
+    : connected === 0
+      ? 'EMPTY'
+      : reachableStale > 0 || trackedGone > goneCeiling
+        ? 'STALE'
+        : 'OK'
+  return { state, reachableStale, goneCeiling }
+}
+
+/**
  * 🛑 `status` IN sync_job_runs IS NOT ONE VOCABULARY — IT IS SEVEN WRITERS' WORTH.
  *
  * `syncJobRunTelemetry.ts` types the field as `success | partial | failed`, and it is the only
@@ -1120,6 +1151,16 @@ async function main() {
                  AND state."syncStatus" = 'skipped'
                  AND state."lastError" LIKE 'league gone at provider: %'
              )::int AS gone_at_provider,
+             -- Stale because the provider deleted the league, AND still being re-checked daily
+             -- (LEAGUE_GONE_RECHECK_MS is 24h; 26h is the slack). See leagueCoverageVerdict.
+             count(*) FILTER (
+               WHERE connected.external_id IS NOT NULL
+                 AND (state."lastSuccessfulSyncAt" IS NULL OR
+                      state."lastSuccessfulSyncAt" < now() - INTERVAL '1 hour')
+                 AND state."syncStatus" = 'skipped'
+                 AND state."lastError" LIKE 'league gone at provider: %'
+                 AND state."lastAttemptedSyncAt" > now() - INTERVAL '26 hours'
+             )::int AS tracked_gone,
              string_agg(DISTINCT coalesce(state."syncStatus", 'no state'), ', ' ORDER BY coalesce(state."syncStatus", 'no state'))
                FILTER (WHERE connected.external_id IS NOT NULL AND state."lastSuccessfulSyncAt" IS NULL) AS never_statuses,
              string_agg(DISTINCT connected.provider, ', ' ORDER BY connected.provider)
@@ -1135,11 +1176,17 @@ async function main() {
        GROUP BY game_day.active
     `)
     const active = coverage.rows[0]
+    const verdict = leagueCoverageVerdict({
+      gameDay: Boolean(active.game_day),
+      connected: active.connected,
+      stale: active.stale,
+      trackedGone: active.tracked_gone,
+    })
     results.push({
       path: '/api/cron/fantasy-os-active-sync#league-coverage',
       tier: 'fast', kind: 'coverage', table: 'league_sync_state',
-      state: !active.game_day ? 'IDLE' : active.connected === 0 ? 'EMPTY' : active.stale > 0 ? 'STALE' : 'OK',
-      detail: `${active.stale} of ${active.connected} connected current-season NFL leagues last read over 1h ago or never (${active.never} never successful, ${active.never_attempted} never attempted, ${active.gone_at_provider} gone at provider; statuses: ${active.never_statuses ?? 'none'}; providers: ${active.stale_providers ?? 'none'}); oldest successful read ${active.oldest_age_seconds == null ? 'never' : Math.round(active.oldest_age_seconds / 60) + 'm'}; game day ${active.game_day}`,
+      state: verdict.state,
+      detail: `${verdict.reachableStale} of ${active.connected - active.tracked_gone} reachable current-season NFL leagues last read over 1h ago or never; ${active.tracked_gone} deleted at the provider and re-checked daily (fails above ${verdict.goneCeiling}) (${active.stale} stale in total: ${active.never} never successful, ${active.never_attempted} never attempted, ${active.gone_at_provider} gone before any successful read; statuses: ${active.never_statuses ?? 'none'}; providers: ${active.stale_providers ?? 'none'}); oldest successful read ${active.oldest_age_seconds == null ? 'never' : Math.round(active.oldest_age_seconds / 60) + 'm'}; game day ${active.game_day}`,
     })
   } finally {
     await client.end()

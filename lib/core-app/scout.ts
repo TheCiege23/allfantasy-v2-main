@@ -140,6 +140,12 @@ export type ScoutData = {
     /** Newest profile write across the league. Null when nothing is profiled. */
     lastRefreshedAt: string | null
     /**
+     * OLDEST profile write across the league. The newest alone hid the spread: profiles are rebuilt
+     * by a rotation (24 leagues every 6h, stalest first), so one fresh manager beside eleven
+     * week-old ones read as "last updated today". Null when nothing is profiled.
+     */
+    oldestRefreshedAt: string | null
+    /**
      * How many profiled managers this viewer's plan cannot read.
      *
      * ⚠ COUNTED SEPARATELY FROM `profiledCount`, so the screen can say "9 of 12
@@ -205,7 +211,7 @@ export async function getScoutData(
         reason:
           'scouting reads the managers of a league you are in, and this account is not a member of this one',
       },
-      coverage: { teamCount: 0, profiledCount: 0, lastRefreshedAt: null, lockedCount: 0 },
+      coverage: { teamCount: 0, profiledCount: 0, lastRefreshedAt: null, oldestRefreshedAt: null, lockedCount: 0 },
     }
   }
 
@@ -235,7 +241,7 @@ export async function getScoutData(
         available: false,
         reason: 'no teams have been imported for this league, so there is nobody to scout',
       },
-      coverage: { teamCount: 0, profiledCount: 0, lastRefreshedAt: null, lockedCount: 0 },
+      coverage: { teamCount: 0, profiledCount: 0, lastRefreshedAt: null, oldestRefreshedAt: null, lockedCount: 0 },
     }
   }
 
@@ -379,12 +385,17 @@ export async function getScoutData(
       (newest, f) => (newest == null || f.updatedAt > newest ? f.updatedAt : newest),
       null,
     ) ?? null
+  const oldestRefreshedAt =
+    (facts ?? []).reduce<string | null>(
+      (oldest, f) => (oldest == null || f.updatedAt < oldest ? f.updatedAt : oldest),
+      null,
+    ) ?? null
 
   return {
     ...base,
     you: mine && myManagerId ? { managerId: myManagerId, teamName: mine.teamName } : null,
     week: week ? { seasonYear: week.seasonYear, week: week.week } : null,
     managers: { available: true, data: managers },
-    coverage: { teamCount: teams.length, profiledCount, lastRefreshedAt, lockedCount },
+    coverage: { teamCount: teams.length, profiledCount, lastRefreshedAt, oldestRefreshedAt, lockedCount },
   }
 }
