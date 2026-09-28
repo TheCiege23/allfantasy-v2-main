@@ -6,6 +6,7 @@ import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
 import { sameNflTeam } from '@/lib/sports/teamRef'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
+import { nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 
 /**
@@ -46,17 +47,23 @@ const SPORTS_DAY_TIMEZONE = 'America/New_York'
  */
 const TONIGHT_START_HOUR_ET = 17
 
-/**
- * Nobody's honest answer needs more, and a roster read is several queries.
+/*
+ * 🛑 A TIME BUDGET, NOT A LEAGUE CAP — the same change `get_my_injuries` made (#1471).
  *
- * ⚠ A CAP CHANGES THE COUNT, SO EXCEEDING IT IS REPORTED. "How many leagues" is
- * the whole question; silently scanning the first 40 of 65 and answering "6"
- * would be a precise, confident, wrong number.
+ * This was `MAX_LEAGUES_SCANNED = 40`, reported as "N further league(s) were NOT scanned".
+ * The note was right that a cap changes the count — "how many leagues" is the whole question —
+ * but a count of the missed leagues names none of them, and the cap was a guess at a time limit.
+ * A Chimmy tool has no timeout of its own (only the loop's 75s, shared with the model turns),
+ * so every in-season league is now attempted and whatever the budget does not reach is NAMED.
  */
-const MAX_LEAGUES_SCANNED = 40
+const SCAN_BUDGET_MS = 20_000
+const PER_LEAGUE_TIMEOUT_MS = 8_000
 
 /** Rosters read at once. Bounded so one chat turn cannot saturate the pool. */
 const ROSTER_CONCURRENCY = 6
+
+/** A backstop against a pathological account, far above any real one; overflow is named too. */
+const MAX_LEAGUES_SCANNED = 150
 
 type Fixture = {
   homeTeam: string | null
@@ -94,25 +101,6 @@ function easternHour(value: Date | null): number | null {
   }).format(value)
   const parsed = Number(hour)
   return Number.isFinite(parsed) ? parsed : null
-}
-
-/** Run `work` over `items` a few at a time, preserving input order. */
-async function mapLimited<T, R>(
-  items: T[],
-  limit: number,
-  work: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (;;) {
-      const index = next++
-      if (index >= items.length) return
-      out[index] = await work(items[index])
-    }
-  })
-  await Promise.all(runners)
-  return out
 }
 
 /** Today's NFL fixtures on the Eastern calendar day, one row per real game. */
@@ -194,6 +182,8 @@ export interface MyStartersPlayingInput {
   userId: string
   /** 'tonight' narrows to kickoffs from 5pm ET; 'today' takes the whole ET day. */
   window: 'today' | 'tonight'
+  /** Scan bounds; the tool loop takes the defaults. A caller with a shorter deadline must pass its own. */
+  scan?: Partial<BoundedScanOptions> & { maxLeagues?: number }
 }
 
 /**
@@ -223,7 +213,7 @@ export async function buildMyStartersPlayingContext(
 
   /*
    * No games is a real answer and a cheap one — and it comes BEFORE any roster
-   * read, because scanning forty rosters to conclude nobody is playing is work
+   * read, because scanning every roster to conclude nobody is playing is work
    * nobody asked for.
    */
   if (fixtures.length === 0) {
@@ -268,10 +258,16 @@ export async function buildMyStartersPlayingContext(
    */
   const pool = inSeason.length > 0 ? inSeason : nflLeagues.filter((l) => l.season === newestSeason)
   const reportedSeason = inSeason.length > 0 ? season : newestSeason
-  const scanned = pool.slice(0, MAX_LEAGUES_SCANNED)
-  const truncated = pool.length - scanned.length
+  const maxLeagues = input.scan?.maxLeagues ?? MAX_LEAGUES_SCANNED
+  const scanned = pool.slice(0, maxLeagues)
+  const overCap = pool.slice(maxLeagues)
 
-  const results = await mapLimited(scanned, ROSTER_CONCURRENCY, async (league) => {
+  const scan = await scanWithinBudget(scanned, {
+    concurrency: input.scan?.concurrency ?? ROSTER_CONCURRENCY,
+    budgetMs: input.scan?.budgetMs ?? SCAN_BUDGET_MS,
+    perItemTimeoutMs: input.scan?.perItemTimeoutMs ?? PER_LEAGUE_TIMEOUT_MS,
+    now: input.scan?.now,
+  }, async (league) => {
     const team = await resolveAiTeamContext({
       userId,
       leagueId: league.id,
@@ -291,6 +287,11 @@ export async function buildMyStartersPlayingContext(
     const { playing, unknownTeam } = startersInFixtures(team.starters, fixtures)
     return { league, state: 'read' as const, playing, unknownTeam, starterCount: team.starters.length }
   })
+  const results = scan.done.map((d) => d.result)
+  /* Every league that was never read, by name — the part a bare count threw away. */
+  const notReached = [...scan.notStarted, ...overCap].map((l) => l.name)
+  const unfinished = [...scan.timedOut, ...scan.failed].map((l) => l.name)
+  const unchecked = notReached.length + unfinished.length
 
   const hits: LeagueHit[] = []
   const unreadable: string[] = []
@@ -323,8 +324,27 @@ export async function buildMyStartersPlayingContext(
   const lines: string[] = [
     `CROSS-LEAGUE STARTER COUNT for ${label} (Eastern), ${reportedSeason} NFL season.`,
     `NFL games ${label}: ${fixtures.map(describeFixture).join('; ')}.`,
-    `ANSWER: ${hits.length} of ${readCount} readable NFL league(s) have at least one STARTER in those games.`,
   ]
+
+  /*
+   * ⚠ COVERAGE SITS IMMEDIATELY ABOVE THE NUMBER. The answer IS a count, so a partial scan
+   * changes the headline itself — "3 leagues" over 40 of 64 is a floor, not an answer. It is
+   * stated before the ANSWER line, with the missed leagues named, not in the gaps at the bottom.
+   */
+  if (unchecked === 0) {
+    lines.push(`SCAN COVERAGE: all ${pool.length} ${reportedSeason} NFL league(s) were reached.`)
+  } else {
+    const parts = [
+      notReached.length ? `not reached in the time available (${notReached.length}): ${nameList(notReached)}` : null,
+      unfinished.length ? `started but did not finish (${unfinished.length}): ${nameList(unfinished)}` : null,
+    ].filter(Boolean)
+    lines.push(
+      `⚠ PARTIAL SCAN — ${pool.length - unchecked} of ${pool.length} ${reportedSeason} NFL leagues were checked; ${unchecked} were NOT. ${parts.join('; ')}. ` +
+        `The count below is a FLOOR: say it covers ${pool.length - unchecked} of ${pool.length} leagues, name (or count) the ones not checked, ` +
+        'and never present it as the total — asking again usually reaches the rest.',
+    )
+  }
+  lines.push(`ANSWER: ${hits.length} of ${readCount} readable NFL league(s) have at least one STARTER in those games.`)
 
   if (hits.length > 0) {
     lines.push(
@@ -343,23 +363,17 @@ export async function buildMyStartersPlayingContext(
    * says which way.
    */
   const gaps: string[] = []
-  if (truncated > 0) {
-    gaps.push(
-      `${truncated} further NFL league(s) were NOT scanned (cap of ${MAX_LEAGUES_SCANNED}), so the real count can only be HIGHER`,
-    )
+  if (unchecked > 0) {
+    gaps.push(`${unchecked} NFL league(s) were not checked at all (named under PARTIAL SCAN above), so the real count can only be HIGHER`)
   }
   if (unreadable.length > 0) {
     gaps.push(
-      `${unreadable.length} league(s) have no claimed or synced team of theirs, so nothing could be read there (${unreadable
-        .slice(0, 6)
-        .join(', ')}) — the real count can only be HIGHER, and this is NOT a finding that those leagues are empty`,
+      `${unreadable.length} league(s) have no claimed or synced team of theirs, so nothing could be read there (${nameList(unreadable)}) — the real count can only be HIGHER, and this is NOT a finding that those leagues are empty`,
     )
   }
   if (noStarters.length > 0) {
     gaps.push(
-      `${noStarters.length} league(s) have a claimed team with NO starters stored (${noStarters
-        .slice(0, 6)
-        .join(', ')}) — their lineup has not synced, so the real count can only be HIGHER`,
+      `${noStarters.length} league(s) have a claimed team with NO starters stored (${nameList(noStarters)}) — their lineup has not synced, so the real count can only be HIGHER`,
     )
   }
   if (leaguesWithUnknownTeams > 0) {
