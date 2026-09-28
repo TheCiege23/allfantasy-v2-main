@@ -117,7 +117,13 @@ describe('game-day sizing', () => {
   it('takes enough leagues per tick for every league to come round in 20 minutes', () => {
     // 20-minute target over a 5-minute cadence = 4 ticks.
     expect(activeSliceSize({ eligibleForProvider: 307, limitPerProvider: 4, gameDay: true })).toBe(77)
-    expect(activeSliceSize({ eligibleForProvider: 307, limitPerProvider: 4, gameDay: false })).toBe(4)
+    // Off a game day: 60-minute target over a 5-minute cadence = 12 ticks → ceil(307 / 12) = 26.
+    // (It was a fixed 4 — a ~6-hour lap; see OFF_DAY_REFRESH_TARGET_MINUTES.)
+    expect(activeSliceSize({ eligibleForProvider: 307, limitPerProvider: 4, gameDay: false })).toBe(26)
+    expect(activeSliceSize({ eligibleForProvider: 20, limitPerProvider: 4, gameDay: false })).toBe(4)
+    expect(activeSliceSize({ eligibleForProvider: 5_000, limitPerProvider: 4, gameDay: false })).toBe(
+      GAME_DAY_MAX_PER_PROVIDER,
+    )
     // Never below the requested floor, never above the cap.
     expect(activeSliceSize({ eligibleForProvider: 6, limitPerProvider: 4, gameDay: true })).toBe(4)
     expect(activeSliceSize({ eligibleForProvider: 5_000, limitPerProvider: 4, gameDay: true })).toBe(

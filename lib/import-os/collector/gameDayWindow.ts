@@ -3,8 +3,8 @@
  *
  * Used by the five-minute active lane to decide how many leagues a tick must reach. On a game day
  * the lane sizes itself so every imported league's rosters and transactions refresh at least every
- * {@link GAME_DAY_REFRESH_TARGET_MINUTES} minutes; the rest of the week it keeps its small fixed
- * slice.
+ * {@link GAME_DAY_REFRESH_TARGET_MINUTES} minutes; the rest of the week it sizes itself to
+ * {@link OFF_DAY_REFRESH_TARGET_MINUTES} minutes.
  *
  * ⚠ READ FROM `SportsGame`, NOT FROM THE WEEKDAY. "It is Sunday" is not "there are games today" —
  * a Saturday in December, a Wednesday Christmas game, a Friday opener in Brazil and a London
@@ -25,6 +25,17 @@ export const GAME_DAY_LEAD_MS = 4 * 60 * 60_000
 export const GAME_DAY_TAIL_MS = 4 * 60 * 60_000
 /** The freshness the lane promises every in-season imported league on a game day. */
 export const GAME_DAY_REFRESH_TARGET_MINUTES = 20
+/**
+ * The freshness it promises the rest of the week.
+ *
+ * 🛑 OFF A GAME DAY THE SLICE USED TO BE A FIXED 4 LEAGUES PER PROVIDER PER TICK — about a 6-hour
+ * lap across ~285 Sleeper leagues. Trades mostly happen BETWEEN game days, so that is where the
+ * slow reads landed: measured on production 2026-09-28 over 72h, Sleeper trades were first written
+ * a median 8 minutes after completing, but the Friday-evening ones 186 and 222 minutes after, every
+ * one of them in a league the lane covers. The lane ran every 5 minutes throughout; it just read 4
+ * Sleeper leagues each time. Guap set the off-day target to 60 minutes (2026-09-28).
+ */
+export const OFF_DAY_REFRESH_TARGET_MINUTES = 60
 
 /** Pure form, for tests: is any kickoff inside [now - tail, now + lead]? */
 export function isInGameDayWindow(kickoffs: ReadonlyArray<Date | null | undefined>, now: Date): boolean {

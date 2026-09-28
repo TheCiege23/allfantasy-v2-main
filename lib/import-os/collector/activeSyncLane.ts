@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { isInSeason, resolveSeasonState } from '@/lib/import-os/season'
 import { enumerateConnectedLeagues } from './enumerate'
-import { GAME_DAY_REFRESH_TARGET_MINUTES, isNflGameDayWindow } from './gameDayWindow'
+import { GAME_DAY_REFRESH_TARGET_MINUTES, isNflGameDayWindow, OFF_DAY_REFRESH_TARGET_MINUTES } from './gameDayWindow'
 import { isInLeagueGoneBackoff } from './leagueGone'
 import { runDueLeagues, type RunDueResult } from './runDueSleeperLeagues'
 import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
@@ -57,14 +57,20 @@ export const GAME_DAY_MAX_PER_PROVIDER = 100
  */
 export const ACTIVE_SYNC_START_BUDGET_MS = 60_000
 
-/** How many leagues per provider a tick takes. Pure, for tests. */
+/**
+ * How many leagues per provider a tick takes. Pure, for tests.
+ *
+ * Sized from the portfolio on EVERY day now — to {@link GAME_DAY_REFRESH_TARGET_MINUTES} on a game
+ * day and {@link OFF_DAY_REFRESH_TARGET_MINUTES} otherwise; see the latter for why the fixed off-day
+ * slice went. The same cap and the same start budget bound both.
+ */
 export function activeSliceSize(input: {
   eligibleForProvider: number
   limitPerProvider: number
   gameDay: boolean
 }): number {
-  if (!input.gameDay) return input.limitPerProvider
-  const ticksPerTarget = Math.max(1, Math.floor(GAME_DAY_REFRESH_TARGET_MINUTES / ACTIVE_SYNC_CADENCE_MINUTES))
+  const target = input.gameDay ? GAME_DAY_REFRESH_TARGET_MINUTES : OFF_DAY_REFRESH_TARGET_MINUTES
+  const ticksPerTarget = Math.max(1, Math.floor(target / ACTIVE_SYNC_CADENCE_MINUTES))
   const needed = Math.ceil(input.eligibleForProvider / ticksPerTarget)
   return Math.min(GAME_DAY_MAX_PER_PROVIDER, Math.max(input.limitPerProvider, needed))
 }
