@@ -3885,7 +3885,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagues={tradeStripLeagues.filter((league) => league.id === selectedLeagueId)}
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
-              history={<Trades data={trades} />}
+              history={<Trades data={trades} hidePending />}
               completedHistory={trades.league.platform === 'sleeper' && trades.history.available ? trades.history.data : []}
               edgeAccess={corePaywall?.competitive_edge ?? null}
             />

@@ -178,11 +178,11 @@ describe('⚠ the inbox never claims an empty league it did not read', () => {
     expect(INBOX).toContain('pending.weeksUnanswered > 0')
   })
 
-  it('shows an auditable live-scan receipt and says manual entry is unnecessary', () => {
+  it('shows an auditable public-feed receipt without promising every live offer is present', () => {
     expect(ROUTE).toContain('weeksRequested: pendingScan.weeksRequested')
     expect(ROUTE).toContain('weeksAnswered: pendingScan.weeksAnswered')
-    expect(INBOX).toContain('Live trade import check')
-    expect(INBOX).toContain('You do not enter them by hand')
+    expect(INBOX).toContain('Public transaction feed check')
+    expect(INBOX).toContain('Sleeper may show additional live proposals in its app')
   })
 
   it('⚠ offers no accept, reject or counter — the provider has no write endpoint', () => {

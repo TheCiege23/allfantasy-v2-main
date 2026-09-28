@@ -29,6 +29,8 @@ function linkIdOf(id: string): string {
 
 export type TradesProps = {
   data: TradesData
+  /** The Trade Center already renders pending offers above its builder. */
+  hidePending?: boolean
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -298,7 +300,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
   )
 }
 
-export function Trades({ data }: TradesProps) {
+export function Trades({ data, hidePending = false }: TradesProps) {
   // A trade email or push lands here with `?trade=`; bring that trade into view.
   useFocusTradeFromUrl()
   return (
@@ -354,10 +356,10 @@ export function Trades({ data }: TradesProps) {
       </div>
 
       {/* ── Inbox / sent ────────────────────────────────────────────── */}
-      <div className="af-tr-pending">
+      {!hidePending ? <div className="af-tr-pending">
         <OfferColumn title="Inbox" state={data.inbox} empty="No offers waiting on you." />
         <OfferColumn title="Sent" state={data.sent} empty="You have no offers out." />
-      </div>
+      </div> : null}
 
       {/* ── Completed trades ────────────────────────────────────────── */}
       <section className="af-tr-history">
