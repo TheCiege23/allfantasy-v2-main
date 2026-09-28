@@ -24,6 +24,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/league/trades-panel/route.ts', entry: /gradeDeal\(/, what: 'pending offers on the league page and the inbox' },
   /* 2026-09-27: the Trade Center's "Best trade partners" suggestions (see lib/trade-intel/partnerSuggestionGrades.ts). */
   { file: 'app/api/leagues/[leagueId]/trades/rosters/route.ts', entry: /gradeDeal\(/, what: 'the Trade Center partner suggestions' },
+  /* 2026-09-28: the trade block's suggested offers (see lib/trade-block/tradeBlockOffers.ts). */
+  { file: 'app/api/redraft/trades/trade-block/route.ts', entry: /gradeDeal\(/, what: 'the trade block' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   /* 2026-09-28: the live draft's pick-trade builder, rookie drafts (see lib/live-draft-engine/draftPickTradeGrade.ts). */
   { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /gradeDeal\(/, what: 'the live draft pick-trade builder' },
