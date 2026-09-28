@@ -17,7 +17,7 @@ import {
   sportHasWeekSignal,
   toScheduleSportKey,
 } from './sportWeekSignal'
-import { resolveDailySportSeasonStart } from './dailySportSeasonStarts'
+import { dailySportWeekForInstant, resolveDailySportSeasonStart } from './dailySportSeasonStarts'
 import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import type {
   LeagueSeasonWeekResolution,
@@ -113,7 +113,11 @@ export async function resolveSportWeek(
   // anchor, so it bypasses the feed's `week` and `seasonType` entirely — both
   // of which are unusable for these sports (week 0 / 500, seasonType NULL).
   if (dailyAnchor) {
-    const relabelled = relabelDailySportWeeks(rows, new Date(dailyAnchor))
+    // Through the shared week resolver, so a gameweek sport (soccer) skips its international breaks
+    // here exactly as the stat sync and the finalizer do.
+    const relabelled = relabelDailySportWeeks(rows, new Date(dailyAnchor), (kickoff) =>
+      dailySportWeekForInstant(scheduleSport, seasonYear, kickoff),
+    )
     return resolveSportWeekFromSchedule(relabelled, now)
   }
 

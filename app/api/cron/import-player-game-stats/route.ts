@@ -210,15 +210,20 @@ async function handle(req: NextRequest) {
      * backfill, and after the budget. Folded into this daily RI pass rather than a new route or
      * cron slot (cron-budget-check.mjs caps the list). A 304 — the 2026-27 schedule before RI
      * publishes it — writes nothing and is simply reported.
+     *
+     * SOCCER rides the same pass (three calls: EPL, La Liga, Serie A — all or nothing, see
+     * syncRiSeasonSchedule). Its pool spans those three leagues and SportsGame holds only the EPL,
+     * and the daily re-sync is also what moves a played game to `completed` for the finalizer.
      */
     let schedule: Record<string, unknown> | null = null
-    if (!fromDate && !toDate && !budget.exhausted() && candidates.includes("NCAAB")) {
+    for (const scheduleSport of ["NCAAB", "SOCCER"] as const) {
+      if (fromDate || toDate || budget.exhausted() || !candidates.includes(scheduleSport)) continue
       try {
         const season = currentScheduleSeason()
-        const r = await syncRiSeasonSchedule({ sport: "NCAAB", season, db: prisma as never })
-        schedule = { NCAAB: r }
+        const r = await syncRiSeasonSchedule({ sport: scheduleSport, season, db: prisma as never })
+        schedule = { ...(schedule ?? {}), [scheduleSport]: r }
       } catch (err) {
-        schedule = { NCAAB: { error: String(err).slice(0, 200) } }
+        schedule = { ...(schedule ?? {}), [scheduleSport]: { error: String(err).slice(0, 200) } }
       }
     }
 

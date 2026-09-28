@@ -38,6 +38,7 @@
  * during a game), then reconcile these tables against it.
  */
 import { normalizeMlbGameStats } from './mlbStatNormalization'
+import { normalizeSoccerGameStats } from './soccerStatNormalization'
 
 type JsonRecord = Record<string, unknown>
 
@@ -323,6 +324,9 @@ const DAILY_SPORT_NORMALIZERS: Readonly<Record<string, (raw: unknown) => Normali
   // see mlbStatNormalization.ts. Registering it lets the weekly sync score MLB once the season's
   // opener is recorded (dailySportSeasonStarts.ts); without one, the sync declines and says so.
   MLB: normalizeMlbGameStats,
+  // Measured against the stored production rows, not the contract (G-04 has no soccer fields) — see
+  // soccerStatNormalization.ts. Like MLB, a week scores only once its season opener is recorded.
+  SOCCER: normalizeSoccerGameStats,
 }
 
 export function isDailyStatSport(sport: string | null | undefined): boolean {

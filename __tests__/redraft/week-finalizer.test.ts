@@ -453,8 +453,9 @@ describe('finalizeRedraftWeek', () => {
 
   it('refuses a daily sport it has no date window for, whose week is not a column', async () => {
     // This was NBA until 2026-09-25, then MLB until 2026-09-28, when each joined
-    // DATE_WINDOWED_SPORTS (see week-finalizer-daily-sport.test.ts). Soccer is still outside every list.
-    const { prisma } = makePrisma({ season: { ...SEASON, sport: 'SOCCER' } })
+    // DATE_WINDOWED_SPORTS (see week-finalizer-daily-sport.test.ts), then SOCCER the same day. Every
+    // offered sport now closes, so the control is one no league can be created in.
+    const { prisma } = makePrisma({ season: { ...SEASON, sport: 'CRICKET' } })
 
     const result = await finalizeRedraftWeek(
       { seasonId: 'season-1', week: 2 },

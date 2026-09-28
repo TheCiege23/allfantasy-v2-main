@@ -16,6 +16,14 @@ export const soccerAdapter: SportAdapter = {
       own_goal: raw.own_goal ?? 0,
       pen_miss: raw.pen_miss ?? 0,
       pen_save: raw.pen_save ?? 0,
+      // Box-score keys the panel can score (soccerStatNormalization.ts).
+      shots_on_target: raw.shots_on_target ?? 0,
+      shots: raw.shots ?? 0,
+      minutes_played: raw.minutes_played ?? 0,
+      appearance: raw.appearance ?? 0,
+      gk_goals_against: raw.gk_goals_against ?? 0,
+      fouls_committed: raw.fouls_committed ?? 0,
+      fouls_drawn: raw.fouls_drawn ?? 0,
     }
   },
   getLineupLockTime(_sport: string, gameTimeIso: string): Date {

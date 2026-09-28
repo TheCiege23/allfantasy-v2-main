@@ -3,8 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
-import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
-import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
@@ -259,7 +258,7 @@ export async function readWeekSlate(
      *
      * A daily sport's week IS a date window — the same one
      * `syncPlayerWeeklyScoresForRedraftSeason` already aggregates its stats over, from the
-     * same `weekWindowFromSeasonStart` anchor. Passing it keeps both halves reading the
+     * same `resolveDailySportWeekWindow` resolver. Passing it keeps both halves reading the
      * same seven days.
      */
     dateWindow?: { start: Date; end: Date } | null
@@ -276,6 +275,15 @@ export async function readWeekSlate(
     const slateGames = games.filter((g) =>
       args.seasonType === 'regular' ? g.seasonType === 'regular' || g.seasonType == null : g.seasonType === 'post',
     )
+    /*
+     * ⚠ SOCCER: A POSTPONED FIXTURE IS A BLANK, NOT AN OPEN GAME. Rolling Insights reschedules a
+     * soccer match as a NEW game id and marks the old one `replaced` — but a match called off with
+     * no new date yet stays `postponed` (La Liga's Levante v Athletic, 16 Sep 2026, in the captured
+     * schedule). Counted as unfinished, its gameweek could never seal. It carries no stats, and when
+     * it is played it lands in a later gameweek under its new id, so it is off this slate — the FPL
+     * convention.
+     */
+    const postponedIsBlank = args.sport.toUpperCase() === 'SOCCER'
     let final = 0
     let cancelled = 0
     let unfinished = 0
@@ -283,7 +291,7 @@ export async function readWeekSlate(
     for (const g of slateGames) {
       const status = normalizeGameStatus(g.status)
       if (status === 'final') final += 1
-      else if (status === 'cancelled') cancelled += 1
+      else if (status === 'cancelled' || (postponedIsBlank && status === 'postponed')) cancelled += 1
       else unfinished += 1
       if (g.startTime && (lastStart == null || g.startTime > lastStart)) lastStart = g.startTime
     }
@@ -368,8 +376,8 @@ export async function finalizeRedraftWeek(
    */
   let dateWindow: { start: Date; end: Date } | null = null
   if (isDateWindowed) {
-    const seasonStart = resolveDailySportSeasonStart(sport, season.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, params.week) : null
+    // The stat sync's own resolver, so slate and stats cover the same days — gameweeks for soccer.
+    const window = resolveDailySportWeekWindow(sport, season.season, params.week)
     if (!window) return emptyResult(base, 'season_start_unknown')
     dateWindow = { start: new Date(window.start), end: new Date(window.end) }
   }

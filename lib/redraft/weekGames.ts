@@ -35,8 +35,14 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
  * feed can close its weeks), and its stats are the Rolling Insights box score, normalized per game
  * by `mlbStatNormalization.ts`. No 2027 opener is recorded yet, so every MLB week refuses
  * `season_start_unknown` until one is added to `dailySportSeasonStarts.ts` — deliberately.
+ *
+ * ⚠ SOCCER JOINED 2026-09-28, mid-season, with GAMEWEEKS rather than seven-day arithmetic: its
+ * windows skip the international breaks, which hold no game and would otherwise never seal
+ * (`resolveDailySportWeekWindow` in dailySportSeasonStarts.ts). Its slate is the Rolling Insights
+ * schedule (below), because its pool is EPL + La Liga + Serie A and `SportsGame` holds only the EPL
+ * (TheSportsDB) plus stale MLS rows (espn_live).
  */
-export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NBA', 'NCAAB', 'MLB']
+export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NBA', 'NCAAB', 'MLB', 'SOCCER']
 
 /**
  * Date-windowed sports whose slate comes from the Rolling Insights season schedule
@@ -45,8 +51,12 @@ export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NBA', 'NCAAB', '
  * week 1 lists 243 games against 310 in our game logs; RI's schedule matches the logs exactly.
  * A slate short a game can seal a week whose stats miss that game — so for these sports an
  * unsynced schedule is an EMPTY slate, which refuses, never a fallback to the partial feeds.
+ *
+ * SOCCER, measured 2026-09-28: every one of the 133 games with stat lines is `completed` in the
+ * Rolling Insights schedules for EPL, La Liga and Serie A, and every game completed since stats began
+ * (25 Aug) has lines. `SportsGame` carries only the EPL, so a La Liga or Serie A game would be missed.
  */
-export const RI_SCHEDULE_SLATE_SPORTS: readonly string[] = ['NCAAB']
+export const RI_SCHEDULE_SLATE_SPORTS: readonly string[] = ['NCAAB', 'SOCCER']
 
 export type WeekGameRow = {
   status: string | null

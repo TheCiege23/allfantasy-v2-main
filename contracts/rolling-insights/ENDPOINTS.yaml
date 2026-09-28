@@ -470,9 +470,27 @@ fields:
                    "innings[].events[].leverage_index"]
 
   SOCCER:
-    confidence: very_low
+    confidence: low   # schedule-season captured; /live still has no fixture (G-04)
     team_stats: [team_ID, name, played, wins, draws, losses, points]
-    live: unknown   # see GAPS.md
+    live: unknown   # see GAPS.md — no fixture. The player-box fields the ingest STORES are listed in
+                    # lib/scoring-runtime/soccerStatNormalization.ts (measured on production rows, not a probe)
+    schedule_season:
+      source: probe.sh schedule-season SOCCER <LEAGUE> 2026-01-01 (RSC_TOKEN2), captured 2026-09-28
+      fixtures:
+        - fixtures/schedule-season.SOCCER.EPL.json      # 398 rows, 2026-27
+        - fixtures/schedule-season.SOCCER.LALIGA.json   # 397 rows
+        - fixtures/schedule-season.SOCCER.SERIEA.json   # 384 rows
+      # One call PER LEAGUE (?league=), response keyed data.<LEAGUE> (soccer_trap above).
+      game: [game_ID, season, season_type, status, game_time, home_team, home_team_ID,
+             away_team, away_team_ID, arena, field, dome, city, country, postal_code, latitude, longitude]
+      # season: "2026-2027" on every row. season_type: "Regular Season" on every row.
+      # status at capture: EPL completed 50 · replaced 18 · scheduled 330; LALIGA completed 69 ·
+      #   replaced 17 · postponed 1 · scheduled 310; SERIEA completed 50 · replaced 4 · scheduled 330.
+      # `replaced` = the fixture moved to a NEW game_ID (no `replaced_by` field, unlike NCAABB).
+      # game_ID is `YYYYMMDD-<home>-<away>`, and its date equals the kickoff's US Eastern day on all
+      #   1,140 live rows. game_time is RFC 1123 ("Fri, 21 Aug 2026 19:00:00 GMT"). NO scores.
+      # Matches our stored stats exactly: all 133 games with player_game_stats lines are `completed`
+      #   here, and every game completed since those lines began (2026-08-25) has lines.
 
   NHL:
     source: probe.sh live NHL 2026-03-15 (RSC_TOKEN2)
