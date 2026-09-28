@@ -213,3 +213,94 @@ describe('syncPlayerWeeklyScoresForRedraftSeason — NCAAF', () => {
     expect(prismaMock.sportsGame.findMany).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * 🛑 CFBD LISTS ONLY PLAYERS WHO RECORDED A STAT, and a starter with no score counts against the
+ * finalizer's 80% coverage floor. Measured on production 2026-09-28: managed 12-team lineups covered
+ * 78-87% of starters in weeks 2-4, autopicked ones ~27% — and every missing starter was a bye or a
+ * school whose final game WAS ingested. A resolved starter with no row now scores a real 0 for those
+ * two, and stays missing only for a game that is unfinished, final but never ingested, or unplaceable.
+ */
+describe('syncPlayerWeeklyScoresForRedraftSeason — NCAAF starters with no CFBD row', () => {
+  const SCHEDULE = [
+    { homeTeam: 'Vanderbilt', awayTeam: 'Georgia State', week: 3, externalId: '1001', status: 'completed' },
+    { homeTeam: 'Florida', awayTeam: 'LSU', week: 3, externalId: '1002', status: 'completed' }, // final, never ingested
+    { homeTeam: 'Texas', awayTeam: 'Rice', week: 3, externalId: '1003', status: 'scheduled' },
+    { homeTeam: 'Kentucky', awayTeam: 'Ohio', week: 2, externalId: '0901', status: 'completed' }, // Kentucky: bye in week 3
+  ]
+  const ROSTER = [
+    { playerId: '5158948', sport: 'NCAAFB', position: 'QB', team: 'Vanderbilt University' },
+    { playerId: '2001', sport: 'NCAAFB', position: 'WR', team: 'Georgia State University' },
+    { playerId: '2002', sport: 'NCAAFB', position: 'WR', team: 'University of Kentucky' },
+    { playerId: '2003', sport: 'NCAAFB', position: 'RB', team: 'University of Florida' },
+    { playerId: '2004', sport: 'NCAAFB', position: 'TE', team: 'University of Texas' },
+    { playerId: '2005', sport: 'NCAAFB', position: 'WR', team: 'Hogwarts' },
+    { playerId: '77009', sport: 'NCAAFB', position: 'RB', team: 'Georgia State University' }, // not linked to CFBD
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.adminAuditLog.create.mockResolvedValue({})
+    prismaMock.playerWeeklyScore.upsert.mockResolvedValue({})
+    prismaMock.playerGameLogCache.findMany.mockResolvedValue([])
+    prismaMock.playerIdentityMap.findFirst.mockResolvedValue(null)
+    prismaMock.playerIdentityMap.findMany.mockResolvedValue([])
+    prismaMock.sportsPlayer.findFirst.mockResolvedValue(null)
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NCAAF', settings: {} })
+    prismaMock.league.findUnique.mockResolvedValue({ sport: 'NCAAF', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue({ id: 's1', leagueId: 'L1', sport: 'NCAAFB', season: 2026, currentWeek: 3 })
+    prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'r1' }])
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(ROSTER)
+    // Every player but 77009 is a CFBD pool player, so his roster id IS his CFBD id.
+    prismaMock.sportsPlayer.findMany.mockResolvedValue(['5158948', '2001', '2002', '2003', '2004', '2005'].map((externalId) => ({ externalId })))
+    prismaMock.sportsGame.findMany.mockResolvedValue(SCHEDULE)
+    prismaMock.playerGameStat.findMany.mockImplementation(async ({ where }: { where: Record<string, any> }) =>
+      where.gameId ? [{ gameId: 'cfbd:1001' }] : [{ playerId: '5158948', normalizedStatMap: CURTIS }],
+    )
+  })
+
+  async function run() {
+    const { syncPlayerWeeklyScoresForRedraftSeason } = await import('@/lib/redraft/playerWeeklyScoreService')
+    return syncPlayerWeeklyScoresForRedraftSeason({ seasonId: 's1', week: 3, actorId: 'system:test' })
+  }
+  const written = () => new Map(prismaMock.playerWeeklyScore.upsert.mock.calls.map((c) => [c[0].create.playerId, c[0].create]))
+
+  it('a bye, and a final ingested game with no line for him, each score a real 0', async () => {
+    const summary = await run()
+    expect(written().get('2001')).toMatchObject({ fantasyPts: 0, stats: {} }) // his school played; he recorded nothing
+    expect(written().get('2002')).toMatchObject({ fantasyPts: 0, stats: {} }) // bye
+    expect(summary.ncaafZeroScored).toEqual([
+      { playerId: '2001', reason: 'no_stat' },
+      { playerId: '2002', reason: 'bye' },
+    ])
+  })
+
+  it('an unfinished game, a final game never ingested, and an unplaceable school stay MISSING', async () => {
+    const summary = await run()
+    for (const id of ['2003', '2004', '2005']) {
+      expect(written().has(id)).toBe(false)
+      expect(summary.missingCachePlayerIds).toContain(id)
+    }
+    expect(summary.ncaafMissingByReason).toEqual({ not_ingested: 1, pending: 1, unmatched: 1 })
+  })
+
+  it('[control] an unlinked roster id is never zeroed, even when his school played', async () => {
+    const summary = await run()
+    expect(written().has('77009')).toBe(false)
+    expect(summary.missingCachePlayerIds).toContain('77009')
+  })
+
+  it('the QB with a line still scores from it', async () => {
+    const summary = await run()
+    expect(written().get('5158948')?.fantasyPts).toBeCloseTo(277 * 0.04 + 3 * 4 + 2 * -2 + 64 * 0.1 + 1 * -2, 5)
+    expect(summary.scoresUpserted).toBe(3)
+  })
+
+  it('asks for ingested rows only among this week’s games, under both id spellings', async () => {
+    await run()
+    const call = prismaMock.playerGameStat.findMany.mock.calls.find((c) => c[0].where.gameId)![0]
+    expect(call.where).toMatchObject({ season: 2026, weekOrRound: 3 })
+    expect(call.where.gameId.in).toEqual(expect.arrayContaining(['cfbd:1001', 'cfbd:1002', 'cfbd:1003']))
+    expect(call.where.gameId.in).not.toContain('cfbd:0901')
+  })
+})
