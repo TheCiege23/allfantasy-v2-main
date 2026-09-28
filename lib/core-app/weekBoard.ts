@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom, resolveStatedWeek } from './currentWeek'
+import { realManagerName } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
@@ -537,7 +538,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     if (!pid || !t.externalId) continue
     // teamName is what shows in the platform's own UI; ownerName is the person.
     // Prefer the team, fall back to the person, never to a placeholder.
-    const label = t.teamName?.trim() || t.ownerName?.trim()
+    const label = realManagerName(t.teamName) || realManagerName(t.ownerName)
     if (label) rosterNames.set(`${pid}:${t.externalId}`, label)
     const avatar = managerArtUrl({ avatarUrl: t.avatarUrl, platform: platformOf(t, pid) })
     if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
