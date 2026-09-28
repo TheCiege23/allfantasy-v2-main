@@ -57,10 +57,19 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
   const kind = imageTrade.question || imageTrade.clarification ? 'trade' : chimmyDecisionKind(args.question)
   if (!kind) return null
   let provenLeagueId: string | null = null
+  /*
+   * ⚠ EVERY `needs_data` ANSWER IS FREE, AND NOW EVERY ONE SAYS SO. The chat route returns them
+   * before any spend, and a private mention never charges. Only four of ~19 remedies said it, so
+   * the owner's own KBFL trade came back as a HOLD with a grade, values and depth, and no word that
+   * nothing was charged: from the outside, a paid answer that declined to answer. Added here once,
+   * so a new gap code cannot forget it. It goes in the text, not the remedy, which stays "what to
+   * do next".
+   */
   const gap = (code: string, detail: string, remedy: string, scenario?: ReadyChimmyScenario) => {
     const partial = scenario && 'value' in scenario ? { ...scenario, recommendation: { action: 'hold', explanation: remedy } } : scenario
+    const text = (partial ? renderDecisionScenario(partial) : detail) + '\n' + remedy
     return decisionAnswer({ kind, status: 'needs_data', leagueId: provenLeagueId,
-      answer: (partial ? renderDecisionScenario(partial) : detail) + '\n' + remedy,
+      answer: /\bno charge\b|\bnot charged\b/i.test(text) ? text : text + '\nThis answer is not charged.',
       sources: [], gap: { code, remedy }, ...(partial ? { scenario: partial } : {}) })
   }
   if (!args.leagueId || !args.userId) return gap('league_required', 'I need your league and roster before computing this decision.', 'Select a league in Chimmy and ask again.')
