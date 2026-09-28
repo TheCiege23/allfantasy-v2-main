@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { FantasyCalcPlayer, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer, FantasyCalcPlayerIdentity, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
 import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
 import { fetchFantasyCalcValues } from '@/lib/fantasycalc-fetch'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
@@ -23,6 +23,28 @@ function parseCachedPayload(data: unknown): CachedFantasyCalcPayload | null {
   if (!payload.settings || typeof payload.settings !== 'object') return null
   if (typeof payload.syncedAt !== 'string') return null
   return payload as CachedFantasyCalcPayload
+}
+
+/**
+ * Every player identity held in ANY cached FantasyCalc profile — one Postgres read, never a fetch.
+ *
+ * FantasyCalc hands us each player's id on several platforms at once (`sleeperId`, `mflId`,
+ * `fleaflickerId`, `espnId`). That makes the cache the cheapest honest bridge from those platforms'
+ * roster ids to Sleeper ids (`lib/player-identity/fantasyCalcIdentityBridge.ts`). A stale row is as
+ * good as a fresh one for this: a player's ids do not change when his value does.
+ */
+export async function readCachedFantasyCalcIdentities(): Promise<FantasyCalcPlayerIdentity[]> {
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { startsWith: KEY_PREFIX } },
+    select: { data: true },
+  })
+  const out: FantasyCalcPlayerIdentity[] = []
+  for (const row of rows) {
+    const payload = parseCachedPayload(row.data)
+    if (!payload) continue
+    for (const v of payload.players) if (v?.player) out.push(v.player)
+  }
+  return out
 }
 
 export async function writeFantasyCalcValuesToDb(

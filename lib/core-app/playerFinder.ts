@@ -16,6 +16,7 @@ import { designationOnset } from './designationOnset'
 import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { rosterIdSpaceOf, translateRostersByLeague } from './rosterIdSpace'
+import { applyBridge, bridgeIdsForSleeperId, loadBridgedLeagues } from './bridgedRosterIds'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -570,17 +571,35 @@ export async function resolveLeagueSlots(
    * NO hit, and a collision IS a hit. So these leagues are named as unchecked instead of scanned —
    * the same stance the game-day triage and the shares board already take ("counted, not read").
    */
-  const foreignLeagueIds = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
-
-  const rosters = await translateRostersByLeague(
-    claimedLeagueIds.length > 0 && allCandidates.length > 0
-      ? await prisma.roster.findMany({
-          where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
-          select: { leagueId: true, platformUserId: true, playerData: true },
-        })
-      : [],
-    platformByLeague,
+  /*
+   * EXCEPT A LEAGUE THE IDENTITY BRIDGE CAN READ (Phase 4, 2026-09-27). Fleaflicker and MFL ids reach
+   * Sleeper ids through `PlayerIdentityMap` (bridgedRosterIds.ts). Such a league is scanned only when
+   * most of it translates, and only in translated form — unbridged ids are DROPPED, because a raw
+   * one is exactly the collision above.
+   */
+  const bridgedLeagues = await loadBridgedLeagues(leagues)
+  const hisBridgeIds = bridgedLeagues.size > 0 ? await bridgeIdsForSleeperId(sleeperId) : {}
+  const foreignLeagueIds = new Set(
+    leagues
+      .filter((l) => rosterIdSpaceOf(l.platform) === 'other' && !bridgedLeagues.get(l.id)?.readable)
+      .map((l) => l.id),
   )
+  const throughBridge = <T extends { leagueId: string; playerData: unknown }>(r: T): T => {
+    const b = bridgedLeagues.get(r.leagueId)
+    return b?.readable ? { ...r, playerData: applyBridge(r.playerData, b.map) } : r
+  }
+
+  const rosters = (
+    await translateRostersByLeague(
+      claimedLeagueIds.length > 0 && allCandidates.length > 0
+        ? await prisma.roster.findMany({
+            where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
+            select: { leagueId: true, platformUserId: true, playerData: true },
+          })
+        : [],
+      platformByLeague,
+    )
+  ).map(throughBridge)
 
   const out: LeagueSlot[] = []
   const unmatched: UnmatchedLeague[] = []
@@ -640,15 +659,17 @@ export async function resolveLeagueSlots(
    */
   const unclaimed = leagueIds.filter((id) => !claimed.has(id))
   if (unclaimed.length > 0) {
-    const everyRoster = await translateRostersByLeague(
-      await prisma.roster
-        .findMany({
-          where: { leagueId: { in: unclaimed } },
-          select: { leagueId: true, platformUserId: true, playerData: true },
-        })
-        .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>),
-      platformByLeague,
-    )
+    const everyRoster = (
+      await translateRostersByLeague(
+        await prisma.roster
+          .findMany({
+            where: { leagueId: { in: unclaimed } },
+            select: { leagueId: true, platformUserId: true, playerData: true },
+          })
+          .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>),
+        platformByLeague,
+      )
+    ).map(throughBridge)
 
     const held = new Map<string, { platformUserId: string; slot: string }>()
     for (const r of everyRoster) {
@@ -694,7 +715,14 @@ export async function resolveLeagueSlots(
       for (const id of missed) {
         // Another platform's ids: unchecked by definition, no sample needed — but only when
         // something was imported (no rosters at all is a different gap, as below).
-        if (foreignLeagueIds.has(id)) {
+        /*
+         * A bridged league we CAN read still cannot see a player the bridge does not know — a kicker,
+         * a defense, a deep bench body FantasyCalc does not value. Every roster slot he could fill was
+         * dropped as unbridged, so "not here" would be a guess. Name it unchecked for him instead.
+         */
+        const bridged = bridgedLeagues.get(id)
+        const blindToHim = Boolean(bridged?.readable && !hisBridgeIds[bridged.column])
+        if (foreignLeagueIds.has(id) || blindToHim) {
           if (!everyRoster.some((r) => r.leagueId === id)) continue
           const league = byId.get(id)
           unmatched.push({

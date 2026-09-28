@@ -31,9 +31,17 @@ import { reduceCrosswalk } from './crosswalkRules'
  * no key separates.
  */
 
-/** Which `PlayerIdentityMap` column holds a given platform's own id. */
-const ID_COLUMN_BY_PLATFORM: Record<string, 'espnId'> = {
+/**
+ * Which `PlayerIdentityMap` column holds a given platform's own id.
+ *
+ * Fleaflicker and MFL joined 2026-09-27, once `fantasyCalcIdentityBridge.ts` began filling their
+ * columns (both held zero rows before). This returns a MAP; what a caller does with an id the map
+ * does not hold is that caller's rule and is unchanged here.
+ */
+const ID_COLUMN_BY_PLATFORM: Record<string, 'espnId' | 'fleaflickerId' | 'mflId'> = {
   espn: 'espnId',
+  fleaflicker: 'fleaflickerId',
+  mfl: 'mflId',
 }
 
 /**
@@ -56,9 +64,9 @@ export async function crosswalkToSleeperIds(
   const rows = await prisma.playerIdentityMap
     .findMany({
       where: { sport: sport.trim().toUpperCase(), [column]: { in: rosterIds } },
-      select: { espnId: true, sleeperId: true },
+      select: { espnId: true, fleaflickerId: true, mflId: true, sleeperId: true },
     })
-    .catch(() => [])
+    .catch(() => [] as Array<{ espnId: string | null; fleaflickerId: string | null; mflId: string | null; sleeperId: string | null }>)
 
   /*
    * The one-to-one guard lives in a pure module so it can be tested without

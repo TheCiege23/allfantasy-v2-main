@@ -45,7 +45,7 @@ const db = vi.hoisted(() => ({
   league: { findMany: vi.fn() },
   roster: { findMany: vi.fn(), findFirst: vi.fn() },
   sportsPlayer: { findMany: vi.fn() },
-  playerIdentityMap: { findMany: vi.fn() },
+  playerIdentityMap: { findMany: vi.fn(), findUnique: vi.fn() },
   fantasyProjection: { findMany: vi.fn() },
   sportsInjury: { findMany: vi.fn() },
 }))
@@ -82,9 +82,11 @@ beforeEach(() => {
       .filter((id) => [HIM, '9', '777', '888'].includes(id))
       .map((sleeperId) => ({ sleeperId, name: `P${sleeperId}`, position: 'RB', team: 'BUF' })),
   )
+  // ESPN is bridged; these Fleaflicker leagues are not (no fleaflickerId rows), so they stay unread.
   db.playerIdentityMap.findMany.mockImplementation(async ({ where }: AnyArgs) =>
-    (where.espnId.in as string[]).includes(HIS_ESPN_ID) ? [{ espnId: HIS_ESPN_ID, sleeperId: HIM }] : [],
+    ((where.espnId?.in ?? []) as string[]).includes(HIS_ESPN_ID) ? [{ espnId: HIS_ESPN_ID, sleeperId: HIM }] : [],
   )
+  db.playerIdentityMap.findUnique.mockResolvedValue(null)
   db.fantasyProjection.findMany.mockResolvedValue([])
   db.sportsInjury.findMany.mockResolvedValue([])
 })
