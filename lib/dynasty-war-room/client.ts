@@ -9,6 +9,8 @@ import type { BuySellHoldResult } from './dynastyBuySellHoldEngine'
 import type { DynastyLineupResult } from './dynastyLineupEngine'
 import type { DynastyWaiverResult } from './dynastyWaiverEngine'
 import type { DynastyTradeAnalysis, DynastyTradeFinderResult } from './dynastyTradeEngine'
+/** THE grade on trade-analyze (2026-09-28, lib/decision-os/trade/warRoomTradeGrade.ts). */
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 
 const base = (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/dynasty-war-room`
 
@@ -60,7 +62,7 @@ export const analyzeDynastyWarRoomTrade = (
     outgoingPickIds?: string[]
     incomingPickIds?: string[]
   },
-) => postAction<{ tradeAnalysis: DynastyTradeAnalysis }>(leagueId, 'trade-analyze', input)
+) => postAction<{ tradeAnalysis: DynastyTradeAnalysis; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
 
 export const findDynastyWarRoomTrades = (leagueId: string, rosterId?: string) =>
   postAction<{ tradeFinder: DynastyTradeFinderResult }>(leagueId, 'trade-find', { rosterId })

@@ -697,7 +697,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
           <section className="af-c13-card">
             <p className="af-c13-head">Reputation</p>
             <p className="af-c13-none">
-              13a shows an overall and a commissioner-trust score built from completed trades, dispute history and lineup
+              Reputation is an overall and a commissioner-trust score built from completed trades, dispute history and lineup
               consistency. None of those are recorded per manager, so there is nothing to score — this is unmeasured, not
               zero.
             </p>
@@ -768,7 +768,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
                 ))}
               </div>
               <p className="af-c13-note">
-                13a lists six dimensions. Rivalry needs head-to-head results against a named
+                The legacy score has six dimensions. Rivalry needs head-to-head results against a named
                 manager and awards needs an awards record; an imported season carries a record,
                 not an opponent ledger. Both are shown unweighted rather than scored zero, and the
                 four above are re-normalised across what can be scored.

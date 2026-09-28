@@ -952,7 +952,7 @@ export async function loadInjury(
 
 /* ── news ────────────────────────────────────────────────────────────────── */
 
-async function loadNews(name: string, sport: string): Promise<SectionState<PlayerCardNews[]>> {
+export async function loadNews(name: string, sport: string): Promise<SectionState<PlayerCardNews[]>> {
   const rows = await prisma.sportsNews
     .findMany({
       where: {

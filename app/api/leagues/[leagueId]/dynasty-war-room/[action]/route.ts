@@ -32,6 +32,7 @@ import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { DynastyWarRoomContext } from '@/lib/dynasty-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -133,7 +134,21 @@ export async function POST(
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-28, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * `analysis.verdict` is this engine's own accept/reject/neutral; the panel shows the grade in its
+       * place and keeps the analysis's facts (age, pick and direction impact).
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const picks = context.teams.flatMap((t) => t.picks)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, pickIds: body.outgoingPickIds, players, picks }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, pickIds: body.incomingPickIds, players, picks }),
+      })
+      return NextResponse.json({ tradeAnalysis: analysis, tradeGrade })
     }
 
     case 'trade-find':

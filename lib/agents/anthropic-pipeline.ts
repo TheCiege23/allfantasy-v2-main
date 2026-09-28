@@ -505,6 +505,8 @@ async function callClaude(args: {
   cacheContext?: { sport?: string | null; leagueId?: string | null; assistantMode?: string | null; language?: string | null }
   /** Skip the response cache (e.g. for follow-up turns with conversation history). */
   skipResponseCache?: boolean
+  /** Spend-metering label (`recordLlmCall`). Unnamed calls are recorded as 'anthropic-pipeline'. */
+  feature?: string
 }): Promise<ClaudeCallResult> {
   const startedAt = Date.now()
 
@@ -541,6 +543,9 @@ async function callClaude(args: {
     image: args.image ? { data: args.image.data, mediaType: args.image.mediaType } : null,
     preferredAnthropicModel: args.model,
     skipCache: true,
+    feature: args.feature ?? 'anthropic-pipeline',
+    userId: args.userId ?? null,
+    leagueId: args.cacheContext?.leagueId ?? null,
   })
   if (!result.ok) {
     console.error('[anthropic-pipeline] all providers failed', { latencyMs: Date.now() - startedAt })
@@ -570,6 +575,9 @@ async function callClaudeStream(args: {
   maxTokens?: number
   onText: (delta: string, snapshot: string) => void
   image?: UserContext['image']
+  /** Spend-metering label (`recordLlmCall`). */
+  feature?: string
+  userId?: string | null
 }): Promise<ClaudeCallResult> {
   const result = await routeStreamCall({
     messages: [
@@ -577,6 +585,8 @@ async function callClaudeStream(args: {
       { role: 'user', content: args.userMessage },
     ],
     maxTokens: args.maxTokens,
+    feature: args.feature ?? 'anthropic-pipeline-stream',
+    userId: args.userId ?? null,
     image: args.image ? { data: args.image.data, mediaType: args.image.mediaType } : null,
     preferredAnthropicModel: args.model,
     onText: args.onText,
@@ -1907,6 +1917,9 @@ export async function runDraftLookaheadAgent(
     model: MODELS.specialist,
     maxTokens: 900,
     image: ctx.image,
+    // Metering only: its own label, because it is the one automatic Anthropic spender.
+    // Deliberately NOT userId, which would re-scope this call's response cache.
+    feature: 'draft_lookahead',
   })
 }
 

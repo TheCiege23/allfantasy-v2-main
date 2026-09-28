@@ -5,6 +5,7 @@ import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
+import { anthropicTokenUsage, recordLlmCall } from '@/lib/telemetry/llm-usage'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -250,10 +251,31 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
        */
       ...(useFallbacks ? { fallbacks: 'default' } : {}),
     } as Anthropic.MessageCreateParamsNonStreaming
-    return client.messages.create(params, {
-      timeout,
-      headers: useFallbacks ? { 'anthropic-beta': CLAUDE_FALLBACK_BETA } : undefined,
-    })
+    /*
+     * Metered per REQUEST, inside this helper, so every turn, the no-fallbacks retry and a failed
+     * call are all counted. This loop is Chimmy's Opus spend: up to MAX_TOOL_TURNS billed calls per
+     * question, and every one of them is billed even when the loop then returns null and the push
+     * path makes ANOTHER call. It recorded nothing until 2026-09-28.
+     */
+    const meter = {
+      feature: 'chimmy_tool_loop',
+      provider: 'anthropic',
+      userId: args.context.userId,
+      leagueId: args.context.leagueId,
+      maxTokens: CLAUDE_MAX_TOKENS,
+    }
+    const startedAt = Date.now()
+    try {
+      const response = await client.messages.create(params, {
+        timeout,
+        headers: useFallbacks ? { 'anthropic-beta': CLAUDE_FALLBACK_BETA } : undefined,
+      })
+      recordLlmCall({ ...meter, model: response.model || model, usage: anthropicTokenUsage(response.usage), ok: true, durationMs: Date.now() - startedAt })
+      return response
+    } catch (err) {
+      recordLlmCall({ ...meter, model, ok: false, durationMs: Date.now() - startedAt })
+      throw err
+    }
   }
 
   try {
@@ -350,6 +372,18 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
         },
         { signal: AbortSignal.timeout(TURN_TIMEOUT_MS) },
       )
+      // Metered like the Claude loop. A thrown call is not metered here: the Grok client has no
+      // per-request helper, and the catch below already reports a provider failure.
+      recordLlmCall({
+        feature: 'chimmy_tool_loop',
+        provider: 'xai',
+        model: response.model || model,
+        userId: args.context.userId,
+        leagueId: args.context.leagueId,
+        usage: { inputTokens: response.usage?.prompt_tokens ?? null, outputTokens: response.usage?.completion_tokens ?? null },
+        maxTokens: 1200,
+        ok: true,
+      })
 
       const message = response.choices?.[0]?.message
       if (!message) return null

@@ -313,6 +313,62 @@ async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext
     .filter((row) => Boolean(row.name))
 }
 
+/** Every Sleeper id the identity map knows for this sport, with the player it belongs to. */
+async function loadSleeperIdOwners(sport: SupportedSport): Promise<Array<{ sleeperId: string; name: string }>> {
+  const rows = await prisma.playerIdentityMap.findMany({
+    where: { sport, sleeperId: { not: null } },
+    select: { sleeperId: true, canonicalName: true },
+  })
+  return rows.flatMap((row) => (row.sleeperId && row.canonicalName ? [{ sleeperId: row.sleeperId, name: row.canonicalName }] : []))
+}
+
+/**
+ * 🛑 A BARE `<SPORT>:<n>` ID IS A SLEEPER ID TO EVERY READER, SO ONLY SLEEPER'S PLAYER MAY HOLD IT
+ * (2026-09-28).
+ *
+ * `buildPlayerId` turned ANY provider's raw id into `<SPORT>:<raw>`, and a provider seed beats an
+ * identity seed of the same name. So Rolling Insights' id for Trent McDuffie (6770) was written
+ * as `NFL:6770` — which is Joe Burrow's Sleeper id — and Burrow himself went to `NFL:5427`, his
+ * Rolling Insights id. `getPlayer` reads a Sleeper roster's bare id as `<SPORT>:<id>`
+ * (lib/data/players.ts), so the Trade Center priced Burrow's slot as "Trent McDuffie, DB" and
+ * withheld it, in 331 Sleeper roster slots; Zay Flowers read as "Dillon Bell" in 330. Measured on
+ * production: 338 bare NFL ids held a different player from the one Sleeper assigns them.
+ *
+ * Two rules, applied to the merged seeds:
+ *  - a player whose name belongs to exactly ONE Sleeper id is written under that id, whichever
+ *    source supplied the row;
+ *  - a bare id that Sleeper assigns to somebody else is never written; that player falls back to
+ *    the name/team key, the same form a seed with no id already uses.
+ * A name shared by two Sleeper players (two Michael Carters) is not guessed at.
+ */
+export function keySeedsToSleeperIdentity<T extends { id: string; name: string; team: string }>(
+  sport: string,
+  seeds: T[],
+  owners: Array<{ sleeperId: string; name: string }>,
+): T[] {
+  if (owners.length === 0) return seeds
+  const ownerNameById = new Map<string, string>()
+  const idsByName = new Map<string, Set<string>>()
+  for (const owner of owners) {
+    const name = normalizePlayerName(owner.name)
+    if (!name) continue
+    ownerNameById.set(owner.sleeperId, name)
+    const ids = idsByName.get(name) ?? new Set<string>()
+    ids.add(owner.sleeperId)
+    idsByName.set(name, ids)
+  }
+  const prefix = `${sport}:`
+  return seeds.map((seed) => {
+    const name = normalizePlayerName(seed.name)
+    const ids = idsByName.get(name)
+    if (ids?.size === 1) return { ...seed, id: boundPlayerId(`${prefix}${[...ids][0]}`) }
+    const raw = seed.id.startsWith(prefix) ? seed.id.slice(prefix.length) : null
+    const owner = raw != null ? ownerNameById.get(raw) : undefined
+    if (owner !== undefined && owner !== name) return { ...seed, id: buildPlayerId(sport, null, seed.name, seed.team) }
+    return seed
+  })
+}
+
 function buildProjectionMap(rows: Array<Record<string, unknown>>): Map<string, Record<string, unknown>> {
   const map = new Map<string, Record<string, unknown>>()
   for (const row of rows) {
@@ -421,9 +477,10 @@ export async function runSportsDataImporter(options?: {
     }
     teamCodeCounts[sport] = teamCtx.counts
 
-    const [identitySeeds, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
+    const [identitySeeds, sleeperIdOwners, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
         loadIdentitySeeds(sport, teamCtx),
+        loadSleeperIdOwners(sport),
         // The only UNBOUNDED provider read in this block. `projections` and `rankings` below were
         // already wrapped; this one was not, and it is the same apiChain.fetch against the same
         // providers. An unbounded call here is what turns a 239s start into a 300s edge 502.
@@ -576,7 +633,7 @@ export async function runSportsDataImporter(options?: {
       newsMap.set(key, current)
     }
 
-    const rows = Array.from(seedMap.values()).flatMap((seed) => {
+    const rows = keySeedsToSleeperIdentity(sport, Array.from(seedMap.values()), sleeperIdOwners).flatMap((seed) => {
       const key = normalizePlayerName(seed.name)
       const injury = injuryMap.get(key)
       const adp = adpMap.get(key)

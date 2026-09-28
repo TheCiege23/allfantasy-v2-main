@@ -924,7 +924,8 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                     {career.level != null ? (
                       <b className="af3a-mono af3a-lvl">
                         LVL <i>{career.level}</i>
-                        <em>AF RANK</em>
+                        {/* The XP level, not a rank — "AF RANK" under it read as "your rank is 14". */}
+                        <em>CAREER LEVEL</em>
                       </b>
                     ) : null}
                     <b className="af3a-mono af3a-stat">
