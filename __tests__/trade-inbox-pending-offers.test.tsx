@@ -178,11 +178,13 @@ describe('⚠ the inbox never claims an empty league it did not read', () => {
     expect(INBOX).toContain('pending.weeksUnanswered > 0')
   })
 
-  it('shows an auditable public-feed receipt without promising every live offer is present', () => {
+  it('shows an auditable feed receipt without promising every live offer is present', () => {
     expect(ROUTE).toContain('weeksRequested: pendingScan.weeksRequested')
     expect(ROUTE).toContain('weeksAnswered: pendingScan.weeksAnswered')
     expect(INBOX).toContain('Public transaction feed check')
-    expect(INBOX).toContain('Sleeper may show additional live proposals in its app')
+    // Sleeper: the feed carries a trade only once accepted — rendered coverage in
+    // __tests__/trades/trade-inbox-sleeper-open-offers.test.tsx.
+    expect(INBOX).toContain('Sleeper only shares a trade once it&rsquo;s accepted')
   })
 
   it('⚠ offers no accept, reject or counter — the provider has no write endpoint', () => {
