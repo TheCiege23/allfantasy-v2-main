@@ -84,10 +84,12 @@ export function triageRows(args: {
 
   for (const s of starters) {
     const reported = injuries.get(s.name.trim().toLowerCase()) ?? null
-    // An injury item explicitly about a later week is not a warning for this week's
-    // lineup. The feed often publishes Week 4 status while Week 3 is still live.
-    const reportWeek = reported?.description?.match(/\bWeek\s+(\d{1,2})\b/i)
-    const inj = week != null && reportWeek && Number(reportWeek[1]) > week ? null : reported
+    // A designation explicitly for another week is not a current lineup warning.
+    // Match the designation phrase, not "Expected Return Week 7": a player on
+    // IR with that return date is still unavailable this week. Old Week 1
+    // Questionable reports must not survive into a Week 3 game-day triage.
+    const reportWeek = reported?.description?.match(/\b(?:Out|Questionable|Doubtful|Probable|Inactive|Active)\s+for\s+Week\s+(\d{1,2})\b/i)
+    const inj = week != null && reportWeek && Number(reportWeek[1]) !== week ? null : reported
     const readyBase = readiness(inj?.status ?? null, Boolean(inj))
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null
