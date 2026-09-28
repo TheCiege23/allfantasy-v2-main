@@ -222,7 +222,6 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/draft/ai-claude.ts',
     'lib/fantasy-news-aggregator/NewsSummarizerAI.ts',
     'lib/guillotine/ai/GuillotineAIService.ts',
-    'lib/integrity/CollusionDetectionEngine.ts',
     'lib/integrity/TankingDetectionEngine.ts',
     'lib/salary-cap/ai/SalaryCapAIService.ts',
     'lib/smart-trade-recommendations.ts',
@@ -311,7 +310,10 @@ describe('AI spend guard — provider boundary coverage', () => {
      * genuinely deleted, and say which one in the commit — that sentence is the
      * difference between a deletion and a silent revert.
      */
-    expect(GUARDED.length).toBeGreaterThanOrEqual(34)
+    // 34 on 2026-09-27 (#1385 guarded lib/ai/providerRouter.ts), then 33: lib/integrity/CollusionDetectionEngine.ts
+    // is no longer a provider boundary — its direct Anthropic verdict was deleted, and its note now goes through
+    // explainTrade → providerRouter, which is guarded. A deletion, not a silent revert.
+    expect(GUARDED.length).toBeGreaterThanOrEqual(33)
   })
 
   it('the unguarded ratchet has not grown', () => {

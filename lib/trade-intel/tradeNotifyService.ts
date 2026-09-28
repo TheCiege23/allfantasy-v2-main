@@ -8,7 +8,8 @@ import { sendTemplatedEmail } from '@/lib/resend-client'
 import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
 import { getTradeGrades, type GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { buildPendingTradeOfferEmail, buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
-import { completedTradeGraderFor, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, completedTradeInputs, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -395,6 +396,19 @@ function completedGradeCache(): (
       hit = (async () => {
         const grader: LeagueTradeGrader | null = await completedTradeGraderFor(rowId).catch(() => null)
         const grade = await oneGradeForCompletedTrade(rowId, trade, season, { graderFor: async () => grader }).catch(() => null)
+        /*
+         * The emailed grade, on record (Trade OS): once per league row and trade, shared by every
+         * recipient of it, so no single recipient is named on the receipt.
+         * ⚠ FAILURE-CONTAINED: a receipt is bookkeeping and must never cost a manager their alert.
+         */
+        if (grade) {
+          try {
+            const inputs = completedTradeInputs(trade, season)
+            if (inputs) await receiptIdForGrade({ surface: 'trade-email', leagueId: rowId, userId: null, give: inputs.give, get: inputs.get, viewerSide: false, grade })
+          } catch {
+            // the alert goes regardless
+          }
+        }
         return { grade, leagueType: grade?.leagueType ?? grader?.leagueType ?? null, grader }
       })()
       memo.set(key, hit)
@@ -858,13 +872,25 @@ async function notifyOffers(args: {
            * grade that cannot be computed withholds its letter; the alert still goes.
            */
           const grader = await createLeagueTradeGrader({ leagueId: row.id, userId: recipient.id }).catch(() => null)
-          const grade = await gradeDeal(grader, {
-            give: gradeInputsFromPending(assetsGiven, 'sleeper'),
-            get: gradeInputsFromPending(assetsReceived, 'sleeper'),
-            viewerSide: true,
-          }).catch(() => null)
+          const give = gradeInputsFromPending(assetsGiven, 'sleeper')
+          const get = gradeInputsFromPending(assetsReceived, 'sleeper')
+          const grade = await gradeDeal(grader, { give, get, viewerSide: true }).catch(() => null)
+          // The emailed letter, on record for this recipient (Trade OS), linked to the Sleeper offer.
+          // `receiptIdForGrade` never throws, so a failed save cannot cost the recipient their alert.
+          if (grade) {
+            await receiptIdForGrade({
+              surface: 'trade-email',
+              leagueId: row.id,
+              userId: recipient.id,
+              give,
+              get,
+              viewerSide: true,
+              grade,
+              stored: storedTradeLink({ kind: 'provider', provider: 'sleeper', providerTradeId: offer.id }, { source: 'provider', platform: 'sleeper', status: 'proposed' }),
+            })
+          }
           const saved = await captureEmailEvaluation({ userId: recipient.id, leagueId: row.id, leagueName, grader, grade,
-            give: gradeInputsFromPending(assetsGiven, 'sleeper'), get: gradeInputsFromPending(assetsReceived, 'sleeper'), origin: 'pending_email',
+            give, get, origin: 'pending_email',
           }).catch(() => null)
           return buildPendingTradeOfferEmail({
             leagueName,

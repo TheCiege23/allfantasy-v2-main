@@ -5,7 +5,7 @@ import {
   contentionScore,
   discountFactor,
 } from '@/lib/projections/objectiveEngine'
-import { evaluateTrade, gradeTrade, type TradeSide } from '@/lib/projections/tradeGrading'
+import { hasNoSignal, type TradeSide } from '@/lib/projections/tradeGrading'
 
 const engine = new HeuristicObjectiveEngine()
 
@@ -72,91 +72,25 @@ describe('temporal discounting', () => {
   })
 })
 
-describe('per-side trade evaluation', () => {
-  const sideA: TradeSide & { teamId: string } = {
-    teamId: 'contender',
-    label: 'contender',
-    assets: [{ id: 'star', rank: 5, rawValue: null }],
-  }
-  const sideB: TradeSide & { teamId: string } = {
-    teamId: 'rebuilder',
-    label: 'rebuilder',
-    assets: [
-      { id: 'young1', rank: 40, rawValue: null },
-      { id: 'young2', rank: 60, rawValue: null },
-    ],
-  }
-
-  it('reports mutual benefit when both sides improve against their own objective', () => {
-    // The contender buys present value; the rebuilder buys future. Both gain.
-    // A "who won" verdict would be wrong here, which is the whole point.
-    const res = evaluateTrade({
-      sideA,
-      sideB,
-      objectiveDeltaFor: (teamId) => (teamId === 'contender' ? 0.03 : 0.02),
-      engineVersion: 'test',
-    })
-    expect(res.evaluated).toBe(true)
-    if (!res.evaluated) return
-    expect(res.mutualBenefit).toBe(true)
-    expect(res.sides).toHaveLength(2)
-    expect(res.sides.every((s) => s.delta > 0)).toBe(true)
-  })
-
-  it('grades the same trade oppositely for differently-situated teams', () => {
-    const res = evaluateTrade({
-      sideA,
-      sideB,
-      objectiveDeltaFor: (teamId) => (teamId === 'contender' ? 0.06 : -0.06),
-      engineVersion: 'test',
-    })
-    if (!res.evaluated) return
-    expect(res.mutualBenefit).toBe(false)
-    expect(res.sides[0].verdict).toBe('STRONG_GAIN')
-    expect(res.sides[1].verdict).toBe('STRONG_LOSS')
-  })
-
-  it('refuses to evaluate when coverage is partial, exactly as grading does', () => {
-    const partial: TradeSide & { teamId: string } = {
-      teamId: 'x',
-      label: 'x',
-      assets: [
-        { id: 'known', rank: 10, rawValue: null },
-        { id: 'unknown', rank: null, rawValue: null },
-      ],
-    }
-    const res = evaluateTrade({
-      sideA: partial,
-      sideB,
-      objectiveDeltaFor: () => 0.05,
-      engineVersion: 'test',
-    })
-    expect(res.evaluated).toBe(false)
-    if (res.evaluated) return
-    expect(res.reason).toBe('PARTIAL_COVERAGE')
-  })
-
-  it('keeps the value split as context, not as the verdict', () => {
-    const res = evaluateTrade({
-      sideA,
-      sideB,
-      objectiveDeltaFor: () => 0.01,
-      engineVersion: 'test',
-    })
-    if (!res.evaluated) return
-    // The split is still available for display...
-    expect(res.valueSplit.graded).toBe(true)
-    // ...but the per-side verdicts are what a consumer grades on.
-    expect(res.sides[0].verdict).toBeDefined()
-  })
-})
-
+/*
+ * The per-side `evaluateTrade` and the rank-space `gradeTrade` that lived in
+ * `lib/projections/tradeGrading.ts` were deleted on 2026-09-26 — neither had a runtime caller, and
+ * the one trade engine is `lib/decision-os/trade/evaluateTrade.ts`. The coverage guard they sat on
+ * is still exported and still used by `lib/core-app`, so it keeps its tests.
+ */
 describe('the coverage guard still governs', () => {
+  const priced = (id: string, rank: number | null): TradeSide['assets'][number] => ({ id, rank, rawValue: null })
+
   it('refuses a single-sided trade', () => {
-    const g = gradeTrade(
-      { label: 'a', assets: [] },
-      { label: 'b', assets: [{ id: 'x', rank: 1, rawValue: null }] }
-    )
-    expect(g.graded).toBe(false)
+    expect(hasNoSignal({ label: 'a', assets: [] }, { label: 'b', assets: [priced('x', 1)] })).toBe(true)
+  })
+
+  it('refuses partial coverage, rather than pricing the missing asset at zero', () => {
+    const partial = { label: 'x', assets: [priced('known', 10), priced('unknown', null)] }
+    expect(hasNoSignal(partial, { label: 'y', assets: [priced('z', 40)] })).toBe(true)
+  })
+
+  it('allows a fully covered trade — the control that lets the two above fail', () => {
+    expect(hasNoSignal({ label: 'a', assets: [priced('star', 5)] }, { label: 'b', assets: [priced('y1', 40), priced('y2', 60)] })).toBe(false)
   })
 })

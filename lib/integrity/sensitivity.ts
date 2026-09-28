@@ -17,12 +17,15 @@
  * file ever grows a server-only import, the UI silently forks from the engine
  * and the promise on screen becomes a guess.
  *
- * ⚠ MEDIUM IS PINNED TO THE PREVIOUS HARDCODED BEHAVIOUR. `medium` is the column
- * default, so every existing league is on it. Collusion's trigger was a bare
- * `valueDifferentialPct >= 35` and tanking's bench gap was a bare `>= 5`; medium
- * reproduces both exactly. Wiring these settings up therefore changes nothing
- * for any league that never touched the control, and only does something for a
- * commissioner who deliberately moved it.
+ * ⚠ TANKING'S MEDIUM IS PINNED TO THE PREVIOUS HARDCODED BEHAVIOUR (a bench gap of
+ * `>= 5`). `medium` is the column default, so every existing league is on it.
+ *
+ * ⚠ COLLUSION'S IS NOT, ON PURPOSE. Its old trigger was `valueDifferentialPct >= 35`
+ * on the scan's private value scale. On 2026-09-27 the scan was converted to run the
+ * trade review, and its sensitivity now picks review flags by severity — see
+ * `COLLUSION_MIN_SEVERITY`. That is a behaviour change for every league, and it is
+ * the change that was asked for: one engine, so the scan cannot disagree with the
+ * review panel about the same trade.
  */
 
 export type IntegritySensitivity = 'low' | 'medium' | 'high'
@@ -35,16 +38,35 @@ export function normalizeSensitivity(value: unknown): IntegritySensitivity {
 }
 
 /**
- * Percentage by which the two sides of a trade must differ, measured against the
- * larger side, before the trade is flagged for review.
+ * Collusion: which of the trade review's own flags open an integrity flag.
  *
- * `medium: 35` is the number the engine used unconditionally before this module
- * existed — see the file header.
+ * ⚠ NOT A THRESHOLD, AND THAT IS THE POINT (2026-09-27). This used to be a value-gap
+ * percentage on the scan's private value scale, so a commissioner's review panel and
+ * the post-trade scan could disagree about the same trade. The scan now runs the
+ * review itself (`lib/decision-os/trade/tradeReview.ts`), whose checks and severities
+ * are fixed in code; sensitivity only chooses how serious a raised check must be to
+ * open a case. Every level therefore sees exactly the flags the panel shows.
+ *
+ * Mirrors `ReviewSeverity` rather than importing it: this file stays import-free
+ * (see the header).
  */
-export const COLLUSION_VALUE_GAP_PCT: Record<IntegritySensitivity, number> = {
-  low: 50,
-  medium: 35,
-  high: 25,
+type ReviewSeverityLike = 'low' | 'medium' | 'high'
+
+export const COLLUSION_MIN_SEVERITY: Record<IntegritySensitivity, ReviewSeverityLike> = {
+  low: 'high',
+  medium: 'medium',
+  high: 'low',
+}
+
+const SEVERITY_RANK: Record<ReviewSeverityLike, number> = { low: 1, medium: 2, high: 3 }
+
+/** The raised review flags serious enough, at this sensitivity, to open a collusion flag. */
+export function collusionFlagsAtSensitivity<F extends { severity: ReviewSeverityLike }>(
+  flags: readonly F[],
+  level: IntegritySensitivity,
+): F[] {
+  const floor = SEVERITY_RANK[COLLUSION_MIN_SEVERITY[level]]
+  return flags.filter((f) => SEVERITY_RANK[f.severity] >= floor)
 }
 
 /**
@@ -52,9 +74,8 @@ export const COLLUSION_VALUE_GAP_PCT: Record<IntegritySensitivity, number> = {
  * as a suspicious lineup decision. `medium: 5` matches the previous hardcoded
  * gap.
  *
- * A LOWER number is MORE sensitive, which is the opposite direction from the
- * collusion table above reading top to bottom — both are "high = catches more",
- * which is what the commissioner is choosing between.
+ * A LOWER number is MORE sensitive. "High = catches more" is what the commissioner
+ * is choosing between, for both controls.
  */
 export const TANKING_BENCH_GAP_POINTS: Record<IntegritySensitivity, number> = {
   low: 9,
@@ -68,9 +89,12 @@ export const TANKING_BENCH_GAP_POINTS: Record<IntegritySensitivity, number> = {
  * product does not honour.
  */
 export function describeCollusionSensitivity(level: IntegritySensitivity): string {
-  const pct = COLLUSION_VALUE_GAP_PCT[level]
-  const label = level === 'low' ? 'Low' : level === 'high' ? 'High' : 'Medium'
-  return `${label} flags a trade once the two sides differ by about ${pct}% of the larger side.`
+  const floor = COLLUSION_MIN_SEVERITY[level]
+  if (floor === 'high') return 'Low flags a trade only for a heavily lopsided value gap or, in a one-season league, a tanking signal.'
+  if (floor === 'medium') {
+    return 'Medium flags a heavily lopsided value gap, a tanking signal, a dynasty or keeper rebuild, repeat partners who all lean one way, an inactive manager, or an eliminated team sending starters to a contender.'
+  }
+  return 'High flags every trade review flag, including a lopsided trade rushed in just before the deadline.'
 }
 
 export function describeTankingSensitivity(level: IntegritySensitivity): string {

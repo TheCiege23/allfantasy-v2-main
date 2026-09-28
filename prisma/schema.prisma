@@ -12207,13 +12207,18 @@ model TradeManagerStrategy {
   @@map("trade_manager_strategies")
 }
 
-/// Append-only evidence captured when an AllFantasy trade proposal is created.
+/// Append-only evidence captured when an AllFantasy trade proposal is created — and, since
+/// 2026-09-26, THE one receipt table for every `evaluateTrade()` call: a proposal's receipt is in its
+/// own row, an evaluation that is not a trade gets a row with `tradeId` NULL.
 /// Historical decision grades may use this row; current data must never overwrite it.
 model TradeDecisionSnapshot {
   id                 String   @id @default(cuid())
-  tradeId            String   @unique
-  leagueId           String
-  proposedByUserId   String
+  /// The AfLeagueTrade this receipt belongs to. NULL for an evaluation that is not a trade — an ad-hoc
+  /// `evaluateTrade()` call from /trade-evaluator or the legacy analyzer (2026-09-26). Every reader
+  /// selects by `tradeId`, so those rows are invisible to trade screens by construction.
+  tradeId            String?  @unique
+  leagueId           String?
+  proposedByUserId   String?
   policyVersion      String   @db.VarChar(48)
   format             String   @db.VarChar(32)
   leagueContext      Json
@@ -12229,9 +12234,18 @@ model TradeDecisionSnapshot {
   /// ⚠ Timestamptz for the same reason as TradeManagerStrategy above — the migration that
   /// created this table was hand-written with `TIMESTAMPTZ`.
   capturedAt         DateTime @default(now()) @db.Timestamptz(6)
+  /// Which surface evaluated it: `proposal`, `trade-evaluator`, `legacy-trade-analyze`. NULL on rows
+  /// written before the one trade engine.
+  surface            String?  @db.VarChar(48)
+  /// sha256 of the normalized deal, so the same deal evaluated twice can be found.
+  inputHash          String?  @db.VarChar(64)
+  /// The full `TradeEvaluationReceipt` from `lib/decision-os/trade/evaluateTrade.ts`, as computed.
+  evaluationReceipt  Json?
 
   @@index([leagueId, capturedAt])
   @@index([proposedByUserId, capturedAt])
+  @@index([inputHash])
+  @@index([surface, capturedAt])
   @@map("trade_decision_snapshots")
 }
 

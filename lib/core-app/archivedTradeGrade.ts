@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, gradeArchivedTradeWithInputs } from '@/lib/decision-os/trade/completedTradeGrade'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
 import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
@@ -38,6 +39,9 @@ export type ArchivedTradeGrade = {
   grade: TradeGradeView
   picksIn: ArchivedPick[]
   picksOut: ArchivedPick[]
+  /** What was graded, in the grader's terms — so a caller can record the grade as a receipt (Trade OS). */
+  give: GradeInputs
+  get: GradeInputs
 }
 
 const idsOf = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
@@ -76,14 +80,14 @@ export async function gradeArchivedTradeRows(args: {
       )
       const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
       const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
-      const grade = await gradeArchivedTrade(grader, {
+      const { grade, give, get } = await gradeArchivedTradeWithInputs(grader, {
         received: idsOf(t.playersReceived).map(args.nameOf),
         gave: idsOf(t.playersGiven).map(args.nameOf),
         picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
         picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
         currentSeason,
       })
-      out.set(t.transactionId, { grade, picksIn, picksOut })
+      out.set(t.transactionId, { grade, picksIn, picksOut, give, get })
     }),
   )
   return out

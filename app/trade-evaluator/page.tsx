@@ -12,6 +12,7 @@ import { InContextMonetizationCard } from "@/components/monetization/InContextMo
 import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui"
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
 import type { NegotiationToolkit } from "@/lib/trade-engine/types"
+import { liveGradePanel } from "@/lib/decision-os/trade/receiptViews"
 
 type LeagueFormat = "dynasty" | "keeper" | "redraft"
 type QBFormat = "sf" | "1qb"
@@ -45,6 +46,7 @@ type VerdictKey =
   | "LEAN DECLINE"
   | "DECLINE"
   | "SMASH DECLINE"
+  | "NOT GRADED"
 
 interface TradePlayer {
   id: string
@@ -88,13 +90,27 @@ interface TradeLabelChip {
 
 interface TradeResult {
   verdict: VerdictKey
-  fairnessScore: number
+  /**
+   * 🛑 LIVE MODE SHOWS ONLY THE RECEIPT'S NUMBERS. The route's composite fairness, value delta,
+   * confidence, acceptance drivers and signal chips are priced differently from the one grade and
+   * could contradict the letter beside them, so the page carries `receiptTotals` and hides them.
+   * Historical (`asOfDate`) mode shows the same one grade since 2026-09-27; its old letters are gone.
+   */
+  live: boolean
+  /** In `asOfDate` mode: what the grade is on, and the as-of-date gap as a labelled number. */
+  historicalNote: string | null
+  receiptTotals: { send: number; get: number; gapPct: number } | null
+  fairnessScore: number | null
   fairnessMethod: string | null
-  senderGrade: string
-  receiverGrade: string
-  valueDelta: number
-  confidencePct: number
+  /** Null when the grade was withheld — `gradeWithheld` says why. */
+  senderGrade: string | null
+  receiverGrade: string | null
+  gradeWithheld: string | null
+  valueDelta: number | null
+  confidencePct: number | null
   recommendation: string
+  /** The AI's own summary, shown under the grade's recommendation in live mode. */
+  aiSummary: string | null
   analysisBullets: string[]
   providers: string[]
   pECRIterations?: number
@@ -196,13 +212,28 @@ interface ApiTradeResponse {
     sensitivitySentence?: string
   }
   negotiationToolkit?: NegotiationToolkit
-  dualModeGrades?: {
-    atTheTime?: { percentDiff?: number; grade?: string }
-    withHindsight?: { percentDiff?: number; grade?: string }
-    comparison?: string
+  /** The one trade engine's grade, from the sender's side (`lib/decision-os/trade/evaluateTrade.ts`). */
+  tradeGrade?: {
+    grade: string | null
+    partnerGrade: string | null
+    gradeLabel: string | null
+    gradeWithheld: string | null
+    percentDiff: number | null
+    giveValue: number | null
+    getValue: number | null
+    recommendation: string | null
+    evaluationReceiptId: string | null
   }
+  /** The as-of-date value comparison — numbers only; the route sends no letter for it. */
+  dualModeGrades?: {
+    atTheTime?: { percentDiff?: number }
+    withHindsight?: { percentDiff?: number }
+  }
+  /** Which provider wrote the explanation of the grade (one call, Phase 4), keyed by provider name. */
   aiProviders?: {
     openai?: string
+    anthropic?: string
+    xai?: string
     deepseek?: string
     grok?: string
   }
@@ -255,6 +286,25 @@ const VERDICT_CONFIG: Record<VerdictKey, { color: string; glow: string; emoji: s
   "LEAN DECLINE": { color: "#fb923c", glow: "rgba(251,146,60,0.28)", emoji: "📉" },
   DECLINE: { color: "#f87171", glow: "rgba(248,113,113,0.30)", emoji: "❌" },
   "SMASH DECLINE": { color: "#ef4444", glow: "rgba(239,68,68,0.35)", emoji: "🚫" },
+  "NOT GRADED": { color: "#94a3b8", glow: "rgba(148,163,184,0.22)", emoji: "⏸️" },
+}
+
+/** The one grade's label as this page's verdict — the badge reads off the same number as the letter. */
+function verdictFromGradeLabel(label: string | null | undefined): VerdictKey {
+  switch (label) {
+    case "Major win (you)":
+      return "SMASH ACCEPT"
+    case "Slightly favors you":
+      return "LEAN ACCEPT"
+    case "Even":
+      return "FAIR"
+    case "Slightly favors opponent":
+      return "LEAN DECLINE"
+    case "Major overpay":
+      return "SMASH DECLINE"
+    default:
+      return "NOT GRADED"
+  }
 }
 
 const POSITION_OPTIONS = ["", "QB", "RB", "WR", "TE", "K", "DEF", "PG", "SG", "SF", "PF", "C", "SP", "RP", "OF", "SS", "2B", "3B", "1B", "LW", "RW", "D", "G", "UTIL", "FLEX", "IDP"]
@@ -295,12 +345,6 @@ function emptySide(name: string, firstPlayerName = ""): TradeSide {
   }
 }
 
-function clampScore(value: unknown, fallback = 50) {
-  const score = Number(value)
-  if (!Number.isFinite(score)) return fallback
-  return Math.max(0, Math.min(100, Math.round(score)))
-}
-
 type LinkedLeague = {
   id: string
   sleeperLeagueId?: string | null
@@ -330,90 +374,8 @@ function scoringFromLinkedLeague(league: LinkedLeague): ScoringFormat | null {
   return null
 }
 
-function humanizeKey(value: string) {
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
 
-function driverDirection(value: string | undefined): TradeDriver["direction"] {
-  if (value === "UP") return "positive"
-  if (value === "DOWN") return "negative"
-  return "neutral"
-}
 
-function driverStrength(value: string | undefined): TradeDriver["strength"] {
-  if (value === "STRONG") return "strong"
-  if (value === "MEDIUM") return "moderate"
-  return "weak"
-}
-
-function driverDetail(driver: ApiDriver) {
-  const evidence = driver.evidence
-  if (!evidence) return "Deterministic trade engine signal."
-
-  const pieces = [
-    evidence.metric ? humanizeKey(evidence.metric) : null,
-    typeof evidence.raw === "number" ? `${evidence.raw}${evidence.unit ? ` ${evidence.unit}` : ""}` : null,
-    evidence.note ?? null,
-  ].filter(Boolean)
-
-  return pieces.length > 0 ? pieces.join(" · ") : "Deterministic trade engine signal."
-}
-
-function gradeFromPercentDiff(percentDiff: number): string {
-  if (percentDiff > 20) return "A+"
-  if (percentDiff > 10) return "A"
-  if (percentDiff > 5) return "B+"
-  if (percentDiff > -5) return "B"
-  if (percentDiff > -10) return "C+"
-  if (percentDiff > -20) return "C"
-  return "D"
-}
-
-function pickPercentDiff(payload: ApiTradeResponse, asOfDate: string) {
-  if (payload.dualModeGrades) {
-    const preferred = asOfDate ? payload.dualModeGrades.atTheTime : payload.dualModeGrades.withHindsight
-    if (typeof preferred?.percentDiff === "number") return preferred.percentDiff
-    if (typeof payload.dualModeGrades.withHindsight?.percentDiff === "number") return payload.dualModeGrades.withHindsight.percentDiff
-    if (typeof payload.dualModeGrades.atTheTime?.percentDiff === "number") return payload.dualModeGrades.atTheTime.percentDiff
-  }
-
-  const received = Number(payload.valuationReport?.teamA?.totalReceived ?? 0)
-  const given = Number(payload.valuationReport?.teamA?.totalGiven ?? 0)
-  const total = received + given
-  const diff = Number(payload.valuationReport?.teamA?.netValue ?? 0)
-  if (total <= 0) return 0
-  return (diff / total) * 100
-}
-
-function verdictFromPayload(payload: ApiTradeResponse, fairnessScore: number, valueDelta: number): VerdictKey {
-  if (payload.tradeInsights?.veto) return "SMASH DECLINE"
-
-  const engineVerdict = payload.acceptProbability?.verdict
-  const lean = payload.acceptProbability?.lean
-  if (engineVerdict === "Elite Asset Theft") return lean === "Them" ? "SMASH DECLINE" : "SMASH ACCEPT"
-  if (engineVerdict === "Strong Win") return lean === "Them" ? "DECLINE" : "ACCEPT"
-  if (engineVerdict === "Slight Win") return lean === "Them" ? "LEAN DECLINE" : "LEAN ACCEPT"
-  if (engineVerdict === "Fair") return "FAIR"
-  if (engineVerdict === "Overpay Risk") return fairnessScore < 40 || valueDelta < 0 ? "DECLINE" : "LEAN DECLINE"
-  if (engineVerdict === "Major Overpay") return "SMASH DECLINE"
-
-  const overall = payload.evaluation?.verdict?.overall
-  if (overall === "FAIR") {
-    if (fairnessScore >= 55 || valueDelta > 0) return "LEAN ACCEPT"
-    if (fairnessScore <= 45 || valueDelta < 0) return "LEAN DECLINE"
-    return "FAIR"
-  }
-  if (overall === "FAIR_UPSIDE_SKEWED") return valueDelta >= 0 ? "LEAN ACCEPT" : "LEAN DECLINE"
-  if (overall === "UNFAIR_TEAM_A") return valueDelta >= 0 ? "ACCEPT" : "DECLINE"
-  if (overall === "UNFAIR_TEAM_B") return valueDelta >= 0 ? "DECLINE" : "ACCEPT"
-
-  if (fairnessScore >= 60 || valueDelta > 0) return "ACCEPT"
-  if (fairnessScore <= 35 || valueDelta < -1000) return "SMASH DECLINE"
-  if (fairnessScore <= 45 || valueDelta < 0) return "DECLINE"
-  return "FAIR"
-}
 
 function providerList(payload: ApiTradeResponse) {
   const providers = payload.aiProviders
@@ -421,8 +383,9 @@ function providerList(payload: ApiTradeResponse) {
 
   const labels: string[] = []
   if (providers.openai === "ok") labels.push("OpenAI")
+  if (providers.anthropic === "ok") labels.push("Anthropic")
+  if (providers.xai === "ok" || providers.grok === "ok") labels.push("Grok")
   if (providers.deepseek === "ok") labels.push("DeepSeek")
-  if (providers.grok === "ok") labels.push("Grok")
   return labels.length > 0 ? labels : ["AI"]
 }
 
@@ -464,62 +427,65 @@ function buildWarnings(payload: ApiTradeResponse) {
   ].filter((value): value is string => Boolean(value && value.trim()))
 }
 
-function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: string): TradeResult {
-  const fairnessScore = clampScore(
-    payload.tradeInsights?.fairnessScore ?? payload.valuationReport?.teamA?.fairnessScore ?? 50,
-    50
-  )
-  const valueDelta = Number(payload.valuationReport?.teamA?.netValue ?? 0)
-  const percentDiff = pickPercentDiff(payload, asOfDate)
-  const senderGrade =
-    (asOfDate ? payload.dualModeGrades?.atTheTime?.grade : payload.dualModeGrades?.withHindsight?.grade) ??
-    gradeFromPercentDiff(percentDiff)
-  const receiverGrade = gradeFromPercentDiff(-percentDiff)
-  const analysisBullets = [
-    ...(payload.acceptProbability?.acceptBullets ?? []),
-    ...(payload.evaluation?.explanation?.leagueContextNotes ?? []),
-  ].filter(Boolean)
-  const labels: TradeLabelChip[] = [
-    ...(payload.tradeInsights?.labels ?? []).map((label) => ({ ...label, kind: "positive" as const })),
-    ...(payload.tradeInsights?.warnings ?? []).map((label) => ({ ...label, kind: "warning" as const })),
-  ]
-  const drivers = (payload.acceptProbability?.drivers ?? []).map((driver) => ({
-    id: driver.id,
-    direction: driverDirection(driver.direction),
-    strength: driverStrength(driver.strength),
-    label: driver.name ?? humanizeKey(driver.id),
-    detail: driverDetail(driver),
-  }))
+/**
+ * `asOfDate` mode (2026-09-27). The one grader has no as-of-date pricing, so the letter is today's —
+ * and this says so, beside the gap on the requested date as a NUMBER. That old gap used to become a
+ * letter of its own (`computeDualModeGrades`, `gradeFromPercentDiff`), a second scale on one screen.
+ */
+function historicalNoteFor(payload: ApiTradeResponse, asOfDate: string): string | null {
+  if (!asOfDate) return null
+  const base = `Graded on today's league values — grades have no as-of-date pricing yet, so this is not a grade for ${asOfDate}.`
+  const then = payload.dualModeGrades?.atTheTime?.percentDiff
+  if (typeof then !== "number" || !Number.isFinite(then)) return base
+  const pct = Math.round(Math.abs(then))
+  if (pct === 0) return `${base} On ${asOfDate}'s values the two sides were even.`
+  return `${base} On ${asOfDate}'s values the sender ${then > 0 ? "received" : "gave up"} about ${pct}% more value — a value comparison, not a grade.`
+}
 
+function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: string): TradeResult {
+  /*
+   * 🛑 THE LETTER IS THE SERVER'S ONE GRADE, NOT ONE MADE HERE. This used to be
+   * `gradeFromPercentDiff` over the route's composite totals — a third scale, computed in the
+   * browser. A withheld grade shows no letter and the reason, never a fallback letter.
+   */
   const pecrIterations = headers.get("x-pecr-iterations")
   const pecrPassed = headers.get("x-pecr-passed")
-
-  return {
-    verdict: verdictFromPayload(payload, fairnessScore, valueDelta),
-    fairnessScore,
-    fairnessMethod: payload.tradeInsights?.fairnessMethod ?? null,
-    senderGrade,
-    receiverGrade,
-    valueDelta,
-    confidencePct: clampScore(
-      payload.serverConfidence?.score ??
-        payload.evaluation?.confidence?.score ??
-        (typeof payload.acceptProbability?.probability === "number" ? payload.acceptProbability.probability * 100 : 70),
-      70
-    ),
-    recommendation:
-      payload.evaluation?.explanation?.summary ??
-      payload.acceptProbability?.sensitivitySentence ??
-      "Trade analysis complete.",
-    analysisBullets,
+  const shared = {
     providers: providerList(payload),
     pECRIterations: pecrIterations ? Number(pecrIterations) : undefined,
     pECRPassed: pecrPassed ? pecrPassed === "true" : undefined,
-    drivers,
-    labels,
     warnings: buildWarnings(payload),
     idpLineupWarning: payload.tradeInsights?.idpLineupWarning ?? null,
-    idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null,
+  }
+  const warningChips: TradeLabelChip[] = (payload.tradeInsights?.warnings ?? []).map((label) => ({ ...label, kind: "warning" as const }))
+
+  /*
+   * 🛑 LIVE: EVERY NUMBER IS THE RECEIPT'S (2026-09-27). The verdict badge, the totals and the
+   * headline all read off the one grade; the composite fairness, value delta, confidence,
+   * acceptance drivers/bullets, positive signal chips and the IDP fairness-range caveat are hidden,
+   * because they are priced differently and could contradict the letter. The AI summary stays, as
+   * supporting text under the grade — its prompt now leads with the receipt.
+   */
+  const panel = liveGradePanel(payload.tradeGrade)
+  return {
+    ...shared,
+    live: true,
+    historicalNote: historicalNoteFor(payload, asOfDate),
+    receiptTotals: panel.totals,
+    verdict: verdictFromGradeLabel(panel.gradeLabel),
+    fairnessScore: null,
+    fairnessMethod: null,
+    senderGrade: panel.senderGrade,
+    receiverGrade: panel.receiverGrade,
+    gradeWithheld: panel.gradeWithheld,
+    valueDelta: panel.totals ? panel.totals.get - panel.totals.send : null,
+    confidencePct: null,
+    recommendation: panel.headline,
+    aiSummary: payload.evaluation?.explanation?.summary ?? null,
+    analysisBullets: (payload.evaluation?.explanation?.leagueContextNotes ?? []).filter(Boolean),
+    drivers: [],
+    labels: warningChips,
+    idpCeilingCaveat: null,
     counterOffer: buildCounterOffer(payload),
     negotiationSteps: buildNegotiationSteps(payload),
     betterAlternatives: payload.evaluation?.betterAlternatives ?? [],
@@ -1285,39 +1251,75 @@ function TradeHubInner() {
                   </div>
                 ) : null}
 
-                <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Score Cards</div>
-                  <div className="mt-4 grid grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
-                      <div className="text-2xl font-black text-white">{result.fairnessScore}</div>
-                      <div className="mt-1 text-[10px] text-white/35">Fairness</div>
-                    </div>
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
-                      <div className={`text-2xl font-black ${result.valueDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                        {result.valueDelta > 0 ? "+" : ""}
-                        {Math.round(result.valueDelta)}
+                {result.historicalNote ? (
+                  <p data-testid="historical-note" className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-[12px] text-amber-100/80">
+                    {result.historicalNote}
+                  </p>
+                ) : null}
+
+                {result.live ? (
+                  result.receiptTotals ? (
+                    <div data-testid="receipt-totals" className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">League value</div>
+                      <div className="mt-4 grid grid-cols-3 gap-3">
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                          <div className="text-2xl font-black text-white">{result.receiptTotals.send.toLocaleString()}</div>
+                          <div className="mt-1 text-[10px] text-white/35">Sender gives</div>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                          <div className="text-2xl font-black text-white">{result.receiptTotals.get.toLocaleString()}</div>
+                          <div className="mt-1 text-[10px] text-white/35">Sender gets</div>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                          <div className={`text-2xl font-black ${result.receiptTotals.gapPct >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                            {result.receiptTotals.gapPct > 0 ? "+" : ""}
+                            {result.receiptTotals.gapPct}%
+                          </div>
+                          <div className="mt-1 text-[10px] text-white/35">Gap</div>
+                        </div>
                       </div>
-                      <div className="mt-1 text-[10px] text-white/35">Value Delta</div>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
-                      <div className="text-2xl font-black text-white">{result.confidencePct}%</div>
-                      <div className="mt-1 text-[10px] text-white/35">Confidence</div>
+                  ) : null
+                ) : (
+                  <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Score Cards</div>
+                    <div className="mt-4 grid grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                        <div className="text-2xl font-black text-white">{result.fairnessScore ?? "—"}</div>
+                        <div className="mt-1 text-[10px] text-white/35">Fairness</div>
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                        <div className={`text-2xl font-black ${(result.valueDelta ?? 0) >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                          {(result.valueDelta ?? 0) > 0 ? "+" : ""}
+                          {result.valueDelta == null ? "—" : Math.round(result.valueDelta)}
+                        </div>
+                        <div className="mt-1 text-[10px] text-white/35">Value Delta</div>
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
+                        <div className="text-2xl font-black text-white">{result.confidencePct == null ? "—" : `${result.confidencePct}%`}</div>
+                        <div className="mt-1 text-[10px] text-white/35">Confidence</div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Grades</div>
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
-                      <div className="text-3xl font-black text-cyan-200">{result.senderGrade}</div>
+                      <div className="text-3xl font-black text-cyan-200">{result.senderGrade ?? '—'}</div>
                       <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-cyan-100/70">Sender</div>
                     </div>
                     <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4 text-center">
-                      <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade}</div>
+                      <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade ?? '—'}</div>
                       <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-fuchsia-100/70">Receiver</div>
                     </div>
                   </div>
+                  {result.gradeWithheld && (
+                    <div data-testid="trade-grade-withheld" className="mt-3 text-xs text-amber-200/90">
+                      Not graded. {result.gradeWithheld}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
@@ -1350,6 +1352,7 @@ function TradeHubInner() {
                     ) : null}
                   </div>
                   <p className="mt-4 text-base leading-7 text-white/80">{result.recommendation}</p>
+                  {result.aiSummary ? <p className="mt-3 text-sm leading-6 text-white/60">{result.aiSummary}</p> : null}
                   {result.analysisBullets.length > 0 ? (
                     <ul className="mt-4 space-y-2">
                       {result.analysisBullets.map((bullet, index) => (

@@ -32,7 +32,9 @@ import {
 } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
+import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -158,7 +160,7 @@ export async function frozenProposerGrade(tradeId: string): Promise<NoticeGrade 
   try {
     const [trade, snapshot] = await Promise.all([
       prisma.afLeagueTrade.findUnique({ where: { id: tradeId }, select: { proposerRosterId: true } }),
-      prisma.tradeDecisionSnapshot ? prisma.tradeDecisionSnapshot.findFirst({ where: { tradeId } }) : Promise.resolve(null),
+      prisma.tradeDecisionSnapshot ? prisma.tradeDecisionSnapshot.findFirst({ where: { tradeId }, select: PUBLIC_RECEIPT_SELECT }) : Promise.resolve(null),
     ])
     if (!trade || !snapshot) return null
     return publicTradeDecisionReceipt(snapshot).participantDecisions.find((p) => p.rosterId === trade.proposerRosterId) ?? null
@@ -557,6 +559,13 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
   }).tradeManagerStrategy
 
+  // The engine's receipt rides in this trade's own snapshot row — asked BEFORE the transaction,
+  // because writing a column an unmigrated database lacks would abort the trade with it.
+  const engineReceipt =
+    serverDecisionResult?.evaluationReceipt && decisionStore && (await receiptColumnsReady())
+      ? receiptColumns(serverDecisionResult.evaluationReceipt)
+      : null
+
   // Production uses one transaction so a trade can never exist without its
   // proposal-time receipt. Reduced test clients without the new delegate keep
   // exercising the legacy creation path until their generated client updates.
@@ -594,6 +603,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
           leagueId: input.leagueId,
           proposedByUserId: input.proposedByUserId,
           snapshot,
+          receipt: engineReceipt,
         })
         return created
       })
@@ -883,7 +893,12 @@ export async function acceptAfLeagueTrade(input: {
   return { status: 'processed' }
 }
 
-export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; actorUserId: string }): Promise<void> {
+export async function finalizeAfLeagueTradeProcessing(input: {
+  tradeId: string
+  actorUserId: string
+  /** Recorded on this processing's status-history rows — e.g. the commissioner review that was shown. */
+  auditMetadata?: Record<string, unknown>
+}): Promise<void> {
   const trade = await prisma.afLeagueTrade.findUniqueOrThrow({
     where: { id: input.tradeId },
     include: { items: true },
@@ -934,6 +949,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       toStatus: 'scheduled',
       actorUserId: input.actorUserId,
       reason: 'delayed_processing',
+      ...(input.auditMetadata ? { metadata: input.auditMetadata } : {}),
     })
     await appendAfTradeProcessingEvent({
       tradeId: trade.id,
@@ -1015,6 +1031,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       toStatus: 'processed',
       actorUserId: input.actorUserId,
       reason: 'processed',
+      ...(input.auditMetadata ? { metadata: input.auditMetadata } : {}),
     })
     await appendAfTradeProcessingEvent({ tradeId: trade.id, eventType: 'trade_processed', payload: {} })
     await logAfTradeAudit({
@@ -1030,6 +1047,13 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+
+  // The integrity scan: the trade review, run once the trade has settled. Native trades were never
+  // scanned before the scan read real trades (2026-09-27). Fire-and-forget; the worker checks entitlement.
+  // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
+  void Promise.resolve()
+    .then(() => enqueueCollusionScan(trade.leagueId, { kind: 'af', tradeId: trade.id }, [trade.proposerRosterId, trade.receiverRosterId]))
+    .catch((e) => console.error('[af-trade] enqueueCollusionScan failed', e))
 
   recordProductEvent(ENGAGEMENT.TRADE_PROCESSED, {
     userId: input.actorUserId,
@@ -1051,7 +1075,13 @@ export async function commissionerAfTradeDecision(input: {
   leagueId: string
   userId: string
   decision: 'approve' | 'reject'
+  /**
+   * The commissioner review they were shown (`GET …/trades/{id}/review` → `reviewId`), logged with the
+   * decision (design step 6: "decision logged"). Null when there was none, or it was not saved yet.
+   */
+  reviewId?: string | null
 }): Promise<void> {
+  const auditMetadata = { commissionerDecision: input.decision, reviewId: input.reviewId ?? null }
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
   if (!elevated) throw new Error('Commissioner only')
 
@@ -1072,6 +1102,7 @@ export async function commissionerAfTradeDecision(input: {
       toStatus: 'rejected',
       actorUserId: input.userId,
       reason: 'commissioner_reject',
+      metadata: auditMetadata,
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
     await notifyProposerOfDecision({
@@ -1086,7 +1117,7 @@ export async function commissionerAfTradeDecision(input: {
     return
   }
 
-  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId })
+  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata })
 }
 
 export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {

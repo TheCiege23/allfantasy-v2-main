@@ -39,6 +39,7 @@ import { createPhaseTimer, unattributedMs } from '@/lib/logging/phaseTimer'
 import { logUsageEvent } from '@/lib/telemetry/usage'
 import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
 import { applyTradeAnalysisDepth } from '@/lib/trade-value-console/tradeAnalysisDepth'
+import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
 import { loadTradeEdge } from '@/lib/competitive-edge/tradeEdgeLoader'
 import type { EdgeDealAsset } from '@/lib/competitive-edge/tradeEdge'
@@ -430,7 +431,22 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * try block by the parsed REQUEST. Two `const payload` in one block is an ECMAScript
        * early error, so the module would not parse and every request to this route would
        * 500. ignoreBuildErrors:true means the build would not have stopped it. */
-      const responseBody = hasContext ? { ...analysis, ...notes } : analysis
+      /*
+       * The receipt for the grade this response shows (Trade OS, design step 5). The Trade Center
+       * already graded the deal through the one grader (`gradePricedSides`); this records that grade
+       * rather than pricing the deal twice. Null until the receipts migration is applied.
+       */
+      const receiptId = await receiptIdForGrade({
+        surface: 'trade-center',
+        leagueId: parsed.data.leagueId ?? null,
+        userId,
+        give: { assets: parsed.data.sideGive, unpriceable: [] },
+        get: { assets: parsed.data.sideGet, unpriceable: [] },
+        // Roster need is priced only for a signed-in viewer in a league (`runTradeConsoleAnalysis`).
+        viewerSide: Boolean(parsed.data.leagueId && userId),
+        grade: out.grade,
+      })
+      const responseBody = { ...(hasContext ? { ...analysis, ...notes } : analysis), receiptId }
 
       /*
        * Phase attribution for this request.

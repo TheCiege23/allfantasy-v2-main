@@ -13,44 +13,31 @@ type TradeCheckRow = {
   tradeStatus?: 'pending' | 'complete' | string
   aiGrade?: string | null
   aiVerdict?: string | null
+  /** The one engine's analysis (`lib/decision-os/trade/legacyTradeNotificationGrade.ts`); null before the cutover. */
+  aiAnalysis?: {
+    grade?: string | null
+    partnerGrade?: string | null
+    gradeWithheld?: string | null
+    expertAnalysis?: string | null
+  } | null
   isNew?: boolean
 }
 
 const PROCESSED_LIMIT = 500
 
 /**
- * ⚠ RETURNS NULL FOR AN UNGRADED TRADE. This used to default to 50/"C", which
- * announced an invented "Trade score: 50/100 (C)" for trades that were never
- * graded — indistinguishable from a real C. No grade means no score, and the
- * message must say so instead.
+ * The viewer's letter, from the one trade engine. The stored `aiGrade` is the SENDER's (the first roster
+ * in the trade); on an incoming offer the viewer is the receiver, whose letter is the exact mirror the
+ * engine stored as `partnerGrade`. Before 2026-09-27 this showed the sender's letter to the receiver.
+ *
+ * ⚠ NO NUMERIC SCORE. This used to turn the letter into "Trade score: 75/100" through a lookup table —
+ * a second scale nobody computed. A letter is shown as a letter, and a missing one says why (an
+ * ungraded trade used to default to 50/"C", indistinguishable from a real C).
  */
-function toGradeScore(grade: string | null | undefined): { score: number; grade: string } | null {
-  const normalized = String(grade ?? '').trim().toUpperCase()
-  const map: Record<string, number> = {
-    'A+': 95,
-    A: 90,
-    'A-': 85,
-    'B+': 80,
-    B: 75,
-    'B-': 70,
-    'C+': 65,
-    C: 60,
-    'C-': 55,
-    D: 45,
-    F: 30,
-  }
-  const score = map[normalized]
-  if (Number.isFinite(score)) {
-    return { score, grade: normalized }
-  }
-  return null
-}
-
-function toRecommendation(score: number): string {
-  if (score >= 82) return 'Lean accept if it matches your roster timeline.'
-  if (score >= 68) return 'Close value. Consider a small counter for better balance.'
-  if (score >= 55) return 'Prefer a counteroffer before accepting.'
-  return 'Lean decline unless roster context strongly changes the outlook.'
+function viewerLetter(row: TradeCheckRow): string | null {
+  const letter = row.tradeDirection === 'incoming' ? row.aiAnalysis?.partnerGrade : row.aiGrade
+  const normalized = String(letter ?? '').trim().toUpperCase()
+  return /^[ABCDF]$/.test(normalized) ? normalized : null
 }
 
 function tradeAnalyzerHref(leagueId?: string): string {
@@ -136,15 +123,20 @@ export async function resolveTradeEvalIdentity(): Promise<{ sleeperUsername: str
 }
 
 function buildAutoEvalMessage(row: TradeCheckRow): string {
-  const graded = toGradeScore(row.aiGrade)
+  const letter = viewerLetter(row)
   const leagueName = row.leagueName?.trim() || 'your league'
   const verdict = row.aiVerdict ? `Verdict: ${row.aiVerdict}.` : ''
+  const withheld = row.aiAnalysis?.gradeWithheld?.trim()
   const href = tradeAnalyzerHref(row.leagueId)
 
   return [
     `Incoming trade/counter offer in ${leagueName}`,
-    graded ? `Trade score: ${graded.score}/100 (${graded.grade})` : `This trade hasn't been graded yet — not enough data to score it honestly.`,
-    graded ? `Recommendation: ${toRecommendation(graded.score)}` : '',
+    letter
+      ? `Your grade: ${letter}`
+      : withheld
+        ? `Not graded: ${withheld}`
+        : `This trade hasn't been graded yet — not enough data to grade it honestly.`,
+    letter ? row.aiAnalysis?.expertAnalysis?.trim() ?? '' : '',
     verdict,
     `[Open AI Trade Analyzer for a deeper response](${href})`,
   ]

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { completedTradeGraderFor, gradeArchivedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 import type { ActivityTradeGrade } from '@/lib/activity/types'
 
@@ -107,8 +107,10 @@ export async function nativeTradeReceiptGrades(
   try {
     // Absent on a client or test double without the model — the same guard `recentTrades.ts` uses.
     if (!prisma.tradeDecisionSnapshot) return out
-    const rows = await prisma.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: tradeIds } } })
+    const rows = await prisma.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: tradeIds } }, select: PUBLIC_RECEIPT_SELECT })
     for (const row of rows) {
+      // `tradeId` is nullable since ad-hoc receipts exist (one trade engine, Phase 1); the query above filters on it.
+      if (!row.tradeId) continue
       const decisions = publicTradeDecisionReceipt(row).participantDecisions
       if (decisions.length !== 2 || !decisions.every((d) => d.grade && LETTERS.has(d.grade))) continue
       out.set(row.tradeId, {

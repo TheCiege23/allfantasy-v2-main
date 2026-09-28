@@ -354,14 +354,10 @@ export function withheldTradeReason(
    * `grade.total` counts picks now, so "6 players" would be a wrong noun bolted to a
    * right number.
    *
-   * 🛑 AND THE REASON IT IS RESTATED INSTEAD OF CORRECTED AT SOURCE IS NOT TIDINESS.
-   * `lib/projections/tradeGrading.ts` carries two decision-engine boundary violations
-   * that predate this change — `gradeTrade` and `evaluateTrade` are verdict-shaped
-   * exports living outside `lib/decision-os/`, unchanged on `main` — and
-   * `check-decision-engine-boundary.mjs` runs in `--changed` mode, so ANY edit to that
-   * file, including a three-word copy fix 180 lines away from either of them, fails CI.
-   * Clearing them means moving both functions into `lib/decision-os/trade/` and
-   * repointing their callers; that is a real piece of work and it is not this one.
+   * It is restated here because, when this was written, `lib/projections/tradeGrading.ts`
+   * carried two decision-engine boundary violations (`gradeTrade`, `evaluateTrade`) and any
+   * edit to that file failed CI. Both were deleted on 2026-09-26 — neither had a runtime
+   * caller — so the wording could now be corrected at source in `describeNoSignal`.
    */
   if (grade.reason === 'PARTIAL_COVERAGE') {
     return `Not graded — only ${grade.covered} of ${grade.total} assets have values on file.`
