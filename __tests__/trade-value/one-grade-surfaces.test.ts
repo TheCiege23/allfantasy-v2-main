@@ -391,3 +391,29 @@ describe('College redraft — points over replacement, never the private scale (
     expect(code('lib/decision-os/trade/leagueTradeGrader.ts')).toMatch(/resolveAssets\(/)
   })
 })
+
+describe('League asset rules — picks refused where unpriced, held devy prospects priced (design step 9)', () => {
+  it('the league grader refuses picks before pricing and prices devy before grading', () => {
+    const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
+    const refuse = src.indexOf('assets.pickRefusal([...give, ...get])')
+    const price = src.indexOf('resolveAssets(give, opts)')
+    expect(refuse).toBeGreaterThan(-1)
+    expect(price).toBeGreaterThan(refuse)
+    expect(src).toMatch(/assets\.priceDevy\(\{ inputs: give, lines: g\.lines, priced: g\.priced \}\)/)
+    expect(src).toMatch(/giveLines: gd\.lines,\s*getLines: td\.lines,/)
+  })
+
+  it('the Trade Center console applies the same rules to the deal and to its counters', () => {
+    const src = code('lib/trade-value-console/runTradeConsoleAnalysis.ts')
+    expect(src).toMatch(/withheld: assetPolicy\?\.pickRefusal\(\[\.\.\.give, \.\.\.get\]\) \?\? null/)
+    expect(src).toMatch(/assetPolicy\.priceDevy\(\{ inputs: give, lines: giveLines, priced: givePriced \}\)/)
+    expect(src).toMatch(/assetPolicy\?\.pickRefusal\(\[\.\.\.counterGive, \.\.\.counterGet\]\)/)
+    expect(src).toMatch(/assetPolicy\.priceDevy\(\{ inputs: counterGive, lines: g\.lines, priced: g\.priced \}\)/)
+  })
+
+  it('the devy price is the measured option value, not the commissioner bridge or the private scale', () => {
+    const src = code('lib/decision-os/trade/leagueAssetRules.ts')
+    expect(src).toMatch(/devyOptionValue\(/)
+    expect(src).not.toMatch(/devyMarketBridge|resolveDevyBridge|dynastyValue|c2cSideWeight/)
+  })
+})

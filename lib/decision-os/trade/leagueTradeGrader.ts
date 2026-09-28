@@ -21,6 +21,8 @@ import { loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewe
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
+import { createLeagueAssetPolicy } from './leagueAssetPolicy'
+import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 
 /**
  * The ONE trade grade, computed. Every surface that shows a letter for a deal that has not happened
@@ -82,6 +84,8 @@ export async function gradePricedSides(args: {
   need: NeedScope | null
   /** Why this deal cannot be graded at all, when the caller already knows (e.g. no league). */
   withheld?: string | null
+  /** Sentences the basis must carry about how some lines were priced (e.g. devy prospects). */
+  basisNotes?: readonly string[]
   mark?: (name: string) => void
 }): Promise<{ leagueGrade: LeagueGrade; grade: TradeGradeView; needFactors: NeedFactors | null }> {
   const { chart } = args
@@ -133,6 +137,7 @@ export async function gradePricedSides(args: {
   if (chart.valuationGaps?.length) {
     leagueGrade.valueBasis.label += ` — scope: chart and league scoring only. ${chart.valuationGaps.join(' ')}`
   }
+  if (args.basisNotes?.length) leagueGrade.valueBasis.label += ` ${args.basisNotes.join(' ')}`
   const withheld =
     args.withheld ??
     proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
@@ -245,6 +250,14 @@ export async function createLeagueTradeGrader(args: {
     sport === 'NCAAF'
       ? createNcaafLeagueGrader({ id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType })
       : null
+  /* Phase 9: picks refused where nothing prices them, and devy prospects this league holds priced. */
+  const assets = createLeagueAssetPolicy({
+    id: args.leagueId,
+    sport,
+    leagueType,
+    season: leagueRow.season ?? null,
+    status: leagueRow.status ?? null,
+  })
 
   // An arrow, not a function declaration: a hoisted declaration loses the `leagueRow` null narrowing.
   const gradeOnce = async ({
@@ -259,6 +272,8 @@ export async function createLeagueTradeGrader(args: {
     try {
       const collegeView = college ? await college.grade(give, get) : null
       if (collegeView) return collegeView
+      const pickWhy = assets.pickRefusal([...give, ...get])
+      if (pickWhy) return { graded: false, reason: pickWhy, basis: null }
       const dataGaps: string[] = []
       const opts = {
         effectiveSport: sport,
@@ -277,12 +292,17 @@ export async function createLeagueTradeGrader(args: {
           basis: null,
         }
       }
+      const [gd, td] = await Promise.all([
+        assets.priceDevy({ inputs: give, lines: g.lines, priced: g.priced }),
+        assets.priceDevy({ inputs: get, lines: t.lines, priced: t.priced }),
+      ])
       const { grade } = await gradePricedSides({
         chart,
-        giveLines: g.lines,
-        getLines: t.lines,
-        givePriced: applyChartTePremium(chart, g.priced),
-        getPriced: applyChartTePremium(chart, t.priced),
+        giveLines: gd.lines,
+        getLines: td.lines,
+        givePriced: applyChartTePremium(chart, gd.priced),
+        getPriced: applyChartTePremium(chart, td.priced),
+        basisNotes: gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : [],
         need:
           viewerSide && args.userId
             ? { leagueId: args.leagueId, userId: args.userId, sport, starters: leagueRow.starters }

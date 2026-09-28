@@ -45,6 +45,8 @@ import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './l
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
+import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
+import { DEVY_BASIS_NOTE } from '@/lib/decision-os/trade/leagueAssetRules'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
 import {
   benchAssetsNotInGive,
@@ -291,6 +293,32 @@ export async function runTradeConsoleAnalysis(
   }
 
   mark('assets_get')
+  /*
+   * Phase 9: the same league asset rules `createLeagueTradeGrader` applies — a devy prospect this league
+   * holds is priced, and a pick is refused where nothing prices it — so the console cannot disagree.
+   */
+  const assetPolicy =
+    leagueRow && input.leagueId
+      ? createLeagueAssetPolicy({
+          id: input.leagueId.trim(),
+          sport: String(effectiveSport),
+          leagueType: leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, platform: leagueRow.platform ?? null }),
+          season: leagueRow.season ?? null,
+          status: leagueRow.status ?? null,
+        })
+      : null
+  let devyPricedCount = 0
+  if (assetPolicy) {
+    const [gd, td] = await Promise.all([
+      assetPolicy.priceDevy({ inputs: give, lines: giveLines, priced: givePriced }),
+      assetPolicy.priceDevy({ inputs: get, lines: getLines, priced: getPriced }),
+    ])
+    giveLines = gd.lines
+    givePriced = gd.priced
+    getLines = td.lines
+    getPriced = td.priced
+    devyPricedCount = gd.devyPriced + td.devyPriced
+  }
   const [giveEnriched, getEnriched] = await Promise.all([
     enrichTradeConsolePlayerLines({
       prisma,
@@ -343,6 +371,8 @@ export async function runTradeConsoleAnalysis(
       marketCtx && leagueRow && input.leagueId && input.userId
         ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
         : null,
+    withheld: assetPolicy?.pickRefusal([...give, ...get]) ?? null,
+    basisNotes: devyPricedCount > 0 ? [DEVY_BASIS_NOTE] : [],
     mark,
   })
   const leagueGrade = graded.leagueGrade
@@ -705,13 +735,22 @@ export async function runTradeConsoleAnalysis(
       // A counter in a college league is graded on the same basis as the deal it counters.
       const collegeCounter = collegeGrader ? await collegeGrader.grade(counterGive, counterGet) : null
       if (collegeCounter) return collegeCounter
+      const counterPickWhy = assetPolicy?.pickRefusal([...counterGive, ...counterGet]) ?? null
+      if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
+      const [gd, td] = assetPolicy
+        ? await Promise.all([
+            assetPolicy.priceDevy({ inputs: counterGive, lines: g.lines, priced: g.priced }),
+            assetPolicy.priceDevy({ inputs: counterGet, lines: t.lines, priced: t.priced }),
+          ])
+        : [{ ...g, devyPriced: 0 }, { ...t, devyPriced: 0 }]
       return (await gradePricedSides({
-        chart, giveLines: g.lines, getLines: t.lines,
-        givePriced: applyChartTePremium(chart, g.priced), getPriced: applyChartTePremium(chart, t.priced),
+        chart, giveLines: gd.lines, getLines: td.lines,
+        givePriced: applyChartTePremium(chart, gd.priced), getPriced: applyChartTePremium(chart, td.priced),
+        basisNotes: gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : [],
         need: marketCtx && leagueRow && input.leagueId && input.userId
           ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
           : null,
