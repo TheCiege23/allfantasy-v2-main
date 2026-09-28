@@ -10,9 +10,9 @@ import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { CARD_PAID_LOCK_MESSAGE, CARD_PAID_LOCK_REDIRECT } from "@/lib/geo/cardLockCopy"
-import { isTorExit, resolveEdgeGeo } from "@/lib/geo/geoHeaders"
+import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
-import { resolveAnonymizerByIp } from "@/lib/geo/anonymizerCache"
+import { vpnStatusFromHeaders, type VpnStatus } from "@/lib/geo/vpnStatus"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
 import { INTERNAL_HOP_HEADER, verifyInternalHop } from "@/lib/http/internalHop"
 import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http/originLock"
@@ -369,11 +369,8 @@ function isAnonymousCrawler(request: NextRequest): boolean {
 }
 
 /** Tor from the edge header (free); everything else from the cached vendor verdict. */
-async function isAnonymizedClient(request: NextRequest): Promise<boolean> {
-  if (isTorExit(request.headers)) return true
-  const ip = clientIpFromHeaders(request.headers)
-  if (!ip) return false
-  return (await resolveAnonymizerByIp(ip)) === true
+async function anonymizedClient(request: NextRequest): Promise<VpnStatus> {
+  return vpnStatusFromHeaders(request.headers)
 }
 
 /** The owner bypass the geo gates honour. Decodes the session only when asked. */
@@ -403,10 +400,11 @@ async function apiVpnRefusal(request: NextRequest, pathname: string): Promise<Ne
   ) {
     return null
   }
-  if (!(await isAnonymizedClient(request))) return null
+  const vpn = await anonymizedClient(request)
+  if (!vpn.blocked) return null
   if (await isOwnerRequest(request)) return null
   return new NextResponse(
-    JSON.stringify({ error: "VPN_BLOCKED", message: VPN_BLOCKED_MESSAGE, redirectTo: "/vpn-blocked" }),
+    JSON.stringify({ error: "VPN_BLOCKED", kind: vpn.kind, message: VPN_BLOCKED_MESSAGE, redirectTo: "/vpn-blocked" }),
     { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
   )
 }
@@ -420,13 +418,17 @@ async function pageVpnRedirect(
   if (isVpnPublicPage(pathname)) return null
   if (isAnonymousCrawler(request)) return null
   if (hasMachineCredential(request.headers)) return null
-  if (!(await isAnonymizedClient(request))) return null
+  const vpn = await anonymizedClient(request)
+  if (!vpn.blocked) return null
   // tokenUserId is only decoded on session-gated paths; decode it here otherwise.
   if (tokenUserId ? isMiddlewareAdmin(tokenUserId) : await isOwnerRequest(request)) return null
   const url = request.nextUrl.clone()
   url.pathname = "/vpn-blocked"
   url.search = ""
   url.searchParams.set("from", `${pathname}${request.nextUrl.search}`)
+  // So the page can say WHAT is on — "iCloud Private Relay is still on" is the
+  // answer a person who already switched their VPN off needs.
+  if (vpn.kind) url.searchParams.set("why", vpn.kind)
   const response = NextResponse.redirect(url)
   response.headers.set("Cache-Control", "private, no-store, max-age=0")
   return response

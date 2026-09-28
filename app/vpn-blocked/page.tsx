@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import { isSafeInternalPath } from "@/lib/auth/auth-intent-resolver"
-import { RetryOnReconnect } from "./RetryOnReconnect"
+import { VpnRetryPanel } from "./VpnRetryPanel"
+import { vpnKindCopy } from "./vpnKindCopy"
 
 export const dynamic = "force-dynamic"
 
@@ -29,32 +30,53 @@ function safeReturnPath(raw: unknown): string {
 export default async function VpnBlockedPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ from?: string }> | { from?: string }
+  searchParams?: Promise<{ from?: string; why?: string }> | { from?: string; why?: string }
 }) {
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const retry = safeReturnPath(sp.from)
+  // `why` is set by the middleware from the verdict that sent the person here.
+  // Anything unrecognised falls back to the general page, never to an error.
+  const detected = vpnKindCopy(sp.why)
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
-      <RetryOnReconnect href={retry} />
       <div className="mx-auto max-w-xl text-center">
         <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
-        <h1 className="mb-2 text-2xl font-black sm:text-3xl">Turn off your VPN to use AllFantasy.ai</h1>
+        <h1 className="mb-2 text-2xl font-black sm:text-3xl">
+          {detected?.title ?? "Turn off your VPN to use AllFantasy.ai"}
+        </h1>
         <p className="mb-6 text-sm leading-7 text-white/70">
           Fantasy sports laws differ from state to state, so we have to confirm which state you&apos;re in before you
           sign in, sign up or use the app. A VPN, proxy, Tor or iCloud Private Relay hides your location, so we
           can&apos;t let you in while one is on.
         </p>
 
+        {detected ? (
+          <div className="mb-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-5 text-left text-sm leading-7 text-amber-100">
+            <p className="mb-1 font-semibold text-amber-50">We can see {detected.detected} on this connection</p>
+            <p className="mb-3">{detected.lead}</p>
+            <ul className="list-disc space-y-2 pl-5">
+              {detected.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {/* Straight after the specific steps when we know what is on; after the general list when we do not. */}
+        {detected ? <VpnRetryPanel href={retry} /> : null}
+
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left text-sm leading-7 text-white/75">
-          <p className="mb-3 font-semibold text-white">How to fix it</p>
+          <p className="mb-3 font-semibold text-white">{detected ? "Other things that can cause this" : "How to fix it"}</p>
           <ul className="list-disc space-y-2 pl-5">
             <li>
-              <span className="font-semibold text-white">VPN app:</span> disconnect it, then tap Try again.
+              <span className="font-semibold text-white">VPN app:</span> disconnect it, then tap Try again. Some apps
+              reconnect on their own — on iPhone, check Settings → VPN says Not Connected.
             </li>
             <li>
-              <span className="font-semibold text-white">iCloud Private Relay (Safari on iPhone or iPad):</span> tap the{" "}
-              <span className="font-semibold">aA</span> button in the address bar and choose{" "}
+              <span className="font-semibold text-white">iCloud Private Relay (Safari on iPhone or iPad):</span> tap the
+              page menu at the left of the address bar (<span className="font-semibold">aA</span> on older iPhones) and
+              choose{" "}
               <span className="font-semibold">Show IP Address</span>. Or turn it off in Settings → your name → iCloud →
               Private Relay.
             </li>
@@ -75,17 +97,7 @@ export default async function VpnBlockedPage({
           </ul>
         </div>
 
-        <div className="mb-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <a
-            href={retry}
-            className="inline-flex rounded-xl bg-cyan-500/90 px-5 py-2.5 text-sm font-semibold text-slate-950"
-          >
-            I turned it off — try again
-          </a>
-          <a href="mailto:support@allfantasy.ai" className="text-sm text-cyan-400 hover:text-cyan-300">
-            Contact Support
-          </a>
-        </div>
+        {detected ? null : <VpnRetryPanel href={retry} />}
 
         <p className="mb-6 text-xs leading-6 text-white/55">
           Need to cancel or manage a subscription? You can do that without turning your VPN off:{" "}
