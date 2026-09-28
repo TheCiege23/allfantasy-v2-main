@@ -71,7 +71,9 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/core-app/rosterIdCrosswalk', () => ({
+// The REAL `sleeperLookupId` rides along: it is the rule under test for a foreign league below.
+vi.mock('@/lib/core-app/rosterIdCrosswalk', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   crosswalkToSleeperIds: vi.fn(async () => db.crosswalk),
 }))
 
@@ -93,6 +95,38 @@ beforeEach(() => {
   db.injuries = []
   db.crosswalk = new Map()
   db.games = slateWithout('none') // every club plays
+})
+
+/*
+ * 🛑 A FOREIGN-ID LEAGUE NEVER PRICES A STRANGER. Fleaflicker ids are short numbers in Sleeper's range
+ * — 44 of 248 on the one production Fleaflicker league ARE real Sleeper ids. Here the roster's "a" and
+ * "b" are Fleaflicker ids that happen to equal Sleeper players a (10) and b (6): the crosswalk knows
+ * neither, so neither may be priced. One bridged id ("fl-c" -> c) still is.
+ */
+describe('Matchup scoreboard — a foreign-id league', () => {
+  it('an unmapped Fleaflicker id is unprojected, never priced as the Sleeper player sharing its number', async () => {
+    db.platform = 'fleaflicker'
+    db.crosswalk = new Map([['fl-c', 'c']])
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([
+      { platformUserId: 'you', playerData: { starters: ['a', 'b', 'fl-c'] } },
+      { platformUserId: 'them', playerData: { starters: ['d'] } },
+    ] as never)
+    const sides = await load()
+    expect(sides?.you.projectedRemaining).toBe(8)
+    expect(sides?.you.unprojected).toBe(2)
+    expect(sides?.you.lineup.find((s) => s.playerId === 'a')?.projected ?? null).toBeNull()
+  })
+
+  it('control: the same ids in a Sleeper league ARE Sleeper ids and are priced', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([
+      { platformUserId: 'you', playerData: { starters: ['a', 'b'] } },
+      { platformUserId: 'them', playerData: { starters: ['d'] } },
+    ] as never)
+    const sides = await load()
+    expect(sides?.you.projectedRemaining).toBe(16)
+  })
 })
 
 describe('Matchup scoreboard — a ruled-out starter', () => {

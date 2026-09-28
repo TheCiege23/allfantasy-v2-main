@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -496,7 +496,11 @@ export async function getMatchupData(
     : new Map<string, string>()
 
   const lookupIds = [
-    ...new Set(lineupIds.map((id) => sleeperIdByRosterId.get(id) ?? id)),
+    ...new Set(
+      lineupIds
+        .map((id) => sleeperLookupId(league.platform, id, sleeperIdByRosterId))
+        .filter((x): x is string => x != null),
+    ),
   ]
 
   const [identityRows, scoreRows] = await Promise.all([
@@ -539,7 +543,8 @@ export async function getMatchupData(
    */
   const identityBy = new Map<string, ComposedPlayerIdentity>()
   for (const rosterId of new Set(lineupIds)) {
-    const row = bySleeperId.get(sleeperIdByRosterId.get(rosterId) ?? rosterId)
+    const lookup = sleeperLookupId(league.platform, rosterId, sleeperIdByRosterId)
+    const row = lookup ? bySleeperId.get(lookup) : undefined
     if (row) identityBy.set(rosterId, row)
   }
   const actualBy = new Map(scoreRows.map((r) => [r.playerId, r.points]))
@@ -641,7 +646,7 @@ export async function getMatchupData(
        * folded key below is a real Sleeper id rather than a passed-through
        * roster id.
        */
-      sleeperId: identity ? (sleeperIdByRosterId.get(entry.playerId) ?? entry.playerId) : null,
+      sleeperId: identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId) : null,
       name: identity?.name ?? null,
       position: displayPosition(identity?.position),
       /*

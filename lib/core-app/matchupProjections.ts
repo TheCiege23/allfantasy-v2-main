@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
@@ -158,7 +158,9 @@ export async function loadSideProjections(args: {
     rosterIds,
   ).catch(() => new Map<string, string>())
 
-  const lookupIds = [...new Set(rosterIds.map((id) => sleeperIdByRosterId.get(id) ?? id))]
+  const leaguePlatform = String(league?.platform ?? '')
+  const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId)
+  const lookupIds = [...new Set(rosterIds.map(lookupOf).filter((x): x is string => x != null))]
   const projections = await prisma.fantasyProjection.findMany({
     // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.
     where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' } },
@@ -218,7 +220,7 @@ export async function loadSideProjections(args: {
     let projectedRemaining = 0
     for (const id of ids) {
       const unavailable = isResolvableId(id)
-        ? unavailableBySleeperId.get(sleeperIdByRosterId.get(id) ?? id) ?? null
+        ? unavailableBySleeperId.get(lookupOf(id) ?? '') ?? null
         : null
       if (unavailable) {
         starters.push({ playerId: id, projectedPoints: 0, actualPoints: 0, isFinal: false })
@@ -226,7 +228,7 @@ export async function loadSideProjections(args: {
         continue
       }
       const proj = isResolvableId(id)
-        ? byPlayer.get(sleeperIdByRosterId.get(id) ?? id)
+        ? byPlayer.get(lookupOf(id) ?? '')
         : undefined
       if (!proj) {
         unprojected++
