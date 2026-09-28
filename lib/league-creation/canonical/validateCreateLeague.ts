@@ -1,3 +1,4 @@
+import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
  */
@@ -319,6 +320,16 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       timezone: data.timezone ?? null,
       language: data.language ?? null,
     })
+    if (bestBall.contestStructure === 'tournament') {
+      try {
+        const ends = tournamentRoundEnds(bestBall)
+        if (ends.length === 1 && data.teamCount > bestBall.podSize) throw new Error('Add an advancement round when the field contains more than one pod')
+        if (bestBall.scoringPeriod !== 'weekly') throw new Error('Tournament advancement currently requires weekly scoring')
+        if (sport === 'NFL' && ends.at(-1)! > 18) throw new Error('NFL tournament rounds must finish by week 18')
+      } catch (error) {
+        return { ok: false, status: 400, error: (error as Error).message, errors: [{ path: 'conceptSetup.bestBall.roundEndWeeks', message: (error as Error).message }] }
+      }
+    }
     if (bestBall.mode === 'underdog' && (bestBall.waiversEnabled || bestBall.tradesEnabled || bestBall.substitutionsEnabled)) {
       return {
         ok: false,

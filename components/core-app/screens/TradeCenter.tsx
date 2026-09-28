@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
@@ -17,6 +17,7 @@ import {
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
 import {
   analysisUnpricedReason,
   pickUnpricedReason,
@@ -34,7 +35,6 @@ import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
@@ -48,6 +48,7 @@ import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-a
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -222,6 +223,7 @@ function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines
 }
 
 type AnalyzeResult = {
+  evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
   counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
@@ -630,6 +632,12 @@ export function TradeCenter(props: {
     return m
   }, [result])
 
+  const { data: rosterData } = useLeagueRosters(
+    props.league?.id ?? null,
+    Boolean(props.league?.id),
+    props.viewerId,
+  )
+
   const toLines = useCallback(
     (assets: PickedAsset[], engineLines?: EngineLine[] | null): Line[] => {
       /*
@@ -700,33 +708,16 @@ export function TradeCenter(props: {
             ...leagueOf(engine),
           }
         }
-        /*
-         * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
-         *
-         * This field has now been fixed three times in three places — the rosters route,
-         * the hand-typed pick, and here — because pricing at PICK time bakes a number into
-         * stored state, so every path that creates a pick has to remember to set it. Any
-         * path that forgets produces an em dash on the row and "1 unpriced" on a total
-         * that then understates itself by a whole first-rounder.
-         *
-         * The round is all the curve needs and every pick carries one, so deriving it here
-         * makes ONE rule serve every path — including a draft serialized into localStorage
-         * before the rule existed, which no amount of fixing creation sites can reach.
-         *
-         * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
-         * slot it projects to; the curve here only knows the round, so it is the fallback
-         * and not the override.
-         *
-         * ⚠ AND A PICK THE ROUTE COULD NOT PLACE STAYS UNPRICED. The picker defaults a missing
-         * round to 1 when it builds the asset, so pricing that round here would show a pick with no
-         * round as a first-rounder. `unpricedReason` is what survives from the route to say so.
-         */
+        // A league quote overrides saved draft values, including values from older pricing models.
         const pick: Line = {
           name: a.label,
           position: 'PICK',
           team: null,
           marketValue:
-            a.value ??
+            props.league?.id
+              ? (valuedByVerdict(a) ? readPickPreviewValue({ leagueId: props.league.id,
+                  book: rosterData?.pickPreviewBook, year: a.year, round: a.round }) : null)
+              : a.value ??
             (!a.unpricedReason && Number.isFinite(a.round) && a.round >= 1
               ? pickValueByOverall({
                   round: a.round,
@@ -736,9 +727,8 @@ export function TradeCenter(props: {
               : null),
         }
         /*
-         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The builder prices a pick on its
-         * own round curve and the analysis on the historical pick curve, and they are not the same
-         * number — so a row showing one while the verdict summed the other could never add up. The
+         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The league preview and
+         * evaluator share a pricer; an analysis retains its exact value even if the market refreshes. The
          * engine names picks differently from the builder, so the line is matched by its place in the
          * deal (the analysis returns lines in the order it was sent), and only if it IS a pick line.
          */
@@ -748,7 +738,7 @@ export function TradeCenter(props: {
           pick.leagueValue = graded
           pick.adjustments = []
         }
-        const why = pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null
+        const why = pick.marketValue == null ? (a.unpricedReason ?? pricedOnAnalysisReason()).label : null
         return {
           ...pick,
           // Said on the row because the verdict below it silently has one asset fewer.
@@ -756,7 +746,7 @@ export function TradeCenter(props: {
         }
       })
     },
-    [pricedBy, props.league?.teamCount],
+    [pricedBy, props.league?.id, props.league?.teamCount, rosterData?.pickPreviewBook],
   )
 
   const give = toLines(giveAssets, result?.players?.give)
@@ -781,10 +771,6 @@ export function TradeCenter(props: {
    * ⚠ THIS DOES ADD ONE REQUEST PER TRADE-PAGE LOAD, and that is the deliberate trade: it is the
    * request that fetches the content the page is for.
    */
-  const { data: rosterData } = useLeagueRosters(
-    props.league?.id ?? null,
-    Boolean(props.league?.id),
-  )
   /*
    * ⚠ IDENTITY, NOT THE PROPOSE GATE. `viewerRosterId` is the engine's strict
    * predicate and is null on every imported league, so filtering "everyone but
@@ -1033,32 +1019,15 @@ export function TradeCenter(props: {
   }, [result, isPhone])
 
   /*
-   * ⚠ A LETTER PER SIDE, OR NO LETTER AT ALL. `projectedLetterFor` returns null
-   * without signal rather than leaving that judgement to this component, so an
-   * unpriced deal shows no badge instead of a C that reads as "even".
-   *
-   * `percentDiff` is signed from the viewer's side, so the opponent's grade is
-   * the mirror of it.
-   */
-  /*
-   * 🛑 THE LETTERS COME FROM THE SERVER'S GRADE (2026-09-24), the one object the league page, the
-   * inbox, /core Trades and Chimmy show for the same deal. Computing them here from `percentDiff`
-   * was the same arithmetic, but a second copy is how a surface drifts; the fallback stays only for
-   * a response that predates the field.
+   * 🛑 THE LETTERS COME FROM THE SERVER'S GRADE, OR THERE ARE NONE (2026-09-24; fallback removed
+   * 2026-09-27). This is the one object the league page, the inbox, /core Trades and Chimmy show for
+   * the same deal. A response without it used to fall back to `projectedLetterFor(percentDiff)` —
+   * a second copy of the arithmetic, run in the browser, which is how a surface drifts onto its own
+   * scale. No grade on the response means no badge: the analyze route always sends one now.
    */
   const serverGrade = result?.grade ?? null
-  const yourGrade = serverGrade
-    ? serverGrade.graded ? serverGrade.letter : null
-    : projectedLetterFor({
-        percentDiff: result?.percentDiff ?? null,
-        hasSignal: Boolean(result) && !noSignal,
-      })
-  const theirGrade = serverGrade
-    ? serverGrade.graded ? serverGrade.partnerLetter : null
-    : projectedLetterFor({
-        percentDiff: result?.percentDiff != null ? -result.percentDiff : null,
-        hasSignal: Boolean(result) && !noSignal,
-      })
+  const yourGrade = serverGrade?.graded ? serverGrade.letter : null
+  const theirGrade = serverGrade?.graded ? serverGrade.partnerLetter : null
 
   /*
    * ── Draft persistence ──────────────────────────────────────────
@@ -1334,6 +1303,7 @@ export function TradeCenter(props: {
           they do not hold and the engine would refuse it on send.
         */
         rosterPicks={r?.picks ?? []}
+        pickPreviewBook={rosterData?.pickPreviewBook}
         rosterLabel={side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
@@ -1409,12 +1379,13 @@ export function TradeCenter(props: {
 
   return (
     <div className="af-tc" data-mobile-step={mobileStep}>
+      <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       <header className="af-tc-head">
         <div className="af-label">Core · Trades</div>
         <h1>Trade Center</h1>
         <p className="af-tc-lede">
           Build a deal across any league you&rsquo;re in and any asset class it allows. Context
-          explains the league scoring and roster needs used in the grade. Schedule and
+          explains the league scoring used in the grade. Roster fit, schedule and
           strategy notes help you judge the deal alongside that value.
         </p>
         {/*
@@ -2084,6 +2055,8 @@ export function TradeCenter(props: {
               Roster fit does not change the letter. Refreshed market values can change a later evaluation.
             </p>
           ) : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>Open this saved evaluation</Link> · Original values preserved at {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString()}.</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">This evaluation could not be saved. Keep a copy before relying on it later.</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
               <div className="af-label">Your roster fit · separate from the trade-value grade</div>

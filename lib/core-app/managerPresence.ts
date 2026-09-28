@@ -7,6 +7,7 @@ import { normalizePosition } from './positionNormalization'
 import { coverageReason, rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { translateRostersToSleeperIds } from './rosterIdSpace'
 import { activityWindow, DEFAULT_TIME_ZONE, zoneLabel, type ActivityWindow } from './managerActivityWindow'
+import { importedActivityLeagueWhere, managerKeysOf, teamResolver } from './importedActivityAttribution'
 
 /**
  * Player Finder — "TRADE WINDOW": who to pitch for this player in a league,
@@ -180,7 +181,7 @@ export async function getManagerPresence(
       .findMany({
         where: {
           activityType: { in: KINDS },
-          OR: [{ afLeagueId: leagueId }, ...(league.platformLeagueId ? [{ providerLeagueId: league.platformLeagueId }] : [])],
+          ...importedActivityLeagueWhere(league),
         },
         orderBy: { occurredAt: 'desc' },
         take: MAX_ROWS,
@@ -235,45 +236,11 @@ export async function getManagerPresence(
   const teamOfRoster = (platformUserId: string): TeamRow | null =>
     teams.find((t) => t.platformUserId === platformUserId) ?? teams.find((t) => t.externalId === platformUserId) ?? null
 
-  /* ── Attribution: manager key → team ─────────────────────────────────── */
-  const byKey = new Map<string, TeamRow>()
-  for (const t of teams) {
-    if (t.platformUserId) {
-      byKey.set(t.platformUserId, t)
-      byKey.set(`sleeper:${t.platformUserId}`, t)
-      byKey.set(`sleeper:manager:${t.platformUserId}`, t)
-    }
-    if (t.claimedByUserId) byKey.set(t.claimedByUserId, t)
-    byKey.set(t.externalId, t)
-  }
-  const keysOf = (normalized: unknown): string[] => {
-    const raw = (normalized as { managerKeys?: unknown } | null)?.managerKeys
-    return Array.isArray(raw) ? raw.map((k) => String(k)).filter(Boolean) : []
-  }
-  const resolveKey = (k: string): TeamRow | undefined => {
-    const direct = byKey.get(k)
-    if (direct) return direct
-    const tail = k.includes(':') ? k.slice(k.lastIndexOf(':') + 1) : null
-    return tail ? byKey.get(tail) : undefined
-  }
-
-  /*
-   * A key that resolves to nothing is usually an AllFantasy user id for a
-   * manager whose team row was never claimed. The profile's linked Sleeper id
-   * is the persisted reverse lookup the ingest used to mint that key, so it is
-   * read back the same way — one query, only when something is unresolved.
-   */
-  const unresolved = new Set<string>()
-  for (const r of rows) for (const k of keysOf(r.normalized)) if (!resolveKey(k)) unresolved.add(k)
-  if (unresolved.size > 0) {
-    const profiles = await prisma.userProfile
-      .findMany({ where: { userId: { in: [...unresolved] } }, select: { userId: true, sleeperUserId: true } })
-      .catch(() => [] as Array<{ userId: string; sleeperUserId: string | null }>)
-    for (const p of profiles) {
-      const t = p.sleeperUserId ? byKey.get(p.sleeperUserId) : undefined
-      if (t) byKey.set(p.userId, t)
-    }
-  }
+  /* ── Attribution: manager key → team (the shared rule, importedActivityAttribution.ts) ── */
+  const keysOf = managerKeysOf
+  const attribution = teamResolver(teams)
+  const resolveKey = attribution.resolve
+  await attribution.withProfileKeys(rows.flatMap((r) => keysOf(r.normalized)))
 
   const stats = new Map<string, { times: Date[]; last: { at: Date; kind: MoveKind } | null }>()
   let unattributed = 0

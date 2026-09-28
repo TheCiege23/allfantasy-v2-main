@@ -85,6 +85,7 @@ function makeContext(over: Partial<BestBallWarRoomContext> = {}): BestBallWarRoo
   return {
     leagueId: 'lg1',
     leagueType: 'best_ball',
+    ruleConfigurationVerified: true,
     sport: 'NFL',
     season: 2026,
     teamCount: TEAM_COUNT,
@@ -314,5 +315,14 @@ describe('bestBallWarRoomPrompt', () => {
     expect(prompt).toContain('AUTOMATIC LINEUP')
     expect(prompt).toContain('ROSTER CONSTRUCTION')
     expect(prompt).toContain('STACKS / CORRELATION')
+  })
+
+  it('withholds generic roster targets and disabled-rule claims without explicit settings', () => {
+    const context = makeContext({ ruleConfigurationVerified: false, teams: [userRoster()] })
+    const prompt = buildBestBallWarRoomPrompt({ context, construction: evaluateRosterConstruction(context, 'r1') })
+    expect(prompt).toContain('UNVERIFIED LEAGUE RULES')
+    expect(prompt).not.toContain('waivers=OFF')
+    expect(prompt).not.toContain('Auto-lineup slots:')
+    expect(prompt).not.toContain('ROSTER CONSTRUCTION')
   })
 })

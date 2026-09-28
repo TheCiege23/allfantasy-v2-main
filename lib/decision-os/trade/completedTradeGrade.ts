@@ -121,9 +121,15 @@ export async function gradeArchivedTrade(
     currentSeason: number
   },
 ): Promise<TradeGradeView> {
-  return gradeDeal(grader, {
-    give: archivedSide(args.gave, args.picksOut, args.currentSeason),
-    get: archivedSide(args.received, args.picksIn, args.currentSeason),
-    viewerSide: false,
-  })
+  return (await gradeArchivedTradeWithInputs(grader, args)).grade
+}
+
+/** `gradeArchivedTrade`, with the inputs it graded — so a caller can record the grade as a receipt. */
+export async function gradeArchivedTradeWithInputs(
+  grader: LeagueTradeGrader | null,
+  args: Parameters<typeof gradeArchivedTrade>[1],
+): Promise<{ grade: TradeGradeView; give: GradeInputs; get: GradeInputs }> {
+  const give = archivedSide(args.gave, args.picksOut, args.currentSeason)
+  const get = archivedSide(args.received, args.picksIn, args.currentSeason)
+  return { grade: await gradeDeal(grader, { give, get, viewerSide: false }), give, get }
 }

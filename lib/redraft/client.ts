@@ -151,6 +151,16 @@ export type RedraftTradeProposal = {
     valueDifference: number
     createdAt: string
   } | null
+  /**
+   * The one trade engine's grade for this proposal, from the PROPOSER's side (Trade OS). This is the
+   * letter to show; `valueSnapshot.grade` is the proposal-time snapshot's own scale.
+   */
+  tradeGrade?: {
+    grade: string | null
+    partnerGrade: string | null
+    gradeWithheld: string | null
+    receiptId: string | null
+  }
 }
 
 export type RedraftTradeAssetInput = {
@@ -205,6 +215,14 @@ export type CommissionerTradeReview = {
   }
   eventTrail: Array<{ eventType: string; createdAt: string }>
   settings: { vetoMode: string; vetoThreshold: number | null; reviewHours: number | null; tradeDeadlineWeek: number | null; draftPickTrading: boolean }
+  /** The one trade engine's grade, from the proposer's side (`receiptGradeFields`). */
+  tradeGrade?: {
+    grade: string | null
+    partnerGrade: string | null
+    gradeLabel: string | null
+    gradeWithheld: string | null
+    evaluationReceiptId: string | null
+  }
 }
 
 export async function fetchCommissionerTradeReview(proposalId: string): Promise<CommissionerTradeReview> {
@@ -628,6 +646,8 @@ export async function submitTradeVote(payload: {
     | 'vote_approve'
     | 'vote_veto'
   reason?: string
+  /** The commissioner review this decision was made with — logged on the decision. */
+  reviewId?: string | null
 }) {
   const res = await fetch('/api/redraft/trade-votes', {
     method: 'POST',
@@ -638,7 +658,7 @@ export async function submitTradeVote(payload: {
   return parseJson<{ proposal: RedraftTradeProposal; resolved: boolean }>(res)
 }
 
-export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string }) {
+export async function vetoRedraftTradeProposal(payload: { proposalId: string; reason?: string; reviewId?: string | null }) {
   const res = await fetch('/api/redraft/trades/veto', {
     method: 'POST',
     credentials: 'include',
