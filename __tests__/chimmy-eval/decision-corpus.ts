@@ -62,7 +62,10 @@ export type DecisionDimension =
   | 'gap'
   | 'verdict'
   | 'billing'
-  /** The message the trade engine was asked. This is how screenshot asset extraction is scored. */
+  /**
+   * The first message ANY scenario engine (trade, start/sit, waiver) was asked. This scores
+   * screenshot asset extraction, and that a compound question never reaches an engine whole.
+   */
   | 'extraction'
   /** Every `says` string appears in the answer. */
   | 'evidence'
@@ -736,16 +739,78 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     engine: {
       start: startSit(),
       trade: {
-        "Should I start Ja'Marr Chase or Justin Jefferson, and should I trade Travis Kelce for Brock Bowers?": trade({ give: [p('kelce', 'Travis Kelce', 'TE')], get: [p('bowers', 'Brock Bowers', 'TE')] }),
+        /*
+         * What the REAL parser makes of the whole message: it splits on the first " for ", so all three
+         * players before it land on the give side. This fixture used to return a tidy Kelce-for-Bowers
+         * trade here, which is exactly why the eval could not see the misread.
+         */
+        "Should I start Ja'Marr Chase or Justin Jefferson, and should I trade Travis Kelce for Brock Bowers?": trade({
+          give: [p('chase', "Ja'Marr Chase", 'WR'), p('jj', 'Justin Jefferson', 'WR'), p('kelce', 'Travis Kelce', 'TE')],
+          get: [p('bowers', 'Brock Bowers', 'TE')],
+        }),
       },
     },
-    expect: { kind: 'trade', status: 'ready', gap: null, verdict: 'YES', billing: 'charge', says: ['Travis Kelce', "Ja'Marr Chase"] },
-    gaps: {
-      evidence: {
-        today: "missing: Ja'Marr Chase",
-        why: 'Only the first decision kind is answered (trade wins the classifier). The start/sit half is dropped without saying so, and the user is charged for one answer to two questions.',
+    /*
+     * Until 2026-09-28: the trade engine got the whole message, graded Chase + Jefferson + Kelce for
+     * Bowers, charged for it, and dropped the start/sit question without a word. Now the first
+     * question is answered from its own text and the second is named back as unanswered.
+     */
+    expect: {
+      kind: 'lineup', status: 'ready', gap: 'none', verdict: "start:Ja'Marr Chase", billing: 'charge',
+      extraction: "Should I start Ja'Marr Chase or Justin Jefferson",
+      says: ['You also asked "should I trade Travis Kelce for Brock Bowers?"', 'That was not answered here'],
+    },
+  },
+  {
+    id: 'compound-trade-then-waiver',
+    format: 'redraft',
+    source: 'synthetic',
+    question: 'Should I trade Kyren Williams for Garrett Wilson? Also should I add Jaylen Warren and drop Tyjae Spears?',
+    engine: {
+      trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) },
+      waiver: waiver(),
+    },
+    expect: {
+      kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge',
+      extraction: 'Should I trade Kyren Williams for Garrett Wilson?',
+      says: ['You also asked "should I add Jaylen Warren and drop Tyjae Spears?"'],
+    },
+  },
+  {
+    id: 'compound-in-guillotine',
+    format: 'guillotine',
+    source: 'synthetic',
+    // The format gate applies to the clause answered, and the unanswered waiver clause is still named.
+    question: 'Should I trade Kyren Williams for Garrett Wilson, and should I add Jaylen Warren and drop Tyjae Spears?',
+    engine: { waiver: waiver() },
+    expect: {
+      kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none',
+      says: ['does not allow trades', 'You also asked "should I add Jaylen Warren and drop Tyjae Spears?"'],
+    },
+  },
+  {
+    id: 'not-compound-two-players-given',
+    format: 'redraft',
+    source: 'synthetic',
+    // "and" joins two players, not two questions: one trade, read whole.
+    question: "Should I trade Travis Kelce and Brock Bowers for Ja'Marr Chase?",
+    engine: {
+      trade: {
+        "Should I trade Travis Kelce and Brock Bowers for Ja'Marr Chase?": trade({ give: [p('kelce', 'Travis Kelce', 'TE'), p('bowers', 'Brock Bowers', 'TE')], get: [p('chase', "Ja'Marr Chase", 'WR')] }),
       },
     },
+    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge', extraction: "Should I trade Travis Kelce and Brock Bowers for Ja'Marr Chase?" },
+  },
+  {
+    id: 'not-compound-period-in-name',
+    format: 'redraft',
+    source: 'synthetic',
+    // A period inside a name is not a sentence break.
+    question: 'Should I trade Amon-Ra St. Brown for Puka Nacua?',
+    engine: {
+      trade: { 'Should I trade Amon-Ra St. Brown for Puka Nacua?': trade({ give: [p('arsb', 'Amon-Ra St. Brown', 'WR')], get: [p('puka', 'Puka Nacua', 'WR')] }) },
+    },
+    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge', extraction: 'Should I trade Amon-Ra St. Brown for Puka Nacua?' },
   },
 
   // ── Access and failure ─────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisi
 import { loadLeagueGroundingForUser } from './chimmy-league-snapshot'
 import { chimmyDecisionKind, decisionAnswer, type ChimmyDecisionAnswer } from './decisionAnswerContract'
 import { decisionFormatBlock } from './decisionFormatGate'
+import { compoundDecision, unansweredClausesNote } from './decisionClauses'
 import { buildStartSitScenario, buildWaiverScenario } from './lineupScenarioGrounding'
 import { buildTradeScenario } from './tradeScenarioGrounding'
 import { buildLineupOptimization, singleSwapCall } from './lineupOptimizerGrounding'
@@ -51,8 +52,24 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
     'Future-season results are not computed; player development, future injuries and future draft selections are unknown.'].join('\n')
 }
 
-/** Shared by full chat, bubble/public advice and private mentions. Membership is checked here too. */
-export async function prepareChimmyDecisionAnswer(args: { question: string; leagueId?: string | null; userId?: string | null; screenshotEvidence?: string | null }): Promise<ChimmyDecisionAnswer | null> {
+type DecisionArgs = { question: string; leagueId?: string | null; userId?: string | null; screenshotEvidence?: string | null }
+
+/**
+ * Shared by full chat, bubble/public advice and private mentions. Membership is checked here too.
+ *
+ * A message holding two decisions is answered for the FIRST one, from that clause's text alone,
+ * and the answer names the rest as unanswered (`decisionClauses.ts` says why the whole message
+ * must never reach an engine). A screenshot is one offer, so a message with an attachment is not
+ * split.
+ */
+export async function prepareChimmyDecisionAnswer(args: DecisionArgs): Promise<ChimmyDecisionAnswer | null> {
+  const compound = args.screenshotEvidence ? null : compoundDecision(args.question)
+  if (!compound) return prepareSingleDecisionAnswer(args)
+  const answer = await prepareSingleDecisionAnswer({ ...args, question: compound.primary })
+  return answer && { ...answer, answer: answer.answer + '\n\n' + unansweredClausesNote(compound.others) }
+}
+
+async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDecisionAnswer | null> {
   const imageTrade = screenshotTradeQuestion(args.screenshotEvidence)
   const kind = imageTrade.question || imageTrade.clarification ? 'trade' : chimmyDecisionKind(args.question)
   if (!kind) return null
