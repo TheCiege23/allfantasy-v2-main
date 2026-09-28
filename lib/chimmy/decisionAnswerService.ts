@@ -85,10 +85,23 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
         return { offer, scenario: scenario?.status === 'ready' ? await enrichTrade(scenario) : scenario }
       }))
       const ready = results.filter(r => r.scenario?.status === 'ready' && (r.offer.assetCount == null || r.offer.assetCount === r.scenario.give.length + r.scenario.get.length) && r.scenario.value.grade && r.scenario.lineup && !r.scenario.unpricedExcluded)
-      const answer = results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready' ? (r.offer.assetCount != null && r.offer.assetCount !== r.scenario.give.length + r.scenario.get.length ? 'Not every offer asset resolved; no verdict was computed for this package.' : renderDecisionScenario(r.scenario)) : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
-      if (!ready.length) return gap('pending_offer_evaluation_missing', answer, 'Sync league rosters, scoring and values before deciding.')
-      if (needsSeason && results.some(r => r.scenario?.status !== 'ready' || !r.scenario.playoffOdds.available)) return gap('season_impact_missing', answer, 'This is a partial analysis, with no charge. Sync the league and complete schedule/projection coverage before relying on a playoff-impact decision.')
-      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer,
+      /*
+       * ⚠ A PARTIAL ANSWER HOLDS EVERY OFFER. `gap()` forces HOLD on the one scenario it is given,
+       * but these partials carry several scenarios in their text, and they used to be rendered with
+       * each offer's own engine verdict. So a free "partial analysis" of a playoff question opened
+       * with "YES," (measured by `__tests__/chimmy-eval/decision.test.ts`). `holdReason` gives every
+       * offer the same HOLD `gap()` would.
+       */
+      const renderOffers = (holdReason?: string) => results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready'
+        ? (r.offer.assetCount != null && r.offer.assetCount !== r.scenario.give.length + r.scenario.get.length
+          ? 'Not every offer asset resolved; no verdict was computed for this package.'
+          : renderDecisionScenario(holdReason ? { ...r.scenario, recommendation: { action: 'hold', explanation: holdReason } } : r.scenario))
+        : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
+      const evaluationRemedy = 'Sync league rosters, scoring and values before deciding.'
+      if (!ready.length) return gap('pending_offer_evaluation_missing', renderOffers(evaluationRemedy), evaluationRemedy)
+      const seasonRemedy = 'This is a partial analysis, with no charge. Sync the league and complete schedule/projection coverage before relying on a playoff-impact decision.'
+      if (needsSeason && results.some(r => r.scenario?.status !== 'ready' || !r.scenario.playoffOdds.available)) return gap('season_impact_missing', renderOffers(seasonRemedy), seasonRemedy)
+      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: renderOffers(),
         sources: ['provider_pending_offers', 'league_rosters', 'league_scoring', 'trade_engine'] })
     }
     if (kind === 'trade') {
