@@ -14,6 +14,14 @@
  * app that offers Google/Facebook/X/Discord/Spotify sign-in must also offer
  * it. Inside the app those buttons are hidden, leaving email sign-in.
  *
+ * Guideline 5.1.2 is the third: ad tracking (Meta Pixel + Conversions API,
+ * GTM and the TikTok/Reddit/Google tags it carries, the Facebook SDK) needs
+ * Apple's App Tracking Transparency prompt, which the app does not show. So
+ * none of it runs in the app — the root layout's loaders, lib/meta-client and
+ * lib/meta-capi all check this marker — and App Privacy can truthfully say
+ * "not used to track". First-party analytics (PostHog, Sentry) is not tracking
+ * in Apple's sense and is unchanged.
+ *
  * ⚠ A User-Agent can be forged, and that is fine HERE because the gate only
  * ever takes things AWAY. Spoofing the marker gets you a website you cannot
  * pay on; removing it gets you the normal website. Never use this marker to
@@ -25,6 +33,19 @@ export const IOS_APP_UA_MARKER = "AllFantasyiOS"
 export function isIosAppUserAgent(userAgent: string | null | undefined): boolean {
   return typeof userAgent === "string" && userAgent.includes(IOS_APP_UA_MARKER)
 }
+
+/** In the browser: is this page running inside the iOS app? Always false on the server. */
+export function isInIosAppClient(): boolean {
+  return typeof navigator !== "undefined" && isIosAppUserAgent(navigator.userAgent)
+}
+
+/**
+ * The same test as a JS expression, for the inline <script> loaders in the root
+ * layout (they run before any bundle, so they cannot import this module).
+ */
+export const IOS_APP_UA_TEST_JS = `(typeof navigator!=="undefined"&&navigator.userAgent.indexOf(${JSON.stringify(
+  IOS_APP_UA_MARKER,
+)})!==-1)`
 
 /** Where a purchase page sends the iOS app. Must not itself be a purchase page. */
 export const IOS_APP_PLANS_PATH = "/ios-app/plans"

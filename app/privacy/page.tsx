@@ -291,6 +291,11 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
           You can limit ad personalization in your Meta and Google ad settings, and you can block these
           cookies in your browser.
         </p>
+        {/* Enforced by lib/platform/iosApp: the layout loaders, meta-client and meta-capi all skip the app. */}
+        <p>
+          Our iOS app does not use any of these tools. Nothing you do in the iOS app is shared with Meta
+          or Google for advertising or measurement.
+        </p>
       </section>
 
       <LegalGrid>

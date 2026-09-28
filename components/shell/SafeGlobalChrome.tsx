@@ -7,6 +7,7 @@ import { AuthRouteGlobalChrome } from "@/components/auth/AuthRouteGlobalChrome"
 import AgeConfirmationPrompt from "@/components/legal/AgeConfirmationPrompt"
 import { shouldRegisterServiceWorker } from "@/lib/pwa/shouldRegisterServiceWorker"
 import { initPWA } from "@/lib/pwa"
+import { isInIosAppClient } from "@/lib/platform/iosApp"
 
 const AUTH_ROUTE_PREFIXES = ["/login", "/signup", "/signin", "/auth"]
 
@@ -201,13 +202,17 @@ export function SafeGlobalChrome({
   // against React hydration.
   const allowThirdPartyScripts = !shouldBailThirdPartyScripts(pathname)
   const renderFacebookSdk = allowThirdPartyScripts && Boolean(fbAppId)
+  // The SDK sets Facebook cookies — tracking — so the iOS app never loads it
+  // (lib/platform/iosApp). Only the <Script> is gated: it renders no DOM, so
+  // the server/client difference cannot cause a hydration mismatch.
+  const loadFacebookSdk = renderFacebookSdk && !isInIosAppClient()
 
   return (
     <>
       <ServiceWorkerLifecycle />
 
       {renderFacebookSdk ? <div id="fb-root" /> : null}
-      {renderFacebookSdk ? (
+      {loadFacebookSdk ? (
         <Script
           src={`https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v25.0&appId=${fbAppId}`}
           strategy="afterInteractive"
