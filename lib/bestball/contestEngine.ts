@@ -20,6 +20,7 @@ export async function assignEntriesToPods(contestId: string): Promise<void> {
     if (contest.status === 'complete' || contest.podSize < 1) throw new Error('Contest cannot form pods')
     const entries = await tx.bestBallEntry.findMany({ where: { contestId, currentRound: 1, isEliminated: false } })
     if (!entries.length) throw new Error('Contest has no entries')
+    if (contest.rounds === 1 && entries.length > contest.podSize) throw new Error('Multiple pods require an advancement round')
     if (entries.some(entry => entry.podId != null)) throw new Error('Entries already assigned; recovery required')
     const ordered = shuffle(entries)
     for (let offset = 0; offset < ordered.length; offset += contest.podSize) {
@@ -123,7 +124,11 @@ export async function calculateContestScores(contestId: string, week: number): P
     const row = await prisma.bestBallOptimizedLineup.findFirst({
       where: { contestId, entryId: e.id, week },
     })
-    const pts = row?.totalPoints ?? 0
+    const quality = row?.optimizerLog as { dataQuality?: { status?: string } } | null
+    if (!row?.isFinalized || quality?.dataQuality?.status !== 'AVAILABLE' || !Number.isFinite(row.totalPoints)) {
+      throw new Error('Contest scoring is incomplete')
+    }
+    const pts = row.totalPoints
     const prev = (e.weeklyScores as { week: number; points: number }[] | null) ?? []
     const nextScores = [...prev.filter((x) => x.week !== week), { week, points: pts }]
     const totalPoints = contest.cumulativeScoring

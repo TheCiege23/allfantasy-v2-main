@@ -70,8 +70,20 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
        * Non-fatal: the draft is already finalized and the rosters already
        * materialized by this point. A commissioner can still create the season
        * by hand, exactly as before.
-       */
+      */
       if (summary.seasonId) {
+        try {
+          const { ensureNativeTournamentEntries } = await import('@/lib/bestball/nativeTournament')
+          await ensureNativeTournamentEntries(leagueId, summary.seasonId)
+        } catch (tournamentErr) {
+          // A tournament failure must not prevent another league format's season from starting.
+          // Tournament entry creation is retry-safe and the scoring worker retries open contests.
+          console.error('[postDraftFinalizeArtifacts] tournament entry ensure failed', {
+            leagueId,
+            error: tournamentErr instanceof Error ? tournamentErr.message : String(tournamentErr),
+          })
+        }
+
         try {
           const { ensureGuillotineSeason } = await import('@/lib/guillotine/ensureGuillotineSeason')
           const guillotine = await ensureGuillotineSeason({
