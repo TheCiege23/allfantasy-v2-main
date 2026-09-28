@@ -1,4 +1,4 @@
-import { resolveLeagueRules } from '@/lib/league-rules/resolveLeagueRules'
+import { leagueForbidsTrades, tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import type { ChimmyDecisionKind } from './decisionAnswerContract'
 
 /**
@@ -46,18 +46,11 @@ export type DecisionFormatBlock = {
   remedy: string
 }
 
-/** The catalog's reason a league's format forbids trades, or null when trades are allowed or unknown. */
-export function tradeBanReason(league: Pick<DecisionFormatInput, 'leagueType' | 'isDynasty' | 'settings'>): string | null {
-  const concept = resolveLeagueRules({ leagueType: league.leagueType, isDynasty: league.isDynasty, settings: league.settings }).concept
-  if (!concept || concept.id === 'best_ball') return null
-  const trade = concept.actions.find((a) => a.id === 'trade')
-  return trade && trade.legalInFormat === false ? (trade.note ?? `${concept.label} leagues do not allow trades.`) : null
-}
-
-/** True when the league's format has no trade market, per the concept catalog. */
-export function leagueForbidsTrades(league: Pick<DecisionFormatInput, 'leagueType' | 'isDynasty' | 'settings'>): boolean {
-  return tradeBanReason(league) !== null
-}
+/*
+ * The trade rule lives in `lib/league-rules/tradeLegality.ts`, shared with the Player Finder so the two
+ * surfaces cannot disagree about whether a league trades. Re-exported for this module's callers.
+ */
+export { leagueForbidsTrades, tradeBanReason }
 
 export function decisionFormatBlock(league: DecisionFormatInput, kind: ChimmyDecisionKind): DecisionFormatBlock | null {
   if (kind === 'lineup' && league.bestBallMode === true) {

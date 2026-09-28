@@ -96,6 +96,25 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
     )
   }
 
+  /*
+   * A no-trade league with no bid to offer (a tournament, or an elimination league whose bid could
+   * not be worked out). Without this it fell through to "No balanced package right now", which reads
+   * as "try again later" in a league where no package can ever be sent.
+   */
+  if (v.tradesAllowed === false) {
+    return (
+      <section className="af-card af-pf-tv af-pf-tv--notrade" aria-labelledby="af-pf-tv-h">
+        <header className="af-pf-tv-head">
+          <span className="af-label">Trade for {last}</span>
+          <h3 className="af-pf-h3" id="af-pf-tv-h">This league does not allow trades</h3>
+        </header>
+        <p className="af-pf-readonly-note">
+          {v.tradeBan ?? 'This league’s format has no trades, so there is no package to build for him.'}
+        </p>
+      </section>
+    )
+  }
+
   const rec = v.recommended
   const links = tradeLink({
     id: v.leagueId,
