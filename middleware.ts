@@ -133,6 +133,7 @@ const GEO_EXEMPT_PREFIXES = [
   "/paid-restricted",
   "/restricted",
   "/vpn-blocked",
+  "/offline",
   "/terms",
   "/privacy",
   "/data-deletion",
@@ -426,7 +427,9 @@ async function pageVpnRedirect(
   url.pathname = "/vpn-blocked"
   url.search = ""
   url.searchParams.set("from", `${pathname}${request.nextUrl.search}`)
-  return NextResponse.redirect(url)
+  const response = NextResponse.redirect(url)
+  response.headers.set("Cache-Control", "private, no-store, max-age=0")
+  return response
 }
 
 // ─── The account lock ────────────────────────────────────────────────────────

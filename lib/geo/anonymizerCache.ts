@@ -30,11 +30,13 @@ import { isPublicIp } from "./geoIpCache"
 import { combineAnonymizerSignals, parseIpApiPayload, parseProxycheckPayload } from "./geoIpParse"
 
 /**
- * A verdict about an address changes rarely. Kept at geoIpCache's TTL so the
- * call count tracks unique visitors, not requests. A user who turns their VPN
- * off gets a NEW address and a fresh check, so this never traps anyone.
+ * A negative verdict changes rarely. Positive verdicts are retried sooner:
+ * a network switch or a mistaken vendor result should not trap a visitor.
  */
 const ANSWERED_TTL_MS = 6 * 60 * 60 * 1000
+// Positive classifications can be transient or wrong after a network switch.
+// Recheck them promptly so a home-screen app is not locked out for six hours.
+const BLOCKED_TTL_MS = 2 * 60 * 1000
 
 /** "Could not tell" is retried soon, because it is far more likely transient. */
 const UNKNOWN_TTL_MS = 5 * 60 * 1000
@@ -146,7 +148,7 @@ export async function resolveAnonymizerByIp(ip: string): Promise<boolean | null>
       consecutiveUnknown = 0
     }
     evictIfFull()
-    cache.set(ip, { verdict, expiresAt: Date.now() + (verdict === null ? UNKNOWN_TTL_MS : ANSWERED_TTL_MS) })
+    cache.set(ip, { verdict, expiresAt: Date.now() + (verdict === null ? UNKNOWN_TTL_MS : verdict ? BLOCKED_TTL_MS : ANSWERED_TTL_MS) })
     return verdict
   }
 

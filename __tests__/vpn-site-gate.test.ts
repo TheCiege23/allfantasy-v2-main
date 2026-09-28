@@ -207,6 +207,7 @@ describe("what stays open over a VPN", () => {
     "/terms",
     "/privacy",
     "/vpn-blocked",
+    "/offline",
     "/vpn-blocked?from=%2Fcore",
     "/robots.txt",
     "/sitemap.xml",
