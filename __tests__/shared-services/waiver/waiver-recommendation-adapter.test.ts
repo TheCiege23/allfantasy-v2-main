@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockGenerateWaiverRecommendations } = vi.hoisted(() => ({ mockGenerateWaiverRecommendations: vi.fn() }))
+const { mockGenerateWaiverRecommendations, mockLeagueFindUnique } = vi.hoisted(() => ({
+  mockGenerateWaiverRecommendations: vi.fn(),
+  mockLeagueFindUnique: vi.fn(async () => ({ platform: 'sleeper' })),
+}))
+
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: mockLeagueFindUnique } } }))
 
 vi.mock('@/lib/ai/waivers/waiverRecommendationService', () => ({
   generateWaiverRecommendations: mockGenerateWaiverRecommendations,
@@ -9,7 +14,19 @@ vi.mock('@/lib/ai/waivers/waiverRecommendationService', () => ({
 import { runLegacyWaiverGrader } from '@/lib/shared-services/waiver/WaiverRecommendationAdapter'
 
 describe('runLegacyWaiverGrader', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockLeagueFindUnique.mockImplementation(async () => ({ platform: 'sleeper' }))
+  })
+
+  // A Fleaflicker roster's ids collide with real Sleeper ids; the legacy engine would read them as such.
+  it('never runs the legacy engine on a foreign league, and says why', async () => {
+    mockLeagueFindUnique.mockImplementation(async () => ({ platform: 'fleaflicker' }))
+    const result = await runLegacyWaiverGrader({ leagueId: 'league-1', managerKey: 'manager-1' })
+    expect(mockGenerateWaiverRecommendations).not.toHaveBeenCalled()
+    expect(result.topAddPlayerId).toBeNull()
+    expect(result.error).toMatch(/cannot be matched/)
+  })
 
   it('returns an unavailable result honestly when no manager key exists', async () => {
     const result = await runLegacyWaiverGrader({ leagueId: 'league-1', managerKey: null })

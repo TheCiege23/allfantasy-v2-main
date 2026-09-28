@@ -26,21 +26,28 @@
  */
 
 import { generateWaiverRecommendations } from '@/lib/ai/waivers/waiverRecommendationService'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { prisma } from '@/lib/prisma'
 import type { LegacyWaiverGraderResult } from './types'
 
 export async function runLegacyWaiverGrader(input: { leagueId: string; managerKey: string | null }): Promise<LegacyWaiverGraderResult> {
   const graderId = 'waiver_recommendation_service' as const
-  if (!input.managerKey) {
-    return {
-      graderId,
-      topAddPlayerId: null,
-      topAddPlayerName: null,
-      faabBid: null,
-      priority: null,
-      confidence: null,
-      error: 'No manager identifier available for this roster.',
-    }
-  }
+  const unavailable = (error: string): LegacyWaiverGraderResult => ({
+    graderId,
+    topAddPlayerId: null,
+    topAddPlayerName: null,
+    faabBid: null,
+    priority: null,
+    confidence: null,
+    error,
+  })
+  if (!input.managerKey) return unavailable('No manager identifier available for this roster.')
+  // The legacy engine reads a foreign league's roster ids as Sleeper ids (they collide); a pick
+  // built on strangers is not a comparison worth logging. Same gate as /api/ai/waivers/recommend.
+  const league = await prisma.league
+    .findUnique({ where: { id: input.leagueId }, select: { platform: true } })
+    .catch(() => null)
+  if (isForeignIdSpace(league?.platform)) return unavailable("This league's roster ids cannot be matched to ours yet.")
 
   try {
     const output = await generateWaiverRecommendations({

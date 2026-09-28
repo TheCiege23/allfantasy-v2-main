@@ -22,7 +22,6 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire/settings-service"
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
 import { getPlayerPoolForSport } from "@/lib/sport-teams/SportPlayerPoolResolver"
-import { isForeignIdSpace, sleeperReadablePlayerData } from "@/lib/core-app/rosterIdSpace"
 
 export type WaiverRecommendationInput = {
   userId: string
@@ -101,25 +100,15 @@ export async function generateWaiverRecommendations(
    */
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
-    select: { id: true, sport: true, platform: true },
+    select: { id: true, sport: true },
   })
   const sport = (league?.sport ?? "NFL").toUpperCase()
 
-  /*
-   * A foreign league's roster ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, so they are
-   * stripped before any lookup — and with nobody subtractable, "available in this league" would be
-   * a guess, so the pool is left empty and the gap says why.
-   */
-  const foreignIds = isForeignIdSpace(league?.platform)
-  if (foreignIds) dataGaps.push("roster_ids_not_readable_for_platform")
-
   // Every roster in the league: the user's own drives needs + FAAB, the union drives availability.
-  const leagueRosters = (
-    await prisma.roster.findMany({
-      where: { leagueId: input.leagueId },
-      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
-    })
-  ).map((r) => ({ ...r, playerData: sleeperReadablePlayerData(league?.platform, r.playerData) }))
+  const leagueRosters = await prisma.roster.findMany({
+    where: { leagueId: input.leagueId },
+    select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+  })
 
   /* `platformUserId` holds the session user id — the same key every /api/waiver-wire route uses. */
   const myRoster = leagueRosters.find((r) => r.platformUserId === input.userId) ?? null
@@ -159,7 +148,7 @@ export async function generateWaiverRecommendations(
     limit: input.mode === "quick" ? 120 : 300,
   })
 
-  const availablePlayers: Array<{ id: string; name: string; position: string }> = (foreignIds ? [] : pool)
+  const availablePlayers: Array<{ id: string; name: string; position: string }> = pool
     .filter((p) => {
       const ids = [p.player_id, p.external_source_id].filter(Boolean) as string[]
       return !ids.some((id) => rosteredIds.has(id))
