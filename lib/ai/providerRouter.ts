@@ -26,6 +26,7 @@ import { openaiChatText, openaiChatTextStream } from '@/lib/openai-client'
 import { xaiChatJson, parseTextFromXaiChatCompletion } from '@/lib/xai-client'
 import { deepseekChat } from '@/lib/deepseek-client'
 import { rateLimitManager } from '@/lib/workers/rate-limit-manager'
+import { anthropicTokenUsage, recordLlmCall, type LlmTokenUsage } from '@/lib/telemetry/llm-usage'
 
 export type ProviderName = 'openai' | 'anthropic' | 'xai' | 'deepseek'
 export type { ProviderProfile }
@@ -38,8 +39,26 @@ export type RouterImage = {
 }
 
 export type RouterResult =
-  | { ok: true; text: string; model: string; provider: ProviderName; tokensUsed: number }
+  | {
+      ok: true
+      text: string
+      model: string
+      provider: ProviderName
+      tokensUsed: number
+      /** Split token counts, where the provider path exposes them (Anthropic). Used for spend metering. */
+      usage?: LlmTokenUsage | null
+    }
   | { ok: false }
+
+/**
+ * Who is spending, for `recordLlmCall`. Optional: a caller that passes nothing is recorded as
+ * 'provider-router', which still counts the call. Naming the feature is what makes it visible.
+ */
+export type RouterMetering = {
+  feature?: string
+  userId?: string | null
+  leagueId?: string | null
+}
 
 type TextCallArgs = {
   messages: RouterMessage[]
@@ -194,6 +213,7 @@ async function callAnthropicText(args: TextCallArgs): Promise<RouterResult> {
       model: response.model || model,
       provider: 'anthropic',
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      usage: anthropicTokenUsage(response.usage),
     }
   } catch (error: unknown) {
     const status = (error as Record<string, unknown>)?.status as number | undefined
@@ -256,6 +276,7 @@ async function callAnthropicStream(args: StreamCallArgs): Promise<RouterResult> 
       tokensUsed:
         Math.max(0, finalMessage.usage.input_tokens ?? 0) +
         Math.max(0, finalMessage.usage.output_tokens ?? 0),
+      usage: anthropicTokenUsage(finalMessage.usage),
     }
   } catch (error: unknown) {
     const status = (error as Record<string, unknown>)?.status as number | undefined
@@ -378,6 +399,34 @@ const STREAM_CALLS: Record<ProviderName, StreamCall> = {
   },
 }
 
+/**
+ * One metering row per provider ATTEMPT, not per answer. A failed attempt before a fallback is still
+ * a request the provider saw, and the fallback chain is exactly what moved spend onto Anthropic when
+ * OpenAI's billing lapsed. The one exception is the spend kill switch: nothing left the process, so
+ * there is nothing to meter, and recording every blocked call would bury the real ones.
+ */
+function meterAttempt(
+  args: RouterMetering & { maxTokens?: number },
+  provider: ProviderName,
+  result: RouterResult | null,
+  startedAt: number,
+  failureCategory: string | null,
+): void {
+  if (failureCategory === 'spend_disabled') return
+  const ok = Boolean(result?.ok)
+  recordLlmCall({
+    feature: args.feature?.trim() || 'provider-router',
+    provider,
+    model: result && result.ok ? result.model : `unknown:${failureCategory ?? 'failed'}`,
+    userId: args.userId ?? null,
+    leagueId: args.leagueId ?? null,
+    usage: result && result.ok ? result.usage ?? null : null,
+    maxTokens: args.maxTokens ?? null,
+    ok,
+    durationMs: Date.now() - startedAt,
+  })
+}
+
 // ─── Public router functions ──────────────────────────────────────────────────
 
 export async function routeTextCall(args: {
@@ -394,7 +443,7 @@ export async function routeTextCall(args: {
    * fallback, so a preferred provider being down degrades rather than fails.
    */
   preferredProvider?: ProviderName | null
-}): Promise<RouterResult> {
+} & RouterMetering): Promise<RouterResult> {
   // NOTE: the spend guard is NOT in this loop. It lives at each provider boundary — the clients this
   // router delegates to (`lib/openai-client`, `lib/xai-client`, `lib/deepseek-client`) and the inline
   // Anthropic adapter above, the point where a request actually leaves. A refusal from any of them is
@@ -403,10 +452,14 @@ export async function routeTextCall(args: {
   const attempts: string[] = []
 
   for (const provider of order) {
+    const startedAt = Date.now()
     try {
-      return await withTimeout(TEXT_CALLS[provider](args), PROVIDER_TIMEOUT_MS, provider)
+      const result = await withTimeout(TEXT_CALLS[provider](args), PROVIDER_TIMEOUT_MS, provider)
+      meterAttempt(args, provider, result, startedAt, null)
+      return result
     } catch (error: unknown) {
       const norm = normalizeProviderError(error)
+      meterAttempt(args, provider, null, startedAt, norm.category)
       console.error('[provider-router] text provider failed:', {
         provider,
         category: norm.category,
@@ -431,15 +484,19 @@ export async function routeStreamCall(args: {
   /** See routeTextCall — provider tried first, ignored unless in AI_PROVIDER_ORDER. */
   preferredProvider?: ProviderName | null
   onText: (delta: string, snapshot: string) => void
-}): Promise<RouterResult> {
+} & RouterMetering): Promise<RouterResult> {
   const order = applyPreferredProvider(getProviderOrder(), args.preferredProvider)
   const attempts: string[] = []
 
   for (const provider of order) {
+    const startedAt = Date.now()
     try {
-      return await withTimeout(STREAM_CALLS[provider](args), PROVIDER_TIMEOUT_MS, provider)
+      const result = await withTimeout(STREAM_CALLS[provider](args), PROVIDER_TIMEOUT_MS, provider)
+      meterAttempt(args, provider, result, startedAt, null)
+      return result
     } catch (error: unknown) {
       const norm = normalizeProviderError(error)
+      meterAttempt(args, provider, null, startedAt, norm.category)
       console.error('[provider-router] stream provider failed:', {
         provider,
         category: norm.category,
