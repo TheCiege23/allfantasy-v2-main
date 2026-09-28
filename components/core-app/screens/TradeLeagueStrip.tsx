@@ -90,7 +90,13 @@ function statusLine(s: TileState, platform: string): { text: string; tone: strin
         tone: 'waiting',
       }
     case 'clear':
-      return { text: 'Nothing waiting', tone: 'clear' }
+      /*
+       * Sleeper's public feed carries a trade only once it is accepted (see TradeInbox), so for a
+       * Sleeper league "nothing waiting" is a claim we cannot check. Say what we actually know.
+       */
+      return platform.toLowerCase() === 'sleeper'
+        ? { text: 'None visible · open offers live in Sleeper', tone: 'faint' }
+        : { text: 'Nothing waiting', tone: 'clear' }
   }
 }
 

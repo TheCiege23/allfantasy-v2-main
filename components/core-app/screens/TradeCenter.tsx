@@ -867,6 +867,26 @@ export function TradeCenter(props: {
   )
 
   /**
+   * An offer the manager can see on Sleeper and we cannot. Sleeper's public feed carries a trade
+   * only once it is accepted (see TradeInbox), so the manager types it in. It is the builder, not
+   * a separate form: the same assets, league values and grader as every other trade on this page,
+   * and the note says where the deal came from so the verdict is not read as an offer we fetched.
+   */
+  const enterOfferByHand = useCallback(() => {
+    setDraftTouched(true)
+    setRecoverableDraft(null)
+    setGiveAssets([])
+    setGetAssets([])
+    setPartnerRosterId(null)
+    setCountering(null)
+    setPicking(null)
+    setResult(null)
+    setError(null)
+    setDraftNote('Entering an offer from Sleeper: pick the manager who sent it, add what you would send and what you would get exactly as Sleeper shows it, then analyze.')
+    goToStep('give')
+  }, [goToStep])
+
+  /**
    * Arm counter mode: the builder holds their deal, seen from this manager, and the
    * send goes to `/counter` with the parent attached.
    *
@@ -1550,6 +1570,7 @@ export function TradeCenter(props: {
           view="offers"
           leagueId={props.league?.id ?? null}
           onLoad={loadOffer}
+          onEnterByHand={enterOfferByHand}
           onCounter={startCounter}
           reloadToken={inboxReloadToken}
           importedHistory={props.completedHistory}
