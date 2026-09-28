@@ -667,6 +667,33 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     }
     const weeks = [...new Set(remaining.map((g) => g.week))].sort((a, b) => a - b)
 
+    /*
+     * 🛑 NO UPCOMING ROW IS NOT THE SAME AS NO UPCOMING GAME. Sleeper, ESPN and Yahoo write a 0-0
+     * placeholder row for every unplayed week, so an empty remainder there does mean the regular
+     * season is over. The Fantrax writer stores only weeks already PLAYED — so Cream Bowl, four
+     * weeks into its season, read "Settled — the regular season is over and you are out" in week 3
+     * (production audit 2026-09-28; its WeeklyMatchup rows were weeks 1–4, all scored, none ahead).
+     *
+     * So an empty remainder is trusted only when the league STATES its last regular week and the
+     * scores have reached it. Otherwise the schedule ahead is simply not on file, and the league is
+     * withheld with that reason rather than simulated as a finished season.
+     */
+    if (weeks.length === 0) {
+      const lastScoredWeek = seasonRows.reduce(
+        (max, r) => (r.pointsFor > 0 || r.pointsAgainst > 0 ? Math.max(max, r.week) : max),
+        0,
+      )
+      if (endWeek == null || lastScoredWeek < endWeek) {
+        const platform = String(league.platform ?? '').trim()
+        const who = platform ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase() : 'The platform'
+        withheld.push({
+          leagueName,
+          reason: `The rest of the schedule is not on file — ${who} has sent only the weeks already played (through week ${lastScoredWeek}), so a finished season cannot be told from one still going.`,
+        })
+        continue
+      }
+    }
+
     const missing: string[] = []
     const unmodelled = simTeams.filter((t) => !t.profile).length
     if (unmodelled > 0) {
