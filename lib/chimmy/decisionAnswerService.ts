@@ -1,4 +1,5 @@
 import 'server-only'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { screenshotTradeQuestion } from './tradeOfferEvidence'
 import { tradeSeasonOutlook } from './tradeSeasonOutlook'
 import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisionRecommendation'
@@ -157,7 +158,10 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
         ? 'Choose an available player whose game has not started. Ask for a full lineup check to compare eligible replacements, then confirm the slot and AutoSubs on your platform.'
         : scenario.reason === 'players_locked'
           ? 'Keep already-started players in place. Compare players with future kickoffs and confirm individual locks and AutoSubs on your platform.'
-          : 'Sync league settings and rosters, then confirm the player names and ask again.'
+          // A re-sync cannot make a foreign league's player ids matchable, so it is not offered as the fix.
+          : scenario.reason === 'roster_ids_unreadable'
+            ? `${FOREIGN_IDS_UNREADABLE}, and a re-sync will not change that — make this call on your league platform for now.`
+            : 'Sync league settings and rosters, then confirm the player names and ask again.'
       return gap(scenario.reason, scenario.detail, remedy)
     }
     if (scenario?.status === 'ready') {
@@ -204,7 +208,18 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
           ...(result.unverifiedLocks?.length ? [`Kickoff locks unverified: ${result.unverifiedLocks.map(p => p.name).join(', ')}.`] : []),
           'Confirm individual locks, AutoSubs and current injury news on your platform. This is a one-week projection, not a guarantee.'].join('\n') })
     }
-    return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', kind === 'trade' ? 'Name what you give and receive, or ask whether to trade for a named player.' : 'Name the player to add and the player to drop. FAAB bidding needs additional waiver-engine evidence.')
+    /*
+     * ⚠ A WAIVER QUESTION THAT NAMES NO MOVE IS A STRATEGY QUESTION, NOT A MISSING INPUT. "Looking at
+     * my roster, should I spend FAAB on a player this week?" (asked live in a guillotine league,
+     * 2026-09-28) got "Name the player to add and the player to drop": a free dead end, for a
+     * question the full answer path can take up with the roster, waiver-pool and FAAB tools. The
+     * engine lane exists to give an EXACT answer to a named move. When the waiver engine resolved
+     * none, it steps aside (null) and the question is answered like any other. A named move the
+     * engine could not resolve still gets its precise refusal above ("not found", "already
+     * rostered"), because that one is a real answer.
+     */
+    if (kind === 'waiver') return null
+    return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', 'Name what you give and receive, or ask whether to trade for a named player.')
   } catch {
     return gap('engine_unavailable', 'The decision engine could not complete this comparison.', 'Try again after syncing your league. No recommendation was computed.')
   }

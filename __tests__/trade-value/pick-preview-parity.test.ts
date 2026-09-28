@@ -26,13 +26,32 @@ it('quotes the observed 2027 second at 1,585 and uses that exact price in the ev
 it('prices the season being traded, rather than giving every future second the same value', async () => {
   expect((await priceLeagueTradePick({ year: 2028, round: 2 }, pricing)).priced.value).toBe(1200)
 })
-it('retains evaluator fallback parity when a successfully loaded chart has no row for that season', async () => {
+it('🛑 a season the chart carries no row for is UNPRICED with a reason — never the formula curve (2026-09-28)', async () => {
+  // The curve priced a 2027 1st at 7,360 against FantasyCalc's ~2,900 in guillotine/survivor/zombie
+  // leagues, and graded deals on it (trade price coverage audit). Preview and evaluator still agree.
   const preview = await priceLeagueTradePick({ year: 2029, round: 3 }, pricing)
   const evaluated = await resolveAssets([{ kind: 'pick', year: 2029, round: 3 }], {
     ...pricing, effectiveSport: 'NFL', waiverBudget: 100, dataGaps: [],
   })
-  expect(preview.dataSource).toBe('historical_pick_curve')
+  expect(preview.dataSource).toBe('no_pick_market')
+  expect(preview.priced).toMatchObject({ unpriced: true, value: 0, source: 'unknown',
+    unpricedReason: { code: 'no_pick_market', label: "No market value for a 2029 round 3 pick in this league's format" } })
+  expect(preview.priced.assetValue.marketValue).toBe(0)
   expect(evaluated.priced[0]).toEqual(preview.priced)
+  expect(evaluated.lines[0]).toMatchObject({ unpriced: true, unpricedReason: { code: 'no_pick_market' } })
+})
+it('🛑 a redraft-style chart (guillotine, survivor, zombie) prices NO pick at all, in any season or round', async () => {
+  // The audit case: the chart these formats use has player rows and no pick rows.
+  const redraft = [{ player: { name: 'Some Receiver', position: 'WR', sleeperId: '1' }, value: 3000 }] as FantasyCalcPlayer[]
+  const onRedraft = { fcPlayers: redraft, nflCtx: { ...pricing.nflCtx, fantasyCalcPlayers: redraft } }
+  for (const [year, round] of [[2027, 1], [2027, 6], [2028, 2]] as const) {
+    const { priced, dataSource } = await priceLeagueTradePick({ year, round }, onRedraft)
+    expect({ year, round, dataSource, unpriced: priced.unpriced, value: priced.value }).toEqual({ year, round, dataSource: 'no_pick_market', unpriced: true, value: 0 })
+  }
+})
+it('[control] a pick the chart DOES carry is still priced from it', async () => {
+  const { priced, dataSource } = await priceLeagueTradePick({ year: 2027, round: 1 }, pricing)
+  expect({ dataSource, value: priced.value, unpriced: priced.unpriced }).toEqual({ dataSource: 'fantasycalc_pick', value: 4000, unpriced: undefined })
 })
 
 describe('league quote isolation', () => {

@@ -4,6 +4,7 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 
 import { useEffect, useState } from 'react'
 
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
 
 /**
@@ -23,6 +24,8 @@ import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
 const REASON: Record<Exclude<WaiverBoardState, 'ok'>, string> = {
   no_team_claimed: 'we cannot tell which roster in this league is yours',
   no_roster: 'no roster rows imported for your team yet',
+  // Imported, but unread: "no roster rows" would be false of a league whose ids we cannot match.
+  ids_unreadable: FOREIGN_IDS_UNREADABLE.toLowerCase(),
   no_scoring_settings: 'this league publishes no scoring settings, so nothing here can be priced',
   no_slots: 'this league publishes no starting slots, so there is no lineup to improve',
   no_projections: 'nothing on your roster could be projected under this league’s scoring yet',

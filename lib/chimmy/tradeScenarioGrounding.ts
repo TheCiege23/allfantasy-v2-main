@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
 import { evaluateTrade, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
@@ -165,6 +167,18 @@ export async function buildTradeScenario(
       status: 'unresolved',
       reason: 'no_viewer_roster',
       detail: 'Your team in this league is not claimed or has no synced roster, so there is no "before" to compare.',
+    }
+  }
+  /*
+   * The port strips a foreign league's roster ids (`loadRosters`), so every roster here is empty and
+   * the name match below would refuse with "not every player named is on a roster in this league" —
+   * a false claim about the league. `provenance.provider` decides only this refusal.
+   */
+  if (isForeignIdSpace(world.provenance?.provider)) {
+    return {
+      status: 'unresolved',
+      reason: 'roster_ids_unreadable',
+      detail: `${FOREIGN_IDS_UNREADABLE}, so no roster in this league can be read to compare this trade.`,
     }
   }
 

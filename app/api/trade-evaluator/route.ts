@@ -823,7 +823,15 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         )
       }
 
-      if (allPlayerPrices.length > 0 && unpricedAssets.length === allPlayerPrices.length) {
+      /*
+       * ⚠ ONLY AN UNEXPLAINED MISS CAN MEAN AN OUTAGE. `pricePlayer` refuses with a reason when
+       * it knows why — a fringe veteran the market board dropped, a defender with no league
+       * board — and a trade made only of those is not our feed being down. Counting them here
+       * would answer a Mixon-for-Hunt trade with "this is on our side, try again shortly",
+       * which retrying can never fix.
+       */
+      const unexplained = unpricedAssets.filter((p) => !p.unpricedReason)
+      if (allPlayerPrices.length > 0 && unexplained.length === allPlayerPrices.length) {
         return NextResponse.json(
           {
             error: 'VALUATION_UNAVAILABLE',
@@ -833,14 +841,27 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           { status: 503 },
         )
       }
+      const reasonByName = new Map(
+        unpricedAssets.flatMap((p) => (p.unpricedReason ? [[p.name, p.unpricedReason.label] as const] : [])),
+      )
+      const explained = names.filter((n) => reasonByName.has(n))
+      const unknown = names.filter((n) => !reasonByName.has(n))
+      const sentences = [
+        ...explained.map((n) => `${n}: ${reasonByName.get(n)}.`),
+        ...(unknown.length === 1
+          ? [`No value on file for ${unknown[0]} — check the spelling, or the player may not be on the dynasty board.`]
+          : unknown.length > 1
+            ? [`No values on file for ${unknown.join(', ')} — check the spellings, or those players may not be on the dynasty board.`]
+            : []),
+      ]
       return NextResponse.json(
         {
           error: 'UNPRICED_ASSETS',
-          message:
-            names.length === 1
-              ? `No value on file for ${names[0]}, so this trade cannot be graded. Check the spelling, or the player may not be on the dynasty board.`
-              : `No values on file for ${names.join(', ')}, so this trade cannot be graded. Check the spellings, or those players may not be on the dynasty board.`,
+          message: `This trade cannot be graded. ${sentences.join(' ')}`,
           unpricedPlayers: names,
+          ...(explained.length > 0 && {
+            unpricedReasons: explained.map((n) => ({ name: n, reason: reasonByName.get(n)! })),
+          }),
         },
         { status: 422 },
       )

@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { hasIdpScoring } from '@/lib/core-app/scoringNotes'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -54,6 +55,8 @@ export type WaiverBoardState =
   | 'ok'
   | 'no_team_claimed'
   | 'no_roster'
+  /** A foreign-id league (Fleaflicker, MFL, …): its roster is on file but cannot be read as ours. */
+  | 'ids_unreadable'
   | 'no_scoring_settings'
   | 'no_slots'
   | 'no_projections'
@@ -163,9 +166,9 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   const myIds = readableIds(mine.playerData)
   if (myIds.length === 0) {
     return EMPTY(
-      'no_roster',
+      isForeignIdSpace(league.platform) ? 'ids_unreadable' : 'no_roster',
       isForeignIdSpace(league.platform)
-        ? ['This platform’s player ids cannot be matched to players yet, so free agents cannot be told apart from rostered players.']
+        ? [`${FOREIGN_IDS_UNREADABLE}, so free agents cannot be told apart from rostered players.`]
         : [],
     )
   }

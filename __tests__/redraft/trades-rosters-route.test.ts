@@ -18,6 +18,15 @@ const findFirstLeagueTeam = vi.fn()
 const findUniqueUserProfile = vi.fn()
 const findManySportsPlayer = vi.fn()
 const getFantasyCalcValues = vi.fn()
+/**
+ * The pick rows a real DYNASTY FantasyCalc chart carries (2027–2029, rounds 1–2). A redraft chart —
+ * what guillotine, survivor and zombie leagues price on — carries none, and since 2026-09-28 a pick
+ * with no chart row is UNPRICED rather than priced on the formula curve.
+ */
+const DYNASTY_PICK_ROWS = [2027, 2028, 2029].flatMap((season, i) => [
+  { player: { name: `${season} Round 1`, position: 'PICK' }, value: 3000 - i * 200 },
+  { player: { name: `${season} Round 2`, position: 'PICK' }, value: 1500 - i * 100 },
+])
 const loadLeagueValues = vi.fn()
 vi.mock('@/lib/league-values/leagueTradeValues', () => ({
   loadLeagueTradeValues: (...args: unknown[]) => loadLeagueValues(...args),
@@ -466,13 +475,14 @@ describe('🛑 the bye week, which no column supplies', () => {
 })
 
 describe('🛑 draft picks carry a value, in the players\' own units', () => {
-  it('prices a pick off the curve instead of returning nothing', async () => {
+  it('prices a pick off the league chart instead of returning nothing', async () => {
     /*
      * Guap's report: "the draft pick has no shown value". The route built picks as
      * `{ ...p, itemType }` with no `value` at all, so the builder rendered an em dash and reported
      * "1 unpriced" on a side holding a first-round pick — a total understated by a whole pick.
-     * `lib/pick-curve.ts` has existed the entire time; nothing called it from here.
+     * A dynasty chart carries the pick, so it shows that value (2026-09-28: no longer the curve).
      */
+    getFantasyCalcValues.mockResolvedValue(DYNASTY_PICK_ROWS)
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
     findManyRoster.mockResolvedValue([
       {
@@ -490,7 +500,23 @@ describe('🛑 draft picks carry a value, in the players\' own units', () => {
     const picks = ((await res.json()) as { rosters: Array<{ picks: Array<Record<string, unknown>> }> }).rosters[0]!.picks
 
     expect(picks.length).toBeGreaterThan(0)
-    expect(picks[0]!.value).toBeGreaterThan(0)
+    expect(picks[0]!.value).toBe(3000)
+  })
+
+  it('🛑 a pick the chart has no market for is null WITH the reason — not the formula curve, not "could not be loaded"', async () => {
+    // A redraft chart (guillotine, survivor, zombie) carries no pick rows. The curve priced a 2027 1st
+    // at 7,360 against FantasyCalc's ~2,900 (trade price coverage audit, 2026-09-28).
+    getFantasyCalcValues.mockResolvedValue([{ player: { name: 'Some Receiver', position: 'WR', sleeperId: 'x' }, value: 3000 }])
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', faabRemaining: null,
+        playerData: { players: [], draftPicks: [{ id: 'p2027r1', season: 2027, round: 1 }] } },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const pick = ((await res.json()) as { rosters: Array<{ picks: Array<Record<string, unknown>> }> }).rosters[0]!.picks[0]!
+    expect(pick.value).toBeNull()
+    expect(pick.unpricedReason).toMatchObject({ code: 'no_pick_market', label: "No market value for a 2027 round 1 pick in this league's format" })
   })
 
   it('🛑 a pick with no round stays NULL, never 0', async () => {
@@ -768,10 +794,17 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
     expect(code('rb')).toBe('no_feed_for_sport')
   })
 
-  it('a pick with no round says so; a pick with one carries no reason', async () => {
+  it('a pick with no round says so; a priced pick carries no reason', async () => {
+    getFantasyCalcValues.mockResolvedValue(DYNASTY_PICK_ROWS)
     const { pickCode } = await load()
     expect(pickCode('pk-none')).toBe('pick_without_round')
     expect(pickCode('pk-r1')).toBeNull()
+  })
+
+  it('a pick with a round but no market row says THAT, not "could not be loaded"', async () => {
+    // beforeEach's chart holds one player and no picks — the redraft-chart case.
+    const { pickCode } = await load()
+    expect(pickCode('pk-r1')).toBe('no_pick_market')
   })
 })
 
@@ -935,7 +968,8 @@ describe('🛑 an imported league lists its real draft picks', () => {
     expect(picksOf('r2').some((p) => p.pickId === 'fdp:2027:1:2')).toBe(false)
   })
 
-  it('values them on the pick curve, and marks them not proposable', async () => {
+  it('values them off the league chart, and marks them not proposable', async () => {
+    getFantasyCalcValues.mockResolvedValue(DYNASTY_PICK_ROWS)
     const { picksOf } = await load()
     for (const p of [...picksOf('r1'), ...picksOf('r2')]) {
       expect(p.value).toBeGreaterThan(0)

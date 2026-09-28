@@ -125,4 +125,19 @@ describe('getPlayerCard — the league half never reads a foreign roster as Slee
     expect(JSON.stringify(card!.league)).not.toContain('Wrong Player')
     expect(JSON.stringify(card!.league)).not.toContain('Stranger FC')
   })
+
+  it('🛑 a Fleaflicker league reports his slot as UNREADABLE, never NOT ROSTERED', async () => {
+    leagueOn('fleaflicker')
+    const card = await getPlayerCard(REQ)
+    expect(card!.league!.slot).toBe('UNREADABLE')
+  })
+
+  it('[control] a Sleeper league where nobody holds him still reports NOT ROSTERED', async () => {
+    leagueOn('sleeper')
+    overrides.roster = {
+      findMany: async () => [{ id: 'r-me', platformUserId: 'me', playerData: { players: ['111'], starters: [] } }],
+    }
+    const card = await getPlayerCard(REQ)
+    expect(card!.league!.slot).toBe('NOT ROSTERED')
+  })
 })

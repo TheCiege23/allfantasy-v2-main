@@ -2,7 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildRosterIdMap } from './rosterIdMatch'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { FOREIGN_IDS_UNREADABLE, FOREIGN_IDS_UNREADABLE_CLAUSE } from './foreignIdSpaceCopy'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekProgress } from './leagueWeekProgress'
 
@@ -175,11 +176,13 @@ export async function getCrossLeagueExposure(
   const seen = new Set<string>()
   const held = new Map<string, { count: number; starts: number }>()
   let rostersRead = 0
+  let foreignRead = 0
 
   for (const r of rosters) {
     if (seen.has(r.leagueId)) continue
     seen.add(r.leagueId)
     rostersRead += 1
+    if (isForeignIdSpace(r.league?.platform)) foreignRead += 1
 
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id; such a roster
     // still counts toward the denominator (so "every roster" stays honest) but names nobody.
@@ -197,6 +200,13 @@ export async function getCrossLeagueExposure(
   }
 
   if (held.size === 0) {
+    // Every roster read was a foreign league's: its ids were stripped, not missing from the import.
+    if (foreignRead === rostersRead) {
+      return {
+        available: false,
+        reason: rostersRead === 1 ? FOREIGN_IDS_UNREADABLE : `for each of your ${rostersRead} leagues, ${FOREIGN_IDS_UNREADABLE_CLAUSE}`,
+      }
+    }
     return { available: false, reason: 'your rosters imported with no resolvable player ids' }
   }
 

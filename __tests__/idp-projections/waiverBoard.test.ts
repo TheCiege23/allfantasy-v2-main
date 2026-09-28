@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { bestLineup, loadWaiverBoard, type Scored } from '@/lib/waivers/waiverBoard'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 /*
  * Doubles for the loader tests at the bottom of this file. `bestLineup` above is pure and touches
@@ -159,7 +160,9 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     const board = await loadWaiverBoard({ prisma: prismaOn('fleaflicker'), leagueId: 'L1', userId: 'u-1' })
     expect(JSON.stringify(board)).not.toContain('Wrong Player')
     expect(board.candidates).toEqual([])
-    expect(board.notes.join(' ')).toContain('cannot be matched')
+    // Imported but unread — not "no roster rows imported for your team yet".
+    expect(board.state).toBe('ids_unreadable')
+    expect(board.notes.join(' ')).toContain(FOREIGN_IDS_UNREADABLE)
   })
 
   it('CONTROL: the same id in a Sleeper league IS priced and named as displaced', async () => {

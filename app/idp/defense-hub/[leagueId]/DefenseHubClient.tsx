@@ -19,6 +19,7 @@ import { TradeBoardSection } from './TradeBoardSection'
 import '@/components/core-app/af-core.css'
 
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 
 /**
@@ -62,6 +63,12 @@ const FALLBACK_REASON: Record<DefenseHubState, { title: string; body: string }> 
   no_defenders: {
     title: 'You don’t roster any defensive players yet',
     body: 'This league starts defensive slots — once you hold a defender, he shows up here.',
+  },
+  ids_unreadable: {
+    title: FOREIGN_IDS_UNREADABLE,
+    body:
+      'Your roster is imported, but until its players can be matched there is no defender here ' +
+      'we could name or price — so none is shown, rather than the wrong one.',
   },
   no_projection_history: {
     title: 'No scored games on file yet',

@@ -21,6 +21,31 @@ import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
+import {
+  IOS_APP_PLANS_PATH,
+  isIosAppPurchaseApi,
+  isIosAppPurchasePage,
+  isIosAppUserAgent,
+} from "@/lib/platform/iosApp"
+
+/**
+ * Inside the iOS app nothing is for sale (App Store guideline 3.1.1 — see
+ * lib/platform/iosApp). Checked ahead of every geo gate: it is a UA read with
+ * no network call, and it only ever refuses, so running first cannot let
+ * anything through that a later gate would have stopped.
+ */
+function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResponse | null {
+  if (!isIosAppUserAgent(request.headers.get("user-agent"))) return null
+  if (isApiPath(pathname)) {
+    if (!isIosAppPurchaseApi(pathname)) return null
+    return NextResponse.json(
+      { error: "not_available_in_ios_app", message: "Purchases aren't available in the iOS app." },
+      { status: 403, headers: { "cache-control": "no-store" } },
+    )
+  }
+  if (!isIosAppPurchasePage(pathname)) return null
+  return NextResponse.redirect(new URL(IOS_APP_PLANS_PATH, request.url), 307)
+}
 
 /**
  * Once a visitor is authenticated, the no-login trial cookie (`af_guest_session`)
@@ -928,6 +953,9 @@ export async function middleware(request: NextRequest) {
 
 async function routeMiddleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  const iosRefusal = iosAppPurchaseRefusal(request, pathname)
+  if (iosRefusal) return applyApiSecurityHeaders(pathname, iosRefusal)
 
   // ── Hard early-exit for all API routes ───────────────────────────────────
   // UI redirect logic (username gate, geo redirect, /choose-username, etc.)

@@ -26,6 +26,7 @@
  */
 
 import { generateWaiverRecommendations } from '@/lib/ai/waivers/waiverRecommendationService'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { prisma } from '@/lib/prisma'
 import type { LegacyWaiverGraderResult } from './types'
@@ -47,7 +48,7 @@ export async function runLegacyWaiverGrader(input: { leagueId: string; managerKe
   const league = await prisma.league
     .findUnique({ where: { id: input.leagueId }, select: { platform: true } })
     .catch(() => null)
-  if (isForeignIdSpace(league?.platform)) return unavailable("This league's roster ids cannot be matched to ours yet.")
+  if (isForeignIdSpace(league?.platform)) return unavailable(`${FOREIGN_IDS_UNREADABLE}.`)
 
   try {
     const output = await generateWaiverRecommendations({

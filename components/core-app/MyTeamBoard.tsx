@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import { lineupLink } from '@/lib/core-app/platformLinks'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
+import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { MyTeamLockClock } from '@/components/core-app/MyTeamLockClock'
 import { LineupIntelligenceActions } from '@/components/core-app/LineupIntelligenceActions'
 import {
@@ -322,7 +323,8 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
     )
   }
 
-  const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup
+  const idsUnreadable = pulse.notChecked.idsUnreadable ?? 0
+  const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup + idsUnreadable
   const hidden = Math.max(0, activeTotal - rows.length)
   const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
 
@@ -443,8 +445,18 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
           {pulse.notChecked.noLineup > 0
             ? `${pulse.notChecked.noLineup} ${pulse.notChecked.noLineup === 1 ? 'has' : 'have'} a roster but no starting lineup on file`
             : ''}
+          {/* A foreign-id league's lineup is unread, not absent — its own words, never "no lineup". */}
+          {idsUnreadable > 0 && (pulse.notChecked.noRoster > 0 || pulse.notChecked.noLineup > 0) ? ' and ' : ''}
+          {idsUnreadable > 0
+            ? `${idsUnreadable} ${idsUnreadable === 1 ? 'has' : 'have'} a roster on file, but ${idsUnreadable === 1 ? '' : 'for each league, '}${FOREIGN_IDS_UNREADABLE_CLAUSE}`
+            : ''}
           . This is a gap in available data, not a verdict on those lineups. {' '}
-          <Link href={allHref}>Review league setup</Link> or <Link href="/core/sync">re-sync imported leagues</Link>.
+          {/* A re-sync cannot make a foreign league's ids matchable, so it is offered only for the gaps it can close. */}
+          {pulse.notChecked.noRoster + pulse.notChecked.noLineup > 0 ? (
+            <>
+              <Link href={allHref}>Review league setup</Link> or <Link href="/core/sync">re-sync imported leagues</Link>.
+            </>
+          ) : null}
         </p>
       ) : null}
 

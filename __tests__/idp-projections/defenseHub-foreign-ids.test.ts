@@ -24,9 +24,13 @@ vi.mock('@/lib/core-app/myRoster', async (importOriginal) => ({
 }))
 
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
+import { findMyRoster } from '@/lib/core-app/myRoster'
 
 /** The fake Sleeper player table: '6038' IS a real Sleeper id, and it is somebody else. */
-const SLEEPER_PLAYERS = [{ sleeperId: '6038', name: 'Wrong Player', team: 'KC', position: 'LB', updatedAt: new Date() }]
+const SLEEPER_PLAYERS = [
+  { sleeperId: '6038', name: 'Wrong Player', team: 'KC', position: 'LB', updatedAt: new Date() },
+  { sleeperId: '7777', name: 'Only A Receiver', team: 'MIA', position: 'WR', updatedAt: new Date() },
+]
 
 const prismaOn = (platform: string) =>
   ({
@@ -76,5 +80,16 @@ describe('loadDefenseHub — foreign roster ids', () => {
     expect(hub.state).toBe('ok')
     expect(hub.defenders.map((d) => d.name)).toEqual(['Wrong Player'])
     expect(hub.defenders[0].value).toBe(2100)
+  })
+
+  it('says the ids are unreadable, not that the manager rosters no defenders', async () => {
+    const hub = await loadDefenseHub({ prisma: prismaOn('fleaflicker'), leagueId: 'L1', userId: 'u-1' })
+    expect(hub.state).toBe('ids_unreadable')
+  })
+
+  it('CONTROL: a Sleeper roster that genuinely holds no defender still says no_defenders', async () => {
+    vi.mocked(findMyRoster).mockResolvedValueOnce({ found: true, playerData: { players: ['7777'] } })
+    const hub = await loadDefenseHub({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(hub.state).toBe('no_defenders')
   })
 })

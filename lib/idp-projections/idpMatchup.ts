@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
 
@@ -30,6 +31,8 @@ export type IdpMatchupState =
   | 'no_team_claimed'
   | 'no_matchup'
   | 'no_scoring_settings'
+  /** The rosters are the provider's own ids (see `isForeignIdSpace`) — not "no matchup on file". */
+  | 'ids_unreadable'
 
 export interface IdpMatchupPlayer {
   sleeperId: string
@@ -224,11 +227,9 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
   const oppIds = idsFor(oppRosterId)
   const allIds = [...new Set([...myIds, ...oppIds])]
   if (allIds.length === 0) {
-    return EMPTY('no_matchup', [
-      isForeignIdSpace(league.platform)
-        ? 'This platform’s player ids cannot be matched to players yet, so the matchup cannot be scored here.'
-        : 'No rosters imported for this matchup.',
-    ])
+    return isForeignIdSpace(league.platform)
+      ? EMPTY('ids_unreadable', [`${FOREIGN_IDS_UNREADABLE}, so the matchup cannot be scored here.`])
+      : EMPTY('no_matchup', ['No rosters imported for this matchup.'])
   }
 
   const [playerRows, actual] = await Promise.all([

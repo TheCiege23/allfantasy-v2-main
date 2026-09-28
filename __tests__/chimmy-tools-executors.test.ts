@@ -73,6 +73,12 @@ describe('tool specs', () => {
        */
       'get_available_players',
       /*
+       * FAAB bid sizing for the user's OWN team (claimed seat, session league). Reads rosters,
+       * market values and the user's `faabRemaining`, runs the pure `allocateFaabAcrossPool`, and
+       * writes nothing. It returns ceilings to consider, never a placed bid.
+       */
+      'get_faab_bid_plan',
+      /*
        * One player's published market value, by NAME. Reads only
        * `allFantasyMarketPlayerValue` rows already marked published, writes
        * nothing, and takes no league — a house value is the same number for

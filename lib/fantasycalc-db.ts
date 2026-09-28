@@ -244,7 +244,18 @@ export async function getFantasyCalcValuesDbFirst(
 
 /**
  * `getFantasyCalcValuesDbFirst`, plus WHEN the chart was synced from FantasyCalc — so a trade grade
- * can record the age of every market value it was taken on (2026-09-28). Same freshness rule.
+ * can record the age of every market value it was taken on (2026-09-28).
+ *
+ * 🛑 `maxStaleMs` IS AN AGE LIMIT, AND UNTIL 2026-09-28 IT WAS NOT ONE. The old test was
+ * `!stale || age <= maxStale`, and a row is only `stale` once past its 6 h expiry — so any unexpired
+ * row was served whatever its age, and the trade chart's 2 h limit never applied: the real bound was
+ * 6 h (trade price coverage audit). Guap chose freshness over speed (see the warm cron): the hourly
+ * warm keeps rows under an hour old, and the 2 h limit is what forces a live fetch when it lapses.
+ * Now a row older than the limit IS refetched.
+ *
+ * ⚠ AN OUTAGE STILL SERVES THE RECENT CHART. If that live fetch fails, a row still inside its own
+ * expiry is returned with its TRUE sync time (every grade line now records it) rather than failing
+ * a request the old code would have answered. Only a row past its expiry, or none, rethrows.
  */
 export async function getFantasyCalcChartDbFirst(
   settings: FantasyCalcSettings,
@@ -252,15 +263,20 @@ export async function getFantasyCalcChartDbFirst(
 ): Promise<{ players: FantasyCalcPlayer[]; syncedAt: string | null }> {
   const fromDb = await readFantasyCalcValuesFromDb(settings, { allowStale: true })
   const maxStale = options?.maxStaleMs ?? 1000 * 60 * 60 * 6
+  const cached = fromDb.players.length > 0 ? { players: fromDb.players, syncedAt: fromDb.syncedAt } : null
+  // No sync time means an unknown age, which is not "fresh enough".
+  const ageMs = fromDb.syncedAt ? Date.now() - new Date(fromDb.syncedAt).getTime() : Infinity
 
-  if (fromDb.players.length > 0) {
-    const syncedMs = fromDb.syncedAt ? Date.now() - new Date(fromDb.syncedAt).getTime() : Infinity
-    if (!fromDb.stale || syncedMs <= maxStale) {
-      return { players: fromDb.players, syncedAt: fromDb.syncedAt }
-    }
+  if (cached && ageMs <= maxStale) return cached
+
+  let fresh: FantasyCalcPlayer[]
+  try {
+    fresh = await fetchFantasyCalcValues(settings)
+  } catch (error) {
+    // Only the VENDOR call falls back; a failed write below behaves exactly as it always has.
+    if (cached && !fromDb.stale) return cached
+    throw error
   }
-
-  const fresh = await fetchFantasyCalcValues(settings)
   const syncedAt = new Date()
   await writeFantasyCalcValuesToDb(settings, fresh, { syncedAt })
   return { players: fresh, syncedAt: syncedAt.toISOString() }

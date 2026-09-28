@@ -85,7 +85,7 @@ describe("buildCompressedSystemPrompt — REPLACEMENT OPTIONS section", () => {
         },
       },
     })
-    expect(prompt).toContain("cannot be matched to ours yet")
+    expect(prompt).toContain("can't be matched to ours yet")
     expect(prompt).toContain("do not suggest alternatives")
   })
 

@@ -123,9 +123,8 @@ browser chrome (URL bar) instead of full-screen — that's the tell.
 
 Internal testing → invite yourself → confirm full-screen open, login, and the
 /core home → promote to Production. First review typically 1–7 days for a new
-developer account. iOS has no TWA equivalent — the Capacitor wrapper is a
-separate later project (Apple Developer enrollment for BROWN PIG LLC is already
-in flight per the D-U-N-S paperwork).
+developer account. iOS has no TWA equivalent; its Capacitor shell lives in
+`ios-app/` and has its own runbook, `docs/app-store/RUNBOOK.md`.
 
 ## When the site changes
 

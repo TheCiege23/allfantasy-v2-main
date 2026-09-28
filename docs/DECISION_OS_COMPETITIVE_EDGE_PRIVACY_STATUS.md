@@ -57,6 +57,25 @@ It is excluded because it is **not the subsystem this milestone is about**, and 
 
 ⚠ **AND "ALREADY IN PRODUCTION" WAS BEING READ AS "PROVEN SAFE".** `lib/decision-os/userOs.ts` described this exposure as "already-proven-safe" and extended it on that basis. It was already SHIPPED; nobody had shown it was safe. The wording is corrected there. Shipped is not proven, and a comment that conflates them turns one unexamined decision into the licence for the next.
 
+## Retired by this contract, after the fact (2026-09-28)
+
+🛑 **`lib/core-app/scoutAngle.ts` IS DELETED, AND IT WAS SUPERSEDED RATHER THAN MERELY UNWIRED.**
+It turned a manager's profile LABELS into advice prose — "opens the door on most offers", "pays for
+production this season" — keyed on `trade-heavy`, `win-now`, `quiet strategist` and the rest of the
+retired vocabulary. It was written as the Scout → trade-pitch seam before this pass landed, was
+fully built and unit-tested, and was imported by nothing but its own test (census run across all
+four import forms — alias, relative, `require`, dynamic — plus the bare token).
+
+⚠ **ENTITLEMENT WAS NOT AN ESCAPE, AND THAT IS THE POINT WORTH KEEPING.** The module's own header
+said the caller must "resolve access before it ever builds these", which was the pre-milestone rule:
+opponent psychology is premium. This contract replaced that rule with a different axis — *facts,
+never labels* (`lib/competitive-edge/tradeEdge.ts`) — so gating it changes who pays and not what is
+disclosed. A gated home for it was considered on the user's instruction and rejected on that basis.
+
+**What answers the same question now:** Competitive Edge, from counts over completed trades a reader
+can check. Nothing user-facing is lost by the deletion; the psychological profile engine keeps
+running for Scout's coverage line and the internal feeds and classifier this pass preserves.
+
 ## Next functional work
 
 Build the authenticated decision-specific Competitive Edge evidence contract from actual trade, draft and waiver facts. It must bind evidence to the selected move and manager, enforce coverage and freshness, and return bounded factual explanations. Acceptance probabilities and counters require calibration; the new entry does not invent them.

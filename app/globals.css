@@ -3198,3 +3198,28 @@ select, option {
     font-size: 16px;
   }
 }
+
+/*
+ * ── Inside the native iOS app ─────────────────────────────────────────────────
+ * `html[data-ios-app]` is set before first paint by the root layout's
+ * af-ios-app-flag script (lib/platform/iosApp). Two App Store rules:
+ *  - 3.1.1: nothing is sold in the app, so links to purchase pages are hidden.
+ *    Middleware redirects those pages and refuses checkout APIs anyway; this
+ *    only keeps a reviewer from tapping into a dead end.
+ *  - 4.8: third-party sign-in requires Sign in with Apple, which is not live,
+ *    so anything marked data-hide-in-ios-app (the social sign-in rows) goes.
+ * Keep the hrefs in step with IOS_APP_PURCHASE_PAGE_PREFIXES.
+ */
+html[data-ios-app] [data-hide-in-ios-app],
+html[data-ios-app] a[href^='/upgrade'],
+html[data-ios-app] a[href^='/pricing'],
+html[data-ios-app] a[href^='/commissioner-upgrade'],
+html[data-ios-app] a[href^='/tokens'],
+html[data-ios-app] a[href^='/donate'],
+html[data-ios-app] a[href='/support'],
+html[data-ios-app] a[href^='/support?'],
+html[data-ios-app] a[href^='/support/'],
+html[data-ios-app] a[href*='allfantasy.ai/upgrade'],
+html[data-ios-app] a[href*='allfantasy.ai/pricing'] {
+  display: none !important;
+}
