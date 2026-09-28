@@ -16,7 +16,8 @@ uploads on a GitHub-hosted macOS runner, and it runs only when started by hand.
    `PRODUCT_BUNDLE_IDENTIFIER` (two places) in
    `ios-app/ios/App/App.xcodeproj/project.pbxproj` to match.
 2. **API key.** App Store Connect → Users and Access → Integrations → App Store
-   Connect API → Team Keys → **+**, role **App Manager** (or Admin). Download
+   Connect API → Team Keys → **+**, role **Admin** (automatic signing creates the distribution
+   certificate, which an App Manager key cannot). Download
    the `.p8`. Apple lets you download it only once.
 3. **Repository secrets** (GitHub → Settings → Secrets and variables → Actions):
 
