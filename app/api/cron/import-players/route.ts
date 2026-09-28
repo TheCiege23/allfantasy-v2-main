@@ -713,6 +713,27 @@ async function handle(req: NextRequest) {
     }
 
     /*
+     * Fleaflicker / MFL -> Sleeper id bridge, filled from the FantasyCalc values already cached in
+     * Postgres (no provider call). The Player Finder reads those leagues only through this bridge
+     * (bridgedRosterIds.ts); left unscheduled, the columns stay empty and the leagues stay unread —
+     * the "scheduled writer is the part that is easy to skip" rule from CLAUDE.md.
+     */
+    let identityBridge: unknown = { skipped: true }
+    if (!dryRun && wantsNfl && budget.exhausted()) {
+      deferredPhases.push('identityBridge')
+    } else if (!dryRun && wantsNfl) {
+      try {
+        const { bridgeIdentityMapFromFantasyCalcCache } = await import('@/lib/player-identity/fantasyCalcIdentityBridge')
+        identityBridge = await bridgeIdentityMapFromFantasyCalcCache({ isExhausted: () => budget.exhausted() })
+      } catch (bridgeErr) {
+        /* Enrichment must never fail the import it rides on. */
+        identityBridge = {
+          error: bridgeErr instanceof Error ? bridgeErr.message.slice(0, 160) : 'identity bridge failed',
+        }
+      }
+    }
+
+    /*
      * The psych profile rotation USED to be the last phase here. It moved to the `?intel=1` tick
      * — see the block inside `if (intelOnly)` for why.
      *
@@ -776,6 +797,7 @@ async function handle(req: NextRequest) {
       sleeperRows,
       canonicalBirthdays,
       espnIdentities,
+      identityBridge,
       sports: result.sports,
       identity,
       staleFallbackApplied: result.staleFallbackApplied,

@@ -30,7 +30,7 @@ import { prisma } from '@/lib/prisma'
 
 export type RosterIdSpace = 'sleeper' | 'espn' | 'other'
 
-const ROSTER_KEYS = ['players', 'starters', 'reserve', 'taxi'] as const
+export const ROSTER_KEYS = ['players', 'starters', 'reserve', 'taxi'] as const
 
 export function rosterIdSpaceOf(platform: string | null | undefined): RosterIdSpace {
   const p = (platform ?? '').trim().toLowerCase()
