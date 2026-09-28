@@ -83,17 +83,26 @@ describe('NHL lineup lock', () => {
     expect(warnings[0]).toContain('No NHL games found')
   })
 
-  it('[control] NCAAB is still not locked from SportsGame — its schedule there is incomplete', async () => {
-    const { warnings } = await hydrateRedraftLineupLocks(schedule(GAMES), {
+  it('[control] NCAAB is never locked from SportsGame — its schedule there is incomplete', async () => {
+    // NCAAB reads the Rolling Insights schedule instead (ncaab-lineup-lock.test.ts); with none synced
+    // it fails open and says so. The partial SportsGame feed must not be read as a fallback.
+    let sportsGameReads = 0
+    const db = {
+      sportsGame: { findMany: async () => { sportsGameReads += 1; return [] } },
+      sportsDataCache: { findUnique: async () => null, findMany: async () => [] },
+    } as never
+    const { players, warnings } = await hydrateRedraftLineupLocks(db, {
       sport: 'NCAAB',
       season: 2026,
       week: 1,
       rosterId: 'r1',
       leagueSettings: {},
       players: PLAYERS,
-      now: new Date('2026-10-03T12:00:00.000Z'),
+      now: new Date('2026-11-05T12:00:00.000Z'),
     })
-    expect(warnings[0]).toContain('not locked')
+    expect(sportsGameReads).toBe(0)
+    expect(players.every((p) => !p.isLocked)).toBe(true)
+    expect(warnings[0]).toMatch(/schedule is not synced yet/)
   })
 })
 
