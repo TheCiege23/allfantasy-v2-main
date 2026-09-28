@@ -421,3 +421,24 @@ describe('League asset rules — picks refused where unpriced, held devy prospec
     expect(src).not.toMatch(/devyMarketBridge|resolveDevyBridge|dynastyValue|c2cSideWeight/)
   })
 })
+
+describe('Nightly trade agent — suggests only what the one grade reads C for both sides (design step 9)', () => {
+  it('grades every package with the one grader, from each side with that side’s own roster', () => {
+    const src = code('lib/decision-os/trade/tradeAgent.ts')
+    expect(src).toMatch(/createLeagueTradeGrader/)
+    expect(src).toMatch(/grader\.grade\(\{ give: toInputs\(give\), get: toInputs\(get\), viewerSide: true, needRoster: \{ playerData: myRoster\.playerData \} \}\)/)
+    expect(src).toMatch(/grader\.grade\(\{ give: toInputs\(get\), get: toInputs\(give\), viewerSide: true, needRoster: \{ playerData: partnerRoster\.playerData \} \}\)/)
+    expect(src).toMatch(/qualifyDeal\(viewer, theirs\)/)
+  })
+
+  it('saves nothing the finder computed: its band only skips packages, and every saved number is the grade’s', () => {
+    const src = code('lib/decision-os/trade/tradeAgent.ts')
+    expect(src).not.toMatch(/myTotalValue|partnerTotalValue|valueDelta|matchScore/)
+    expect(src).not.toMatch(/createAfLeagueTrade|proposeTrade|sendTemplatedEmail|sendPushToUser/)
+  })
+
+  it('rides the hourly housekeeping cron rather than taking a 61st cron slot', () => {
+    expect(code('app/api/cron/reap-sync-runs/route.ts')).toMatch(/runTradeAgentPass\(\{/)
+    expect(existsSync(resolve(process.cwd(), 'app/api/cron/trade-agent/route.ts'))).toBe(false)
+  })
+})
