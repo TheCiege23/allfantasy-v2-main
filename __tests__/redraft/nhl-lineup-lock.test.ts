@@ -161,8 +161,9 @@ describe('NBA lineup lock', () => {
   })
 
   it('[control] a sport with no week window names the sports that DO lock, NBA among them', async () => {
+    // Was MLB until MLB joined DATE_WINDOWED_SPORTS (2026-09-28); soccer is outside every list.
     const { warnings } = await hydrateRedraftLineupLocks(schedule(NBA_GAMES), {
-      sport: 'MLB',
+      sport: 'SOCCER',
       season: 2026,
       week: 1,
       rosterId: 'r1',

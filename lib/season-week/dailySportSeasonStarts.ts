@@ -51,6 +51,12 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
   NCAAB: {
     2026: '2026-11-02T00:00:00.000Z',
   },
+  /*
+   * MLB: NOTHING RECORDED ON PURPOSE. MLB's season is keyed by its own calendar year (2027 = the
+   * 2027 season). Add the 2027 regular-season opener here once MLB publishes it, checked against
+   * the schedule rows the same two-source way as the dates above — never guessed. Until then every
+   * MLB week declines with `season_start_unknown`, which is the safe failure.
+   */
 }
 
 /**
