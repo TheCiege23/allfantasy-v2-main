@@ -1,0 +1,3432 @@
+[
+  {
+    "id": "gen-001",
+    "leagueType": "general",
+    "category": "scoring",
+    "question": "What's the difference between PPR, half-PPR and standard scoring?",
+    "idealAnswer": "PPR (point per reception) gives 1 point for every catch, half-PPR gives 0.5, and standard gives nothing for the catch itself — only yards and touchdowns score. The more a reception is worth, the more valuable high-volume pass catchers become (slot receivers, pass-catching backs, target-hog tight ends) relative to touchdown-dependent runners. Check your league's scoring before trusting any ranking, because a list built for PPR can mislead you in standard.",
+    "mustSay": [
+      "PPR = 1 point per reception",
+      "half-PPR = 0.5 per reception",
+      "standard gives no points for receptions"
+    ],
+    "mustNotSay": [
+      "PPR awards points per rushing attempt",
+      "scoring format doesn't change player values"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-002",
+    "leagueType": "general",
+    "category": "waivers",
+    "question": "What is FAAB and how does it work?",
+    "idealAnswer": "FAAB stands for Free Agent Acquisition Budget. Each team gets a season-long budget (often $100 or $1,000 of play money) and places blind bids on players on waivers; the highest bid wins and that amount comes out of your budget. Ties are usually broken by waiver priority, and in most leagues the budget does not refill during the season, so every dollar you spend is gone.",
+    "mustSay": [
+      "blind bids",
+      "highest bid wins",
+      "season-long budget that usually doesn't refill"
+    ],
+    "mustNotSay": [
+      "FAAB costs real money",
+      "first come, first served"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-003",
+    "leagueType": "general",
+    "category": "waivers",
+    "question": "What's the difference between rolling waivers and reverse-standings waivers?",
+    "idealAnswer": "With rolling waivers, whoever makes a successful claim drops to the back of the priority order, and the order only moves when claims are made. With reverse-standings waivers, priority is reset each week so the team with the worst record claims first. Rolling rewards patience with your top priority; reverse standings is designed to help struggling teams catch up.",
+    "mustSay": [
+      "rolling: a successful claim sends you to the back",
+      "reverse standings: worst record gets first priority"
+    ],
+    "mustNotSay": [
+      "both systems work the same way"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-004",
+    "leagueType": "general",
+    "category": "waivers",
+    "question": "Should I save most of my FAAB budget for later in the season?",
+    "idealAnswer": "Usually not. The most valuable waiver adds tend to come early, when breakouts and role changes are still being discovered, and a player added in week 3 helps you for many more weeks than one added in week 13. Keep a reserve for injuries to key starters, but in a standard season-long league unspent FAAB is worth nothing when the season ends.",
+    "mustSay": [
+      "early adds help for more weeks",
+      "unspent FAAB has no value at season end",
+      "keep some reserve for injuries"
+    ],
+    "mustNotSay": [
+      "always hoard FAAB for the playoffs"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "gen-005",
+    "leagueType": "general",
+    "category": "waivers",
+    "question": "Can I bid $0 on a player in FAAB?",
+    "idealAnswer": "That depends on your league's settings. Many platforms allow $0 bids (which can win if nobody else bids), but some set a minimum bid of $1 or more. Check your league's minimum-bid setting before relying on a $0 claim.",
+    "mustSay": [
+      "depends on the league's minimum bid setting"
+    ],
+    "mustNotSay": [
+      "$0 bids are never allowed",
+      "$0 bids are always allowed"
+    ],
+    "needsLeagueData": true,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-006",
+    "leagueType": "general",
+    "category": "trades",
+    "question": "When should a trade be vetoed?",
+    "idealAnswer": "Most well-run leagues reserve vetoes for collusion or clear rule violations — two managers working together so one benefits unfairly — not for trades that simply look lopsided. Managers value players differently, and overturning a deal because you disagree with it discourages trading. If your league uses a review period or league vote, it should still be judged on intent and fairness to the league, not on who 'won'.",
+    "mustSay": [
+      "vetoes are for collusion or rule violations",
+      "a lopsided trade alone is not a reason to veto"
+    ],
+    "mustNotSay": [
+      "any uneven trade should be vetoed"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-007",
+    "leagueType": "general",
+    "category": "trades",
+    "question": "What's good trade etiquette in a fantasy league?",
+    "idealAnswer": "Send offers that address the other manager's needs, not just yours, and include a short note explaining the idea. Don't spam lowball offers, don't pressure people with deadlines you invented, and respond to offers you receive — even a quick decline or counter. Being known as a fair trade partner gets you more deals over time.",
+    "mustSay": [
+      "make offers that help both sides",
+      "respond to offers"
+    ],
+    "mustNotSay": [
+      "spamming lowball offers is a good strategy"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-008",
+    "leagueType": "general",
+    "category": "trades",
+    "question": "What counts as collusion in fantasy football?",
+    "idealAnswer": "Collusion is when two or more managers coordinate to benefit one of them at the league's expense — for example, a team out of contention handing its best players to a friend, splitting prize money in exchange for a trade, or trading players back after a week. A trade that looks uneven is not collusion by itself; collusion is about an agreement outside the normal pursuit of each team's own interest.",
+    "mustSay": [
+      "coordination between managers to benefit one team",
+      "an uneven trade is not automatically collusion"
+    ],
+    "mustNotSay": [
+      "every lopsided trade is collusion"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-009",
+    "leagueType": "general",
+    "category": "lineup",
+    "question": "What is a FLEX spot?",
+    "idealAnswer": "A FLEX is a starting lineup slot that can be filled by more than one position — in football it's usually any RB, WR or TE. It lets you start an extra player from whichever of those positions you are deepest at. A superflex is a different slot that also allows a quarterback.",
+    "mustSay": [
+      "can hold RB, WR or TE (usually)",
+      "superflex also allows a QB"
+    ],
+    "mustNotSay": [
+      "a FLEX spot can hold a quarterback in every league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-010",
+    "leagueType": "general",
+    "category": "lineup",
+    "question": "My player is listed as questionable — should I start him?",
+    "idealAnswer": "Questionable means there's real uncertainty, and many questionable players do play. Check the official inactives list, released about 90 minutes before kickoff, and news from beat reporters. If he plays in a late game, have a backup plan from a game that kicks off even later, or put him in your FLEX so you have more replacement options.",
+    "mustSay": [
+      "check inactives before kickoff",
+      "have a backup plan"
+    ],
+    "mustNotSay": [
+      "questionable players never play",
+      "always bench questionable players"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-011",
+    "leagueType": "general",
+    "category": "misconception",
+    "question": "Does a player on a bye week still score points for me if I start him?",
+    "idealAnswer": "No. A player on a bye has no game that week, so he scores zero if he's in your starting lineup. Check bye weeks every week and swap in someone who is playing.",
+    "mustSay": [
+      "a bye-week player scores zero"
+    ],
+    "mustNotSay": [
+      "bye-week players get projected points"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-012",
+    "leagueType": "general",
+    "category": "playoffs",
+    "question": "What week do my league's playoffs start?",
+    "idealAnswer": "That's set by your league's playoff settings, so it varies by league. Many NFL leagues start the playoffs around week 15 and avoid week 18, but your commissioner may have chosen a different start week, number of playoff teams or bye structure. Check the playoff start week in your league settings.",
+    "mustSay": [
+      "depends on the league's playoff start week setting"
+    ],
+    "mustNotSay": [
+      "all leagues start playoffs in week 14"
+    ],
+    "needsLeagueData": true,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-013",
+    "leagueType": "general",
+    "category": "playoffs",
+    "question": "How are fantasy playoff seeds usually decided?",
+    "idealAnswer": "Most leagues seed by win-loss record, with total points scored (points for) as the most common tiebreaker. Some leagues add a wildcard spot for the highest-scoring non-qualifier or seed partly by points. The exact tiebreakers are a league setting, so check yours if a race is close.",
+    "mustSay": [
+      "record first",
+      "points for is a common tiebreaker"
+    ],
+    "mustNotSay": [
+      "seeds are random"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "gen-014",
+    "leagueType": "general",
+    "category": "strategy",
+    "question": "Why do people care about 'points for' if wins decide the standings?",
+    "idealAnswer": "Points for (total points scored) is a better measure of how strong a team really is, because head-to-head record includes a lot of schedule luck. A team with a mediocre record but high points for is often better than it looks. It's also a common playoff tiebreaker and sometimes decides a wildcard spot.",
+    "mustSay": [
+      "record includes schedule luck",
+      "points for is often a tiebreaker"
+    ],
+    "mustNotSay": [
+      "points for has no effect on anything"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-015",
+    "leagueType": "general",
+    "category": "draft",
+    "question": "What's the difference between a snake draft and a linear draft?",
+    "idealAnswer": "In a snake draft the order reverses every round, so the team that picks last in round 1 picks first in round 2. In a linear draft the order is the same every round, so the first pick gets the first selection in every round. Snake is the common default because it evens out the advantage of an early pick.",
+    "mustSay": [
+      "snake reverses the order each round",
+      "linear keeps the same order every round"
+    ],
+    "mustNotSay": [
+      "snake and linear drafts are identical"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-016",
+    "leagueType": "general",
+    "category": "draft",
+    "question": "What is ADP and should I draft strictly by it?",
+    "idealAnswer": "ADP is average draft position — where a player typically gets picked across many drafts. It's a useful guide to when a player is likely to be available, so you don't reach too early or wait too long. But it isn't a rule: your league's scoring, roster settings and your own team needs should move you off ADP when they matter.",
+    "mustSay": [
+      "average draft position",
+      "a guide, not a rule"
+    ],
+    "mustNotSay": [
+      "you must always draft in ADP order"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-017",
+    "leagueType": "general",
+    "category": "draft",
+    "question": "How does an auction draft work?",
+    "idealAnswer": "In an auction, every team gets the same budget, managers take turns nominating players, and anyone can bid; the highest bidder gets the player for that price. Unlike a snake draft, any team can get any player if it's willing to pay. The skill is budget management: overspending early can leave you filling your roster with $1 players.",
+    "mustSay": [
+      "teams share the same budget",
+      "players are nominated and bid on",
+      "any team can get any player"
+    ],
+    "mustNotSay": [
+      "auction drafts use a fixed pick order"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-018",
+    "leagueType": "general",
+    "category": "scoring",
+    "question": "What does TE premium mean?",
+    "idealAnswer": "TE premium is a scoring setting that gives tight ends extra points per reception compared with other positions (for example an extra 0.5 per catch). It raises the value of high-volume tight ends and makes the position more worth investing in. AllFantasy supports TE premium as a modifier on top of formats like redraft, dynasty and keeper.",
+    "mustSay": [
+      "extra points per reception for tight ends",
+      "raises tight end value"
+    ],
+    "mustNotSay": [
+      "TE premium means you must start two tight ends"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league/format-engine.ts (supportedModifiers: te_premium)",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-019",
+    "leagueType": "general",
+    "category": "scoring",
+    "question": "Why did my team's score change a few days after the game ended?",
+    "idealAnswer": "That's almost always a stat correction. The NFL reviews official stats after games and sometimes changes things like who got credit for a catch, tackle or yardage; fantasy platforms then update scores, often a few days later. A correction can occasionally change a matchup result, depending on when your league finalizes the week.",
+    "mustSay": [
+      "stat corrections",
+      "official stats can change after the game"
+    ],
+    "mustNotSay": [
+      "scores never change after games end"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-020",
+    "leagueType": "general",
+    "category": "strategy",
+    "question": "What is a handcuff and should I draft one?",
+    "idealAnswer": "A handcuff is the backup to a starting running back who would take over most of the work if the starter got hurt. Handcuffing your own star back is insurance; owning another team's handcuff is a lottery ticket. They're most worth it when the backup would get a clear workload and your bench has room — a backup in a committee is rarely worth a roster spot.",
+    "mustSay": [
+      "backup who takes over if the starter is injured",
+      "most valuable when he'd inherit a clear workload"
+    ],
+    "mustNotSay": [
+      "you should handcuff every running back"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-021",
+    "leagueType": "general",
+    "category": "strategy",
+    "question": "What does 'streaming' a defense or kicker mean?",
+    "idealAnswer": "Streaming means picking up a different defense or kicker each week based on the matchup instead of holding one all season. Because those positions are hard to predict and the differences between most options are small, targeting weak opposing offenses (for a defense) or high-scoring games (for a kicker) often beats sticking with one you drafted.",
+    "mustSay": [
+      "pick up a different one each week based on matchup"
+    ],
+    "mustNotSay": [
+      "you should always draft a kicker early"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-022",
+    "leagueType": "general",
+    "category": "lineup",
+    "question": "Why do people put a late-game player in the FLEX spot?",
+    "idealAnswer": "Because it keeps your options open. If a player in a late game turns out to be inactive, a FLEX slot can be filled by an RB, WR or TE who hasn't played yet, whereas a dedicated WR slot can only take another WR. Putting uncertain or late-kickoff players in the FLEX gives you the most replacement choices, as long as your platform lets you swap players whose games haven't started.",
+    "mustSay": [
+      "a FLEX slot accepts more positions, so you have more replacement options"
+    ],
+    "mustNotSay": [
+      "the FLEX spot scores extra points"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-023",
+    "leagueType": "general",
+    "category": "waivers",
+    "question": "Is the waiver wire first come, first served?",
+    "idealAnswer": "It depends on your league's waiver settings. Most leagues run a waiver period where claims are processed at a set time by priority or FAAB bids, and only after that do unclaimed players become free agents you can add instantly. Check your league's waiver type and processing schedule.",
+    "mustSay": [
+      "depends on the league's waiver type and processing time"
+    ],
+    "mustNotSay": [
+      "waivers are always first come, first served"
+    ],
+    "needsLeagueData": true,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-024",
+    "leagueType": "general",
+    "category": "trades",
+    "question": "What is a trade deadline?",
+    "idealAnswer": "The trade deadline is the last point in the season when trades can be made; after it, rosters can only change through waivers and free agency. It exists so teams can't load up just before the playoffs. The exact date is a league setting, so check yours.",
+    "mustSay": [
+      "last point in the season when trades are allowed",
+      "the date is a league setting"
+    ],
+    "mustNotSay": [
+      "all leagues share the same deadline"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "gen-025",
+    "leagueType": "general",
+    "category": "strategy",
+    "question": "How much should I trust weekly projections?",
+    "idealAnswer": "Treat projections as a rough middle estimate, not a promise. Weekly scoring varies a lot, so a difference of a point or two between two players is basically a coin flip. Use projections to find clear gaps, then break close calls with role, matchup, health and your need for safety or upside that week.",
+    "mustSay": [
+      "projections are estimates, not guarantees",
+      "small differences are close to a coin flip"
+    ],
+    "mustNotSay": [
+      "always start whoever is projected higher, even by 0.1"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-001",
+    "leagueType": "redraft",
+    "category": "rules",
+    "question": "What is a redraft league?",
+    "idealAnswer": "A redraft league starts from scratch every season: everyone drafts a full new roster, and nothing carries over to next year. The season is the whole horizon, so every decision is about winning this year. That's the main difference from keeper and dynasty leagues, where some or all players carry over.",
+    "mustSay": [
+      "rosters reset every season",
+      "nothing carries over"
+    ],
+    "mustNotSay": [
+      "you keep players in a redraft league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (redraft)",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-002",
+    "leagueType": "redraft",
+    "category": "trades",
+    "question": "Can I trade future draft picks in my redraft league?",
+    "idealAnswer": "No — future rookie picks don't exist in a redraft league, because nothing carries into next season. A deal that includes a 'next year's 1st' isn't a cheap asset, it's an impossible one, so redraft trades are decided entirely on players. Some platforms let you swap picks in the upcoming draft before it happens, but once the season is underway there are no picks to trade.",
+    "mustSay": [
+      "future picks don't exist in redraft",
+      "trades are decided on players"
+    ],
+    "mustNotSay": [
+      "future picks are valuable redraft trade chips"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (redraft: futurePicksTradeable false)",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-003",
+    "leagueType": "redraft",
+    "category": "trades",
+    "question": "Should I trade for an injured star in a redraft league?",
+    "idealAnswer": "Only if he's expected back in time to help you this season — ideally well before your playoffs — and you can afford to carry him until then. In redraft his value is just the weeks he'll actually play for you, so a star out until week 15 is worth far less than his name suggests. If you're already comfortably in playoff position, buying low on a returning star can be a great playoff upgrade.",
+    "mustSay": [
+      "value depends on weeks he'll play this season",
+      "timing relative to your playoffs matters"
+    ],
+    "mustNotSay": [
+      "his long-term dynasty value matters in redraft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-004",
+    "leagueType": "redraft",
+    "category": "trades",
+    "question": "When is the right time to sell high on a player in redraft?",
+    "idealAnswer": "Sell high when a player's production is running ahead of his role — for example a run of touchdowns on modest volume, or a fill-in role that ends when a starter returns. Move him while his recent box scores make him look like a stud to other managers. Don't sell a player whose usage (snaps, targets, carries) genuinely grew, because that production is more likely to stick.",
+    "mustSay": [
+      "production running ahead of role or volume",
+      "don't sell a genuine usage increase"
+    ],
+    "mustNotSay": [
+      "always sell any player after one big week"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "rd-005",
+    "leagueType": "redraft",
+    "category": "draft",
+    "question": "What is the Zero RB draft strategy?",
+    "idealAnswer": "Zero RB means skipping running backs in the early rounds, loading up on elite receivers (and sometimes a top QB or TE), then drafting many mid- and late-round backs hoping some land big roles. It bets on the fact that running backs get hurt and change roles more often than receivers. It works best in PPR and can leave you thin at RB early in the season if your late picks don't hit.",
+    "mustSay": [
+      "skip RBs early, take WRs",
+      "draft many later-round RBs",
+      "risk of being thin at RB"
+    ],
+    "mustNotSay": [
+      "Zero RB means never rostering a running back"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-006",
+    "leagueType": "redraft",
+    "category": "draft",
+    "question": "When should I draft a quarterback in a one-QB redraft league?",
+    "idealAnswer": "Usually later than in superflex, because in a one-QB league the gap between a mid-range starter and the QBs available later is smaller than at RB or WR. Elite rushing quarterbacks can justify an earlier pick because they create a real weekly edge. If you wait, grab two solid options in the middle-late rounds rather than one lottery ticket.",
+    "mustSay": [
+      "QBs can usually wait in one-QB leagues",
+      "elite rushing QBs are the exception"
+    ],
+    "mustNotSay": [
+      "always take a QB in the first round of a one-QB league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "rd-007",
+    "leagueType": "redraft",
+    "category": "draft",
+    "question": "When should I draft a kicker and a team defense?",
+    "idealAnswer": "In your last two rounds. Kicker and defense scoring is hard to predict from year to year and the differences between most options are small, so an early pick there costs you a player with far more upside. Many managers then stream both positions based on weekly matchups.",
+    "mustSay": [
+      "last rounds",
+      "hard to predict, small differences"
+    ],
+    "mustNotSay": [
+      "draft the top defense in the first five rounds"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-008",
+    "leagueType": "redraft",
+    "category": "waivers",
+    "question": "What should I prioritize on waivers early in the season?",
+    "idealAnswer": "Prioritize changes in role over one-week point spikes: a player whose snap share, targets or carries jumped is more likely to keep producing than one who scored on two touches. Injuries that open up a starting job are the other big source of value. Early adds help you for the most weeks, so this is the time to be aggressive.",
+    "mustSay": [
+      "role and volume changes over one big game",
+      "early adds help for more weeks"
+    ],
+    "mustNotSay": [
+      "chase whoever scored the most points last week"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-009",
+    "leagueType": "redraft",
+    "category": "misconception",
+    "question": "Should I worry about a player's age in a redraft league?",
+    "idealAnswer": "Only as it affects this season. In redraft nothing carries over, so a 30-year-old running back producing now is worth more to you than a 22-year-old who'll break out next year. Age can matter indirectly — injury risk or a declining workload — but long-term outlook isn't part of the value.",
+    "mustSay": [
+      "only this season matters",
+      "long-term outlook isn't part of redraft value"
+    ],
+    "mustNotSay": [
+      "avoid older players because of their future value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-010",
+    "leagueType": "redraft",
+    "category": "playoffs",
+    "question": "Should I plan my roster around playoff-week matchups?",
+    "idealAnswer": "A little, but not too early. Schedules and team quality change a lot over a season, so using week 15–17 matchups as a tiebreaker between similar players is fine, while trading a better player for a better playoff schedule in September usually isn't. Closer to the deadline, playoff matchups and having depth for byes and injuries deserve more weight.",
+    "mustSay": [
+      "use playoff matchups as a tiebreaker",
+      "matchups are less reliable far in advance"
+    ],
+    "mustNotSay": [
+      "draft entirely based on the week 16 schedule"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "rd-011",
+    "leagueType": "redraft",
+    "category": "trades",
+    "question": "How should I evaluate a 2-for-1 trade in redraft?",
+    "idealAnswer": "The side getting the single best player often wins, because lineup spots are limited and the extra player may never start. Compare what each team's starting lineup looks like after the deal, not the total value of the players. The team receiving two players also has to drop someone, so count the value of the player they cut and the waiver replacement available.",
+    "mustSay": [
+      "compare starting lineups after the trade",
+      "the extra player may not start",
+      "the receiving team must drop someone"
+    ],
+    "mustNotSay": [
+      "two good players are always worth more than one great player"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-012",
+    "leagueType": "redraft",
+    "category": "lineup",
+    "question": "Should I bench a stud because of a tough matchup?",
+    "idealAnswer": "Almost never. Elite players get enough volume to produce even against good defenses, and the replacement you'd start instead usually has a lower expected score. Matchups are best used to decide between similar, borderline players, not to sit your best ones.",
+    "mustSay": [
+      "start your studs",
+      "use matchups for borderline decisions"
+    ],
+    "mustNotSay": [
+      "always bench stars against top defenses"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-013",
+    "leagueType": "redraft",
+    "category": "lineup",
+    "question": "How should I decide between two similar players for my last lineup spot?",
+    "idealAnswer": "Look at role first (expected snaps, targets and carries), then the matchup and game environment, such as a high over/under or a team likely to be trailing and throwing. Consider your weekly situation too: if you're a big underdog, lean toward upside; if you're favored, lean toward the safer floor. If it's still close, it's genuinely a coin flip.",
+    "mustSay": [
+      "role and volume first",
+      "matchup and game environment",
+      "upside if underdog, floor if favored"
+    ],
+    "mustNotSay": [
+      "always pick the player with the bigger name"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-014",
+    "leagueType": "redraft",
+    "category": "strategy",
+    "question": "Is there any reason to tank in a redraft league?",
+    "idealAnswer": "Generally no. In a true redraft league nothing carries over, so losing on purpose doesn't build toward next year, and it hurts the fairness of the league for everyone still competing. Unless your league has an unusual rule tying next year's draft order to this year's finish, the right play is to keep setting your best lineup.",
+    "mustSay": [
+      "nothing carries over, so tanking gains nothing",
+      "keep setting your best lineup"
+    ],
+    "mustNotSay": [
+      "tanking gets you a better roster next year in redraft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "rd-015",
+    "leagueType": "redraft",
+    "category": "waivers",
+    "question": "Should I drop my early-round pick after a couple of bad weeks?",
+    "idealAnswer": "Usually not. Early-round players were drafted for their role, and two quiet weeks are often just variance. Look at usage: if his snaps, targets or carries are still strong, be patient. The time to move on is when his role has clearly shrunk — and even then, try to trade him before dropping him for nothing.",
+    "mustSay": [
+      "check usage before reacting",
+      "trade rather than drop if possible"
+    ],
+    "mustNotSay": [
+      "drop any player who has two bad games"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-016",
+    "leagueType": "redraft",
+    "category": "strategy",
+    "question": "What should I keep on my bench in redraft?",
+    "idealAnswer": "Favor upside: running backs who'd start if the player ahead of them got hurt, and young receivers whose role could grow. A backup QB or TE is usually only worth a spot during their bye weeks or if your starter is injured, since you can find one on waivers. Your bench is for players who could become starters, not for players you'll never use.",
+    "mustSay": [
+      "bench for upside",
+      "backup QB/TE usually only for byes or injuries"
+    ],
+    "mustNotSay": [
+      "fill your bench with backup kickers and defenses"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "rd-017",
+    "leagueType": "redraft",
+    "category": "draft",
+    "question": "Does my draft slot change my strategy in a snake draft?",
+    "idealAnswer": "Yes. Picking at the ends ('the turns') gives you back-to-back picks with a long wait in between, so you should anticipate position runs and plan pairs of picks. Picking in the middle gives more evenly spaced picks, so you can react to the board more. Early picks get the clearest shot at an elite player; late picks can pair two strong players at the turn.",
+    "mustSay": [
+      "turn picks come back-to-back with long waits",
+      "plan around position runs"
+    ],
+    "mustNotSay": [
+      "draft slot makes no difference in a snake draft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-018",
+    "leagueType": "redraft",
+    "category": "misconception",
+    "question": "Can I keep my best player from my redraft team for next season?",
+    "idealAnswer": "Not in a true redraft league — every roster resets and everyone drafts again. If your league does let managers carry players over, it's actually a keeper league, and how many you can keep and what they cost are commissioner settings. Ask your commissioner if you're not sure which kind of league you're in.",
+    "mustSay": [
+      "no players carry over in redraft",
+      "keeping players makes it a keeper league"
+    ],
+    "mustNotSay": [
+      "every redraft league lets you keep one player"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (redraft vs keeper)",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-019",
+    "leagueType": "redraft",
+    "category": "waivers",
+    "question": "A starting running back just got hurt — who should I target on waivers?",
+    "idealAnswer": "Target the backup expected to inherit most of the work, but check the team's history first: some teams split carries by committee, which makes the handcuff less valuable. Bid aggressively if one player is set to take over a full workload, because those players can become weekly starters. If it looks like a split, spread smaller bids or look elsewhere.",
+    "mustSay": [
+      "the backup who inherits the workload",
+      "check whether it will be a committee"
+    ],
+    "mustNotSay": [
+      "always pick up the third-string back"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-020",
+    "leagueType": "redraft",
+    "category": "trades",
+    "question": "What should I do at the trade deadline if I'm out of playoff contention in redraft?",
+    "idealAnswer": "There's no future to build toward in redraft, so you can't trade for next year. Keep making trades only if they genuinely improve your team, and play out the season setting your best lineup — it matters to the teams competing against you. Managers still in the race are the ones who should be buying at the deadline.",
+    "mustSay": [
+      "no future value to trade for in redraft",
+      "keep setting your best lineup"
+    ],
+    "mustNotSay": [
+      "sell your stars for next year's picks"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (redraft)",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-021",
+    "leagueType": "redraft",
+    "category": "scoring",
+    "question": "How does half-PPR change RB versus WR value compared with full PPR?",
+    "idealAnswer": "Half-PPR sits between the two: receptions still help, but touchdowns and rushing yards carry relatively more weight than in full PPR. That nudges early-down, goal-line running backs up and low-yardage, high-catch receivers and backs down compared with full PPR. Pass-catching backs who also get carries stay valuable in any format.",
+    "mustSay": [
+      "receptions count less than in full PPR",
+      "touchdown and yardage players gain relative value"
+    ],
+    "mustNotSay": [
+      "half-PPR and full PPR produce identical rankings"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "rd-022",
+    "leagueType": "redraft",
+    "category": "trades",
+    "question": "Is it better to make trades early or late in a redraft season?",
+    "idealAnswer": "Each has trade-offs. Early trades give you more weeks of value from what you acquire, and other managers' opinions are still forming, which creates buy-low chances. Later trades rely on clearer information about roles and health but the player helps you for fewer weeks. In redraft a player is worth only the weeks he has left, including your playoff weeks.",
+    "mustSay": [
+      "early trades give more weeks of value",
+      "later trades have clearer information",
+      "value is the weeks remaining this season"
+    ],
+    "mustNotSay": [
+      "trades only matter after week 10"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "rd-023",
+    "leagueType": "redraft",
+    "category": "strategy",
+    "question": "How long should I stick with a waiver pickup who had one big week?",
+    "idealAnswer": "Judge him on usage, not the one score. If his snaps, targets or carries went up and there's a reason (an injury ahead of him, a new role), he's worth holding for a few weeks. If the big game came on a handful of touches or a long touchdown, he's likely to fall back and can be dropped when you need the spot.",
+    "mustSay": [
+      "judge on usage, not one score",
+      "a real role change is worth holding"
+    ],
+    "mustNotSay": [
+      "one big week guarantees future production"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-001",
+    "leagueType": "dynasty",
+    "category": "rules",
+    "question": "How does a dynasty league work?",
+    "idealAnswer": "In dynasty you keep your entire roster from season to season. After a one-time startup draft, new talent enters mainly through an annual rookie draft, and future rookie picks are real assets you can trade. That makes it a long-horizon game: you balance winning now against building value for future seasons.",
+    "mustSay": [
+      "full rosters carry over every year",
+      "annual rookie draft",
+      "future picks are tradeable"
+    ],
+    "mustNotSay": [
+      "you redraft your whole team every year in dynasty"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (dynasty)",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-002",
+    "leagueType": "dynasty",
+    "category": "draft",
+    "question": "What is a rookie draft in dynasty?",
+    "idealAnswer": "The rookie draft is the yearly draft, usually held after the real NFL Draft, where teams select incoming rookies (and sometimes unrostered free agents). It's the main way new talent enters a dynasty league. The picks used in it are tradeable in advance, which is why future picks carry value all year.",
+    "mustSay": [
+      "yearly draft of incoming rookies",
+      "usually after the NFL Draft",
+      "picks are tradeable in advance"
+    ],
+    "mustNotSay": [
+      "the rookie draft replaces your whole roster"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-003",
+    "leagueType": "dynasty",
+    "category": "draft",
+    "question": "How is the rookie draft order decided in my dynasty league?",
+    "idealAnswer": "That's a league setting and it varies. Common options are reverse order of standings, reverse max points-for (to discourage tanking), or a lottery for non-playoff teams, with playoff teams ordered by finish. Check your league's rookie draft order setting.",
+    "mustSay": [
+      "depends on the league's draft order setting"
+    ],
+    "mustNotSay": [
+      "every dynasty league uses reverse standings"
+    ],
+    "needsLeagueData": true,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-004",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "When should I start selling aging running backs in dynasty?",
+    "idealAnswer": "Running backs tend to decline sharply in their late twenties, often around 26 to 28, and their trade value usually falls before their production does. The best time to sell is while they're still producing, often a year earlier than feels comfortable. A contending team can reasonably hold an older back for a title push, but a rebuilding team should move him while he still brings a real return.",
+    "mustSay": [
+      "RBs decline in their late twenties",
+      "sell while they're still producing",
+      "contenders may hold for a title push"
+    ],
+    "mustNotSay": [
+      "running backs keep their value into their mid-30s"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-005",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "How long do wide receivers hold their value in dynasty?",
+    "idealAnswer": "Receivers have a longer shelf life than running backs. Many peak from their mid-twenties to around 28 and decline more gradually, often around 30. That makes young, productive receivers the safest long-term assets, and why many dynasty managers build around them.",
+    "mustSay": [
+      "longer shelf life than RBs",
+      "decline tends to start around 30"
+    ],
+    "mustNotSay": [
+      "receivers decline at the same age as running backs"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-006",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "Are quarterbacks good long-term dynasty assets?",
+    "idealAnswer": "Quarterbacks have the longest careers of the skill positions, often playing well into their thirties, so they hold value for a long time. How much that value is worth depends heavily on format: in a one-QB league a replacement is easy to find, while in superflex or 2QB leagues a reliable starter is one of the most valuable assets you can own.",
+    "mustSay": [
+      "QBs have the longest careers",
+      "value depends on one-QB vs superflex/2QB"
+    ],
+    "mustNotSay": [
+      "quarterbacks are equally valuable in every dynasty format"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-007",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "Should I be contending or rebuilding in dynasty?",
+    "idealAnswer": "Pick a clear direction and build toward it. If your roster is strong enough to compete for a title, buy productive veterans with picks and prospects. If it isn't, sell aging players for young talent and picks and aim for a future window. The worst place to be is the middle — good enough to miss a top pick, not good enough to win.",
+    "mustSay": [
+      "pick a clear direction",
+      "avoid the middle"
+    ],
+    "mustNotSay": [
+      "you should always try to contend and rebuild at the same time"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-008",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "How should I value future draft picks in dynasty?",
+    "idealAnswer": "A future pick's value depends on where it's likely to land — a first from a weak team is worth more than a first from a contender — and on the strength of the incoming rookie class. Picks further out carry more uncertainty and are usually valued a bit lower. Picks are real, tradeable assets in dynasty, so they're a key currency for moving between contending and rebuilding.",
+    "mustSay": [
+      "depends on the projected finish of the original team",
+      "picks further out are more uncertain"
+    ],
+    "mustNotSay": [
+      "all first-round picks are worth the same"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (dynasty: futurePicksTradeable true)",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-009",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "When are rookie picks usually cheapest and most expensive to trade for?",
+    "idealAnswer": "Picks tend to be cheapest during the season, when contenders are willing to part with them for immediate help, and most expensive in the run-up to the rookie draft, once the incoming class is known and hype peaks. So rebuilding teams often buy picks mid-season and sell them close to the draft. It's a tendency, not a rule — a particularly strong or weak class moves prices.",
+    "mustSay": [
+      "often cheaper during the season",
+      "often pricier close to the rookie draft"
+    ],
+    "mustNotSay": [
+      "pick values never change during the year"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-010",
+    "leagueType": "dynasty",
+    "category": "rules",
+    "question": "What is a taxi squad?",
+    "idealAnswer": "A taxi squad is a set of extra roster spots for young players, usually rookies or second-year players, that don't count against your active roster. Players on it can't score for you until you promote them to the active roster. Who is eligible, how many spots there are and how long a player can stay are league settings, so check yours.",
+    "mustSay": [
+      "extra spots for young players",
+      "taxi players don't score until promoted",
+      "eligibility and size are league settings"
+    ],
+    "mustNotSay": [
+      "taxi squad players score points each week"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league/format-engine.ts (taxi modifier)",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-011",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "How should I handle a player who gets suspended for part of the season in dynasty?",
+    "idealAnswer": "Focus on his long-term role. If he'll return to a secure starting job, a suspension often creates a buy-low window because owners get frustrated with a player who can't help them now. If the suspension threatens his job or his future with the team, the value drop may be justified. Contenders feel the lost weeks most; rebuilding teams can be patient.",
+    "mustSay": [
+      "focus on his role after he returns",
+      "can be a buy-low window"
+    ],
+    "mustNotSay": [
+      "a suspended player has no dynasty value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-012",
+    "leagueType": "dynasty",
+    "category": "misconception",
+    "question": "My dynasty league uses IDP — does that make AllFantasy treat it like a redraft league?",
+    "idealAnswer": "No. IDP is a scoring and roster setting, not a league format, and it sits on top of any base format. A dynasty IDP league is still a dynasty league: rosters carry over and future picks are real assets. AllFantasy treats IDP as a modifier specifically so it never replaces your dynasty format.",
+    "mustSay": [
+      "IDP is a modifier, not a format",
+      "still a dynasty league",
+      "future picks remain real"
+    ],
+    "mustNotSay": [
+      "IDP leagues are always redraft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (MODIFIER_ALIASES); lib/league-rules/conceptCatalog.ts (idp)",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-013",
+    "leagueType": "dynasty",
+    "category": "draft",
+    "question": "What's a good approach to a dynasty startup draft?",
+    "idealAnswer": "Blend youth with production. Young, proven receivers and quarterbacks (especially in superflex) hold value longest, while elite running backs win now but lose value faster. Decide early whether you want to compete immediately or build for later, and draft consistently with that plan rather than mixing both.",
+    "mustSay": [
+      "balance youth and production",
+      "decide contend vs build and stay consistent"
+    ],
+    "mustNotSay": [
+      "only draft players under 23 in a startup"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-014",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "Should I trade two good players for one star in dynasty?",
+    "idealAnswer": "Often yes, because true stars are scarce and lineup spots are limited — consolidating depth into one elite player usually raises your weekly ceiling. The catch is depth: make sure you can still fill your lineup through byes and injuries, and that the star's age fits your window. Rebuilding teams sometimes prefer the opposite deal, spreading one aging star into several younger assets.",
+    "mustSay": [
+      "stars are scarce",
+      "check you still have enough depth"
+    ],
+    "mustNotSay": [
+      "more players always means more value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-015",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "Is buying a young player coming off a major injury a good dynasty move?",
+    "idealAnswer": "It can be. Injured players' trade value often drops more than their long-term outlook, especially when the current owner is contending and needs production now. The key questions are the injury type and recovery track record, his age, and whether his starting role will still be there. It suits a rebuilding team that can wait.",
+    "mustSay": [
+      "value often drops more than outlook",
+      "consider injury type, age and role"
+    ],
+    "mustNotSay": [
+      "injured players should never be acquired"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-016",
+    "leagueType": "dynasty",
+    "category": "waivers",
+    "question": "Is the waiver wire useful in dynasty leagues?",
+    "idealAnswer": "It's thinner than in redraft because rosters are deep and carry over, but it still matters. Look for young players whose role is growing, undrafted rookies who win jobs, and injury replacements. Adding cheap upside is how dynasty teams find value without spending picks.",
+    "mustSay": [
+      "thinner than redraft",
+      "young players with growing roles"
+    ],
+    "mustNotSay": [
+      "dynasty leagues have no waivers"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-017",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "Should I trade my rookie pick before or after the rookie draft?",
+    "idealAnswer": "Before the draft, the pick carries 'could be anyone' value and hype, which often makes it easier to sell for a proven asset. After the draft you know exactly which player you have, which removes uncertainty but also the mystery premium. If you'd rather have a veteran, selling the pick near the draft often gets the best price; if you love a specific prospect, use it.",
+    "mustSay": [
+      "picks often carry extra value before the draft",
+      "after the draft the player is known"
+    ],
+    "mustNotSay": [
+      "picks are worth the same before and after the draft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-018",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "What should I offer a rebuilding team in dynasty?",
+    "idealAnswer": "Rebuilding teams want young players and draft picks, not veterans who help this year. If you're contending, offer picks, prospects and young depth in exchange for their productive veterans. Framing the deal around their timeline, not just raw value, makes it much more likely to be accepted.",
+    "mustSay": [
+      "rebuilders want youth and picks",
+      "offer around their timeline"
+    ],
+    "mustNotSay": [
+      "offer your oldest veterans to a rebuilding team"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-019",
+    "leagueType": "dynasty",
+    "category": "misconception",
+    "question": "Aren't future picks basically worthless because they're so far away?",
+    "idealAnswer": "No. In dynasty, future picks are real, tradeable assets and they gain value as the draft gets closer. They're discounted for uncertainty and time, but they're one of the main ways teams rebuild, and contenders routinely buy veterans with them. Treating picks as worthless gives away value in trades.",
+    "mustSay": [
+      "future picks are real assets in dynasty",
+      "discounted for time and uncertainty, not worthless"
+    ],
+    "mustNotSay": [
+      "future picks have no value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (dynasty: future picks are real, tradeable assets)",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-020",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "How does a player's real-life free agency affect his dynasty value?",
+    "idealAnswer": "A player heading into free agency carries landing-spot risk: a new team can mean a bigger role, a smaller one, or a worse offense. Values often swing sharply when he signs. If you're risk-averse, move him before free agency; if you think the market underrates him, buying before he signs can pay off.",
+    "mustSay": [
+      "landing-spot risk",
+      "values move when he signs"
+    ],
+    "mustNotSay": [
+      "free agency never affects fantasy value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-021",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "Is it worth trading future picks to push for a dynasty title?",
+    "idealAnswer": "When you're a genuine contender, yes — championship windows are limited, and picks are exactly the currency that turns future value into points now. The risk is overspending on a team that isn't quite good enough, then being left old and pick-less. Make the push when your core is strong and young enough that you won't need those picks to rebuild next year.",
+    "mustSay": [
+      "worth it for genuine contenders",
+      "risk of overspending without winning"
+    ],
+    "mustNotSay": [
+      "never trade future picks"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-022",
+    "leagueType": "dynasty",
+    "category": "rules",
+    "question": "What happens to my roster at the end of a dynasty season?",
+    "idealAnswer": "You keep it. Your whole roster carries into next season, and you add rookies through the rookie draft. Depending on your league's settings, you may need to cut players to meet the roster limit before or after the rookie draft.",
+    "mustSay": [
+      "the whole roster carries over",
+      "add rookies via the rookie draft"
+    ],
+    "mustNotSay": [
+      "your roster is wiped at the end of the season"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (dynasty)",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-023",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "Why do dynasty managers say to be patient with young tight ends?",
+    "idealAnswer": "Tight ends usually take longer to develop than receivers because they have to learn blocking as well as routes, and many don't break out until their second or third season. That means rookie tight ends often disappoint early and can be bought cheaply from impatient owners. The position is also scarce, so a tight end who does break out is very valuable.",
+    "mustSay": [
+      "tight ends usually develop slowly",
+      "breakouts often come in year two or three"
+    ],
+    "mustNotSay": [
+      "rookie tight ends are usually elite immediately"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-024",
+    "leagueType": "dynasty",
+    "category": "draft",
+    "question": "In a rookie draft, should I draft for need or take the best player available?",
+    "idealAnswer": "Best player available usually wins. Your needs will change before most rookies contribute, and a more talented player is easier to trade for whatever you're missing later. Use need only to break ties between players you rate about the same.",
+    "mustSay": [
+      "best player available",
+      "use need as a tiebreaker"
+    ],
+    "mustNotSay": [
+      "always draft for your weakest position"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-025",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "I'm rebuilding — should I trade for a 30-year-old receiver who is still producing?",
+    "idealAnswer": "Usually not. A rebuilding team wants players who will still be valuable when its window opens, and a 30-year-old receiver is likely to decline and lose trade value by then. He's a better fit for a contender; if anything, a rebuilding team should be the one selling him.",
+    "mustSay": [
+      "he'll likely decline before your window",
+      "better fit for a contender"
+    ],
+    "mustNotSay": [
+      "rebuilding teams should buy aging veterans"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-026",
+    "leagueType": "dynasty",
+    "category": "strategy",
+    "question": "I just took over an orphaned dynasty team — where should I start?",
+    "idealAnswer": "Start by taking stock: list your young core, aging veterans, future picks and any draft or trade restrictions. Then decide honestly whether the roster can contend soon or needs a rebuild, and trade in that direction. Avoid panic-selling everything in your first week — other managers will expect you to, so lowball offers will come quickly.",
+    "mustSay": [
+      "take stock of assets and picks",
+      "decide contend or rebuild",
+      "don't panic-sell"
+    ],
+    "mustNotSay": [
+      "immediately trade every veteran regardless of return"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "dyn-027",
+    "leagueType": "dynasty",
+    "category": "misconception",
+    "question": "Should I always take the youngest player in dynasty?",
+    "idealAnswer": "No. Youth is valuable because it extends how long a player can help you, but production and talent still matter more — a young player who never earns a role is worth little. The best dynasty assets combine youth with a proven or clearly emerging role. Contending teams in particular should value current production.",
+    "mustSay": [
+      "youth matters but production and talent matter more",
+      "contenders should value current production"
+    ],
+    "mustNotSay": [
+      "age is the only thing that matters in dynasty"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "dyn-028",
+    "leagueType": "dynasty",
+    "category": "trades",
+    "question": "When is the dynasty trade market most active?",
+    "idealAnswer": "The off-season is usually the deepest trade market in dynasty: rookie drafts, real NFL free agency and roster planning give every team a reason to deal. In-season trading still happens, especially between contenders and rebuilders near the deadline. If you're planning a big roster change, the off-season usually gives you the most partners.",
+    "mustSay": [
+      "the off-season is the deepest trade market"
+    ],
+    "mustNotSay": [
+      "dynasty teams can only trade during the season"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (dynasty phases: off-season is the deepest part of the trade market)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-001",
+    "leagueType": "keeper",
+    "category": "rules",
+    "question": "How does a keeper league work?",
+    "idealAnswer": "A keeper league is like redraft, except each team can carry a limited number of players into next season. Keeping a player usually costs something, most often a draft pick in a specific round, and that cost often gets more expensive each year you hold him. Everyone else goes back into the draft pool.",
+    "mustSay": [
+      "a limited number of players carry over",
+      "keeping usually costs a draft pick",
+      "cost often rises each year"
+    ],
+    "mustNotSay": [
+      "you keep your whole roster in a keeper league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (keeper)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-002",
+    "leagueType": "keeper",
+    "category": "strategy",
+    "question": "How do I pick the best keeper?",
+    "idealAnswer": "Pick the player whose value most exceeds what he costs to keep. A late-round breakout kept for a 10th-round pick is usually a better keeper than a star kept at the cost of your 1st, because the surplus — value minus the pick you give up — is much larger. Also consider how many years he can be kept and how quickly his cost rises.",
+    "mustSay": [
+      "value minus keeper cost",
+      "a cheap breakout often beats an expensive star"
+    ],
+    "mustNotSay": [
+      "always keep your best player"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (keeperSurplus)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-003",
+    "leagueType": "keeper",
+    "category": "rules",
+    "question": "How many keepers can I have in my league?",
+    "idealAnswer": "That's set by your commissioner, so it varies by league — common setups range from one to a handful of players. Check your league's maximum-keepers setting.",
+    "mustSay": [
+      "depends on the league's max keepers setting"
+    ],
+    "mustNotSay": [
+      "every keeper league allows three keepers"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/league-rules/conceptCatalog.ts (keeper configurableFields: maxKeepers)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-004",
+    "leagueType": "keeper",
+    "category": "rules",
+    "question": "What round will my keeper cost me next year?",
+    "idealAnswer": "It depends on your league's keeper cost rules. Many leagues charge the round the player was drafted in (or a late round for waiver pickups) and move it earlier by a set number of rounds each year he's kept, but the cost system and the yearly penalty are commissioner settings. Check your league's keeper cost system and round penalty.",
+    "mustSay": [
+      "depends on the keeper cost system and round penalty settings"
+    ],
+    "mustNotSay": [
+      "keepers always cost the round they were drafted in"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (keeperCostSystem, keeperRoundPenalty)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-005",
+    "leagueType": "keeper",
+    "category": "trades",
+    "question": "Is a player worth the same in a keeper league trade as in a redraft trade?",
+    "idealAnswer": "No. In a keeper league you're acquiring the player and his keeper cost. A receiver you could keep for a 7th-round pick is a much better asset than the same receiver who would cost a 2nd, even though every standard ranking treats them identically. Factor in the keeper price, not just the player.",
+    "mustSay": [
+      "value is the player minus his keeper cost",
+      "the same player can be worth different amounts"
+    ],
+    "mustNotSay": [
+      "keeper cost doesn't affect trade value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (keeper: market value is not trade value)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-006",
+    "leagueType": "keeper",
+    "category": "trades",
+    "question": "Can I trade draft picks in my keeper league?",
+    "idealAnswer": "That depends on your league. Some keeper leagues allow trading picks (sometimes only before the draft), and many never do — it's a commissioner setting. AllFantasy doesn't assume either way, so confirm your league's rule before building a deal around a pick.",
+    "mustSay": [
+      "depends on the commissioner's pick-trading setting",
+      "confirm before building a deal around a pick"
+    ],
+    "mustNotSay": [
+      "picks are always tradeable in keeper leagues",
+      "keeper leagues never allow pick trades"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (keeper: futurePicksTradeable null)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-007",
+    "leagueType": "keeper",
+    "category": "strategy",
+    "question": "Why does a keeper get more expensive the longer I keep him?",
+    "idealAnswer": "Many keeper leagues add a round penalty each year a player is kept, so he costs an earlier pick every season. That's designed to stop teams holding a bargain forever. It means a keeper's surplus value shrinks over time, and a player who was a great keeper last year may no longer be worth his price.",
+    "mustSay": [
+      "round penalty makes the cost earlier each year",
+      "surplus shrinks over time"
+    ],
+    "mustNotSay": [
+      "keeper costs never change"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (keeperRoundPenalty notes)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-008",
+    "leagueType": "keeper",
+    "category": "draft",
+    "question": "How do keepers change the draft?",
+    "idealAnswer": "Kept players are removed from the draft pool, so the talent available is thinner than normal ADP suggests and good players go earlier than usual. The pick you used on your keeper is gone, so plan around the rounds you still own. Before the draft, list every team's keepers to see which positions will be scarce.",
+    "mustSay": [
+      "kept players leave the draft pool",
+      "your keeper uses up a pick"
+    ],
+    "mustNotSay": [
+      "keepers have no effect on the draft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-009",
+    "leagueType": "keeper",
+    "category": "trades",
+    "question": "I'm out of contention in my keeper league — what should I do?",
+    "idealAnswer": "Shift toward next season: target players who will be cheap, valuable keepers — late-round or waiver breakouts — from contending teams that need production now. Contenders often care more about this season than about keeper value. Check your league's rules on trading picks and keepers first.",
+    "mustSay": [
+      "target cheap future keepers",
+      "contenders value this season more"
+    ],
+    "mustNotSay": [
+      "nothing you do matters once you're out of contention"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "kp-010",
+    "leagueType": "keeper",
+    "category": "misconception",
+    "question": "Isn't my best player automatically my best keeper?",
+    "idealAnswer": "Not necessarily. The best keeper is the one with the most value above what he costs to keep. If your best player would cost your 1st-round pick, you might get similar value just by drafting there, while a mid-round breakout kept cheaply gives you a big edge.",
+    "mustSay": [
+      "best keeper = most surplus over cost"
+    ],
+    "mustNotSay": [
+      "always keep the highest-ranked player"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (keeperSurplus)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-011",
+    "leagueType": "keeper",
+    "category": "strategy",
+    "question": "Are rookies good keeper targets?",
+    "idealAnswer": "Often, yes. A rookie drafted in a middle or late round who breaks out can be kept cheaply for several years, which is the ideal keeper profile. The catch is that it depends on your keeper cost rules and how many years a player can be kept.",
+    "mustSay": [
+      "cheap breakouts are ideal keepers",
+      "depends on keeper cost rules"
+    ],
+    "mustNotSay": [
+      "rookies can't be kept"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "kp-012",
+    "leagueType": "keeper",
+    "category": "rules",
+    "question": "What's the difference between a keeper league and a dynasty league?",
+    "idealAnswer": "In a keeper league you keep only a limited number of players, usually at a cost like a draft pick, and everyone else goes back into the draft. In dynasty you keep your entire roster and add talent through a rookie draft. Keeper is closer to redraft with a bit of carryover; dynasty is a fully long-term format.",
+    "mustSay": [
+      "keeper: limited players at a cost",
+      "dynasty: entire roster carries over"
+    ],
+    "mustNotSay": [
+      "keeper and dynasty are the same"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (keeper, dynasty)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-013",
+    "leagueType": "keeper",
+    "category": "misconception",
+    "question": "AllFantasy shows my league with 3 keepers — does that mean we're definitely a keeper league?",
+    "idealAnswer": "Not necessarily. Every league record starts with a default of 3 keepers whether or not anyone chose it, so an untouched default is treated as unconfirmed rather than as proof you have three keepers. If your league really uses keepers, have the commissioner confirm the keeper settings so AllFantasy can price keeper costs correctly.",
+    "mustSay": [
+      "3 is a default",
+      "treated as unconfirmed",
+      "commissioner can confirm the keeper settings"
+    ],
+    "mustNotSay": [
+      "3 keepers means you are definitely a keeper league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (LEAGUE_COLUMN_DEFAULTS, keeperEvidenceFor)",
+    "confidence": "high"
+  },
+  {
+    "id": "kp-014",
+    "leagueType": "keeper",
+    "category": "rules",
+    "question": "When do I have to declare my keepers?",
+    "idealAnswer": "That's set by your league — usually some time before the draft, by a deadline your commissioner chooses. Check your league's keeper deadline, because missing it can mean losing the chance to keep anyone.",
+    "mustSay": [
+      "depends on the league's keeper deadline"
+    ],
+    "mustNotSay": [
+      "keepers are always due one week before the draft"
+    ],
+    "needsLeagueData": true,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-001",
+    "leagueType": "best_ball",
+    "category": "rules",
+    "question": "How does a best ball league work?",
+    "idealAnswer": "In best ball you draft a roster and your highest-scoring valid lineup is set for you automatically every week. There are no start/sit decisions — the system looks back at who scored and counts your best combination at each lineup slot. Because of that, the draft and your roster construction are most of the game.",
+    "mustSay": [
+      "the best lineup is set automatically",
+      "no start/sit decisions",
+      "the draft is most of the game"
+    ],
+    "mustNotSay": [
+      "you set your lineup each week in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (best_ball); lib/chimmy/lineupActionEvidence.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-002",
+    "leagueType": "best_ball",
+    "category": "lineup",
+    "question": "Who should I start this week in my best ball league?",
+    "idealAnswer": "You don't have to start anyone — in best ball the highest-scoring lineup is chosen for you automatically each week, so there's no start/sit decision to make. What you can influence is your roster: depth to cover byes and injuries, upside, and stacks. If you want, I can look at your roster construction instead.",
+    "mustSay": [
+      "lineup is set automatically",
+      "no start/sit decision"
+    ],
+    "mustNotSay": [
+      "a specific start/sit recommendation (start X over Y)",
+      "telling the user to set or change their lineup"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/chimmy/lineupActionEvidence.ts; lib/best-ball-war-room/bestBallWarRoomPrompt.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-003",
+    "leagueType": "best_ball",
+    "category": "trades",
+    "question": "Can I make trades in a best ball league?",
+    "idealAnswer": "It depends on your league and platform. Many best ball leagues are draft-only with trades turned off, but some leagues enable them, so it isn't a universal rule. Check your league's trade setting; AllFantasy only treats trades as enabled or disabled when your league's settings actually say so.",
+    "mustSay": [
+      "depends on the league or platform setting",
+      "many are draft-only, but not all"
+    ],
+    "mustNotSay": [
+      "trades are banned in all best ball leagues",
+      "every best ball league allows trades"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/best-ball-war-room/bestBallRuleEvidence.ts; docs/chimmy-best-ball-rule-provenance-2026-09-27.md",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-004",
+    "leagueType": "best_ball",
+    "category": "waivers",
+    "question": "Are there waivers in best ball?",
+    "idealAnswer": "It varies by league and platform. Many best ball formats are draft-and-hold with no waiver wire at all, while others allow waivers or free agency. Check your league's waiver setting before counting on adding players during the season.",
+    "mustSay": [
+      "varies by league or platform",
+      "many are draft-and-hold"
+    ],
+    "mustNotSay": [
+      "best ball leagues never have waivers",
+      "best ball always has waivers"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/best-ball-war-room/bestBallRuleEvidence.ts; lib/best-ball-war-room/bestBallWaiverEngine.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-005",
+    "leagueType": "best_ball",
+    "category": "draft",
+    "question": "Why does depth matter so much in best ball?",
+    "idealAnswer": "Because you usually can't fix your lineup during the season. Your depth automatically covers byes and injuries — if a starter is out, the next-best player at that position fills the slot. Too little depth at a position means taking a zero or a weak score in bad weeks.",
+    "mustSay": [
+      "depth covers byes and injuries automatically",
+      "you usually can't fix the lineup in-season"
+    ],
+    "mustNotSay": [
+      "depth doesn't matter because the lineup is optimized"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/best-ball-war-room/bestBallWarRoomPrompt.ts (depth covers byes/injuries automatically)",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-006",
+    "leagueType": "best_ball",
+    "category": "strategy",
+    "question": "Should I value ceiling or floor more in best ball?",
+    "idealAnswer": "Ceiling. Since only your best scores each week are counted, a player's big weeks help you and his bad weeks often don't hurt — they just sit on the bench. That makes boom-or-bust players more valuable in best ball than in leagues where you have to pick your starters in advance.",
+    "mustSay": [
+      "ceiling matters more",
+      "bad weeks often don't count"
+    ],
+    "mustNotSay": [
+      "always prefer the safest, lowest-variance players"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/best-ball-war-room/bestBallWarRoomPrompt.ts (ceiling matters more than floor)",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-007",
+    "leagueType": "best_ball",
+    "category": "draft",
+    "question": "What is stacking in best ball and why do people do it?",
+    "idealAnswer": "Stacking means drafting players from the same real team, most often a quarterback with one or more of his pass catchers. Their big games tend to happen together, so when the offense explodes you get points from several players at once, which raises your ceiling. It also raises variance, which suits best ball's focus on spike weeks.",
+    "mustSay": [
+      "players from the same team, often QB plus pass catcher",
+      "their big games happen together"
+    ],
+    "mustNotSay": [
+      "stacking lowers your ceiling"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/best-ball-war-room/bestBallStackCorrelationEngine.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-008",
+    "leagueType": "best_ball",
+    "category": "draft",
+    "question": "How many quarterbacks and tight ends should I draft in best ball?",
+    "idealAnswer": "It depends on your roster size and starting slots, but most best ball managers take two or three of each in one-QB formats so byes and injuries don't leave the slot empty. With larger rosters or superflex, you'll want more quarterbacks. Check your league's lineup and roster size before settling on numbers.",
+    "mustSay": [
+      "enough to cover byes and injuries",
+      "depends on roster size and lineup slots"
+    ],
+    "mustNotSay": [
+      "one quarterback is always enough in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "bb-009",
+    "leagueType": "best_ball",
+    "category": "misconception",
+    "question": "My best ball player was ruled out — do I need to bench him?",
+    "idealAnswer": "No — there's nothing to bench in best ball, because the lineup is chosen automatically. An inactive player simply scores zero, and if you have another eligible player at that position, his score is used instead. Whether the slot goes empty depends on your depth there.",
+    "mustSay": [
+      "nothing to bench",
+      "an Out player scores zero",
+      "depth fills the slot if available"
+    ],
+    "mustNotSay": [
+      "bench him and start someone else"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/chimmy/lineupActionEvidence.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-010",
+    "leagueType": "best_ball",
+    "category": "draft",
+    "question": "Should I worry about bye weeks when drafting best ball?",
+    "idealAnswer": "Yes, a little. If too many of your players at one position share a bye week, you may not have enough eligible players to fill those slots that week and will score zeros. Spreading byes across your roster, especially at thin positions, protects you — but don't pass on a clearly better player just to avoid a bye overlap.",
+    "mustSay": [
+      "clustered byes can leave slots empty",
+      "spread byes at thin positions"
+    ],
+    "mustNotSay": [
+      "bye weeks don't matter in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "bb-011",
+    "leagueType": "best_ball",
+    "category": "strategy",
+    "question": "Are boom-or-bust players better in best ball than in normal leagues?",
+    "idealAnswer": "Yes. In a managed league you have to guess which week a volatile player will hit, and his bad weeks hurt you when you start him. In best ball his big weeks are counted automatically and his bad weeks usually get replaced by someone else on your roster, so volatility becomes an asset.",
+    "mustSay": [
+      "big weeks are counted automatically",
+      "bad weeks often get replaced"
+    ],
+    "mustNotSay": [
+      "volatile players are worse in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/best-ball-war-room/bestBallWarRoomPrompt.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-012",
+    "leagueType": "best_ball",
+    "category": "rules",
+    "question": "Does best ball use head-to-head matchups or total points?",
+    "idealAnswer": "Both exist. Many best ball contests and leagues rank teams by total points over the season (sometimes with playoff rounds), while others play weekly head-to-head matchups using each team's auto-optimized lineup. Check how your league determines standings.",
+    "mustSay": [
+      "both total points and head-to-head exist",
+      "check your league's standings format"
+    ],
+    "mustNotSay": [
+      "best ball is always head-to-head"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "bb-013",
+    "leagueType": "best_ball",
+    "category": "draft",
+    "question": "Are running back handcuffs worth drafting in best ball?",
+    "idealAnswer": "They can be, especially in formats with no waivers, because you can't pick up the backup after an injury. The best ones are backups who would inherit a large workload if the starter went down, or who already get some standalone touches. A pure backup with no role until an injury is a weaker use of a roster spot than a player with his own spike weeks.",
+    "mustSay": [
+      "useful when you can't add players after injuries",
+      "best if he'd inherit a large workload"
+    ],
+    "mustNotSay": [
+      "handcuffs are useless in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "bb-014",
+    "leagueType": "best_ball",
+    "category": "misconception",
+    "question": "Why is my best ball score lower than the total of all my players' points?",
+    "idealAnswer": "Because only the players who fit your starting lineup slots count. Each week the system picks the highest-scoring valid lineup — say one QB, two RBs and so on — and everyone else's points stay on the bench. It isn't a lineup error; bench points only matter when they're better than a starter at an eligible slot.",
+    "mustSay": [
+      "only the optimal starting lineup counts",
+      "bench points don't count"
+    ],
+    "mustNotSay": [
+      "every rostered player's points count in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (best_ball)",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-015",
+    "leagueType": "best_ball",
+    "category": "draft",
+    "question": "Is it smart to draft two cheap quarterbacks instead of one expensive one in best ball?",
+    "idealAnswer": "It can be. Because the higher of your quarterbacks' scores counts each week, two mid- or late-round QBs with different good weeks can combine into strong weekly output at a lower draft cost. The trade-off is that an elite QB gives you a higher ceiling on his own. Either approach works if you have enough QBs to cover byes.",
+    "mustSay": [
+      "the higher-scoring QB counts each week",
+      "cheaper combination vs single elite ceiling"
+    ],
+    "mustNotSay": [
+      "you must start both quarterbacks"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "bb-016",
+    "leagueType": "best_ball",
+    "category": "strategy",
+    "question": "If lineups are automatic, what can Chimmy actually help me with in best ball?",
+    "idealAnswer": "Roster construction, depth, upside and stacking — the things that decide best ball. Chimmy can look at whether you have enough players at each position for byes and injuries, where your ceiling comes from, and which same-team stacks you own, and help with your draft plan. If your league has waivers or trades turned on, it can help with those too; it won't give start/sit advice, because there isn't any to give.",
+    "mustSay": [
+      "roster construction, depth, upside, stacking",
+      "no start/sit advice"
+    ],
+    "mustNotSay": [
+      "Chimmy will set your best ball lineup"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/best-ball-war-room/bestBallWarRoomPrompt.ts; lib/best-ball-war-room/bestBallChimmyGrounding.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "bb-017",
+    "leagueType": "best_ball",
+    "category": "playoffs",
+    "question": "In best ball tournaments with playoff rounds late in the season, what should I target?",
+    "idealAnswer": "Target players and stacks with favorable schedules in the playoff weeks, and correlated pieces whose teams play each other in those weeks, because a single big game can decide an advancement round. Early-season points only get you into the playoffs, so late-season upside is worth extra. The exact playoff weeks depend on the contest.",
+    "mustSay": [
+      "favorable playoff-week schedules",
+      "correlated stacks",
+      "playoff weeks depend on the contest"
+    ],
+    "mustNotSay": [
+      "playoff weeks don't matter in best ball"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "bb-018",
+    "leagueType": "best_ball",
+    "category": "rules",
+    "question": "Does AllFantasy know whether my imported best ball league allows trades and waivers?",
+    "idealAnswer": "Only if your league's settings explicitly include its trade, waiver and substitution rules. If those rules weren't imported, AllFantasy treats them as unverified and won't claim they're enabled or disabled. You'll still get the automatic-lineup explanation; confirm the transaction rules on your host platform.",
+    "mustSay": [
+      "only when the league's settings include them",
+      "otherwise treated as unverified"
+    ],
+    "mustNotSay": [
+      "AllFantasy assumes all best ball leagues are draft-only"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/best-ball-war-room/bestBallRuleEvidence.ts; docs/chimmy-best-ball-rule-provenance-2026-09-27.md",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-001",
+    "leagueType": "idp",
+    "category": "rules",
+    "question": "What is an IDP league?",
+    "idealAnswer": "IDP stands for individual defensive players. Instead of (or alongside) a team defense, you draft and start real defenders — defensive linemen, linebackers and defensive backs — who score for tackles, sacks, interceptions, forced fumbles and similar stats. IDP is a scoring and roster setting that can sit on top of any format, including redraft and dynasty.",
+    "mustSay": [
+      "individual defensive players",
+      "score for tackles, sacks, interceptions and similar",
+      "works on top of any format"
+    ],
+    "mustNotSay": [
+      "IDP is its own separate league format that replaces dynasty or redraft"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (idp); lib/idp/IDPScoringPresets.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-002",
+    "leagueType": "idp",
+    "category": "misconception",
+    "question": "If I add IDP to my redraft league, is it still a redraft league?",
+    "idealAnswer": "Yes. IDP only changes scoring and roster slots; it doesn't change whether rosters reset or carry over. A redraft IDP league is still redraft, and a dynasty IDP league is still dynasty.",
+    "mustSay": [
+      "IDP doesn't change the base format"
+    ],
+    "mustNotSay": [
+      "IDP turns a league into a different format"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (MODIFIER_ALIASES)",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-003",
+    "leagueType": "idp",
+    "category": "scoring",
+    "question": "What's the difference between tackle-heavy and big-play IDP scoring?",
+    "idealAnswer": "Tackle-heavy scoring rewards volume tacklers, which pushes linebackers and tackle-heavy safeties to the top. Big-play scoring puts more weight on sacks, interceptions, forced fumbles and touchdowns, which boosts pass rushers and ballhawks. AllFantasy offers Balanced, Tackle-Heavy and Big-Play-Heavy IDP presets, so check which one your league uses before ranking defenders.",
+    "mustSay": [
+      "tackle-heavy favors linebackers",
+      "big-play favors sacks and turnovers"
+    ],
+    "mustNotSay": [
+      "IDP scoring presets rank players the same way"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/idp/IDPScoringPresets.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-004",
+    "leagueType": "idp",
+    "category": "draft",
+    "question": "When should I draft IDP players?",
+    "idealAnswer": "In most IDP leagues, after your core offensive starters, because the gap between top defenders and replacement level is usually smaller than at RB or WR. The exception is very defense-heavy scoring or lineups with many IDP slots, where elite linebackers can be worth taking earlier. Look at your league's IDP scoring and slot count to decide.",
+    "mustSay": [
+      "usually after core offensive starters",
+      "depends on IDP scoring and slot count"
+    ],
+    "mustNotSay": [
+      "always draft IDP players in the first round"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "idp-005",
+    "leagueType": "idp",
+    "category": "rules",
+    "question": "What do DL, LB and DB mean, and how do DE, DT, CB and S fit in?",
+    "idealAnswer": "DL (defensive line), LB (linebacker) and DB (defensive back) are grouped positions. Some leagues split them further: DL into DE and DT, and DB into CB and S. AllFantasy supports a standard grouped mode (DL, LB, DB), an advanced split mode (DE, DT, LB, CB, S) and a hybrid, so which slots you fill depends on your league's IDP position mode.",
+    "mustSay": [
+      "DL, LB, DB are grouped positions",
+      "DE/DT and CB/S are split positions"
+    ],
+    "mustNotSay": [
+      "all IDP leagues use the same positions"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/idp/IDPScoringPresets.ts (IDP_POSITION_MODE_LABELS); lib/idp/IDPRosterPresets.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-006",
+    "leagueType": "idp",
+    "category": "strategy",
+    "question": "Why are linebackers usually the top IDP scorers?",
+    "idealAnswer": "Linebackers, especially every-down off-ball linebackers, are involved in the most tackles, and tackles are the most consistent source of IDP points. That volume gives them a steady floor. In scoring systems that weight sacks and turnovers heavily, pass rushers can close the gap.",
+    "mustSay": [
+      "tackle volume",
+      "consistent floor"
+    ],
+    "mustNotSay": [
+      "cornerbacks are always the top IDP scorers"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-007",
+    "leagueType": "idp",
+    "category": "strategy",
+    "question": "In IDP, should I prefer safeties or cornerbacks?",
+    "idealAnswer": "In most tackle-based scoring, safeties are more reliable because they make more tackles, especially those who play near the line of scrimmage. Cornerbacks' scoring is more dependent on interceptions and pass breakups, which are volatile. A rookie or weak-team corner who gets targeted a lot can be an exception.",
+    "mustSay": [
+      "safeties usually tackle more",
+      "cornerback scoring is more volatile"
+    ],
+    "mustNotSay": [
+      "cornerbacks always outscore safeties"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "idp-008",
+    "leagueType": "idp",
+    "category": "scoring",
+    "question": "How many points is a sack worth in my IDP league?",
+    "idealAnswer": "That depends on your league's scoring settings — IDP point values vary a lot from league to league and preset to preset. Check your league's scoring page for the sack value (and whether there are bonuses such as sack yardage).",
+    "mustSay": [
+      "depends on the league's IDP scoring settings"
+    ],
+    "mustNotSay": [
+      "a sack is always worth 4 points"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/idp/IDPScoringPresets.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-009",
+    "leagueType": "idp",
+    "category": "waivers",
+    "question": "What should I look for when picking up IDP players on waivers?",
+    "idealAnswer": "Look for defenders who just became full-time starters — high snap counts are the best predictor of tackles. Injuries to starting linebackers and safeties often hand their backups a big tackle opportunity. Opponents that run a lot of plays or throw often can also create more chances.",
+    "mustSay": [
+      "snap counts / full-time role",
+      "injury replacements"
+    ],
+    "mustNotSay": [
+      "pick up whoever had one interception"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "idp-010",
+    "leagueType": "idp",
+    "category": "lineup",
+    "question": "Do I still start a team defense in an IDP league?",
+    "idealAnswer": "It depends on your league's roster settings. Some IDP leagues replace the team defense entirely (AllFantasy's own IDP roster presets don't include a DST slot), while others keep one alongside individual defenders. Check your league's starting lineup slots.",
+    "mustSay": [
+      "depends on the league's roster settings",
+      "some IDP setups drop the team defense"
+    ],
+    "mustNotSay": [
+      "IDP leagues always also require a team defense"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/idp/IDPRosterPresets.ts (DST: 0 for IDP)",
+    "confidence": "high"
+  },
+  {
+    "id": "idp-011",
+    "leagueType": "idp",
+    "category": "strategy",
+    "question": "Why does a defender's position label matter so much in IDP?",
+    "idealAnswer": "Because the label decides which slot he can fill and how he's valued. A pass rusher listed at LB instead of DL can be much more valuable if linebacker is the scarcer or higher-scoring slot in your league, and platforms don't always agree on labels. Check how your platform lists a player before trading for him.",
+    "mustSay": [
+      "the label decides eligible slots",
+      "platforms can list players differently"
+    ],
+    "mustNotSay": [
+      "position labels don't matter in IDP"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "idp-012",
+    "leagueType": "idp",
+    "category": "trades",
+    "question": "Are IDP players worth trading rookie picks for in dynasty?",
+    "idealAnswer": "Usually only at a discount. In most IDP scoring, top defenders are easier to replace than top offensive players, so they cost less in trades. Elite every-down linebackers in tackle-heavy leagues can be exceptions. Compare the defender's edge over a replacement in your scoring with what the pick could return elsewhere.",
+    "mustSay": [
+      "defenders are usually cheaper than offensive players",
+      "depends on your league's IDP scoring"
+    ],
+    "mustNotSay": [
+      "IDP players are always worth first-round picks"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "idp-013",
+    "leagueType": "idp",
+    "category": "lineup",
+    "question": "What is an IDP flex spot?",
+    "idealAnswer": "An IDP flex is a starting slot that can be filled by any defensive player — lineman, linebacker or defensive back. It lets you start an extra defender from whichever position you're deepest at, much like an offensive flex. In AllFantasy's IDP presets, for example, the standard preset has two IDP flex slots.",
+    "mustSay": [
+      "can hold any defensive player"
+    ],
+    "mustNotSay": [
+      "an IDP flex can hold a quarterback"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/idp/IDPRosterPresets.ts (IDP_FLEX)",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-001",
+    "leagueType": "superflex",
+    "category": "rules",
+    "question": "What is a superflex league?",
+    "idealAnswer": "A superflex league has a starting slot that can hold a quarterback as well as a running back, receiver or tight end. Because quarterbacks usually score the most, most managers start a second QB there, which makes quarterbacks far more valuable than in one-QB leagues. AllFantasy supports superflex as a setting on top of formats like redraft, dynasty and keeper.",
+    "mustSay": [
+      "a slot that can hold a QB",
+      "most managers start a second QB there",
+      "QBs are more valuable"
+    ],
+    "mustNotSay": [
+      "superflex means you must start two quarterbacks"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league/format-engine.ts (superflex modifier); lib/sport-defaults/SportDefaultsRegistry.ts (SUPER_FLEX)",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-002",
+    "leagueType": "superflex",
+    "category": "rules",
+    "question": "What's the difference between superflex and 2QB?",
+    "idealAnswer": "In a 2QB league you must start two quarterbacks — both slots are QB-only. In superflex the second slot can hold a QB or a skill player, so you're not forced to start a second quarterback, but you usually should. 2QB makes quarterbacks even more essential because an empty QB slot is a guaranteed zero.",
+    "mustSay": [
+      "2QB requires two QBs",
+      "superflex allows a QB or another position"
+    ],
+    "mustNotSay": [
+      "superflex and 2QB are the same"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-003",
+    "leagueType": "superflex",
+    "category": "draft",
+    "question": "How early should I draft quarterbacks in superflex?",
+    "idealAnswer": "Much earlier than in one-QB leagues. With most teams wanting two starters, there are only enough real starting quarterbacks for about 32 slots across the whole league, and they run out fast. Securing two reliable starters early is usually important; waiting often leaves you starting a backup or a skill player in that slot.",
+    "mustSay": [
+      "much earlier than one-QB",
+      "starting QBs run out fast"
+    ],
+    "mustNotSay": [
+      "wait on quarterbacks in superflex"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-004",
+    "leagueType": "superflex",
+    "category": "strategy",
+    "question": "How many quarterbacks should I roster in superflex?",
+    "idealAnswer": "Usually three. Two to start every week plus a third to cover bye weeks and injuries, since replacement quarterbacks on waivers are scarce in superflex. Deeper leagues sometimes push that to four in dynasty.",
+    "mustSay": [
+      "usually three",
+      "covers byes and injuries"
+    ],
+    "mustNotSay": [
+      "one quarterback is enough in superflex"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "sf-005",
+    "leagueType": "superflex",
+    "category": "trades",
+    "question": "Why do quarterbacks cost so much in superflex dynasty trades?",
+    "idealAnswer": "Because they're both the highest-scoring players and in short supply — only about 32 starting quarterbacks exist for two lineup spots per team. They also have long careers, so a young starting QB holds value for years. In superflex dynasty they're often the most valuable assets in the league.",
+    "mustSay": [
+      "high scoring and scarce",
+      "long careers"
+    ],
+    "mustNotSay": [
+      "quarterbacks are worth the same in superflex and one-QB leagues"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-006",
+    "leagueType": "superflex",
+    "category": "lineup",
+    "question": "Should I put a quarterback in my superflex slot?",
+    "idealAnswer": "Almost always, if you have a healthy starting QB available. Even an average starting quarterback typically outscores a flex-level running back or receiver. The exception is when your only option is a backup who isn't starting, in which case a strong skill player can be the better choice.",
+    "mustSay": [
+      "almost always if you have a starting QB",
+      "even average QBs usually outscore flex players"
+    ],
+    "mustNotSay": [
+      "never start a quarterback in the superflex"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-007",
+    "leagueType": "superflex",
+    "category": "misconception",
+    "question": "Am I required to start a quarterback in the superflex spot?",
+    "idealAnswer": "No. The superflex slot accepts a QB, RB, WR or TE, so it's legal to start a non-quarterback there. It's usually a weaker choice, but if you're short on healthy starting quarterbacks, a strong skill player is fine.",
+    "mustSay": [
+      "not required",
+      "accepts QB, RB, WR or TE"
+    ],
+    "mustNotSay": [
+      "the superflex slot must be a quarterback"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/sport-defaults/SportDefaultsRegistry.ts (SUPER_FLEX allowedPositions)",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-008",
+    "leagueType": "superflex",
+    "category": "draft",
+    "question": "Where do rookie quarterbacks go in superflex rookie drafts?",
+    "idealAnswer": "Much higher than in one-QB leagues. Rookie quarterbacks projected to start, especially first-round NFL picks, often go near the top of superflex rookie drafts because a long-term starting QB is so valuable. In one-QB leagues the same players often fall to later rounds.",
+    "mustSay": [
+      "much higher than in one-QB",
+      "projected starters can go near the top"
+    ],
+    "mustNotSay": [
+      "rookie QBs are drafted in the same spot in every format"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "sf-009",
+    "leagueType": "superflex",
+    "category": "rules",
+    "question": "Is my league a superflex league?",
+    "idealAnswer": "It depends on your league's starting lineup settings. If your lineup includes a superflex (sometimes shown as SF or SUPER_FLEX) slot that allows a quarterback, you're in superflex; if you have two QB-only slots, it's 2QB; otherwise it's a one-QB league. Check your league's roster settings.",
+    "mustSay": [
+      "depends on the starting lineup settings",
+      "look for a slot that allows a QB"
+    ],
+    "mustNotSay": [
+      "all dynasty leagues are superflex"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/sport-defaults/SportDefaultsRegistry.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "sf-010",
+    "leagueType": "superflex",
+    "category": "strategy",
+    "question": "How do I handle quarterback bye weeks in superflex?",
+    "idealAnswer": "Plan ahead: when drafting or trading, avoid having your two starters share a bye, and keep a third quarterback. Waivers rarely have a starting QB available in superflex, so waiting until the bye week often leaves you starting a backup or a skill player. If it happens anyway, use a strong skill player rather than a non-starting QB.",
+    "mustSay": [
+      "avoid two starters sharing a bye",
+      "keep a third QB"
+    ],
+    "mustNotSay": [
+      "just pick up a starting QB on waivers each bye"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "gil-001",
+    "leagueType": "guillotine",
+    "category": "rules",
+    "question": "How does a guillotine league work?",
+    "idealAnswer": "Every week (scoring period) the lowest-scoring team in the league is eliminated — 'chopped' — and its entire roster is released to waivers for everyone else to bid on. There are no head-to-head matchups: you're not trying to beat one opponent, you're trying not to finish last. The last team standing wins.",
+    "mustSay": [
+      "lowest-scoring team is eliminated each week",
+      "its roster goes to waivers",
+      "last team standing wins"
+    ],
+    "mustNotSay": [
+      "you win by beating your weekly opponent",
+      "eliminated players leave the league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (guillotine); lib/trade-intel/guillotine.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-002",
+    "leagueType": "guillotine",
+    "category": "waivers",
+    "question": "Why is FAAB so important in a guillotine league?",
+    "idealAnswer": "Because it's the main way to acquire talent. Every chop dumps a full roster onto waivers, so better players hit the wire in guillotine than in any other format, every single week. Your budget doesn't replenish, so treating FAAB as a real asset — not a tiebreaker — is what separates surviving teams.",
+    "mustSay": [
+      "every chop dumps a full roster onto waivers",
+      "FAAB is the main acquisition currency",
+      "budget doesn't replenish"
+    ],
+    "mustNotSay": [
+      "FAAB matters less in guillotine"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/guillotine.ts (FAAB is the acquisition market)",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-003",
+    "leagueType": "guillotine",
+    "category": "strategy",
+    "question": "Should I prefer high-floor or high-ceiling players in guillotine?",
+    "idealAnswer": "High floor, especially as the field shrinks. You only need to avoid being the lowest score in the league, so a reliable 15 points is worth more than a boom-or-bust player who might score 25 or 4. That's the opposite of head-to-head advice, where upside helps you beat one opponent.",
+    "mustSay": [
+      "floor matters more",
+      "you only need to avoid finishing last"
+    ],
+    "mustNotSay": [
+      "always chase the highest ceiling in guillotine"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/guillotine.ts (floor beats ceiling)",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-004",
+    "leagueType": "guillotine",
+    "category": "trades",
+    "question": "Should I try to trade for players in my guillotine league?",
+    "idealAnswer": "Yes, trades are allowed in a guillotine league, but a trade is worth less every week because the field keeps shrinking and your team may not survive to use what you get. Price a deal by how many weeks you expect to stay alive, not by the full season, and favour steady weekly scorers over boom-or-bust upside. Bidding on the rosters released after each elimination is the other main way to improve.",
+    "mustSay": [
+      "trades are allowed",
+      "a trade is worth less as the season goes on",
+      "bidding on released rosters is the other main lever"
+    ],
+    "mustNotSay": [
+      "trades are not allowed in guillotine leagues",
+      "trade for future picks"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (guillotine: trade legalInFormat true); lib/trade-intel/guillotine.ts (tradeValueMultiplier)",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-005",
+    "leagueType": "guillotine",
+    "category": "rules",
+    "question": "What happens to the players on a team that gets chopped?",
+    "idealAnswer": "Its whole roster is released to the waiver pool, where the surviving teams can claim them. When they become available depends on your league's release timing setting — AllFantasy's default is the next waiver run.",
+    "mustSay": [
+      "the whole roster is released to waivers",
+      "timing depends on the league's release setting"
+    ],
+    "mustNotSay": [
+      "chopped players are removed from the game",
+      "they are redistributed evenly"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/guillotine/constants.ts (RELEASE_NEXT_WAIVER); lib/guillotine/GuillotineLeagueConfig.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-006",
+    "leagueType": "guillotine",
+    "category": "rules",
+    "question": "What happens if two teams tie for the lowest score in a guillotine week?",
+    "idealAnswer": "A tiebreaker decides who is chopped. AllFantasy's default order is bench points (lower loses), then season points, then the previous period's score, then draft slot, then a commissioner decision, then random — but the commissioner can change that order. Check your league's tiebreaker setting if it matters.",
+    "mustSay": [
+      "a tiebreaker order decides it",
+      "default starts with bench points",
+      "commissioner can change the order"
+    ],
+    "mustNotSay": [
+      "both teams are eliminated",
+      "nobody is eliminated on a tie"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/guillotine/constants.ts (DEFAULT_TIEBREAKER_ORDER)",
+    "confidence": "medium"
+  },
+  {
+    "id": "gil-007",
+    "leagueType": "guillotine",
+    "category": "waivers",
+    "question": "Is it better to spend FAAB early or late in a guillotine league?",
+    "idealAnswer": "There's a real trade-off. The waiver pool gets better as the season goes on, because stronger rosters get released as the field shrinks, so budget and waiver priority are worth more later. But you only collect that value if you survive, so a team near the chop line may need to spend now. Don't get eliminated holding a big unspent budget.",
+    "mustSay": [
+      "the pool improves later in the season",
+      "you must survive to use it"
+    ],
+    "mustNotSay": [
+      "always spend everything in week 1",
+      "always save it all for the end"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (guillotine waiver_claim note); lib/trade-intel/guillotine.ts",
+    "confidence": "medium"
+  },
+  {
+    "id": "gil-008",
+    "leagueType": "guillotine",
+    "category": "playoffs",
+    "question": "When do the playoffs start in a guillotine league?",
+    "idealAnswer": "Guillotine doesn't have head-to-head playoffs. Teams are eliminated one at a time over the season, and the last surviving team wins. The 'endgame' is simply the final weeks when only a few teams remain.",
+    "mustSay": [
+      "no head-to-head playoffs",
+      "last surviving team wins"
+    ],
+    "mustNotSay": [
+      "the top four teams make a playoff bracket"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/guillotine.ts (no playoffs, no head-to-head); lib/league-rules/conceptCatalog.ts (final phase)",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-009",
+    "leagueType": "guillotine",
+    "category": "draft",
+    "question": "How should I draft for a guillotine league?",
+    "idealAnswer": "Draft for early-season survival and depth. You can't win if you're chopped in week 2, so players with secure roles and steady production early matter a lot, and bye-week coverage is critical because a bad bye week can end your season. You'll also have chances to add talent later from chopped rosters, so a deep, reliable team beats a top-heavy one.",
+    "mustSay": [
+      "survive early weeks",
+      "depth and bye coverage"
+    ],
+    "mustNotSay": [
+      "draft only high-upside rookies who might break out late"
+    ],
+    "needsLeagueData": false,
+    "grounding": "general",
+    "confidence": "medium"
+  },
+  {
+    "id": "gil-010",
+    "leagueType": "guillotine",
+    "category": "lineup",
+    "question": "I'm close to the chop line — should I start my boom-or-bust receiver?",
+    "idealAnswer": "Usually not. When you're near the bottom, the goal is to not be the lowest score, so a steady player with a reliable floor protects you better than a volatile one who could post a very low number. Lean on consistency unless you're so far behind that only a huge game can save you.",
+    "mustSay": [
+      "prefer a reliable floor near the chop line"
+    ],
+    "mustNotSay": [
+      "always start the highest-upside player"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/guillotine.ts (chopMargin, floorOverCeilingNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "gil-011",
+    "leagueType": "guillotine",
+    "category": "rules",
+    "question": "What week do eliminations start in my guillotine league?",
+    "idealAnswer": "That's a league setting. Guillotine leagues configure an elimination start week and end week, so eliminations may begin in week 1 or later depending on your commissioner. Check your league's elimination window.",
+    "mustSay": [
+      "depends on the league's elimination start and end week settings"
+    ],
+    "mustNotSay": [
+      "eliminations always start in week 1"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/league-rules/conceptCatalog.ts (guillotine configurableFields: eliminationStartWeek, eliminationEndWeek)",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-012",
+    "leagueType": "guillotine",
+    "category": "misconception",
+    "question": "I'm projected to beat my opponent this week — does that mean I'm safe in guillotine?",
+    "idealAnswer": "There's no weekly opponent in guillotine. You're compared against every team still alive, and only the lowest total gets chopped. What matters is how far above the bottom score you finish, so look at where your projection ranks among all surviving teams.",
+    "mustSay": [
+      "no head-to-head opponent",
+      "compared against every surviving team"
+    ],
+    "mustNotSay": [
+      "winning your matchup keeps you safe"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/guillotine.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "gil-013",
+    "leagueType": "guillotine",
+    "category": "strategy",
+    "question": "How does strategy change late in a guillotine season with only a few teams left?",
+    "idealAnswer": "Late in the season every surviving roster is stacked with players picked up from chopped teams, and one bad week ends your season. Floor matters even more, and FAAB left over should be spent on players who genuinely improve your weekly score, because there are few weeks left to use it. Anything you acquire now only has a week or two to help.",
+    "mustSay": [
+      "one bad week ends your season",
+      "spend remaining FAAB",
+      "few weeks left for acquisitions to help"
+    ],
+    "mustNotSay": [
+      "save FAAB for next season"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/guillotine.ts (guillotineHorizon, floorOverCeilingNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "gil-014",
+    "leagueType": "guillotine",
+    "category": "scoring",
+    "question": "Can a stat correction change who gets chopped in a guillotine league?",
+    "idealAnswer": "It depends on your league's correction setting. AllFantasy guillotine leagues can finalize eliminations immediately, after a stat-correction window (48 hours by default), or at a custom cutoff. If your league waits for corrections, a late change can affect who is eliminated; if it finalizes immediately, it won't.",
+    "mustSay": [
+      "depends on the league's correction window setting"
+    ],
+    "mustNotSay": [
+      "stat corrections can never affect eliminations"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/guillotine/constants.ts (CORRECTION_IMMEDIATE, CORRECTION_AFTER_STAT, DEFAULT_STAT_CORRECTION_HOURS)",
+    "confidence": "medium"
+  },
+  {
+    "id": "sv-001",
+    "leagueType": "survivor",
+    "category": "rules",
+    "question": "How does a Survivor fantasy league work?",
+    "idealAnswer": "Managers are split into tribes. Each week the lowest-scoring tribe goes to tribal council, where its members vote one manager out. Later the tribes merge and everyone competes individually, and managers voted out after the merge form a jury that decides the winner. Idols, exile and other twists follow the TV show's structure, depending on how your league is set up.",
+    "mustSay": [
+      "tribes",
+      "lowest-scoring tribe goes to tribal council and votes someone out",
+      "merge and jury"
+    ],
+    "mustNotSay": [
+      "the lowest-scoring manager is automatically eliminated before the merge"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (survivor)",
+    "confidence": "high"
+  },
+  {
+    "id": "sv-002",
+    "leagueType": "survivor",
+    "category": "misconception",
+    "question": "In Survivor, does the lowest-scoring manager get eliminated?",
+    "idealAnswer": "Not directly. Score decides which tribe goes to tribal council, but the tribe's vote decides who leaves — so a high scorer on a losing tribe can be voted out, and a low scorer can survive. After the merge, the whole league votes.",
+    "mustSay": [
+      "score decides which tribe attends",
+      "the vote decides who leaves"
+    ],
+    "mustNotSay": [
+      "elimination is by score alone"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (survivor elimination)",
+    "confidence": "high"
+  },
+  {
+    "id": "sv-003",
+    "leagueType": "survivor",
+    "category": "strategy",
+    "question": "How should my roster strategy change around the Survivor merge?",
+    "idealAnswer": "Before the merge your tribe just needs to avoid being the lowest-scoring tribe, which rewards a reliable floor. In the Survivor rules AllFantasy models, immunity after the merge goes to the week's top scorer, which rewards ceiling. Since the merge happens on a known schedule, start shifting toward upside a little before it arrives.",
+    "mustSay": [
+      "pre-merge rewards floor",
+      "post-merge rewards ceiling"
+    ],
+    "mustNotSay": [
+      "strategy is the same before and after the merge"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/survivor.ts (mergeInversionNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "sv-004",
+    "leagueType": "survivor",
+    "category": "strategy",
+    "question": "Should I save my Survivor idol for the perfect moment?",
+    "idealAnswer": "Be careful — in the Survivor setup AllFantasy models, most idols expire at the merge, so an idol held too long becomes worthless. Its value falls as the merge approaches, and it does you no good if you're voted out before playing it. Only idols that convert into points or FAAB keep value past the merge.",
+    "mustSay": [
+      "most idols expire at the merge",
+      "an idol held too long can become worthless"
+    ],
+    "mustNotSay": [
+      "idols never expire"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/survivor.ts (idolHorizon, CONVERTING_IDOLS)",
+    "confidence": "medium"
+  },
+  {
+    "id": "sv-005",
+    "leagueType": "survivor",
+    "category": "trades",
+    "question": "Can I trade in my Survivor league?",
+    "idealAnswer": "Yes. Trading is allowed in a Survivor league, and who you trade with matters as much as what you get. Before the merge, a deal that strengthens a tribemate can help keep your tribe out of tribal council even if it looks like a loss on paper, while strengthening a rival tribe works against you. After the merge there are no tribes, so every point you hand over helps an opponent.",
+    "mustSay": [
+      "trades are allowed",
+      "before the merge, helping a tribemate can help your tribe",
+      "after the merge, cooperative trades stop making sense"
+    ],
+    "mustNotSay": [
+      "trades are not allowed in Survivor leagues"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (survivor: trade legalInFormat true, tribemate note); lib/trade-intel/survivor.ts (post-merge note)",
+    "confidence": "high"
+  },
+  {
+    "id": "sv-006",
+    "leagueType": "survivor",
+    "category": "rules",
+    "question": "What is Exile in a Survivor league?",
+    "idealAnswer": "Exile is where voted-out managers can go instead of leaving the game completely, if your league turns it on. Exiled managers compete for tokens, and depending on the settings they may be able to return to the main game. Whether exile return is enabled and how many tokens it takes are league settings.",
+    "mustSay": [
+      "voted-out managers may go to exile",
+      "return depends on the league's settings"
+    ],
+    "mustNotSay": [
+      "every eliminated manager returns automatically"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/survivor/SurvivorLeagueConfig.ts (exileReturnEnabled, exileReturnTokens)",
+    "confidence": "medium"
+  },
+  {
+    "id": "sv-007",
+    "leagueType": "survivor",
+    "category": "rules",
+    "question": "When does the merge happen in my Survivor league?",
+    "idealAnswer": "That's set by your league's merge trigger — typically a specific week or when a certain number of managers remain. Check your league's merge setting; AllFantasy uses a default merge week if the commissioner didn't set one.",
+    "mustSay": [
+      "depends on the league's merge trigger setting"
+    ],
+    "mustNotSay": [
+      "the merge is always in week 10"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/survivor/SurvivorLeagueConfig.ts (mergeTrigger, mergeWeek)",
+    "confidence": "high"
+  },
+  {
+    "id": "sv-008",
+    "leagueType": "survivor",
+    "category": "rules",
+    "question": "Can Chimmy tell me how the other managers voted at tribal council?",
+    "idealAnswer": "No. Tribal council ballots are private, and Chimmy won't disclose or guess how another manager voted. It can help you think through your own vote and alliances.",
+    "mustSay": [
+      "ballots are private",
+      "won't disclose or infer others' votes"
+    ],
+    "mustNotSay": [
+      "revealing or guessing another manager's vote"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (survivor vote: ballots are private)",
+    "confidence": "high"
+  },
+  {
+    "id": "sv-009",
+    "leagueType": "survivor",
+    "category": "playoffs",
+    "question": "How is the winner of a Survivor league decided?",
+    "idealAnswer": "Managers voted out after the merge form a jury, and at the end the jury votes to decide the winner among the finalists. So your relationships with the managers you help vote out can matter as much as your scoring.",
+    "mustSay": [
+      "the jury of evicted managers decides the winner"
+    ],
+    "mustNotSay": [
+      "the team with the most points wins"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (survivor jury phase)",
+    "confidence": "high"
+  },
+  {
+    "id": "sag-001",
+    "leagueType": "survivor_guillotine",
+    "category": "rules",
+    "question": "How is Survivor All-Stars Guillotine different from a regular Survivor league?",
+    "idealAnswer": "It borrows tribes from Survivor but eliminates like guillotine: you go out by being the lowest scorer on your tribe (or in the league once merged), never by a vote. Eliminated rosters go to waivers, there are no trades, and FAAB is the only way to add players. It also has a starting lineup that grows on a published schedule during the season.",
+    "mustSay": [
+      "eliminated by lowest score, never by vote",
+      "no trades",
+      "lineup grows during the season"
+    ],
+    "mustNotSay": [
+      "tribal council votes decide eliminations"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/survivorGuillotine.ts; lib/league-rules/conceptCatalog.ts (survivor_guillotine)",
+    "confidence": "high"
+  },
+  {
+    "id": "sag-002",
+    "leagueType": "survivor_guillotine",
+    "category": "lineup",
+    "question": "How does the starting lineup change during a Survivor All-Stars Guillotine season?",
+    "idealAnswer": "It grows on a published schedule. Weeks 1–6 start eight players (QB, 2 RB, 2 WR, TE, 2 WR/RB/TE flex); week 7 adds a flex, week 9 adds a SUPERFLEX, week 11 adds another flex, and week 14 adds a final flex for twelve starters. That means bench players you can't start early become starters later.",
+    "mustSay": [
+      "starts at 8 starters",
+      "SUPERFLEX added in week 9",
+      "reaches 12 starters by week 14"
+    ],
+    "mustNotSay": [
+      "the lineup stays the same all season"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/survivorGuillotine.ts (LINEUP_SCHEDULE)",
+    "confidence": "high"
+  },
+  {
+    "id": "sag-003",
+    "leagueType": "survivor_guillotine",
+    "category": "strategy",
+    "question": "Why would I want a second quarterback early in Survivor All-Stars Guillotine?",
+    "idealAnswer": "Because the SUPERFLEX slot arrives in week 9, turning a second QB from an unstartable bench player into a weekly starter. Everyone can see that date coming, so bidding on quarterbacks tends to rise before the slot opens. Adding one earlier can be cheaper — as long as you survive until week 9 to use him.",
+    "mustSay": [
+      "SUPERFLEX arrives in week 9",
+      "bidding rises before the slot opens",
+      "you have to survive to use him"
+    ],
+    "mustNotSay": [
+      "a second QB is never useful in this format"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/survivorGuillotine.ts (superflexInflectionNote, deferredSlotValue)",
+    "confidence": "high"
+  },
+  {
+    "id": "sag-004",
+    "leagueType": "survivor_guillotine",
+    "category": "trades",
+    "question": "Can I trade in Survivor All-Stars Guillotine?",
+    "idealAnswer": "No — this format has no trades. The only way to acquire players is FAAB bidding, with a $1,000 budget for the whole season (not per week), which makes timing your bids the key skill.",
+    "mustSay": [
+      "no trades",
+      "FAAB is the only way to acquire players",
+      "$1,000 for the whole season"
+    ],
+    "mustNotSay": [
+      "you can trade within your tribe"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (survivor_guillotine actions); lib/trade-intel/survivorGuillotine.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "sag-005",
+    "leagueType": "survivor_guillotine",
+    "category": "rules",
+    "question": "When do idols expire in Survivor All-Stars Guillotine?",
+    "idealAnswer": "Standard idols can't be played after week 10, and Gauntlet idols can't be played after week 13. An idol is also lost if you're eliminated while still holding it, so saving it too long can waste it two different ways.",
+    "mustSay": [
+      "standard idols: after week 10",
+      "Gauntlet idols: after week 13",
+      "lost if eliminated while holding it"
+    ],
+    "mustNotSay": [
+      "idols can be played any time"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/survivorGuillotine.ts (STANDARD_IDOL_LAST_WEEK, GAUNTLET_IDOL_LAST_WEEK, idolExpiryNote)",
+    "confidence": "high"
+  },
+  {
+    "id": "devy-001",
+    "leagueType": "devy",
+    "category": "rules",
+    "question": "What is a devy league?",
+    "idealAnswer": "A devy (developmental) league is a dynasty league where rosters can also hold college players. You stash college prospects in dedicated devy slots and, once they reach the NFL, move them onto your active roster. It extends dynasty planning years further into the future.",
+    "mustSay": [
+      "dynasty league that also holds college players",
+      "prospects are stashed until they reach the NFL"
+    ],
+    "mustNotSay": [
+      "devy is a redraft format"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (devy); lib/devy/DevyLeagueConfig.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "devy-002",
+    "leagueType": "devy",
+    "category": "scoring",
+    "question": "Do my college players score points in a devy league?",
+    "idealAnswer": "No. In a devy league college players don't score — they're an investment in a future NFL contributor, not a producing asset. If college players do score in your league, it's likely a Campus to Canton (C2C) league instead.",
+    "mustSay": [
+      "college players don't score in devy",
+      "C2C is the format where they do"
+    ],
+    "mustNotSay": [
+      "devy players score college stats every week"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (devy note)",
+    "confidence": "high"
+  },
+  {
+    "id": "devy-003",
+    "leagueType": "devy",
+    "category": "trades",
+    "question": "In a devy league, what's the difference between a '2027 1st' and a '2027 college 1st'?",
+    "idealAnswer": "They're different picks in different drafts. A '2027 1st' is a pick in the NFL rookie draft, while a '2027 college 1st' is a pick in your league's college (devy) draft, and they're worth very different amounts. Always check which pool a pick in a trade belongs to.",
+    "mustSay": [
+      "two separate pick pools",
+      "NFL rookie draft vs college draft",
+      "worth different amounts"
+    ],
+    "mustNotSay": [
+      "they are the same pick"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (devy/c2c two pick pools)",
+    "confidence": "high"
+  },
+  {
+    "id": "devy-004",
+    "leagueType": "devy",
+    "category": "strategy",
+    "question": "How should I value college prospects in devy?",
+    "idealAnswer": "Think of each prospect as an option on a future NFL player: his value depends on how likely he is to become relevant, how good he'd be, and how long you'll wait. Closer draft years, strong production and a projected high NFL draft pick all help. Be wary of anyone putting a precise trade-chart value on a college player — no trade market prices them the way NFL players are priced.",
+    "mustSay": [
+      "an option on a future NFL player",
+      "how long you'll wait matters",
+      "no market prices them like NFL players"
+    ],
+    "mustNotSay": [
+      "devy prospects have exact trade values like NFL players"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/devyOutlook.ts",
+    "confidence": "medium"
+  },
+  {
+    "id": "devy-005",
+    "leagueType": "devy",
+    "category": "misconception",
+    "question": "Can Chimmy tell me my college player's exact trade value on the same scale as NFL players?",
+    "idealAnswer": "No. No market we hold prices college players, so AllFantasy ranks devy prospects on their own scale — a standing among other devy assets — and deliberately doesn't convert that into NFL trade value. A deal mixing college and NFL assets won't be blended into one score; it's better compared piece by piece.",
+    "mustSay": [
+      "college players are ranked on a separate scale",
+      "not converted to NFL trade value"
+    ],
+    "mustNotSay": [
+      "an exact NFL-equivalent value for a college player"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/devyOutlook.ts (DEVY_SCALE); lib/league-rules/conceptCatalog.ts (devy trade note)",
+    "confidence": "high"
+  },
+  {
+    "id": "devy-006",
+    "leagueType": "devy",
+    "category": "rules",
+    "question": "When does my devy player move to my active roster?",
+    "idealAnswer": "That depends on your league's promotion rules. A common default (and AllFantasy's) is that you choose to promote a player once he's drafted into the NFL, before the rookie draft, but your league may use a different timing or limit promotions per year. Check your league's promotion settings.",
+    "mustSay": [
+      "depends on the league's promotion timing setting"
+    ],
+    "mustNotSay": [
+      "devy players are promoted automatically on draft night in every league"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/devy/DevyLeagueConfig.ts (promotionTiming, maxYearlyDevyPromotions)",
+    "confidence": "medium"
+  },
+  {
+    "id": "c2c-001",
+    "leagueType": "c2c",
+    "category": "rules",
+    "question": "What is a Campus to Canton (C2C) league?",
+    "idealAnswer": "C2C is a dynasty-style format where your roster holds both college and NFL players, and both score. You set a college lineup and a pro lineup, and the two are combined into your result. Players move from your college side to your pro side as they reach the NFL.",
+    "mustSay": [
+      "college and NFL players on one roster",
+      "both college and pro players score"
+    ],
+    "mustNotSay": [
+      "college players don't score in C2C"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (c2c); lib/merged-devy-c2c/C2CLeagueConfig.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "c2c-002",
+    "leagueType": "c2c",
+    "category": "scoring",
+    "question": "How are college and pro scores combined in my C2C league?",
+    "idealAnswer": "That's set by your league. C2C leagues weight the pro and college sides, and AllFantasy's default gives the pro side 60% of the weight, but your commissioner can change the weighting and the college scoring system. Check your league's C2C scoring settings.",
+    "mustSay": [
+      "depends on the league's weighting setting"
+    ],
+    "mustNotSay": [
+      "college and pro points always count equally"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/merged-devy-c2c/C2CLeagueConfig.ts (hybridProWeight default 60)",
+    "confidence": "medium"
+  },
+  {
+    "id": "c2c-003",
+    "leagueType": "c2c",
+    "category": "rules",
+    "question": "What's the difference between devy and C2C?",
+    "idealAnswer": "In devy, college players are stashed and don't score until they reach the NFL. In C2C, college players score too, through their own college lineup, so a college player is both a producing asset now and a future NFL option. Both use separate college and NFL rookie pick pools.",
+    "mustSay": [
+      "devy: college players don't score",
+      "C2C: college players score"
+    ],
+    "mustNotSay": [
+      "devy and C2C are identical"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (devy vs c2c notes)",
+    "confidence": "high"
+  },
+  {
+    "id": "c2c-004",
+    "leagueType": "c2c",
+    "category": "strategy",
+    "question": "Why are productive college players extra valuable in C2C?",
+    "idealAnswer": "Because they give you value twice: they score for your college lineup now, and they may become NFL contributors later. A college star with a strong NFL outlook is one of the best assets in the format. Weigh both parts rather than judging him only on his NFL future.",
+    "mustSay": [
+      "score now and have future NFL value"
+    ],
+    "mustNotSay": [
+      "only NFL potential matters in C2C"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (c2c note)",
+    "confidence": "high"
+  },
+  {
+    "id": "c2c-005",
+    "leagueType": "c2c",
+    "category": "trades",
+    "question": "Can I trade college draft picks in my C2C league?",
+    "idealAnswer": "It depends on your league. C2C supports separate college picks and NFL rookie picks, but whether each kind can be traded is a league setting, and AllFantasy can't currently read which pools your league opens. Confirm with your commissioner, and always check which pool a pick belongs to.",
+    "mustSay": [
+      "depends on the league's settings",
+      "college and rookie picks are separate pools"
+    ],
+    "mustNotSay": [
+      "college picks are always tradeable"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/trade-intel/leagueFormatRules.ts (devy/c2c futurePicksTradeable null); lib/merged-devy-c2c/C2CLeagueConfig.ts",
+    "confidence": "low"
+  },
+  {
+    "id": "sc-001",
+    "leagueType": "salary_cap",
+    "category": "rules",
+    "question": "How does a salary cap league work?",
+    "idealAnswer": "Every player on your roster has a contract with a salary and a length, and your total salaries must stay under the league's cap. Players are typically acquired at auction, contracts carry over across seasons, and trades must leave both teams cap-compliant. Managing your cap is as important as picking players.",
+    "mustSay": [
+      "contracts with salary and length",
+      "must stay under the cap",
+      "trades must be cap-compliant"
+    ],
+    "mustNotSay": [
+      "salary cap leagues have no contracts"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (salary_cap); lib/trade-intel/salaryCap.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "sc-002",
+    "leagueType": "salary_cap",
+    "category": "trades",
+    "question": "Why would a trade both managers agree on be rejected in a salary cap league?",
+    "idealAnswer": "Most likely because it's not cap-legal: one side would end up over the salary cap after the deal. If your league has a cap floor, a team that sheds too much salary can be blocked too. Cap legality comes before value — a fair trade that breaks the cap can't happen.",
+    "mustSay": [
+      "over the cap after the trade",
+      "a cap floor can also block it"
+    ],
+    "mustNotSay": [
+      "the commissioner vetoed it for fairness"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/salaryCap.ts (capLegality)",
+    "confidence": "high"
+  },
+  {
+    "id": "sc-003",
+    "leagueType": "salary_cap",
+    "category": "strategy",
+    "question": "Is the best player always the best asset in a salary cap league?",
+    "idealAnswer": "No. You're acquiring a player and his contract. An elite player on a punishing salary can be worth less than a solid player on a cheap deal, because the salary you save can buy another starter. Judge players on production relative to cost, not production alone.",
+    "mustSay": [
+      "you acquire the player and his contract",
+      "production relative to cost"
+    ],
+    "mustNotSay": [
+      "contracts don't affect value"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/salaryCap.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "sc-004",
+    "leagueType": "salary_cap",
+    "category": "strategy",
+    "question": "Why do cheap, long contracts matter so much in salary cap leagues?",
+    "idealAnswer": "Because they lock in value for multiple seasons. A good player on a low salary with several years left is worth much more than the same player on a one-year deal, just as rookie contracts are prized in the real NFL. Years remaining can matter as much as the salary itself.",
+    "mustSay": [
+      "years remaining matter",
+      "cheap long deals lock in value"
+    ],
+    "mustNotSay": [
+      "contract length doesn't matter"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/salaryCap.ts",
+    "confidence": "high"
+  },
+  {
+    "id": "sc-005",
+    "leagueType": "salary_cap",
+    "category": "rules",
+    "question": "What is dead money in a salary cap league?",
+    "idealAnswer": "Dead money is salary that still counts against your cap after you cut a player. Many salary cap leagues charge some or all of a released player's remaining contract, so cutting an expensive player doesn't free all his cap space. How dead money is calculated is a league rule.",
+    "mustSay": [
+      "salary that still counts after cutting a player",
+      "calculation is a league rule"
+    ],
+    "mustNotSay": [
+      "cutting a player always frees his full salary"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/salaryCap.ts (dead money)",
+    "confidence": "medium"
+  },
+  {
+    "id": "sc-006",
+    "leagueType": "salary_cap",
+    "category": "rules",
+    "question": "What is our league's salary cap, and is there a cap floor?",
+    "idealAnswer": "Those are league settings, so they vary. Check your league's cap amount and whether a cap floor is enabled — a floor means you must spend at least a minimum amount, which can block salary-dump trades.",
+    "mustSay": [
+      "depends on the league's cap and floor settings"
+    ],
+    "mustNotSay": [
+      "every salary cap league uses the same cap"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/league-rules/conceptCatalog.ts (salary_cap configurableFields); lib/trade-intel/salaryCap.ts (capFloor)",
+    "confidence": "high"
+  },
+  {
+    "id": "trn-001",
+    "leagueType": "tournament",
+    "category": "rules",
+    "question": "How does a Tournament league work on AllFantasy?",
+    "idealAnswer": "Tournament mode is bracket or multi-stage play instead of a normal season-long schedule: teams compete in stages and either advance or are eliminated. In the tournament shape AllFantasy models, qualifying leagues feed into later rounds and survivors redraft into new leagues between stages. The exact stages and advancement rules come from your tournament's settings.",
+    "mustSay": [
+      "bracket or multi-stage play",
+      "advance or be eliminated",
+      "stage details come from the tournament's settings"
+    ],
+    "mustNotSay": [
+      "it's a normal season-long head-to-head league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (tournament); lib/trade-intel/tournament.ts",
+    "confidence": "medium"
+  },
+  {
+    "id": "trn-002",
+    "leagueType": "tournament",
+    "category": "trades",
+    "question": "Can I make trades in a tournament league?",
+    "idealAnswer": "Probably not, but check. Most tournaments bar trades (and pick trading) entirely, though the platform treats trading as a setting a tournament could turn on. Confirm your tournament's rules before planning around a deal.",
+    "mustSay": [
+      "most tournaments bar trades",
+      "confirm your tournament's setting"
+    ],
+    "mustNotSay": [
+      "trades are always allowed in tournaments"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/trade-intel/tournament.ts (tradingPolicy); lib/trade-intel/leagueFormatRules.ts (tournament)",
+    "confidence": "medium"
+  },
+  {
+    "id": "trn-003",
+    "leagueType": "tournament",
+    "category": "strategy",
+    "question": "Should I think about long-term value when adding players in a tournament?",
+    "idealAnswer": "No. In a tournament your roster only lasts until the next redraft, so nothing you acquire carries forward — a player picked up just before a redraft may help for a single game. And in single-elimination rounds you only expect about two more games no matter how many rounds remain, so value players on the weeks you'll actually use them.",
+    "mustSay": [
+      "rosters dissolve at the next redraft",
+      "no carry-forward value"
+    ],
+    "mustNotSay": [
+      "draft for next season in a tournament"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/tournament.ts (rosterHorizon, bracketHorizon)",
+    "confidence": "medium"
+  },
+  {
+    "id": "trn-004",
+    "leagueType": "tournament",
+    "category": "waivers",
+    "question": "My tournament issues a new FAAB budget for the later rounds — should I save my current budget?",
+    "idealAnswer": "No. If a fresh budget is issued at a reset week, whatever is left of the old budget disappears at that point. Spend it on anything that helps before the reset, because unspent FAAB is simply lost.",
+    "mustSay": [
+      "the old budget expires at the reset",
+      "spend it before the reset"
+    ],
+    "mustNotSay": [
+      "unspent FAAB carries over to the new budget"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/tournament.ts (faabResetNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "zom-001",
+    "leagueType": "zombie",
+    "category": "rules",
+    "question": "How does a Zombie league work?",
+    "idealAnswer": "Every manager has a status — Survivor, Zombie or Whisperer — that changes with weekly results. Losing to a Zombie or the Whisperer can turn a Survivor into a Zombie and add them to the horde, and resources like serums and weapons are used to defend or attack. The exact thresholds and rules are configured per league.",
+    "mustSay": [
+      "statuses: Survivor, Zombie, Whisperer",
+      "losing can turn you into a Zombie",
+      "thresholds are configured per league"
+    ],
+    "mustNotSay": [
+      "infected teams are removed from the league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (zombie); lib/trade-intel/zombie.ts",
+    "confidence": "medium"
+  },
+  {
+    "id": "zom-002",
+    "leagueType": "zombie",
+    "category": "trades",
+    "question": "Can Zombie teams make trades?",
+    "idealAnswer": "In the Zombie rules AllFantasy models, no — Zombie teams can't trade, and once you're infected you lose the ability to trade too. That means the pool of legal trade partners only shrinks as the horde grows, so if a deal makes sense, it's better done earlier than later. Confirm your league's own rules.",
+    "mustSay": [
+      "Zombie teams can't trade",
+      "the trade partner pool shrinks over time"
+    ],
+    "mustNotSay": [
+      "everyone can trade all season in a Zombie league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/zombie.ts (tradeWindow); lib/trade-intel/leagueFormatRules.ts (zombie)",
+    "confidence": "medium"
+  },
+  {
+    "id": "zom-003",
+    "leagueType": "zombie",
+    "category": "strategy",
+    "question": "When is a serum most valuable in a Zombie league?",
+    "idealAnswer": "Later in the season. In the rules AllFantasy models, a serum is a single-use +10 that only works against a Zombie opponent, so it's close to useless early when few teams are infected and gets more valuable as the horde grows. Don't overpay for one in the first weeks.",
+    "mustSay": [
+      "only works against a Zombie",
+      "more valuable as the horde grows"
+    ],
+    "mustNotSay": [
+      "a serum is worth the same all season"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/zombie.ts (serumValue, SERUM_POINTS)",
+    "confidence": "medium"
+  },
+  {
+    "id": "zom-004",
+    "leagueType": "zombie",
+    "category": "scoring",
+    "question": "How do weapons work in a Zombie league?",
+    "idealAnswer": "In the Zombie ruleset AllFantasy models, weapons give a weekly point bonus (knife 4, axe 6, bow 8, gun 10), but only your best two count in any week, so a third weaker weapon adds nothing. A bomb is a one-time 35 points, but using it cancels your other weapons that week, so its real gain is 35 minus your top two weapons. Check your league's own values.",
+    "mustSay": [
+      "only your best two weapons count",
+      "a bomb cancels your weapons that week"
+    ],
+    "mustNotSay": [
+      "every weapon you hold adds points"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/zombie.ts (WEAPON_POINTS, WEAPONS_COUNTED, BOMB_POINTS)",
+    "confidence": "medium"
+  },
+  {
+    "id": "zom-005",
+    "leagueType": "zombie",
+    "category": "waivers",
+    "question": "Does my Zombie league use waivers or free agency?",
+    "idealAnswer": "That depends on your league's rules. The Zombie ruleset AllFantasy models has no waivers at all — free agents can be added at will, even during games — which makes depth players cheap to replace, but other Zombie leagues may use normal waivers. Check your league's settings.",
+    "mustSay": [
+      "depends on the league's rules",
+      "some Zombie rulesets use free agency with no waivers"
+    ],
+    "mustNotSay": [
+      "all Zombie leagues use FAAB waivers"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/trade-intel/zombie.ts; lib/league-rules/conceptCatalog.ts (zombie waiver_claim)",
+    "confidence": "low"
+  },
+  {
+    "id": "pir-001",
+    "leagueType": "pirate",
+    "category": "rules",
+    "question": "How does a Pirate league work?",
+    "idealAnswer": "In a Pirate league, winning your matchup lets you take (steal) a player from the manager you beat, so rosters can be raided, not just traded with. You can protect a limited number of players; anyone unprotected — starter, bench or IR — can be taken. Every result moves a player and none come back, so the talent pool shifts toward winning teams all season.",
+    "mustSay": [
+      "the winner takes a player from the loser",
+      "only protected players are safe"
+    ],
+    "mustNotSay": [
+      "players are only acquired through trades and waivers"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/pirate.ts; lib/trade-intel/leagueFormatRules.ts (pirate)",
+    "confidence": "medium"
+  },
+  {
+    "id": "pir-002",
+    "leagueType": "pirate",
+    "category": "strategy",
+    "question": "In a Pirate league, should I concentrate value in a few stars or spread it out?",
+    "idealAnswer": "If your league uses a protection cap (the Pirate rules AllFantasy models protect 3 players), concentrate. Players inside your protected slots are untouchable, while everything outside them is inventory the league can take, so stacking your best value into protected players is the safest build. Spreading value across unprotected players means every loss costs you someone useful.",
+    "mustSay": [
+      "protected players can't be taken",
+      "concentrate value into protected slots"
+    ],
+    "mustNotSay": [
+      "spread value evenly across the whole roster"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/pirate.ts (PROTECTION_SLOTS, concentrationCorrectionNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "pir-003",
+    "leagueType": "pirate",
+    "category": "trades",
+    "question": "Can I trade during the games in a Pirate league?",
+    "idealAnswer": "In the Pirate rules AllFantasy models, no: all trading is locked league-wide from the start of the Thursday game until the Monday games end, and protecting a player doesn't create an exception. Plan deals for earlier in the week, and confirm your own league's rules.",
+    "mustSay": [
+      "trading is locked from Thursday kickoff through Monday games",
+      "protection doesn't create an exception"
+    ],
+    "mustNotSay": [
+      "you can trade any time in a Pirate league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/pirate.ts (tradeLockNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "pir-004",
+    "leagueType": "pirate",
+    "category": "rules",
+    "question": "Is a Pirate league dynasty or redraft?",
+    "idealAnswer": "It can be either. Pirate is a set of steal-and-protect rules that sits on top of a base format, so it depends on whether your league's rosters carry over. AllFantasy asks the commissioner to confirm the base, because it decides whether players are valued on a dynasty or a redraft basis.",
+    "mustSay": [
+      "can sit on dynasty or redraft",
+      "depends on whether rosters carry over"
+    ],
+    "mustNotSay": [
+      "Pirate leagues are always dynasty"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/league/leagueConceptOptions.ts (PIRATE_BASE_FORMAT_OPTIONS, readConfirmedPirateBase)",
+    "confidence": "high"
+  },
+  {
+    "id": "koth-001",
+    "leagueType": "king_of_the_hill",
+    "category": "rules",
+    "question": "How does a King of the Hill league work?",
+    "idealAnswer": "In the King of the Hill rules AllFantasy models, week 1's top scorer takes the crown. The King gets a +10 bonus every week until he loses a matchup; when he does, he forfeits that week's top three scorers from his roster to waivers, and that week's top scorer becomes the new King. The crown stops at the playoffs, and it sits on a redraft-style league.",
+    "mustSay": [
+      "the King gets +10 a week",
+      "losing forfeits that week's top three scorers to waivers",
+      "it stops at the playoffs"
+    ],
+    "mustNotSay": [
+      "the King is eliminated when he loses"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/kingOfTheHill.ts; lib/league-rules/conceptCatalog.ts (king_of_the_hill)",
+    "confidence": "medium"
+  },
+  {
+    "id": "koth-002",
+    "leagueType": "king_of_the_hill",
+    "category": "strategy",
+    "question": "I'm the King — how should I manage my roster?",
+    "idealAnswer": "Spread your value and favor consistency. Losing costs you three players at once, so a roster whose value sits in three stars can be gutted in a single week — the opposite of Pirate, where concentrating is safer. Reliable scorers help you keep the crown and its weekly bonus longer.",
+    "mustSay": [
+      "spread value",
+      "favor consistency",
+      "losing costs three players"
+    ],
+    "mustNotSay": [
+      "concentrate all your value in three stars"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/kingOfTheHill.ts (crownConcentrationNote, dethroneNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "koth-003",
+    "leagueType": "king_of_the_hill",
+    "category": "waivers",
+    "question": "When should I spend FAAB in a King of the Hill league?",
+    "idealAnswer": "Consider holding some for the week the King looks beatable. When the King loses, three of his players hit waivers at once and the whole league can bid, so the best players arrive in bursts rather than steadily. Having budget ready for that week can land you a star.",
+    "mustSay": [
+      "the King's forfeited players hit waivers when he loses",
+      "hold FAAB for that week"
+    ],
+    "mustNotSay": [
+      "FAAB doesn't matter in King of the Hill"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/kingOfTheHill.ts (dethroneNote)",
+    "confidence": "medium"
+  },
+  {
+    "id": "koth-004",
+    "leagueType": "king_of_the_hill",
+    "category": "misconception",
+    "question": "When the King loses, does he lose his three best players?",
+    "idealAnswer": "Not exactly — it's that week's top three scorers on his roster, not his three most valuable players. If his stars had a bad week and bench pieces scored well, he loses those instead; if everyone went off and he still lost, he loses his real core. That's why scoring a lot and still losing is the King's worst outcome.",
+    "mustSay": [
+      "that week's top three scorers",
+      "not necessarily his three best players"
+    ],
+    "mustNotSay": [
+      "he always loses his three most valuable players"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/trade-intel/kingOfTheHill.ts (crownRisk note)",
+    "confidence": "medium"
+  },
+  {
+    "id": "bbro-001",
+    "leagueType": "big_brother",
+    "category": "rules",
+    "question": "How does a Big Brother fantasy league work?",
+    "idealAnswer": "Each week follows the show: a Head of Household (HOH) is decided, the HOH nominates managers for eviction, a veto is drawn and used or not, and then the house votes to evict one of the nominees. Each step has a weekly deadline set by the league. Evicted managers can form a jury that decides the winner at the finale.",
+    "mustSay": [
+      "weekly HOH, nominations, veto and eviction vote",
+      "jury decides the winner"
+    ],
+    "mustNotSay": [
+      "the lowest scorer is automatically evicted"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (big_brother); lib/league/format-engine.ts (big_brother)",
+    "confidence": "high"
+  },
+  {
+    "id": "bbro-002",
+    "leagueType": "big_brother",
+    "category": "rules",
+    "question": "What happens to an evicted manager's players in Big Brother?",
+    "idealAnswer": "The evicted roster is released to the waiver pool for the remaining managers. When the players become available depends on your league's release timing — immediately, at the next waiver run (AllFantasy's default), or during a FAAB window.",
+    "mustSay": [
+      "released to waivers",
+      "timing depends on the league's setting"
+    ],
+    "mustNotSay": [
+      "evicted players are given to the HOH"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/big-brother/BigBrotherRosterReleaseEngine.ts; lib/big-brother/constants.ts (WAIVER_RELEASE_TIMING_OPTIONS)",
+    "confidence": "high"
+  },
+  {
+    "id": "bbro-003",
+    "leagueType": "big_brother",
+    "category": "rules",
+    "question": "Can Chimmy tell me who voted to evict me?",
+    "idealAnswer": "No. Eviction ballots are private, and Chimmy won't disclose or guess another manager's vote or reveal a nomination that hasn't been announced. Depending on league settings, only vote totals may be shown.",
+    "mustSay": [
+      "ballots are private",
+      "won't disclose another manager's vote"
+    ],
+    "mustNotSay": [
+      "revealing or inferring who voted for whom"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league-rules/conceptCatalog.ts (big_brother vote); lib/big-brother/constants.ts (PUBLIC_VOTE_TOTALS_OPTIONS)",
+    "confidence": "high"
+  },
+  {
+    "id": "bbro-004",
+    "leagueType": "big_brother",
+    "category": "rules",
+    "question": "How many managers get nominated and who plays in the veto in Big Brother?",
+    "idealAnswer": "By AllFantasy's default the HOH nominates two managers, and six compete for the veto: the HOH, the two nominees and three others drawn at random. Your league can change these numbers, so check its settings.",
+    "mustSay": [
+      "two nominees by default",
+      "six veto players by default",
+      "configurable"
+    ],
+    "mustNotSay": [
+      "everyone in the house plays for the veto every week"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/big-brother/constants.ts (FINAL_NOMINEE_COUNT, DEFAULT_VETO_COMPETITOR_COUNT)",
+    "confidence": "medium"
+  },
+  {
+    "id": "bbro-005",
+    "leagueType": "big_brother",
+    "category": "rules",
+    "question": "When are nominations due in my Big Brother league?",
+    "idealAnswer": "That's set by your league's weekly schedule — the HOH competition, nomination deadline, veto draw, veto decision and eviction vote each have a configured day. Check your league's nomination deadline; if the HOH misses it, a fallback rule (such as lowest season points, random, or the commissioner) may pick the nominees.",
+    "mustSay": [
+      "depends on the league's nomination deadline setting"
+    ],
+    "mustNotSay": [
+      "nominations are always due Sunday night"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/league-rules/conceptCatalog.ts (big_brother configurableFields); lib/big-brother/constants.ts (AUTO_NOMINATION_FALLBACK_OPTIONS)",
+    "confidence": "high"
+  },
+  {
+    "id": "roy-001",
+    "leagueType": "royal",
+    "category": "rules",
+    "question": "What are the rules of a Royal league?",
+    "idealAnswer": "The specific Royal rules depend on how your commissioner set up the league, and AllFantasy doesn't hold a single fixed rulebook for it. AllFantasy treats Royal as its own format built on a dynasty base, so players are valued the way they would be in dynasty. Check your league's rules or ask your commissioner for the details.",
+    "mustSay": [
+      "depends on the commissioner's setup",
+      "valued on a dynasty base"
+    ],
+    "mustNotSay": [
+      "an invented detailed Royal rulebook"
+    ],
+    "needsLeagueData": true,
+    "grounding": "lib/league-rules/conceptCatalog.ts (royal: flattenedOnto dynasty); lib/specialty-automation/handlers/royalHandler.ts",
+    "confidence": "low"
+  },
+  {
+    "id": "efl-001",
+    "leagueType": "efl",
+    "category": "rules",
+    "question": "What is an EFL league?",
+    "idealAnswer": "On AllFantasy, EFL refers to a promotion/relegation dynasty league: teams play in tiers and move up or down between them based on results, while rosters carry over like dynasty. AllFantasy values players in it the same way it values dynasty. The specifics — how many teams move, how draft order is set — come from your league's own constitution, so check with your commissioner.",
+    "mustSay": [
+      "promotion and relegation between tiers",
+      "valued like dynasty",
+      "specifics come from the league's rules"
+    ],
+    "mustNotSay": [
+      "EFL is a redraft league"
+    ],
+    "needsLeagueData": false,
+    "grounding": "lib/league/leagueConceptOptions.ts (efl prices on the dynasty book); lib/core-app/formatHubs.ts (efl_promotion_relegation_dynasty); docs/commissioner-os/EFL_IMPLEMENTATION_HANDOFF.md",
+    "confidence": "low"
+  }
+]
