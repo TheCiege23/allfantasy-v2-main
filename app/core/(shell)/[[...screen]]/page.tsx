@@ -215,7 +215,7 @@ import CoreLeagueContextBar, {
   CoreLeagueDecisionChip,
   CoreLeagueRecommendation,
 } from '@/components/core-app/CoreLeagueContextBar'
-import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
+import { touchLeaguesViewed, touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
@@ -2118,6 +2118,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'players' && userId && !playerDetail
       ? await loadGameDayTriage(userId, playedLeagues.map((l) => l.id)).catch(() => null)
       : null
+  /*
+   * Queue bump (2026-09-27): a league where a flagged starter can still be moved is refreshed
+   * FIRST by the five-minute roster lane. Only those leagues, capped inside the helper — marking a
+   * whole account would push every other user's leagues behind it (touchLeagueViewed.ts).
+   */
+  if (gameDayTriage?.available) {
+    const nowMs = Date.now()
+    void touchLeaguesViewed(
+      gameDayTriage.data.rows
+        .filter((r) => !r.kickoff || new Date(r.kickoff).getTime() > nowMs)
+        .flatMap((r) => r.leagues.map((l) => l.leagueId)),
+    )
+  }
 
   /*
    * 2a, league in context: who has him in THIS league — you, a named manager,
