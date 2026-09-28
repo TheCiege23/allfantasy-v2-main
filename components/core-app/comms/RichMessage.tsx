@@ -20,6 +20,7 @@ import { gifCredit, readGif, readSafeGif } from '@/lib/rich-message/RichMessageR
 import { getSafeMessageMediaUrl } from '@/lib/rich-message/safeMedia'
 import { MessagePoll } from './MessagePoll'
 import { TradeCardView } from './TradeCardView'
+import { readTradeCardGrade, type TradeCardGrade } from '@/lib/league-chat/tradeCardGradeView'
 import { readTradeOffer, readTradeOfferStatus } from '@/lib/chat-notifications/tradeOfferCard'
 import { ImageViewer } from './ImageViewer'
 
@@ -48,6 +49,8 @@ type TradeCard = {
   extrasGot?: string[]
   valueGave?: number | null
   valueGot?: number | null
+  valueBasis?: 'league' | 'market' | null
+  grade?: TradeCardGrade | null
   note?: string | null
 }
 
@@ -143,6 +146,9 @@ function readTradeCard(meta: RichMetadata): TradeCard | null {
     extrasGot: labels(t.extrasGot),
     valueGave: value(t.valueGave),
     valueGot: value(t.valueGot),
+    /* THE grade (2026-09-27). A card from before then has neither, and its numbers were market value. */
+    valueBasis: t.valueBasis === 'league' ? 'league' : t.valueBasis === 'market' ? 'market' : null,
+    grade: readTradeCardGrade(t.grade),
     note: str(t.note),
   }
 }

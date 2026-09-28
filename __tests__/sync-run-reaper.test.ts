@@ -24,7 +24,11 @@ const mocks = vi.hoisted(() => ({
   reapAllAbandonedRuns: vi.fn(),
   recordSyncJobRun: vi.fn(),
   purgeExpiredCache: vi.fn(),
+  refreshPrivateRelayRanges: vi.fn(),
+  runTradeAgentPass: vi.fn(),
 }))
+
+const RELAY_FRESH = { status: 'fresh', fetchedAt: '2026-09-05T02:00:00.000Z' }
 
 const PURGED = {
   available: true,
@@ -110,7 +114,40 @@ describe('GET /api/cron/reap-sync-runs', () => {
       recordSyncJobRun: mocks.recordSyncJobRun,
     }))
     vi.doMock('@/lib/enrichment-cache', () => ({ purgeExpiredCache: mocks.purgeExpiredCache }))
+    // The Private Relay refresh fetches a multi-megabyte feed from Apple; never from a unit test.
+    vi.doMock('@/lib/geo/privateRelayIngest', () => ({ refreshPrivateRelayRanges: mocks.refreshPrivateRelayRanges }))
     mocks.purgeExpiredCache.mockResolvedValue(PURGED)
+    mocks.refreshPrivateRelayRanges.mockResolvedValue(RELAY_FRESH)
+    // The nightly trade agent rides this route; mocked so these tests do not depend on the clock.
+    vi.doMock('@/lib/decision-os/trade/tradeAgentPass', () => ({ runTradeAgentPass: mocks.runTradeAgentPass }))
+    mocks.runTradeAgentPass.mockResolvedValue({ ran: false, reason: 'outside the nightly window' })
+  })
+
+  it('runs the trade-agent pass only AFTER the heartbeat, inside the route budget', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 1, cutoff: '2026-09-05T11:30:00.000Z' })
+    const order: string[] = []
+    mocks.recordSyncJobRun.mockImplementationOnce(async () => void order.push('heartbeat'))
+    mocks.runTradeAgentPass.mockImplementationOnce(async () => (order.push('agent'), { ran: false, reason: 'x' }))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(order).toEqual(['heartbeat', 'agent'])
+    const budgetMs = mocks.runTradeAgentPass.mock.calls[0]![0].budgetMs
+    expect(budgetMs).toBeGreaterThan(200_000)
+    expect(budgetMs).toBeLessThanOrEqual(240_000)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 1, tradeAgent: { ran: false } })
+  })
+
+  it('a failing trade-agent pass never fails the reap', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 3, cutoff: '2026-09-05T11:30:00.000Z' })
+    mocks.runTradeAgentPass.mockRejectedValueOnce(new Error('grader exploded'))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 3, tradeAgent: { ran: false, reason: 'grader exploded' } })
   })
 
   it('rejects an unauthenticated call without touching the database', async () => {
@@ -196,6 +233,44 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // A warning makes the run `partial`, so a blind purge cannot read as a clean zero.
     expect(outcome.warnings).toEqual(['cache purge: connection lost'])
     expect(outcome.metadata.cachePurge).toEqual(blind)
+  })
+
+  it('refreshes the Private Relay ranges after the reap, and records the outcome', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 0, cutoff: '2026-09-05T11:30:00.000Z' })
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(mocks.refreshPrivateRelayRanges).toHaveBeenCalledTimes(1)
+    expect(await res.json()).toMatchObject({ ok: true, privateRelay: RELAY_FRESH })
+    const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as { warnings: string[]; metadata: Record<string, unknown> }
+    expect(outcome.warnings).toEqual([])
+    expect(outcome.metadata.privateRelay).toEqual(RELAY_FRESH)
+  })
+
+  it('reports a failed Private Relay refresh as a warning, without failing the reap', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 1, cutoff: '2026-09-05T11:30:00.000Z' })
+    mocks.refreshPrivateRelayRanges.mockResolvedValueOnce({ status: 'failed', error: 'feed down', keptFetchedAt: null })
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 1 })
+    const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as { warnings: string[] }
+    expect(outcome.warnings).toEqual(['private relay ranges: feed down'])
+  })
+
+  it('survives the Private Relay refresh throwing', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 1, cutoff: '2026-09-05T11:30:00.000Z' })
+    mocks.refreshPrivateRelayRanges.mockRejectedValueOnce(new Error('db gone'))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as { warnings: string[] }
+    expect(outcome.warnings).toEqual(['private relay ranges: db gone'])
   })
 
   it('does not warn when the purge is switched off on purpose', async () => {

@@ -38,6 +38,11 @@ import {
   type TeamProfileLite,
 } from '@/lib/trade-finder/allowed-assets'
 import { buildAssetIndex, makeSleeperPickId } from '@/lib/trade-finder/asset-index'
+import { gradeFinderCandidates, type GradedFinderCandidate } from '@/lib/trade-finder/candidateGrades'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+
+/** Candidates graded per request — the page shows the first few; grading rows nobody sees is pure cost. */
+const GRADED_FINDER_CANDIDATES = 8
 import { buildTradeHubIntelBlock, parseTradeIntelBlockMeta } from '@/lib/trade-engine/trade-analyzer-intel'
 
 const TradeFinderRequestSchema = z.object({
@@ -439,6 +444,53 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
       }
     }
 
+    /*
+     * 🛑 THE GRADE ON EACH CANDIDATE (2026-09-27), on the VIEWER's own AF copy of this league — the
+     * letter every other trade surface shows. Before this the page had no grade: it rendered the
+     * insight notes in `opportunities` as trade cards and invented "FAIR" and 80 for each.
+     *
+     * ⚠ BOUNDED to what the page shows, and FAILURE-CONTAINED: no AF row, no session, or a grader that
+     * cannot load costs the letters, never the finder. Partner names come from our own league rows —
+     * no extra provider call.
+     */
+    if (session?.user?.id && generatorOutput.candidates.length > 0) {
+      const viewerId = session.user.id
+      try {
+        const af = await (prisma as any).league.findFirst({
+          where: {
+            platformLeagueId: data.league_id,
+            OR: [{ userId: viewerId }, { teams: { some: { claimedByUserId: viewerId } } }],
+          },
+          select: { id: true },
+        })
+        if (af?.id) {
+          const [grader, teams] = await Promise.all([
+            createLeagueTradeGrader({ leagueId: af.id, userId: viewerId }).catch(() => null),
+            (prisma as any).leagueTeam
+              .findMany({ where: { leagueId: af.id }, select: { platformUserId: true, teamName: true, ownerName: true } })
+              .catch(() => [] as Array<{ platformUserId: string | null; teamName: string | null; ownerName: string | null }>),
+          ])
+          const candidates = generatorOutput.candidates as GradedFinderCandidate[]
+          await gradeFinderCandidates({
+            candidates,
+            grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+            limit: GRADED_FINDER_CANDIDATES,
+          })
+          const nameByOwner = new Map<string, string>()
+          for (const t of teams as Array<{ platformUserId: string | null; teamName: string | null; ownerName: string | null }>) {
+            const label = t.teamName?.trim() || t.ownerName?.trim()
+            if (t.platformUserId && label) nameByOwner.set(t.platformUserId, label)
+          }
+          for (const c of candidates) {
+            const ownerId = leagueDecisionCtx.teams[c.teamB.teamId]?.ownerId
+            c.partnerName = ownerId ? nameByOwner.get(ownerId) ?? null : null
+          }
+        }
+      } catch (e) {
+        console.warn('[TradeFinder] candidate grading skipped:', (e as Error)?.name)
+      }
+    }
+
     if (generatorOutput.candidates.length === 0) {
       const note = generatorOutput.opportunities.length > 0
         ? 'No clean market wins today. Best options are below.'
@@ -669,6 +721,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
           whyThisExists: c.whyThisExists,
           summary: `${c.archetype} trade with score ${c.finderScore}/100`,
         })),
+        // The trades themselves, graded — the page lists these whether or not the AI step ran.
+        candidates: generatorOutput.candidates,
         meta: {
           partnersEvaluated: generatorOutput.partnersEvaluated,
           rawCandidatesGenerated: generatorOutput.rawCandidatesGenerated,

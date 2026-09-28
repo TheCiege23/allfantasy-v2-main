@@ -155,7 +155,8 @@ describe('loadTrades — the grade', () => {
       { teams: { some: { claimedByUserId: 'u1' } } },
     ])
     expect(gradeRows).toHaveBeenCalledWith(expect.objectContaining({ afLeagueId: 'af-mine', platformLeagueId: 'L1' }))
-    expect(out.available && out.data[0]!.grade).toEqual({ graded: true, acquirerLetter: 'B', senderLetter: 'D', got: 5000, gave: 4000 })
+    // `frozenAt` null: ROW_GRADE is a live grade (no frozen original — see frozenCompletedGrade.ts).
+    expect(out.available && out.data[0]!.grade).toEqual({ graded: true, acquirerLetter: 'B', senderLetter: 'D', got: 5000, gave: 4000, frozenAt: null })
   })
 
   it('mirrors the grade when the surviving row is the SENDER’s copy, so the dedupe cannot flip a letter', async () => {
@@ -167,7 +168,7 @@ describe('loadTrades — the grade', () => {
 
     expect(gradeRows).toHaveBeenCalledWith(expect.objectContaining({ afLeagueId: 'af-checked' }))
     // The row (sender) got B for giving him away; the side that GOT him reads the mirror.
-    expect(out.available && out.data[0]!.grade).toEqual({ graded: true, acquirerLetter: 'D', senderLetter: 'B', got: 4000, gave: 5000 })
+    expect(out.available && out.data[0]!.grade).toEqual({ graded: true, acquirerLetter: 'D', senderLetter: 'B', got: 4000, gave: 5000, frozenAt: null })
   })
 
   it('no AF row to grade on: listed, never graded — and nothing guessed', async () => {

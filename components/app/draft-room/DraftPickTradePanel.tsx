@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { DraftPickTradePanelRoot } from './DraftPickTradePanelRoot'
 import { useEntitlements } from '@/hooks/useEntitlements'
+import { readDraftPickTradeGrade } from './DraftPickTradeGradeLine'
+import type { DraftPickTradeGrade } from '@/lib/live-draft-engine/draftPickTradeGrade'
 
 export type ProposalSummary = {
   id: string
@@ -42,6 +44,8 @@ export type AiReviewState = {
   executionMode?: string | null
   structuredAnalysis?: StructuredTradeAnalysis | null
   aiConfidence?: number | null
+  /** THE grade (builder only, rookie drafts) — when graded, the private verdict chips are not shown. */
+  tradeGrade?: DraftPickTradeGrade | null
 } | null
 
 export type InventoryPick = { overall: number; round: number; slot: number }
@@ -473,6 +477,7 @@ export function DraftPickTradePanel({
               ? (sa as StructuredTradeAnalysis)
               : null,
           aiConfidence: typeof data.aiConfidence === 'number' ? data.aiConfidence : null,
+          tradeGrade: readDraftPickTradeGrade(data.tradeGrade),
         })
       } else {
         setBuilderAnalysis({

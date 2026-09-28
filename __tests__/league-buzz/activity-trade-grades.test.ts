@@ -60,18 +60,30 @@ describe('gradeSleeperActivityTrade', () => {
     const g = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx(), rosterNames: NAMES, players: PLAYERS, now: 0 })
     expect(graderFor).toHaveBeenCalledWith('af-1')
     expect(gradeArchived).toHaveBeenCalledWith({ grader: true }, {
-      received: ['Woody Marks'],
-      gave: ['Rachaad White'],
+      // By Sleeper id, as every other trade surface prices a player — see `sleeperPlayerInput`.
+      received: [{ name: 'Woody Marks', sleeperId: 'p1' }],
+      gave: [{ name: 'Rachaad White', sleeperId: 'p2' }],
       picksIn: [{ season: 2027, round: 2, label: '2027 round 2' }],
       picksOut: [],
       currentSeason: 1970,
+      // Which trade on which row, so the letter is its frozen original (`frozenCompletedGrade.ts`).
+      original: { afLeagueId: 'af-1', tradeId: 'tx-1', now: new Date(0) },
     })
+    // A live grade (nothing frozen) is labelled as today's.
     expect(g).toEqual({ graded: true, basis: 'today', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }] })
   })
 
-  it('an unnamed player reaches the grader as null, so it withholds rather than prices a raw id', async () => {
+  it('a frozen original is labelled as first graded, never as today’s', async () => {
+    gradeArchived.mockResolvedValue({ ...GRADED, frozenAt: '2026-09-20T12:00:00.000Z' })
+    const g = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx(), rosterNames: NAMES, players: PLAYERS, now: 0 })
+    expect(g).toEqual({ graded: true, basis: 'first-graded', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }] })
+  })
+
+  it('an unnamed player reaches the grader with a null name, so it withholds rather than prices a raw id', async () => {
     await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx({ adds: { p1: 1, zzz: 2 } }), rosterNames: NAMES, players: PLAYERS, now: 0 })
-    expect(gradeArchived.mock.calls[0]![1].gave).toEqual([null])
+    // The id rides along, but a null name still withholds — pinned against the real grader input in
+    // __tests__/trade-value/completed-trade-parity.test.ts.
+    expect(gradeArchived.mock.calls[0]![1].gave).toEqual([{ name: null, sleeperId: 'zzz' }])
   })
 
   it('withholds FAAB trades and three-team trades without asking the grader', async () => {

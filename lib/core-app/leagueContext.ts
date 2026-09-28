@@ -56,6 +56,9 @@ export const LEAGUE_CONTEXT_SELECT = {
   avatarUrl: true,
   syncStatus: true,
   lastSyncedAt: true,
+  // The importer. League Sync offers "remove from My Leagues" only on the viewer's own row, because
+  // `DELETE /api/league/[id]` only ever removes rows the caller owns.
+  userId: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.LeagueSelect

@@ -12,6 +12,7 @@ vi.mock('@/lib/prisma', () => {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } }
 })
+vi.mock('@/lib/bestball/finalizeNativeTournamentSeason', () => ({ finalizeNativeTournamentSeason: m.seasonUpdate }))
 vi.mock('@/lib/bestball/contestEngine', () => ({ assignEntriesToPods: vi.fn(), advancePodWinners: m.advance }))
 import { runNativeTournamentWeek } from '@/lib/bestball/nativeTournament'
 import { tournamentRoundEnds, isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'

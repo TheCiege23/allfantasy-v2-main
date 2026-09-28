@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
   messageFindUnique: vi.fn(),
   linkCreate: vi.fn(),
   linkFindFirst: vi.fn(),
-  queryRaw: vi.fn(),
+  executeRaw: vi.fn(),
   transaction: vi.fn(),
   fetch: vi.fn(),
 }))
@@ -62,7 +62,7 @@ beforeEach(() => {
   h.linkCreate.mockResolvedValue({})
   h.linkFindFirst.mockResolvedValue(null)
   h.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
-    callback({ $queryRaw: h.queryRaw, discordMessageLink: { create: h.linkCreate, findFirst: h.linkFindFirst } }))
+    callback({ $executeRaw: h.executeRaw, discordMessageLink: { create: h.linkCreate, findFirst: h.linkFindFirst } }))
 })
 
 afterEach(() => {

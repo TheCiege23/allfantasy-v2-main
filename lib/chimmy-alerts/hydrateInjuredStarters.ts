@@ -51,6 +51,7 @@ export interface HydrateInjuredStartersResult {
 export function buildInjuredStarterSignals(portfolio: {
   items: Array<{
     displayName: string
+    sport?: string | null
     position: string | null
     injury: { status: string; reportedAt?: string | null; freshness?: { stale?: boolean } | null } | null
     projection?: { projectedPoints: number } | null
@@ -96,6 +97,8 @@ export function buildInjuredStarterSignals(portfolio: {
   for (const item of portfolio.items) {
     const status = String(item.injury?.status ?? '').toLowerCase()
     if (!URGENT_STATUSES.has(status)) continue
+    // A Sleeper appearance's playerId IS his Sleeper id; ESPN/Yahoo ids are not, so they are never used for the link.
+    const sleeperId = item.leagueAppearances.find((a) => String(a.provider).toLowerCase() === 'sleeper')?.playerId ?? null
 
     for (const appearance of item.leagueAppearances) {
       if (appearance.rosterStatus !== 'starter') continue
@@ -110,6 +113,8 @@ export function buildInjuredStarterSignals(portfolio: {
       out.push({
         playerName: item.displayName,
         position: item.position,
+        sleeperId,
+        sport: item.sport ?? null,
         // Present the designation as the port stated it, capitalised for display only.
         designation: status.charAt(0).toUpperCase() + status.slice(1),
         leagueId: appearance.canonicalLeagueId,
@@ -153,7 +158,36 @@ export async function hydrateInjuredStarters(args: {
     requestTime: args.requestTime,
   })
   const verified = await verifySleeperLineupAssignments(portfolio as never, args.appUserId)
-  return buildInjuredStarterSignals(verified)
+  const withoutBestBall = await dropBestBallAppearances(verified)
+  return buildInjuredStarterSignals(withoutBestBall)
+}
+
+/**
+ * ⚠ BEST BALL HAS NO LINEUP TO FIX. The platform starts the best scorers after the fact, so
+ * "X is Out and still starting" in a best-ball league is an alert about a decision nobody can
+ * make — the same false alarm the game-day list stopped showing (lib/core-app/leagueBestBall.ts).
+ * One read of the leagues the portfolio names; a failed read drops nothing.
+ */
+async function dropBestBallAppearances(portfolio: AlertPortfolio): Promise<AlertPortfolio> {
+  const ids = [...new Set(portfolio.items.flatMap((item) => item.leagueAppearances.map((a) => a.canonicalLeagueId)))]
+  if (ids.length === 0) return portfolio
+  const [{ prisma }, { isBestBallLeagueRow }] = await Promise.all([import('@/lib/prisma'), import('@/lib/core-app/leagueBestBall')])
+  const leagues = await prisma.league
+    .findMany({ where: { id: { in: ids } }, select: { id: true, name: true, bestBallMode: true, leagueVariant: true, leagueType: true, settings: true } })
+    .catch(() => [])
+  return withoutBestBallAppearances(portfolio, new Set(leagues.filter((l) => isBestBallLeagueRow(l)).map((l) => l.id)))
+}
+
+/** Pure: the portfolio with every appearance in a best-ball league removed. */
+export function withoutBestBallAppearances(portfolio: AlertPortfolio, bestBallLeagueIds: ReadonlySet<string>): AlertPortfolio {
+  if (bestBallLeagueIds.size === 0) return portfolio
+  return {
+    ...portfolio,
+    items: portfolio.items.map((item) => ({
+      ...item,
+      leagueAppearances: item.leagueAppearances.filter((a) => !bestBallLeagueIds.has(a.canonicalLeagueId)),
+    })),
+  }
 }
 
 /**

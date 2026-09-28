@@ -1,4 +1,5 @@
 import 'server-only'
+import { realManagerName } from './managerName'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
@@ -260,9 +261,9 @@ export function collapseMirroredTrades<T extends { leagueId: string; transaction
  * manager" says we could not resolve it, which is true and legible.
  */
 export function managerLabel(raw: string | null | undefined, resolved?: string | null): string {
-  const r = resolved?.trim()
+  const r = realManagerName(resolved)
   if (r) return r
-  const v = String(raw ?? '').trim()
+  const v = realManagerName(raw) ?? ''
   if (!v) return 'a manager'
   return /^\d{6,}$/.test(v) ? 'a manager' : v
 }
@@ -476,7 +477,7 @@ export async function getTradesBoard(
       e = { byUserId: new Map(), byRoster: new Map() }
       managersByLeague.set(row.leagueId, e)
     }
-    const name = row.ownerName?.trim() || row.teamName?.trim() || ''
+    const name = realManagerName(row.ownerName) || realManagerName(row.teamName) || ''
     if (row.platformUserId) {
       e.byUserId.set(String(row.platformUserId), { name, mine: row.claimedByUserId === userId })
     }
@@ -785,8 +786,8 @@ export async function getTradesBoard(
       },
       ledgerSides.get(ledgerKey(t.sleeperLeagueId, t.transactionId)),
     )
-    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut)
-    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn)
+    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut, drafted?.idsOut)
+    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn, drafted?.idsIn)
 
     const defenders = defendersFor(t.leagueId, leagueBook)
 
@@ -796,12 +797,14 @@ export async function getTradesBoard(
      * league value. Same deal, same letter, same numbers: `gradeArchivedTrade`, on this league's
      * chart today, from this row's point of view.
      */
-    const nameOfId = (id: string) => playerById.get(id)?.name?.trim() || null
-    const pickRef = (p: TradeAsset & { drafted?: string | null }) => ({
+    // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
+    const nameOfId = (id: string) => ({ name: playerById.get(id)?.name?.trim() || null, sleeperId: id })
+    const pickRef = (p: TradeAsset & { drafted?: string | null; draftedId?: string | null }) => ({
       season: p.pickSeason ?? null,
       round: p.pickRound ?? null,
       label: p.name,
       drafted: p.drafted ?? null,
+      draftedId: p.draftedId ?? null,
     })
     const g = await gradeArchivedTrade(await completedTradeGraderFor(t.leagueId), {
       received: recvIds.map(nameOfId),
@@ -814,6 +817,12 @@ export async function getTradesBoard(
        * treat one of ITS picks as still to come — never a later season's.
        */
       currentSeason: marketSeason ?? (Number(t.season) || 0),
+      /*
+       * The trade's frozen original — a stored row, so the cached payload stays derived from rows.
+       * One read per league (this loop takes each league's first trade). No `now` from this file:
+       * the freeze module stamps a first freeze itself.
+       */
+      original: { afLeagueId: t.leagueId, tradeId: t.transactionId },
     })
 
     const mgr = managersByLeague.get(league.id)

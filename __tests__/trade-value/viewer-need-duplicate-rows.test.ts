@@ -35,7 +35,7 @@ vi.mock('@/lib/trade-intel/viewerLeagueRoster', () => ({
 vi.mock('@/lib/core-app/playerProjections', () => ({ latestProjectionWeek: async () => null }))
 vi.mock('@/lib/trade-intel/positionScarcity', () => ({ getPositionScarcity: async () => new Map() }))
 
-import { loadViewerNeedFactors } from '@/lib/trade-value/viewerNeedFactors'
+import { loadRosterNeedFactors, loadViewerNeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 
 beforeEach(() => {
   h.platform = 'sleeper'
@@ -89,6 +89,15 @@ describe('a foreign league’s roster ids', () => {
     expect(h.sleeperIdsAsked).toEqual([])
     expect(f.give[0]).toBeNull()
     expect(f.get[0]).toBeNull()
+    expect(f.gap).toMatch(/cannot be matched/)
+  })
+
+  // The partner-side loader (the trade agent grading the other roster) shares the read, and the gate.
+  it('🛑 a Fleaflicker PARTNER roster is never looked up by Sleeper id either', async () => {
+    h.platform = 'fleaflicker'
+    const { userId: _u, ...rest } = args
+    const f = await loadRosterNeedFactors({ ...rest, playerData: { players: ['qb1', 'te1'] } })
+    expect(h.sleeperIdsAsked).toEqual([])
     expect(f.gap).toMatch(/cannot be matched/)
   })
 

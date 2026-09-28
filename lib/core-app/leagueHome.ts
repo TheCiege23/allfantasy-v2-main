@@ -34,6 +34,7 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -329,13 +330,15 @@ function tradeBuzzGrade(t: RecentTrade): { grades?: Array<{ team: string; letter
       ? null
       : t.sides.find((sd) => String(sd.rosterId) === String(t.verdict!.favoursRosterId))
     const strength = t.verdict?.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
+    // The letters are the trade's frozen original when one exists — say when (`frozenCompletedGrade.ts`).
+    const when = gradeMoment({ frozenAt: t.gradedAt })
     return {
       grades: t.sides.map((sd) => ({ team: name(sd), letter: sd.grade! })),
       gradeLine: favoured
-        ? `${strength} ${name(favoured)} on this league’s values today`
+        ? `${strength} ${name(favoured)} on this league’s values ${when}`
         : t.verdict?.favoursRosterId == null
-          ? 'An even deal on this league’s values today'
-          : 'One side comes out ahead on this league’s values today',
+          ? `An even deal on this league’s values ${when}`
+          : `One side comes out ahead on this league’s values ${when}`,
     }
   }
   const withheld = t.sides.find((sd) => sd.gradeReason.startsWith('League grade withheld'))
@@ -576,7 +579,7 @@ export async function getLeagueHomeData(
           `${sd.teamName || sd.managerName} got ${
             sd.received.length > 0
               ? sd.received.map((a) => a.name).join(', ')
-              : 'nothing we can name'
+              : 'no players or picks on record'
           }`,
       )
       .join(' · '),

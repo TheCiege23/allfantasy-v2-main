@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import type { SectionState, UnavailableSection } from './leagueHome'
+import { isBestBallLeagueRow } from './leagueBestBall'
 import { latestProjectionWeek, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
@@ -93,6 +94,8 @@ export type LeagueSlot = {
    * for (the row then reads "another manager" rather than inventing a name).
    */
   owner: { teamName: string; ownerName: string; avatarUrl: string | null; externalId: string } | null
+  /** Best ball: the platform sets this lineup itself, so no "Open lineup" button is offered for it (leagueBestBall.ts). */
+  bestBall?: boolean
 }
 
 /**
@@ -554,9 +557,10 @@ export async function resolveLeagueSlots(
   // leagues where someone else has him, and those need a name and a platform too.
   const leagues = await prisma.league.findMany({
     where: { id: { in: leagueIds } },
-    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true, season: true },
+    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true, season: true, bestBallMode: true, leagueVariant: true, settings: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
+  const bestBallIds = new Set(leagues.filter((l) => isBestBallLeagueRow(l)).map((l) => l.id))
   // ESPN rosters -> Sleeper ids through the identity chain before any scan below (rosterIdSpace.ts);
   // the id-space map the translator reads is built below, once the bridge verdicts are known.
   /*
@@ -640,6 +644,7 @@ export async function resolveLeagueSlots(
         slot: slotLabel(key),
         isYours: true,
         owner: null,
+        bestBall: bestBallIds.has(r.leagueId),
       })
       claimed.add(r.leagueId)
       break
@@ -792,6 +797,7 @@ export async function resolveLeagueSlots(
           platformLeagueId: league?.platformLeagueId ?? null,
           season: league?.season ?? null,
           teamExternalId: teamExternalIdByLeague.get(leagueId) ?? null,
+          bestBall: bestBallIds.has(leagueId),
         }
         /*
          * If the holder is one of YOUR candidate ids after all — the first pass

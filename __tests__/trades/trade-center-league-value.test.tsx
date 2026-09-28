@@ -123,7 +123,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
     expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Roster fit does not change the letter')
   })
-  it('recovers a proposal and counterparty after remount, without recovering its grade', async () => {
+  it('offers an explicit resume after remount, without treating an old proposal as a fresh trade', async () => {
     const league = { id: 'recovery-league', name: 'L', format: 'Dynasty', teamCount: 12 }
     const view = render(<TradeCenter league={league} viewerId="account-a" />)
     await analyze(view.container)
@@ -134,9 +134,11 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     expect(stored?.partnerRosterId).toBe('r2')
     view.unmount()
     const recovered = render(<TradeCenter league={league} viewerId="account-a" />)
+    expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
+    expect(screen.getByText(/An unfinished proposal is saved on this device/)).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume unfinished proposal' })))
     expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove Trey McBride', exact: true })).toBeTruthy()
-    expect(screen.getByText(/Recovered this device’s in-progress proposal/)).toBeTruthy()
     expect(recovered.container.querySelector('.af-tc-verdict')).toBeNull()
     await act(async () => fireEvent.click(recovered.container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!))
     const calls = fetchMock.mock.calls.filter(([url]) => url === '/api/trade-value/analyze')
@@ -151,6 +153,8 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
     expect(window.localStorage.getItem(tradeDeviceDraftKey('account-a', league.id, true)!)).toBe(original)
     await act(async () => view.rerender(<TradeCenter league={league} viewerId="account-a" />))
+    expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume unfinished proposal' })))
     expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
     await act(async () => view.rerender(<TradeCenter league={{ ...league, id: 'other-league' }} viewerId="account-a" />))
     expect(screen.queryByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeNull()
@@ -389,6 +393,7 @@ describe('pick quote recovery parity', () => {
             get: [{ name: 'DK Metcalf', position: 'WR', marketValue: 1801, leagueValue: 1801, pricedSource: 'fantasycalc' }] } }) }
       : { ok: false, status: 500, json: async () => ({}) })
     const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume unfinished proposal' })))
     const totals = view.container.querySelector('.af-tc-stepbar-totals')!
     expect(totals.textContent).toContain('Send 1,585')
     expect(totals.textContent).toContain('Get 1,801')
@@ -398,18 +403,20 @@ describe('pick quote recovery parity', () => {
     expect(totals.textContent).toContain('Get 1,801')
     expect([...view.container.querySelectorAll('.af-tc-grade-letter')].map(el => el.textContent)).toEqual(['B', 'D'])
   })
-  it('refreshes a recovered pick when the server quote changes', () => {
+  it('refreshes a resumed pick when the server quote changes', async () => {
     savedProposal()
     rosterData.current = { ...(rosterData.current as object), pickPreviewBook: { leagueId: league.id, values: { '2027:2': 1585 } } }
     const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume unfinished proposal' })))
     rosterData.current = { ...(rosterData.current as object), pickPreviewBook: { leagueId: league.id, values: { '2027:2': 1620 } } }
     view.rerender(<TradeCenter league={league} viewerId="account-a" />)
     expect(view.container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Send 1,620')
   })
-  it('ignores an old league book instead of trusting the saved 456 quote', () => {
+  it('ignores an old league book instead of trusting the saved 456 quote', async () => {
     savedProposal()
     rosterData.current = { ...(rosterData.current as object), pickPreviewBook: { leagueId: 'another-league', values: { '2027:2': 1585 } } }
     const view = render(<TradeCenter league={league} viewerId="account-a" />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume unfinished proposal' })))
     const totals = view.container.querySelector('.af-tc-stepbar-totals')!.textContent!
     expect(totals).not.toContain('456')
     expect(totals).not.toContain('1,585')

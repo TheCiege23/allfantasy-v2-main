@@ -10,6 +10,8 @@ import {
   UNREADABLE_IP_GEO,
 } from "./geoIpParse"
 import type { ParsedIpGeo, ProxycheckVerdict } from "./geoIpParse"
+import { decideRelay, lookupRelayState } from "./privateRelayRanges"
+import { getRelayRangeSetNode } from "./privateRelayStore"
 
 export { __resetIpApiShapeWarning } from "./geoIpParse"
 
@@ -125,6 +127,24 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
     // has already said yes.
     const ipapi = proxycheck?.anonymized ? null : (lookup ?? (await ipapiLookup(rawIp)))
     isVpnOrProxy = combineAnonymizerSignals({ tor: false, proxycheck, ipapi }) === true
+  }
+
+  // An anonymized address Apple's Private Relay feed lists can be PLACED rather
+  // than refused — the middleware gate's rule (lib/geo/privateRelayRanges), so
+  // signup, checkout and /api/geo/check agree with it about the same address.
+  if (isVpnOrProxy && rawIp && !isTorExit(headers)) {
+    const set = await getRelayRangeSetNode()
+    const decision = decideRelay(set ? lookupRelayState(set, rawIp) : null)
+    if (decision.kind === "placed") {
+      return {
+        stateCode: decision.state,
+        country: "US",
+        isVpnOrProxy: false,
+        detectionSource: placed.detectionSource,
+        rawIp,
+        privateRelay: { state: decision.state, paidBlocked: decision.paidBlocked },
+      }
+    }
   }
 
   return {

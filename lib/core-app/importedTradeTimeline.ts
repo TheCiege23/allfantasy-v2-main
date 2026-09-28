@@ -56,9 +56,10 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
       timestamp: Number.isFinite(date.getTime()) ? date.toISOString() : '',
       leagueGrade,
       leagueGradeSide: 'viewer' as const,
-      currentGrade: leagueGrade?.graded ? leagueGrade.letter : null,
-      currentValueGiven: leagueGrade?.graded ? leagueGrade.giveValue : null,
-      currentValueReceived: leagueGrade?.graded ? leagueGrade.getValue : null,
+      // "Current" is TODAY's grade: the re-evaluation beside a frozen original, else the letter itself.
+      currentGrade: leagueGrade?.graded ? leagueGrade.current?.letter ?? leagueGrade.letter : null,
+      currentValueGiven: leagueGrade?.graded ? leagueGrade.current?.giveValue ?? leagueGrade.giveValue : null,
+      currentValueReceived: leagueGrade?.graded ? leagueGrade.current?.getValue ?? leagueGrade.getValue : null,
       realizedGrade: first.gradeBasis === 'Realized' ? first.grade ?? null : null,
       realizedNote: first.gradeBasis === 'Realized' ? first.gradeNote ?? null : null,
     }]

@@ -71,8 +71,12 @@ export type TradeTargetFacts = {
     receiveTotal: number
     fairness: FairnessBand
   } | null
-  /** The trade engine's grade of that package, when it answered in time. */
-  grade: { verdict: 'accept' | 'reject' | 'counter'; acceptance: number | null } | null
+  /**
+   * THE grade of that package — the one every trade surface gives it, from your side (design step 7,
+   * 2026-09-27). It replaced a second engine's accept/reject call and the trade finder's fairness band
+   * as what the price is judged by. Null when there was no package to grade.
+   */
+  grade: TradeTargetGrade | null
   /** Set when the league does not allow trades at all, with the waiver advice when there is any. */
   noTrades: { waiverNote: string | null } | null
   /**
@@ -82,6 +86,18 @@ export type TradeTargetFacts = {
    */
   block?: { supported: boolean; listed: boolean; teamName: string | null; since: string | null; note: string } | null
 }
+
+export type TradeTargetGrade =
+  | {
+      graded: true
+      letter: string
+      partnerLetter: string
+      label: string
+      /** The one grade's own advice for your side: A/B accept, C review, D counter, F decline. */
+      action: 'accept' | 'review' | 'counter' | 'decline'
+      receiptId: string | null
+    }
+  | { graded: false; reason: string }
 
 export type TradeTargetVerdict = {
   verdict: 'yes' | 'no'
@@ -192,14 +208,6 @@ function assetList(give: TradeTargetOfferAsset[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
-const FAIRNESS_PHRASE: Record<FairnessBand, string> = {
-  balanced: 'a fair deal',
-  'slight edge you': 'a slight edge to you',
-  'slight edge partner': 'a slight overpay by you',
-  lopsided: 'a big value gap',
-  'low confidence': 'a deal the values cannot price with confidence',
-}
-
 /*
  * No market value for him in this format. The package finder still returns something — a bench
  * body "for his 0" — and the engine will grade it, but a price built on a missing value is not a
@@ -213,12 +221,12 @@ function priceLine(facts: TradeTargetFacts): string | null {
   }
   const o = facts.offer
   if (!o) return null
-  let line = `Price: about ${assetList(o.give)} (${fmtInt(o.giveTotal)}) for his ${fmtInt(o.receiveTotal)} — ${FAIRNESS_PHRASE[o.fairness]}.`
+  let line = `Price: about ${assetList(o.give)} (${fmtInt(o.giveTotal)}) for his ${fmtInt(o.receiveTotal)}.`
   const g = facts.grade
-  if (g) {
-    const odds = g.acceptance != null ? `, about ${Math.round(g.acceptance * 100)}% they accept` : ''
-    const word = g.verdict === 'accept' ? 'a good offer' : g.verdict === 'reject' ? 'a bad offer for you' : 'an opening offer they will counter'
-    line += ` The trade engine calls it ${word}${odds}.`
+  if (g?.graded) {
+    line += ` The AllFantasy grade for you: ${g.letter} — ${g.label} (their side ${g.partnerLetter}), the same grade the Trade Center gives this package.`
+  } else if (g) {
+    line += ` Not graded: ${g.reason.replace(/\.$/, '')}.`
   }
   return line
 }
@@ -282,7 +290,7 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
   if (priced) basis.push(`Week ${priced.week} projections scored under ${possessive(facts.leagueName)} own rules.`)
   else basis.push(`No lineup projection: ${lineup.status === 'unavailable' ? lineup.detail : 'unavailable'}.`)
   basis.push(`${facts.mode === 'dynasty' ? 'Dynasty' : 'Redraft'} market values in this league's format.`)
-  if (!facts.grade && facts.offer && !unpricedTarget(facts)) basis.push('The trade engine did not grade the package in time.')
+  if (facts.grade?.graded && facts.grade.receiptId) basis.push(`Evaluation receipt ${facts.grade.receiptId}.`)
 
   const no = (because: string): TradeTargetVerdict => ({
     verdict: 'no',
@@ -330,12 +338,18 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
     )
   }
 
-  // 4. What it costs.
-  if (facts.grade?.verdict === 'reject') {
-    return no(`the package it would take (${assetList(facts.offer.give)}) costs more than he is worth to you`)
+  // 4. What it costs — judged by the one grade, never a band of this surface's own.
+  const g = facts.grade
+  if (!g?.graded) {
+    return no(
+      `the package it would take could not be graded on this league's values${g ? ` (${g.reason.replace(/\.$/, '')})` : ''}, so there is no price to recommend`,
+    )
   }
-  if (facts.offer.fairness === 'lopsided' && facts.offer.receiveTotal < facts.offer.giveTotal) {
-    return no(`you would have to overpay — about ${fmtInt(facts.offer.giveTotal)} for his ${fmtInt(facts.offer.receiveTotal)}`)
+  if (g.action === 'decline') {
+    return no(`the package it would take (${assetList(facts.offer.give)}) costs more than he is worth to you — it grades ${g.letter} for you`)
+  }
+  if (g.action === 'counter') {
+    return no(`you would have to overpay — the package grades ${g.letter} for you (${g.partnerLetter} for them)`)
   }
 
   // 5. Paying the price must still leave your lineup better, when this season is what you are playing for.

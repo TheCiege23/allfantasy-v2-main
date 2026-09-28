@@ -287,3 +287,26 @@ describe('Scout separates "not profiled" from "locked"', () => {
     expect(data.coverage.lastRefreshedAt).toBeNull()
   })
 })
+
+describe('Scout dates the profiles, not the league', () => {
+  /**
+   * The line read "last updated <newest profile>", and was taken for the league's sync time. The
+   * range makes the oldest profile visible: a rotation that rebuilt one manager today and the rest a
+   * week ago no longer reads as "updated today".
+   */
+  it('reports both the oldest and the newest profile rebuild', async () => {
+    h.loadProfiles.mockResolvedValue([
+      { ...fact('mine'), updatedAt: '2026-09-19T12:00:00.000Z' },
+      { ...fact('rival'), updatedAt: '2026-09-12T08:00:00.000Z' },
+    ])
+    const data = await scoutFor(granted())
+    expect(data.coverage.lastRefreshedAt).toBe('2026-09-19T12:00:00.000Z')
+    expect(data.coverage.oldestRefreshedAt).toBe('2026-09-12T08:00:00.000Z')
+  })
+
+  it('has no oldest date when nothing is profiled', async () => {
+    h.loadProfiles.mockResolvedValue([])
+    const data = await scoutFor(granted())
+    expect(data.coverage.oldestRefreshedAt).toBeNull()
+  })
+})

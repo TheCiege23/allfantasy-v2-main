@@ -9,6 +9,10 @@ import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { ruledOutByFact } from './injuryStatus'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 
 /**
  * Waivers, across every league — "the single best add on each wire, ranked by
@@ -112,6 +116,22 @@ export type WaiversBoardData = {
   marketLeagues: number
   /** The projection week every figure on the board is drawn from. */
   at: { season: string; week: number } | null
+  /**
+   * One kickoff per fixture of the projection week (ISO), so the renderer can say how much of it
+   * has already been played. Null when the schedule is unread.
+   *
+   * ⚠ KICKOFF TIMES, NOT A "PLAYED" COUNT — THIS MODULE MUST STAY CLOCK-FREE. The board is served
+   * from the screen-summary cache (`waiversBoardSummary`), which is only sound because nothing
+   * here reads `now`; a count taken at build time would freeze in the cache. The first version of
+   * this field did exactly that and the summary's own guard test caught it. The renderer counts.
+   *
+   * 🛑 THE FEED HOLDS ONE WEEK, AND ON A MONDAY THAT WEEK IS OVER. Production 2026-09-28: the board
+   * ranked week-3 projections with 13 of 14 week-3 games played, for claims that process Tuesday for
+   * week 4. There is no week-4 line to rank on instead (see projections-hold-one-week), so the
+   * board says which week it is pricing and how much of it is gone rather than presenting it as
+   * next week's points.
+   */
+  weekKickoffs: string[] | null
 }
 
 const EMPTY: WaiversBoardData = {
@@ -120,6 +140,7 @@ const EMPTY: WaiversBoardData = {
   withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
   marketLeagues: 0,
   at: null,
+  weekKickoffs: null,
 }
 
 /** How many free-agent candidates to consider. The wire below this is noise. */
@@ -354,6 +375,39 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
 
   const marketOk = market.leaguesCounted >= MIN_LEAGUES_FOR_MARKET
 
+  /*
+   * 🛑 THE PROJECTION FEED DOES NOT KNOW WHO IS HURT, AND THIS BOARD TRUSTED IT. Measured on
+   * production 2026-09-28: Jaxson Dart — on IR, and shown as IR on the same account's home and
+   * Player Finder — was the #1 add in three leagues at 27.4 projected points, because
+   * `fantasyProjection` still carried a week-3 line for him. A pickup who cannot play is not a
+   * gain, and naming him first is the single most confident wrong thing this screen can say.
+   *
+   * So a candidate the injury feed declares ABSENT (IR, Out, PUP, NFI, suspension — `isRuledOut`,
+   * the same predicate the home's "cannot play" alert reads) is never named as the add.
+   * Questionable and Doubtful stay eligible: uncertainty is not absence (see injuryStatus.ts).
+   * ⚠ A GAME-DAY "Out" OLDER THAN THE STALENESS WINDOW IS LAST WEEK'S NEWS and does not exclude —
+   * season-scale rulings (IR and the rest) still do, because they hold for months.
+   * An unreadable feed excludes nobody: a missing injury row is "no news", never "healthy", but it
+   * is not "hurt" either.
+   */
+  const ruledOut = new Set<string>()
+  {
+    const lookups = new Map<string, { name: string; position: string | null; team: string | null }>()
+    for (const p of pool) {
+      const meta = metaById.get(p.playerId)
+      if (meta) lookups.set(p.playerId, { name: meta.name, position: meta.position, team: meta.team })
+    }
+    const injuries =
+      lookups.size > 0
+        ? await resolveInjuryFacts({ sport: 'NFL', players: [...lookups.values()] }).catch(() => null)
+        : null
+    if (injuries) {
+      for (const [playerId, lookup] of lookups) {
+        if (ruledOutByFact(injuries.byPlayer.get(normalizeMatchName(lookup.name)))) ruledOut.add(playerId)
+      }
+    }
+  }
+
   function toPlayer(id: string, projected: number): WaiverPlayer | null {
     const meta = metaById.get(id)
     if (!meta) return null
@@ -418,6 +472,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     for (const p of pool) {
       if (takenIds.has(p.playerId)) continue
       if (!metaById.has(p.playerId)) continue
+      if (ruledOut.has(p.playerId)) continue
       const pts = scoreOf(p)
       if (pts == null) continue
       if (pts > bestPts) {
@@ -546,5 +601,27 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     withheld,
     marketLeagues: market.leaguesCounted,
     at,
+    /* A schedule read that fails costs the note, never the board. */
+    weekKickoffs: await projectionWeekKickoffs(at).catch(() => null),
   }
+}
+
+/** One kickoff per distinct fixture of the projection week. See `weekKickoffs`. */
+async function projectionWeekKickoffs(at: { season: string; week: number }): Promise<string[] | null> {
+  const season = Number(at.season)
+  if (!Number.isFinite(season)) return null
+  const games = await prisma.sportsGame
+    .findMany({
+      where: { sport: 'NFL', season, week: at.week, seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season'] } },
+      select: { homeTeam: true, awayTeam: true, startTime: true },
+    })
+    .catch(() => null)
+  if (!games || games.length === 0) return null
+  /* Each game is stored by more than one source; one fixture per club pair. */
+  const kickoffByFixture = new Map<string, Date | null>()
+  for (const g of games) {
+    const key = [normalizeTeamAbbrev(g.homeTeam) ?? g.homeTeam, normalizeTeamAbbrev(g.awayTeam) ?? g.awayTeam].join('|')
+    if (!kickoffByFixture.has(key) || (g.startTime && !kickoffByFixture.get(key))) kickoffByFixture.set(key, g.startTime)
+  }
+  return [...kickoffByFixture.values()].filter((t): t is Date => t != null).map((t) => t.toISOString()).sort()
 }

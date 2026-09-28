@@ -58,6 +58,14 @@ describe('league-gated analyst tools', () => {
     expect(h.trade).toHaveBeenCalledWith({ give: ["Ja'Marr Chase"], get: ['Justin Jefferson'], leagueId: 'L1', userId: 'u1' })
   })
 
+  it('hands the letters the engine gave to the route’s collector, and only when there is one', async () => {
+    const tradeGrades: Array<{ letters: string[]; summary: string }> = []
+    await executeChimmyTool('evaluate_trade', { give: ['A'], get: ['B'] }, { ...CTX, tradeGrades })
+    const passed = h.trade.mock.calls[0]![0] as { onGrade?: (g: { letters: string[]; summary: string }) => void }
+    passed.onGrade!({ letters: ['B'], summary: 's' })
+    expect(tradeGrades).toEqual([{ letters: ['B'], summary: 's' }])
+  })
+
   /* Chimmy's track record: the engines' start/sit calls reach the route only when it asks. */
   it.each([
     ['compare_start_options', h.startSit],

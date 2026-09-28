@@ -445,7 +445,8 @@ export function PlayerFinder({
   const byeMark = byeMarkBase && (byeState === 'bye' || byeState === 'no-game') ? { ...byeMarkBase, kind: byeState } : null
   const injuryReportedAt = detail?.injury.available ? asIso(detail.injury.data.reportedAt) : null
   const startingLeagues: GameDayLeague[] = leagueRows
-    .filter((r) => r.slot.isYours && (r.impact ? r.impact.isStarting : r.slot.slot === 'STARTER'))
+    // Best ball has no lineup to open: the platform picks the scoring lineup itself (leagueBestBall.ts).
+    .filter((r) => r.slot.isYours && !r.slot.bestBall && (r.impact ? r.impact.isStarting : r.slot.slot === 'STARTER'))
     .map((r) => ({
       leagueId: r.slot.leagueId,
       leagueName: r.slot.leagueName,

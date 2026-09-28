@@ -138,7 +138,8 @@ export function DecisionQueue({
                       ) : null}
                     </h3>
                     <p className="af-decision-meta">
-                      {when ? <b className="af3a-mono af-decision-when">{when === 'now' ? 'NOW' : `IN ${when}`}</b> : null}
+                      {/* The trailing space: on a phone the chip runs inline and read "IN 6DSleeper ›". */}
+                      {when ? <><b className="af3a-mono af-decision-when">{when === 'now' ? 'NOW' : `IN ${when}`}</b>{' '}</> : null}
                       {issue.meta}
                     </p>
                   </div>

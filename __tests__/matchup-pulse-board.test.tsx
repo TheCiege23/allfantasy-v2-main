@@ -486,3 +486,24 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
     expect(container.textContent ?? '').toContain('View all 65')
   })
 })
+
+describe('MatchupPulseBoard header counts', () => {
+  /* Production 2026-09-28: the header printed the capped column lengths, "5 leading · 5 trailing",
+     on an account 32 ahead and 21 behind. */
+  it('states the true totals, not the length of the five-row columns', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          ranked: 53,
+          leading: [row({ leagueId: 'a' }), row({ leagueId: 'b' })],
+          trailing: [row({ leagueId: 'c', margin: -3 })],
+          leadingTotal: 32,
+          trailingTotal: 21,
+        })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-count')?.textContent).toBe('32 leading · 21 trailing')
+  })
+})

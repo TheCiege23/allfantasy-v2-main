@@ -108,3 +108,21 @@ export function isHealthyDesignation(status: string | null | undefined): boolean
 export function isAtRisk(status: string | null | undefined): boolean {
   return !isHealthyDesignation(status) && !isRuledOut(status)
 }
+
+/**
+ * Is he ruled out, judged from a dated injury FACT rather than a bare status string?
+ *
+ * ⚠ ONE RULE, SHARED. It was written inline in the waiver board (37ea538c5) and is needed again by
+ * Chimmy's starters-playing count, which listed an Out QB as "playing tonight". Two copies of the
+ * rule would drift the way the two SQL/JS name normalizers once did.
+ *
+ *   - `isRuledOut` on the status (IR, IL, PUP, NFI, Out, suspension).
+ *   - EXCEPT a game-day "Out" that is stale: that is last week's news. Season-scale rulings (IR and
+ *     the rest) still count when stale, because they hold for months.
+ *   - No fact is not ruled out: a missing injury row is "no news", never "healthy" — and never "hurt".
+ */
+export function ruledOutByFact(fact: { status: string | null; stale: boolean } | null | undefined): boolean {
+  if (!fact || !isRuledOut(fact.status)) return false
+  if (fact.stale && isOutDesignation(fact.status)) return false
+  return true
+}

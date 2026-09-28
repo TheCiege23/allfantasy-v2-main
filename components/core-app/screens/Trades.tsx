@@ -5,9 +5,10 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
-import type { TradesData, TradeRecord, PendingOffer } from '@/lib/core-app/trades'
+import type { TradesData, TradeRecord, PendingOffer, TradeAgentIdea } from '@/lib/core-app/trades'
 import { useFocusTradeFromUrl } from '@/components/core-app/useFocusTradeFromUrl'
 import { assetValues, gradeReasons } from '@/lib/core-app/importedTradeTimeline'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -29,6 +30,8 @@ function linkIdOf(id: string): string {
 
 export type TradesProps = {
   data: TradesData
+  /** The Trade Center already renders pending offers above its builder. */
+  hidePending?: boolean
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -129,6 +132,45 @@ function OfferColumn({
         ) : (
           <Unavailable reason={empty} />
         )
+      ) : (
+        <Unavailable reason={state.reason} />
+      )}
+    </section>
+  )
+}
+
+const assetList = (assets: TradeAgentIdea['give']) => assets.map((a) => (a.position ? `${a.name} (${a.position})` : a.name)).join(', ')
+
+/**
+ * The nightly trade agent's ideas (design step 9). Suggest only: a deal both sides grade C on this
+ * league's values, on which both rosters gain. Shown only to this manager — the partner is not told.
+ */
+function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> }) {
+  return (
+    <section className="af-card af-tr-ideas" aria-label="Trade ideas">
+      <h2 className="af-label">Trade ideas</h2>
+      <p className="af-tr-ideas-why">
+        Near-even on this league’s values, and each roster comes out ahead. Only you see these; nothing is sent.
+      </p>
+      {state.available ? (
+        <ul className="af-tr-ideas-list">
+          {state.data.map((idea) => (
+            <li key={idea.id} className="af-tr-idea">
+              <p className="af-tr-idea-deal">
+                Give <strong>{assetList(idea.give)}</strong> for <strong>{assetList(idea.get)}</strong>
+                {idea.partnerName ? <> with {idea.partnerName}</> : null}
+              </p>
+              <p className="af-tr-idea-grade">
+                <span className="af-num">
+                  {idea.letter}/{idea.partnerLetter}
+                </span>{' '}
+                · your roster <span className="af-num">+{idea.viewerFitPct}%</span> · theirs{' '}
+                <span className="af-num">+{idea.partnerFitPct}%</span> · suggested{' '}
+                <time dateTime={idea.runDate}>{idea.runDate}</time>
+              </p>
+            </li>
+          ))}
+        </ul>
       ) : (
         <Unavailable reason={state.reason} />
       )}
@@ -251,7 +293,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
                     League grade · got {(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} for{' '}
-                    {(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value today
+                    {(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value {gradeMoment(graded)}
                   </span>
                 </div>
               ) : null}
@@ -298,7 +340,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
   )
 }
 
-export function Trades({ data }: TradesProps) {
+export function Trades({ data, hidePending = false }: TradesProps) {
   // A trade email or push lands here with `?trade=`; bring that trade into view.
   useFocusTradeFromUrl()
   return (
@@ -353,11 +395,14 @@ export function Trades({ data }: TradesProps) {
         )}
       </div>
 
+      {/* ── Nightly trade ideas (absent until the agent's table exists) ── */}
+      {data.agentIdeas ? <AgentIdeas state={data.agentIdeas} /> : null}
+
       {/* ── Inbox / sent ────────────────────────────────────────────── */}
-      <div className="af-tr-pending">
+      {!hidePending ? <div className="af-tr-pending">
         <OfferColumn title="Inbox" state={data.inbox} empty="No offers waiting on you." />
         <OfferColumn title="Sent" state={data.sent} empty="You have no offers out." />
-      </div>
+      </div> : null}
 
       {/* ── Completed trades ────────────────────────────────────────── */}
       <section className="af-tr-history">

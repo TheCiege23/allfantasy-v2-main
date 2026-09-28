@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   channels: [] as Array<{ key: string; canWrite: boolean }>,
   created: [] as Array<{ body: string; opts: Record<string, unknown> }>,
   queueLeague: vi.fn(),
+  syncOutbound: vi.fn(async () => ({ synced: true })),
   dispatch: vi.fn(async () => ({})),
   sender: { displayName: null as string | null, username: null as string | null, email: 'secret@example.com' },
   members: ['sender', 'u-2', 'u-3'],
@@ -36,7 +37,7 @@ vi.mock('@/lib/chat-core/chatPresence', () => ({ markViewingChat: vi.fn(), readC
 vi.mock('@/lib/chat-core/leagueChatRead', () => ({ markLeagueChatRead: vi.fn() }))
 vi.mock('@/lib/chat-core/chimmyPrivateReply', () => ({ generateChimmyPrivateReply: vi.fn() }))
 vi.mock('@/lib/league-chat/tradeChatCards', () => ({ syncTradeCardsForLeague: vi.fn() }))
-vi.mock('@/lib/discord/sync-outbound', () => ({ syncOutboundLeagueChat: async () => undefined }))
+vi.mock('@/lib/discord/sync-outbound', () => ({ syncOutboundLeagueChat: h.syncOutbound }))
 vi.mock('@/lib/chat-core/resolveMentionTargets', () => ({ resolveLeagueMentionIds: async () => [] }))
 vi.mock('@/lib/league-chat/leagueMemberIds', () => ({ getLeagueMemberUserIds: async () => h.members }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
@@ -80,6 +81,8 @@ beforeEach(() => {
   h.created = []
   h.sender = { displayName: null, username: null, email: 'secret@example.com' }
   h.queueLeague.mockReset()
+  h.syncOutbound.mockReset()
+  h.syncOutbound.mockResolvedValue({ synced: true })
   h.dispatch.mockClear()
 })
 
@@ -97,6 +100,20 @@ describe('league chat POST → message alerts', () => {
         source: 'league',
       }),
     )
+  })
+
+  it('waits for Discord relay before completing the send', async () => {
+    let finishRelay: (() => void) | undefined
+    h.syncOutbound.mockImplementationOnce(() => new Promise((resolve) => {
+      finishRelay = () => resolve({ synced: true })
+    }))
+    let completed = false
+    const sending = post({ leagueId: 'L1', message: 'bridge delivery' }).then(() => { completed = true })
+    await vi.waitFor(() => expect(h.syncOutbound).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'm-1' })))
+    expect(completed).toBe(false)
+    finishRelay?.()
+    await sending
+    expect(completed).toBe(true)
   })
 
   it('a Big Brother side room is labelled as a side room (the notifier skips anything but the main room)', async () => {

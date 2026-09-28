@@ -20,6 +20,14 @@ import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getCanonicalDraftState } from '@/lib/draft/getCanonicalDraftState'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import {
+  NOT_A_ROOKIE_DRAFT_REASON,
+  draftPickGradeAsset,
+  draftPickTradeGradeFrom,
+  isRookieDraft,
+  type DraftPickTradeGrade,
+} from '@/lib/live-draft-engine/draftPickTradeGrade'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,6 +139,32 @@ export async function POST(
     thirdRoundReversal: draftSession.thirdRoundReversal,
   })
 
+  /*
+   * 🛑 THE ONE GRADE, for a swap the league's chart can price (2026-09-28) — see
+   * lib/live-draft-engine/draftPickTradeGrade.ts. Rookie drafts only: elsewhere a pick is worth the
+   * player taken there, which the chart does not price. The viewer is the side giving `give` (its
+   * ownership was verified above), and membership was verified by `canAccessLeagueDraft` + the roster
+   * check, which is what `createLeagueTradeGrader` requires of its caller. A preview, like a pending
+   * offer: `gradeDeal`, no receipt written per tweak. `viewerSide: false` keeps roster-need reads off
+   * a live-draft request path — need never changes the letter anyway.
+   */
+  const pickSeason = new Date(draftSession.startedAt ?? draftSession.createdAt).getUTCFullYear()
+  const tradeGrade: DraftPickTradeGrade = isRookieDraft(draftSession)
+    ? await gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), {
+        give: {
+          assets: [draftPickGradeAsset({ season: pickSeason, round: giveRound, overall: giveOverall, slot: giveSlot, teamCount: draftSession.teamCount })],
+          unpriceable: [],
+        },
+        get: {
+          assets: [draftPickGradeAsset({ season: pickSeason, round: receiveRound, overall: receiveOverall, slot: receiveSlot, teamCount: draftSession.teamCount })],
+          unpriceable: [],
+        },
+        viewerSide: false,
+      })
+        .then(draftPickTradeGradeFrom)
+        .catch((): DraftPickTradeGrade => ({ graded: false, reason: 'This trade could not be graded just now.' }))
+    : { graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON }
+
   const premiumTradeAi = (await new EntitlementResolver().resolveForUser(userId, 'pro_trade_ai')).hasAccess
 
   const invocation = evaluateAIInvocationPolicy({
@@ -141,7 +175,8 @@ export async function POST(
     providerAvailable: getProviderStatus().anyAi,
   })
 
-  let summary = review.summary
+  // A graded swap leads with the grade's own recommendation; the draft-position line stays a reason.
+  let summary = tradeGrade.graded && tradeGrade.recommendation ? tradeGrade.recommendation : review.summary
   let aiUsed = false
   let reasonCode = invocation.reasonCode
   if (!premiumTradeAi && includeAiExplanation) {
@@ -175,7 +210,7 @@ export async function POST(
           {
             role: 'system',
             content:
-              'You analyze live fantasy draft pick trades (snake/redraft). Use only the JSON facts provided. Return strict JSON: { "summary": string (2 short sentences), "confidence": number between 0 and 1 } reflecting how certain your wording is given public draft-capital logic — not player predictions.',
+              'You analyze live fantasy draft pick trades (snake/redraft). Use only the JSON facts provided. If trade.leagueGrade is present it is THE AllFantasy grade for this trade and it is the verdict: explain it and never contradict it or call the trade better or worse than it says. Return strict JSON: { "summary": string (2 short sentences), "confidence": number between 0 and 1 } reflecting how certain your wording is given public draft-capital logic — not player predictions.',
           },
           {
             role: 'user',
@@ -211,7 +246,17 @@ export async function POST(
                   ownerLabel: partnerSlotEntry?.displayName ?? 'Partner',
                 },
                 structured: structuredAnalysis,
-                deterministicVerdict: review.verdict,
+                ...(tradeGrade.graded
+                  ? {
+                      leagueGrade: {
+                        yourLetter: tradeGrade.letter,
+                        theirLetter: tradeGrade.partnerLetter,
+                        label: tradeGrade.label,
+                        youSendLeagueValue: tradeGrade.giveValue,
+                        youGetLeagueValue: tradeGrade.getValue,
+                      },
+                    }
+                  : { deterministicVerdict: review.verdict }),
                 deterministicReasons: review.reasons,
               },
             }),
@@ -267,6 +312,7 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
+    tradeGrade,
     verdict: review.verdict,
     reasons: review.reasons,
     declineReasons: review.declineReasons,

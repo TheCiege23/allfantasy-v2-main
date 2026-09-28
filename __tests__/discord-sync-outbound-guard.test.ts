@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
   linkCreate: vi.fn(),
   linkFindFirst: vi.fn(),
   transaction: vi.fn(),
-  queryRaw: vi.fn(),
+  executeRaw: vi.fn(),
   fetch: vi.fn(),
 }))
 
@@ -58,8 +58,8 @@ beforeEach(() => {
   h.messageFindUnique.mockResolvedValue(publicMessage)
   h.linkCreate.mockResolvedValue({})
   h.linkFindFirst.mockResolvedValue(null)
-  h.queryRaw.mockResolvedValue([])
-  h.transaction.mockImplementation(async callback => callback({ $queryRaw:h.queryRaw, discordMessageLink:{create:h.linkCreate,findFirst:h.linkFindFirst} }))
+  h.executeRaw.mockResolvedValue(1)
+  h.transaction.mockImplementation(async callback => callback({ $executeRaw:h.executeRaw, discordMessageLink:{create:h.linkCreate,findFirst:h.linkFindFirst} }))
 })
 
 afterEach(() => {
@@ -71,6 +71,7 @@ describe('what may leave AllFantasy', () => {
   it('copies a public main-chat message and records the link', async () => {
     const result = await syncOutboundLeagueChat(input)
     expect(result).toEqual({ synced: true, discordMessageId: 'discord-msg-1' })
+    expect(h.executeRaw).toHaveBeenCalledTimes(1)
     expect(h.fetch).toHaveBeenCalledTimes(1)
     const [url, init] = h.fetch.mock.calls[0]
     expect(String(url)).toContain(`/channels/${CHANNEL}/messages`)
