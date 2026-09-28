@@ -563,7 +563,8 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
       pending: { offers: [{ id: 'kbfl', question: KBFL_IMAGE_MESSAGE, assetCount: 5 }], gap: null },
       trade: { [KBFL_IMAGE_MESSAGE]: KBFL_AS_MEASURED },
     },
-    expect: { kind: 'trade', status: 'needs_data', gap: 'pending_offer_evaluation_missing', verdict: 'COUNTER_OR_HOLD', billing: 'free', says: ['Offer kbfl:', 'Lineup impact unavailable'] },
+    // Read "COUNTER / HOLD:" until 2026-09-28: the offer's own verdict, not the partial's HOLD.
+    expect: { kind: 'trade', status: 'needs_data', gap: 'pending_offer_evaluation_missing', verdict: 'HOLD', billing: 'free', says: ['Offer kbfl:', 'Lineup impact unavailable'] },
   },
   {
     id: 'pending-offer-playoff-question-no-model',
@@ -574,14 +575,33 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
       pending: { offers: [{ id: 'p1', question: 'Should I trade Kyren Williams for Garrett Wilson?', assetCount: 2 }], gap: null },
       trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) },
     },
+    // Led with "YES," until 2026-09-28: a free partial selling a paid-looking verdict.
     expect: { kind: 'trade', status: 'needs_data', gap: 'season_impact_missing', verdict: 'HOLD', billing: 'free', says: ['no charge'] },
-    gaps: {
-      verdict: {
-        today: 'YES',
-        why: 'The pending path renders each offer with its own engine verdict and, unlike the single-trade path, never forces HOLD when it returns a partial. So a free "partial analysis" answer to a playoff question leads with "YES,".',
+  },
+  {
+    id: 'pending-two-offers-playoff-question-no-model',
+    format: 'dynasty',
+    source: 'synthetic',
+    // Both offers fully graded (one YES, one NO), so only the season model is missing. The
+    // partial must HOLD BOTH: the invariant reads every line, not only the first verdict.
+    question: 'Should I accept my pending trades to make the playoffs?',
+    engine: {
+      pending: {
+        offers: [
+          { id: 'p1', question: 'Should I trade Kyren Williams for Garrett Wilson?', assetCount: 2 },
+          { id: 'p2', question: 'Should I trade Bijan Robinson for Brock Bowers?', assetCount: 2 },
+        ],
+        gap: null,
       },
-      invariants: { today: 'a free partial answer never leads with YES', why: 'Same defect, caught by the universal rule rather than by this case.' },
+      trade: {
+        'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }),
+        'Should I trade Bijan Robinson for Brock Bowers?': trade({
+          give: [p('bijan', 'Bijan Robinson', 'RB')], get: [p('bowers', 'Brock Bowers', 'TE')],
+          recommendation: { action: 'decline', explanation: 'You give more value than you get.' },
+        }),
+      },
     },
+    expect: { kind: 'trade', status: 'needs_data', gap: 'season_impact_missing', verdict: 'HOLD', billing: 'free', says: ['Offer p1:', 'Offer p2:', 'Trade Center grade: B'] },
   },
 
   // ── Lineup ─────────────────────────────────────────────────────────────────────────────

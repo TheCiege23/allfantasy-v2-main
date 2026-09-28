@@ -90,7 +90,11 @@ export function readBilling(answer: ChimmyDecisionAnswer | null): Billing {
 export const INVARIANTS: ReadonlyArray<readonly [string, (a: ChimmyDecisionAnswer, c: DecisionCase) => boolean]> = [
   ['authority is explanation-only, version 1', (a) => a.authority === 'explanation_only' && a.version === 1],
   ['a partial answer carries a gap and a ready one does not', (a) => (a.status === 'needs_data') === Boolean(a.gap)],
-  ['a free partial answer never leads with YES', (a) => a.status !== 'needs_data' || readVerdict(a) !== 'YES'],
+  /*
+   * ON ANY LINE, not just the first: a pending-offer partial carries one verdict per offer, and
+   * checking only the first let offer 2's "YES," through while offer 1 read HOLD.
+   */
+  ['a free partial answer carries no YES, NO or COUNTER verdict on any line', (a) => a.status !== 'needs_data' || !/^(?:YES,|NO:|COUNTER:)/m.test(a.answer)],
   ['a ready answer names its sources', (a) => a.status !== 'ready' || a.sources.length > 0],
   ['the league id is the proven one, never the raw request', (a) => a.leagueId === null || a.leagueId === 'proven-league'],
   ['no private reason, error text or infrastructure detail', (a) => !/not_member|not_found|prisma|timed out|10\.0\.0\.|Error\b/.test(a.answer)],
@@ -231,10 +235,21 @@ describe('positive control: the scorer rejects known-bad answers', () => {
     expect(failures.map((f) => f.split(':')[0]).sort()).toEqual([...dims].sort())
   })
 
-  it('an invariant catches a free partial that leads with YES', () => {
+  it.each([
+    ['leads with YES', 'YES, looks good.'],
+    // The pending-offer shape: the first offer holds, the second still sells a verdict.
+    ['holds offer 1 but says YES on offer 2', 'Offer p1:\nHOLD: sync first.\n\nOffer p2:\nYES, on verified value.'],
+    ['says NO on a later line', 'Offer p1:\nHOLD: sync first.\n\nOffer p2:\nNO: you give more.'],
+  ])('an invariant catches a free partial that %s', (_name, answer) => {
     const [, ok] = INVARIANTS.find(([name]) => name.startsWith('a free partial'))!
-    const bad = { version: 1, authority: 'explanation_only', status: 'needs_data', gap: { code: 'x', remedy: 'y' }, answer: 'YES, looks good.', sources: [], leagueId: null } as unknown as ChimmyDecisionAnswer
+    const bad = { version: 1, authority: 'explanation_only', status: 'needs_data', gap: { code: 'x', remedy: 'y' }, answer, sources: [], leagueId: null } as unknown as ChimmyDecisionAnswer
     expect(ok(bad, kbfl)).toBe(false)
+  })
+
+  it('the same invariant lets a partial that holds every offer through', () => {
+    const [, ok] = INVARIANTS.find(([name]) => name.startsWith('a free partial'))!
+    const good = { status: 'needs_data', answer: 'Offer p1:\nHOLD: sync first.\n\nOffer p2:\nHOLD: sync first.' } as ChimmyDecisionAnswer
+    expect(ok(good, kbfl)).toBe(true)
   })
 
   it('an invariant catches a future-season probability', () => {
