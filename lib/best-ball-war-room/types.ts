@@ -113,6 +113,8 @@ export interface BestBallTeamSummary {
 export interface BestBallWarRoomContext {
   leagueId: string
   leagueType: 'best_ball'
+  /** True only when the stored league has explicit waiver, trade and substitution settings. */
+  ruleConfigurationVerified: boolean
   sport: string
   season: number
   teamCount: number

@@ -427,7 +427,7 @@ export async function buildTradeContextNotes(args: {
     if (!d || d.factor === 1) continue
     const pct = Math.round((d.factor - 1) * 100)
     needNotes.push(
-      `${g.name} is worth about ${Math.abs(pct)}% ${pct > 0 ? 'more' : 'less'} to you than his market price — ${d.basis}`,
+      `${g.name} is worth about ${Math.abs(pct)}% ${pct > 0 ? 'more' : 'less'} to you than his base value — ${d.basis}`,
     )
   }
 

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PickCoverage, RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import { readPickPreviewValue, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
 import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
-import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { pricedOnAnalysisReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /**
  * The asset picker behind "+ Add asset" on the Trade Center.
@@ -24,6 +25,7 @@ export type PickedAsset =
   | {
       kind: 'player'
       playerId: string | null
+      providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
       name: string
       position: string | null
       team: string | null
@@ -56,8 +58,7 @@ export type PickedAsset =
       itemType?: 'rookie_pick' | 'future_pick'
       /**
        * ⚠ NULL IS "NOT PRICED", never 0 — the same contract a player carries. A pick typed by
-       * hand has no round we can trust and stays null; one taken off a roster is priced by
-       * `lib/pick-curve.ts` on the route.
+       * hand and roster picks use the server league quote when a league is selected.
        */
       value?: number | null
       /**
@@ -92,6 +93,7 @@ type SearchRow = {
   kind: 'player'
   sport: string
   playerId: string | null
+  providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
   name: string
   position: string | null
   team: string | null
@@ -244,12 +246,15 @@ export function TradeAssetPicker(props: {
   onClose: () => void
   /** Restricts search when the league is single-sport. */
   sport?: string | null
+  /** Uses the same league chart as the roster and analyzer. */
+  leagueId?: string | null
   /**
    * The picks actually held by the roster this side is sending from, when we
    * know whose roster it is. Empty means we do not know — which is a different
    * thing from "they hold none", and the copy below keeps them apart.
    */
   rosterPicks?: RosterPick[]
+  pickPreviewBook?: TradePickPreviewBook | null
   /** Whose picks these are, for the label. */
   rosterLabel?: string | null
   /** True once a counterparty is chosen, so "we do not know" can be said precisely. */
@@ -301,6 +306,7 @@ export function TradeAssetPicker(props: {
   const [faab, setFaab] = useState(10)
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchVersion = useRef(0)
 
   const roster = props.rosterPlayers ?? []
 
@@ -341,33 +347,37 @@ export function TradeAssetPicker(props: {
 
   const search = useCallback(
     async (q: string) => {
+      const version = ++searchVersion.current
       if (q.trim().length < MIN_QUERY) {
         setRows([])
+        setSearching(false)
         return
       }
       setSearching(true)
       try {
         const sport = props.sport ? props.sport.toUpperCase() : 'ALL'
         const r = await fetch(
-          `/api/trade-value/player-search?q=${encodeURIComponent(q)}&sport=${encodeURIComponent(sport)}`,
+          `/api/trade-value/player-search?q=${encodeURIComponent(q)}&sport=${encodeURIComponent(sport)}${props.leagueId ? `&leagueId=${encodeURIComponent(props.leagueId)}` : ''}`,
         )
         const j = (await r.json().catch(() => [])) as SearchRow[]
-        setRows(Array.isArray(j) ? j : [])
+        if (version === searchVersion.current) setRows(Array.isArray(j) ? j : [])
       } catch {
         /* A failed search shows nothing rather than a stale list. */
-        setRows([])
+        if (version === searchVersion.current) setRows([])
       } finally {
-        setSearching(false)
+        if (version === searchVersion.current) setSearching(false)
       }
     },
-    [props.sport],
+    [props.sport, props.leagueId],
   )
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
+    setRows([])
     timer.current = setTimeout(() => void search(query), DEBOUNCE_MS)
     return () => {
       if (timer.current) clearTimeout(timer.current)
+      searchVersion.current++
     }
   }, [query, search])
 
@@ -504,6 +514,7 @@ export function TradeAssetPicker(props: {
                 props.onPick({
                   kind: 'player',
                   playerId: r.playerId,
+                  providerIdentity: r.providerIdentity,
                   name: r.name,
                   position: r.position,
                   team: r.team,
@@ -557,7 +568,13 @@ export function TradeAssetPicker(props: {
                     ? `${props.rosterLabel}'s picks`
                     : 'Picks on this roster'}
               </span>
-              {(props.rosterPicks ?? []).map((p) => (
+              {(props.rosterPicks ?? []).map((p) => {
+                const value = props.leagueId ? (p.round == null ? null : readPickPreviewValue({
+                  leagueId: props.leagueId, book: props.pickPreviewBook,
+                  year: p.season ?? new Date().getFullYear(), round: p.round,
+                })) : p.value
+                const reason = value == null ? p.unpricedReason ?? pricedOnAnalysisReason() : null
+                return (
                 <button
                   key={p.pickId}
                   type="button"
@@ -571,8 +588,8 @@ export function TradeAssetPicker(props: {
                       // An imported pick's id is for display only; an offer must never reference it.
                       pickId: p.proposable === false ? null : p.pickId,
                       itemType: p.itemType,
-                      value: p.value,
-                      unpricedReason: p.unpricedReason ?? null,
+                      value,
+                      unpricedReason: reason,
                       proposable: p.proposable !== false,
                     })
                   }
@@ -588,13 +605,14 @@ export function TradeAssetPicker(props: {
                     two are summed into one total. Rendering it anywhere else would invite the
                     reading that picks are a separate currency.
                   */}
-                  {p.value == null ? (
-                    <UnpricedValue reason={p.unpricedReason} />
+                  {value == null ? (
+                    <UnpricedValue reason={reason} />
                   ) : (
-                    <span className="af-tc-row-value">{p.value.toLocaleString()}</span>
+                    <span className="af-tc-row-value">{value.toLocaleString()}</span>
                   )}
                 </button>
-              ))}
+                )
+              })}
             </>
           ) : props.rosterKnown ? (
             <p className="af-tc-row-sub">
@@ -655,7 +673,9 @@ export function TradeAssetPicker(props: {
                  * a pickId the engine has nothing to point an offer at; the copy below already
                  * says so and is unchanged.
                  */
-                value: pickValueByOverall({
+                value: props.leagueId ? readPickPreviewValue({
+                  leagueId: props.leagueId, book: props.pickPreviewBook, year: pickYear, round: pickRound,
+                }) : pickValueByOverall({
                   round: pickRound,
                   teams: props.teamCount ?? null,
                   firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
@@ -671,9 +691,8 @@ export function TradeAssetPicker(props: {
             guess it would override a computed answer with a hunch.
           */}
           <p className="af-tc-row-sub">
-            Where in the round it lands is projected from the sending team&rsquo;s record, so there
-            is nothing to enter here. A pick added this way is priced but not proposable &mdash;
-            the league only recognises a pick it already has on a roster.
+            Future picks use the league&rsquo;s current round value until an actual slot is known.
+            You can analyze a manually entered pick; proposals require a pick listed on the roster.
           </p>
         </div>
       ) : null}

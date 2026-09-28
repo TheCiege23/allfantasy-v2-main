@@ -389,8 +389,10 @@ describe('prompt blocks', () => {
     const block = renderWaiverScenarioBlock((await waiver('Add Rashod Bateman?'))!)
     expect(block).toContain('Add: Rashod Bateman (WR), 14.0 points in week 3.')
     expect(block).toContain('whether the roster has room was NOT checked')
-    expect(block).toContain('Starting lineup, week 3: 106.0 before, 109.0 after (+3.0)')
+    expect(block).toContain('Hypothetical optimized lineup projection, week 3: 106.0 before, 109.0 after (+3.0)')
     expect(block).toContain('This is ONE week')
+    expect(block).toContain('not the provider')
+    expect(block).toContain('actual/live scores')
   })
 
   it('an unresolved block tells the model not to invent a comparison', async () => {
@@ -466,6 +468,32 @@ describe('the cards', () => {
     render(<ChimmyScenarioCard scenario={s} />)
     expect(screen.getByTestId('chimmy-scenario').textContent).toContain('Tank Bigsby (RB)')
     expect(screen.queryByTestId('chimmy-scenario-room')).toBeNull()
-    expect(screen.getByTestId('chimmy-scenario-unfilled').textContent).toContain('Totals leave out DEF')
+    expect(s.lineup).toBeNull()
+    expect(s.lineupUnavailable).toContain('after-trade lineup cannot fill DEF')
+    expect(screen.getByTestId('chimmy-scenario').textContent).toContain(s.lineupUnavailable!)
+    expect(screen.queryByTestId('chimmy-scenario-unfilled')).toBeNull()
+    expect(renderWaiverScenarioBlock(s)).toContain('Starting lineup: not computed')
+    expect(renderWaiverScenarioBlock(s)).not.toContain('Every total leaves out')
   })
+})
+
+
+it('refuses a two-player start/sit swap involving a reported unavailable player', async () => {
+  deps.loadAvailability = async (_sport, metadata) => new Map([...metadata].map(([id, player])=>[id,{...player,injury:id==='rb3'?'Out':null}]))
+  const result = await startSit('Start Jayden Reed or Tank Bigsby?')
+  expect(result).toMatchObject({status:'unresolved',reason:'unavailable_player'})
+  if (result?.status==='unresolved') expect(result.detail).toContain('Tank Bigsby')
+})
+it('refuses a two-player swap after either option has kicked off', async () => {
+  deps.checkLocks = async () => ({started:new Map([['wr3','started']]),unverified:[]})
+  expect(await startSit('Start Jayden Reed or Tank Bigsby?')).toMatchObject({status:'unresolved',reason:'players_locked'})
+})
+it('preserves another started starter when comparing two future options', async () => {
+  const current = world()
+  current.rosters[0]!.starterIds = ['qb1','rb3','rb2','wr1','wr2','te1','wr3']
+  resolveWorld.mockResolvedValue(current)
+  deps.checkLocks = async () => ({started:new Map([['rb3','started'],['wr4','started']]),unverified:[]})
+  const result = ready(await startSit('Start Garrett Wilson or Jayden Reed?'))
+  expect(result.options.find(p=>p.playerId==='wr2')?.lineupIfStarted).toBe(102)
+  expect(result.options.find(p=>p.playerId==='wr3')?.lineupIfStarted).toBe(101)
 })

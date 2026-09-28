@@ -91,7 +91,7 @@ describe('assessLeagueScale', () => {
       ],
     })!
     expect(s.scrutiny).toBe('standard')
-    expect(s.notes.join(' ')).not.toContain('12-team price')
+    expect(s.notes.join(' ')).not.toContain('historical pick curve uses a 12-team reference')
   })
 
   it('withholds entirely rather than guessing at a lineup it cannot read', () => {
@@ -324,6 +324,6 @@ describe('the shallow end: 4 teams, huge rosters', () => {
 
   it('still flags the 12-team price caveat, because 4 is not 12 either', () => {
     const s = assessLeagueScale({ teamCount: 4, starters: FOUR_TEAM })!
-    expect(s.notes.join(' ')).toContain('12-team price')
+    expect(s.notes.join(' ')).toContain('historical pick curve uses a 12-team reference')
   })
 })

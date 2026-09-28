@@ -13,7 +13,7 @@
  * club off this week and an otherwise complete slate, which is what `getByeWeeks` requires before
  * it will call anything a bye.
  */
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db = vi.hoisted(() => ({
   answers: {} as Record<string, (args: any) => unknown>,
@@ -57,6 +57,7 @@ vi.mock('@/lib/core-app/currentSleeperRoster', () => ({
     starters: [...STARTERS],
     reserve: [],
     taxi: [],
+    bestBall: state.bestBall,
     verification: { checkedAt: '2026-09-25T12:00:00.000Z', source: 'Sleeper', week: 3, slots: ['QB', 'WR'] },
   })),
 }))
@@ -82,6 +83,8 @@ const state = vi.hoisted(() => ({
   receptions: {} as Record<string, number>,
   club: {} as Record<string, string>,
   position: {} as Record<string, string>,
+  kickoff: {} as Record<string, Date>,
+  bestBall: false,
 }))
 const nameOf = (id: string) => `Player ${id}`
 
@@ -107,6 +110,7 @@ function answerDb() {
         awayTeam: PLAYING[2 * i + 1],
         week: 3,
         seasonType: 'regular',
+        startTime: state.kickoff[PLAYING[2 * i]] ?? state.kickoff[PLAYING[2 * i + 1]] ?? new Date('2026-09-27T17:00:00Z'),
       })),
   }
 }
@@ -146,10 +150,14 @@ async function wrSlot() {
 
 describe('My Team — the bench check sees byes', () => {
   beforeAll(async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T12:00:00Z'))
     await import('@/lib/core-app/myTeam')
   }, 180_000)
+  afterAll(() => vi.restoreAllMocks())
 
   beforeEach(() => {
+    state.kickoff = {}
+    state.bestBall = false
     state.receptions = { qb1: 20, wrStart: 12, wrBench: 25 }
     state.club = { qb1: 'NYJ', wrStart: 'MIA', wrBench: 'NE' }
     state.position = { qb1: 'QB', wrStart: 'WR', wrBench: 'WR' }
@@ -160,6 +168,27 @@ describe('My Team — the bench check sees byes', () => {
     const slot = await wrSlot()
     expect(slot.benchCheck?.benchName).toBe(nameOf('wrBench'))
     expect(slot.benchCheck?.verdict).toBe('swap')
+  })
+
+  it('does not suggest benching a starter whose game has started', async () => {
+    state.kickoff.MIA = new Date('2026-09-25T11:00:00Z')
+    expect((await wrSlot()).benchCheck).toBeNull()
+  })
+
+  it('does not recommend a bench player whose game has started', async () => {
+    state.kickoff.NE = new Date('2026-09-25T11:00:00Z')
+    expect((await wrSlot()).benchCheck).toBeNull()
+  })
+
+  it('does not offer manual swaps in a provider-confirmed Best Ball league', async () => {
+    state.bestBall = true
+    expect((await wrSlot()).benchCheck).toBeNull()
+  })
+
+  it('opens the verified lineup screen for a manual league', async () => {
+    const { getMyTeamData } = await import('@/lib/core-app/myTeam')
+    const data = await getMyTeamData(LEAGUE_ID, USER_ID, context() as any)
+    expect(data?.league.sourceLink?.href).toBe('https://sleeper.com/leagues/999/team')
   })
 
   it('🛑 never suggests a bench player whose club is off this week', async () => {

@@ -97,7 +97,7 @@ function toTradeFact(t: NormalizedTransaction, season: number): NormalizedTradeF
         ownerId: String(p.owner_id ?? ''),
       }))
       .filter((p) => p.season !== '' && Number.isFinite(p.round)),
-    created: Date.parse(t.created_at) || 0,
+    created: Date.parse(t.completed_at ?? t.created_at) || 0,
     /* Unused by `persistTradesForSeason`; present only to satisfy the shared type. */
     creator: '',
   }

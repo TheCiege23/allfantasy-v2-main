@@ -2,7 +2,7 @@ import 'server-only'
 
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer } from '@/lib/data/players'
-import { evaluateCounterOffers } from './counterOffers'
+import { availableRosterTargets, evaluateCounterOffers } from './counterOffers'
 import { prepareProposalCap, proposalCapNote } from './proposalCap'
 import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
@@ -255,6 +255,7 @@ export async function runTradeConsoleAnalysis(
     },
     mark,
   })
+  dataGaps.push(...(chart.valuationGaps ?? []))
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
   const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
 
@@ -325,8 +326,8 @@ export async function runTradeConsoleAnalysis(
    * graded in another, and a manager checking the arithmetic could never make it add up.
    *
    * Now each line starts from its market value on THIS league's chart, is moved by this league's
-   * scoring and the viewer's roster need (each factor carried with its reason, see
-   * `lib/trade-value/leagueTradeValue.ts`), and the grade is the difference of those totals. The
+   * scoring, and the grade is the difference of those totals. The viewer's roster need is
+   * a separate personal-utility estimate so a completed email cannot drop a grading factor. The
    * composite survives only where it always belonged: the driver model below (accept probability,
    * lineup simulation), which is secondary and labelled as such.
    */
@@ -458,8 +459,9 @@ export async function runTradeConsoleAnalysis(
     dataGaps.length > 0 ||
     [...giveLines, ...getLines].some((l) => l.dataSource === 'placeholder')
 
-  const giveProjSum = sumEffectiveProjections(giveLines)
-  const getProjSum = sumEffectiveProjections(getLines)
+  const comparableProjections = sumEffectiveProjections([...giveLines, ...getLines]) != null
+  const giveProjSum = comparableProjections ? sumEffectiveProjections(giveLines) : null
+  const getProjSum = comparableProjections ? sumEffectiveProjections(getLines) : null
   const netProj =
     giveProjSum != null && getProjSum != null
       ? Math.round((getProjSum - giveProjSum) * 10) / 10
@@ -471,8 +473,8 @@ export async function runTradeConsoleAnalysis(
     net: netProj,
     summary:
       giveProjSum != null && getProjSum != null
-        ? 'Net = sum(get) − sum(give) of league-scored weekly projections (injury → weather → scoring stack) for players with DB rows — short-term add/drop signal, not dynasty market value.'
-        : 'Add league + player rows with projections to unlock scoring-adjusted weekly impact alongside market composites.',
+        ? 'Net compares combined player production, not starting-lineup improvement or win probability. Picks and FAAB are excluded. Defensive history estimates use league scoring; review each estimate for its week and injury/weather coverage.'
+        : 'Complete, comparable player projections are required on both sides. Missing players are not counted as zero; picks and FAAB have no weekly production estimate.',
   }
 
   const scoringSummaryLine = leagueNormCtx
@@ -647,17 +649,25 @@ export async function runTradeConsoleAnalysis(
     : { bullets: drivers.acceptBullets, sensitivity: drivers.sensitivitySentence }
 
   let opponentRosterTargets: TradeConsoleOpponentRosterTarget[] | undefined
+  // Only align by selection order when every input has a resolved line.
+  const selectedProviderIds = input.sideGive.length + input.sideGet.length === giveLines.length + getLines.length
+    ? [...giveLines, ...getLines].map(line =>
+    line.sport === 'NFL' && line.enrichmentPlayerId
+      ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null) : undefined
   if (rosterCtxForDrivers?.theirRoster?.length) {
-    const receiveIds = new Set(receiveAssets.map((a) => a.id))
-    opponentRosterTargets = rosterCtxForDrivers.theirRoster
-      .filter((a) => a.type === 'PLAYER' && !receiveIds.has(a.id))
+    const rosterTargets = rosterCtxForDrivers.theirRoster
+      .filter((a) => a.type === 'PLAYER')
       .map((a) => ({
         id: a.rosterPlayerId ?? a.id,
         name: a.name ?? a.id,
         position: a.pos ?? null,
         marketValue: Math.round(a.marketValue ?? a.value ?? 0),
+        providerIdentity: a.valuationIdentity,
+        playerId: a.valuationPlayerId,
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
+    opponentRosterTargets = availableRosterTargets({ targets: rosterTargets,
+      selected: [...input.sideGive, ...input.sideGet], selectedProviderIds })
   }
 
   const evaluateCap = input.leagueId && input.userId
@@ -677,10 +687,12 @@ export async function runTradeConsoleAnalysis(
       ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
     give: input.sideGive,
     get: input.sideGet,
+    selectedProviderIds,
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')
-      .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0 })),
+      .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0,
+        providerIdentity: a.valuationIdentity, playerId: a.valuationPlayerId })),
     evaluate: async (counterGive, counterGet) => {
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
@@ -790,6 +802,7 @@ export async function runTradeConsoleAnalysis(
     giveTotal,
     getTotal,
     confidenceScore,
+    confidenceLabel: confidence,
     degraded,
     dataGaps,
     injuryNotes: capNote ? [capNote, ...injuryNotes] : injuryNotes,

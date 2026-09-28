@@ -9,13 +9,15 @@ import {
   type LeagueWeekPricingDeps,
   type LeagueWeekRefusalReason,
 } from '@/lib/decision-os/trade/leagueWeekPricing'
-import { fillLineup, type ImpactPlayer } from '@/lib/decision-os/trade/rosterImpact'
+import { fillLineup, DEFAULT_SLOT_ELIGIBILITY, type ImpactPlayer } from '@/lib/decision-os/trade/rosterImpact'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
 import type { ScenarioWeek } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
+import { checkStartedGames, type LockCheck } from './actions/gameLocks'
+import { enrichLineupAvailability, lineupDesignation, unavailableForLineup, type LineupMetadata } from './lineupAvailability'
 
 /**
  * "Set my lineup" — the whole roster, not a two-player choice.
@@ -41,7 +43,7 @@ import type { ChatStartCall } from './tools/chimmyTools'
  * 🛑 THE LEAGUE ID MUST BE THE MEMBERSHIP-PROVEN ONE. It is only ever `ctx.leagueId` from the tool
  * context, which the route fills from `leagueSnapshot.id` or `find_league_by_name`.
  *
- * ⚠ NOT MODELLED, AND THE BLOCK SAYS SO: whether a game has already locked, weather, injury news
+ * ⚠ NOT MODELLED, AND THE BLOCK SAYS SO: provider-specific AutoSubs locks, weather, injury news
  * after the last sync, and weeks after this one.
  */
 
@@ -55,9 +57,6 @@ const BENCH_SHOWN = 6
 export const MIN_SWAP_GAIN = 0.5
 
 const STARTING_SLOT_EXCLUDED = new Set(['BN', 'BE', 'BENCH', 'IR', 'TAXI'])
-
-/** Designations that mean "will not play" rather than "might not". */
-const OUT_STATUSES = /^(out|o|ir|injured reserve|pup|suspended|sus|nfi|dnr|cov|covid)$/i
 
 export type OptimizerPlayer = {
   playerId: string
@@ -75,6 +74,7 @@ export type LineupOptimizationUnresolvedReason =
   | 'no_viewer_roster'
   | 'unknown_slots'
   | 'no_league_projections'
+  | 'locked_starter_unpriced'
 
 export type LineupOptimization =
   | { status: 'unresolved'; reason: LineupOptimizationUnresolvedReason; detail: string }
@@ -107,6 +107,8 @@ export type LineupOptimization =
       /** Active players nothing projects this week, excluded from the fill. */
       unpricedActive: number
       unfilledSlots: string[]
+      lockedPlayers?: OptimizerPlayer[]
+      unverifiedLocks?: OptimizerPlayer[]
     }
 
 export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
@@ -115,6 +117,7 @@ export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
     sport: string,
     ids: string[],
   ) => Promise<Map<string, { name: string | null; position: string | null; team?: string | null; injury?: string | null }>>
+  checkLocks?: (args: { sport: string; season: number; week: number; players: Array<{ playerId: string; name: string; team: string | null; gameTime: null }> }) => Promise<LockCheck>
 }
 
 /** Enough for any roster with IR and taxi; the name read is bounded by it. */
@@ -123,7 +126,8 @@ const MAX_ROSTER_IDS = 120
 const defaultDeps: LineupOptimizerDeps = {
   ...defaultLeagueWeekPricingDeps,
   resolveWorld: resolveCanonicalWorld,
-  loadPlayers: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_ROSTER_IDS),
+  loadPlayers: async (sport, ids) => enrichLineupAvailability(sport, await resolveNames(normalizeToSupportedSport(sport), ids, MAX_ROSTER_IDS)),
+  checkLocks: checkStartedGames,
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -154,9 +158,13 @@ export async function buildLineupOptimization(
   if (isLeagueWeekRefusal(basis)) return unresolved(basis.refuse, `No lineup numbers: ${basis.detail}.`)
 
   const active = activePlayerIds(roster)
-  const meta = await deps.loadPlayers(world.league.sport, roster.playerIds).catch(() => new Map())
+  const meta: Map<string, LineupMetadata> = await deps.loadPlayers(world.league.sport, roster.playerIds).catch(() => new Map())
   const positions = new Map<string, string | null>(active.map((id) => [id, meta.get(id)?.position ?? null]))
   const priced = await priceLeagueWeek(basis, active, positions, deps)
+  for (const id of active) {
+    const entry = priced.get(id)
+    if (entry && unavailableForLineup(meta.get(id)?.injury)) priced.set(id, { ...entry, projectedPoints: 0 })
+  }
   const impact: ImpactPlayer[] = active.map((id) => priced.get(id)!)
   if (impact.every((p) => p.projectedPoints == null)) {
     return unresolved(
@@ -165,7 +173,37 @@ export async function buildLineupOptimization(
     )
   }
 
-  const best = fillLineup(impact, slots)
+  const currentIds = (roster.starterIds ?? []).filter((id) => !EMPTY_SLOT_IDS.has(String(id)))
+  const currentSet = new Set(currentIds)
+  const locks = deps.checkLocks ? await deps.checkLocks({
+    sport: world.league.sport, season: Number(basis.week.season), week: basis.week.week,
+    players: active.map((id) => ({ playerId: id, name: meta.get(id)?.name ?? id, team: meta.get(id)?.team ?? null, gameTime: null })),
+  }).catch(() => ({ started: new Map<string, string>(), unverified: active })) : { started: new Map<string, string>(), unverified: [] }
+  const startingSlots = slots.filter((slot) => !STARTING_SLOT_EXCLUDED.has(slot.toUpperCase()))
+  const fixed = new Map<number, string>()
+  for (const [index, id] of (roster.starterIds ?? []).entries()) {
+    if (!locks.started.has(id)) continue
+    const entry = priced.get(id)
+    if (!entry || entry.projectedPoints == null) return unresolved('locked_starter_unpriced', 'A starter whose game has started has no projection. A complete remaining lineup comparison cannot be computed.')
+    if (!DEFAULT_SLOT_ELIGIBILITY[startingSlots[index]?.toUpperCase() ?? '']?.includes(entry.position.toUpperCase())) {
+      return unresolved('unknown_slots', 'The placement of an already-started player could not be verified. No swap was computed.')
+    }
+    fixed.set(index, id)
+  }
+  const remainingSlots = startingSlots.filter((_, index) => !fixed.has(index))
+  const best = fillLineup(impact.filter((p) => !locks.started.has(p.playerId) && !unavailableForLineup(meta.get(p.playerId)?.injury)), remainingSlots)
+  let remainingIndex = 0
+  const remainingAssignments = best.assignments.slice()
+  best.assignments = startingSlots.flatMap((slot, index) => {
+    const fixedId = fixed.get(index)
+    if (fixedId) return [{ slot: slot.toUpperCase(), playerId: fixedId }]
+    const nextSlot = remainingSlots[remainingIndex++]
+    const next = remainingAssignments[0]
+    if (next && next.slot === nextSlot?.toUpperCase()) return [remainingAssignments.shift()!]
+    return []
+  })
+  best.starterIds.push(...fixed.values())
+  best.points += [...fixed.values()].reduce((total, id) => total + (priced.get(id)?.projectedPoints ?? 0), 0)
   if (best.unknownSlots.length > 0) {
     return unresolved('unknown_slots', `The lineup has slots this model cannot fill: ${best.unknownSlots.join(', ')}.`)
   }
@@ -178,14 +216,12 @@ export async function buildLineupOptimization(
       name: m?.name ?? `(unnamed player ${id})`,
       position: m?.position ?? (p?.position || null),
       team: m?.team ?? null,
-      injury: m?.injury ?? null,
+      injury: lineupDesignation(m?.injury),
       points: p?.projectedPoints ?? null,
     }
   }
 
   const bestIds = new Set(best.starterIds)
-  const currentIds = (roster.starterIds ?? []).filter((id) => !EMPTY_SLOT_IDS.has(String(id)))
-  const currentSet = new Set(currentIds)
   const known = currentIds.length > 0
   const currentStarters = currentIds.map(player)
   const startingSlotCount = slots.filter((s) => !STARTING_SLOT_EXCLUDED.has(s.toUpperCase())).length
@@ -225,10 +261,13 @@ export async function buildLineupOptimization(
       .filter((id) => !bestIds.has(id))
       .map(player)
       .filter((p) => p.points != null)
+      .filter((p) => !locks.started.has(p.playerId) && !unavailableForLineup(p.injury))
       .sort(byPoints)
       .slice(0, BENCH_SHOWN),
     unpricedActive: impact.filter((p) => p.projectedPoints == null).length,
     unfilledSlots: best.unfilledSlots,
+    lockedPlayers: active.filter((id) => locks.started.has(id)).map(player),
+    unverifiedLocks: locks.unverified.map(player),
   }
 }
 
@@ -243,7 +282,7 @@ const pts = (p: OptimizerPlayer, week: number) =>
   p.points == null ? `no week ${week} projection` : `${fmt(p.points)} pts`
 
 export function isOutDesignation(status: string | null | undefined): boolean {
-  return Boolean(status && OUT_STATUSES.test(status.trim()))
+  return unavailableForLineup(status)
 }
 
 /** Deterministic, so the model repeats the numbers instead of estimating its own. */
@@ -310,8 +349,10 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
   if (r.unpricedActive > 0) {
     lines.push(`- ${r.unpricedActive} active player(s) have no week ${wk} projection and were left out of the maths.`)
   }
+  if (r.lockedPlayers?.length) lines.push(`- Known started games: ${r.lockedPlayers.map(who).join(', ')}. Current starters were kept in place and started bench players were excluded.`)
+  if (r.unverifiedLocks?.length) lines.push(`- Kickoff locks could not be verified for ${r.unverifiedLocks.map(who).join(', ')}. Confirm them on the provider before acting.`)
   lines.push(
-    '- Not modelled: whether a game has already kicked off (locked players cannot move), weather, and injury news after the last sync. Mention it when it matters.',
+    '- Confirm individual provider locks and AutoSubs. Weather and injury news after the last sync are not modelled.',
   )
   return lines.filter(Boolean).join('\n')
 }

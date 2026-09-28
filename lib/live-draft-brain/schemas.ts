@@ -5,8 +5,8 @@ export const PickRecommendationSchema = z.object({
   position: z.string(),
   team: z.string(),
   combinedAdp: z.number(),
-  externalAdp: z.number(),
-  siteAdp: z.number(),
+  externalAdp: z.number().nullable(),
+  siteAdp: z.number().nullable(),
   pickScore: z.number(),
   recommendationType: z.enum([
     'bpa',

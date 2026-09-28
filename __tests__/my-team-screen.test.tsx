@@ -142,6 +142,18 @@ function text(ui: React.ReactElement): string {
 }
 
 describe('My Team — the reported problems', () => {
+  it.each([{ eliminated: true }, { completed: true }])('does not offer lineup fixes for an inactive team: %j', (status) => {
+    const t = text(<MyTeam data={data(status)} />)
+    expect(t).not.toContain('Nobody is starting in this slot')
+    expect(t).not.toContain('Fix in sleeper')
+    expect(t).not.toContain('Lineup lock')
+  })
+  it('shows draft preparation rather than empty-slot lineup fixes before the draft', () => {
+    const t = text(<MyTeam data={data({ preDraft: true })} />)
+    expect(t).toContain('Draft pending')
+    expect(t).not.toContain('Nobody is starting in this slot')
+    expect(t).not.toContain('Fix in sleeper')
+  })
   it('⚠ prices BENCH players, not only starters', () => {
     // The bench rendered a name and a status chip and nothing else, so half the
     // roster carried no number at all and could not be compared to the half
@@ -752,4 +764,12 @@ it('reveals a player after the roster mounts and does not jump on routine refres
     window.history.replaceState(null, '', '/')
     HTMLElement.prototype.scrollIntoView = previous
   }
+})
+it('shows automatic lineup guidance for a confirmed Best Ball league',()=>{
+ const d=data()
+ const view=render(<MyTeam data={data({league:{...d.league,bestBall:true}})} />)
+ expect(view.container.textContent).toContain('Best Ball · automatic lineup')
+ expect(view.container.textContent).not.toContain('first kickoff')
+ expect(view.container.textContent).toContain('manual start/sit swaps are not needed')
+ view.unmount()
 })

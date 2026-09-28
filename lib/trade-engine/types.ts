@@ -13,6 +13,9 @@ export type Asset = {
   id: string
   /** Provider player ID from the actual roster; distinct from the engine's name-based ID. */
   rosterPlayerId?: string
+  /** Verified valuation identity; a bare roster ID is not a provider namespace. */
+  valuationIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
+  valuationPlayerId?: string
   type: AssetType
   value: number
 

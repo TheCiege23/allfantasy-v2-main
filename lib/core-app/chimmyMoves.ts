@@ -1,6 +1,8 @@
 import type { GameDayTriage, TriageRow } from './gameDayTriage'
 import { lockState } from './lineupLock'
 import type { MoveTone } from './playerMoves'
+import type { LineupPlayer } from './myTeam'
+import { isAtRisk } from './injuryStatus'
 
 /**
  * Chimmy's one-tap moves for one league (league-first, phase 2).
@@ -27,6 +29,7 @@ export type ChimmyMove = {
 }
 
 export type ChimmyMoves = {
+  leagueId?: string
   moves: ChimmyMove[]
   /** Starters we could actually read in this league. Zero means "we cannot say", never "all clear". */
   startersRead: number
@@ -82,8 +85,30 @@ export function composeChimmyMoves(args: {
   }
 
   return {
+    leagueId,
     moves,
     startersRead: triage.startersRead,
     checkAsk: `Run a start/sit check on my ${leagueName} lineup for this week.`,
   }
+}
+
+/** My team already resolved its current roster, injury aliases and kickoff times.
+ * Reuse that snapshot instead of adding a second triage read to page load. */
+export function composeMyTeamMoves(args: {
+  leagueId: string
+  leagueName: string
+  starters: LineupPlayer[]
+  nowIso: string
+}): ChimmyMoves {
+  const rows: TriageRow[] = args.starters
+    .filter((player) => player.ruledOut || player.onBye || isAtRisk(player.injuryStatus))
+    .map<TriageRow>((player) => ({
+      player: { ...player, sport: player.sport ?? '', externalId: player.sleeperId },
+      status: player.injuryStatus ? { label: player.injuryStatus, tone: player.ruledOut ? 'bad' : 'warn' } : null,
+      description: null, reportedAt: null, inactive: null,
+      leagues: [{ leagueId: args.leagueId, leagueName: args.leagueName, platform: 'manual' }],
+      kickoff: player.kickoff?.toISOString() ?? null,
+      noGame: player.onBye, bye: player.onBye,
+    }))
+  return composeChimmyMoves({ ...args, triage: { rows, week: null, leaguesRead: 1, startersRead: args.starters.length } })
 }

@@ -34,8 +34,12 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/provider-trades/scanPendingSleeperTrades', () => ({ scanPendingSleeperTrades }))
 
-const { oneGradeForCompletedTrade } = vi.hoisted(() => ({ oneGradeForCompletedTrade: vi.fn() }))
-vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({ oneGradeForCompletedTrade }))
+const { oneGradeForCompletedTrade, gradeArchivedTrade, completedTradeGraderFor } = vi.hoisted(() => ({
+  oneGradeForCompletedTrade: vi.fn(),
+  gradeArchivedTrade: vi.fn(),
+  completedTradeGraderFor: vi.fn(),
+}))
+vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({ oneGradeForCompletedTrade, gradeArchivedTrade, completedTradeGraderFor }))
 
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
@@ -86,6 +90,10 @@ beforeEach(() => {
   oneGradeForCompletedTrade.mockReset()
   // Default: no grade on file — a verdict appears only where a test supplies one.
   oneGradeForCompletedTrade.mockResolvedValue({ graded: false, reason: 'not priced in this test', basis: null })
+  gradeArchivedTrade.mockReset()
+  gradeArchivedTrade.mockResolvedValue({ graded: false, reason: 'not priced in this test', basis: null })
+  completedTradeGraderFor.mockReset()
+  completedTradeGraderFor.mockResolvedValue(null)
   cacheFindMany.mockReset()
   valueFindMany.mockReset()
   nativeFindMany.mockReset()
@@ -191,6 +199,96 @@ describe('getRecentTrades', () => {
       oneGradeForCompletedTrade.mockRejectedValue(new Error('db down'))
       const out = await getRecentTrades(LEAGUES, NOW)
       expect(out).toHaveLength(1)
+      expect(out[0].verdict).toBeNull()
+    })
+  })
+
+  /*
+   * 🛑 THE LETTERS BESIDE THE VERDICT (2026-09-27). The sentence moved to the one grade on 09-25 and
+   * each side kept a Realized/Market letter of its own, so one card could say "favours chxnk" over a
+   * D on chxnk's side. Both now read one grade; the second side is the exact mirror.
+   */
+  describe('each side’s letter, read off THE grade', () => {
+    it('gives side one the letter and side two its mirror, agreeing with the verdict', async () => {
+      oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1150))
+      const out = await getRecentTrades(LEAGUES, NOW)
+      const [chxnk, hustead] = out[0].sides
+      expect(chxnk).toMatchObject({ grade: 'B', gradeBasis: 'League' })
+      expect(hustead).toMatchObject({ grade: 'D', gradeBasis: 'League' })
+      expect(chxnk.gradeReason).toContain('Got 1,150 for 1,000')
+      expect(hustead.gradeReason).toContain('Got 1,000 for 1,150')
+      expect(out[0].verdict?.favoursRosterId).toBe(1)
+      // No realized points on this ledger row (and no `seasonNets` at all): no realized note, no crash.
+      expect(chxnk.gradeReason).not.toContain('Realized')
+    })
+
+    it('keeps realized points as a FACT beside the league letter, never as a second letter', async () => {
+      const cached = payload() as { data: { trades: Array<{ sides: Array<Record<string, unknown>> }> } }
+      const [one, two] = cached.data.trades[0]!.sides
+      Object.assign(one!, {
+        playersIn: [{ playerId: '4988', name: 'Darren Waller', position: 'TE', creditedBySeason: { '2026': 30 } }],
+        playersOut: [], picksOut: [], seasonNets: [{ season: '2026', partial: true }], cumulativeNet: 30, currentGrade: 'A',
+      })
+      Object.assign(two!, { playersOut: [], picksOut: [], seasonNets: [], cumulativeNet: -30, currentGrade: 'F' })
+      cacheFindMany.mockResolvedValue([cached])
+      oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1150))
+      const out = await getRecentTrades(LEAGUES, NOW)
+      const [chxnk, hustead] = out[0].sides
+      // THE letter, not the realized A/F the ledger holds.
+      expect([chxnk.grade, hustead.grade]).toEqual(['B', 'D'])
+      expect(chxnk.gradeReason).toContain('Realized so far: net 30.0 fantasy points')
+      expect(hustead.gradeReason).toContain('Realized so far: net -30.0 fantasy points')
+    })
+
+    it('a withheld grade leaves no League letter on either side', async () => {
+      const out = await getRecentTrades(LEAGUES, NOW)
+      expect(out[0].sides.map((s) => s.gradeBasis)).not.toContain('League')
+    })
+  })
+
+  describe('a trade the graded ledger has not reached yet', () => {
+    const live = (over: Record<string, unknown> = {}) => ({
+      transactionId: 'fresh-9', proposedBy: 'Trade Partner', proposedByViewer: false,
+      proposedAt: NOW.toISOString(),
+      assetsGiven: [{ playerId: '1', playerName: 'Sent Player', position: 'WR', team: 'NYJ' }],
+      assetsReceived: [
+        { playerId: '2', playerName: 'New Player', position: 'RB', team: 'BUF' },
+        { playerId: null, playerName: '2027 1st', position: '', team: '', isPick: true, pickRound: '2027 1st', pickYear: 2027, pickRoundNumber: 1 },
+      ],
+      readOnly: true, provider: 'sleeper', lifecycleStatus: 'complete',
+      viewerRosterExternalId: '1', counterpartyRosterExternalId: '2',
+      ...over,
+    })
+    const run = async () => {
+      cacheFindMany.mockResolvedValue([])
+      return getRecentTrades([{ ...LEAGUES[0], platform: 'sleeper' }], NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2 })
+    }
+
+    it('is graded from its own structured assets, never from a parsed label', async () => {
+      scanPendingSleeperTrades.mockResolvedValue({ trades: [], completedTrades: [live()], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 })
+      gradeArchivedTrade.mockResolvedValue(grade(1000, 1600))
+      const out = await run()
+      expect(gradeArchivedTrade).toHaveBeenCalledWith(null, {
+        received: ['New Player'],
+        gave: ['Sent Player'],
+        picksIn: [{ season: 2027, round: 1, label: '2027 1st' }],
+        picksOut: [],
+        currentSeason: 2026,
+      })
+      const [you, them] = out[0].sides
+      expect(you).toMatchObject({ grade: 'A', gradeBasis: 'League' })
+      expect(them).toMatchObject({ grade: 'F', gradeBasis: 'League' })
+      expect(out[0].verdict?.favoursRosterId).toBe(1)
+    })
+
+    it('a pick with no coordinates reaches the grader as unpriceable, and the letter is withheld with its reason', async () => {
+      const noCoords = live({ assetsReceived: [{ playerId: null, playerName: 'Some pick', position: '', team: '', isPick: true, pickRound: 'Some pick' }] })
+      scanPendingSleeperTrades.mockResolvedValue({ trades: [], completedTrades: [noCoords], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 })
+      gradeArchivedTrade.mockResolvedValue({ graded: false, reason: '1 asset has no value on this league’s chart', basis: null })
+      const out = await run()
+      expect(gradeArchivedTrade.mock.calls[0]![1].picksIn).toEqual([{ season: null, round: null, label: 'Some pick' }])
+      expect(out[0].sides.every((s) => s.grade === null)).toBe(true)
+      expect(out[0].sides[0]!.gradeReason).toBe('League grade withheld: 1 asset has no value on this league’s chart')
       expect(out[0].verdict).toBeNull()
     })
   })
@@ -423,7 +521,7 @@ describe('getRecentTrades', () => {
         cacheFindMany.mockRejectedValueOnce(new Error('pool timeout'))
         const onIncomplete = vi.fn()
         const out = await getRecentTrades(
-          [{ id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'espn' }], NOW, 3,
+          [{ id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'sleeper' }], NOW, 3,
           { ownerSleeperId: null, currentWeek: 2, onIncomplete },
         )
         expect(out).toEqual([])

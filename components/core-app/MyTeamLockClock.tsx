@@ -20,10 +20,12 @@ import { formatLockLabel } from '@/lib/core-app/lockLabel'
 export function MyTeamLockClock({
   atMs,
   initial,
+  elapsedLabel = 'Locked',
 }: {
   atMs: number
   /** The label the server rendered. Shown until the client clock takes over. */
   initial: string
+  elapsedLabel?: string
 }) {
   const [now, setNow] = useState<number | null>(null)
 
@@ -42,7 +44,8 @@ export function MyTeamLockClock({
   }, [atMs, now])
 
   if (now == null) return <>{initial}</>
-  return <>{formatLockLabel(atMs, now).text}</>
+  const label = formatLockLabel(atMs, now)
+  return <>{label.locked ? elapsedLabel : label.text}</>
 }
 
 export default MyTeamLockClock

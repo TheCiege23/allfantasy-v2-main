@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
-import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/describedTradeEvaluator'
+import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { extractPickMentions, pickLabel, type PickMention } from './tradePickMentions'
@@ -54,8 +54,8 @@ import type {
  * mistake absence for a number.
  */
 
-/** A league the size anyone plays; bounds the one name read. */
-const MAX_LEAGUE_PLAYER_IDS = 800
+/** Covers large 32-team IDP leagues without dropping the later teams' assets. */
+const MAX_LEAGUE_PLAYER_IDS = 4096
 
 export type {
   ReadyTradeScenario,
@@ -321,6 +321,7 @@ export async function buildTradeScenario(
   const partnerTeamId = world.rosters.find((r) => r.rosterId === chosen.partnerRosterId)?.teamId ?? null
   const partnerTeam = world.teams.find((t) => t.teamId === partnerTeamId) ?? null
 
+  const viewerTeam = world.teams.find(t => t.teamId === viewerRoster.teamId)
   const impact = evaluation.rosterImpact ?? null
   const lineup: TradeScenarioLineup | null =
     impact &&
@@ -348,6 +349,11 @@ export async function buildTradeScenario(
     give: [...chosen.give.map(strip), ...chosen.givePicks.map((p) => stripPick(p, viewerRoster.rosterId))],
     get: [...chosen.get.map(strip), ...chosen.getPicks.map((p) => stripPick(p, chosen.partnerRosterId))],
     partnerTeamName: partnerTeam?.displayName || partnerTeam?.ownerName || 'the other team',
+    ...(grade.graded ? { recommendation: { action: grade.action, explanation: grade.recommendation } } : {}),
+    ...(viewerTeam?.record ? { competitiveContext: { ...viewerTeam.record, rank: viewerTeam.rank } } : {}),
+    unpricedExcluded: impact?.unpricedExcluded ?? 0,
+    depthChanges: impact?.depth?.filter(d => d.rosteredDelta !== 0).map(d => ({ position: d.position,
+      before: d.rosteredBefore, after: d.rosteredAfter })) ?? [],
     ...(tradedPicks > 0 ? { picks: tradedPicks } : {}),
     value: grade.graded
       ? {
@@ -469,7 +475,7 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
     s.lineup
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
-    `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
+    s.playoffOdds.available ? `- Playoff scenario estimate: ${s.playoffOdds.before}% before, ${s.playoffOdds.after}% after. ${s.playoffOdds.reason}` : `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
     ...(s.picks
       ? [
           "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
