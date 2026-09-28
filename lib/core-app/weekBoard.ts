@@ -8,6 +8,8 @@ import { leagueWeekProgress } from './leagueWeekProgress'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
 import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
+import type { EliminationSettle } from './eliminationSettle'
+import { loadEliminationSettle } from './eliminationSettleLoader'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -894,7 +896,16 @@ export type EliminationWeek = {
    */
   labelled: boolean
   href: string
+  /**
+   * Whether the week is already DECIDED for you, from whose games have finished
+   * (`eliminationSettle.ts`). Absent when it was not read (unscored, over the read cap), null
+   * when the read failed. A margin alone read "+41.2 clear" for a user who could not be chopped.
+   */
+  settle?: EliminationSettle | null
 }
+
+/** Elimination leagues on one board that get a settle read — four indexed queries each. */
+const MAX_SETTLE_READS = 10
 
 /**
  * Build the elimination cards for a week's rows.
@@ -1155,6 +1166,23 @@ export async function getWeekBoard(
     leagueByPlatformId,
     myRosters,
   })
+  /*
+   * Decided or not, read once here so the board, Your Week and Chimmy all say the same thing.
+   * Only scored weeks, most urgent first (the build order), capped. The loader never throws.
+   */
+  await Promise.all(
+    eliminationWeeks
+      .filter((e) => e.yourScore != null)
+      .slice(0, MAX_SETTLE_READS)
+      .map(async (e) => {
+        e.settle = await loadEliminationSettle({
+          platformLeagueId: e.platformLeagueId,
+          season: e.season,
+          week: e.week,
+          yourRosterId: e.yourRosterId,
+        })
+      }),
+  )
 
   /*
    * 🛑 COUNT THESE AS SEEN, OR THE FIX REPORTS ITSELF AS THE BUG IT REMOVED.
