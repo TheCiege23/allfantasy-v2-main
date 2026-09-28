@@ -14,6 +14,7 @@ import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
 import { vpnStatusFromHeaders, type VpnStatus } from "@/lib/geo/vpnStatus"
 import { getRelayRangeSetEdge } from "@/lib/geo/privateRelayEdge"
+import { getServedOrigin } from "@/lib/http/served-origin"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
 import { INTERNAL_HOP_HEADER, verifyInternalHop } from "@/lib/http/internalHop"
 import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http/originLock"
@@ -382,7 +383,11 @@ function isAnonymousCrawler(request: NextRequest): boolean {
  */
 async function anonymizedClient(request: NextRequest): Promise<VpnStatus> {
   return vpnStatusFromHeaders(request.headers, {
-    relayRanges: () => getRelayRangeSetEdge(request.nextUrl.origin),
+    // NOT request.nextUrl.origin: on Railway that is the bind address
+    // (https://0.0.0.0:8080), which a client cannot reach — the first deploy of
+    // this logged "fetch failed" and every relay user stayed blocked. The same
+    // trap, and the same helper, as lib/api/proxy-adapter.
+    relayRanges: () => getRelayRangeSetEdge(getServedOrigin(request)),
   })
 }
 
