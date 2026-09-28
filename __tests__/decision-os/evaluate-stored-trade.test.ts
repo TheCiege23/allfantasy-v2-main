@@ -41,7 +41,8 @@ const world = (rosters: Array<{ rosterId: string; teamId: string; playerIds: str
 describe('pure pieces', () => {
   it('grade input is by NAME for players; picks and FAAB as themselves', () => {
     expect(gradeInputsOf(trade().sideB.gives)).toEqual({ assets: [{ kind: 'pick', year: 2027, round: 1, label: '2027 1st' }, { kind: 'faab', amount: 10 }], unpriceable: [] })
-    expect(gradeInputsOf(trade().sideA.gives).assets).toEqual([{ kind: 'player', name: 'Josh Allen' }])
+    // The stored roster id rides along for a college redraft grade; the chart path never reads it.
+    expect(gradeInputsOf(trade().sideA.gives).assets).toEqual([{ kind: 'player', name: 'Josh Allen', rosterPlayerId: '4984' }])
   })
 
   it('a Sleeper ledger trade gets canonical rosters through the world’s team source ids', () => {

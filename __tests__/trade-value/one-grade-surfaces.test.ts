@@ -363,3 +363,31 @@ describe('Chimmy — explains the one grade, never makes one (design step 7)', (
     expect(route).toMatch(/enforceTradeLetters\(\{\s*answer: loop\.text,\s*grades: toolContext\.tradeGrades,/)
   })
 })
+
+describe('College redraft — points over replacement, never the private scale (design step 8)', () => {
+  it('the league grader asks the college grader first, before any chart pricing', () => {
+    const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
+    expect(src).toMatch(/sport === 'NCAAF'\s*\?\s*createNcaafLeagueGrader\(/)
+    const college = src.indexOf('await college.grade(give, get)')
+    const chart = src.indexOf('resolveAssets(give, opts)')
+    expect(college).toBeGreaterThan(-1)
+    expect(chart).toBeGreaterThan(college)
+  })
+
+  it('the Trade Center console takes the same college grade, for the deal and for its counters', () => {
+    const src = code('lib/trade-value-console/runTradeConsoleAnalysis.ts')
+    expect(src).toMatch(/effectiveSport === 'NCAAF'[\s\S]{0,80}createNcaafLeagueGrader\(/)
+    expect(src).toMatch(/applyCollegeGrade\(leagueGrade, collegeView\)/)
+    expect(src).toMatch(/collegeGrader \? await collegeGrader\.grade\(counterGive, counterGet\)/)
+  })
+
+  it('the college value reads no chart and no private scale', () => {
+    for (const file of ['lib/decision-os/trade/ncaafRedraftValue.ts', 'lib/decision-os/trade/ncaafRedraftContext.ts', 'lib/decision-os/trade/ncaafLeagueGrader.ts']) {
+      expect(code(file)).not.toMatch(/resolveAssets|dynastyValue|fantasycalc|FantasyCalc|scoringFit|sportsPlayerRecord/i)
+    }
+  })
+
+  it('positive control: the chart pricer the guard forbids is what the chart path calls', () => {
+    expect(code('lib/decision-os/trade/leagueTradeGrader.ts')).toMatch(/resolveAssets\(/)
+  })
+})

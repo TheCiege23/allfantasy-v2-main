@@ -43,6 +43,8 @@ import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/int
 import { clamp } from './sports-db-valuation'
 import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './leagueTradePricing'
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
+import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
 import {
   benchAssetsNotInGive,
@@ -344,20 +346,26 @@ export async function runTradeConsoleAnalysis(
     mark,
   })
   const leagueGrade = graded.leagueGrade
+  const consoleLeagueType = leagueRow
+    ? leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, platform: leagueRow.platform ?? null })
+    : null
+  /*
+   * A college league takes the same college grade `createLeagueTradeGrader` gives it (Phase 8), and the
+   * console's own numbers are rewritten from it, so the letter and the values beside it are one basis.
+   */
+  const collegeGrader =
+    leagueRow && consoleLeagueType && effectiveSport === 'NCAAF' && input.leagueId
+      ? createNcaafLeagueGrader({ id: input.leagueId.trim(), platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType: consoleLeagueType })
+      : null
+  const collegeView = collegeGrader ? await collegeGrader.grade(input.sideGive, input.sideGet) : null
+  if (collegeView) applyCollegeGrade(leagueGrade, collegeView)
   /**
    * THE grade — the same object every other trade surface shows for this deal — with the league type
    * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
    * league) has no league type to name.
    */
-  const grade = leagueRow
-    ? {
-        ...graded.grade,
-        leagueType: leagueTypeBasis({
-          settings: leagueRow.settings,
-          leagueType: leagueRow.leagueType,
-          platform: leagueRow.platform ?? null,
-        }),
-      }
+  const grade = consoleLeagueType
+    ? { ...(collegeView ?? graded.grade), leagueType: consoleLeagueType }
     : graded.grade
   giveLines = leagueGrade.giveLines
   getLines = leagueGrade.getLines
@@ -694,6 +702,9 @@ export async function runTradeConsoleAnalysis(
       .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0,
         providerIdentity: a.valuationIdentity, playerId: a.valuationPlayerId })),
     evaluate: async (counterGive, counterGet) => {
+      // A counter in a college league is graded on the same basis as the deal it counters.
+      const collegeCounter = collegeGrader ? await collegeGrader.grade(counterGive, counterGet) : null
+      if (collegeCounter) return collegeCounter
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])

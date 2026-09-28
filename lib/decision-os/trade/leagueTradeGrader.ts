@@ -20,6 +20,7 @@ import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeVi
 import { loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
+import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 
 /**
  * The ONE trade grade, computed. Every surface that shows a letter for a deal that has not happened
@@ -236,6 +237,14 @@ export async function createLeagueTradeGrader(args: {
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
+  /*
+   * A college league is not graded on the NFL chart where it can be helped (Phase 8): a redraft league
+   * on points over replacement, and a pick refused in every college league. See `./ncaafLeagueGrader.ts`.
+   */
+  const college =
+    sport === 'NCAAF'
+      ? createNcaafLeagueGrader({ id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType })
+      : null
 
   // An arrow, not a function declaration: a hoisted declaration loses the `leagueRow` null narrowing.
   const gradeOnce = async ({
@@ -248,6 +257,8 @@ export async function createLeagueTradeGrader(args: {
     viewerSide: boolean
   }): Promise<TradeGradeView> => {
     try {
+      const collegeView = college ? await college.grade(give, get) : null
+      if (collegeView) return collegeView
       const dataGaps: string[] = []
       const opts = {
         effectiveSport: sport,
