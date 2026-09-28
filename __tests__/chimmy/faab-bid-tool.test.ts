@@ -121,6 +121,42 @@ describe('get_faab_bid_plan', () => {
     expect(await buildFaabBidContext('L1', 'me')).toContain('no player values are loaded')
   })
 
+  /*
+   * The league's real slots (2026-09-28 live miss). FLEX ×4 + SUPER_FLEX over this roster starts
+   * My QB (SUPER_FLEX), My WR1, My RB1, My RB2, My WR2 — My TE (900) sits. So the free TE that was
+   * "+2100 over your weakest TE starter" under the fixed table cannot crack the lineup at all, and
+   * the only upgrade is the free QB, who replaces My QB in the one seat a QB may take.
+   */
+  it('measures upgrades against the league\'s real slots, naming who leaves the lineup', async () => {
+    h.league.mockResolvedValue({
+      ...LEAGUE,
+      settings: { ...LEAGUE.settings, roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN', 'BN', 'BN'] },
+    })
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).toContain("under this league's slots (FLEX ×4, SUPER_FLEX)")
+    expect(text).toContain('- Free QB (QB): bid up to $400; would start in place of My QB, raising the best lineup\'s value by 500')
+    expect(text).not.toContain('Free TE')
+    expect(text).toContain('3 other valued unrostered players would not improve the lineup')
+  })
+
+  it('says when the slots are missing and the standard lineup was assumed', async () => {
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).toContain("This league's starting slots are NOT on file")
+    expect(text).toContain("- Free TE (TE): bid up to $323; adds 2100 value over the user's weakest TE starter (assumed lineup)")
+  })
+
+  it('paces a plain guillotine with no published schedule at one chop a week from the teams alive', async () => {
+    // 14 more live teams (one player each, none valued) and 2 chopped ones (no players): 16 alive.
+    const live = Array.from({ length: 14 }, (_, i) => ({ platformUserId: `u-${i}`, faabRemaining: 200, playerData: { players: [`x${i}`], starters: [`x${i}`] } }))
+    const chopped = [0, 1].map((i) => ({ platformUserId: `c-${i}`, faabRemaining: 200, playerData: { players: [], starters: [] } }))
+    h.rosters.mockResolvedValue([MY_ROSTER, OTHER_ROSTER, ...live, ...chopped])
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).toContain('16 teams still alive and no published schedule, so one chop a week is assumed: about 8.4 more weeks')
+    // $400 over 135/16 weeks is $47.41 this week; the TE is 2100/2600 of it and the QB 500/2600.
+    expect(text).toContain('- Free TE (TE): bid up to $38')
+    expect(text).toContain('- Free QB (QB): bid up to $9')
+  })
+
   it('is reachable from the tool loop, and needs a league in scope', async () => {
     const text = await executeChimmyTool('get_faab_bid_plan', {}, { leagueId: 'L1', userId: 'me' } as never)
     expect(text).toContain('- Free TE (TE): bid up to $323')

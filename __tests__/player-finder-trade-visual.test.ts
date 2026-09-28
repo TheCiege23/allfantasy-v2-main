@@ -280,22 +280,27 @@ describe('getPlayerTradeVisual', () => {
     const bid = v.bidInstead!
     expect(bid.concept).toBe('guillotine')
     /*
-     * Kincaid (3,000) over my weakest TE starter Otton (900) is +2,100. The pool is his OWNER'S
-     * whole roster, because that is what hits waivers when a team is chopped — and only Ferguson
-     * (2,100 over 900 = +1,200) is also an upgrade. So supply is 3,300 and Kincaid is 2,100 of it.
+     * Kincaid (3,000) over my TE starter Otton (900) is +2,100. The pool is his OWNER'S whole roster,
+     * because that is what hits waivers when a team is chopped, and each man is measured against my
+     * best lineup under the league's REAL slots (QB, RB ×2, WR ×2, TE, FLEX — `faabLineupGain.ts`).
+     *
+     * ⚠ THIS WAS 2,100 / 3,300 UNTIL 2026-09-28, AND 3,300 WAS WRONG. The fixed 1/2/2/1 table ignored
+     * the FLEX seat, where my lineup starts Pollard (3,100). Against him Walker +1,900, Cook +2,100,
+     * Odunze +1,200 and Moore +700 are real upgrades too, beside Kincaid +2,100 and Ferguson +1,200.
+     * Supply is 9,200, and Kincaid is 2,100 of it.
      */
     expect(bid.marginalValue).toBe(2100)
-    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 9200, 4)
 
     /*
      * 🛑 THE BID IS AGAINST WHAT HE HAS LEFT ($400), NOT THE LEAGUE'S SEASON BUDGET ($1000).
-     * 400 x 2100/3300 = 255. Bidding the budget would tell a manager down to their last few
+     * 400 x 2100/9200 = 91. Bidding the budget would tell a manager down to their last few
      * dollars to spend like they were untouched — and `rosters.faabRemaining` carries the real
      * number on 96% of rosters, so there is no excuse for using the wrong one.
      */
     expect(bid.budgetRemaining).toBe(400)
     expect(bid.budgetTotal).toBe(1000)
-    expect(bid.ceilingAtRemaining).toBe(255)
+    expect(bid.ceilingAtRemaining).toBe(91)
     expect(bid.reason).toMatch(/No trades in this league/)
   })
 
@@ -307,7 +312,7 @@ describe('getPlayerTradeVisual', () => {
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     if (!state.available) throw new Error('expected available')
     const bid = state.data.bidInstead!
-    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 9200, 4)
     expect(bid.budgetRemaining).toBeNull()
     expect(bid.ceilingAtRemaining).toBeNull()
     // 🛑 The league budget is on file, and must NOT be substituted for what he has left.
@@ -337,11 +342,11 @@ describe('getPlayerTradeVisual', () => {
     const bid = state.data.bidInstead!
 
     /*
-     * Unpaced this is $255 (400 x 2100/3300). Paced across 4.0 expected weeks it is a quarter of
-     * that — $64. The difference IS the schedule, and it is the whole point of the wire.
+     * Unpaced this is $91 (400 x 2100/9200). Paced across 4.0 expected weeks it is a quarter of
+     * that — $23. The difference IS the schedule, and it is the whole point of the wire.
      */
-    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
-    expect(bid.ceilingAtRemaining).toBe(64)
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 9200, 4)
+    expect(bid.ceilingAtRemaining).toBe(23)
     expect(bid.reason).toMatch(/4\.0 more weeks/)
   })
 
@@ -358,8 +363,8 @@ describe('getPlayerTradeVisual', () => {
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     if (!state.available) throw new Error('expected available')
     const bid = state.data.bidInstead!
-    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
-    expect(bid.ceilingAtRemaining).toBe(255)
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 9200, 4)
+    expect(bid.ceilingAtRemaining).toBe(91)
     expect(bid.reason).not.toMatch(/more weeks/)
   })
 
