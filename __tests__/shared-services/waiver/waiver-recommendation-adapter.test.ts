@@ -25,7 +25,7 @@ describe('runLegacyWaiverGrader', () => {
     const result = await runLegacyWaiverGrader({ leagueId: 'league-1', managerKey: 'manager-1' })
     expect(mockGenerateWaiverRecommendations).not.toHaveBeenCalled()
     expect(result.topAddPlayerId).toBeNull()
-    expect(result.error).toMatch(/cannot be matched/)
+    expect(result.error).toMatch(/can't be matched/)
   })
 
   it('returns an unavailable result honestly when no manager key exists', async () => {

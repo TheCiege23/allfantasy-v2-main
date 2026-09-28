@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -86,6 +86,8 @@ export type DefenderBoardState =
   | 'valuation_refused'
   | 'no_league'
   | 'no_rostered_defenders'
+  /** Rosters exist but their ids are the provider's own — see `isForeignIdSpace`. Not "no defenders". */
+  | 'ids_unreadable'
 
 export interface LeagueDefenderBoard {
   state: DefenderBoardState
@@ -247,7 +249,7 @@ export async function loadLeagueDefenderBoard(
       if (!ownerByPlayerId.has(id)) ownerByPlayerId.set(id, r.platformUserId)
     }
   }
-  if (leagueIds.size === 0) return EMPTY('no_rostered_defenders')
+  if (leagueIds.size === 0) return EMPTY(isForeignIdSpace(league.platform) ? 'ids_unreadable' : 'no_rostered_defenders')
 
   const vorp = await loadLeagueIdpVorp({
     prisma: args.prisma,

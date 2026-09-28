@@ -29,6 +29,7 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
+import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
 import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueVariantFor } from './valueBook'
 /*
@@ -517,7 +518,7 @@ export async function getPlayerTradeVisual(
   // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
   // read them — not that he is free to claim.
   if (isForeignIdSpace(league.platform)) {
-    return { available: false, reason: "we can't match this league's player ids to ours yet, so we can't tell who holds him" }
+    return { available: false, reason: `${FOREIGN_IDS_UNREADABLE.toLowerCase()}, so we can't tell who holds him` }
   }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null
   if (!holder) return { available: false, reason: 'he is not on any roster we can read here — claim him instead of trading for him' }

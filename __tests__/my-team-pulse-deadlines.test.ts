@@ -49,8 +49,16 @@ it('🛑 never flags a stranger as your OUT starter from a foreign-id lineup', a
  const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
  expect(pulse.needsTotal).toBe(0)
  expect([...pulse.needs,...pulse.set].some(row=>row.out>0)).toBe(false)
- expect(pulse.notChecked.noLineup).toBe(1)
+ expect(pulse.notChecked.idsUnreadable).toBe(1)
+ expect(pulse.notChecked.noLineup).toBe(0)
  expect(db.sportsPlayer.findMany).not.toHaveBeenCalled()
+})
+it('CONTROL: a Sleeper roster with no starters array is still counted as noLineup, not idsUnreadable', async () => {
+ db.leagueTeam.findMany.mockResolvedValueOnce(oneLeague('sleeper'))
+ db.roster.findMany.mockResolvedValueOnce([{leagueId:'L0',platformUserId:'su',playerData:{players:['healthy']}}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ expect(pulse.notChecked.noLineup).toBe(1)
+ expect(pulse.notChecked.idsUnreadable).toBe(0)
 })
 it('CONTROL: the same lineup in a Sleeper league IS read, and its OUT starter flagged', async () => {
  db.leagueTeam.findMany.mockResolvedValueOnce(oneLeague('sleeper'))

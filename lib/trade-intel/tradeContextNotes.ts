@@ -64,7 +64,8 @@ import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import { resolveViewerLeagueRoster } from './viewerLeagueRoster'
-import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
 import {
   byeCollisionDelta,
   computeRosterNeed,
@@ -265,14 +266,20 @@ export async function buildTradeContextNotes(args: {
 
   /*
    * A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids and would read a
-   * stranger's position, injury and price; such a roster is empty here, so the notes stay blank.
+   * stranger's position, injury and price; such a roster is empty here, so the notes stay blank
+   * and the reason travels as `contextGap`.
    * The same league's opponent roster (`buildLeverageNotes`) is never reached past this return.
    */
   const pd = (sleeperReadablePlayerData(league.platform, roster.playerData) ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []
-  if (rosterIds.length === 0) return EMPTY
+  if (rosterIds.length === 0) {
+    // Unread, not empty: say so under "what we couldn't see" rather than as a silent blank.
+    return isForeignIdSpace(league.platform)
+      ? { ...EMPTY, contextGap: `your roster in this league — ${FOREIGN_IDS_UNREADABLE_CLAUSE}` }
+      : EMPTY
+  }
 
   const players = await prisma.sportsPlayer
     .findMany({

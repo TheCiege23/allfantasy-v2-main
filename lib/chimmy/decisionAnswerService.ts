@@ -1,4 +1,5 @@
 import 'server-only'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { screenshotTradeQuestion } from './tradeOfferEvidence'
 import { tradeSeasonOutlook } from './tradeSeasonOutlook'
 import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisionRecommendation'
@@ -157,7 +158,10 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
         ? 'Choose an available player whose game has not started. Ask for a full lineup check to compare eligible replacements, then confirm the slot and AutoSubs on your platform.'
         : scenario.reason === 'players_locked'
           ? 'Keep already-started players in place. Compare players with future kickoffs and confirm individual locks and AutoSubs on your platform.'
-          : 'Sync league settings and rosters, then confirm the player names and ask again.'
+          // A re-sync cannot make a foreign league's player ids matchable, so it is not offered as the fix.
+          : scenario.reason === 'roster_ids_unreadable'
+            ? `${FOREIGN_IDS_UNREADABLE}, and a re-sync will not change that — make this call on your league platform for now.`
+            : 'Sync league settings and rosters, then confirm the player names and ask again.'
       return gap(scenario.reason, scenario.detail, remedy)
     }
     if (scenario?.status === 'ready') {

@@ -9,6 +9,7 @@ import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { enrichChimmyWithPlayerSportsNorm } from '@/lib/sports-data-normalization'
 import { buildWeatherAugmentFromCachedWeather } from '@/lib/weather/applyWeatherToFantasyProjection'
@@ -211,6 +212,8 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
   let leagueSport: SupportedSport | null = null
   let analysisScope: 'league' | 'general' = 'general'
   let rosterIds: string[] = []
+  /** A league was picked, but its roster ids are the provider's own — see `isForeignIdSpace`. */
+  let rosterIdsUnreadable = false
   const starterSet = new Set<string>()
 
   if (input.leagueId?.trim()) {
@@ -287,7 +290,8 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
     // Foreign-platform roster ids (Fleaflicker/MFL/…) collide with real Sleeper ids — the lookup
     // below would flag a stranger's injury as yours. Such a roster contributes no ids.
     if (isForeignIdSpace(league.platform)) {
-      dataGaps.push("This platform's player ids cannot be matched to players yet — roster-aware injury flags are unavailable.")
+      rosterIdsUnreadable = true
+      dataGaps.push(`${FOREIGN_IDS_UNREADABLE} — roster-aware injury flags are unavailable.`)
     }
     for (const r of picked) {
       const playerData = sleeperReadablePlayerData(league.platform, r.playerData)
@@ -654,7 +658,12 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
     hasAnyProjection
       ? 'League-scored projections merged where roster rows matched.'
       : 'No merged weekly projections — check league selection and scoring sync.',
-    rosterIds.length > 0 ? `Roster-linked IDs: ${rosterIds.length}.` : 'No roster IDs — pick a league for roster-aware flags.',
+    rosterIds.length > 0
+      ? `Roster-linked IDs: ${rosterIds.length}.`
+      : rosterIdsUnreadable
+        ? // A league WAS picked — "pick a league" would send the manager to redo what he just did.
+          `${FOREIGN_IDS_UNREADABLE} — roster-aware flags are unavailable.`
+        : 'No roster IDs — pick a league for roster-aware flags.',
   ].join(' ')
 
   const dataQuality: 'full' | 'partial' | 'degraded' =

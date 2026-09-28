@@ -116,6 +116,29 @@ describe('player card — Propose Trade', () => {
   })
 
   /*
+   * 🛑 Nor in a league whose rosters we cannot read (Fleaflicker/MFL/Fantrax/Yahoo): we do not
+   * know whether anyone holds him, so neither "FREE AGENT" nor a trade CTA is honest.
+   */
+  it('does NOT offer it, or call him a free agent, when the league is UNREADABLE', () => {
+    const { container } = mount(
+      card({ league: { ...card().league!, platform: 'fleaflicker', slot: 'UNREADABLE', owner: null } })
+    )
+    expect(cta(container)).toBeNull()
+    expect(container.textContent).toContain("This league's player ids can't be matched to ours yet")
+    expect(container.textContent).not.toContain('FREE AGENT')
+    expect(container.textContent).not.toContain('You have nobody else at this position')
+  })
+
+  it('CONTROL: a genuinely unrostered player in a readable league is still a FREE AGENT', () => {
+    const { container } = mount(
+      card({ league: { ...card().league!, slot: 'NOT ROSTERED', owner: null } })
+    )
+    expect(container.textContent).toContain('FREE AGENT')
+    expect(container.textContent).not.toContain("can't be matched to ours yet")
+    expect(container.textContent).toContain('You have nobody else at this position')
+  })
+
+  /*
    * ⚠ AND NOT ON THE UNIVERSAL FLAVOUR. With no league there is no builder to
    * open and no scoring to price the deal under, so the button would lead
    * somewhere that cannot answer the question it implies.

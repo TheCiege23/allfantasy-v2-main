@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import type { LeagueDefenderBoard, DefenderBoardRow } from '@/lib/values/leagueDefenderBoard'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 /**
  * Every defender in the league and what he is worth HERE — the board a manager reads before
@@ -49,6 +50,7 @@ const BLOCKED_COPY: Record<string, string> = {
     'than guessed.',
   no_league: 'We could not resolve this league.',
   no_rostered_defenders: 'No rosters in this league carry a defender yet.',
+  ids_unreadable: `${FOREIGN_IDS_UNREADABLE}, so no defender on its rosters can be priced or given an owner.`,
 }
 
 export function TradeBoardSection({ leagueId }: { leagueId: string }) {
