@@ -2264,16 +2264,26 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * tool loop runs ONLY on xAI: measured 2026-09-22, the xAI account was out of credits, so every
    * answer came through this path with no way to call a tool — and no path here could answer the
    * question at all. Gated on the ONE predicate the deterministic injury builder yields on, so
-   * the two agree on who owns the question and the 40-league scan runs only when it is asked.
+   * the two agree on who owns the question and the cross-league scan runs only when it is asked.
    *
    * ⚠ Own race, for the reason given on `portfolioPlayerGroundingTask`: a timeout costs this
    * section, never the answer.
+   *
+   * ⚠ THE SCAN BUDGET SITS INSIDE THE RACE. The tool's default budget is 20s (sized for the tool
+   * loop); raced against 4s here it would lose every large account outright and push NOTHING.
+   * Stopping new league reads at 1.5s, and abandoning any single read at 1.2s, puts the last read
+   * done by ~2.7s and leaves the injury lookup and kickoff check room to finish — so a big account
+   * gets a partial report that names the leagues it did not reach, rather than no report at all.
    */
   const rosterReviewLeagueId = leagueSnapshot && isScopedRosterReviewQuestion(message, true) ? leagueSnapshot.id : null
   const myRosterInjuriesTask: Promise<string | null> =
     userId && (isOwnRosterInjuryQuestion(message) || rosterReviewLeagueId)
       ? Promise.race([
-          buildMyRosterInjuriesContext({ userId, ...(rosterReviewLeagueId ? { leagueId: rosterReviewLeagueId } : {}) }).catch(() => null),
+          buildMyRosterInjuriesContext({
+            userId,
+            ...(rosterReviewLeagueId ? { leagueId: rosterReviewLeagueId } : {}),
+            scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 },
+          }).catch(() => null),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
         ])
       : Promise.resolve(null)
