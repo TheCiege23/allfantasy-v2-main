@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveAiTeamContext } from '@/lib/ai-payload/resolveAiTeamContext'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 import { rosterCountEvidence } from '@/lib/chimmy/rosterCounts'
+import { checkStartedGames } from '@/lib/chimmy/actions/gameLocks'
+import { kickoffStatusLine } from '@/lib/chimmy/lineupActionEvidence'
 
 /**
  * THE USER'S OWN ROSTER, FOR THE LEAGUE IN SCOPE.
@@ -114,6 +116,33 @@ export async function buildMyRosterContext(
 
   lines.push(rosterCountEvidence([...team.starters, ...team.bench, ...team.injuredReserve, ...team.taxi]))
   lines.push(...groups)
+
+  /*
+   * ⚠ KICKOFF IS ON FILE, SO IT IS STATED RATHER THAN DISCLAIMED. Without this line a 2026-09-28
+   * KBFL answer offered a TE swap for a starter whose game had kicked off five hours earlier — while
+   * the same app's My team screen said nothing was left to review. The same check the optimizer and
+   * the lineup confirm card use; a failed read reports every starter unverified, never "not started".
+   */
+  const starters = team.starters.filter((p) => p.playerId?.trim() && p.playerId.trim() !== '0')
+  const now = new Date()
+  const kickoff = await checkStartedGames({
+    sport: String(league.sport ?? 'NFL'),
+    season: Number(league.season ?? now.getUTCFullYear()),
+    week: 0,
+    players: starters.map((p) => ({
+      playerId: p.playerId,
+      name: p.name ?? `(unnamed player ${p.playerId})`,
+      team: p.team,
+      gameTime: null,
+    })),
+    now,
+  }).catch(() => null)
+  const kickoffLine = kickoffStatusLine(
+    starters.map((p) => ({ playerId: p.playerId, name: p.name ?? `(unnamed player ${p.playerId})` })),
+    kickoff,
+    now,
+  )
+  if (kickoffLine) lines.push(kickoffLine)
 
   /*
    * ⚠ THE GAPS TRAVEL WITH THE DATA. A partially-resolved roster looks complete

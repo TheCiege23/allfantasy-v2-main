@@ -144,7 +144,10 @@ describe('buildMyRosterInjuriesContext', () => {
     expect(lines).toHaveLength(2)
     expect(out).toContain('CURRENT INJURY COUNTS: 2 distinct players')
     expect(out).toContain('RB: 1; WR: 1')
-    expect(out).toContain('does not verify kickoff locks')
+    /* The mocked prisma has no sportsGame, so the schedule read fails: unverified, never "not started". */
+    expect(out).toContain('does not verify provider lock timing')
+    expect(out).toContain('Christian McCaffrey (KBFL, Work League) — KICKOFF UNVERIFIED')
+    expect(out).not.toContain('— NOT STARTED')
     expect(out).toContain('Stored starter placement is not proof a replacement is still allowed')
     expect(out).not.toContain('Lead with these')
     /* Most serious first, and one line for McCaffrey even though he is on two rosters. */

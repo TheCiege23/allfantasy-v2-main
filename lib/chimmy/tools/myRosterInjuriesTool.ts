@@ -10,7 +10,8 @@ import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 import { isBestBallSettings } from '@/lib/core-app/lineupMode'
 import { listedPositionCounts } from '@/lib/chimmy/rosterCounts'
-import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
+import { LINEUP_ACTION_RULES, kickoffLabel, type KickoffCheck } from '@/lib/chimmy/lineupActionEvidence'
+import { checkStartedGames } from '@/lib/chimmy/actions/gameLocks'
 
 /**
  * WHO IS HURT ON THE USER'S OWN ROSTERS, ACROSS EVERY LEAGUE THEY ARE IN.
@@ -106,6 +107,9 @@ type Finding = {
   reportedAt: Date | null
   stale: boolean
   appearances: Array<{ leagueName: string; slot: Slot; automatic: boolean }>
+  /** For the kickoff check: the finding's sport, and its dedup key as a stand-in player id. */
+  sport: string
+  key: string
 }
 
 /**
@@ -259,6 +263,8 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
             reportedAt: fact?.reportedAt ?? null,
             stale: fact?.stale ?? false,
             appearances: [],
+            sport,
+            key,
           }
         } else if (!fact && e.feedStatus && !NON_INJURY_STATUS.test(e.feedStatus.trim())) {
           /*
@@ -274,6 +280,8 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
             reportedAt: null,
             stale: false,
             appearances: [],
+            sport,
+            key,
           }
         }
         if (finding) byKey.set(key, finding)
@@ -312,10 +320,31 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
       (f) => severityOf(f.status) <= 1 && f.appearances.some((a) => a.slot === 'starter' && !a.automatic),
     )
     if (startingHurt.length > 0) {
+      /*
+       * ⚠ KICKOFF IS CHECKED HERE, NOT ONLY DISCLAIMED. This is the line a 2026-09-28 KBFL answer
+       * built "swap a healthy TE into Johnson's slot" from, after Johnson's game had kicked off.
+       * One schedule read per sport; the dedup key stands in for the player id, and a failed read
+       * leaves every player KICKOFF UNVERIFIED rather than clear.
+       */
+      const now = new Date()
+      const kickoffBySport = new Map<string, KickoffCheck | null>()
+      for (const sport of new Set(startingHurt.map((f) => f.sport))) {
+        const players = startingHurt
+          .filter((f) => f.sport === sport)
+          .map((f) => ({ playerId: f.key, name: f.name, team: f.team, gameTime: null }))
+        kickoffBySport.set(
+          sport,
+          await checkStartedGames({ sport, season: now.getUTCFullYear(), week: 0, players, now }).catch(() => null),
+        )
+      }
       lines.push(
         `ROSTER PLACEMENT: ${startingHurt.length} player(s) listed Out/IR are among stored STARTERS: ${startingHurt
-          .map((f) => `${f.name} (${f.appearances.filter((a) => a.slot === 'starter' && !a.automatic).map((a) => a.leagueName).join(', ')})`)
-          .join('; ')}. This injury check does not verify kickoff locks, provider transaction rules or AutoSubs eligibility. Stored starter placement is not proof a replacement is still allowed; verify those before suggesting an actionable swap. ${LINEUP_ACTION_RULES}`,
+          .map((f) => {
+            const check = kickoffBySport.get(f.sport) ?? null
+            const reason = check?.started.get(f.key)
+            return `${f.name} (${f.appearances.filter((a) => a.slot === 'starter' && !a.automatic).map((a) => a.leagueName).join(', ')}) — ${kickoffLabel(f.key, check)}${reason ? `: ${reason}` : ''}`
+          })
+          .join('; ')}. Kickoff is from the AllFantasy game schedule (checked ${now.toISOString()}), not the platform's lock. This injury check does not verify provider lock timing, transaction rules or AutoSubs eligibility. Stored starter placement is not proof a replacement is still allowed; verify those before suggesting an actionable swap. ${LINEUP_ACTION_RULES}`,
       )
     }
   }
