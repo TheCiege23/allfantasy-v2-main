@@ -250,7 +250,7 @@ export function BestBallAdvancedSettings({
           checked={settings.contestStructure === 'tournament'}
           onChange={(enabled) => patchBestBall({ contestStructure: enabled ? 'tournament' : 'season_long', tournamentEnabled: enabled })}
           label="Tournament / advancement mode"
-          description="Enable advancement metadata, tie handling, and multi-round finals."
+          description="Advance the top scoring teams through scheduled rounds to a final."
           accent={accent}
         />
       </div>
@@ -268,6 +268,13 @@ export function BestBallAdvancedSettings({
           onChange={(tournamentAdvancementRounds) => patchBestBall({ tournamentAdvancementRounds: Math.max(0, Number.parseInt(tournamentAdvancementRounds || '0', 10) || 0) })}
           accent={accent}
         />
+        <GlassInput label="Advancers per pod" value={String(settings.advancersPerPod ?? 1)}
+          onChange={(value) => patchBestBall({ advancersPerPod: Math.max(1, Math.min(settings.podSize, Number(value) || 1)) })} accent={accent} />
+        <GlassInput label="Round end weeks" value={(settings.roundEndWeeks ?? Array.from({ length: settings.tournamentAdvancementRounds + 1 }, (_, i) => settings.regularSeasonLength + i)).join(', ')}
+          onChange={(value) => patchBestBall({ roundEndWeeks: value.split(',').map(part => Number(part.trim())) })} accent={accent}
+          hint="One end week per round, in increasing order. The last round is the final." />
+        <Toggle checked={settings.resetBetweenRounds ?? false} onChange={(resetBetweenRounds) => patchBestBall({ resetBetweenRounds })}
+          label="Reset scores between rounds" description="Each new round ranks teams on that round's scores." accent={accent} />
         <GlassInput
           label="Slow Draft Clock (min)"
           value={settings.slowDraftClockMinutes == null ? '' : String(settings.slowDraftClockMinutes)}

@@ -118,6 +118,38 @@ export function gradeInputsFromNativeItems(
   return out
 }
 
+/**
+ * A redraft proposal's (or preview's) assets as grader inputs. Redraft rows keep the player's name and
+ * pick season/round in COLUMNS rather than in `metadata`; this lifts them into the shape
+ * `gradeInputsFromNativeItems` already reads, so there is one mapping rule, not two.
+ */
+export function gradeInputsFromRedraftAssets(
+  assets: ReadonlyArray<{
+    assetType: string | null | undefined
+    playerId?: string | null
+    playerName?: string | null
+    pickSeason?: number | null
+    pickRound?: number | null
+    metadata?: unknown
+  }>,
+): GradeInputs {
+  return gradeInputsFromNativeItems(
+    assets.map((a) => {
+      const meta = record(a.metadata)
+      return {
+        itemType: a.assetType,
+        itemReference: a.playerId ?? null,
+        metadata: {
+          ...meta,
+          playerName: meta.playerName ?? a.playerName ?? null,
+          pickSeason: meta.pickSeason ?? a.pickSeason ?? null,
+          pickRound: meta.pickRound ?? a.pickRound ?? null,
+        },
+      }
+    }),
+  )
+}
+
 /** The reason a deal is not graded because of assets that cannot be priced, or null. */
 export function unpriceableReason(give: GradeInputs, get: GradeInputs): string | null {
   const all = [...give.unpriceable, ...get.unpriceable]

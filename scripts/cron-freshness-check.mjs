@@ -52,6 +52,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import pg from 'pg'
 import { readVercelCrons, classifyCrons } from './cron-tier.mjs'
+import { withFastTierOperationalOverlays } from './cron-fast-tier-loop.mjs'
 import { pinSessionToUtc, maxAge } from './db-freshness.mjs'
 
 /**
@@ -102,6 +103,9 @@ const MIN_ALLOWANCE_MS = 20 * 60_000
  * stayed invisible.
  */
 export const PROBES = {
+  // The operational overlay is outside cron-schedule.json. Probe its unique job heartbeat,
+  // then audit every connected NFL league's certified active-lane success below.
+  '/api/cron/fantasy-os-active-sync': { heartbeat: 'cron-fantasy-os-active-sync' },
   // ── slow tier (GitHub Actions) ──
   '/api/cron/import-injuries': { table: 'SportsInjury', column: 'fetchedAt' },
   '/api/cron/import-players': { table: 'sports_players', column: 'last_updated' },
@@ -866,7 +870,7 @@ async function main() {
     return 0
   }
 
-  const crons = readVercelCrons()
+  const crons = withFastTierOperationalOverlays(readVercelCrons())
   const tiers = classifyCrons(crons)
   const tierOf = new Map()
   for (const c of tiers.fast) tierOf.set(c.path, 'fast')
@@ -1077,6 +1081,48 @@ async function main() {
             : undefined,
       })
     }
+
+    // A healthy route heartbeat does not prove the portfolio stayed fresh. Audit the
+    // certified per-league active-lane timestamp, including leagues with NO state row.
+    // This is intentionally game-day-only: the overnight lane runs a smaller slice.
+    const coverage = await client.query(`
+      WITH game_day AS (
+        SELECT EXISTS (
+          SELECT 1 FROM "SportsGame"
+           WHERE sport IN ('NFL', 'nfl')
+             AND "startTime" BETWEEN now() - INTERVAL '4 hours' AND now() + INTERVAL '4 hours'
+        ) AS active
+      ), connected AS (
+        SELECT DISTINCT lower(platform) AS provider, "platformLeagueId" AS external_id, season
+          FROM leagues
+         WHERE sport::text = 'NFL'
+           AND season = CASE WHEN EXTRACT(MONTH FROM now()) <= 2
+               THEN EXTRACT(YEAR FROM now())::int - 1 ELSE EXTRACT(YEAR FROM now())::int END
+           AND lower(platform) IN ('sleeper', 'espn', 'yahoo', 'mfl', 'fantrax', 'fleaflicker')
+           AND "platformLeagueId" <> ''
+      )
+      SELECT game_day.active AS game_day,
+             count(connected.external_id)::int AS connected,
+             count(*) FILTER (
+               WHERE connected.external_id IS NOT NULL AND
+                 (state."lastSuccessfulSyncAt" IS NULL OR
+                  state."lastSuccessfulSyncAt" < now() - INTERVAL '1 hour')
+             )::int AS stale,
+             max(EXTRACT(EPOCH FROM (now() - state."lastSuccessfulSyncAt")))
+               FILTER (WHERE connected.external_id IS NOT NULL) AS oldest_age_seconds
+        FROM game_day
+        LEFT JOIN connected ON true
+        LEFT JOIN league_sync_state state
+          ON state."runKey" = connected.provider || ':' || connected.external_id || ':' || connected.season || ':active'
+       GROUP BY game_day.active
+    `)
+    const active = coverage.rows[0]
+    results.push({
+      path: '/api/cron/fantasy-os-active-sync#league-coverage',
+      tier: 'fast', kind: 'coverage', table: 'league_sync_state',
+      state: !active.game_day ? 'IDLE' : active.connected === 0 ? 'EMPTY' : active.stale > 0 ? 'STALE' : 'OK',
+      detail: `${active.stale} of ${active.connected} connected current-season NFL leagues last read over 1h ago or never; oldest ${active.oldest_age_seconds == null ? 'never' : Math.round(active.oldest_age_seconds / 60) + 'm'}; game day ${active.game_day}`,
+    })
   } finally {
     await client.end()
   }

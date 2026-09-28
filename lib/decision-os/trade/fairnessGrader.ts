@@ -1,4 +1,12 @@
 /**
+ * The canonical memo's FAIRNESS score — engine-internal. Moved here from `lib/trade-value/grader.ts`
+ * on 2026-09-26, when `./evaluateTrade.ts` became the one trade engine.
+ *
+ * ⚠ ITS LETTER IS NOT THE TRADE GRADE. The letter a manager is shown comes from `./tradeGrade.ts`
+ * through `evaluateTrade()`. This one feeds `buildTradeValueSnapshot` — the canonical memo, its
+ * confidence and the commissioner review. The redraft proposal preview (`TradeCenterModal`) still
+ * prints its A+…F, a known second scale left for a later phase rather than changed silently here.
+ *
  * T2 Trade Grader V1 — deterministic. No AI text generation.
  *
  * Grade is a transparent function of fairness (value evenness):
@@ -7,7 +15,7 @@
  * numbers + optional team profiles (no generated prose).
  */
 
-import type { CommissionerReview, SideTotals, TeamProfile, TradeGrade } from './types'
+import type { CommissionerReview, SideTotals, TeamProfile, TradeGrade } from '@/lib/trade-value/types'
 
 const GRADE_BUCKETS: Array<[number, string]> = [
   [97, 'A+'],
@@ -88,7 +96,7 @@ export function computeConfidence(sides: SideTotals[]): number {
   return Math.round((priced / players) * 100)
 }
 
-export function gradeTrade(
+export function canonicalFairnessGrade(
   sideA: SideTotals,
   sideB: SideTotals,
   profiles?: { a?: TeamProfile; b?: TeamProfile },

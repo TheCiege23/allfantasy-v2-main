@@ -286,7 +286,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
    */
   const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
   const total = pulse.considered
-  const activeTotal = total - (pulse.paused ?? 0)
+  const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
   /*
    * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
@@ -423,9 +423,9 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         clean; putting it in the same sentence as "nothing needs you there" is
         the claim this whole loader refuses to make.
       */}
-      {(pulse.notChecked.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
+      {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
         <p className="af-bd-note">
-          {(pulse.notChecked.automatic ?? 0) > 0 ? `${pulse.notChecked.automatic} Best Ball teams use automatic lineups. ` : null}
+          {(pulse.automatic ?? 0) > 0 ? `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
           {(pulse.notChecked.inactive ?? 0) > 0 ? `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
         </p>
       ) : null}
@@ -470,8 +470,8 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
             : unreadable > 0
               ? 'are either set or could not be read — the line above says which.'
-            : (pulse.notChecked.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
-              ? 'have no remaining manual lineup task or are excluded — the line above explains why.'
+            : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+              ? 'have no remaining manual lineup task.'
               : 'are set — nothing needs you there.'
         }
       />

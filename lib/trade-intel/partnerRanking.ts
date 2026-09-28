@@ -79,8 +79,18 @@ export type PartnerRecommendation = {
   /** Manager-facing sentences, most important first. */
   reasons: string[]
   /** A starting package, when one could be built. Sides are from the VIEWER's point of view. */
-  suggestion: { give: PartnerAsset[]; get: PartnerAsset[]; percentApart: number } | null
+  suggestion: { give: PartnerAsset[]; get: PartnerAsset[]; percentApart: number; grade?: SuggestionGrade | null } | null
 }
+
+/**
+ * THE grade for a suggested deal (2026-09-27), from the viewer's side — the letter the builder
+ * shows when "Start with this deal" loads it. Set by the rosters route, which holds the grader;
+ * this module stays pure. `percentApart` above is the RANKER's value gap on roster values, a
+ * different measure — the card shows the grade, never a letter derived from `percentApart`.
+ */
+export type SuggestionGrade =
+  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
+  | { graded: false; reason: string }
 
 export type PartnerRanking = {
   partners: PartnerRecommendation[]

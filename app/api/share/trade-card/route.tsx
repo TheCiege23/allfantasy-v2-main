@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getTradeGrades, type TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
-import { realizedGradeDisplay } from '@/lib/trade-intel/gradeScale'
+import { resultMark } from '@/lib/trade-intel/tradeResultMark'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,21 +17,19 @@ export const runtime = 'nodejs'
  * to be shared as an IMAGE (Web Share / download), so no league data is ever
  * exposed on an unauthenticated URL. Every number on the card comes from the
  * same graded ledger the Legacy tab shows.
+ *
+ * 🛑 A RESULT, NOT A GRADE (Trade OS, 2026-09-27). This card measures what a trade PRODUCED — fantasy
+ * points while each asset was held. It used to print that as a 110px letter ("initial B · now A"),
+ * the same shape as the one trade grade, which is a judgement of VALUE at the time. Two letters for one
+ * trade, on two scales, is what the one engine removes; the design keeps the observed result separate
+ * and never lets it rewrite a grade. So the mark is the outcome — WON / LOST / EVEN — and the points.
  */
-
-const GRADE_COLOR: Record<string, string> = {
-  A: '#3ddc97',
-  B: '#3ddc97',
-  C: '#7fb3ff',
-  D: '#ffc53d',
-  F: '#ff6b8b',
-}
 
 function initials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase() || '??'
 }
 
-function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boolean }) {
+function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional: boolean; tie: boolean }) {
   const topIn = [
     ...side.playersIn.map((a) => ({
       name: a.name,
@@ -50,12 +48,7 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
     .map((s) => `'${s.season.slice(2)} ${s.net > 0 ? '+' : ''}${s.net.toFixed(0)}`)
     .join(' > ')
   const avatarUrl = side.avatar ? `https://sleepercdn.com/avatars/${side.avatar}` : null
-  const display = realizedGradeDisplay({
-    scored: !provisional,
-    currentGrade: side.currentGrade,
-    initialGrade: side.initialGrade,
-    trend: side.trend === 'improving' || side.trend === 'worsening' ? side.trend : 'steady',
-  })
+  const display = resultMark(side, { provisional, tie })
 
   return (
     <div
@@ -106,10 +99,10 @@ function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boo
       <div
         style={{
           display: 'flex',
-          fontSize: 110,
+          fontSize: 96,
           fontWeight: 900,
           fontStyle: 'italic',
-          color: provisional ? '#5d64a3' : GRADE_COLOR[side.currentGrade] ?? '#7fb3ff',
+          color: display.color,
           marginTop: 4,
           lineHeight: 1,
         }}
@@ -235,7 +228,7 @@ export async function GET(req: NextRequest) {
           </div>
           <div style={{ display: 'flex', gap: 22, marginTop: 24, flex: 1 }}>
             {trade.sides.slice(0, 3).map((side) => (
-              <SideCol key={side.rosterId} side={side} provisional={provisional} />
+              <SideCol key={side.rosterId} side={side} provisional={provisional} tie={Boolean(trade.tie)} />
             ))}
           </div>
           <div
@@ -247,7 +240,7 @@ export async function GET(req: NextRequest) {
             }}
           >
             <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>
-              Graded on real points while each asset was held · picks tracked to who they became
+              Scored on real points while each asset was held · picks tracked to who they became
             </div>
             <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
               AllFantasy.ai · a Brown Pig LLC product

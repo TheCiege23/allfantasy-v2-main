@@ -402,6 +402,8 @@ export function buildTradeGradeEmail(params: {
   leagueName: string
   trade: GradedTrade
   ledgerUrl: string
+  /** Opens this email's immutable evaluation, when it was saved successfully. */
+  receiptUrl?: string | null
   /** THE grade for this recipient's copy of the league. Null when it could not be computed. */
   grade: TradeGradeView | null
   /**
@@ -468,6 +470,7 @@ export function buildTradeGradeEmail(params: {
     `<tr><td>${sidesCard(ordered)}</td></tr><tr><td style="height:12px"></td></tr>` +
     card(`${eyebrow(graded ? 'How this is graded' : 'Why there is no grade')}<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">${escapeHtml(how)}</div>`) +
     leagueTypeCard(leagueType, params.confirmUrl ?? null) +
+    (params.receiptUrl ? cta(params.receiptUrl, 'View the original evaluation', 'The exact grade and values in this email, preserved for comparison.') : '') +
     cta(ledgerUrl, 'See the trade in AllFantasy', escapeHtml('Every asset, and the value behind each letter.'))
 
   const weekPart = Number.isFinite(trade.week) && trade.week > 0 ? ` · week ${trade.week}` : ''
@@ -505,6 +508,7 @@ export function buildPendingTradeOfferEmail(params: {
   youGive: PendingTradeAsset[]
   /** The recipient's OWN league page for this offer. */
   reviewUrl: string
+  receiptUrl?: string | null
   /** Sleeper's trade screen, only when the link is verified. */
   sleeperUrl?: string | null
   /** THE grade for this offer from the recipient's side (`give` = what they send). */
@@ -570,7 +574,9 @@ export function buildPendingTradeOfferEmail(params: {
     eyebrow: 'Trade offer · waiting on you',
     title: leagueName,
     sub: `${who} sent you an offer on Sleeper.`,
-    rows: verdict + swap + rosterFitCard(params.grade ?? null) + leagueTypeCard(leagueType, params.confirmUrl ?? null) + cta(params.reviewUrl, 'See our read on this offer', sleeperNote),
+    rows: verdict + swap + rosterFitCard(params.grade ?? null) + leagueTypeCard(leagueType, params.confirmUrl ?? null) +
+      (params.receiptUrl ? cta(params.receiptUrl, 'View the original evaluation', 'The exact grade and values in this email, preserved for comparison.') : '') +
+      cta(params.reviewUrl, 'See our read on this offer', sleeperNote),
     footer: emailFooter({ baseUrl: params.baseUrl, leagueName, leagueId: params.leagueId ?? null, unsubscribeUrl: params.unsubscribeUrl ?? null }),
   })
   return { subject, html }

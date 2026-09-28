@@ -26,6 +26,12 @@ export async function buildBestBallContextForChimmy(leagueId: string, userId: st
   const result = await buildBestBallWarRoomContext({ leagueId, userId })
   if (!result.ok) return null
   const context = result.context
+  if (!context.ruleConfigurationVerified) {
+    return [
+      '## BEST BALL AF WAR ROOM CONTEXT (selected league; rule coverage limited)',
+      buildBestBallWarRoomPrompt({ context }),
+    ].join('\n')
+  }
 
   const rosterId = context.userRosterId
   const construction = rosterId ? evaluateUserRosterConstruction(context) : null

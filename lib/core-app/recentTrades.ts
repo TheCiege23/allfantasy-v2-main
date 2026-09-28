@@ -8,10 +8,11 @@ import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
-import { completedTradeGraderFor, gradeArchivedTrade, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 /**
  * Trades that landed in your leagues recently.
@@ -138,6 +139,8 @@ export type RecentTrade = {
    * exactly that — never a neutral grade standing in for missing data.
    */
   verdict: RecentTradeVerdict | null
+  /** The saved receipt for the grade behind `verdict` (Trade OS). Null until the receipts migration is applied. */
+  receiptId?: string | null
   /** Native lifecycle state. Provider history omits it because those rows are completed. */
   status?: string
 }
@@ -258,7 +261,7 @@ async function loadNativeRecentTrades(leagues: RecentTradesLeague[], cutoff: Dat
         }).catch(() => [])
       : Promise.resolve([]),
     client.tradeDecisionSnapshot
-      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } } }).catch(() => [])
+      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } }, select: PUBLIC_RECEIPT_SELECT }).catch(() => [])
       : Promise.resolve([]),
   ])
   const rosterById = new Map(rosters.map((row) => [row.id, row]))
@@ -784,6 +787,28 @@ export async function getRecentTrades(
     }
     const oneGrade = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null)
     t.verdict = gradeOf(src, oneGrade)
+    /*
+     * The receipt for that grade (Trade OS). No stored link: completed imported trades have no loader yet.
+     * ⚠ FAILURE-CONTAINED: recording a receipt is bookkeeping, and must never cost the card its trade.
+     */
+    if (oneGrade) {
+      try {
+        const inputs = completedTradeInputs(src, currentSeason)
+        if (inputs) {
+          t.receiptId = await receiptIdForGrade({
+            surface: 'dashboard-trades',
+            leagueId: t.leagueId,
+            userId: live?.viewerUserId ?? null,
+            give: inputs.give,
+            get: inputs.get,
+            viewerSide: false,
+            grade: oneGrade,
+          })
+        }
+      } catch {
+        t.receiptId = null
+      }
+    }
     for (const side of t.sides) {
       for (const asset of side.received) {
         if (!asset.playerId) continue

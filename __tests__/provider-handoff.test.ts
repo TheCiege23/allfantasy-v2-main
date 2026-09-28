@@ -213,7 +213,8 @@ describe('the brief gets handoffs on trades and single-league injuries', () => {
 describe('the matchup loader gates its lineup link on YOUR team', () => {
   it('builds lineupLink from the claimed team, verified-only', () => {
     const src = readFileSync(join(process.cwd(), 'lib/core-app/matchup.ts'), 'utf8')
-    expect(src).toMatch(/lineupLink = myTeam\?\.externalId\s*\?\s*verifiedHandoff\(/)
+    expect(src).toMatch(/lineupLink = myTeam\?\.externalId && !\([^\n]+\)\s*\?\s*verifiedHandoff\(/)
+    expect(src).toContain("league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)")
     expect(src).toContain("'lineup'")
   })
 })

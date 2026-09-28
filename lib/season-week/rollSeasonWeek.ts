@@ -1,3 +1,4 @@
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 /**
  * The week roller: the caller `advance_week` never had.
  *
@@ -180,6 +181,7 @@ export async function rollSeasonWeeks(
       currentWeek: true,
       totalWeeks: true,
       playoffStartWeek: true,
+      league: { select: { bbContestId: true, bestBallMode: true, settings: true } },
     },
     take: options.limit ?? 200,
   })
@@ -190,6 +192,11 @@ export async function rollSeasonWeeks(
   let failed = 0
 
   for (const season of seasons) {
+    if (isNativeTournamentLeague(season.league)) {
+      held += 1
+      outcomes.push({ ...seasonFields(season), plan: { action: 'hold', reason: 'FORMAT_NOT_SUPPORTED', detail: 'contest_advancement_owns_season' } })
+      continue
+    }
     const resolution = await resolveSeasonWeekForRedraftSeason(season.id, { prisma: db, now })
 
     // `SEASON_NOT_FOUND` cannot happen here (we just read the row) but is part of
@@ -322,7 +329,7 @@ export async function rollPostseason(
       includeShadowLeagues: options.includeShadowLeagues,
       statuses: [REDRAFT_SEASON_STATUS.REGULAR_SEASON_COMPLETE, REDRAFT_SEASON_STATUS.PLAYOFFS],
     }),
-    select: { id: true, leagueId: true, status: true },
+    select: { id: true, leagueId: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
     take: options.limit ?? 200,
   })
 
@@ -335,6 +342,11 @@ export async function rollPostseason(
   for (const season of seasons) {
     const base = { seasonId: season.id, leagueId: season.leagueId, status: season.status }
 
+    if (isNativeTournamentLeague(season.league)) {
+      held += 1
+      outcomes.push({ ...base, step: 'held', detail: 'contest_advancement_owns_season' })
+      continue
+    }
     if (options.dryRun) {
       held += 1
       outcomes.push({ ...base, step: 'held', detail: 'dryRun' })

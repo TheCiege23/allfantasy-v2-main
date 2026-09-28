@@ -133,6 +133,23 @@ export function TradePartnerSuggestions(props: {
                   {p.suggestion.get.map((a) => `${a.name} (${money(a.value)})`).join(' + ')}
                 </p>
               ) : null}
+              {/*
+                THE grade for this deal, from your side — the letter the builder shows when "Start
+                with this deal" loads it. A withheld grade says why; no grade on the row draws nothing.
+              */}
+              {p.suggestion?.grade?.graded ? (
+                <p className="af-tc-fit-grade" data-letter={p.suggestion.grade.letter}>
+                  <strong className="af-num">{p.suggestion.grade.letter}</strong>
+                  <span>
+                    for you · {p.ownerName ?? 'They'} {p.suggestion.grade.partnerLetter} · {p.suggestion.grade.label} — you get{' '}
+                    {money(p.suggestion.grade.getValue)} for {money(p.suggestion.grade.giveValue)} in league value
+                  </span>
+                </p>
+              ) : p.suggestion?.grade && !p.suggestion.grade.graded ? (
+                <p className="af-tc-fit-grade" data-letter="none">
+                  <span>Not graded: {p.suggestion.grade.reason}</span>
+                </p>
+              ) : null}
               <div className="af-tc-fit-actions">
                 <button
                   type="button"

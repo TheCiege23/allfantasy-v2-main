@@ -291,6 +291,19 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
   }
 }
 
+/** The same pick price for roster previews and the full evaluator. */
+export async function priceLeagueTradePick(
+  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null },
+  args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[] },
+): Promise<{ priced: PricedAsset; dataSource: string }> {
+  const curve = await pricePick({ ...pick, tier: pick.tier ?? null }, args.nflCtx)
+  const live = livePickValue(args.fcPlayers, pick.year, pick.round, pick.tier ?? null)
+  return {
+    priced: live != null ? repricedAsset(curve, live, 'fantasycalc') : curve,
+    dataSource: live != null ? 'fantasycalc_pick' : 'historical_pick_curve',
+  }
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -309,12 +322,7 @@ export async function resolveAssets(
 
   for (const raw of items) {
     if (raw.kind === 'pick') {
-      const curve = await pricePick(
-        { year: raw.year, round: raw.round, tier: raw.tier ?? null },
-        args.nflCtx,
-      )
-      const live = livePickValue(args.fcPlayers, raw.year, raw.round, raw.tier ?? null)
-      const p = live != null ? repricedAsset(curve, live, 'fantasycalc') : curve
+      const { priced: p, dataSource } = await priceLeagueTradePick(raw, args)
       priced.push(p)
       lines.push(
         lineFromPriced(p, {
@@ -323,7 +331,7 @@ export async function resolveAssets(
           team: `${raw.year}`,
           pricedSource: 'pick',
           playerId: null,
-          dataSource: live != null ? 'fantasycalc_pick' : 'historical_pick_curve',
+          dataSource,
         }),
       )
       continue

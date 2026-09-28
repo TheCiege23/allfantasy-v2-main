@@ -19,7 +19,21 @@ async function main() {
   const draft = await prisma.draftSession.findFirstOrThrow({ where: { leagueId }, orderBy: { createdAt: 'desc' } })
   const startingPositions = template.template.slots.flatMap(slot => Array.from({ length: slot.starterCount ?? 0 }, () => (slot.allowedPositions ?? []).find(p => allowed.has(p.toUpperCase()))?.toUpperCase() ?? position))
   const entryCount = Math.max(8, draft.rounds * draft.teamCount)
-  const entries = Array.from({ length: entryCount }, (_, i) => ({ playerId: league.name + '-p' + (i + 1), name: 'Fixture Player ' + (i + 1), position: startingPositions[Math.floor(i / draft.teamCount)] ?? position, team: 'FA', adp: i + 1 }))
+  const entries = Array.from({ length: entryCount }, (_, i) => {
+    const playerId = league.name + '-p' + (i + 1)
+    const name = 'Fixture Player ' + (i + 1)
+    const playerPosition = startingPositions[Math.floor(i / draft.teamCount)] ?? position
+    return {
+      playerId, name, position: playerPosition, team: 'FA', adp: i + 1,
+      display: {
+        playerId, displayName: name, sport: league.sport,
+        assets: { headshotUrl: null, teamLogoUrl: null },
+        team: { teamId: 'FA', abbreviation: 'FA', displayName: 'Free Agent', sport: league.sport, logoUrl: null },
+        stats: { adp: i + 1, primaryStatLabel: 'ADP', primaryStatValue: i + 1 },
+        metadata: { position: playerPosition, teamAbbreviation: 'FA', byeWeek: null, injuryStatus: null, sport: league.sport },
+      },
+    }
+  })
   await prisma.draftPoolCache.create({ data: { leagueId, cacheKey: 'seven-sport-browser:' + leagueId, sourceFingerprint: rosterFp, entryCount: entries.length, sport: league.sport, poolType: 'pro', expiresAt: new Date(Date.now() + 3600000), payload: { entries, sport: league.sport, count: entries.length, rosterConfigurationIncomplete: false } } })
   console.log(JSON.stringify({ position, entries }))
   await prisma.$disconnect()
