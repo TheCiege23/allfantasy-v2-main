@@ -47,6 +47,8 @@ import type { LeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { PlayerSharesBoard } from '@/components/core-app/player-finder/PlayerSharesBoard'
 import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
+import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
+import { buildLeagueStrip } from '@/lib/core-app/leagueStrip'
 import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
 import { PlayerNextGames } from '@/components/core-app/player-finder/PlayerNextGames'
@@ -470,6 +472,23 @@ export function PlayerFinder({
   const yoursCount = leagueRows.filter((r) => r.slot.isYours).length
   const unmatched = (detail?.rosterCoverage.unmatched ?? []).filter((u) => inScope(u.leagueId))
 
+  // The league strip: every league in scope as one chip — cross-league view only (leagueStrip.ts).
+  const stripChips =
+    detail && signedIn && !leagueMode && detail.leagues.available
+      ? buildLeagueStrip({
+          leagues: pickLeagues,
+          scope: savedPicks,
+          slots: detail.leagues.data,
+          unmatched: detail.rosterCoverage.unmatched,
+          playerName: detail.player.name,
+          readinessTone: ready?.tone ?? null,
+        })
+      : []
+  const stripLeagueHref = (leagueId: string) =>
+    detail
+      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId))}&league=${encodeURIComponent(leagueId)}`
+      : '/core/players'
+
   /*
    * Game day (2026-09-06). His kickoff is the lock every league row counts
    * down to; when the feed says Questionable / Doubtful / Out, the card leads
@@ -782,6 +801,7 @@ export function PlayerFinder({
                     <span className="af-pf-rostered"> · cross-league lookup unavailable</span>
                   )}
                 </div>
+                <LeagueStrip chips={stripChips} leagueHref={stripLeagueHref} />
               </div>
 
               <span className="af-sync af-num" data-stale={detail.freshness.stale}>
