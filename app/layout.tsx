@@ -14,6 +14,7 @@ import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
 import { buildSeoMeta } from '@/lib/seo';
 import { resolveEffectiveDataMode } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
+import { IOS_APP_HTML_FLAG_SCRIPT } from '@/lib/platform/iosApp';
 import './globals.css';
 
 export const viewport = {
@@ -248,6 +249,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
+        {/*
+          Marks <html data-ios-app> inside the native iOS shell, before first
+          paint, so globals.css can hide purchase links and third-party sign-in
+          there (lib/platform/iosApp says why). Client-side on purpose: reading
+          the User-Agent on the server would make every page dynamic.
+        */}
+        <script id="af-ios-app-flag" dangerouslySetInnerHTML={{ __html: IOS_APP_HTML_FLAG_SCRIPT }} />
 
         {metaPixelId ? (
           <script

@@ -59,7 +59,7 @@ export default function OAuthButtonRow({ callbackUrl }: OAuthButtonRowProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-hide-in-ios-app>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {ROW_PROVIDERS.map((provider) => {
           const enabled = isSocialProviderEnabled(provider)
