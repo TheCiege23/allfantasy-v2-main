@@ -1609,7 +1609,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               {yourTab === 'active'
                 ? 'Offers with your name on them'
                 : importedLeague
-                  ? 'Graded on this league’s values today — the same grade as the Trade Center'
+                  ? 'Each trade keeps the grade it got when first graded on this league’s values — the same grade as the Trade Center'
                   : 'Realized grades — scored on what each side has produced since'}
             </span>
           </div>

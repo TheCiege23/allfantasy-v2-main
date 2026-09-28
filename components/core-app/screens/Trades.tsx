@@ -8,6 +8,7 @@ import { TeamLogo } from '@/app/components/TeamLogo'
 import type { TradesData, TradeRecord, PendingOffer, TradeAgentIdea } from '@/lib/core-app/trades'
 import { useFocusTradeFromUrl } from '@/components/core-app/useFocusTradeFromUrl'
 import { assetValues, gradeReasons } from '@/lib/core-app/importedTradeTimeline'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -292,7 +293,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
                     League grade · got {(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} for{' '}
-                    {(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value today
+                    {(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value {gradeMoment(graded)}
                   </span>
                 </div>
               ) : null}

@@ -78,11 +78,13 @@ export async function gradeSleeperActivityTrade(args: {
       picksIn: picksTo(a),
       picksOut: picksTo(b),
       currentSeason: new Date(now).getUTCFullYear(),
+      // The trade's frozen original — the same letter its email and history show (`frozenCompletedGrade.ts`).
+      original: { afLeagueId: args.afLeagueId, tradeId: tx.transaction_id, now: new Date(now) },
     })
     if (!g.graded) return { graded: false, reason: g.reason }
     return {
       graded: true,
-      basis: 'today',
+      basis: g.frozenAt ? 'first-graded' : 'today',
       sides: [
         { name: args.rosterNames.get(a) ?? `Team ${a}`, letter: g.letter },
         { name: args.rosterNames.get(b) ?? `Team ${b}`, letter: g.partnerLetter },

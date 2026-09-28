@@ -5,6 +5,7 @@ import type { TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeServ
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { assetValues, gradeReasons, type importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 type Proposal = { id: string; title: string; status: string; involvesYou: boolean; assets: string[]; grade: string | null; explanation: string }
 type History = { supported: boolean; grades?: TradeGradesPayload; ledger?: ImportedTradeLedgerPayload; viewerSleeperUserId?: string | null; sync?: { incomplete: boolean } }
@@ -21,9 +22,14 @@ type TradeCenter = {
  * The one sentence Chimmy is handed about a trade's grade — the letters and values it was graded on,
  * so an answer explains THE grade instead of inventing one. Empty when there is no grade.
  */
-function gradeFact(aName: string, bName: string, g: { letter: string; partnerLetter: string; getValue: number; giveValue: number } | null): string {
+function gradeFact(
+  aName: string,
+  bName: string,
+  g: { letter: string; partnerLetter: string; getValue: number; giveValue: number; frozenAt?: string | null } | null,
+): string {
   if (!g) return ''
-  return ` The AllFantasy grade on this league's values today is ${aName} ${g.letter} (got ${g.getValue.toLocaleString()} for ${g.giveValue.toLocaleString()}) and ${bName} ${g.partnerLetter}.`
+  // A completed trade's letter is its frozen original — tell Chimmy WHEN, so it does not call it today's.
+  return ` The AllFantasy grade on this league's values ${gradeMoment(g)} is ${aName} ${g.letter} (got ${g.getValue.toLocaleString()} for ${g.giveValue.toLocaleString()}) and ${bName} ${g.partnerLetter}.`
 }
 
 function TradeCenterCard({ trade, active, onAsk }: { trade: LeagueTradeHistoryItem; active: boolean; onAsk: (question: string) => void }) {
@@ -49,7 +55,7 @@ function TradeCenterCard({ trade, active, onAsk }: { trade: LeagueTradeHistoryIt
     <p>{active && viewerIsParty ? 'You receive' : 'Received'}: {received}</p>
     <p>{active && trade.decisionRecommendation
       ? trade.decisionRecommendation
-      : one ? `You got ${one.getValue.toLocaleString()} for ${one.giveValue.toLocaleString()} on this league's values today.`
+      : one ? `You got ${one.getValue.toLocaleString()} for ${one.giveValue.toLocaleString()} on this league's values ${gradeMoment(one)}.`
       : grade ? `Repriced using this league's current player values. This is not a realized-points grade.` : 'Verified valuation coverage is incomplete; no letter grade is shown.'}</p>
     {!active && trade.currentUnresolvedAssets?.length ? <p>Unpriced: {trade.currentUnresolvedAssets.join(', ')}</p> : null}
     <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain ${trade.status || 'recorded'} trade ${trade.id}: ${title}. Recorded sent assets: ${sent}. Recorded received assets: ${received}.${gradeFact('my side', trade.partnerName, one)} Verify which side is mine, then explain the grade and whether it fits my roster and this league's rules.`)}>Ask Chimmy</button>
@@ -193,7 +199,7 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
             🛑 THE ONE GRADE (2026-09-27). These rows are the Trade Center's own completed-trade rows,
             so a trade reads the same letters here, there, on the league page and in the grade email.
           */}
-          <p>Graded on this league&rsquo;s values today &mdash; the same grade as the Trade Center. Realized points are shown as a result, not a grade.</p>
+          <p>Each trade keeps the grade it got the first time AllFantasy graded it on this league&rsquo;s values &mdash; the same grade as the Trade Center. Realized points are shown as a result, not a grade.</p>
           {graded.slice(0, visible).map(row => <GradedHistoryCard key={row.id} row={row} realized={realizedByTx.get(row.id.split(':').at(-1)!) ?? new Map()} onAsk={onAsk} />)}
           {graded.length === 0 && <p>No completed trades on file for this league.</p>}
         </> : trades.slice(0, visible).map(t => {

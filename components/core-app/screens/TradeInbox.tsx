@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -853,16 +854,31 @@ export function TradeInbox(props: {
                      * so the column answers the question a finished deal actually has: who won it.
                      * The two letters are one grade seen from each side (`partnerLetter` is exact).
                      */
-                    <div className="af-tc-timeline-grades" data-mode="teams" aria-label="Grade for each team, on league value today">
+                    /*
+                     * A FROZEN original (`frozenCompletedGrade.ts`) is labelled with the day it was
+                     * first graded, and today's letter shows under it only when the market moved it —
+                     * the original and the re-evaluation are two facts, never one.
+                     */
+                    <div
+                      className="af-tc-timeline-grades"
+                      data-mode="teams"
+                      aria-label={`Grade for each team, on league value ${gradeMoment(teamGrades)}`}
+                    >
                       <div data-letter={teamGrades.letter}>
                         <span title={sideAName}>{sideAName}</span>
                         <strong>{teamGrades.letter}</strong>
                         <small>{teamGrades.getValue.toLocaleString()} for {teamGrades.giveValue.toLocaleString()}</small>
+                        {teamGrades.current && teamGrades.current.letter !== teamGrades.letter
+                          ? <small>Today {teamGrades.current.letter}</small>
+                          : null}
                       </div>
                       <div data-letter={teamGrades.partnerLetter}>
                         <span title={sideBName}>{sideBName}</span>
                         <strong>{teamGrades.partnerLetter}</strong>
                         <small>{teamGrades.giveValue.toLocaleString()} for {teamGrades.getValue.toLocaleString()}</small>
+                        {teamGrades.current && teamGrades.current.partnerLetter !== teamGrades.partnerLetter
+                          ? <small>Today {teamGrades.current.partnerLetter}</small>
+                          : null}
                       </div>
                     </div>
                   ) : (

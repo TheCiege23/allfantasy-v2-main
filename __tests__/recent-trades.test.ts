@@ -286,6 +286,8 @@ describe('getRecentTrades', () => {
         picksIn: [{ season: 2027, round: 1, label: '2027 1st' }],
         picksOut: [],
         currentSeason: 2026,
+        // Which trade on which row, so the letter is its frozen original (`frozenCompletedGrade.ts`).
+        original: { afLeagueId: 'af-1', tradeId: 'fresh-9', now: expect.any(Date) },
       })
       const [you, them] = out[0].sides
       expect(you).toMatchObject({ grade: 'A', gradeBasis: 'League' })
