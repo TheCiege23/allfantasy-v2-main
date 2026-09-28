@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import {
@@ -20,6 +20,33 @@ import type {
   TradePartnerSuggestion,
   SuggestedTradePackage,
 } from '@/lib/league-trade-engine/proposalSuggestions'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { ComposerAsset } from '@/lib/league-trade-engine/proposalPackageGrades'
+import { ComposerGradeLine } from './ComposerGradeLine'
+
+/** One side of the composed deal, in the grade preview's shape. Picks carry their season and round. */
+export function composerSide(
+  roster: TradeableRoster,
+  playerIds: ReadonlySet<string>,
+  pickIds: ReadonlySet<string>,
+  faab: string,
+): ComposerAsset[] {
+  const players = [...playerIds].map((id): ComposerAsset => ({ kind: 'player', id, name: roster.players.find((p) => p.id === id)?.name ?? id }))
+  const picks = [...pickIds].map((id): ComposerAsset => {
+    const pick = roster.picks.find((p) => p.pickId === id)
+    return { kind: 'pick', season: pick?.season ?? null, round: pick?.round ?? null, label: pick?.label ?? id }
+  })
+  const amount = Math.floor(Number(faab))
+  return [...players, ...picks, ...(amount > 0 ? [{ kind: 'faab' as const, amount }] : [])]
+}
+
+/**
+ * A package's reason without its "stays within N% of the priced value" clause — the suggester's own
+ * value gap, which could read against the grade shown beside it. Everything else in the reason stays.
+ */
+export function reasonWithoutValueGap(reason: string): string {
+  return reason.replace(/;?\s*the package stays within \d+% of the priced value,?/i, ';').replace(/;\s*;/g, ';').replace(/^;\s*/, '').trim()
+}
 
 export type ProposeTradeModalProps = {
   open: boolean
@@ -207,6 +234,51 @@ export function ProposeTradeModal({
   const firstHasAssets = givePlayerIds.size + getPlayerIds.size + givePickIds.size + getPickIds.size > 0 || Number(giveFaab) > 0 || Number(getFaab) > 0
   const secondHasAssets = secondGivePlayerIds.size + secondGetPlayerIds.size + secondGivePickIds.size + secondGetPickIds.size > 0 || Number(secondGiveFaab) > 0 || Number(secondGetFaab) > 0
   const canSubmit = Boolean(myRoster && partnerRoster && firstHasAssets && (!multiTeam || (secondPartnerRoster && secondHasAssets)) && !submitting)
+
+  /*
+   * THE grade for the deal as composed (2026-09-28): re-asked 450 ms after the last change, two-team
+   * only, from the viewer's side (`/trades/grade-preview`). A stale answer is dropped by sequence, so
+   * a slow response can never paint the letter of a deal the manager has already changed.
+   */
+  const [composedGrade, setComposedGrade] = useState<SuggestionGrade | null>(null)
+  const [composedGradeLoading, setComposedGradeLoading] = useState(false)
+  const composedSeq = useRef(0)
+  const composedKey = JSON.stringify([partnerRosterId, [...givePlayerIds], [...getPlayerIds], [...givePickIds], [...getPickIds], giveFaab, getFaab, multiTeam])
+  useEffect(() => {
+    const seq = ++composedSeq.current
+    setComposedGrade(null)
+    if (!open || multiTeam || !myRoster || !partnerRoster || !firstHasAssets) {
+      setComposedGradeLoading(false)
+      return
+    }
+    const give = composerSide(myRoster, givePlayerIds, givePickIds, giveFaab)
+    const get = composerSide(partnerRoster, getPlayerIds, getPickIds, getFaab)
+    if (give.length === 0 || get.length === 0) {
+      setComposedGrade({ graded: false, reason: 'Add something to both sides to see the grade.' })
+      setComposedGradeLoading(false)
+      return
+    }
+    setComposedGradeLoading(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/grade-preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ give, get }),
+        })
+        const data = (await res.json().catch(() => null)) as { grade?: SuggestionGrade } | null
+        if (seq !== composedSeq.current) return
+        setComposedGrade(res.ok && data?.grade ? data.grade : { graded: false, reason: 'This trade could not be graded just now.' })
+      } catch {
+        if (seq === composedSeq.current) setComposedGrade({ graded: false, reason: 'This trade could not be graded just now.' })
+      } finally {
+        if (seq === composedSeq.current) setComposedGradeLoading(false)
+      }
+    }, 450)
+    return () => window.clearTimeout(timer)
+    // `composedKey` stands for every input the grade depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, composedKey, myRoster, partnerRoster, leagueId])
 
   function applySuggestion(partnerId: string, proposal: SuggestedTradePackage) {
     setMultiTeam(false)
@@ -412,6 +484,7 @@ export function ProposeTradeModal({
                           <span className="ml-auto font-mono text-[10px] text-emerald-300">{suggestion.fitScore}% fit</span>
                         </span>
                         {best ? <span className="mt-1.5 block text-[10.5px] leading-snug text-white/55">Send {best.send.map((a) => a.name).join(' + ')} for {best.receive.map((a) => a.name).join(' + ')}</span> : null}
+                        {best ? <ComposerGradeLine compact grade={best.grade} partnerName={roster?.ownerName} testId="composer-partner-grade" /> : null}
                       </button>
                     )
                   })}
@@ -471,8 +544,14 @@ export function ProposeTradeModal({
                       <span className="block text-[11px] text-white/65">
                         Receive {proposal.receive.map((asset) => asset.name).join(' + ')}
                       </span>
+                      {/*
+                        🛑 THE GRADE, NOT "N% VALUE MATCH" (2026-09-28). `fairness` is the suggester's own
+                        value gap; when the package is graded it is not shown, and the reason's clause that
+                        quotes it is cut — it could read against the letter beside it.
+                      */}
+                      <ComposerGradeLine compact grade={proposal.grade} partnerName={partnerRoster?.ownerName} testId="composer-package-grade" />
                       <span className="mt-1 block text-[10px] text-emerald-100/60">
-                        {proposal.fairness}% value match · {proposal.reason}
+                        {proposal.grade ? reasonWithoutValueGap(proposal.reason) : `${proposal.fairness}% value match · ${proposal.reason}`}
                       </span>
                       {proposal.acceptanceLikelihood != null ? <span className="mt-1 block text-[10px] text-cyan-200/70">{proposal.acceptanceLikelihood}% learned acceptance likelihood</span> : null}
                       {proposal.simulation?.available ? <span className={`mt-1 block text-[10px] ${(proposal.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{proposal.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability {proposal.simulation.beforePct?.toFixed(1)}% → {proposal.simulation.afterPct?.toFixed(1)}% ({(proposal.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{proposal.simulation.deltaPct?.toFixed(1)}%)</span> : proposal.simulation ? <span className="mt-1 block text-[10px] text-amber-200/60">Simulation withheld: {proposal.simulation.reason}</span> : null}
@@ -580,6 +659,20 @@ export function ProposeTradeModal({
                     })}
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+
+            {/* THE grade for the deal as composed, before it is sent (2026-09-28). */}
+            {myRoster && partnerRoster && firstHasAssets ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2" data-testid="composer-deal-grade-box">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">League grade for this offer</p>
+                {multiTeam ? (
+                  <span className="mt-1 block text-[11px] text-white/55">Three-team trades aren&apos;t graded.</span>
+                ) : composedGradeLoading && !composedGrade ? (
+                  <span className="mt-1 block text-[11px] text-white/45">Grading…</span>
+                ) : (
+                  <ComposerGradeLine grade={composedGrade} partnerName={partnerRoster.ownerName} testId="composer-deal-grade" />
+                )}
               </div>
             ) : null}
 

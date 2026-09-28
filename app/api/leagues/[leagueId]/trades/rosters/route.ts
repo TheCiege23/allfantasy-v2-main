@@ -18,6 +18,7 @@ import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/p
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
+import { gradeProposalPackages } from '@/lib/league-trade-engine/proposalPackageGrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
@@ -51,6 +52,8 @@ export const dynamic = 'force-dynamic'
 
 /** How many ranked partners' suggested deals are graded — the cards the Trade Center shows, plus headroom. */
 const GRADED_PARTNER_SUGGESTIONS = 5
+/** The composer shows 3 partner cards plus the chosen partner's packages; this covers both. */
+const GRADED_COMPOSER_PACKAGES = 8
 
 /**
  * A player the picker can offer.
@@ -876,9 +879,13 @@ export async function GET(
    * ⚠ BOUNDED to the cards the screen shows, and FAILURE-CONTAINED like the ranking: a grader that
    * cannot load costs the letter, never the rosters.
    */
+  /* One league grader per request, shared by the partner ranking and the composer's packages. */
+  let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
+  const leagueGrader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null))
+
   if (partnerRanking) {
     try {
-      const grader = await createLeagueTradeGrader({ leagueId, userId }).catch(() => null)
+      const grader = await leagueGrader()
       await gradePartnerSuggestions({
         ranking: partnerRanking,
         picks: new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
@@ -1015,6 +1022,27 @@ export async function GET(
    * (`tradeDepth` itself was resolved in wave one.)
    */
   const depthOpen = tradeDepth.unlocked
+
+  /*
+   * 🛑 THE GRADE ON THE COMPOSER'S PACKAGES (2026-09-28, lib/league-trade-engine/proposalPackageGrades.ts).
+   * The "Propose a Trade" composer showed each package as "N% value match" — `fairness`, this route's
+   * own value gap. The packages it can show are now graded by the one grader, on the viewer's side,
+   * with the inputs the builder would send. Only when the suggestions are actually sent (`depthOpen`),
+   * bounded to GRADED_COMPOSER_PACKAGES, and failure-contained: no grader, no letters, same response.
+   */
+  if (depthOpen && suggestions.length > 0) {
+    try {
+      const grader = await leagueGrader()
+      await gradeProposalPackages({
+        suggestions,
+        picks: new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
+        grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+        limit: GRADED_COMPOSER_PACKAGES,
+      })
+    } catch {
+      /* The packages stand without letters. */
+    }
+  }
 
   return NextResponse.json({
     rosters: result,
