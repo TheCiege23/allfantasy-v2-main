@@ -234,6 +234,41 @@ describe('daily-sport weekly score sync', () => {
     expect(summary.warnings.join(' ')).toContain('vendor_specific_tally')
   })
 
+  it('REGRESSION (2026-09-28): a soccer DEFENDER is scored from his box line, not treated as an NFL team defense', async () => {
+    // `isTeamDefenseRow` keys on position `DEF`, which is exactly a soccer defender's position. The
+    // test-DB smoke (scripts/smoke-soccer-gameweek-testdb.ts) found 16 of 16 defenders unscored.
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'SOCCER', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('SOCCER'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: '1208', sport: 'SOCCER', position: 'DEF', team: 'ARS' }])
+    prismaMock.playerIdentityMap.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      'rollingInsightsId' in args.where ? [{ id: 'pim-def', rollingInsightsId: '1208', sleeperId: null }] : [],
+    )
+    prismaMock.playerGameStat.findMany.mockImplementation(async (args: { where: { playerId: { in: string[] } } }) =>
+      args.where.playerId.in.includes('pim-def')
+        ? [{ playerId: 'pim-def', normalizedStatMap: { seasonType: 'regular', group: 'fielders', position: 'Defender', stats: { clean_sheets: 1, minutes_played: 90, goals: 0, assists: 1 } } }]
+        : [],
+    )
+
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
+
+    expect(summary.scoresUpserted).toBe(1)
+    const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0][0]
+    expect(written.create.stats).toMatchObject({ clean_sheet_def: 1, assists: 1, minutes_played: 90 })
+    expect(written.create.fantasyPts).toBeGreaterThan(0)
+    // No team-defense lookup: that path reads SportsGame for a points-allowed result.
+    expect(prismaMock.sportsGame.findMany).not.toHaveBeenCalled()
+  })
+
+  it('[control] an NFL DEF is still a team defense', async () => {
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NFL'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'nfl:def:BUF', sport: 'NFL', position: 'DEF', team: 'BUF' }])
+
+    await runSync()
+
+    expect(prismaMock.sportsGame.findMany).toHaveBeenCalled()
+  })
+
   it('records a player with no games this week as missing, not as zero', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NHL', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NHL'))

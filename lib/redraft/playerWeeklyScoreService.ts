@@ -420,8 +420,17 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // final score. Pre-load this week's finished games keyed by team abbrev so a
   // DEF starter scores from data we have, even without a per-team box-score
   // provider feed. (Sacks/INT/etc. still require the box-score feed — see G8.)
-  // NFL-shaped team defenses only: NCAAF has no team-defense stat line and takes its own branch below.
-  const teamDefensePlayerIds = isNcaaf ? [] : playerIds.filter((id) => isTeamDefenseRow(id, positionByPlayer.get(id) ?? null))
+  /*
+   * 🛑 ONLY NFL-SHAPED FOOTBALL HAS A TEAM DEFENSE. `isTeamDefenseRow` keys on the position `DEF`, and
+   * a soccer defender's position IS `DEF` — so every soccer defender was routed here, looked up as a
+   * team score, and scored nothing (found 2026-09-28 by scripts/smoke-soccer-gameweek-testdb.ts: 16 of
+   * 16 defenders unscored while keepers, midfielders and forwards scored). A daily sport is scored
+   * from its own box lines, player by player, whatever the position is called. NCAAF has no
+   * team-defense stat line either, and takes its own branch below.
+   */
+  const isTeamDefense = (id: string) =>
+    !isDailySport && !isNcaaf && isTeamDefenseRow(id, positionByPlayer.get(id) ?? null)
+  const teamDefensePlayerIds = playerIds.filter(isTeamDefense)
   const gameByTeam = new Map<string, { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }>()
   if (teamDefensePlayerIds.length > 0) {
     const rawGames = await prisma.sportsGame.findMany({
@@ -474,7 +483,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   if (!isDailySport && candidateSportKeys(sport).includes('NFL')) {
     const uncachedOffensiveIds = playerIds.filter(
       (id) =>
-        !isTeamDefenseRow(id, positionByPlayer.get(id) ?? null) &&
+        !isTeamDefense(id) &&
         Object.keys(cachedWeekStatsFor(id)).length === 0,
     )
     if (uncachedOffensiveIds.length > 0) {
@@ -547,7 +556,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       continue
     }
 
-    if (isTeamDefenseRow(playerId, position)) {
+    if (isTeamDefense(playerId)) {
       const cached = cacheByPlayer.get(playerId)
       const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
       const stats: Record<string, number> = weekPayload ? normalizeNflTeamDefenseWeeklyStats(weekPayload) : {}
