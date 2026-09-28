@@ -14,6 +14,7 @@
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { resolveLinkedPlatformUserIds } from '../game-day/UserPlayerExposureService'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 
 export interface ReplacementCandidate {
   playerId: string
@@ -53,7 +54,7 @@ export interface ReplacementOptionsResult {
   /** Slice 9 — where a bench chip can take the user to adjust their lineup. */
   lineupTarget: ClaimTarget
   /** Non-null when the lists are empty for a structural reason. */
-  limitation: 'no_projection_data' | 'no_user_roster' | null
+  limitation: 'no_projection_data' | 'no_user_roster' | 'roster_ids_unreadable' | null
 }
 
 const NATIVE_PLATFORMS = new Set(['', 'allfantasy', 'af', 'manual', 'native'])
@@ -137,6 +138,25 @@ export async function resolveReplacementOptions(args: {
 
   const claimTarget = resolveClaimTarget(league)
   const lineupTarget = resolveLineupTarget(league)
+
+  /*
+   * A foreign league's roster ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, and the
+   * projection table is keyed on Sleeper ids: a bench id would carry a stranger's projection, and
+   * nobody could be subtracted from the "unrostered" pool. Honest empty lists, with the reason.
+   */
+  if (isForeignIdSpace(league.platform)) {
+    return {
+      leagueId,
+      affectedPlayerId,
+      affectedProjection: null,
+      projectionWeek: null,
+      benchOptions: [],
+      freeAgentOptions: [],
+      claimTarget,
+      lineupTarget,
+      limitation: 'roster_ids_unreadable',
+    }
+  }
 
   const [platformUserIds, rosters] = await Promise.all([
     resolveLinkedPlatformUserIds(appUserId),

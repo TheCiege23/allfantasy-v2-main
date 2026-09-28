@@ -290,6 +290,19 @@ export type TradeBlockItem = {
   wantsDraftPicks: boolean
   note: string | null
   expiresAt: string | null
+  /**
+   * THE grade on the block (2026-09-28, lib/trade-block/tradeBlockOffers.ts): a suggested offer from
+   * the viewer's roster for this player, graded from the viewer's side. Only on OTHER managers' cards,
+   * and absent when no package fits or past the grading bound.
+   */
+  suggestedOffer?: {
+    gives: string[]
+    receives: string[]
+    grade:
+      | { graded: true; letter: string; partnerLetter: string; label: string; giveValue: number; getValue: number }
+      | { graded: false; reason: string }
+      | null
+  } | null
 }
 export type TradeInterestItem = {
   id: string

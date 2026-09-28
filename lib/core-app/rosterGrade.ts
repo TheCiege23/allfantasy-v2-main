@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { detectQbFormat } from './slotEligibility'
+import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
 
 /**
@@ -99,7 +100,7 @@ export async function getRosterGrade(args: {
   const rosters = await prisma.roster
     .findMany({
       where: { leagueId },
-      select: { platformUserId: true, playerData: true },
+      select: { platformUserId: true, playerData: true, league: { select: { platform: true } } },
     })
     .catch(() => [])
 
@@ -108,7 +109,8 @@ export async function getRosterGrade(args: {
 
   const byTeam = new Map<string, string[]>()
   for (const r of rosters) {
-    const pd = (r.playerData ?? {}) as Record<string, unknown>
+    // A foreign league's ids collide with real Sleeper ids; priced as such they grade strangers.
+    const pd = (sleeperReadablePlayerData(r.league?.platform, r.playerData) ?? {}) as Record<string, unknown>
     /*
      * The whole roster, not the starting lineup. A grade that counted only
      * starters would rank a team with an elite bench identically to one with

@@ -91,6 +91,29 @@ describe('loadTrades — every read is scoped', () => {
     expect(where.history).toEqual({ sleeperLeagueId: 'L9' })
   })
 
+  /*
+   * 🛑 A FOREIGN LEAGUE'S TRADE IDS COLLIDE WITH REAL SLEEPER IDS. `persistTradesForSeason` writes
+   * Fleaflicker/MFL/Yahoo trades into `LeagueTrade` with the provider's own ids, so a Fleaflicker
+   * trade of its '6813' matched Sleeper's 6813 by `array_contains`, and its other ids were named via
+   * the Sleeper-id name read. The same trade on a Sleeper row is the control.
+   */
+  it('[control] a Sleeper trade holding the id is listed and its players named', async () => {
+    tradeFindMany.mockResolvedValue([trade('t1', 'L1')])
+    playerFindMany.mockResolvedValue([{ sleeperId: '6813', name: 'Real Man' }, { sleeperId: '111', name: 'Wrong Player' }])
+    const { loadTrades } = await import('@/lib/core-app/playerCard')
+    const out = await loadTrades('6813', { leagueId: 'L1' })
+    expect(out.available && out.data[0]!.sent).toEqual(['Wrong Player'])
+  })
+
+  it('🛑 a Fleaflicker trade holding a colliding id is not shown, and names no stranger', async () => {
+    tradeFindMany.mockResolvedValue([{ ...trade('t1', 'L1'), platform: 'fleaflicker' }])
+    playerFindMany.mockResolvedValue([{ sleeperId: '6813', name: 'Real Man' }, { sleeperId: '111', name: 'Wrong Player' }])
+    const { loadTrades } = await import('@/lib/core-app/playerCard')
+    const out = await loadTrades('6813', { leagueId: 'L1' })
+    expect(out.available).toBe(false)
+    expect(JSON.stringify(out)).not.toContain('Wrong Player')
+  })
+
   it('has no call site without a scope object', () => {
     const src = readFileSync(resolve(__dirname, '../lib/core-app/playerCard.ts'), 'utf8')
     const calls = [...src.matchAll(/loadTrades\(([^)]*)\)/g)]

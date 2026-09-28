@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
 
@@ -92,13 +93,13 @@ export interface LoadIdpMatchupArgs {
 export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatchupPayload> {
   const league =
     (await args.prisma.league
-      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true } })
+      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true } })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true },
+        select: { id: true, settings: true, platform: true },
       })
       .catch(() => null))
   if (!league) return EMPTY('no_scoring_settings')
@@ -203,9 +204,12 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
    * and the read above already fetches the whole league, so this costs no extra query.
    */
   const rosterByTeam = resolveRostersForTeams(teams, rosters, (t) => [t.platformUserId, t.externalId])
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the
+  // scoreboard would name and score a stranger. Such rosters contribute no ids.
+  const readableIds = (playerData: unknown) => rosterPlayerIds(sleeperReadablePlayerData(league.platform, playerData))
   const idsFor = (rosterId: string): string[] => {
     const row = rosterByTeam.get(rosterId)
-    return row ? rosterPlayerIds(row.playerData) : []
+    return row ? readableIds(row.playerData) : []
   }
 
   /*
@@ -216,10 +220,16 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
    * the opponent resolved 44 players while my side resolved 0.
    */
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
-  const myIds = mine.found ? rosterPlayerIds(mine.playerData) : idsFor(myTeam.externalId)
+  const myIds = mine.found ? readableIds(mine.playerData) : idsFor(myTeam.externalId)
   const oppIds = idsFor(oppRosterId)
   const allIds = [...new Set([...myIds, ...oppIds])]
-  if (allIds.length === 0) return EMPTY('no_matchup', ['No rosters imported for this matchup.'])
+  if (allIds.length === 0) {
+    return EMPTY('no_matchup', [
+      isForeignIdSpace(league.platform)
+        ? 'This platform’s player ids cannot be matched to players yet, so the matchup cannot be scored here.'
+        : 'No rosters imported for this matchup.',
+    ])
+  }
 
   const [playerRows, actual] = await Promise.all([
     args.prisma.sportsPlayer

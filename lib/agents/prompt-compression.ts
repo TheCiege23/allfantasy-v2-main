@@ -260,6 +260,10 @@ function buildReplacementOptionsSection(structuredFantasyContext: StructuredFant
     lines.push('- No real projection data exists for this league yet — say so rather than estimating.')
     return lines.join('\n')
   }
+  if (reps.limitation === 'roster_ids_unreadable') {
+    lines.push("- This league's player ids cannot be matched to ours yet, so no replacements were compared — say so; do not suggest alternatives.")
+    return lines.join('\n')
+  }
 
   const week = reps.projectionWeek
   const affected = reps.affectedProjection

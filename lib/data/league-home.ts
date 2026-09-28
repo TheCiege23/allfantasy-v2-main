@@ -14,6 +14,7 @@ import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConf
 import { getDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
@@ -73,6 +74,7 @@ type LeagueContext = {
     settings: Prisma.JsonValue | null
     scoring: string | null
     isDynasty: boolean
+    platform: string
     platformLeagueId: string
     lifecycleState: LeagueLifecycleState
     locked: boolean
@@ -343,6 +345,7 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
         settings: true,
         scoring: true,
         isDynasty: true,
+        platform: true,
         platformLeagueId: true,
         lifecycleState: true,
         locked: true,
@@ -405,17 +408,28 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
 
 async function resolvePlayerIndex(
   sport: string,
-  playerIds: string[]
+  playerIds: string[],
+  /** The platform of the league these ids came from. Omitted for ids that are not a league's own. */
+  platform?: string | null
 ): Promise<Map<string, ResolvedPlayerIndexEntry>> {
   const uniqueIds = Array.from(new Set(playerIds.filter(Boolean)))
   if (!uniqueIds.length) return new Map()
+
+  /*
+   * ⚠ A FOREIGN LEAGUE'S IDS COLLIDE WITH REAL SLEEPER IDS (Fleaflicker's are short numbers in
+   * Sleeper's range), so they are never matched on a Sleeper-vocabulary key: not `sleeperId`, not
+   * SportsPlayer (whose `externalId` IS the Sleeper id on Sleeper-seeded rows), not the media batch
+   * (keyed on `sleeperId`). Nor is a provider-column hit indexed under its row's `sleeperId`, where
+   * it could overwrite another roster id's entry. The provider-column matches (`mflId`, ...) stay.
+   */
+  const foreign = isForeignIdSpace(platform)
 
   const [identityRows, sportsPlayers, sportsRecords, mediaMap] = await Promise.all([
     prisma.playerIdentityMap.findMany({
       where: {
         sport: sport.toUpperCase(),
         OR: [
-          { sleeperId: { in: uniqueIds } },
+          ...(foreign ? [] : [{ sleeperId: { in: uniqueIds } }]),
           { rollingInsightsId: { in: uniqueIds } },
           { apiSportsId: { in: uniqueIds } },
           { clearSportsId: { in: uniqueIds } },
@@ -438,7 +452,7 @@ async function resolvePlayerIndex(
       logOptionalLeagueDataWarning('player identity index', error)
       return []
     }),
-    prisma.sportsPlayer.findMany({
+    foreign ? [] : prisma.sportsPlayer.findMany({
       where: {
         sport: sport.toUpperCase(),
         OR: [
@@ -479,7 +493,7 @@ async function resolvePlayerIndex(
       logOptionalLeagueDataWarning('sports player records', error)
       return []
     }),
-    attachPlayerMediaBatch(uniqueIds.map((playerId) => ({ playerId, sport }))).catch((error) => {
+    foreign ? (new Map() as PlayerMediaBatchMap) : attachPlayerMediaBatch(uniqueIds.map((playerId) => ({ playerId, sport }))).catch((error) => {
       logOptionalLeagueDataWarning('player media', error)
       return new Map() as PlayerMediaBatchMap
     }),
@@ -489,7 +503,7 @@ async function resolvePlayerIndex(
 
   for (const row of identityRows) {
     const keys = [
-      row.sleeperId,
+      foreign ? null : row.sleeperId,
       row.rollingInsightsId,
       row.apiSportsId,
       row.clearSportsId,
@@ -1139,7 +1153,7 @@ async function buildRosterCard(context: LeagueContext): Promise<LeagueRosterCard
     ...allPlayers,
     ...reserve,
     ...taxi,
-  ])
+  ], context.league.platform)
 
   const totalAllowed = template
     ? template.slots.reduce(
@@ -1394,7 +1408,7 @@ async function buildActivityItems(context: LeagueContext): Promise<LeagueActivit
       waiverRows.flatMap((row) => [row.addPlayerId, row.dropPlayerId]).filter((value): value is string => Boolean(value))
     )
   )
-  const playerIndex = await resolvePlayerIndex(String(context.league.sport), activityPlayerIds)
+  const playerIndex = await resolvePlayerIndex(String(context.league.sport), activityPlayerIds, context.league.platform)
 
   const waiverItems: LeagueActivityItem[] = waiverRows.map((row) => {
     const roster = rosterById.get(row.rosterId)

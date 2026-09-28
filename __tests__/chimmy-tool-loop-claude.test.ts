@@ -5,6 +5,10 @@ const h = vi.hoisted(() => ({ anthropicCreate: vi.fn(), openaiCreate: vi.fn(), e
 const reportProviderFailure = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/ai-orchestration/providerOutageAlert', () => ({ reportProviderFailure }))
 
+// The spend-metering writer. Mocked so a metered call never reaches a database from this suite.
+const logUsageEvent = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@/lib/telemetry/usage', () => ({ logUsageEvent }))
+
 vi.mock('@anthropic-ai/sdk', () => {
   class BadRequestError extends Error {
     status = 400
@@ -292,4 +296,39 @@ it('keeps unified memory while making the new selected-league request authoritat
   expect(focus.text).toContain('Stored starter placement or an injury list is not proof')
   expect(focus.cache_control).toBeUndefined()
   expect(params.system[0].text).toBe('You are Chimmy.')
+})
+/*
+ * Spend metering (2026-09-28). This loop is Chimmy's Opus spend, up to MAX_TOOL_TURNS billed calls
+ * per question, and it recorded nothing. Every REQUEST is now metered, including a turn whose loop
+ * later returns nothing, since the provider billed it anyway.
+ */
+describe('the Claude tool loop meters every request', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+  const withUsage = <T extends object>(m: T, input: number, output: number) => ({ ...m, usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 800 } })
+
+  it('records one row per turn, with the tokens each turn used', async () => {
+    h.anthropicCreate
+      .mockResolvedValueOnce(withUsage(wantsTools({ id: 't1', name: CHIMMY_TOOL_SPECS[0].function.name }), 3000, 120))
+      .mockResolvedValueOnce(withUsage(answer('Josh Allen leads.'), 3400, 260))
+    const out = await runChimmyToolLoop(base)
+    await settle()
+    expect(out?.text).toBe('Josh Allen leads.')
+    const rows = logUsageEvent.mock.calls.map((c) => (c as unknown as [Record<string, any>])[0])
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => [r.tool, r.endpoint, r.ok, r.meta.inputTokens, r.meta.outputTokens, r.meta.cacheReadTokens])).toEqual([
+      ['chimmy_tool_loop', 'llm/anthropic/claude-opus-5', true, 3000, 120, 800],
+      ['chimmy_tool_loop', 'llm/anthropic/claude-opus-5', true, 3400, 260, 800],
+    ])
+    expect(rows[0]).toMatchObject({ userId: 'u1', leagueId: 'l1' })
+  })
+
+  it('still records a turn that is billed but yields no answer, and a failed request', async () => {
+    h.anthropicCreate.mockResolvedValueOnce(withUsage({ ...answer(''), stop_reason: 'max_tokens' }, 5000, 8000))
+    expect(await runChimmyToolLoop(base)).toBeNull()
+    h.anthropicCreate.mockRejectedValueOnce(Object.assign(new Error('credit balance too low'), { status: 400 }))
+    expect(await runChimmyToolLoop(base)).toBeNull()
+    await settle()
+    const rows = logUsageEvent.mock.calls.map((c) => (c as unknown as [Record<string, any>])[0])
+    expect(rows.map((r) => [r.ok, r.meta.outputTokens])).toEqual([[true, 8000], [false, null]])
+  })
 })

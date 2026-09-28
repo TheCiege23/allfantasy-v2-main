@@ -220,3 +220,33 @@ describe('getLivePageData — roster read failure', () => {
     expect(weeklyScoreFindMany).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the PROVIDER's ids, short numbers in Sleeper's
+ * range. '6038' is a real Sleeper id in the fake catalog, owned by "Wrong Player" who plays for
+ * BUF — in the game on the slate. Reading the Fleaflicker roster as Sleeper ids ties a stranger in.
+ */
+describe('getLivePageData — foreign roster ids', () => {
+  function collide(platform: string) {
+    leagueTeamFindMany.mockResolvedValue([{ ...claimedNflTeam[0], league: { ...claimedNflTeam[0].league, platform } }])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', leagueId: 'L1', platformUserId: 'u1', playerData: { players: ['6038'], starters: ['6038'] } }])
+    weeklyScoreFindMany.mockResolvedValue([])
+    sportsPlayerFindMany.mockImplementation((async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
+      where.sleeperId.in.includes('6038')
+        ? [{ sleeperId: '6038', name: 'Wrong Player', position: 'WR', team: 'BUF', sport: 'NFL' }]
+        : []) as never)
+  }
+
+  it('🛑 never ties a stranger into the game from a Fleaflicker roster', async () => {
+    collide('fleaflicker')
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'all' })
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerName)).not.toContain('Wrong Player')
+    expect(JSON.stringify(data.games)).not.toContain('Wrong Player')
+  })
+
+  it('CONTROL: the same roster in a Sleeper league IS tied in', async () => {
+    collide('sleeper')
+    const data = await getLivePageData({ userId: 'u1', sport: 'NFL', scope: 'all' })
+    expect(data.games.flatMap((g) => g.tieIns).map((t) => t.playerName)).toContain('Wrong Player')
+  })
+})

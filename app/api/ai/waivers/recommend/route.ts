@@ -5,6 +5,8 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { getUserAfProStatus, AfProRequiredError } from "@/lib/entitlements/afAccess"
 import { generateWaiverRecommendations } from "@/lib/ai/waivers/waiverRecommendationService"
+import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
+import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -53,6 +55,30 @@ export async function POST(request: Request) {
   const { leagueId, mode, includeFaab, week } = parsed.data
 
   try {
+    /*
+     * 🛑 A FOREIGN LEAGUE'S ROSTER IDS COLLIDE WITH REAL SLEEPER IDS (51 of 248 on the production
+     * Fleaflicker league). The recommender reads them as Sleeper ids: needs from a stranger's
+     * position, a colliding id hiding a real free agent, the league's actual players never
+     * subtracted. Refused here, before it runs, with the reason — the recommender itself is a
+     * standing decision-engine-boundary violation (it belongs in lib/decision-os/waiver/), so the
+     * gate lives at its callers rather than in it.
+     */
+    const league = await prisma.league
+      .findUnique({ where: { id: leagueId }, select: { platform: true } })
+      .catch(() => null)
+    if (isForeignIdSpace(league?.platform)) {
+      return NextResponse.json({
+        ok: true,
+        insufficientData: true,
+        recommendations: [],
+        rosterNeeds: [],
+        leagueContext: { leagueId, waiverType: "unknown", faabBudget: null, faabRemaining: null },
+        generatedAt: new Date().toISOString(),
+        meta: { dataGaps: ["roster_ids_not_readable_for_platform"], mode },
+      })
+    }
+
+
     const output = await generateWaiverRecommendations({
       userId,
       leagueId,

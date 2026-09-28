@@ -10,8 +10,14 @@ import {
   TradeBlockValidationError,
 } from '@/lib/trade-block/redraftTradeBlockService'
 import { recordRedraftTradeSignalEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
+import { assembleDiscoveryLeague } from '@/lib/trade-discovery/assembleRosters'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { tradeBlockOffers, type TradeBlockOffer } from '@/lib/trade-block/tradeBlockOffers'
 
 export const dynamic = 'force-dynamic'
+
+/** The block is short and newest-first; grading more cards than a manager scans is pure cost. */
+const GRADED_BLOCK_OFFERS = 8
 
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -25,7 +31,40 @@ export async function GET(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const items = await listLeagueTradeBlock(leagueId)
-  return NextResponse.json({ items })
+
+  /*
+   * 🛑 THE GRADE ON THE TRADE BLOCK (2026-09-28, lib/trade-block/tradeBlockOffers.ts). A block card was
+   * a player with no deal on it. Each card ANOTHER manager listed now carries a suggested offer — the
+   * finder's package from the viewer's roster for exactly that player — graded by the one grader from
+   * the viewer's side. BOUNDED to GRADED_BLOCK_OFFERS cards; the league is assembled and the grader
+   * loaded only when there is such a card; any failure leaves the block exactly as it was.
+   */
+  let offers: Record<string, TradeBlockOffer> = {}
+  try {
+    const ctx = await resolveCallerContext(leagueId, userId)
+    const viewerRosterId = ctx.rosterId
+    if (viewerRosterId && items.some((i) => i.rosterId !== viewerRosterId)) {
+      const league = await assembleDiscoveryLeague(leagueId)
+      if (league) {
+        let grader: ReturnType<typeof createLeagueTradeGrader> | null = null
+        const map = await tradeBlockOffers({
+          items,
+          viewerRosterId,
+          rosters: league.rosters,
+          sport: league.sport,
+          draftPickTrading: league.draftPickTrading,
+          grade: async (give, get) =>
+            gradeDeal(await (grader ??= createLeagueTradeGrader({ leagueId, userId }).catch(() => null)), { give, get, viewerSide: true }),
+          limit: GRADED_BLOCK_OFFERS,
+        })
+        offers = Object.fromEntries(map)
+      }
+    }
+  } catch {
+    /* The block stands without offers. */
+  }
+
+  return NextResponse.json({ items: items.map((i) => ({ ...i, suggestedOffer: offers[i.id] ?? null })) })
 }
 
 export async function POST(req: NextRequest) {
