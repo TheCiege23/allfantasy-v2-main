@@ -24,7 +24,11 @@ import {
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow';
 import { evaluateTrade, type EvaluateTradeDeps } from '@/lib/decision-os/trade/evaluateTrade';
-import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague';
+import {
+  NOT_YOUR_LEAGUE_REASON,
+  resolveEvaluationLeagueId,
+  resolveVerifiedPlatformLeagueId,
+} from '@/lib/decision-os/trade/evaluationLeague';
 import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews';
 import { gradeInputsFromAssetLabels, splitSideAssets } from '@/lib/decision-os/trade/tradeGradeInputs';
 
@@ -106,8 +110,19 @@ export async function POST(req: Request) {
 
   try {
     const normalizedSport = normalizeToSupportedSport(sport);
+    const userId = session.user.id
     const parsedLeague = parseLeagueContext(leagueContext)
-    if (leagueId) parsedLeague.leagueId = leagueId
+    /*
+     * 🛑 A CLIENT'S `leagueId` IS NOT A LEAGUE THE CALLER MAY READ. It used to be set here as given, and
+     * the assembler below reads manager tendencies, competitor snapshots, trade history and league values
+     * `where: { platformLeagueId }` — all written into the AI prompt, so naming another league's id got
+     * its derived manager data narrated back. Now only a league the caller owns or has a team in is used,
+     * as its `platformLeagueId` (the key the assembler matches on); anything else is analyzed league-blind.
+     */
+    const verifiedPlatformLeagueId = leagueId
+      ? await resolveVerifiedPlatformLeagueId({ suppliedLeagueId: String(leagueId), userId })
+      : null
+    if (verifiedPlatformLeagueId) parsedLeague.leagueId = verifiedPlatformLeagueId
     parsedLeague.platform = parsedLeague.platform || normalizedSport
 
     const sideAAssets = splitSideAssets(String(sideA))
@@ -121,14 +136,13 @@ export async function POST(req: Request) {
      * Orientation: each team's list is what that team GETS — the engine calls the side whose list is
      * worth more "favored" and the page labels it the winner — so Team A gives B's list, gets A's.
      *
-     * ⚠ `gradeLeagueId`, NOT `leagueId`. `leagueId` already flows unchecked into the context assembler
-     * below; the grade's league goes through `resolveEvaluationLeagueId`, which admits only a league the
-     * viewer owns or has a team in, and is used for nothing else. `viewerSide: false` — the viewer is
-     * not proven to be Team A, so roster need is not priced.
+     * ⚠ `gradeLeagueId`, NOT `leagueId`: the grade's league goes through `resolveEvaluationLeagueId`,
+     * which admits only a league the viewer owns or has a team in. (`leagueId` is gated the same way
+     * above, for the context assembler.) `viewerSide: false` — the viewer is not proven to be Team A,
+     * so roster need is not priced.
      *
      * Started here and awaited at the response, so it overlaps the AI stage rather than adding to it.
      */
-    const userId = session.user.id
     const evaluationReceiptPromise = (async () => {
       const evaluationLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: gradeLeagueId ?? null, userId })
       const notYourLeague: Partial<EvaluateTradeDeps> =
@@ -168,7 +182,7 @@ export async function POST(req: Request) {
     console.log(`[dynasty-trade-analyzer] Stage A assembled in ${stageALatency}ms — ctx=${tradeContext.contextId}, ${tradeContext.dataQuality.assetsCovered}/${tradeContext.dataQuality.assetsTotal} assets (${tradeContext.dataQuality.coveragePercent}%), ${tradeContext.dataQuality.warnings.length} warnings`)
 
     const envelope = tradeContextToEnvelope(tradeContext, {
-      leagueId: leagueId ?? parsedLeague.leagueId ?? null,
+      leagueId: verifiedPlatformLeagueId,
       userId: session.user?.id ?? null,
     });
     const mandatorySuffix = getMandatorySystemPromptSuffix(envelope);
@@ -193,7 +207,7 @@ export async function POST(req: Request) {
       recordTradeSurfaceShadow({
         surface: 'dynasty',
         userId: session.user?.id ?? null,
-        leagueId: leagueId ?? parsedLeague.leagueId ?? null,
+        leagueId: verifiedPlatformLeagueId,
         assetsGive: sideAAssets.length,
         assetsGet: sideBAssets.length,
         surfaceVerdict: verdict,

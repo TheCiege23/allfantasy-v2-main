@@ -51,5 +51,31 @@ export async function resolveEvaluationLeagueId(args: {
   return (rows.find((r) => r.id === supplied) ?? rows.find((r) => r.userId === userId) ?? rows[0]!).id
 }
 
+/**
+ * The same membership gate, for a consumer keyed on the PROVIDER's league id rather than ours — the
+ * trade context assembler (`lib/trade-engine/trade-context-assembler.ts`) reads manager tendencies,
+ * competitor snapshots, trade history and league values `where: { platformLeagueId }`.
+ *
+ * 🛑 WITHOUT THIS, A CLIENT-SUPPLIED ID READ ANY LEAGUE'S DERIVED MANAGER DATA INTO AN AI PROMPT. The
+ * dynasty trade analyzer passed its request's `leagueId` straight to the assembler, so a signed-in
+ * caller who named another league got that league's manager preference vectors narrated back.
+ *
+ * Returns the verified league's `platformLeagueId`, or null — never throws — when there is no viewer,
+ * no id, no league of theirs by that id, or the read fails. Null means: proceed league-blind.
+ */
+export async function resolveVerifiedPlatformLeagueId(args: {
+  suppliedLeagueId: string | null | undefined
+  userId: string | null | undefined
+}): Promise<string | null> {
+  const leagueId = await resolveEvaluationLeagueId(args)
+  if (!leagueId) return null
+  try {
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { platformLeagueId: true } })
+    return row?.platformLeagueId?.trim() || null
+  } catch {
+    return null
+  }
+}
+
 export const NOT_YOUR_LEAGUE_REASON =
   'This league is not one of yours on AllFantasy, so there are no league values to grade it on. Import the league to get a grade.'
