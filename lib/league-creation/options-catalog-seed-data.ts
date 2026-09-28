@@ -141,7 +141,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     salary_cap: ALL_SPORTS,
     devy: ['NFL', 'NCAAF'],
     c2c: ['NFL', 'NCAAF', 'NCAAB'],
-    guillotine: ['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB'],
+    /*
+     * Only sports that can run a season. A guillotine league IS its weekly chop, and NCAAF and MLB
+     * cannot finalize a week (`SEASON_CAPABLE_SPORTS`, lib/sport-scope.ts) — a league created there
+     * never eliminates anyone. Removed 2026-09-28 by product decision; restore a sport here only once
+     * it is season-capable. This list is both the wizard's tiles and the server's create gate.
+     */
+    guillotine: ['NFL', 'NBA', 'NHL'],
     zombie: ['NFL', 'NBA', 'MLB', 'NHL'],
     survivor: SURVIVOR_ALLOWED_SPORTS,
     tournament: ALL_SPORTS,
