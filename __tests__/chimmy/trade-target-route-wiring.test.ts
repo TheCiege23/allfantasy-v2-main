@@ -49,7 +49,8 @@ describe('the trade-target verdict in the chat route', () => {
 
   /*
    * This read runs BEFORE the shared decision service and is charged when it decides, so without
-   * the skip a guillotine manager bought a trade verdict the service's format gate refuses free.
+   * the skip a manager in a no-trade format (Survivor-Guillotine, Tournament) bought a trade
+   * verdict the service's format gate refuses free.
    */
   it('takes its "no trades" test from the shared format gate, not a copy of it', () => {
     expect(ROUTE).toMatch(/import \{ leagueForbidsTrades \} from '@\/lib\/chimmy\/decisionFormatGate'/)

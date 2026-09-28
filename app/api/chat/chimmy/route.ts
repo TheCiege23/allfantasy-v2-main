@@ -2769,8 +2769,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * 🛑 `leagueSnapshot.id` ONLY. The verdict reads every roster in the league.
    *
    * ⚠ NOT IN A LEAGUE WITH NO TRADES. This read runs BEFORE `prepareChimmyDecisionAnswer` and is
-   * charged when it decides, so it would sell a guillotine manager a trade verdict the shared
-   * format gate refuses. Skipping it hands the question to that gate, which answers free.
+   * charged when it decides, so it would sell a Survivor-Guillotine or Tournament manager a trade
+   * verdict the shared format gate refuses. Skipping it hands the question to that gate, which
+   * answers free. (Plain guillotine and survivor leagues DO trade, per the concept catalog.)
    *
    * ⚠ NOR ON A MESSAGE HOLDING SEVERAL DECISIONS. It reads the whole message, and the shared service
    * answers a compound question clause by clause (`lib/chimmy/decisionClauses.ts`).
