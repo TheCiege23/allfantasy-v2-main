@@ -140,7 +140,11 @@ describe('buildWeeklyRoutine', () => {
       biggestWin: { leagueName: 'Ice Kings', margin: 23.5 },
       closestLoss: { leagueName: 'Dynasty', margin: 2.2 },
       topScorer: { name: 'Jahmyr Gibbs', points: 28.4, leagueName: 'Ice Kings' },
+      pending: false,
     })
+    // One league's game still open → the "Monday night games may still change these" caveat applies.
+    const open = build({ lastWeek: { ...lastWeek, rows: [...lastWeek.rows, { ...lastWeek.rows[0], completed: false }] } })
+    expect(open.recap?.pending).toBe(true)
     expect(step(d, 'recap')).toMatchObject({ state: 'unknown', summary: '1-1 in week 1 · top scorer Jahmyr Gibbs 28.4' })
     expect(step(build({ topScorer: null }), 'recap').summary).toBe('1-1 in week 1')
     expect(build({ lastWeek: null }).recap).toBeNull()
