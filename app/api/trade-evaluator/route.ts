@@ -50,6 +50,8 @@ import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTrade
 import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
 import { priceEvaluatorDevy } from '@/lib/decision-os/trade/leagueAssetPolicy'
+import { loadTradeKeeperCosts, type TradeKeeperCosts } from '@/lib/keeper/tradeKeeperCosts'
+import { buildLeagueShape } from '@/lib/trade-value/leagueShape'
 import { receiptGradeFields, structuredEvaluationFromExplanation } from '@/lib/decision-os/trade/receiptViews'
 import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -927,6 +929,46 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       const receipt = await evaluationReceiptPromise
       return { tradeGrade: receiptGradeFields(receipt), evaluationReceipt: receipt }
     }
+
+    /*
+     * 🛑 KEEPER COST, BESIDE THE LETTER — NEVER IN IT (2026-09-28, Guap's call).
+     *
+     * In a keeper league a receiver kept at a 2nd and the same receiver kept at a 12th graded
+     * identically: nothing on file said what either costs to keep. `loadTradeKeeperCosts` reads the
+     * league's own drafts (the Sleeper keeper flag the draft sync now keeps), prices the cost only
+     * where the league's rule is MEASURED, and words the surplus through the keeper model. It rides
+     * beside the grade, so the letter does not move until those costs are checked on real leagues.
+     *
+     * Started here, awaited at the response, in the same membership-checked league the grade uses.
+     */
+    const candidateIdsByNameLower = new Map<string, string[]>()
+    for (const [pid, p] of Object.entries(leaguePlayers)) {
+      const n = String(p?.full_name ?? '').toLowerCase().trim()
+      if (!n) continue
+      const ids = candidateIdsByNameLower.get(n)
+      if (ids) ids.push(pid)
+      else candidateIdsByNameLower.set(n, [pid])
+    }
+    const keeperShape = sleeperLeagueForConfig?.total_rosters
+      ? buildLeagueShape({ teams: sleeperLeagueForConfig.total_rosters, starterSlots: sleeperLeagueForConfig.roster_positions })
+      : null
+    const keeperCostsPromise: Promise<TradeKeeperCosts> = (async () => {
+      const leagueId = data.league_id ? await evaluationLeagueIdPromise.catch(() => null) : null
+      if (!leagueId) return { applies: false }
+      return loadTradeKeeperCosts({
+        leagueId,
+        shape: keeperShape,
+        players: allPlayerPrices
+          .filter((p) => !p.unpriced)
+          .map((p) => ({
+            name: p.name,
+            value: p.value,
+            position: p.position ?? null,
+            candidateIds: candidateIdsByNameLower.get(p.name.toLowerCase().trim()) ?? [],
+          })),
+      })
+    })()
+    keeperCostsPromise.catch(() => undefined)
     const teamBNetValue = senderGivenComposite - senderReceivedComposite
 
     const allPlayerNames = [...senderPlayerNames, ...receiverPlayerNames]
@@ -2000,6 +2042,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       evaluation: evalData,
       schemaValid: true,
       ...(await oneGradePayload()),
+      keeperCosts: await keeperCostsPromise.catch((): TradeKeeperCosts => ({ applies: false })),
       /*
        * The RESOLVED superflex answer and how it was reached.
        *

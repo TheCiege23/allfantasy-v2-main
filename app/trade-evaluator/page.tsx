@@ -19,6 +19,12 @@ import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
 import type { NegotiationToolkit } from "@/lib/trade-engine/types"
 import { liveGradePanel } from "@/lib/decision-os/trade/receiptViews"
+import {
+  KeeperCostNote,
+  keeperCostsViewFor,
+  type KeeperCostsPayload,
+  type KeeperCostsView,
+} from "@/components/trade-evaluator/KeeperCostNote"
 
 type LeagueFormat = "dynasty" | "keeper" | "redraft"
 type QBFormat = "sf" | "1qb"
@@ -106,6 +112,8 @@ interface TradeResult {
   /** In `asOfDate` mode: what the grade is on, and the as-of-date gap as a labelled number. */
   historicalNote: string | null
   receiptTotals: { send: number; get: number; gapPct: number } | null
+  /** Keeper cost, shown BESIDE the grade in a keeper league — never part of the letter. Null elsewhere. */
+  keeperCosts: KeeperCostsView | null
   fairnessScore: number | null
   fairnessMethod: string | null
   /** Null when the grade was withheld — `gradeWithheld` says why. */
@@ -232,6 +240,8 @@ interface ApiTradeResponse {
     recommendation: string | null
     evaluationReceiptId: string | null
   }
+  /** Keeper cost beside the grade (keeper leagues only). `applies: false` everywhere else. */
+  keeperCosts?: KeeperCostsPayload
   /** The as-of-date value comparison — numbers only; the route sends no letter for it. */
   dualModeGrades?: {
     atTheTime?: { percentDiff?: number }
@@ -480,6 +490,7 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     live: true,
     historicalNote: historicalNoteFor(payload, asOfDate),
     receiptTotals: panel.totals,
+    keeperCosts: keeperCostsViewFor(payload),
     verdict: verdictFromGradeLabel(panel.gradeLabel),
     fairnessScore: null,
     fairnessMethod: null,
@@ -1362,6 +1373,8 @@ function TradeHubInner() {
                     </div>
                   )}
                 </div>
+
+                {result.keeperCosts ? <KeeperCostNote view={result.keeperCosts} /> : null}
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Providers</div>

@@ -20,8 +20,13 @@ interface PendingSleeperDraftFact {
   playerId: string
   managerId?: string
   season: number
-  /** `{ ownerSleeperId }` — who owned the drafting team that season (see `sleeperPickOwnerId`). */
-  metadata?: { ownerSleeperId: string }
+  /**
+   * `ownerSleeperId` — who owned the drafting team that season (see `sleeperPickOwnerId`).
+   * `isKeeper` — Sleeper slotted this player into the draft as a KEEPER (`is_keeper`), so `round`
+   * is what keeping him cost that season. Written only when true (2026-09-28): the sync fetched the
+   * flag for years and discarded it, which left every keeper league with no keeper cost on file.
+   */
+  metadata?: { ownerSleeperId?: string; isKeeper?: true }
 }
 
 export interface SleeperHistoricalDraftSyncSummary {
@@ -224,6 +229,11 @@ async function collectSleeperDraftFacts(args: {
         }
 
         const ownerSleeperId = sleeperPickOwnerId(pick, ownerByRosterId)
+        const isKeeper = pick?.is_keeper === true
+        const metadata = {
+          ...(ownerSleeperId ? { ownerSleeperId } : {}),
+          ...(isKeeper ? { isKeeper: true as const } : {}),
+        }
         pendingRows.push({
           sourceDraftId,
           leagueId: args.internalLeagueId,
@@ -233,7 +243,7 @@ async function collectSleeperDraftFacts(args: {
           playerId,
           managerId: canonicalManagerId(normalizeManagerId(pick)),
           season: seasonLeague.season,
-          ...(ownerSleeperId ? { metadata: { ownerSleeperId } } : {}),
+          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         })
         draftProducedRows = true
       }
