@@ -753,7 +753,17 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     source: 'synthetic',
     question: 'How much FAAB should I bid?',
     engine: {},
-    expect: { kind: 'waiver', status: 'needs_data', gap: 'decision_inputs_required', verdict: 'none', billing: 'free', says: ['FAAB bidding needs additional waiver-engine evidence'] },
+    // Refused as `decision_inputs_required` until 2026-09-28. It now defers to the full answer.
+    expect: { kind: 'waiver', status: null, gap: null, verdict: null, billing: 'defer', extraction: 'How much FAAB should I bid?' },
+  },
+  {
+    id: 'guillotine-faab-strategy',
+    format: 'guillotine',
+    source: 'owner',
+    // Asked live, word for word, on 2026-09-28, and answered "name the player to add and drop".
+    question: 'looking at my roster, should I spend FAAB on a player this week?',
+    engine: {},
+    expect: { kind: 'waiver', status: null, gap: null, verdict: null, billing: 'defer' },
   },
   {
     id: 'waiver-add-already-rostered',
