@@ -183,6 +183,19 @@ export function verifiedHandoff(league: LinkLeague, screen: SourceScreen): Platf
   return fromResolved(resolved, league.platform)
 }
 
+/**
+ * Where to FIX a lineup, for a surface that promises exactly that (the injury fan-out, the finder's
+ * per-league calls): the platform's verified lineup screen, else a native league's in-app team tab,
+ * else nothing. Never `lineupLink`'s league-page fallback — a button that says "fix your lineup" and
+ * opens a homepage is worse than no button.
+ */
+export function lineupFixLink(league: LinkLeague): PlatformLink | null {
+  const verified = verifiedHandoff(league, 'lineup')
+  if (verified) return verified
+  const own = lineupLink(league)
+  return own && !own.external ? own : null
+}
+
 /** The verified screen for the job, else that league's verified page (labelled "League"), else nothing. */
 export function handoffFor(league: LinkLeague, screen: SourceScreen): PlatformLink | null {
   return verifiedHandoff(league, screen) ?? (screen === 'league' ? null : verifiedHandoff(league, 'league'))

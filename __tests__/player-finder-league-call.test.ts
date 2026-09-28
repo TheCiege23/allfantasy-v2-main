@@ -100,3 +100,21 @@ describe('the questionable starter — the game-day case', () => {
     expect(inactiveListClock(null, KICKOFFS)).toBeNull()
   })
 })
+
+describe('leagueCall — where to fix it', () => {
+  it('a Sleeper league carries its verified lineup screen', () => {
+    const c = leagueCall({ impact: impact({ platformLeagueId: '1180000000000000000', season: 2026, teamExternalId: '3' }), player: HIM, readinessTone: 'bad', kickoffs: KICKOFFS, nowIso: NOW })
+    expect(c.fix?.href).toContain('sleeper.com/leagues/1180000000000000000')
+  })
+
+  it('a native league carries its in-app editor', () => {
+    const c = leagueCall({ impact: impact({ platform: 'allfantasy', leagueId: 'nat1' }), player: HIM, readinessTone: 'bad', kickoffs: KICKOFFS, nowIso: NOW })
+    expect(c.fix?.href).toBe('/league/nat1?view=team')
+  })
+
+  it('🛑 a platform that cannot be deep-linked carries none — never its homepage', () => {
+    const c = leagueCall({ impact: impact({ platform: 'fleaflicker', platformLeagueId: '206154', season: 2026 }), player: HIM, readinessTone: 'bad', kickoffs: KICKOFFS, nowIso: NOW })
+    expect(c.fix).toBeNull()
+  })
+})
+

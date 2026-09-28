@@ -32,6 +32,21 @@ describe('LeagueCalls', () => {
     expect(seen).toEqual([{ tab: 'chimmy', prefill: 'In Going Deep: Dalton Kincaid is questionable — should I keep him in or start Tucker Kraft?', leagueId: 'L3' }])
   })
 
+  it('offers "Fix lineup" where there is a change to make — to the verified screen, in a new tab for a platform', () => {
+    const fix = { href: 'https://sleeper.com/leagues/1/team', label: 'Open in Sleeper', platformLabel: 'Sleeper', screen: 'Lineup', external: true }
+    render(<LeagueCalls calls={CALLS.map((c) => ({ ...c, fix }))} playerName="Dalton Kincaid" />)
+    const links = screen.getAllByRole('link', { name: 'Fix lineup in Sleeper' })
+    // sit (L4) and the questionable hold (L3) — not the settled hold (L1) or the locked call (L2).
+    expect(links).toHaveLength(2)
+    expect(links[0]).toHaveAttribute('href', 'https://sleeper.com/leagues/1/team')
+    expect(links[0]).toHaveAttribute('target', '_blank')
+  })
+
+  it('no verified destination, no button — never a homepage', () => {
+    render(<LeagueCalls calls={[{ ...CALLS[3], fix: null }]} playerName="Dalton Kincaid" />)
+    expect(screen.queryByRole('link', { name: /Fix lineup/ })).toBeNull()
+  })
+
   it('renders nothing with no leagues', () => {
     const { container } = render(<LeagueCalls calls={[]} playerName="X" />)
     expect(container.innerHTML).toBe('')
