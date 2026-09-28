@@ -313,13 +313,27 @@ async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext
     .filter((row) => Boolean(row.name))
 }
 
-/** Every Sleeper id the identity map knows for this sport, with the player it belongs to. */
-async function loadSleeperIdOwners(sport: SupportedSport): Promise<Array<{ sleeperId: string; name: string }>> {
-  const rows = await prisma.playerIdentityMap.findMany({
-    where: { sport, sleeperId: { not: null } },
-    select: { sleeperId: true, canonicalName: true },
+export type SleeperIdOwner = { sleeperId: string; name: string; position?: string | null }
+
+/**
+ * Every Sleeper id for this sport, with the player Sleeper itself assigns it — from Sleeper's own
+ * `SportsPlayer` record (newest row per id), which is what the Trade Center's roster resolver reads.
+ *
+ * ⚠ NOT `PlayerIdentityMap`. The identity map covers fewer ids (9,037 NFL vs Sleeper's 11,960) and
+ * its position disagrees with Sleeper's on 3,499 of the ids both hold (measured 2026-09-28).
+ */
+async function loadSleeperIdOwners(sport: SupportedSport): Promise<SleeperIdOwner[]> {
+  const rows = await prisma.sportsPlayer.findMany({
+    where: { sport, source: 'sleeper', sleeperId: { not: null } },
+    orderBy: { updatedAt: 'desc' },
+    select: { sleeperId: true, name: true, position: true },
   })
-  return rows.flatMap((row) => (row.sleeperId && row.canonicalName ? [{ sleeperId: row.sleeperId, name: row.canonicalName }] : []))
+  const seen = new Set<string>()
+  return rows.flatMap((row) => {
+    if (!row.sleeperId || !row.name || seen.has(row.sleeperId)) return []
+    seen.add(row.sleeperId)
+    return [{ sleeperId: row.sleeperId, name: row.name, position: normalizePositionForSport(sport, row.position) }]
+  })
 }
 
 /**
@@ -340,32 +354,43 @@ async function loadSleeperIdOwners(sport: SupportedSport): Promise<Array<{ sleep
  *  - a bare id that Sleeper assigns to somebody else is never written; that player falls back to
  *    the name/team key, the same form a seed with no id already uses.
  * A name shared by two Sleeper players (two Michael Carters) is not guessed at.
+ *
+ * ⚠ AND A ROW ON A SLEEPER ID TAKES SLEEPER'S POSITION, NOT THE SEED'S (2026-09-28). The first cut
+ * of this moved the ID and kept the seed's position, so an injury-report seed — which has no position
+ * and writes `FLEX` — landed on Jaire Alexander's Sleeper id as a `FLEX`, and a provider seed brought
+ * its own label (573 rows in the first run, 29 of them rostered). The id now says Sleeper's player,
+ * so the position says Sleeper's position too; a seed's own label is kept only when Sleeper has none.
  */
-export function keySeedsToSleeperIdentity<T extends { id: string; name: string; team: string }>(
+export function keySeedsToSleeperIdentity<T extends { id: string; name: string; team: string; position: string }>(
   sport: string,
   seeds: T[],
-  owners: Array<{ sleeperId: string; name: string }>,
+  owners: SleeperIdOwner[],
 ): T[] {
   if (owners.length === 0) return seeds
-  const ownerNameById = new Map<string, string>()
+  const ownerById = new Map<string, { name: string; position: string | null }>()
   const idsByName = new Map<string, Set<string>>()
   for (const owner of owners) {
     const name = normalizePlayerName(owner.name)
     if (!name) continue
-    ownerNameById.set(owner.sleeperId, name)
+    ownerById.set(owner.sleeperId, { name, position: owner.position?.trim() || null })
     const ids = idsByName.get(name) ?? new Set<string>()
     ids.add(owner.sleeperId)
     idsByName.set(name, ids)
   }
   const prefix = `${sport}:`
+  const onSleeperId = (seed: T, sleeperId: string): T => {
+    const position = ownerById.get(sleeperId)?.position
+    return { ...seed, id: boundPlayerId(`${prefix}${sleeperId}`), ...(position ? { position } : {}) }
+  }
   return seeds.map((seed) => {
     const name = normalizePlayerName(seed.name)
     const ids = idsByName.get(name)
-    if (ids?.size === 1) return { ...seed, id: boundPlayerId(`${prefix}${[...ids][0]}`) }
+    if (ids?.size === 1) return onSleeperId(seed, [...ids][0])
     const raw = seed.id.startsWith(prefix) ? seed.id.slice(prefix.length) : null
-    const owner = raw != null ? ownerNameById.get(raw) : undefined
-    if (owner !== undefined && owner !== name) return { ...seed, id: buildPlayerId(sport, null, seed.name, seed.team) }
-    return seed
+    const owner = raw != null ? ownerById.get(raw) : undefined
+    if (owner === undefined) return seed
+    if (owner.name !== name) return { ...seed, id: buildPlayerId(sport, null, seed.name, seed.team) }
+    return onSleeperId(seed, raw!)
   })
 }
 
