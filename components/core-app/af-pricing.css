@@ -114,9 +114,11 @@
 .af-pr-error { background: var(--bad-soft); border-color: var(--bad); }
 
 /* ── Grid ─────────────────────────────────────────────────────── */
+/* Four cards: Free + Pro, Commissioner, Supreme (AF Legacy left the launch pricing
+   2026-09-24). 4-across, 2x2 at <=1180px, stacked at <=780px — never 3 + 1. */
 .af-pr-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   align-items: stretch;
 }
@@ -326,7 +328,7 @@
 
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 1180px) {
-  .af-pr-grid { grid-template-columns: repeat(3, 1fr); }
+  .af-pr-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 780px) {
   .af-pr-grid { grid-template-columns: 1fr; }

@@ -6,6 +6,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { RosterTeamMap } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * Get roster <-> team mapping for a league. Uses draft slot order when available;
@@ -23,8 +24,9 @@ export async function getRosterTeamMap(leagueId: string): Promise<RosterTeamMap>
       select: { id: true, externalId: true },
       orderBy: [{ currentRank: 'asc' }, { id: 'asc' }],
     }),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { slotOrder: true },
     }),
   ])

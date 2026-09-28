@@ -71,7 +71,7 @@ export function buildInjuredStarterSignals(portfolio: {
 
   // Bench candidates per league, so a suggested replacement is one this manager actually
   // owns in THAT league — suggesting a player from a different league would be nonsense.
-  const benchByLeague = new Map<string, Array<{ playerName: string; projectedPoints: number | null }>>()
+  const benchByLeague = new Map<string, Array<{ playerName: string; position: string | null; projectedPoints: number | null }>>()
   for (const item of portfolio.items) {
     for (const appearance of item.leagueAppearances) {
       if (appearance.rosterStatus !== 'bench') continue
@@ -81,6 +81,7 @@ export function buildInjuredStarterSignals(portfolio: {
       const list = benchByLeague.get(appearance.canonicalLeagueId) ?? []
       list.push({
         playerName: item.displayName,
+        position: item.position,
         projectedPoints: item.projection?.projectedPoints ?? null,
       })
       benchByLeague.set(appearance.canonicalLeagueId, list)
@@ -100,7 +101,11 @@ export function buildInjuredStarterSignals(portfolio: {
       if (appearance.rosterStatus !== 'starter') continue
 
       const bench = benchByLeague.get(appearance.canonicalLeagueId) ?? []
-      const replacement = bench.length > 0 ? bench[0]! : null
+      // Slot eligibility is not present in this portfolio. Only suggest a same-position
+      // candidate; never tell a manager to replace a tight end with a quarterback.
+      const replacement = item.position
+        ? bench.find((candidate) => candidate.position?.toUpperCase() === item.position?.toUpperCase()) ?? null
+        : null
 
       out.push({
         playerName: item.displayName,

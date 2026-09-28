@@ -89,43 +89,15 @@
   color: var(--text);
 }
 
-/* ── Costs, grouped by band ───────────────────────────────────── */
+/* ── What tokens buy: one framed list, cheapest first ──────────── */
 .af-tk-costs { display: flex; flex-direction: column; gap: 14px; }
 .af-tk-costs-head { display: flex; flex-direction: column; gap: 5px; }
 
-.af-tk-band {
+.af-tk-costs > .af-tk-rules {
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--line2);
   overflow: hidden;
-}
-
-.af-tk-band-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 13px 16px;
-  background: var(--surface2);
-  border-bottom: 1px solid var(--line);
-}
-
-.af-tk-band-cost {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--accent);
-  min-width: 3ch;
-}
-
-.af-tk-band-name {
-  font: 800 14px/1 'Archivo', system-ui, sans-serif;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-
-.af-tk-band-count {
-  margin-left: auto;
-  font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--faint);
 }
 
 .af-tk-rules { list-style: none; margin: 0; padding: 0; }
@@ -154,6 +126,21 @@
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
+}
+
+/* Who can buy it, when that is narrower than any member. */
+.af-tk-rule-who { color: var(--faint); font-size: 12px; }
+
+/* What tokens don't buy. */
+.af-tk-not {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
 }
 
 /* ── Free / packs / recent ────────────────────────────────────── */
@@ -194,6 +181,7 @@
   color: var(--faint);
 }
 .af-tk-pack-price { margin-top: 6px; font-size: 14px; font-weight: 700; color: var(--text); }
+.af-tk-pack-about { font-size: 11px; color: var(--faint); }
 
 .af-tk-btn {
   appearance: none;

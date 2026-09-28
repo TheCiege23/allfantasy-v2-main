@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { buildHeadshotUrl, getTeamLogoUrl } from './player-media-urls'
 
 export type { SportKey } from './player-media-urls'
@@ -44,7 +45,7 @@ function teamCacheKey(teamAbbr: string, sport: string): string {
 
 function buildMediaFromTemplate(playerId: string | null, teamAbbr: string | null, sport: string = 'nfl'): PlayerMedia {
   return {
-    headshotUrl: buildHeadshotUrl(playerId),
+    headshotUrl: buildHeadshotUrl(playerId, sport),
     teamLogoUrl: getTeamLogoUrl(teamAbbr, sport),
   }
 }
@@ -112,8 +113,8 @@ export async function attachPlayerMedia(player: {
         select: { imageUrl: true, team: true },
         orderBy: { fetchedAt: 'desc' },
       })
-      if (sportsPlayer?.imageUrl) {
-        dbImageUrl = sportsPlayer.imageUrl
+      if (toImageUrl(sportsPlayer?.imageUrl)) {
+        dbImageUrl = toImageUrl(sportsPlayer?.imageUrl)
         source = 'db'
       }
       if (sportsPlayer?.team && !dbTeamAbbr) {
@@ -168,7 +169,7 @@ export async function attachPlayerMedia(player: {
   const effectiveTeam = dbTeamAbbr || player.teamAbbr || null
 
   const media: PlayerMedia = {
-    headshotUrl: dbImageUrl || buildHeadshotUrl(player.playerId),
+    headshotUrl: dbImageUrl || buildHeadshotUrl(player.playerId, sport),
     teamLogoUrl: dbTeamLogoUrl || getTeamLogoUrl(effectiveTeam, sport),
   }
 
@@ -287,14 +288,14 @@ export async function attachPlayerMediaBatch(
 
     const dbTeamAbbr = identity?.currentTeam || sportsPlayer?.team || sportsPlayerRecord?.team || null
     const effectiveTeam = dbTeamAbbr || p.teamAbbr
-    const dbImageUrl = sportsPlayerRecord?.headshotUrl || sportsPlayer?.imageUrl || null
+    const dbImageUrl = toImageUrl(sportsPlayerRecord?.headshotUrl) || toImageUrl(sportsPlayer?.imageUrl) || null
     const dbTeamLogoUrl = effectiveTeam
       ? teamAssetMap.get(`${p.sport.toUpperCase()}:${effectiveTeam}`) || sportsPlayerRecord?.logoUrl || null
       : sportsPlayerRecord?.logoUrl || null
     const source: 'db' | 'template' = (dbTeamAbbr || dbImageUrl || dbTeamLogoUrl) ? 'db' : 'template'
 
     const media: PlayerMedia = {
-      headshotUrl: dbImageUrl || buildHeadshotUrl(p.playerId),
+      headshotUrl: dbImageUrl || buildHeadshotUrl(p.playerId, p.sport),
       teamLogoUrl: dbTeamLogoUrl || getTeamLogoUrl(effectiveTeam, p.sport),
     }
 
@@ -357,7 +358,7 @@ export async function attachPlayerMediaHistorical(
   const effectiveTeam = historicalTeam || player.teamAbbr || null
 
   const media: PlayerMedia = {
-    headshotUrl: buildHeadshotUrl(player.playerId),
+    headshotUrl: buildHeadshotUrl(player.playerId, sport),
     teamLogoUrl: getTeamLogoUrl(effectiveTeam, sport),
   }
 

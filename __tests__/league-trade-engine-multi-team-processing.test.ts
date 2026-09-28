@@ -10,6 +10,8 @@ describe('multi-team trade processing', () => {
     ]
     const saved = new Map<string, { playerData: unknown; faabRemaining: number }>()
     const tx = {
+      league: { findUnique: vi.fn().mockResolvedValue({ sport: 'NFL', leagueVariant: null }) },
+      salaryCapLeagueConfig: { findUnique: vi.fn().mockResolvedValue(null) },
       roster: {
         findMany: vi.fn().mockResolvedValue(rosters),
         update: vi.fn().mockImplementation(async ({ where, data }) => {

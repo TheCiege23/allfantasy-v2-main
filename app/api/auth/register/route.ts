@@ -206,16 +206,17 @@ export async function POST(req: Request) {
           { status: 451 }
         )
       }
-      if (
-        geo.isVpnOrProxy &&
-        geo.stateCode &&
-        (isFullyBlocked(geo.stateCode) || isPaidBlocked(geo.stateCode))
-      ) {
+      // Any VPN, wherever it resolves. This used to require the VPN to resolve to
+      // a RESTRICTED state — but the state is read from the IP the VPN replaces,
+      // so a Washington user on an Oregon exit read as OR and the check could
+      // never fire for the evasion it named. The middleware refuses this route
+      // over a VPN first; this is the route's own copy of the rule.
+      if (geo.isVpnOrProxy) {
         return NextResponse.json(
           {
             error: "VPN_BLOCKED",
             message:
-              "VPN or proxy usage is not permitted when accessing AllFantasy.ai from a restricted state.",
+              "Accounts can't be created over a VPN, proxy, Tor or iCloud Private Relay, because we have to confirm which state you're in. Turn it off and try again.",
           },
           { status: 451 }
         )
@@ -823,7 +824,8 @@ export async function POST(req: Request) {
       try {
         const rawToken = makeToken(32)
         const tokenHash = sha256Hex(rawToken)
-        const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
+        const { emailVerifyLinkExpiresAt } = await import("@/lib/auth/emailVerifyLink")
+        const expiresAt = emailVerifyLinkExpiresAt()
 
         const tokenRecord = await (prisma as any).emailVerifyToken.create({
           data: { userId: user.id, tokenHash, expiresAt },

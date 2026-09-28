@@ -4,6 +4,7 @@ import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
+import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
 import {
   CHIMMY_CLAUDE_EFFORT,
   CHIMMY_CLAUDE_FALLBACK_BETA,
@@ -50,8 +51,19 @@ import {
  * that exposure and is deliberately small.
  */
 
-/** Hard ceiling on provider calls per message. Raising this raises unit cost. */
-const MAX_TOOL_TURNS = 3
+/**
+ * Hard ceiling on provider calls per message. Raising this raises unit cost.
+ *
+ * ⚠ 4, AND THE LAST ONE MAY NOT CALL A TOOL (2026-09-24). At 3 with no forced answer, a question
+ * that needed "select the league → run the analysis → answer" plus one follow-up lookup ended its
+ * third turn still asking for data, returned null, and fell through to the PUSH path — which then
+ * paid for a second full model journey. So the ceiling bought an answer from the WORSE path at the
+ * HIGHER cost. The analyst tools (lineup optimizer, playoff simulator, trade evaluator) routinely
+ * need the league lookup first, so the fourth turn exists, and on it `tool_choice` is `none`: the
+ * model must answer from what it has already fetched. Worst case is now four calls and an answer,
+ * where it used to be three calls, no answer, and a push-path journey on top.
+ */
+const MAX_TOOL_TURNS = 4
 
 /** Below the 25s provider default, since several of these run in series. */
 const TURN_TIMEOUT_MS = 20_000
@@ -160,6 +172,14 @@ type ChimmyToolLoopArgs = {
    * minute: sent AFTER the cached block on Claude so it does not invalidate the cache.
    */
   clockLine?: string | null
+  /**
+   * How THIS user likes answers (their saved Chimmy preferences). Per-user, so like the clock it is
+   * sent after the cached block rather than inside it — one user's style must not bust the cache for
+   * everyone, and must never be cached into anyone else's prompt.
+   */
+  styleLine?: string | null
+  /** Membership-checked Decision OS evidence already assembled by the route. */
+  groundingLine?: string | null
   conversation?: Array<{ role: 'user' | 'assistant'; content: string }>
   context: ChimmyToolContext
   enabled: boolean
@@ -195,24 +215,32 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
     { type: 'text', text: args.systemPrompt, cache_control: { type: 'ephemeral' } },
   ]
   if (args.clockLine?.trim()) system.push({ type: 'text', text: args.clockLine.trim() })
+  if (args.styleLine?.trim()) system.push({ type: 'text', text: args.styleLine.trim() })
+  if (args.groundingLine?.trim()) system.push({ type: 'text', text: args.groundingLine.trim() })
+  system.push({ type: 'text', text: currentRequestFocus(args.context.leagueId) })
 
   const messages: Anthropic.MessageParam[] = [
     ...claudeHistory(args.conversation),
-    { role: 'user', content: args.question },
+    { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
   const toolsUsed: string[] = []
   const deadline = Date.now() + CLAUDE_LOOP_BUDGET_MS
   let useFallbacks = true
 
-  const call = async (): Promise<Anthropic.Message> => {
+  const call = async (final: boolean): Promise<Anthropic.Message> => {
     const timeout = Math.max(5_000, Math.min(CLAUDE_TURN_TIMEOUT_MS, deadline - Date.now()))
     const params = {
       model,
       max_tokens: CLAUDE_MAX_TOKENS,
       system,
+      // Still sent on the final turn: the history carries tool_use blocks, which require them.
       tools,
-      // The model decides; forcing a call would fetch on questions that need nothing.
-      tool_choice: { type: 'auto' as const },
+      /*
+       * The model decides — forcing a call would fetch on questions that need nothing — except on
+       * the LAST turn, where `none` makes it answer from the results it already has. `none` is
+       * compatible with adaptive thinking; `any`/`tool` are not, and are not used.
+       */
+      tool_choice: final ? { type: 'none' as const } : { type: 'auto' as const },
       thinking: { type: 'adaptive' as const },
       output_config: { effort: CLAUDE_EFFORT },
       messages,
@@ -231,10 +259,11 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
   try {
     for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
       if (Date.now() >= deadline) return null
+      const final = turn === MAX_TOOL_TURNS
 
       let response: Anthropic.Message
       try {
-        response = await call()
+        response = await call(final)
       } catch (err) {
         /*
          * The refusal-fallback beta is an ADD-ON. If this account or model rejects it, a 400
@@ -243,7 +272,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLo
          */
         if (useFallbacks && err instanceof Anthropic.BadRequestError) {
           useFallbacks = false
-          response = await call()
+          response = await call(final)
         } else {
           throw err
         }
@@ -296,9 +325,9 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
   const model = args.model?.trim() || DEFAULT_MODEL
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: [args.clockLine, args.systemPrompt].filter((s) => s?.trim()).join('\n\n') },
+    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
     ...(args.conversation ?? []).map((t) => ({ role: t.role, content: t.content }) as const),
-    { role: 'user', content: args.question },
+    { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
 
   const toolsUsed: string[] = []
@@ -312,9 +341,10 @@ async function runGrokToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoop
           tools: CHIMMY_TOOL_SPECS as unknown as OpenAI.ChatCompletionTool[],
           /*
            * The model decides. Forcing a call would make it fetch on questions
-           * that need nothing, and every forced call is a paid round trip.
+           * that need nothing, and every forced call is a paid round trip. On the
+           * LAST turn it must answer instead — see MAX_TOOL_TURNS.
            */
-          tool_choice: 'auto',
+          tool_choice: turn === MAX_TOOL_TURNS ? 'none' : 'auto',
           temperature: 0.4,
           max_tokens: 1200,
         },

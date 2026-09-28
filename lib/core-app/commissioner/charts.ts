@@ -227,10 +227,12 @@ export function isPlayed(r: { pointsFor: number; pointsAgainst: number }): boole
   return r.pointsFor > 0 || r.pointsAgainst > 0
 }
 
-export function scoringChart(rows: ScoringRow[]): HubChart | null {
+export function scoringChart(rows: ScoringRow[], progress?: { currentWeek: number | null; complete: boolean }): HubChart | null {
+  const certified = progress?.complete === true || progress?.currentWeek != null
   const byWeek = new Map<number, number[]>()
   for (const r of rows) {
-    if (r.pointsFor <= 0) continue
+    if (progress?.currentWeek != null && !progress.complete && r.week >= progress.currentWeek) continue
+    if (!certified && !isPlayed(r)) continue
     const list = byWeek.get(r.week) ?? []
     list.push(r.pointsFor)
     byWeek.set(r.week, list)
@@ -251,7 +253,7 @@ export function scoringChart(rows: ScoringRow[]): HubChart | null {
   return {
     key: 'scoring',
     title: 'Scoring',
-    subtitle: 'Average team score per played week',
+    subtitle: certified ? 'Average team score per completed week' : 'Recorded weekly scores · may include a week in progress',
     bars,
     takeaway: `Week ${weeks[weeks.length - 1]}: high ${Math.max(...latest).toFixed(1)}, low ${Math.min(...latest).toFixed(1)}.`,
   }

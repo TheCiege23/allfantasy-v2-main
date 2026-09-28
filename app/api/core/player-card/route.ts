@@ -6,6 +6,8 @@ import { authOptions } from '@/lib/auth'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { getPlayerCard } from '@/lib/core-app/playerCard'
+import { applyPlayerCardDepth } from '@/lib/core-app/playerCardDepth'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import { getPlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
 
 /**
@@ -60,7 +62,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'externalId or sleeperId is required' }, { status: 400 })
   }
 
-  const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never).catch(() => null)) as {
+    user?: { id?: string; email?: string | null }
+  } | null
   const userId = typeof session?.user?.id === 'string' && session.user.id.trim() ? session.user.id.trim() : null
 
   /*
@@ -88,15 +92,19 @@ export async function GET(req: Request) {
     if (membership.ok) leagueId = parsed.data.leagueId
   }
 
-  const card = await getPlayerCard({
-    sport: parsed.data.sport,
-    externalId: parsed.data.externalId ?? null,
-    sleeperId: parsed.data.sleeperId ?? null,
-    leagueId,
-    userId,
-  }).catch(() => null)
+  const [card, depth] = await Promise.all([
+    getPlayerCard({
+      sport: parsed.data.sport,
+      externalId: parsed.data.externalId ?? null,
+      sleeperId: parsed.data.sleeperId ?? null,
+      leagueId,
+      userId,
+    }).catch(() => null),
+    // Player depth (AF Pro): the card's market move, trades and comps — lib/core-app/playerCardDepth.ts.
+    resolveCoreDepth(userId, 'player_depth', { email: session?.user?.email ?? null }),
+  ])
 
   if (!card) return NextResponse.json({ error: 'Player not found' }, { status: 404 })
 
-  return NextResponse.json(card, { headers: { 'Cache-Control': 'private, no-store' } })
+  return NextResponse.json(applyPlayerCardDepth(card, depth), { headers: { 'Cache-Control': 'private, no-store' } })
 }

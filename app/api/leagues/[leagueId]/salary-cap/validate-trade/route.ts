@@ -37,6 +37,15 @@ export async function POST(
       { status: 400 }
     )
   }
+  const validLine = (line: unknown) => {
+    if (!line || typeof line !== 'object') return false
+    const asset = line as Record<string, unknown>
+    return typeof asset.playerId === 'string' && asset.playerId.trim().length > 0
+      && (asset.contractId == null || typeof asset.contractId === 'string')
+  }
+  if (![...movingToReceiver, ...movingToSender].every(validLine)) {
+    return NextResponse.json({ error: 'Every traded contract must identify a player' }, { status: 400 })
+  }
 
   const input = {
     fromRosterId: String(fromRosterId),

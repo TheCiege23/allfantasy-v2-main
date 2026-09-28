@@ -1,13 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
+import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
@@ -25,9 +27,11 @@ import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topS
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
-import { railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
+import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
+import { speculationGate } from '@/components/core-app/speculationGate'
 import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
+import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import '@/components/core-app/af-core.css'
@@ -55,6 +59,7 @@ export type RailLeague = {
   id: string
   name: string
   platform: PlatformId | string
+  syncPaused?: boolean
   /** Single letter shown on the tile — the genuine fallback when no image renders. */
   mark: string
   /**
@@ -370,6 +375,8 @@ export type AfCoreShellProps = {
   comms?: {
     leagues: CommsLeague[]
     chimmyTokenCost: number | null
+    /** Included Chimmy answers left today when the plan includes Chimmy (lib/chimmy/planAllowance.ts). */
+    chimmyPlanAllowance?: ChimmyPlanAllowanceView | null
     /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
     homeSignals?: string | null
     /** League-scoped screens dock the panel beside the content instead of over it. */
@@ -1092,7 +1099,6 @@ function RailSide({
     projection.pricedFrom > 0 &&
     projection.pricedFrom < projection.starterCount
   const projected = projection?.afProjected ?? projection?.projected ?? null
-  const remaining = score != null && projected != null ? Math.max(0, projected - score) : null
 
   return (
     <span
@@ -1100,11 +1106,11 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       title={projection
-        ? `Projected from ${projection.pricedFrom} of ${projection.starterCount} starters${
+        ? `Weekly baseline projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
             projection.afProjected == null
               ? ' · using the provider projection because this league’s scoring could not be re-scored'
               : ' · re-scored with this league’s settings'
-          }${remaining != null ? ` · about ${remaining.toFixed(1)} projected points still available` : ''}`
+          } · live score is shown separately`
         : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
@@ -1197,6 +1203,14 @@ function HelpDot({ title, body }: { title: string; body: string }) {
   )
 }
 
+/**
+ * The top bar's sync chip. `describeAge` says "never synced" when nothing has synced, so prefixing
+ * "synced" to it read "synced never synced".
+ */
+export function syncChipText(ageLabel: string): string {
+  return /^never\b/i.test(ageLabel.trim()) ? 'Never synced' : `synced ${ageLabel}`
+}
+
 export function AfCoreShell(incoming: AfCoreShellProps) {
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
@@ -1218,6 +1232,66 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
 
   /*
+   * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
+   * link marked `data-core-nav` lights that link and swaps the screen area for its skeleton at
+   * once; the rest of the shell stays as it is until the new render lands.
+   *
+   * ⚠ "LANDED" IS EITHER SIGNAL: the URL moved, or the server handed this shell a new render
+   * (`incoming` is a fresh object per RSC payload). The second covers a click whose server
+   * redirect ends on the URL already open, which would otherwise hold the skeleton until the
+   * safety timeout.
+   */
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const locationKey = `${pathname}?${searchParams?.toString() ?? ''}`
+  const [navPending, setNavPending] = useState<string | null>(null)
+  const navPendingRef = useRef<string | null>(null)
+  navPendingRef.current = navPending
+  const pendingLinkRef = useRef<Element | null>(null)
+  const clearNavPending = useCallback(() => {
+    pendingLinkRef.current?.removeAttribute('data-nav-pending')
+    pendingLinkRef.current = null
+    setNavPending(null)
+  }, [])
+  useEffect(() => {
+    clearNavPending()
+  }, [locationKey, incoming, clearNavPending])
+  useEffect(() => {
+    if (!navPending) return
+    // Safety net only: a navigation that never lands must not hide the screen forever.
+    const timer = window.setTimeout(clearNavPending, 30_000)
+    return () => window.clearTimeout(timer)
+  }, [navPending, clearNavPending])
+  const markNavigation = (event: React.MouseEvent<HTMLElement>) => {
+    const link = (event.target as Element | null)?.closest?.(`a[${CORE_NAV_ATTRIBUTE}]`)
+    if (!link) return
+    const target = pendingCoreNavTarget({
+      href: link.getAttribute('href'),
+      currentHref: window.location.href,
+      button: event.button,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      target: link.getAttribute('target'),
+      download: link.hasAttribute('download'),
+    })
+    if (!target) return
+    /*
+     * ⚠ A DOM ATTRIBUTE, NOT A PROP, AND THAT IS DELIBERATE. React owns `data-active` on these
+     * links and diffs it against its own last render, not the DOM — flipping it by hand could be
+     * left standing after the new render. `data-nav-pending` is not a prop anywhere, so React
+     * never touches it and removing it here is the only write it ever gets.
+     */
+    pendingLinkRef.current?.removeAttribute('data-nav-pending')
+    link.setAttribute('data-nav-pending', 'true')
+    pendingLinkRef.current = link
+    /* The screen the manager asked for is the one render that must not share the server. */
+    speculationGate.noteNavigation()
+    setNavPending(target)
+  }
+
+  /*
    * Rail speculation. See `railPrefetch.ts` for why Next's automatic prefetch warms the wrong
    * thing here and why a long rail turns it off — the decisions are pure and live there; this
    * holds only the per-mount state they need.
@@ -1236,10 +1310,37 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     ) {
       return
     }
+    /*
+     * ⚠ REFUSED BY THE GATE IS NOT WARMED. Dropped rather than queued — a queue would only move
+     * the burst — and not recorded, so resting on this crest again once the server is free can
+     * still warm it.
+     */
+    if (!speculationGate.tryAcquire()) return
     railWarmedRef.current.add(leagueId)
     /* FULL by default — `router.prefetch` is the only path that warms the data. */
     router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
   }
+  /*
+   * A warm needs the pointer (or focus) to REST on a crest for `RAIL_WARM_DWELL_MS`; leaving
+   * first cancels it. Crossing the rail on the way to something else used to warm every league
+   * it passed — see `railPrefetch.ts`.
+   */
+  const railDwellRef = useRef<{ leagueId: string; timer: number } | null>(null)
+  const cancelRailDwell = () => {
+    if (railDwellRef.current) window.clearTimeout(railDwellRef.current.timer)
+    railDwellRef.current = null
+  }
+  const startRailDwell = (leagueId: string) => {
+    cancelRailDwell()
+    railDwellRef.current = {
+      leagueId,
+      timer: window.setTimeout(() => {
+        railDwellRef.current = null
+        warmRailLeague(leagueId)
+      }, RAIL_WARM_DWELL_MS),
+    }
+  }
+  useEffect(() => cancelRailDwell, [])
 
   /*
    * The expanded league rail — 2026-09-07 handoff (`AF League List.dc.html`).
@@ -1294,6 +1395,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     const refresh = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
       if (shellRefreshPendingRef.current) return
+      // A tab click is already fetching a fresh render; a refresh landing first would clear its
+      // skeleton and flash the screen being left.
+      if (navPendingRef.current) return
       // The matchup board polls the same route on a better-informed cadence; two
       // timers on one route paid for two full renders every period.
       if (routeRefreshClaimed()) return
@@ -1428,7 +1532,15 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       } catch {
         // Storage may be unavailable; retain the desktop expanded default.
       }
-      setRailChoice(stored === '0' ? 'closed' : 'open')
+      /*
+       * No saved preference: expanded on a wide desktop, collapsed up to 1280px —
+       * on a tablet (721–1080) an expanded rail pushes the nav column out entirely,
+       * and on a 1081–1280 laptop it leaves the page ~560px —
+       * see the tablet block at the end of af-core-shell.css. Not written back to
+       * storage, so a tablet default never becomes the reader's desktop choice.
+       */
+      const tablet = window.matchMedia('(max-width: 1280px)').matches
+      setRailChoice(stored === '0' ? 'closed' : stored === '1' ? 'open' : tablet ? 'closed' : 'open')
     }
     update()
     desktop.addEventListener('change', update)
@@ -1491,6 +1603,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     <div
       className="af-core af-shell"
       data-league-first={props.leagueFirst ? 'true' : undefined}
+      data-nav-pending={navPending ? 'true' : undefined}
+      onClickCapture={markNavigation}
       /*
        * ⚠ THE ABSENT ATTRIBUTE IS A MEANINGFUL THIRD VALUE, NOT A FALSY 'false'.
        * Desktop CSS expands on `:not([data-rail-open='false'])`, so absent reads
@@ -1603,7 +1717,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           {groupLeagueHubs(leagues).map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
-            const live = liveRail.scores[l.id]
+            const live = l.syncPaused ? undefined : liveRail.scores[l.id]
             const sameWeek = live && saved?.season === live.season && saved?.week === live.week
             const fieldRace = saved?.standing?.elimination === true
             const standing = fieldRace ? live?.fieldStanding : live?.standing
@@ -1632,17 +1746,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 href={leagueHref}
                 /*
                  * ⚠ OFF ON A LONG RAIL, LEFT ALONE ON A SHORT ONE — the asymmetry is the
-                 * point. Next's automatic prefetch stops at this route's `loading.tsx`, so it
-                 * warms the skeleton the page is already showing and never the league data. On
+                 * point. Next's automatic prefetch stops at the nearest `loading.tsx` (now
+                 * app/core/loading.tsx, above the screens), so it never warms the league data. On
                  * a sixty-tile rail that is sixty requests that cannot help; on a short one it
                  * is cheap, bounded, and the only warming a touch device gets at all.
                  * See `railPrefetch.ts`.
                  */
                 prefetch={railAutoPrefetch ? undefined : false}
-                /* Pointing at a league IS intent, unlike scrolling past it. FULL prefetch. */
-                onMouseEnter={() => warmRailLeague(l.id)}
-                onFocus={() => warmRailLeague(l.id)}
+                /* RESTING on a league is intent; passing over it is not. FULL prefetch, via the gate. */
+                onMouseEnter={() => startRailDwell(l.id)}
+                onMouseLeave={cancelRailDwell}
+                onFocus={() => startRailDwell(l.id)}
+                onBlur={cancelRailDwell}
                 className="af-rail-tile af-platform"
+                data-core-nav=""
                 data-platform={l.platform}
                 /*
                  * ⚠ THE RAIL NEVER SAID WHICH LEAGUE YOU ARE IN. The 2026-09-07
@@ -1714,8 +1831,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     ) : null}
                   </span>
                   {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
-                    <span className="af-rail-score-status" data-delayed={delayed || undefined}>
-                      {delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
+                    <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
+                      {l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
                     </span>
                   ) : null}
                   {m ? (
@@ -1832,6 +1949,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   <Link
                     href={item.href}
                     className="af-nav-item"
+                    data-core-nav=""
+                    prefetch={false}
                     data-active={item.key === active}
                     aria-current={item.key === active ? 'page' : undefined}
                   >
@@ -1993,10 +2112,17 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}
 
+            {/*
+              `describeAge` says "never synced" for an account with no sync at all; prefixing
+              "synced" to that read "⚠ synced never synced".
+            */}
             <span className="af-sync af-num" data-stale={syncAge.stale} title="Last sync">
               {syncAge.stale ? '⚠ ' : ''}
-              synced {syncAge.label}
+              {syncChipText(syncAge.label)}
             </span>
+
+            {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
+            <ModeToggle className="af-mode-chip" />
 
             {/*
               The COMPACT form, and only where the visible panel is not already
@@ -2042,7 +2168,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
-          <GameDayAlertsBanner />
+          {active === 'home' ? <GameDayAlertsBanner /> : null}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
             The VISIBLE button, on the /core home screen: a real action row
@@ -2068,7 +2194,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             mount takes no `leagueId` — the shell does not know one.
           */}
           <ShellSignalsContext.Provider value={setPublishedSignals}>
-            <PlayerCardProvider>{children}</PlayerCardProvider>
+            <CoreNavPendingContext.Provider value={navPending != null}>
+              <PlayerCardProvider>{children}</PlayerCardProvider>
+            </CoreNavPendingContext.Provider>
           </ShellSignalsContext.Provider>
         </main>
       </div>
@@ -2095,6 +2223,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <Link
             href="/core"
             className="af-tabbar-item"
+            data-core-nav=""
             data-active={active !== 'live' && !mobileMoreOpen}
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
@@ -2104,6 +2233,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <Link
             href="/core/live"
             className="af-tabbar-item"
+            data-core-nav=""
             data-active={active === 'live' && !mobileMoreOpen}
             aria-current={active === 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
@@ -2155,6 +2285,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               key={item.key}
               href={item.href}
               className="af-tabbar-item"
+              data-core-nav=""
               data-active={item.key === active}
               aria-current={item.key === active ? 'page' : undefined}
             >
@@ -2217,7 +2348,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <div className="af-mobile-more-group">
                   <span className="af-label">Start something</span>
                   {LEAGUE_FIRST_PLAY_LINKS.map((item) => (
-                    <Link key={item.href} href={item.href} className="af-mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                    <Link key={item.href} href={item.href} className="af-mobile-more-link" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
                       <span className="af-mobile-more-icon" aria-hidden>{item.glyph}</span>
                       <span>{item.label}</span>
                     </Link>
@@ -2234,6 +2365,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       key={item.key}
                       href={item.href}
                       className="af-mobile-more-link"
+                      data-core-nav=""
                       data-active={item.key === active}
                       onClick={() => setMobileMoreOpen(false)}
                     >
@@ -2307,6 +2439,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           leagues={comms.leagues}
           pageLeagueId={props.selectedLeagueId ?? null}
           chimmyTokenCost={comms.chimmyTokenCost}
+          chimmyPlanAllowance={comms.chimmyPlanAllowance ?? null}
           homeSignals={comms.homeSignals ?? null}
           pageSurface={isCoreSurfaceKey(active) ? active : null}
           dockable={comms.dockable}

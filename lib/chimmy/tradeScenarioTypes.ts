@@ -38,6 +38,15 @@ export type TradeScenarioLineup = {
 
 /** A literal `false`, so a renderer cannot mistake an absent number for a computed one. */
 export type PlayoffOddsNotComputed = { available: false; reason: string }
+export type TradePlayoffEstimate = {
+  available: true
+  reason: string
+  before: number
+  after: number
+  delta: number
+  iterations: number
+  computedAt: string
+}
 
 /**
  * The unit of every lineup number on every card — trade, waiver and start/sit: that week's
@@ -58,6 +67,11 @@ export type ReadyTradeScenario = {
   give: ScenarioPlayer[]
   get: ScenarioPlayer[]
   partnerTeamName: string
+  recommendation?: { action: string; explanation: string }
+  competitiveContext?: { wins: number; losses: number; ties: number; rank: number | null }
+  unpricedExcluded?: number
+  depthChanges?: Array<{ position: string; before: number; after: number }>
+  playerAges?: Array<{ name: string; age: number; side: 'give' | 'get' }>
   /**
    * How many draft picks the trade carried. Picks appear in `give` / `get` as entries named like
    * "2027 1st-round pick" with no position; this count lets a renderer add the pricing caveat.
@@ -71,13 +85,19 @@ export type ReadyTradeScenario = {
     grade: string | null
     coveragePct: number
     coverageStatus: 'complete' | 'partial' | 'blocked'
+    /** The one grade's label ("Slightly favors you") — absent on scenarios sent before 2026-09-24. */
+    label?: string | null
+    /** The chart the values are on, in words. */
+    basis?: string | null
+    /** Why there is no grade, when there is none. */
+    withheld?: string | null
   }
   lineup: TradeScenarioLineup | null
   /** The week `lineup` is for (`LEAGUE_WEEK_UNIT`); absent on scenarios sent before 2026-09-17. */
   lineupWeek?: number | null
   /** Why `lineup` is null — the evaluator's own blocked reason, verbatim when it gave one. */
   lineupUnavailable: string | null
-  playoffOdds: PlayoffOddsNotComputed
+  playoffOdds: PlayoffOddsNotComputed | TradePlayoffEstimate
 }
 
 export type TradeScenario =
@@ -122,6 +142,8 @@ export type WaiverScenario =
 /* ── Start / sit ───────────────────────────────────────────────────────────────────────────── */
 
 export type StartSitScenarioUnresolvedReason =
+  | 'unavailable_player'
+  | 'players_locked'
   | 'no_league_world'
   | 'no_viewer_roster'
   | 'players_not_on_roster'

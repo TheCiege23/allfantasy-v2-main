@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { valueBookFor, leagueVariantFor, CROSS_LEAGUE_BOOK } from '@/lib/core-app/valueBook'
+import { valueBookFor, leagueVariantFor, startsTwoQuarterbacks, CROSS_LEAGUE_BOOK } from '@/lib/core-app/valueBook'
 
 /*
  * Which value book a league is priced against.
@@ -184,5 +184,88 @@ describe('leagueVariantFor — the shared predicates marketContextFor also reads
       dynasty: false,
       keeper: true,
     })
+  })
+})
+
+/*
+ * 🛑 AN IMPORTED LEAGUE PRICES ON WHAT ITS HOST PLATFORM SAYS IT IS (2026-09-25).
+ * Measured on production that day: 16 Sleeper KEEPER leagues stored and priced as redraft, 10
+ * two-QB leagues and every non-Sleeper superflex league priced 1QB, because the importer's facts
+ * were stored but never read. A person's confirmation still outranks all of it.
+ */
+describe('startsTwoQuarterbacks — every importer\u2019s slot spelling', () => {
+  it.each([
+    [['QB', 'RB', 'SUPER_FLEX'], true],
+    [['QB', 'QB', 'RB', 'WR'], true], // two-QB: no flex slot, two plain starts
+    [['QB', 'RB', 'WR', 'FLEX'], false],
+    [['QB:1', 'RB:2', 'WR:2', 'TE:1', 'SUPER_FLEX:2', 'D/ST:1'], true], // ESPN
+    [['QB:2', 'RB:2', 'WR:3'], true],
+    [['QB:1', 'RB:2', 'WR:2', 'FLEX:1'], false],
+    [['QB:1', 'WR:3', 'Q/W/R/T:1'], true], // Yahoo
+    [['QB:1-2', 'RB:2-4'], true], // MFL range: up to two
+    [['QB:1-1', 'RB:2'], false],
+    [['RB', 'WR', 'SUPER_FLEX'], true], // no plain QB, but a flex-QB slot — superflex today, still
+    [['OP:1', 'QB:1'], true],
+    [['qb', 'super_flex'], true],
+    [['QB:0', 'SUPER_FLEX:0'], false],
+    [[], false],
+  ])('%j → %s', (positions, expected) => {
+    expect(startsTwoQuarterbacks(positions)).toBe(expected)
+  })
+
+  it('a two-QB and an ESPN superflex league price on the SUPERFLEX book', () => {
+    expect(valueBookFor({ roster_positions: ['QB', 'QB', 'RB'] }, 'redraft').qbFormat).toBe('SUPERFLEX')
+    expect(valueBookFor({ roster_positions: ['QB:1', 'SUPER_FLEX:2'] }, 'redraft').qbFormat).toBe('SUPERFLEX')
+    expect(valueBookFor({ roster_positions: ['QB:1', 'FLEX:2'] }, 'redraft').qbFormat).toBe('ONE_QB')
+  })
+})
+
+describe('the host platform\u2019s facts, where nobody has confirmed a type', () => {
+  const sleeperKeeper = {
+    roster_positions: RB,
+    isDynasty: false,
+    conceptRules: { extensions: { keeperProvenance: { source: 'provider', version: 1, isKeeper: true } } },
+  }
+
+  it('🛑 a Sleeper keeper league stored as `redraft` prices as a KEEPER league', () => {
+    expect(leagueVariantFor(sleeperKeeper, 'redraft').keeper).toBe(true)
+    expect(valueBookFor(sleeperKeeper, 'redraft').format).toBe('DYNASTY')
+  })
+
+  it('a person\u2019s confirmation outranks the provider — a confirmed redraft stays redraft', () => {
+    const confirmedRedraft = { ...sleeperKeeper, leagueTypeConfirmation: { type: 'redraft', confirmedByUserId: 'u1' } }
+    expect(leagueVariantFor(confirmedRedraft, 'redraft').keeper).toBe(false)
+    expect(valueBookFor(confirmedRedraft, 'redraft').format).toBe('REDRAFT')
+  })
+
+  it('only a PROVIDER keeper fact counts — not isKeeper false, not another source', () => {
+    const not = { ...sleeperKeeper, conceptRules: { extensions: { keeperProvenance: { source: 'provider', isKeeper: false } } } }
+    const inferred = { ...sleeperKeeper, conceptRules: { extensions: { keeperProvenance: { source: 'inferred', isKeeper: true } } } }
+    expect(leagueVariantFor(not, 'redraft').keeper).toBe(false)
+    expect(leagueVariantFor(inferred, 'redraft').keeper).toBe(false)
+    expect(leagueVariantFor({ ...sleeperKeeper, conceptRules: 'junk' }, 'redraft').keeper).toBe(false)
+  })
+
+  it('🛑 a specialty format on a DYNASTY host league keeps the dynasty book', () => {
+    const dynastyHost = { roster_positions: SF, isDynasty: true }
+    for (const t of ['zombie', 'best_ball', 'big_brother', 'survivor']) {
+      expect(valueBookFor({ ...dynastyHost, leagueTypeConfirmation: { type: t } }, t).format).toBe('DYNASTY')
+      // [control] the same format on a redraft host stays redraft.
+      expect(valueBookFor({ roster_positions: SF, isDynasty: false, leagueTypeConfirmation: { type: t } }, t).format).toBe('REDRAFT')
+    }
+  })
+
+  it('a format whose rosters dissolve is redraft whatever the host flag says', () => {
+    for (const t of ['guillotine', 'survivor_guillotine', 'tournament']) {
+      expect(valueBookFor({ roster_positions: SF, isDynasty: true, leagueTypeConfirmation: { type: t } }, t).format).toBe('REDRAFT')
+    }
+  })
+
+  it('a confirmed REDRAFT on a dynasty host is obeyed', () => {
+    expect(valueBookFor({ roster_positions: SF, isDynasty: true, leagueTypeConfirmation: { type: 'redraft' } }, 'dynasty').format).toBe('REDRAFT')
+  })
+
+  it('salary cap prices as the multi-season contract league the format rules say it is', () => {
+    expect(valueBookFor({ roster_positions: RB }, 'salary_cap').format).toBe('DYNASTY')
   })
 })

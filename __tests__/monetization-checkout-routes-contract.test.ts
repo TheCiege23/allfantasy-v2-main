@@ -12,6 +12,14 @@ vi.mock("@/lib/auth", () => ({
   authOptions: {},
 }))
 
+// The routes now look up the user's existing Stripe customer and live plans before
+// checkout; a first-time buyer has neither.
+vi.mock("@/lib/monetization/stripeCustomerForUser", () => ({
+  findStripeCustomerIdForUser: vi.fn().mockResolvedValue(null),
+  findLiveStripePlanFamiliesForUser: vi.fn().mockResolvedValue(new Set()),
+  duplicatePlanReason: vi.fn().mockReturnValue(null),
+}))
+
 describe("Monetization checkout routes", () => {
   beforeEach(() => {
     vi.clearAllMocks()

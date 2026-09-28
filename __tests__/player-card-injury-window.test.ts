@@ -153,3 +153,16 @@ describe('loadInjury — the recency gate', () => {
     expect(res.available).toBe(false)
   })
 })
+
+
+it('matches suffix aliases while rejecting another club in the player card', async () => {
+  const mod = await import('@/lib/core-app/playerCard')
+  findMany.mockResolvedValue([
+    { status: 'Out', team: 'NE', date: new Date(), updatedAt: new Date(), source: 'espn' },
+    { status: 'IR', team: 'New York Jets', date: new Date(), updatedAt: new Date(), source: 'espn' },
+  ])
+  const result = await mod.loadInjury('13276', 'Omar Cooper', 'NFL', 'NYJ')
+  expect(JSON.stringify(findMany.mock.calls[0][0].where)).toContain('Omar Cooper Jr.')
+  expect(result.available).toBe(true)
+  if (result.available) expect(result.data.status).toBe('IR')
+})

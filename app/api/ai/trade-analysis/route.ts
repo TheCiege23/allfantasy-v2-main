@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueAccess } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { buildLeagueContext } from '@/lib/league/buildLeagueContext'
 import { runTradeAnalysis } from '@/lib/engine/trade'
 import type { TradeAssetUnion, LeagueFormat, SportKey } from '@/lib/engine/trade-types'
@@ -49,6 +50,10 @@ export async function POST(req: Request) {
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Claude on every call; the sibling /api/trade-evaluator already required trade_analyzer.
+  const gated = await aiCostGate(req, 'trade_ai', userId)
+  if (gated) return gated
 
   let body: { leagueId?: string; give?: Side[]; get?: Side[] }
   try {

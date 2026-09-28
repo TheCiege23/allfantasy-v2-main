@@ -6,6 +6,8 @@ import { requireVerifiedUser } from "@/lib/auth-guard";
 import { encrypt } from "@/lib/league-auth-crypto";
 import { runImportedLeagueNormalizationPipeline } from "@/lib/league-import/ImportedLeagueNormalizationPipeline";
 import { persistImportedLeagueFromNormalization } from "@/lib/league-import/ImportedLeagueCommitService";
+import { assertImportCommissioner, recordImportAttestation } from "@/lib/league-import/commissionerGate";
+import { commissionerGateFailureResponse } from "@/lib/league-import/commissionerGateResponse";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,10 @@ const bodySchema = z.object({
   isLegacy: z.boolean().optional(),
   espnS2: z.string().optional(),
   swid: z.string().optional(),
+  /** Same shape the unified commit route accepts; see `assertImportCommissioner`. */
+  attestation: z
+    .object({ accepted: z.boolean().optional(), statement: z.string().optional() })
+    .optional(),
 });
 
 function getErrorMessage(error: unknown): string {
@@ -52,7 +58,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { leagueId, season, espnS2, swid } = parsed.data;
+    const { leagueId, season, espnS2, swid, attestation } = parsed.data;
 
     if ((espnS2 && !swid) || (!espnS2 && swid)) {
       return NextResponse.json(
@@ -90,6 +96,30 @@ export async function POST(req: Request) {
       /^\d{4}[:/]/.test(trimmedLeagueId)
         ? trimmedLeagueId
         : `${season}:${trimmedLeagueId}`;
+
+    /*
+     * 🛑 THIS ROUTE USED TO PERSIST AFTER ONLY `requireVerifiedUser()`. A public ESPN league
+     * reads fine with no cookies, so any verified account could import any league id and
+     * become its AllFantasy owner (`League.userId`, which is what the commissioner checks
+     * read). Same gate, same arguments as /api/leagues/import/commit.
+     *
+     * ⚠ AFTER the cookie upsert above, never before: `checkEspn` proves membership from the
+     * stored SWID, so gating first would refuse the very request that supplies it.
+     */
+    const gateAttestation = attestation?.accepted
+      ? { accepted: true, statement: attestation.statement }
+      : undefined;
+    const gate = await assertImportCommissioner({
+      appUserId: userId,
+      provider: "espn",
+      sourceLeagueId: sourceId,
+      requireCommissioner: true,
+      attestation: gateAttestation,
+    });
+    if (!gate.ok) {
+      return commissionerGateFailureResponse(gate, { attestationHint: true });
+    }
+
     const normalized = await runImportedLeagueNormalizationPipeline({
       provider: "espn",
       sourceId,
@@ -108,7 +138,20 @@ export async function POST(req: Request) {
       provider: "espn",
       normalized: normalized.normalized,
       allowUpdateExisting: true,
+      /* The gate resolved the caller's own team to decide whether they may import at all.
+         Without it the league lands with nothing claimed and never shows on /core. */
+      importerSourceManagerId: gate.sourceManagerId ?? null,
     });
+
+    if (gate.verification === "attestation" && gateAttestation) {
+      void recordImportAttestation({
+        leagueId: persisted.league.id,
+        appUserId: userId,
+        provider: "espn",
+        sourceLeagueId: sourceId,
+        attestation: gateAttestation,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

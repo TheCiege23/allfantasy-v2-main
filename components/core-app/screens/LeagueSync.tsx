@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import SyncNowButton from '../SyncNowButton'
+import SyncPauseButton from '../SyncPauseButton'
 import type { LeagueSyncResult, SyncDataRow } from '@/lib/core-app/leagueSync'
 import '@/components/core-app/af-league-sync.css'
 
@@ -55,6 +57,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
     seasonsOnFile,
     status,
     lastReadAt,
+    rostersReadAt,
     consecutiveFailures,
     lastError,
     rows,
@@ -69,7 +72,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         <div className="af-sy-title-row">
           <h1 className="af-display af-sy-title">Sync</h1>
           <span className="af-sy-status af-label" data-status={status}>
-            {status === 'ok' ? 'All synced' : status === 'attention' ? 'Needs attention' : 'Never synced'}
+            {status === 'paused' ? 'Account sync paused' : status === 'ok' ? 'All synced' : status === 'attention' ? 'Needs attention' : 'Never synced'}
           </span>
         </div>
         <p className="af-sy-sub">
@@ -78,8 +81,14 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </p>
       </header>
 
+      {data.syncKey ? <>
+        {!data.syncPaused ? <SyncNowButton onlyKey={data.syncKey} eligibleCount={1} /> : null}
+        <SyncPauseButton leagueId={league.id} paused={data.syncPaused === true} />
+      </> : (
+        <p className="af-sy-sub">This league has no supported external connection to refresh.</p>
+      )}
       {/* ── The stuck-run warning ───────────────────────────────────── */}
-      {orphanedRun ? (
+      {orphanedRun && !data.syncPaused ? (
         <div className="af-sy-alert" data-tone="bad">
           <span className="af-label">Last run never finished</span>
           <p>
@@ -91,7 +100,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </div>
       ) : null}
 
-      {consecutiveFailures > 0 ? (
+      {consecutiveFailures > 0 && !data.syncPaused ? (
         <div className="af-sy-alert" data-tone="warn">
           <span className="af-label">
             {consecutiveFailures} failed {consecutiveFailures === 1 ? 'run' : 'runs'} in a row
@@ -106,6 +115,10 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
           </Link>
         </div>
       ) : null}
+
+      {data.syncPaused && lastError ? <details className="af-sy-alert">
+        <summary>Latest recorded sync error</summary><p>{lastError}</p>
+      </details> : null}
 
       {/* ── Connection ──────────────────────────────────────────────── */}
       <section className="af-sy-conn" aria-label="Platform connection">
@@ -125,13 +138,24 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
         </div>
 
         <div className="af-sy-conn-read">
-          <span className="af-label">Last read</span>
+          <span className="af-label">{rostersReadAt ? 'Last full read' : 'Last read'}</span>
           {/*
             ⚠ "WE LAST READ", NOT "DATA IS N OLD". The stored value is our own
             collection time; the provider publishes no per-league data
             timestamp, and the column reserved for one is deliberately null.
           */}
           <span className="af-sy-conn-when af-num">{describeWhen(lastReadAt)}</span>
+          {/*
+            The five-minute lane's read of rosters and transactions, which runs far more often
+            than the full read above. Shown only when it has completed here — a league outside
+            the lane (offseason, an older season) has nothing honest to put on this line.
+          */}
+          {rostersReadAt ? (
+            <span className="af-sy-conn-lane">
+              Rosters &amp; transactions{' '}
+              <span className="af-num">{describeWhen(rostersReadAt)}</span>
+            </span>
+          ) : null}
           {coarse ? (
             <span className="af-sy-conn-coarse">
               from the league record — no per-run history has been written for this connection, so

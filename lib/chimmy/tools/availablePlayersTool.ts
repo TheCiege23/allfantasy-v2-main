@@ -300,12 +300,24 @@ export async function buildAvailablePlayersContext(
   const leagueName = league.name ?? 'this league'
 
   /*
-   * ⚠ NFL ONLY. The values table holds NFL assets; running this for an NBA or
-   * MLB league would subtract NFL rosters from NFL values and present the
-   * result as that league's waiver wire.
+   * ⚠ THE VALUE RANKING BELOW IS NFL ONLY. The values table holds NFL assets; running it for an NBA
+   * or MLB league would subtract NFL rosters from NFL values and present the result as that league's
+   * waiver wire. Other sports (2026-09-25) subtract the league's rosters from the SPORT's own player
+   * pool and rank by AllFantasy's per-game projection instead — see availablePlayersOtherSports.ts,
+   * which says in its own block that the ranking basis is different.
    */
   if (String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') {
-    return `Player values are only published for NFL, so there is no available-player ranking for "${leagueName}" (${league.sport}). Say that plainly; do not name anyone.`
+    try {
+      const { buildOtherSportAvailableContext } = await import('@/lib/chimmy/tools/availablePlayersOtherSports')
+      return await buildOtherSportAvailableContext({
+        leagueName,
+        sport: String(league.sport),
+        leagueId,
+        rostered: await rosteredPlayerIds(leagueId),
+      })
+    } catch {
+      return `Player values are only published for NFL, and the ${league.sport} player pool could not be ranked just now for "${leagueName}". Say that plainly; do not name anyone.`
+    }
   }
 
   /* Starting slots this league fills that no source we hold can rank. */

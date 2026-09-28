@@ -33,5 +33,12 @@ declare module "next-auth/jwt" {
     id?: string
     sub?: string
     username?: string | null
+    /**
+     * The account-level lock (lib/geo/accountGeoLock): "full_block" after a
+     * Washington sighting, "card_paid_block" after a purchase with a restricted
+     * state's card billing address. Set ONLY from the database by the jwt
+     * callback; middleware.ts enforces it.
+     */
+    geoLock?: "full_block" | "card_paid_block" | null
   }
 }

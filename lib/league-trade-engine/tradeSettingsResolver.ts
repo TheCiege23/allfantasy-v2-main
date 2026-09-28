@@ -24,6 +24,11 @@ function num(v: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+/** Whether draft picks may be traded. One definition: the validator and the pick picker both read it. */
+export function isDraftPickTradingAllowed(league: { draftPickTrading?: boolean | null }): boolean {
+  return league.draftPickTrading !== false
+}
+
 export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeSettings {
   const snap = parseSettingsSnapshot(league.settings ?? null)
   const comm = (snap?.commissionerSettings ?? {}) as Record<string, unknown>
@@ -86,7 +91,7 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
    */
   const faabTradingAllowed = Boolean((ext as { faabTradable?: boolean }).faabTradable ?? true)
 
-  const draftPickTradingAllowed = league.draftPickTrading !== false
+  const draftPickTradingAllowed = isDraftPickTradingAllowed(league)
 
   const leagueType = String(league.leagueType ?? '').toLowerCase()
   const devyTradingAllowed = leagueType.includes('devy') || Boolean(ext.devyTrading ?? true)

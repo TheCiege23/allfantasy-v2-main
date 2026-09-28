@@ -1,19 +1,10 @@
-﻿import 'server-only'
+import 'server-only'
 
-import type { SportsPlayerRecord } from '@prisma/client'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { getPlayer, searchPlayers } from '@/lib/data/players'
-import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
-import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
-import {
-  pricePlayer,
-  pricePick,
-  compositeScore,
-  compositeTotal,
-  type ValuationContext,
-  type PricedAsset,
-} from '@/lib/hybrid-valuation'
+import { getPlayer } from '@/lib/data/players'
+import { availableRosterTargets, evaluateCounterOffers } from './counterOffers'
+import { prepareProposalCap, proposalCapNote } from './proposalCap'
+import { compositeScore } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { buildInstantNegotiationToolkit, buildNegotiationToolkit } from '@/lib/trade-engine/negotiation-builder'
@@ -31,7 +22,6 @@ import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
 import type { PhaseTimer } from '@/lib/logging/phaseTimer'
-import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import {
@@ -42,6 +32,7 @@ import { loadLeagueForTrade } from './league-loader'
 import { snapshotFromLoaded } from './quick-badges'
 import { pricedAssetToEngineAsset } from './priced-asset-to-asset'
 import { buildTradeIntelligence } from './build-trade-intelligence'
+import { presentTradeConsoleVerdict } from './verdictPresentation'
 import { enrichTradeConsolePlayerLines, sumEffectiveProjections } from './tradeProjectionEnrichment'
 import {
   formatStructuredContextForReasoning,
@@ -49,9 +40,10 @@ import {
   loadLeagueStructuredContextNotes,
 } from './load-league-structured-context'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
-import { clamp, sportsRecordToPricedAsset } from './sports-db-valuation'
-import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
-import { analysisUnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { clamp } from './sports-db-valuation'
+import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './leagueTradePricing'
+import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { tradeGradeLabel } from '@/lib/decision-os/trade/tradeGrade'
 import {
   benchAssetsNotInGive,
   inferThinPositionsFromRoster,
@@ -59,6 +51,7 @@ import {
   type TradeEngineRosterContext,
 } from './roster-context-loader'
 import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
+import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { leagueToolAccessUserMessage } from '@/lib/ai-tools/league-tool-access-messages'
 import type { AiToolPayloadEnvelope } from '@/lib/intelligence/buildAiToolPayload'
 import type {
@@ -72,6 +65,9 @@ import type {
   TradeConsoleSourceFlags,
   TradeConsoleValidation,
 } from './types'
+
+/** Moved to `./leagueTradePricing` with the rest of the pricer; re-exported for its existing test. */
+export { lineFromPriced } from './leagueTradePricing'
 
 async function loadLeagueTradeHistoryNote(leagueId: string | null | undefined): Promise<string | null> {
   if (!leagueId) return null
@@ -97,280 +93,6 @@ async function loadLeagueTradeHistoryNote(leagueId: string | null | undefined): 
   } catch {
     return null
   }
-}
-
-function priceFaabAsset(amount: number, budget: number): PricedAsset {
-  /*
-   * 🛑 WAS `round(clamp(amount / budget, 0, 1) * 2800)` — this console's OWN conversion, and
-   * the last of the three the app used to carry. Measured 2026-09-11, $10 of FAAB out of a
-   * $100 budget priced as 10 in /api/trade-evaluator, 280 here, and 180 in the canonical
-   * engine: a 28x spread on one asset, across three surfaces feeding the same 0–10000 scale.
-   *
-   * The other two now route through `normalizedFaabValue`; this closes it. The SHAPE is
-   * unchanged — it was already budget-relative, which is the part this file had right — so
-   * only the constant moves: a full budget prices at 1800 rather than 2800, matching what the
-   * canonical engine has always paid for FAAB at the default $100 budget.
-   *
-   * ⚠ THAT IS A REAL GRADE CHANGE ON THIS SURFACE, and deliberately so. A console trade
-   * carrying a full budget loses ~1000 points of one side's total; one carrying $25 of a $100
-   * budget goes from 700 to 450. Nothing else in the trade moves. The alternative — keeping
-   * 2800 here and raising the other two — would have re-priced every canonical snapshot ever
-   * written, which is evidence, not a display value.
-   */
-  const mv = normalizedFaabValue(amount, budget)
-  return {
-    name: `FAAB $${amount}`,
-    type: 'player',
-    value: mv,
-    assetValue: {
-      marketValue: mv,
-      impactValue: Math.round(mv * 0.55),
-      vorpValue: Math.round(mv * 0.2),
-      volatility: 0.12,
-    },
-    source: 'unknown',
-    position: 'FAAB',
-  }
-}
-
-/**
- * The SLEEPER provider id for a player, or null — the key the trade enrichment tables use.
- *
- * 🛑 WHY THIS EXISTS AT ALL. `analyze/route.ts` builds `enrichIds` from the console's player id and
- * hands them to `resolveTradeEnrichment`; with no usable key the canonical engine is fed the
- * console's own numbers and `independentInputs` is false. Measured on production 2026-09-08: all
- * nine trade parity rows ever recorded sit in the `console` bucket and ZERO in
- * `console_independent` — the two-engine comparison the shadow exists to run has never happened.
- *
- * The cause was NOT a missing lookup, which is what it looked like. `SportsPlayerRecord.id` (what
- * the console carries), `SportsPlayer.id` and `canonicalPlayerId` were each tested against
- * `resolveTradeEnrichment` and none of them resolve anything; `providerIds.sleeper` returns
- * `adp 2.8` for the same player, and `PlayerValueSnapshot.sleeperId` matches it. The console simply
- * carries a different id space from the one the enrichment port reads.
- *
- * ⚠ AMBIGUOUS IS REFUSED, NOT GUESSED. This repo carries 178 NFL duplicate-name groups it must not
- * merge, and `consoleShadowCompare` already declines `name_match_ambiguous` for exactly this reason
- * — a wrong id here would price one player's trade with another's market value and never surface as
- * an error. `searchPlayers(name)[0]`, which the non-NFL branch uses for its own purposes, is
- * first-hit-wins and is deliberately NOT reused here.
- *
- * ⚠ NEVER THROWS. A resolver failure returns null and the caller behaves exactly as it did before
- * this function existed.
- */
-async function resolveEnrichmentPlayerId(
-  nameHint: string,
-  sport: string,
-  positionHint?: string | null,
-): Promise<string | null> {
-  if (!nameHint.trim()) return null
-  try {
-    const res = await resolvePlayer({
-      provider: 'sleeper',
-      nameHint,
-      positionHint: positionHint ?? null,
-      sport,
-    })
-    if (res.confidence !== 'direct' && res.confidence !== 'name_match_confident') return null
-    return res.player?.providerIds?.sleeper ?? null
-  } catch {
-    return null
-  }
-}
-
-/**
- * One priced asset as a console line. Exported for its test only.
- *
- * `pa.unpriced` is the pricer's own "found nothing" flag, and its marketValue is then a placeholder
- * 0; the line carries the flag and the reason so no surface prints that 0 as a price.
- * `reasonPosition` is the player ROW's position when there is one — an unmatched player's
- * `pa.position` is the literal 'UNKNOWN', which would hide that he is, say, a team defense.
- */
-export function lineFromPriced(
-  pa: PricedAsset,
-  meta: Partial<TradeConsolePlayerLine>,
-  opts?: { reasonPosition?: string | null },
-): TradeConsolePlayerLine {
-  return {
-    name: pa.name,
-    playerId: meta.playerId ?? null,
-    enrichmentPlayerId: meta.enrichmentPlayerId ?? null,
-    sport: meta.sport ?? 'NFL',
-    position: pa.position ?? meta.position ?? '—',
-    team: meta.team ?? '—',
-    headshotUrl: meta.headshotUrl ?? null,
-    logoUrl: meta.logoUrl ?? null,
-    injuryStatus: meta.injuryStatus ?? null,
-    dataSource: meta.dataSource ?? 'deterministic',
-    composite: compositeScore(pa.assetValue),
-    marketValue: pa.assetValue.marketValue,
-    pricedSource: meta.pricedSource ?? 'unknown',
-    ...(pa.unpriced
-      ? {
-          unpriced: true,
-          unpricedReason: analysisUnpricedReason({
-            position: opts?.reasonPosition ?? pa.position ?? meta.position,
-            sport: meta.sport ?? 'NFL',
-          }),
-        }
-      : {}),
-  }
-}
-
-async function resolveAssets(
-  items: TradeAssetInput[],
-  args: {
-    effectiveSport: SupportedSport
-    nflCtx: ValuationContext
-    waiverBudget: number
-    dataGaps: string[]
-    fcPlayers: FantasyCalcPlayer[]
-  },
-): Promise<{ priced: PricedAsset[]; lines: TradeConsolePlayerLine[]; unresolved: string[] }> {
-  const priced: PricedAsset[] = []
-  const lines: TradeConsolePlayerLine[] = []
-  const unresolved: string[] = []
-
-  for (const raw of items) {
-    if (raw.kind === 'pick') {
-      const p = await pricePick(
-        { year: raw.year, round: raw.round, tier: raw.tier ?? null },
-        args.nflCtx,
-      )
-      priced.push(p)
-      lines.push(
-        lineFromPriced(p, {
-          sport: args.effectiveSport,
-          position: 'PICK',
-          team: `${raw.year}`,
-          pricedSource: 'pick',
-          playerId: null,
-          dataSource: 'historical_pick_curve',
-        }),
-      )
-      continue
-    }
-
-    if (raw.kind === 'faab') {
-      const p = priceFaabAsset(raw.amount, args.waiverBudget)
-      priced.push(p)
-      lines.push(
-        lineFromPriced(p, {
-          sport: args.effectiveSport,
-          position: 'FAAB',
-          team: '—',
-          pricedSource: 'faab',
-          playerId: null,
-          dataSource: 'league_waiver_budget',
-        }),
-      )
-      continue
-    }
-
-    let row: SportsPlayerRecord | null = null
-    let displayName = raw.name?.trim() ?? ''
-
-    if (raw.playerId?.trim()) {
-      row = (await getPlayer(raw.playerId.trim())) as SportsPlayerRecord | null
-      if (row) displayName = row.name
-    }
-
-    if (args.effectiveSport === 'NFL') {
-      if (!displayName && row) displayName = row.name
-      if (!displayName) {
-        args.dataGaps.push('Unnamed NFL player — skipped')
-        continue
-      }
-      const matched = findPlayerByName(args.fcPlayers, displayName)
-      if (!matched && row) {
-        args.dataGaps.push(`FantasyCalc match for "${displayName}" — using API sports record fallback`)
-      }
-      const pa = await pricePlayer(displayName, args.nflCtx)
-      priced.push(pa)
-      const headshot = row?.headshotUrl ?? row?.headshotUrlLg ?? row?.headshotUrlSm ?? null
-      const src: TradeConsolePlayerLine['pricedSource'] =
-        pa.source === 'fantasycalc' || pa.source === 'excel'
-          ? 'fantasycalc'
-          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat'
-            ? 'idp_league'
-            : 'unknown'
-      lines.push(
-        lineFromPriced(pa, {
-          playerId: row?.id ?? raw.playerId ?? null,
-          enrichmentPlayerId: await resolveEnrichmentPlayerId(
-            displayName,
-            'NFL',
-            pa.position ?? row?.position ?? null,
-          ),
-          sport: 'NFL',
-          team: row?.team ?? matched?.player.maybeTeam ?? '—',
-          headshotUrl: headshot,
-          logoUrl: row?.logoUrl ?? null,
-          injuryStatus: row?.injuryStatus ?? null,
-          pricedSource: src,
-          dataSource: row?.dataSource ?? 'fantasycalc+rolling',
-          position: pa.position ?? row?.position ?? '—',
-        }, { reasonPosition: row?.position ?? null }),
-      )
-      continue
-    }
-
-    if (!row && displayName.length >= 2) {
-      const found = await searchPlayers(displayName, args.effectiveSport)
-      row = (found[0] ?? null) as SportsPlayerRecord | null
-    }
-    if (!row && raw.playerId) {
-      row = (await getPlayer(raw.playerId.trim())) as SportsPlayerRecord | null
-    }
-    if (!row) {
-      unresolved.push(displayName || raw.playerId || 'unknown')
-      continue
-    }
-
-    const pa = sportsRecordToPricedAsset(row)
-    if (!pa) {
-      // Pricing can now REFUSE (slice 11: no market value and no projection ->
-      // null rather than a fabricated number). An unpriceable asset belongs in
-      // `unresolved` so the grader sees a short side and reports insufficient
-      // data, instead of being handed a zero that reads as "worthless".
-      unresolved.push(displayName || raw.playerId || row.id)
-      continue
-    }
-    priced.push(pa)
-    lines.push(
-      lineFromPriced(pa, {
-        playerId: row.id,
-        // Same seam for every other sport: `row.id` is the slug id, which the enrichment port
-        // cannot read either. Resolving from the resolved row's own name keeps the two branches
-        // honest about the same distinction.
-        enrichmentPlayerId: await resolveEnrichmentPlayerId(row.name, row.sport, row.position),
-        sport: row.sport,
-        team: row.team,
-        headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
-        logoUrl: row.logoUrl,
-        injuryStatus: row.injuryStatus,
-        pricedSource: 'sports_db',
-        dataSource: row.dataSource,
-        position: row.position,
-      }),
-    )
-  }
-
-  return { priced, lines, unresolved }
-}
-
-function pprForNflFromLeagueContext(
-  norm: NormalizedLeagueContext | null,
-  leagueRow: Awaited<ReturnType<typeof loadLeagueForTrade>> | null,
-): 0 | 0.5 | 1 {
-  const fmt = norm?.scoring?.labels?.receptionFormat
-  if (fmt === 'ppr') return 1
-  if (fmt === 'half_ppr') return 0.5
-  if (fmt === 'standard') return 0
-  const s = (leagueRow?.scoring ?? '').toLowerCase()
-  if (s.includes('half') || s.includes('0.5')) return 0.5
-  if (s.includes('standard') && !s.includes('half')) return 0
-  if (s.includes('ppr') || s.includes('full')) return 1
-  return 1
 }
 
 function isMultisportLeague(settings: Record<string, unknown> | null | undefined): boolean {
@@ -478,7 +200,8 @@ export async function runTradeConsoleAnalysis(
     for (const side of [...give, ...get]) {
       if (side.kind !== 'player') continue
       if (side.playerId) {
-        const r = await getPlayer(side.playerId.trim())
+        // The league's sport reads a bare roster id (a Sleeper id) — see `getPlayer`.
+        const r = await getPlayer(side.playerId.trim(), { sport: side.sportHint ?? leagueSnapshot?.sport ?? null })
         if (r?.sport) sportSet.add(normalizeToSupportedSport(r.sport))
       } else if (side.sportHint) {
         sportSet.add(normalizeToSupportedSport(side.sportHint))
@@ -520,70 +243,21 @@ export async function runTradeConsoleAnalysis(
       'Global mode: no opponent roster, so rebalance suggestions and alternate targets are omitted. Select a league for negotiation-grade output.',
     )
   }
-  const leagueSize =
-    input.leagueSize ??
-    leagueSnapshot?.leagueSize ??
-    12
-  const tePremium =
-    input.tePremium ??
-    leagueSnapshot?.tePremiumHint ??
-    (typeof leagueNormCtx?.scoring?.labels?.tePremiumExtra === 'number' &&
-      leagueNormCtx.scoring.labels.tePremiumExtra > 0)
-  const isSuperFlex =
-    input.isSuperFlex ??
-    leagueNormCtx?.scoring?.labels?.isSuperflex ??
-    leagueSnapshot?.isSuperFlexHint ??
-    false
-  const waiverBudget =
-    input.waiverBudget ??
-    leagueSnapshot?.waiverBudget ??
-    100
-
-  const pprNfl = pprForNflFromLeagueContext(leagueNormCtx, leagueRow)
-  const asOf = new Date().toISOString().slice(0, 10)
-  /*
-   * ⚠ TOLERANCE TIGHTENED FROM THE 6 h DEFAULT TO 2 h, WHICH MAKES VALUES FRESHER, NOT FASTER.
-   * `/api/cron/fantasycalc-warm` refreshes every demanded profile hourly, so a served value is
-   * normally under an hour old; 2 h absorbs one missed run. Beyond that this falls through to a
-   * live fetch — slower for that one caller, but still correct and still fresh, which is the
-   * degrade Guap asked for when choosing freshness over the ~2 s this phase used to cost.
-   *
-   * 🛑 DO NOT WIDEN THIS TO BUY LATENCY. That was the alternative fix and it was rejected on
-   * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
-   * retired, this number has to come back DOWN to 6 h or lower, not up.
-   */
-  const fcPlayers = await getFantasyCalcValuesDbFirst(
-    {
-      isDynasty: true,
-      numQbs: isSuperFlex ? 2 : 1,
-      numTeams: leagueSize,
-      ppr: pprNfl,
+  const chart = await resolveLeagueTradeChart({
+    leagueRow,
+    leagueSnapshot,
+    leagueNormCtx,
+    overrides: {
+      leagueSize: input.leagueSize,
+      tePremium: input.tePremium,
+      isSuperFlex: input.isSuperFlex,
+      waiverBudget: input.waiverBudget,
     },
-    { maxStaleMs: 1000 * 60 * 60 * 2 },
-  )
-  mark('fantasycalc')
-
-  /*
-   * This league's defenders, priced by its own scoring rather than by the flat
-   * per-position constant in lib/hybrid-valuation.ts. Keyed off `platformLeagueId`
-   * because the console works in INTERNAL League.id space and Sleeper's roster and
-   * settings endpoints do not answer to that id.
-   */
-  const leagueValues = leagueRow?.platformLeagueId
-    ? await loadLeagueTradeValues({
-        prisma,
-        platformLeagueId: leagueRow.platformLeagueId,
-        isDynasty: leagueRow.isDynasty ?? true,
-      }).catch(() => null)
-    : null
-
-  const nflCtx: ValuationContext = {
-    asOfDate: asOf,
-    isSuperFlex,
-    fantasyCalcPlayers: fcPlayers,
-    numTeams: leagueSize,
-    ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
-  }
+    mark,
+  })
+  dataGaps.push(...(chart.valuationGaps ?? []))
+  // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
+  const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx } = chart
 
   let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {
     effectiveSport,
@@ -637,39 +311,61 @@ export async function runTradeConsoleAnalysis(
     return { ok: false, error: 'Could not price assets on both sides.', code: 'VALIDATION' }
   }
 
-  const applyTep = (assets: PricedAsset[]) => {
-    if (!tePremium) return assets
-    const mult = 1.15
-    return assets.map((a) => {
-      if (a.position?.toUpperCase() === 'TE') {
-        const boosted = Math.round(a.value * mult)
-        return {
-          ...a,
-          value: boosted,
-          assetValue: {
-            ...a.assetValue,
-            marketValue: Math.round(a.assetValue.marketValue * mult),
-            impactValue: Math.round(a.assetValue.impactValue * mult),
-            vorpValue: Math.round(a.assetValue.vorpValue * mult),
-            volatility: a.assetValue.volatility,
-          },
-        }
-      }
-      return a
-    })
-  }
+  const gP = applyChartTePremium(chart, givePriced)
+  const tP = applyChartTePremium(chart, getPriced)
 
-  const gP = applyTep(givePriced)
-  const tP = applyTep(getPriced)
-
-  const giveTotal = compositeTotal(gP)
-  const getTotal = compositeTotal(tP)
   const giveMarket = gP.reduce((s, a) => s + a.assetValue.marketValue, 0)
   const getMarket = tP.reduce((s, a) => s + a.assetValue.marketValue, 0)
 
+  /*
+   * ── THE VERDICT IS GRADED ON LEAGUE VALUE (Guap, 2026-09-24) ─────────────────────────────────
+   *
+   * 🛑 IT WAS GRADED ON A NUMBER NOBODY COULD SEE. `percentDiff` came from `compositeTotal` —
+   * `impactValue + vorpValue − risk`, where `impactValue` is the player's REDRAFT value — while every
+   * line on screen showed his dynasty MARKET value. A dynasty trade was shown in one currency and
+   * graded in another, and a manager checking the arithmetic could never make it add up.
+   *
+   * Now each line starts from its market value on THIS league's chart, is moved by this league's
+   * scoring, and the grade is the difference of those totals. The viewer's roster need is
+   * a separate personal-utility estimate so a completed email cannot drop a grading factor. The
+   * composite survives only where it always belonged: the driver model below (accept probability,
+   * lineup simulation), which is secondary and labelled as such.
+   */
+  const graded = await gradePricedSides({
+    chart,
+    giveLines,
+    getLines,
+    givePriced: gP,
+    getPriced: tP,
+    need:
+      marketCtx && leagueRow && input.leagueId && input.userId
+        ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
+        : null,
+    mark,
+  })
+  const leagueGrade = graded.leagueGrade
+  /**
+   * THE grade — the same object every other trade surface shows for this deal — with the league type
+   * it was priced under and how we know it, as `createLeagueTradeGrader` attaches it. Global mode (no
+   * league) has no league type to name.
+   */
+  const grade = leagueRow
+    ? {
+        ...graded.grade,
+        leagueType: leagueTypeBasis({
+          settings: leagueRow.settings,
+          leagueType: leagueRow.leagueType,
+          platform: leagueRow.platform ?? null,
+        }),
+      }
+    : graded.grade
+  giveLines = leagueGrade.giveLines
+  getLines = leagueGrade.getLines
+  const giveTotal = leagueGrade.totals.giveLeague
+  const getTotal = leagueGrade.totals.getLeague
   const fairnessScore = computeValueFairness(getTotal, giveTotal)
-  const percentDiff =
-    giveTotal > 0 ? Math.round(((getTotal - giveTotal) / Math.max(giveTotal, getTotal, 1)) * 100) : 0
+  const percentDiff = leagueGrade.totals.percentDiff
+  const valueBasis = leagueGrade.valueBasis
 
   const giveAssets: Asset[] = gP.map((pa) => pricedAssetToEngineAsset(pa))
   const receiveAssets: Asset[] = tP.map((pa) => pricedAssetToEngineAsset(pa))
@@ -750,26 +446,22 @@ export async function runTradeConsoleAnalysis(
         : 88
   const confidenceScore = Math.max(10, Math.min(rawConfScore, confCap))
 
-  const delta = getTotal - giveTotal
-  let fairnessLabel = 'Even trade'
-  let sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed' = 'even'
-  if (Math.abs(delta) < Math.max(50, (giveTotal + getTotal) * 0.04)) {
-    fairnessLabel = 'Even'
-    sideAdvantage = 'even'
-  } else if (delta > 0) {
-    fairnessLabel = delta > (giveTotal + getTotal) * 0.12 ? 'Major win (you)' : 'Slightly favors you'
-    sideAdvantage = 'you'
-  } else {
-    fairnessLabel = -delta > (giveTotal + getTotal) * 0.12 ? 'Major overpay' : 'Slightly favors opponent'
-    sideAdvantage = 'opponent'
-  }
+  /*
+   * ⚠ THE LABEL READS OFF THE GRADE'S OWN BANDS (2026-09-24). It used to measure the gap against the
+   * SUM of both sides at 4%/12% while the letter measured it against the LARGER side at 10%/25%, so
+   * an 8% edge read "Slightly favors you" beside a C. One number decides both now — see
+   * `lib/decision-os/trade/tradeGrade.ts`.
+   */
+  const { label: fairnessLabel, sideAdvantage: gradedAdvantage } = tradeGradeLabel(percentDiff)
+  const sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed' = gradedAdvantage
 
   const degraded =
     dataGaps.length > 0 ||
     [...giveLines, ...getLines].some((l) => l.dataSource === 'placeholder')
 
-  const giveProjSum = sumEffectiveProjections(giveLines)
-  const getProjSum = sumEffectiveProjections(getLines)
+  const comparableProjections = sumEffectiveProjections([...giveLines, ...getLines]) != null
+  const giveProjSum = comparableProjections ? sumEffectiveProjections(giveLines) : null
+  const getProjSum = comparableProjections ? sumEffectiveProjections(getLines) : null
   const netProj =
     giveProjSum != null && getProjSum != null
       ? Math.round((getProjSum - giveProjSum) * 10) / 10
@@ -781,8 +473,8 @@ export async function runTradeConsoleAnalysis(
     net: netProj,
     summary:
       giveProjSum != null && getProjSum != null
-        ? 'Net = sum(get) − sum(give) of league-scored weekly projections (injury → weather → scoring stack) for players with DB rows — short-term add/drop signal, not dynasty market value.'
-        : 'Add league + player rows with projections to unlock scoring-adjusted weekly impact alongside market composites.',
+        ? 'Net compares combined player production, not starting-lineup improvement or win probability. Picks and FAAB are excluded. Defensive history estimates use league scoring; review each estimate for its week and injury/weather coverage.'
+        : 'Complete, comparable player projections are required on both sides. Missing players are not counted as zero; picks and FAAB have no weekly production estimate.',
   }
 
   const scoringSummaryLine = leagueNormCtx
@@ -819,7 +511,7 @@ export async function runTradeConsoleAnalysis(
       note: drivers.riskFlags[0] ?? 'Volatility differs by asset; see player injury states.',
     },
     scheduleImpact: {
-      note: 'Schedule strength is blended from available data feeds (see sport data freshness).',
+      note: 'Review the schedule and bye-week notes below. A schedule-strength adjustment is not included in the league-value grade.',
     },
     injuryImpact: {
       note: injuryImpactNote,
@@ -882,7 +574,20 @@ export async function runTradeConsoleAnalysis(
   const sfContext = isSuperFlex
     ? `\n\nLeague Format: Superflex — QBs carry extra trade weight.`
     : ''
-  const tepContext = tePremium ? `\n\nLeague Format: Tight End Premium (~15% TE boost).` : ''
+  /*
+   * The narrative is told what the grade is actually priced in. The old line claimed a flat "~15%
+   * TE boost", which in a league is no longer true — the premium is the league's own reception rule,
+   * per position, and it is listed per asset below.
+   */
+  const leagueAdjustmentLines = [...giveLines, ...getLines]
+    .filter((l) => (l.valueAdjustments ?? []).length > 0)
+    .slice(0, 8)
+    .map((l) => `${l.name}: ${(l.valueAdjustments ?? []).map((a) => `${a.factor > 1 ? '+' : '−'}${Math.abs(Math.round((a.factor - 1) * 100))}% (${a.reason})`).join('; ')}`)
+  const tepContext = marketCtx
+    ? `\n\nValues graded on: ${valueBasis.label}.${leagueAdjustmentLines.length > 0 ? ` League adjustments — ${leagueAdjustmentLines.join(' | ')}.` : ''}`
+    : tePremium
+      ? `\n\nLeague Format: Tight End Premium (~15% TE boost).`
+      : ''
   const scoringCtx = scoringSummaryLine ? `\n\n${scoringSummaryLine}` : ''
   const projContext =
     projectedImpactBlock.giveTotal != null && projectedImpactBlock.getTotal != null
@@ -944,19 +649,65 @@ export async function runTradeConsoleAnalysis(
     : { bullets: drivers.acceptBullets, sensitivity: drivers.sensitivitySentence }
 
   let opponentRosterTargets: TradeConsoleOpponentRosterTarget[] | undefined
+  // Only align by selection order when every input has a resolved line.
+  const selectedProviderIds = input.sideGive.length + input.sideGet.length === giveLines.length + getLines.length
+    ? [...giveLines, ...getLines].map(line =>
+    line.sport === 'NFL' && line.enrichmentPlayerId
+      ? { provider: 'sleeper', id: line.enrichmentPlayerId } : null) : undefined
   if (rosterCtxForDrivers?.theirRoster?.length) {
-    const receiveIds = new Set(receiveAssets.map((a) => a.id))
-    opponentRosterTargets = rosterCtxForDrivers.theirRoster
-      .filter((a) => a.type === 'PLAYER' && !receiveIds.has(a.id))
+    const rosterTargets = rosterCtxForDrivers.theirRoster
+      .filter((a) => a.type === 'PLAYER')
       .map((a) => ({
-        id: a.id,
+        id: a.rosterPlayerId ?? a.id,
         name: a.name ?? a.id,
         position: a.pos ?? null,
         marketValue: Math.round(a.marketValue ?? a.value ?? 0),
+        providerIdentity: a.valuationIdentity,
+        playerId: a.valuationPlayerId,
       }))
       .sort((a, b) => b.marketValue - a.marketValue)
-      .slice(0, 12)
+    opponentRosterTargets = availableRosterTargets({ targets: rosterTargets,
+      selected: [...input.sideGive, ...input.sideGet], selectedProviderIds })
   }
+
+  const evaluateCap = input.leagueId && input.userId
+    ? await prepareProposalCap({ leagueId: input.leagueId.trim(), userId: input.userId,
+        opponentTeamExternalId: input.opponentTeamExternalId,
+        requiresCap: leagueSnapshot?.quickModeBadges.includes('Salary Cap') })
+    : async () => ({ status: 'not_applicable' as const })
+  const salaryCap = await evaluateCap(input.sideGive, input.sideGet)
+  const capNote = proposalCapNote(salaryCap)
+  if (capNote) evaluation.bullets.unshift(capNote)
+  const counterOffers = await evaluateCounterOffers({
+    canRecommend: salaryCap.status === 'not_applicable' ? undefined : async (give, get) => {
+      const cap = await evaluateCap(give, get)
+      return cap.status === 'evaluated' && cap.legal
+    },
+    grade: input.opponentTeamExternalId && rosterCtxForDrivers?.theirRoster?.length
+      ? grade : { graded: false, reason: 'Select a counterparty with a resolved roster.', basis: null },
+    give: input.sideGive,
+    get: input.sideGet,
+    selectedProviderIds,
+    theirTargets: opponentRosterTargets ?? [],
+    yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
+      .filter(a => a.type === 'PLAYER')
+      .map(a => ({ id: a.rosterPlayerId ?? a.id, name: a.name ?? a.id, position: a.pos ?? null, marketValue: a.marketValue ?? a.value ?? 0,
+        providerIdentity: a.valuationIdentity, playerId: a.valuationPlayerId })),
+    evaluate: async (counterGive, counterGet) => {
+      const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget,
+        dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false }
+      const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
+      if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
+      return (await gradePricedSides({
+        chart, giveLines: g.lines, getLines: t.lines,
+        givePriced: applyChartTePremium(chart, g.priced), getPriced: applyChartTePremium(chart, t.priced),
+        need: marketCtx && leagueRow && input.leagueId && input.userId
+          ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
+          : null,
+      })).grade
+    },
+  })
+  mark('counter_offers')
 
   let negotiationToolkit: Record<string, unknown> | null = null
   try {
@@ -1035,12 +786,13 @@ export async function runTradeConsoleAnalysis(
 
   const injuryNotes = [...giveLines, ...getLines].flatMap((l) => {
     const parts: string[] = []
-    if (l.injuryStatus) parts.push(`${l.name}: ${l.injuryStatus}`)
+    if (l.injuryStatus && !['ACT', 'ACTIVE', 'HEALTHY', 'NORMAL'].includes(l.injuryStatus.trim().toUpperCase())) parts.push(`${l.name}: ${l.injuryStatus}`)
     if (l.injuryNewsSummary) parts.push(`${l.name} (aggregated news): ${l.injuryNewsSummary}`)
     return parts
   })
 
   const tradeIntelligence = buildTradeIntelligence({
+    proposalGraded: grade.graded,
     league: leagueSnapshot,
     strategy: input.strategy,
     teamContext: input.teamContext,
@@ -1050,9 +802,10 @@ export async function runTradeConsoleAnalysis(
     giveTotal,
     getTotal,
     confidenceScore,
+    confidenceLabel: confidence,
     degraded,
     dataGaps,
-    injuryNotes,
+    injuryNotes: capNote ? [capNote, ...injuryNotes] : injuryNotes,
     drivers: driverPayload,
     negotiationToolkit,
     opponentRosterTargets: opponentRosterTargets?.map((t) => ({
@@ -1071,6 +824,12 @@ export async function runTradeConsoleAnalysis(
     projectedImpact: projectedImpactBlock,
     scoringSummary: scoringSummaryLine,
   })
+
+  if (input.leagueId && input.opponentTeamExternalId) {
+    tradeIntelligence.rebalanceSuggestions = counterOffers.map(counter =>
+      `${counter.addTo === 'get' ? 'Ask for' : 'Offer'} ${counter.name}. Re-evaluating the full package gives you ${counter.grade.letter} and your partner ${counter.grade.partnerLetter}: ${Math.abs(counter.grade.percentDiff)}% apart, with ${counter.remainingGap.toLocaleString('en-US')} league value remaining. ${counter.balanced ? 'Within the even-value band.' : 'Closer in value, but still outside the even-value band.'} Re-analyze after editing the proposal.`,
+    )
+  }
 
   const validation = buildTradeConsoleValidation({
     leagueNormCtx,
@@ -1094,15 +853,19 @@ export async function runTradeConsoleAnalysis(
       ? 'you'
       : tradeIntelligence.whoWinsNow === 'opponent'
         ? 'opponent'
-        : 'even'
+        : tradeIntelligence.whoWinsNow === 'unknown' ? 'unavailable' : 'even'
   const longLbl =
     tradeIntelligence.whoWinsLongTerm === 'you'
       ? 'you'
       : tradeIntelligence.whoWinsLongTerm === 'opponent'
         ? 'opponent'
-        : 'even'
+        : tradeIntelligence.whoWinsLongTerm === 'unknown' ? 'unavailable' : 'even'
 
-  const summaryLine = `Fairness ${Math.round(fairnessScore)}/100 · short-term ${shortLbl} · long-term ${longLbl}${degraded ? ' · degraded inputs' : ''}`
+  const presentation = presentTradeConsoleVerdict({ graded: grade.graded, fairnessScore, confidenceScore,
+    fairnessLabel, sideAdvantage, confidenceLabel: confidence })
+  const summaryLine = grade.graded
+    ? `Fairness ${Math.round(fairnessScore)}/100 · asset production ${shortLbl} · league value ${longLbl}${degraded ? ' · degraded inputs' : ''}`
+    : `Proposal grade unavailable · ${grade.reason} · asset production ${shortLbl}`
 
   const dataQuality: 'full' | 'partial' | 'degraded' = degraded
     ? 'degraded'
@@ -1161,8 +924,9 @@ export async function runTradeConsoleAnalysis(
     strategy: input.strategy,
     teamContext: input.teamContext,
     analysisTab: input.analysisTab,
-    fairnessScore,
-    confidenceScore,
+    fairnessScore: presentation.fairnessScore,
+    confidenceScore: presentation.confidenceScore,
+    grade,
     percentDiff,
     totals: { give: giveTotal, get: getTotal, giveMarket, getMarket },
     assets: { give: giveLines, get: getLines },
@@ -1172,6 +936,7 @@ export async function runTradeConsoleAnalysis(
     rosterSummary: rosterSummaryOut,
     opponentRosterTargets: opponentRosterTargets ?? [],
     tradeIntelligence,
+    salaryCap,
     structuredLeagueContext: structuredNotes,
     validation,
     sourceFlags,
@@ -1252,18 +1017,16 @@ export async function runTradeConsoleAnalysis(
     effectiveSport,
     analysisScope: leagueSnapshot ? 'league' : 'general',
     league: leagueSnapshot,
-    labels: {
-      fairnessLabel,
-      sideAdvantage,
-      confidenceLabel: confidence,
-    },
-    fairnessScore,
-    confidenceScore,
+    fairnessScore: presentation.fairnessScore,
+    confidenceScore: presentation.confidenceScore,
+    labels: presentation.labels,
     percentDiff,
     giveTotal,
     getTotal,
     giveMarket,
     getMarket,
+    valueBasis,
+    grade,
     degraded,
     dataGaps,
     dataSources: [effectiveSport === 'NFL' ? 'FantasyCalc' : 'sports_players', 'hybrid-valuation', 'trade-engine'],
@@ -1275,6 +1038,8 @@ export async function runTradeConsoleAnalysis(
     evaluation,
     negotiationToolkit,
     opponentRosterTargets,
+    counterOffers,
+    salaryCap,
     tradeIntelligence,
     chimmyPayload,
     timeContext: aiEnvelope?.time ?? null,

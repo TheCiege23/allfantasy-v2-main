@@ -513,9 +513,10 @@ export function LeagueHome({
         and those must both stay silent: a banner on every league is one nobody
         reads by the second week.
 
-        ⚠ AND IT NAMES THE PLATFORM. "We couldn't get your trade history" reads as
-        our failure and invites a support ticket; "Fleaflicker doesn't publish
-        trade history" is the truth and is something the reader can act on.
+        ⚠ AND IT NAMES THE PLATFORM, WITHOUT BLAMING IT. The sentence used to read
+        "Fleaflicker doesn't publish trade history"; a `missing` bucket only means
+        this import did not bring it across, so it now says exactly that and still
+        names where the league came from (see importCoverageSummary's header).
       */}
       {coverageSlot !== undefined ? (
         coverageSlot
@@ -815,7 +816,7 @@ export function LeagueHome({
           {/* Standings */}
           <StatePanel title="Standings" state={data.standings}>
             {(rows) => (
-              <div className="af-standings-wrap">
+              <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
                 <WorkbookBarChart
                   title="Points for by team"
                   subtitle="Current standings leaders"
@@ -830,15 +831,14 @@ export function LeagueHome({
                 />
                 {/*
                   Column heads, because three numeric columns without them is a
-                  guessing game. FAAB rather than "waiver": this league bids,
-                  it does not queue, and the two words describe opposite systems.
+                  guessing game. The budget column only applies to confirmed FAAB leagues.
                 */}
                 <div className="af-standings-head" aria-hidden>
                   <span />
                   <span />
                   <span className="af-label">W-L</span>
                   <span className="af-label">PF</span>
-                  <span className="af-label">FAAB</span>
+                  {data.faabEnabled === true ? <span className="af-label">FAAB</span> : null}
                 </div>
                 <ol className="af-standings">
                   {rows.slice(0, 6).map((t, i) => (
@@ -855,13 +855,13 @@ export function LeagueHome({
                       {/*
                         ⚠ A DASH, NOT $0, WHEN WE DO NOT KNOW. The importer stores
                         null whenever it could not compute budget minus spend, and
-                        a league that does not use FAAB stores null for everyone.
+                        a non-FAAB league can retain irrelevant imported balances.
                         "$0" would tell a manager holding a full budget that they
                         are broke.
                       */}
-                      <span className="af-standings-faab af-num">
+                      {data.faabEnabled === true ? <span className="af-standings-faab af-num">
                         {t.faabRemaining == null ? '\u2014' : `$${t.faabRemaining}`}
-                      </span>
+                      </span> : null}
                     </li>
                   ))}
                 </ol>
@@ -954,6 +954,22 @@ export function LeagueHome({
                         */}
                         {b.bid != null ? <span className="af-buzz-bid">${b.bid}</span> : null}
                       </span>
+                      {/*
+                        A trade's grade: one letter per team, from THE grade (the Trade Center's
+                        letter for the same deal), and who it favours. A withheld grade shows its
+                        reason and no letter.
+                      */}
+                      {b.grades && b.grades.length > 0 ? (
+                        <span className="af-buzz-grades" aria-label="Trade grade for each team">
+                          {b.grades.map((g) => (
+                            <span key={g.team} className="af-buzz-grade" data-letter={g.letter}>
+                              <span className="af-buzz-grade-team">{g.team}</span>
+                              <b>{g.letter}</b>
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
+                      {b.gradeLine ? <span className="af-buzz-grade-line">{b.gradeLine}</span> : null}
                       {/*
                         Faces for who moved. The sentence above already names
                         them; this is so a claim is recognisable before it is

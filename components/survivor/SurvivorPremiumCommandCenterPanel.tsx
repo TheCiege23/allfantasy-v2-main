@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Lock, Sparkles, Coins } from 'lucide-react'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { AF_PLANS } from '@/lib/tournament/af-premium-plans'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 import {
   SURVIVOR_PREMIUM_COMMAND_TILES,
   canAccessSurvivorPremiumTile,
@@ -71,7 +72,7 @@ function SurvivorPremiumTileCard({
               Locked · {AF_PLANS[upgradePlan].label}
             </span>
             <Link
-              href="/settings"
+              href={upgradePathForPlan(upgradePlan)}
               className="font-semibold text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
             >
               Upgrade
@@ -114,8 +115,8 @@ export function SurvivorPremiumCommandCenterPanel({
         <p className="text-sm leading-relaxed text-white/55">
           Player lens unlocks with <span className="text-emerald-200/90">AF Pro</span>. Host automation and fairness
           tools unlock with <span className="text-amber-100/90">AF Commissioner</span>. Full combined story + controls
-          unlock with <span className="text-violet-200/90">AF Supreme</span> (Pro + Commissioner + Legacy
-          class access).
+          unlock with <span className="text-violet-200/90">AF Supreme</span> (AF Pro + AF Commissioner in
+          one plan).
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {SURVIVOR_PREMIUM_COMMAND_TILES.map((tile) => (

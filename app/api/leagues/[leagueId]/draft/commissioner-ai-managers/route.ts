@@ -19,6 +19,7 @@ import {
   DEFAULT_TRADE_RULES,
 } from '@/lib/commissioner-ai-draft-manager/types'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,8 +57,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const row = await prisma.draftSession.findUnique({
+  const row = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { commissionerAiManagers: true, slotOrder: true },
   })
   if (!row) {
@@ -128,8 +130,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     return NextResponse.json({ error: 'Failed to save draft session' }, { status: 500 })
   }
 
-  const row = await prisma.draftSession.findUnique({
+  const row = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { slotOrder: true, commissionerAiManagers: true },
   })
   const slotOrder = parseSlotOrder(row?.slotOrder)

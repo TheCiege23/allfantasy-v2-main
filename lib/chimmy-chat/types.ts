@@ -92,6 +92,8 @@ export type ChimmyMessageMeta = {
   confidencePct?: number
   providerStatus?: ChimmyProviderStatus
   recommendedTool?: string
+  /** The tools the answer used, in order (tool-loop answers only) — what a thumbs up or down is about. */
+  toolsUsed?: string[]
   /** Central routing + tool launches from Chimmy orchestration brain */
   orchestration?: ChimmyOrchestrationMeta | null
   dataSources?: string[]
@@ -109,6 +111,12 @@ export type ChimmyMessageMeta = {
   variant?: "premium_gate" | "error"
   ctaLabel?: string
   ctaHref?: string
+  /**
+   * Confirm cards for a lineup change or trade offer Chimmy PREPARED — nothing has happened until
+   * the user taps Confirm (`components/chimmy/ChimmyActionCard.tsx`). Validated by
+   * `readActionCards`; see lib/chimmy-chat/actionCards.ts.
+   */
+  actionCards?: import("@/lib/chimmy/actions/types").ChimmyActionCard[]
 }
 
 export type ChimmyThreadMessage = {

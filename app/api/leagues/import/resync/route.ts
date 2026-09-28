@@ -48,9 +48,21 @@ export async function POST(req: NextRequest) {
    * `null` now means the collector could not run for this league at all — not "this provider has
    * no refresh step", which was true when only Sleeper had one and is the line this replaces.
    * Every syncable provider drives the durable collector; a null here is the unusual case.
+   *
+   * 🛑 AND IT WAS STILL ANSWERED `ok: true`. `resyncImportedLeague` returns null only when the
+   * persist produced no league id, so nothing was refreshed. 404: there is no league to sync, and
+   * retrying will not change that.
    */
   if (refresh === null) {
-    return NextResponse.json({ ok: true, ...base })
+    return NextResponse.json(
+      {
+        ok: false,
+        ...base,
+        refresh: { status: 'not_refreshed' },
+        error: 'No AllFantasy league was found to refresh, so nothing was synced.',
+      },
+      { status: 404 },
+    )
   }
 
   // A pre-run authorization / not-found / invalid-connection failure keeps its appropriate 4xx meaning.

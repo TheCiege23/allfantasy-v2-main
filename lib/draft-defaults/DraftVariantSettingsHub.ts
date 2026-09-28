@@ -9,6 +9,7 @@ import { getDraftConfigForLeague } from './DraftRoomConfigResolver'
 import type { DraftRoomConfig } from './DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague, updateDraftUISettings } from './DraftUISettingsResolver'
 import type { DraftUISettings } from './DraftUISettingsResolver'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /** Keeper rules (from session when present). */
 export interface KeeperVariantSettings {
@@ -111,8 +112,9 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
     }),
     getDraftConfigForLeague(leagueId),
     getDraftUISettingsForLeague(leagueId),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         status: true,
         draftType: true,
@@ -189,8 +191,9 @@ export async function updateDraftSessionFlags(
   leagueId: string,
   patch: Partial<DraftSessionFlags>,
 ): Promise<{ ok: true } | { ok: false; code: 'NO_SESSION' | 'THIRD_ROUND_REVERSAL_LOCKED'; error: string }> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true },
   })
   if (!session) return { ok: false, code: 'NO_SESSION', error: 'No draft session for league' }
@@ -276,8 +279,9 @@ export async function updateSessionVariant(
   leagueId: string,
   patch: Partial<SessionVariantSettings>
 ): Promise<void> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, keeperConfig: true, devyConfig: true, c2cConfig: true, auctionBudgetPerTeam: true, draftType: true },
   })
   if (!session || session.status !== 'pre_draft') return
@@ -322,8 +326,9 @@ export async function updateSessionVariant(
  */
 async function syncConfigToSession(leagueId: string, config: Partial<DraftRoomConfig>): Promise<void> {
   const [session, uiSettings] = await Promise.all([
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, status: true },
     }),
     getDraftUISettingsForLeague(leagueId),
@@ -380,8 +385,9 @@ export async function updateDraftVariantSettings(
     patch.config &&
     Object.prototype.hasOwnProperty.call(patch.config, 'third_round_reversal')
   ) {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { status: true },
     })
     if (session && session.status !== 'pre_draft') {

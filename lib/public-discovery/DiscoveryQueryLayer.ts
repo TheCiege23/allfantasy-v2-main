@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import type { LeagueSport } from "@prisma/client"
 import { extractLeagueCareerTier } from "@/lib/ranking/tier-visibility"
 import { isSupportedSport, normalizeToSupportedSport } from "@/lib/sport-scope"
+import { CURRENT_DRAFT_SESSION_ORDER } from "@/lib/draft-room/currentDraftSession"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
@@ -204,6 +205,8 @@ export async function queryPublicFantasyLeagueCards(options: {
       createdAt: true,
       updatedAt: true,
       draftSessions: {
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        take: 1,
         select: {
           draftType: true,
           status: true,
@@ -257,7 +260,7 @@ export async function queryPublicFantasyLeagueCards(options: {
         settings,
       })
       const leagueTier = extractLeagueCareerTier(settings, 1)
-      const latestDraftSession = league.draftSessions
+      const latestDraftSession = league.draftSessions[0] ?? null
       const draftType =
         normalizeDraftType(latestDraftSession?.draftType ?? null) ??
         normalizeDraftType(readString(settings, "draft_type")) ??

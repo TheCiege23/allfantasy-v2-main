@@ -475,9 +475,9 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     } else {
       bits.push('and no bench player here could be priced, so this is a gross figure, not a swap')
     }
-    if (add.ownPct != null) {
-      bits.push(`rostered in ${Math.round(add.ownPct * 100)}% of leagues we can see`)
-    }
+    // Its own sentence: tacked on with a comma it read as part of the swap ("…not a swap, rostered in 88%…").
+    const ownership =
+      add.ownPct != null ? ` Rostered in ${Math.round(add.ownPct * 100)}% of the leagues we can see.` : ''
 
     rows.push({
       leagueId: c.leagueId,
@@ -499,7 +499,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
           : null,
       runsAt,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
-      reasoning: `${bits.join(', ')}.`,
+      reasoning: `${bits.join(', ')}.${ownership}`,
     })
   }
 

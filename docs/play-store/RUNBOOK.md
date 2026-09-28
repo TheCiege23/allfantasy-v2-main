@@ -63,9 +63,29 @@ bubblewrap build
    package `ai.allfantasy.app`, free, App.
 2. **App content** section (all required before review):
    - Privacy policy: `https://allfantasy.ai/privacy`
-   - Data safety form: we collect email + optional phone (account), usage
-     analytics; data encrypted in transit; users can request deletion at
-     `https://allfantasy.ai/data-deletion`.
+   - Data safety form. Measured against the live site and code on 2026-09-25;
+     re-check before each submission, because a new SDK or a PostHog project
+     setting changes the answer without touching this file:
+     - **Personal info:** email address; name/username; phone number (optional,
+       for verification codes and opt-in SMS). Required for account management.
+     - **Location:** approximate location from IP (state-law compliance gates).
+     - **App activity:** app interactions (PostHog analytics, heatmaps, dead
+       clicks and **session recordings**, inputs masked, console not captured).
+     - **App info and performance:** crash logs (Sentry, PostHog exception
+       capture); diagnostics (PostHog network timing).
+     - **Shared with third parties for advertising:** the Meta Pixel and Google
+       Tag Manager load on every page, and the server sends Meta Conversions API
+       events (`CompleteRegistration`, `Lead`, `Subscribe`, `Purchase`).
+       Declare it as shared, not only collected.
+     - Data encrypted in transit; users can request deletion at
+       `https://allfantasy.ai/data-deletion`.
+     - ⚠ **Blocker before submitting:** `/privacy` does not mention Meta, Google
+       advertising tags or conversion tracking. The form and the policy must
+       agree, and reviewers compare them.
+     - The same facts drive **App Store Connect → App Privacy**: Contact Info
+       (email, phone, name), Location (coarse), Usage Data (product interaction,
+       advertising data), Diagnostics (crash, performance), and "Data Used to
+       Track You" = yes, because of the Meta and Google ad tags.
    - Content rating questionnaire → category Utility/Sports → this GENERATES
      the real IARC rating (the old manifest carried an invented one; it has
      been removed).

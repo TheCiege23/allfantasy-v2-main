@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { runWeightedLottery } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,8 +46,9 @@ export async function POST(
   if (!result) return NextResponse.json({ error: 'Could not run lottery' }, { status: 500 })
 
   if (finalize) {
-    const draftSession = await prisma.draftSession.findUnique({
+    const draftSession = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, status: true },
     })
     if (!draftSession || draftSession.status !== 'pre_draft') {
@@ -57,7 +59,7 @@ export async function POST(
     }
     const slotOrder = result.slotOrder as SlotOrderEntry[]
     await prisma.draftSession.update({
-      where: { leagueId },
+      where: { id: draftSession.id },
       data: {
         slotOrder: slotOrder as any,
         version: { increment: 1 },

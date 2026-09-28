@@ -7,6 +7,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json';
 import { ACHIEVEMENT_SHARE_TYPES } from '@/lib/social-sharing/types';
 import type { AchievementShareType, AchievementShareContext } from '@/lib/social-sharing/types';
 import { generateShareCopy, getTemplateShareCopy, isGrokShareConfigured } from '@/lib/social-sharing/GrokShareCopyService';
+import { evaluateAiCostGate } from '@/lib/ai-protection/costGate';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +37,14 @@ export async function POST(req: Request) {
   };
 
   const grokConfigured = isGrokShareConfigured();
+  // Grok costs money per caption and nothing capped it. Over the cap the caption still
+  // comes back — from the template, which is what an unconfigured Grok already returns —
+  // so sharing, which brings people in, never fails on a limit.
+  const aiAllowed = grokConfigured
+    ? (await evaluateAiCostGate(req, 'share_copy', session.user.id)).ok
+    : false;
   let fromGrok = false;
-  let copy = grokConfigured
+  let copy = aiAllowed
     ? await generateShareCopy(shareType as AchievementShareType, context, sport)
     : null;
   if (copy) fromGrok = true;

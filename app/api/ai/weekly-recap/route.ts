@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueAccess, requireSleeper } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import {
   fetchPlayersMap,
   fetchSleeperLeagueBundle,
@@ -36,6 +37,9 @@ export async function POST(req: Request) {
   if (!league) {
     return NextResponse.json({ error: 'League not found or forbidden' }, { status: 403 })
   }
+
+  const gated = await aiCostGate(req, 'weekly_recap_ai', userId)
+  if (gated) return gated
 
   const sleeperId = requireSleeper(league)
   if (!sleeperId) {

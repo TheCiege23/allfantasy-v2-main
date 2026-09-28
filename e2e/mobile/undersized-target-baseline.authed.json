@@ -58,7 +58,7 @@
     "own topbar for a standalone render, and af-core-shell.css:822 sets",
     "`.af-content .af3a-topbar { display: none }` so the embedded copy does not",
     "double the shell's chrome. CoreHomeCards is rendered only from",
-    "app/core/[[...screen]]/page.tsx, always inside .af-content, so that input is not",
+    "app/core/(shell)/[[...screen]]/page.tsx, always inside .af-content, so that input is not",
     "reachable anywhere in the product today. The probe is right to skip it.",
     "",
     "WHAT TO TAKE FROM THAT: this route certifies a screen rather than rescuing one,",

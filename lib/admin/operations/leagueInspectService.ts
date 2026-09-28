@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getAuditLogs } from '@/server/services/auditService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type LeagueInspectSnapshot = {
   league: {
@@ -64,7 +65,7 @@ export async function buildLeagueInspectSnapshot(leagueId: string): Promise<Leag
 
   const [draftSession, waiverRunsRecent, rosterCount, finance, duesAgg, leagueAuditTail, financeAuditTail, unreadNotes] =
     await Promise.all([
-      prisma.draftSession.findUnique({ where: { leagueId } }),
+      prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER }),
       prisma.waiverRun.findMany({
         where: { leagueId },
         orderBy: { runAt: 'desc' },

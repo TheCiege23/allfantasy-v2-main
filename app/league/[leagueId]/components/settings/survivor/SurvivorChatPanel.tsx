@@ -64,7 +64,7 @@ export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelPr
   return (
     <div className="space-y-5 px-6 py-6 text-[13px] text-white/85">
       <p className="text-[11px] text-amber-200/80">
-        Link league chat in league settings, then post the dynamic FAQ so everyone sees how this league runs.
+        Post the dynamic FAQ to league chat so everyone knows how this island runs. It gets pinned, so nobody gets to say they missed it.
       </p>
 
       <SettingsSection id="sv-faq" title="League chat FAQ">
@@ -75,7 +75,7 @@ export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelPr
               ? 'Loading status…'
               : faqSeededAt
                 ? `Already posted ${new Date(faqSeededAt).toLocaleString()} — pin is idempotent; use if you changed settings.`
-                : 'Not posted yet. Posts as broadcast and pins (uses your league’s Survivor settings).'
+                : 'Not posted yet. Posts to league chat as a commissioner announcement and pins it (built from your Survivor settings).'
           }
           control={
             <button

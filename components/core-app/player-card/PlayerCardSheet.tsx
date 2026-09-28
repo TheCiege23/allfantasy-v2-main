@@ -11,6 +11,7 @@ import type {
 } from '@/lib/core-app/playerCard'
 import type { PlayerCardRef } from './PlayerCardProvider'
 import { useOverlayContainment } from '../useOverlayContainment'
+import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -121,6 +122,25 @@ function TradeRows({ trades, subject }: { trades: PlayerCardTrade[]; subject: st
             {got.length > 0 ? (
               <div className="af-pc-trade-b af-pc-faint">Moved with {got.join(', ')}</div>
             ) : null}
+            {/*
+              THE grade (2026-09-27): the side that got him, then the side that paid — the /core
+              Trades letter for the same trade. A withheld grade says why, with no letter.
+            */}
+            {t.grade?.graded ? (
+              <div className="af-pc-trade-grade" aria-label="Trade grade for each side">
+                <span className="af-pc-trade-letter" data-letter={t.grade.acquirerLetter}>
+                  Got him <b>{t.grade.acquirerLetter}</b>
+                </span>
+                <span className="af-pc-trade-letter" data-letter={t.grade.senderLetter}>
+                  Paid <b>{t.grade.senderLetter}</b>
+                </span>
+                <span className="af-pc-faint">
+                  {t.grade.got.toLocaleString()} for {t.grade.gave.toLocaleString()} on the league&rsquo;s values today
+                </span>
+              </div>
+            ) : t.grade && !t.grade.graded ? (
+              <div className="af-pc-trade-b af-pc-faint">Not graded: {t.grade.withheld}</div>
+            ) : null}
           </div>
         )
       })}
@@ -211,6 +231,9 @@ export default function PlayerCardSheet({
   const league = data?.league ?? null
   const market = data?.market
   const bio = data?.bio
+  // Player depth (AF Pro). Locked, the route withheld the price move, trades, comps and insight.
+  const depth = data?.depth ?? null
+  const depthLocked = depth?.unlocked === false
 
   /*
    * The ☆.
@@ -659,6 +682,8 @@ export default function PlayerCardSheet({
                             {market.data.delta.change >= 0 ? '+' : ''}
                             {market.data.delta.change.toLocaleString()} · {market.data.delta.days}d
                           </span>
+                        ) : depthLocked && depth ? (
+                          <span className="af-pc-faint">price move · {depth.planName}</span>
                         ) : (
                           <span className="af-pc-faint">no move on file</span>
                         )
@@ -718,7 +743,7 @@ export default function PlayerCardSheet({
                     */}
                     <p className="af-pc-basis">
                       {data.schedule.data.projectedWeek != null
-                        ? `Projections are published for week ${data.schedule.data.projectedWeek} only; later weeks show the fixture.`
+                        ? `Published baseline projections cover week ${data.schedule.data.projectedWeek} only; later weeks show the fixture. Your lineup view applies league scoring and current injury availability.`
                         : 'No projected week is published yet; these are fixtures.'}
                     </p>
                   </>
@@ -766,40 +791,47 @@ export default function PlayerCardSheet({
               </div>
 
               <div className="af-pc-col">
-                <Label>{league ? 'TRADES IN THIS LEAGUE' : 'RECENT TRADES'}</Label>
-                {league ? (
-                  league.trades.length > 0 ? (
-                    <TradeRows trades={league.trades} subject={name} />
-                  ) : (
-                    <Absent reason="No trade in this league has moved him." />
-                  )
-                ) : data.trades.available ? (
-                  <>
-                    <TradeRows trades={data.trades.data} subject={name} />
-                    {/* Scope stated: these are our imports, not the whole sport. */}
-                    <p className="af-pc-basis">Trades in leagues AllFantasy has imported.</p>
-                  </>
+                {depthLocked && depth ? (
+                  <CoreDepthLock access={depth} what={league ? 'Trades in this league' : 'Trade history and similar players'} />
                 ) : (
-                  <Absent reason={data.trades.reason} />
-                )}
-
-                {!league ? (
                   <>
-                    <Label>SIMILAR PRICE</Label>
-                    {data.comps.available ? (
-                      <div className="af-pc-chips">
-                        {data.comps.data.map((c) => (
-                          <button key={c.sleeperId} type="button" className="af-pc-chip" onClick={() => openComp(c)}>
-                            {c.name}
-                            <span className="af-pc-faint af-num"> {c.value.toLocaleString()}</span>
-                          </button>
-                        ))}
-                      </div>
+                    {depth ? <FreeUntilNote access={depth} /> : null}
+                    <Label>{league ? 'TRADES IN THIS LEAGUE' : 'RECENT TRADES'}</Label>
+                    {league ? (
+                      league.trades.length > 0 ? (
+                        <TradeRows trades={league.trades} subject={name} />
+                      ) : (
+                        <Absent reason="No trade in this league has moved him." />
+                      )
+                    ) : data.trades.available ? (
+                      <>
+                        <TradeRows trades={data.trades.data} subject={name} />
+                        {/* Scope stated: these are our imports, not the whole sport. */}
+                        <p className="af-pc-basis">Trades in leagues AllFantasy has imported.</p>
+                      </>
                     ) : (
-                      <Absent reason={data.comps.reason} />
+                      <Absent reason={data.trades.reason} />
                     )}
+
+                    {!league ? (
+                      <>
+                        <Label>SIMILAR PRICE</Label>
+                        {data.comps.available ? (
+                          <div className="af-pc-chips">
+                            {data.comps.data.map((c) => (
+                              <button key={c.sleeperId} type="button" className="af-pc-chip" onClick={() => openComp(c)}>
+                                {c.name}
+                                <span className="af-pc-faint af-num"> {c.value.toLocaleString()}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <Absent reason={data.comps.reason} />
+                        )}
+                      </>
+                    ) : null}
                   </>
-                ) : null}
+                )}
 
                 <Label>LATEST</Label>
                 {data.news.available ? <NewsRows items={data.news.data} /> : <Absent reason={data.news.reason} />}

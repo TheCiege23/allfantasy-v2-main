@@ -1,18 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
+import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
+import { mirrorLetter, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues, gradeReasons, type importedTradeTimelineRows, type TimelineAsset } from '@/lib/core-app/importedTradeTimeline'
+
+/** One completed trade from an imported league's history, as the panel returns it (`?history=1`). */
+type ImportedHistoryRow = ReturnType<typeof importedTradeTimelineRows>[number]
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
-import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
-import type { GradedTrade, TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeService'
-import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
@@ -20,6 +26,8 @@ import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 import {
   groupTradeTimelineBySeason,
@@ -35,16 +43,27 @@ import {
  *   1. Needs your action — offers waiting on the viewer, provider offers that
  *      can only be answered on the provider, and reviews waiting on the
  *      commissioner.
- *   2. Your trades — active, then completed with the REALIZED grade.
- *   3. League trade log — every trade this league has made, both sides,
- *      both grades, filterable, with an "only mine" toggle.
+ *   2. Your trades — active, then completed.
+ *   3. League trade log — every league. An imported league's completed trades come from the graded
+ *      history (`?history=1`); see "RESTORED ON THE ONE GRADE" below.
  *   4. Trade block — what managers have flagged available.
  *
- * Two reads, both existing routes, fetched in parallel and rendered
- * independently: `/api/league/trades-panel` (pending + native offers + block)
- * and `/api/league/trade-grades` (the completed ledger, graded on realized
- * points; the first build of a league walks every season, so the rest of the
- * tab never waits on it).
+ * One read: `/api/league/trades-panel` (pending + completed offers + native history + block).
+ *
+ * 🛑 RETIRED FOR IMPORTED LEAGUES (Guap, 2026-09-25: "retire it, link to /core"). This tab also read
+ * `/api/league/trade-grades` — the completed ledger graded on REALIZED POINTS — and merged it into the
+ * log beside the panel's own completed provider trades, which carry the one grade. The same trade
+ * therefore appeared twice (once "COMPLETED", once falling through to "Pending"), and the ledger's
+ * copy printed "COMPLETED · EVEN" beside a board that graded it F. That read is gone. An imported
+ * league's full history, on the one grade, lives in the Trade Center; this tab links there.
+ *
+ * ✅ RESTORED ON THE ONE GRADE (Guap, 2026-09-27: "bring them back, graded"). The retirement was about
+ * the SECOND letter, not about showing history. The panel now returns the league's completed history
+ * carrying THE grade (`leagueGrade`, the Trade Center's letter for the same trade), built by the same
+ * `importedTradeTimelineRows`. The realized-points ledger is still never read, and `realizedGrade` is
+ * deliberately not drawn here — see `rowFromImportedTimeline`.
+ * ⚠ A NATIVE league keeps its log here: its trades are never written to `transactionFact`, so the
+ * Trade Center's history cannot show them.
  *
  * ⚠ A LETTER OR A REASON, NEVER A LETTER AS A FALLBACK. A pending trade has
  * produced nothing, an imported league's ledger cannot be scored, and a trade
@@ -65,6 +84,8 @@ type YourTab = 'active' | 'completed'
 type LogFilter = 'all' | 'completed' | 'pending' | 'closed'
 
 type PanelResponse = {
+  /** The league type every grade here is priced under, and how we know it. */
+  leagueType?: LeagueTypeBasis | null
   tradeBlock?: LeagueTradeBlockPanelItem[]
   /** What the block can and cannot show on this platform; null for a native league. */
   tradeBlockNote?: string | null
@@ -73,6 +94,8 @@ type PanelResponse = {
   activeTrades?: LeagueTradeHistoryItem[]
   /** Native completed and closed negotiation history, privacy-filtered by the server. */
   historyTrades?: LeagueTradeHistoryItem[]
+  /** An imported league's completed history on the one grade. Only on a `?history=1` read. */
+  importedHistory?: { rows: ImportedHistoryRow[]; available: boolean }
   /** Commissioner-only, native leagues only: trades that have executed and may be reversed. */
   executedTrades?: LeagueTradeHistoryItem[]
   activeCount?: number
@@ -104,6 +127,8 @@ export type BuilderOffer = {
   /** From the VIEWER's side in both directions: what leaves their roster. */
   give: BuilderOfferAsset[]
   get: BuilderOfferAsset[]
+  /** THE grade for this offer, from the viewer's side (see `lib/decision-os/trade/tradeGrade.ts`). */
+  leagueGrade?: TradeGradeView | null
   evaluation?: {
     action: 'accept' | 'counter' | 'decline' | 'review'
     recommendation: string
@@ -117,18 +142,6 @@ export type BuilderOffer = {
     coveragePct: number
   } | null
 }
-
-type GradesResponse =
-  | { supported: false; platform: string }
-  | { supported: true; viewerSleeperUserId: string | null; grades: TradeGradesPayload | null; error?: string }
-  | { supported: true; graded: false; viewerSleeperUserId: string | null; ledger: ImportedTradeLedgerPayload }
-
-type LedgerState =
-  | { kind: 'loading' }
-  | { kind: 'failed' }
-  | { kind: 'unsupported'; platform: string }
-  | { kind: 'ungraded'; ledger: ImportedTradeLedgerPayload }
-  | { kind: 'graded'; grades: TradeGradesPayload; viewerId: string | null }
 
 /** One side of a row in the league log. */
 type LogSide = {
@@ -160,6 +173,8 @@ type LogRow = {
   /** Viewer-relative direction, only for the viewer's own rows. */
   direction: 'incoming' | 'outgoing' | 'done' | null
   receiptNote?: string | null
+  /** THE grade's own sentences — why it graded this way. Imported history only, for now. */
+  why?: string[] | null
 }
 
 function watchStorageKey(leagueId: string): string {
@@ -327,82 +342,18 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
   }
 }
 
-function sideSends(side: GradedTrade['sides'][number]): string {
-  const out = [...side.playersOut.map((p) => p.name), ...side.picksOut.map((p) => p.label)]
-  return out.length > 0 ? out.join(', ') : '—'
-}
-
-/** A completed, graded trade from the Sleeper ledger, as a log row. */
-function rowFromGraded(g: GradedTrade, viewerId: string | null): LogRow {
-  const [s0, s1] = g.sides
-  const side = (s: GradedTrade['sides'][number] | undefined): LogSide => {
-    if (!s) return { name: '—', you: false, sends: '—', initialGrade: null, initialLabel: 'First', grade: null, gradeWhy: 'no side' }
-    const you = Boolean(viewerId && s.ownerId === viewerId)
-    return {
-      name: s.teamName?.trim() || s.managerName,
-      you,
-      sends: sideSends(s),
-      /* Provisional while a pick is unresolved — say so instead of scoring it. */
-      initialGrade: g.hasPendingPicks ? null : s.initialGrade,
-      initialLabel: 'First',
-      grade: g.hasPendingPicks ? null : s.currentGrade,
-      gradeWhy: g.hasPendingPicks
-        ? 'Picks are unresolved, so the result grade is withheld.'
-        : `Realized result: net ${s.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held. Roster need and playoff probability are not part of this result letter.`,
-    }
-  }
-  const a = side(s0)
-  const b = side(s1)
-  const created = Date.parse(g.createdIso) || 0
-  return {
-    id: g.id,
-    kind: 'completed',
-    season: g.season,
-    when: `Wk ${g.week} · ${g.season}`,
-    sortKey: created,
-    a,
-    b,
-    extraSides: Math.max(0, g.sides.length - 2),
-    status: { label: g.tie ? 'Completed · even' : 'Completed', tone: 'good' },
-    mine: a.you || b.you || g.sides.some((s) => Boolean(viewerId && s.ownerId === viewerId)),
-    direction: a.you || b.you ? 'done' : null,
-  }
-}
-
-/** A completed trade from an imported (non-Sleeper) ledger — never graded. */
-function rowFromImported(t: ImportedTradeLedgerPayload['trades'][number]): LogRow {
-  const [s0, s1] = t.sides
-  const side = (s: typeof s0 | undefined, other: typeof s0 | undefined): LogSide => ({
-    name: s?.managerName ?? '—',
-    you: false,
-    /* The import records what each side RECEIVED; what it sent is the other side's haul. */
-    sends: other ? joinNames(other.received.map((p) => ({ name: p.name ?? 'Unnamed player' }))) : '—',
-    initialGrade: null,
-    initialLabel: 'Then',
-    grade: null,
-    gradeWhy: 'not graded on this platform',
-  })
-  const created = t.dateIso ? Date.parse(t.dateIso) || 0 : 0
-  return {
-    id: t.id,
-    kind: 'completed',
-    season: t.season ? String(t.season) : tradeSeasonFromIso(t.dateIso ?? ''),
-    when: t.season ? `${t.season}${t.dateIso ? ` · ${whenLabel(t.dateIso)}` : ''}` : t.dateIso ? whenLabel(t.dateIso) : '—',
-    sortKey: created,
-    a: side(s0, s1),
-    b: side(s1, s0),
-    extraSides: Math.max(0, t.sides.length - 2),
-    status: { label: 'Completed', tone: 'good' },
-    mine: false,
-    direction: null,
-  }
-}
-
 /** A completed or closed AllFantasy-native negotiation. */
 function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
-  const completed = t.status === 'processed' || t.status === 'reversed'
-  const viewerIsA = Boolean(t.viewerIsProposer)
-  const viewerIsB = Boolean(t.viewerIsReceiver)
+  /*
+   * A completed PROVIDER trade (Sleeper/Yahoo) is listed from the viewer's side — `sent` is what the
+   * viewer sent — and carries no proposer/receiver names. Side A is therefore the viewer. It used to
+   * be labelled with the partner's name above the viewer's own assets, which put a letter under the
+   * wrong manager once these rows were graded.
+   */
+  const providerRow = String(t.status ?? '').startsWith('completed_on_')
+  const completed = t.status === 'processed' || t.status === 'reversed' || providerRow
+  const viewerIsA = providerRow || Boolean(t.viewerIsProposer)
+  const viewerIsB = !providerRow && Boolean(t.viewerIsReceiver)
   const viewerIsParticipant = Boolean(t.viewerIsParticipant || viewerIsA || viewerIsB)
   const noGradeWhy = t.decisionReceipt?.reason
     ?? t.proposalGradeReason
@@ -410,33 +361,21 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   const proposalGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.proposalGrade))
     ? t.proposalGrade as GradeLetter
     : null
-  const reversePercent =
-    typeof t.proposalValueGiven === 'number' &&
-    typeof t.proposalValueReceived === 'number' &&
-    t.proposalValueReceived > 0
-      ? ((t.proposalValueGiven - t.proposalValueReceived) / t.proposalValueReceived) * 100
-      : null
   const frozenProposer = t.decisionReceipt?.participantDecisions[0] ?? null
   const frozenReceiver = t.decisionReceipt?.participantDecisions[1] ?? null
+  /*
+   * THE OTHER SIDE'S LETTER IS THE MIRROR (lib/decision-os/trade/tradeGrade.ts). It was recomputed
+   * here as (given − received) / received — a rule of its own, not the inverse of the first side's —
+   * so the two letters on one row could fail to mirror. A frozen receipt letter is evidence and is
+   * shown as recorded.
+   */
   const receiverProposalGrade = frozenReceiver?.grade && ['A', 'B', 'C', 'D', 'F'].includes(frozenReceiver.grade)
     ? frozenReceiver.grade as GradeLetter
-    : projectedLetterFor({
-    percentDiff: reversePercent,
-    hasSignal: proposalGrade != null,
-      })
+    : mirrorLetter(proposalGrade)
   const currentGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.currentGrade))
     ? t.currentGrade as GradeLetter
     : null
-  const reverseCurrentPercent =
-    typeof t.currentValueGiven === 'number' &&
-    typeof t.currentValueReceived === 'number' &&
-    t.currentValueReceived > 0
-      ? ((t.currentValueGiven - t.currentValueReceived) / t.currentValueReceived) * 100
-      : null
-  const receiverCurrentGrade = projectedLetterFor({
-    percentDiff: reverseCurrentPercent,
-    hasSignal: currentGrade != null,
-  })
+  const receiverCurrentGrade = mirrorLetter(currentGrade)
   const unresolved = (t.currentUnresolvedAssets ?? []).slice(0, 2).join(', ')
   const currentWhy = currentGrade
     ? null
@@ -450,7 +389,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     when: whenLabel(t.executedAt ?? t.timestamp),
     sortKey: Date.parse(t.executedAt ?? t.timestamp) || 0,
     a: {
-      name: t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
+      name: providerRow ? 'You' : t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
       avatarUrl: t.proposerAvatarUrl ?? (viewerIsA ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsA,
       sends: joinNames(t.sent),
@@ -461,7 +400,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       gradeWhy: currentWhy,
     },
     b: {
-      name: t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
+      name: providerRow ? t.partnerName : t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
       avatarUrl: t.receiverAvatarUrl ?? (viewerIsB ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsB,
       sends: joinNames(t.received),
@@ -481,6 +420,76 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   }
 }
 
+/** "Woody Marks · 1,240, 2027 round 3 · 610" — each asset with the league value THE grade priced it at. */
+function sendsWithValues(assets: TimelineAsset[], values: Array<number | null>): string {
+  if (assets.length === 0) return '—'
+  return assets
+    .map((a, i) => {
+      const drafted = a.gradedAs ? ` (drafted ${a.gradedAs})` : ''
+      const v = values[i]
+      return `${a.label}${drafted}${v != null ? ` · ${Math.round(v).toLocaleString()}` : ''}`
+    })
+    .join(', ')
+}
+
+/**
+ * A completed trade from an imported league's history (2026-09-27).
+ *
+ * 🛑 THE ONE GRADE ONLY. The 2026-09-25 retirement was about a SECOND letter — the realized-points
+ * ledger printing "EVEN" beside a board that said F. This row carries `leagueGrade`, the letter the
+ * Trade Center shows for the same trade, and deliberately drops the row's `realizedGrade`: bringing
+ * that back here would rebuild exactly the contradiction that was retired.
+ *
+ * "Then" stays an em dash with its reason: nothing recorded a grade when the trade was made on Sleeper.
+ */
+function rowFromImportedTimeline(t: ImportedHistoryRow): LogRow {
+  const g = t.leagueGrade
+  const graded = g?.graded ? g : null
+  const sentValues = graded ? assetValues(t.sent, graded.lines, 'give') : []
+  const receivedValues = graded ? assetValues(t.received, graded.lines, 'get') : []
+  const aYou = t.sideAYou === true
+  const bYou = t.sideBYou === true
+  const noThen = 'no grade was recorded when this trade was made'
+  const nowWhy = g && !g.graded ? g.reason : graded ? null : 'league values could not be read for this trade'
+  return {
+    id: `imported:${t.id}`,
+    kind: 'completed',
+    season: tradeSeasonFromIso(t.timestamp),
+    when: whenLabel(t.timestamp),
+    sortKey: Date.parse(t.timestamp) || 0,
+    a: {
+      name: aYou ? 'You' : t.sideAName,
+      you: aYou,
+      sends: sendsWithValues(t.sent, sentValues),
+      initialGrade: null,
+      initialLabel: 'Then',
+      initialWhy: noThen,
+      grade: graded ? graded.letter : null,
+      gradeWhy: nowWhy,
+    },
+    b: {
+      name: bYou ? 'You' : t.sideBName,
+      you: bYou,
+      sends: sendsWithValues(t.received, receivedValues),
+      initialGrade: null,
+      initialLabel: 'Then',
+      initialWhy: noThen,
+      grade: graded ? graded.partnerLetter : null,
+      gradeWhy: nowWhy,
+    },
+    extraSides: 0,
+    status: { label: 'Completed · on Sleeper', tone: 'good' },
+    mine: aYou || bYou,
+    direction: aYou || bYou ? 'done' : null,
+    why: graded ? gradeReasons(graded, aYou ? 'You' : t.sideAName, bYou ? 'You' : t.sideBName) : null,
+  }
+}
+
+/** The platform transaction a log row stands for, whichever feed produced it. */
+function transactionKey(rowId: string): string {
+  return rowId.split(':').at(-1) ?? rowId
+}
+
 function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; why: string | null; size?: 'sm' | 'md' }) {
   const dim = size === 'sm' ? 'h-6 w-6 text-[12px] rounded-md' : 'h-7 w-7 text-[14px] rounded-lg'
   if (!letter) {
@@ -498,6 +507,20 @@ function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; w
     <span title={why ?? undefined} className={`inline-flex items-center justify-center border font-black ${dim} ${tone.text} ${tone.box}`}>
       {letter}
     </span>
+  )
+}
+
+/** Why a completed trade graded the way it did — THE grade's own sentences, full width under the row. */
+function GradeWhy({ lines }: { lines: string[] | null | undefined }) {
+  if (!lines || lines.length === 0) return null
+  return (
+    <ul className="col-span-full flex flex-col gap-0.5 rounded-lg bg-white/[0.03] px-3 py-2" aria-label="Why it graded this way">
+      {lines.map((line, i) => (
+        <li key={line} className={`text-[10.5px] leading-snug ${i === 0 ? 'font-semibold text-[#CBD5E1]' : 'text-white/45'}`}>
+          {line}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -584,19 +607,6 @@ export function toAnalyzeAssets(
   return { assets: out, dropped }
 }
 
-function fromBuilderAssets(assets: BuilderOfferAsset[]): { assets: AnalyzeAsset[]; dropped: string[] } {
-  const out: AnalyzeAsset[] = []
-  const dropped: string[] = []
-  for (const a of assets) {
-    if (a.faabAmount != null) out.push({ kind: 'faab', amount: a.faabAmount })
-    else if (a.isPick) {
-      if (a.pickYear != null && a.pickRound != null) out.push({ kind: 'pick', year: a.pickYear, round: a.pickRound, label: a.name })
-      else dropped.push(a.name)
-    } else out.push({ kind: 'player', name: a.name })
-  }
-  return { assets: out, dropped }
-}
-
 export type PendingVerdict =
   | { kind: 'loading' }
   | { kind: 'failed' }
@@ -617,15 +627,44 @@ export type PendingVerdict =
       dropped: string[]
     }
 
-type AnalyzeResponse = {
-  labels?: { fairnessLabel?: string; confidenceLabel?: string }
-  fairnessScore?: number
-  percentDiff?: number
-  degraded?: boolean
-  giveTotal?: number | null
-  getTotal?: number | null
-  players?: { give: Array<{ name: string; marketValue?: number | null }>; get: Array<{ name: string; marketValue?: number | null }> }
-  error?: string
+/**
+ * THE grade for an open offer, as the card draws it.
+ *
+ * 🛑 THE CARD NO LONGER GRADES ANYTHING ITSELF (2026-09-24). It used to pick one of three sources —
+ * the canonical evaluation with `(recv−given)/recv`, a native decision with `(get−give)/get` and its
+ * non-mirror inverse, or a fresh `/api/trade-value/analyze` call per card (an LLM call each, capped
+ * at six) — so one offer could carry a different letter here than in the Trade Center or the
+ * inbox. The server now grades every open offer with the one grader and this only reshapes it.
+ *
+ * Per-asset values are matched by POSITION, not by name: the grader prices the sides in the order
+ * the row lists them, and a pricer's canonical spelling ("Kenneth Walker III") need not match the
+ * label on the card.
+ */
+export function pendingVerdictFromGrade(
+  grade: TradeGradeView | null | undefined,
+  giveNames: readonly string[],
+  getNames: readonly string[],
+): PendingVerdict | undefined {
+  if (!grade) return undefined
+  if (!grade.graded) return { kind: 'skipped', why: grade.reason }
+  const values: Record<string, number | null> = {}
+  const give = grade.lines.filter((l) => l.side === 'give')
+  const get = grade.lines.filter((l) => l.side === 'get')
+  giveNames.forEach((n, i) => { values[n.toLowerCase()] = give[i]?.leagueValue ?? null })
+  getNames.forEach((n, i) => { values[n.toLowerCase()] = get[i]?.leagueValue ?? null })
+  return {
+    kind: 'ok',
+    fairnessScore: null,
+    fairnessLabel: grade.label,
+    confidenceLabel: `Graded on league value · ${grade.basis}`,
+    degraded: false,
+    giveGrade: grade.letter,
+    getGrade: grade.partnerLetter,
+    giveTotal: grade.giveValue,
+    getTotal: grade.getValue,
+    values,
+    dropped: [],
+  }
 }
 
 /** One asset as the card draws it, whichever shape it arrived in. */
@@ -768,6 +807,8 @@ function ManagerBlock({
 
 export function PendingTradeCard(props: {
   trade: LeagueTradeHistoryItem
+  /** The AllFantasy league id — set where a commissioner may review the trade (design step 6). */
+  leagueId?: string
   offer: BuilderOffer | null
   verdict: PendingVerdict | undefined
   sport: string
@@ -806,7 +847,6 @@ export function PendingTradeCard(props: {
         avatarUrl: side.avatarUrl,
         viewerSide: side.isViewer,
         rosterId: side.rosterId,
-        frozenGrade: side.grade,
         gradeReason: side.reason,
       }))
     : commissionerView
@@ -818,8 +858,12 @@ export function PendingTradeCard(props: {
 
   const ok = verdict?.kind === 'ok' ? verdict : null
   const values = ok ? ok.values : null
-  const gradeFor = (side: typeof you) => (ok ? (side.viewerSide ? ok.giveGrade : ok.getGrade) : null)
-  const totalFor = (side: typeof you) => (ok ? (side.viewerSide ? ok.giveTotal : ok.getTotal) : null)
+  /*
+   * `gradedSide` is the side the grade was taken from: the viewer's when they are in the deal, the
+   * proposer's (listed first) when a commissioner is looking at someone else's.
+   */
+  const gradeFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveGrade : ok.getGrade) : null)
+  const totalFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveTotal : ok.getTotal) : null)
 
   const headline = commissionerView
     ? `${t.proposerName ?? 'A manager'} has proposed a trade`
@@ -862,6 +906,7 @@ export function PendingTradeCard(props: {
           const frozen = rosterId
             ? t.decisionReceipt?.participantDecisions.find((participant) => participant.rosterId === rosterId) ?? null
             : t.decisionReceipt?.participantDecisions[index] ?? null
+          const gradedSide = t.leagueGradeSide === 'proposer' && rosterId ? index === 0 : side.viewerSide
           return (
           <ManagerBlock
             key={side.name}
@@ -869,8 +914,13 @@ export function PendingTradeCard(props: {
             isYou={side.isYou}
             assets={side.assets}
             values={values}
-            total={frozen?.valueGiven ?? totalFor(side)}
-            grade={(('frozenGrade' in side ? side.frozenGrade : null) as GradeLetter | null | undefined) ?? (frozen?.grade as GradeLetter | null | undefined) ?? gradeFor(side)}
+            total={totalFor(gradedSide)}
+            /*
+             * THE grade only. A proposal receipt's letter is frozen evidence from the moment the
+             * offer was made, on the receipt's own arithmetic; it is shown in the receipt below,
+             * labelled "at proposal", and never stands in for the grade on the card.
+             */
+            grade={gradeFor(gradedSide)}
             sport={props.sport}
             avatarUrl={side.avatarUrl}
             gradeReason={('gradeReason' in side ? side.gradeReason : null) ?? frozen?.reason ?? null}
@@ -906,7 +956,7 @@ export function PendingTradeCard(props: {
           <div className="mb-2 space-y-1.5">
             {t.decisionReceipt.participantDecisions.map((participant, index) => (
               <p key={participant.rosterId} className="text-[10.5px] leading-snug text-white/55">
-                <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade}` : ''}:</strong>{' '}{participant.reason}
+                <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade} at proposal` : ''}:</strong>{' '}{participant.reason}
               </p>
             ))}
           </div>
@@ -971,6 +1021,12 @@ export function PendingTradeCard(props: {
           </>
         ) : props.canAct && review ? (
           <>
+            {/* The commissioner review — flags computed in code, advice only; the buttons log what it said. */}
+            {t.viewerIsCommissioner && props.leagueId ? (
+              <div className="basis-full">
+                <TradeReviewPanel leagueId={props.leagueId} tradeId={t.id} kind="af" />
+              </div>
+            ) : null}
             <button type="button" disabled={props.busy} onClick={props.onApprove} className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50" data-testid="trade-action-commissioner-approve">
               Approve
             </button>
@@ -1013,18 +1069,17 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [tradeBlockReadable, setTradeBlockReadable] = useState(true)
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [historyTrades, setHistoryTrades] = useState<LeagueTradeHistoryItem[]>([])
+  /* null: not read, or the read failed — distinct from a league with no completed trades. */
+  const [importedHistory, setImportedHistory] = useState<ImportedHistoryRow[] | null>(null)
   const [executedTrades, setExecutedTrades] = useState<LeagueTradeHistoryItem[]>([])
   /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
   const [providerPending, setProviderPending] = useState(0)
   const [providerUrl, setProviderUrl] = useState<string | null>(null)
   const [pendingScan, setPendingScan] = useState<PanelResponse['pending'] | null>(null)
+  const [leagueTypeInfo, setLeagueTypeInfo] = useState<LeagueTypeBasis | null>(null)
   const [pendingOffers, setPendingOffers] = useState<BuilderOffer[]>([])
-  const [verdicts, setVerdicts] = useState<Record<string, PendingVerdict>>({})
-  /* Which trades have been sent to the analyzer, so StrictMode's double effect does not double the requests. */
-  const requested = useRef<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [ledger, setLedger] = useState<LedgerState>({ kind: 'loading' })
   const [watch, setWatch] = useState<Set<string>>(() => readWatchSet(league.id))
   const [proposeOpen, setProposeOpen] = useState(false)
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
@@ -1057,16 +1112,26 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     [watch, persistWatch],
   )
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setErr(null)
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    const background = opts?.background === true
+    if (!background) {
+      setLoading(true)
+      setErr(null)
+    }
     try {
-      const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}`, {
+      /*
+       * The graded history is asked for on a full load only: it grades up to sixty trades, and the
+       * once-a-minute background refresh exists to see new OFFERS. A background read that omits it
+       * leaves the last history on screen (see below).
+       */
+      const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}${background ? '' : '&history=1'}`, {
         credentials: 'include',
         cache: 'no-store',
       })
       const data = (await res.json().catch(() => null)) as PanelResponse | null
       if (!res.ok) {
+        // ⚠ A failed BACKGROUND read keeps the screen: one blip must not empty every list.
+        if (background) return
         setErr('Could not load trades.')
         setTradeBlock([])
         setTradeBlockNote(null)
@@ -1085,12 +1150,17 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setTradeBlockReadable(data?.tradeBlockReadable !== false)
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
       setHistoryTrades(Array.isArray(data?.historyTrades) ? (data.historyTrades as LeagueTradeHistoryItem[]) : [])
+      if (data?.importedHistory && typeof data.importedHistory === 'object') {
+        setImportedHistory(data.importedHistory.available && Array.isArray(data.importedHistory.rows) ? data.importedHistory.rows : null)
+      }
       setExecutedTrades(Array.isArray(data?.executedTrades) ? (data.executedTrades as LeagueTradeHistoryItem[]) : [])
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
       setPendingScan(data?.pending && typeof data.pending === 'object' ? data.pending : null)
+      setLeagueTypeInfo(data?.leagueType && typeof data.leagueType === 'object' ? data.leagueType : null)
       setPendingOffers(Array.isArray(data?.pendingOffers) ? data.pendingOffers : [])
     } catch {
+      if (background) return
       setErr('Could not load trades.')
       setTradeBlock([])
       setTradeBlockNote(null)
@@ -1103,49 +1173,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setPendingScan(null)
       setPendingOffers([])
     } finally {
-      setLoading(false)
-    }
-  }, [league.id])
-
-  /*
-   * The completed ledger, independently of the panel. A payload that does not
-   * carry `supported` is not a ledger at all (a proxy error page, a mock) and
-   * must not be read as "no trades".
-   */
-  const loadLedger = useCallback(async () => {
-    setLedger({ kind: 'loading' })
-    try {
-      const res = await fetch(`/api/league/trade-grades?leagueId=${encodeURIComponent(league.id)}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      })
-      const data = (await res.json().catch(() => null)) as GradesResponse | null
-      if (!data || typeof data !== 'object' || !('supported' in data)) {
-        setLedger({ kind: 'failed' })
-        return
-      }
-      if (data.supported === false) {
-        setLedger({ kind: 'unsupported', platform: data.platform })
-        return
-      }
-      if ('graded' in data && data.graded === false) {
-        setLedger({ kind: 'ungraded', ledger: data.ledger })
-        return
-      }
-      if ('grades' in data && data.grades) {
-        setLedger({ kind: 'graded', grades: data.grades, viewerId: data.viewerSleeperUserId })
-        return
-      }
-      setLedger({ kind: 'failed' })
-    } catch {
-      setLedger({ kind: 'failed' })
+      if (!background) setLoading(false)
     }
   }, [league.id])
 
   useEffect(() => {
     void load()
-    void loadLedger()
-  }, [load, loadLedger])
+  }, [load])
 
   /*
    * A trade email or push often arrives while the app is already open in the
@@ -1153,19 +1187,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
    * so the original load would remain on screen indefinitely. Reconcile both
    * pending requests and completed approvals whenever the window regains focus
    * or the document becomes visible again.
+   *
+   * And while the tab stays OPEN, the offers re-read once a minute (2026-09-25): an offer sent
+   * while the manager is looking at this tab used to wait for them to leave and come back. An
+   * accepted offer moves to the panel's own completed list on the same read.
    */
-  useEffect(() => {
-    const refresh = () => void Promise.all([load(), loadLedger()])
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') refresh()
-    }
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [load, loadLedger])
+  useVisibleRefresh(() => load({ background: true }))
 
   const isZombie = String(league.leagueVariant ?? '').toLowerCase() === 'zombie'
   const nflRedraftTradesShell = isNflRedraftCoreDashboardFromUserLeague(league)
@@ -1185,14 +1212,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           setActionErr(`We could not ${path} this trade. Nothing was changed. Try again.`)
           return
         }
-        await Promise.all([load(), loadLedger()])
+        await load()
       } catch {
         setActionErr(`Failed to ${path} trade.`)
       } finally {
         setActionBusyId(null)
       }
     },
-    [league.id, load, loadLedger],
+    [league.id, load],
   )
 
   const runCommissionerDecision = useCallback(
@@ -1203,21 +1230,22 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/commissioner`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision }),
+          // The review the commissioner was shown, logged with the decision. Null when there was none.
+          body: JSON.stringify({ decision, reviewId: reviewIdFor(tradeId) }),
         })
         await res.json().catch(() => ({}))
         if (!res.ok) {
           setActionErr('We could not save that commissioner decision. Nothing was changed. Try again.')
           return
         }
-        await Promise.all([load(), loadLedger()])
+        await load()
       } catch {
         setActionErr('Failed to record commissioner decision.')
       } finally {
         setActionBusyId(null)
       }
     },
-    [league.id, load, loadLedger],
+    [league.id, load],
   )
 
   /* ── Derived views ─────────────────────────────────────────────────── */
@@ -1240,150 +1268,30 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     return m
   }, [pendingOffers])
 
+  /* THE grade per open offer, carried on the row by the trades panel — nothing is fetched here. */
+  const verdictFor = useCallback((t: LeagueTradeHistoryItem): PendingVerdict | undefined => {
+    const offer = offerById.get(t.id) ?? null
+    const grade = t.leagueGrade ?? offer?.leagueGrade ?? null
+    const giveNames = offer ? offer.give.map((a) => a.name) : t.sent.map((a) => a.label)
+    const getNames = offer ? offer.get.map((a) => a.name) : t.received.map((a) => a.label)
+    return pendingVerdictFromGrade(grade, giveNames, getNames)
+  }, [offerById])
+
+
   /*
-   * The AllFantasy read on every pending trade the viewer can see, from the
-   * analyzer the Trade Center already posts to. Capped so a league with a
-   * pile of open offers does not turn one tab into a request storm (the
-   * route rate-limits at 20/min); the rest keep the offer without the read.
-   *
-   * ⚠ NO NEW API ROUTE. Same `/api/trade-value/analyze`, same input shape.
+   * An imported league's completed trades (2026-09-27, restored on the one grade — see the header).
+   * Two feeds can hold the same trade: this season's live Sleeper read (`historyTrades`) and the graded
+   * history (`importedHistory`). One row per transaction, and the HISTORY copy wins — both carry the
+   * same letter from the same grader, but only the history copy names both managers and says why.
    */
-  const pendingForRead = useMemo(
-    () => activeTrades.filter((t) => t.status !== 'accepted' && t.status !== 'scheduled').slice(0, 6),
-    [activeTrades],
-  )
-
-  useEffect(() => {
-    for (const t of pendingForRead) {
-      if (requested.current.has(t.id)) continue
-      requested.current.add(t.id)
-
-      const offer = offerById.get(t.id) ?? null
-      // Provider offers already passed through the canonical Decision OS on the
-      // server. Reuse that immutable read instead of calling the legacy analyzer
-      // and producing a second, potentially contradictory verdict.
-      if (offer?.evaluation) {
-        const evaluation = offer.evaluation
-        const degraded = evaluation.coverageStatus !== 'complete'
-        const valueGiven = evaluation.valueGiven
-        const valueReceived = evaluation.valueReceived
-        const hasSignal = !degraded && valueGiven != null && valueReceived != null
-        const viewerDiff = hasSignal && valueReceived !== 0
-          ? ((valueReceived - valueGiven) / Math.abs(valueReceived)) * 100
-          : null
-        const partnerDiff = hasSignal && valueGiven !== 0
-          ? ((valueGiven - valueReceived) / Math.abs(valueGiven)) * 100
-          : null
-        setVerdicts((prev) => ({
-          ...prev,
-          [t.id]: {
-            kind: 'ok',
-            fairnessScore: evaluation.fairnessScore,
-            fairnessLabel: evaluation.recommendation,
-            confidenceLabel: `${evaluation.confidenceScore}% confidence`,
-            degraded,
-            giveGrade: projectedLetterFor({ percentDiff: viewerDiff, hasSignal }),
-            getGrade: projectedLetterFor({ percentDiff: partnerDiff, hasSignal }),
-            giveTotal: valueGiven,
-            getTotal: valueReceived,
-            values: {},
-            dropped: [],
-          },
-        }))
-        continue
-      }
-      if (t.decisionRecommendation) {
-        const giveTotal = t.proposalValueGiven ?? null
-        const getTotal = t.proposalValueReceived ?? null
-        const hasSignal = giveTotal != null && getTotal != null && (t.decisionCoveragePct ?? 0) === 100
-        const percentDiff = hasSignal && getTotal !== 0 ? ((getTotal - giveTotal) / Math.abs(getTotal)) * 100 : null
-        const inversePercentDiff = hasSignal && giveTotal !== 0 ? ((giveTotal - getTotal) / Math.abs(giveTotal)) * 100 : null
-        setVerdicts((prev) => ({
-          ...prev,
-          [t.id]: {
-            kind: 'ok',
-            fairnessScore: null,
-            fairnessLabel: t.decisionRecommendation ?? 'Decision OS review',
-            confidenceLabel: typeof t.decisionCoveragePct === 'number' ? `${t.decisionCoveragePct}% asset coverage` : null,
-            degraded: !hasSignal,
-            giveGrade: projectedLetterFor({ percentDiff, hasSignal }),
-            getGrade: projectedLetterFor({ percentDiff: inversePercentDiff, hasSignal }),
-            giveTotal,
-            getTotal,
-            values: {},
-            dropped: [],
-          },
-        }))
-        continue
-      }
-      const give = offer ? fromBuilderAssets(offer.give) : toAnalyzeAssets(t.sent)
-      const get = offer ? fromBuilderAssets(offer.get) : toAnalyzeAssets(t.received)
-      const dropped = [...give.dropped, ...get.dropped]
-      if (give.assets.length === 0 && get.assets.length === 0) {
-        setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'skipped', why: 'Nothing in this offer could be priced.' } }))
-        continue
-      }
-      setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'loading' } }))
-
-      void (async () => {
-        try {
-          const r = await fetch('/api/trade-value/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sportFilter: 'ALL',
-              leagueId: league.id,
-              strategy: 'neutral',
-              teamContext: 'my_team',
-              sideGive: give.assets,
-              sideGet: get.assets,
-            }),
-          })
-          const j = (await r.json().catch(() => ({}))) as AnalyzeResponse
-          if (!r.ok) {
-            setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'failed' } }))
-            return
-          }
-          const values: Record<string, number | null> = {}
-          for (const l of [...(j.players?.give ?? []), ...(j.players?.get ?? [])]) {
-            values[l.name.toLowerCase()] = typeof l.marketValue === 'number' ? l.marketValue : null
-          }
-          const allUnpriced = Object.values(values).length > 0 && Object.values(values).every((v) => v == null)
-          const degraded = Boolean(j.degraded) || allUnpriced
-          const hasSignal = !degraded
-          const pd = typeof j.percentDiff === 'number' ? j.percentDiff : null
-          setVerdicts((prev) => ({
-            ...prev,
-            [t.id]: {
-              kind: 'ok',
-              fairnessScore: typeof j.fairnessScore === 'number' ? j.fairnessScore : null,
-              fairnessLabel: j.labels?.fairnessLabel ?? 'No verdict',
-              confidenceLabel: j.labels?.confidenceLabel ?? null,
-              degraded,
-              giveGrade: projectedLetterFor({ percentDiff: pd, hasSignal }),
-              getGrade: projectedLetterFor({ percentDiff: pd != null ? -pd : null, hasSignal }),
-              giveTotal: typeof j.giveTotal === 'number' ? j.giveTotal : null,
-              getTotal: typeof j.getTotal === 'number' ? j.getTotal : null,
-              values,
-              dropped,
-            },
-          }))
-        } catch {
-          setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'failed' } }))
-        }
-      })()
-    }
-  }, [pendingForRead, offerById, league.id])
-
-
+  const importedLeague = tradeShadowNotice != null
   const completedRows = useMemo<LogRow[]>(() => {
-    const imported = ledger.kind === 'graded'
-      ? ledger.grades.trades.map((g) => rowFromGraded(g, ledger.viewerId))
-      : ledger.kind === 'ungraded'
-        ? ledger.ledger.trades.map(rowFromImported)
-        : []
-    return [...imported, ...historyTrades.map(rowFromNativeHistory)]
-  }, [ledger, historyTrades])
+    const live = historyTrades.map(rowFromNativeHistory)
+    if (!importedLeague || !importedHistory) return live
+    const graded = importedHistory.map(rowFromImportedTimeline)
+    const seen = new Set(graded.map((r) => transactionKey(r.id)))
+    return [...graded, ...live.filter((r) => !seen.has(transactionKey(r.id)))]
+  }, [importedLeague, historyTrades, importedHistory])
 
   const pendingRows = useMemo<LogRow[]>(() => activeTrades.map(rowFromActive), [activeTrades])
 
@@ -1421,7 +1329,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const deadlineChip =
     deadlineWeek == null ? null : deadlineWeek >= 99 ? 'Trades open all season' : `Deadline · week ${deadlineWeek}`
 
-  const nothingAtAll = !loading && !err && activeTrades.length === 0 && completedRows.length === 0 && ledger.kind !== 'loading'
+  const nothingAtAll = !loading && !err && activeTrades.length === 0 && completedRows.length === 0
 
   const proposeAffordance = (
     <button
@@ -1447,6 +1355,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             Every deal in this league — and the ones with your name on them. Grades are scored against
             this league&rsquo;s own rules, so the same trade grades differently next door.
           </p>
+          {/*
+            Which rules: the league type, and whether anyone confirmed it. The control lives in the
+            /core league header, so the link goes there.
+          */}
+          <LeagueTypeGradeNote
+            basis={leagueTypeInfo}
+            confirmHref={`/core?league=${encodeURIComponent(league.id)}#league-type`}
+            className="max-w-[62ch]"
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {nflRedraftTradesShell ? (
@@ -1490,7 +1407,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         ) : null}
         <span className="flex-1" />
         <span className="font-mono text-[11px] font-bold text-[#8B9DB8]">
-          {completedRows.length > 0 || ledger.kind === 'graded' || ledger.kind === 'ungraded'
+          {completedRows.length > 0
             ? `${completedCount} completed · ${activeTrades.length} pending${closedCount > 0 ? ` · ${closedCount} closed` : ''}`
             : `${activeTrades.length} pending`}
         </span>
@@ -1526,10 +1443,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Empty ─────────────────────────────────────────────────────── */}
       {nothingAtAll ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] px-6 py-12 text-center">
-          <p className="text-[16px] font-extrabold text-white">No trades in this league yet</p>
+          <p className="text-[16px] font-extrabold text-white">
+            {importedLeague ? 'No open trades right now' : 'No trades in this league yet'}
+          </p>
           <p className="max-w-md text-[12.5px] leading-relaxed text-[#8B9DB8]">
-            Nothing has been proposed or completed this season. Start a deal in the builder, or let the
-            finder pick a partner whose roster shape fits yours.
+            {importedLeague
+              ? 'Nothing is waiting on anyone. Completed trades are in the Trade Center. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.'
+              : 'Nothing has been proposed or completed this season. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.'}
           </p>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
             {proposeAffordance}
@@ -1560,8 +1480,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 key={t.id}
                 trade={t}
                 offer={offerById.get(t.id) ?? null}
-                verdict={verdicts[t.id]}
+                verdict={verdictFor(t)}
                 sport={sport}
+                leagueId={league.id}
                 tradeCenterHref={tradeCenterHref}
                 providerUrl={providerUrl}
                 canAct={nflRedraftTradesShell}
@@ -1687,7 +1608,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             <span className="text-[10px] text-white/35">
               {yourTab === 'active'
                 ? 'Offers with your name on them'
-                : 'Realized grades — scored on what each side has produced since'}
+                : importedLeague
+                  ? 'Graded on this league’s values today — the same grade as the Trade Center'
+                  : 'Realized grades — scored on what each side has produced since'}
             </span>
           </div>
           {yourTab === 'active' ? (
@@ -1702,8 +1625,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     key={t.id}
                     trade={t}
                     offer={offerById.get(t.id) ?? null}
-                    verdict={verdicts[t.id]}
+                    verdict={verdictFor(t)}
                     sport={sport}
+                    leagueId={league.id}
                     tradeCenterHref={tradeCenterHref}
                     providerUrl={providerUrl}
                     canAct={nflRedraftTradesShell}
@@ -1721,15 +1645,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             {yourCompleted.length === 0 ? (
               <p className="px-4 py-6 text-center text-[12px] text-white/40">
-                {ledger.kind === 'loading'
-                  ? 'Reading completed trades…'
-                  : ledger.kind === 'ungraded'
-                    ? `Completed trades on ${league.platform ?? 'this platform'} do not say which side was yours.`
-                    : ledger.kind === 'unsupported'
-                      ? 'Completed trades are not read for this platform yet.'
-                      : ledger.kind === 'failed'
-                        ? 'Completed trades could not be read just now.'
-                        : 'You have not completed a trade in this league.'}
+                You have not completed a trade in this league.
               </p>
             ) : (
               yourCompletedGroups.map(({ season, items }) => (
@@ -1773,6 +1689,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     <div className="md:justify-self-end">
                       <StatusChip status={r.status} />
                     </div>
+                    <GradeWhy lines={r.why} />
                   </div>
                 )
                   })}
@@ -1781,6 +1698,29 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             )}
           </div>
           )}
+        </section>
+      ) : null}
+
+      {/* ── Completed trades live in the Trade Center (imported leagues) ─ */}
+      {!loading && !err && importedLeague ? (
+        <section
+          className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-3.5"
+          data-testid="league-trade-history-link"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className={`${EYEBROW} text-[10px] text-white/40`}>Completed trades</span>
+            <p className="max-w-[62ch] text-[12px] leading-relaxed text-[#8B9DB8]">
+              {importedHistory
+                ? 'The log below grades every completed trade on this league’s values. The Trade Center shows the same grades with player photos and a full breakdown.'
+                : 'Every completed trade in this league, graded on this league’s values — the same grade as your trade emails.'}
+            </p>
+          </div>
+          <Link
+            href={tradeCenterHref}
+            className="rounded-lg border border-white/15 px-3.5 py-2 text-[12px] font-bold text-white/85 hover:border-white/30"
+          >
+            Open trade history
+          </Link>
         </section>
       ) : null}
 
@@ -1848,17 +1788,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               </label>
             ) : null}
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">
-              {ledger.kind === 'loading'
-                ? 'Reading completed trades — the first read of a league can take a minute'
-                : ledger.kind === 'unsupported'
-                  ? `Completed trades are not read for ${ledger.platform} yet — pending only`
-                  : ledger.kind === 'failed'
-                    ? 'Completed trades could not be read just now — pending only'
-                    : ledger.kind === 'ungraded'
-                      ? `${logRows.length} shown · ${league.platform ?? 'this platform'} trades are listed, not graded`
-                      : `${logRows.length} shown · grades are realized where every asset could be scored`}
-            </span>
+            <span className="text-[10px] text-white/35">{logRows.length} shown</span>
           </div>
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-white/[0.06] px-4 py-2 md:grid">
@@ -1918,6 +1848,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     <StatusChip status={r.status} />
                     {r.receiptNote ? <span className="max-w-[120px] text-[9px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
                   </div>
+                  <GradeWhy lines={r.why} />
                 </div>
                   ))}
                 </div>

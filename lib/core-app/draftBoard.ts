@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 
@@ -106,6 +107,7 @@ export async function getDraftBoardData(
 
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       status: true,

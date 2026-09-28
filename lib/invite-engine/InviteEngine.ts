@@ -4,6 +4,8 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { countSeatsHeldByPeople } from '@/lib/league/leagueSeats'
+import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { validateInviteCode, validateFantasyInviteCode } from '@/lib/league-invite'
 import { attributeSignupToReferrer, grantRewardForSignup } from '@/lib/referral'
@@ -26,6 +28,7 @@ import type {
   InviteStatus,
   InviteType,
 } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const MAX_ACTIVE_PER_USER_PER_DAY = 100
 const TOKEN_MAX_ATTEMPTS = 5
@@ -243,13 +246,11 @@ export async function createFantasyLeagueRoster(
           leagueVariant: true,
         },
       }),
-      // Slice 7/7.1: exclude orphan AI rosters from "is full" capacity check.
-      // Orphans get evicted for new humans via evictOrphanForNewHumanRoster.
-      tx.roster.count({
-        where: { leagueId, NOT: { platformUserId: { startsWith: 'orphan-' } } },
-      }),
-      tx.draftSession.findUnique({
+      // Seats held by people, not rosters that exist (a native league has one per seat).
+      countSeatsHeldByPeople(tx as Prisma.TransactionClient, leagueId),
+      tx.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { status: true },
       }),
       tx.userProfile.findFirst({
@@ -275,18 +276,46 @@ export async function createFantasyLeagueRoster(
       return { ok: false as const, error: paidGate.message }
     }
 
-    const roster = await tx.roster.create({
-      data: {
-        leagueId,
-        platformUserId: userId,
-        playerData: { draftPicks: [] },
+    // Take an open seat before creating one. A native league is created with a roster for every
+    // seat, so creating another here gave a 12-team league a 13th roster with no team, no draft
+    // slot and no membership. (It never happened only because the capacity count above read
+    // every native league as full.)
+    const userEmail = await tx.appUser
+      .findUnique({ where: { id: userId }, select: { email: true } })
+      .then((u) => u?.email ?? null)
+    const claim = await claimPlaceholderRoster({
+      tx: tx as Prisma.TransactionClient,
+      leagueId,
+      candidate: {
+        appUserId: userId,
+        displayName: profile?.displayName ?? null,
+        sleeperUsername: profile?.sleeperUsername ?? null,
+        email: userEmail,
       },
-      select: { id: true },
     })
+
+    const roster = claim.claimed && claim.rosterId
+      ? { id: claim.rosterId }
+      : await tx.roster.create({
+          data: {
+            leagueId,
+            platformUserId: userId,
+            playerData: { draftPicks: [] },
+          },
+          select: { id: true },
+        })
 
     await linkDuesToRoster({ leagueId, userId, rosterId: roster.id, tx: tx as Prisma.TransactionClient })
 
-    if (league.platform === 'manual') {
+    if (!claim.claimed) {
+      await tx.redraftLeagueMember.upsert({
+        where: { leagueId_userId: { leagueId, userId } },
+        create: { leagueId, userId, role: 'MEMBER', teamNumber: null },
+        update: {},
+      })
+    }
+
+    if (!claim.claimed && league.platform === 'manual') {
       const manualTeamCount = await tx.leagueTeam.count({
         where: { leagueId },
       })
@@ -422,16 +451,8 @@ async function buildInvitePreviewFromLink(
             select: { id: true },
           })
         : Promise.resolve(null),
-      // Slice 7/7.1: auto-materialization fills empty slots with orphan AI
-      // rosters. Orphans are placeholder seats that get evicted when a human
-      // joins (evictOrphanForNewHumanRoster), so they must NOT count toward
-      // capacity for the "is this league full?" check.
-      prisma.roster.count({
-        where: {
-          leagueId: link.targetId,
-          NOT: { platformUserId: { startsWith: 'orphan-' } },
-        },
-      }),
+      // Seats held by people, not rosters that exist (a native league has one per seat).
+      countSeatsHeldByPeople(prisma, link.targetId),
     ])
 
     if (!league) {

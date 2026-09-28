@@ -4,6 +4,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { createSystemMessage } from "@/lib/platform/chat-service"
+import { leagueChatThreadIdFromSettings } from "@/lib/league/leagueChatThreadLink"
 import { recordTrendSignalsAndUpdate } from "@/lib/player-trend"
 import { getLeagueMemberAppUserIds } from "@/lib/draft-notifications/DraftNotificationService"
 import { dispatchNotification } from "@/lib/notifications/NotificationDispatcher"
@@ -121,9 +122,9 @@ export async function onWaiverRunComplete(
       where: { id: leagueId },
       select: { settings: true, sport: true },
     })
-    const settings = (league?.settings as Record<string, unknown>) || {}
-    const threadId = settings.leagueChatThreadId as string | undefined
-    if (threadId && typeof threadId === "string") {
+    // Only a link that passes the one rule (lib/league/leagueChatThreadLink.ts); a DM or huddle is no link.
+    const threadId = leagueChatThreadIdFromSettings(leagueId, league?.settings)
+    if (threadId) {
       await createSystemMessage(threadId, "waiver_bot", message).catch(() => {})
     }
 

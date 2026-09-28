@@ -228,7 +228,7 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
                   </div>
                 ))
               )}
-              <HubBroadcast label="Broadcast to every league you run" leagueIds={data.broadcastLeagueIds} />
+              <HubBroadcast label="Broadcast to your AllFantasy leagues" leagueIds={data.broadcastLeagueIds} />
             </section>
           </div>
         </>

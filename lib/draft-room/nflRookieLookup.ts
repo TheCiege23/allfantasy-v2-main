@@ -21,6 +21,7 @@
  */
 
 import { getAllPlayers, type SleeperPlayer } from '@/lib/sleeper-client'
+import { dbFirstMode } from '@/lib/db-first-mode'
 import { prisma } from '@/lib/prisma'
 
 const DB_CACHE_KEY = 'sleeper:nfl:yearsexp:compact:v1'
@@ -115,7 +116,7 @@ export type NflRookieLookup = {
   byName: Map<string, RookieMetadataRow>
   /** Strongest key when present: Sleeper player_id. */
   bySleeperId: Map<string, RookieMetadataRow>
-  /** True when the upstream Sleeper fetch returned at least one usable years_exp record. */
+  /** True when the selected source contains at least one usable years_exp record. */
   hasData: boolean
 }
 
@@ -147,11 +148,16 @@ function normPos(pos: string | null | undefined): string {
  * callers should not mutate it. Cheap when the Sleeper cache is warm
  * (24h TTL, in-process).
  *
- * DB-FIRST: on Sleeper failure the lookup falls back to a previously
+ * DB-FIRST page loads read only the previously persisted compact map. When live
+ * requests are allowed, Sleeper failure falls back to a previously
  * persisted compact map in `SportsDataCache`. On Sleeper success the compact
  * map is written to `SportsDataCache` asynchronously (fire-and-forget).
  */
 export async function loadNflRookieLookup(): Promise<NflRookieLookupResult> {
+  if (dbFirstMode.useDbCacheOnly || dbFirstMode.disableLiveApiOnPageLoad) {
+    const cached = await loadYearsExpFromDb()
+    return { lookup: cached ?? EMPTY_LOOKUP, fetchSource: 'sportsdatacache_compact' }
+  }
   let players: Record<string, SleeperPlayer> = {}
   let sleeperSucceeded = false
   try {

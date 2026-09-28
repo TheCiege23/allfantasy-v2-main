@@ -72,7 +72,7 @@ describe('⚠ the target actually renders', () => {
      * would render the home queue with no league selected.
      */
     const page = readFileSync(
-      resolve(process.cwd(), 'app/core/[[...screen]]/page.tsx'),
+      resolve(process.cwd(), 'app/core/(shell)/[[...screen]]/page.tsx'),
       'utf8',
     ).replace(/\r\n/g, '\n')
     expect(page).toContain("typeof sp.league === 'string' ? sp.league : null")

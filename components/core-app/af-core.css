@@ -646,6 +646,32 @@ html[data-mode='af'] .af-core {
   text-transform: uppercase;
 }
 
+/*
+ * The theme switch, as a top-bar chip on /core (the floating pill no longer renders here). Same shape
+ * as the Read-only chip beside it; 44px tall on a phone, where it is a thumb target.
+ */
+.af-core .af-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .af-core .af-mode-chip {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 /* A stale sync must announce itself rather than quietly showing old numbers. */
 .af-core .af-sync[data-stale='true'] {
   color: var(--warn);

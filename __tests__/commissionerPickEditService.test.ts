@@ -145,6 +145,7 @@ describe('commissionerPickEdit', () => {
       const tx = {
         draftSession: {
           findUnique: hm.txFindUnique,
+          findFirst: hm.txFindUnique,
           update: hm.txSessionUpdate,
         },
         draftPick: {

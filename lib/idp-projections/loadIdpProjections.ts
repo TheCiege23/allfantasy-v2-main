@@ -135,6 +135,16 @@ export async function loadIdpProjections(
   }
 
   const games = await loadPriorGames(args, sport, ids)
+  if (games === null) return {
+    bySleeperId: new Map(args.players.map((p) => [p.sleeperId, {
+      ok: false as const, reason: 'history_unavailable' as const, detail: 'Stored defensive history could not be read.',
+    }])),
+    coverage: {
+      requested: args.players.length, projected: 0, refused: args.players.length,
+      refusalsByReason: { history_unavailable: args.players.length },
+      priorsByPosition: {}, paceAvailable: false, refusalRate: 1,
+    },
+  }
 
   const historyBySleeperId = new Map<string, IdpGameObservation[]>()
   for (const g of games) {
@@ -239,7 +249,7 @@ function loadPriorGames(
     weekOrRound: number
     opponent: string | null
     normalizedStatMap: unknown
-  }>
+  }> | null
 > {
   return args.prisma.playerGameStat
     .findMany({
@@ -268,7 +278,7 @@ function loadPriorGames(
       },
       orderBy: { weekOrRound: 'asc' },
     })
-    .catch(() => [])
+    .catch(() => null)
 }
 
 /**

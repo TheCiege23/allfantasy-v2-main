@@ -1,8 +1,10 @@
+import { normalizeTeamAbbrev, getTeamInfo } from '@/lib/team-abbrev'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import type { SectionState } from './leagueHome'
+import { getTeamLogoUrl } from '@/lib/player-media-urls'
 
 /**
  * The three cross-league cards that sit at the top of Dashboard v2: today's
@@ -48,6 +50,7 @@ export type HealthReading = {
 /* ── Next 24 hours ───────────────────────────────────────────────────────── */
 
 export type Next24Row = {
+  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsAt: string | null }
   kind: 'game' | 'waiver'
   text: string
   /** League name for a waiver run; sport and week for a game. */
@@ -199,7 +202,9 @@ async function resolveRecord(
   let losses = 0
   for (const m of matchups) {
     if (!mine.has(`${m.leagueId}:${m.rosterId}`)) continue // someone else's roster
-    if (m.win === 1) wins += 1
+    // This band reports who is currently ahead, not a provider's historical win flag.
+    if (m.pointsFor === m.pointsAgainst) continue
+    if (m.pointsFor > m.pointsAgainst) wins += 1
     else losses += 1
   }
 
@@ -356,12 +361,17 @@ async function resolveNext24(
     .findMany({
       where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
       orderBy: { startTime: 'asc' },
-      take: 20,
-      select: { sport: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
+      take: 200,
+      select: { sport: true, externalId: true, source: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
     })
     .catch(() => [])
 
   const rows: Next24Row[] = []
+  const odds = games.length && prisma.gameOdds ? await prisma.gameOdds.findMany({
+    where: { OR: games.map(g => ({ sport: g.sport, gameExternalId: g.externalId, source: g.source })), expiresAt: { gt: now }, fetchedAt: { gte: new Date(now.getTime() - 3_600_000) } },
+    orderBy: { fetchedAt: 'desc' },
+    select: { sport: true, gameExternalId: true, source: true, spreadHome: true, totalPoints: true, fetchedAt: true },
+  }).catch(() => []) : []
 
   /*
    * No waiver rows. See the header — the timing columns hold our own sport
@@ -370,14 +380,30 @@ async function resolveNext24(
    * correct arithmetic waiting on a trustworthy input.
    */
 
+  const seenFixtures = new Set<string>()
   for (const g of games) {
     if (!g.startTime) continue
+    const teamKey = (team: string | null) => g.sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
+    if (seenFixtures.has(key)) continue
+    seenFixtures.add(key)
     rows.push({
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,
       sub: [g.sport, g.week != null ? `Week ${g.week}` : null].filter(Boolean).join(' · ') || null,
       time: g.startTime.toISOString(),
       tone: 'accent',
+      game: (() => {
+        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && teamKey(peer.homeTeam) === teamKey(g.homeTeam) && teamKey(peer.awayTeam) === teamKey(g.awayTeam))
+        const market = odds.find(o => peers.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
+        const spread = market?.spreadHome
+        const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
+        return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
+          homeLogo: getTeamLogoUrl(teamKey(g.homeTeam), g.sport), awayLogo: getTeamLogoUrl(teamKey(g.awayTeam), g.sport),
+          href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
+          odds: [favorite, market?.totalPoints != null ? `O/U ${market.totalPoints}` : null].filter(Boolean).join(' · ') || 'Odds unavailable',
+          oddsAt: market?.fetchedAt.toISOString() ?? null }
+      })(),
     })
   }
 

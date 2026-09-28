@@ -1,9 +1,12 @@
 /**
- * Commissioner announcements: send @everyone broadcast to league chat.
- * Requires league chat thread to be linked (league.settings.leagueChatThreadId).
+ * The league's stored chat link (`league.settings.leagueChatThreadId`), read through the one rule in
+ * lib/league/leagueChatThreadLink.ts: only the league's own `league:<leagueId>` room comes back, and
+ * anything else reads as "no link". Commissioner announcements themselves go through
+ * `POST /api/commissioner/broadcast`, which posts into the league's own chat.
  */
 
 import { prisma } from "@/lib/prisma"
+import { leagueChatThreadIdFromSettings } from "@/lib/league/leagueChatThreadLink"
 
 export type AnnouncementResult = { ok: true; message?: string } | { ok: false; error: string }
 
@@ -12,15 +15,10 @@ export async function getLeagueChatThreadId(leagueId: string): Promise<string | 
     where: { id: leagueId },
     select: { settings: true },
   })
-  const settings = (league?.settings as Record<string, unknown>) || {}
-  const threadId = settings.leagueChatThreadId
-  return typeof threadId === "string" ? threadId : null
+  return leagueChatThreadIdFromSettings(leagueId, league?.settings)
 }
 
-/**
- * Caller must POST to /api/shared/chat/threads/[threadId]/broadcast with announcement.
- * This service only resolves threadId for the league.
- */
+/** The validated link as a context object. No caller in the app today (census 2026-09-25). */
 export async function resolveAnnouncementContext(leagueId: string): Promise<{
   threadId: string | null
   canAnnounce: boolean

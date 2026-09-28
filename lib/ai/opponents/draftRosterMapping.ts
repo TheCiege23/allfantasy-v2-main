@@ -5,6 +5,7 @@
 import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import { prisma } from "@/lib/prisma"
 import type { SlotOrderEntry } from "@/lib/live-draft-engine/types"
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export async function resolveLeagueTeamIdFromDraftRosterId(leagueId: string, draftRosterId: string): Promise<string | null> {
   const direct = await prisma.leagueTeam.findFirst({
@@ -28,8 +29,9 @@ export async function resolveLeagueTeamIdFromDraftRosterId(leagueId: string, dra
 
 /** Id used in `DraftSession.slotOrder[].rosterId` for this league team. */
 export async function resolveDraftRosterIdForLeagueTeam(leagueId: string, leagueTeamId: string): Promise<string | null> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { slotOrder: true },
   })
   const slotOrder = (session?.slotOrder as unknown as SlotOrderEntry[]) ?? []

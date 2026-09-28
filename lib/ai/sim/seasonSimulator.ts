@@ -1,4 +1,4 @@
-import { createRng, sampleTeamWeeklyScore } from '@/lib/ai/sim/playerModel'
+import { createRng, prepareTeamWeeklySampler } from '@/lib/ai/sim/playerModel'
 import type { MonteCarloOptions, SeasonSimResult, SimTeamInput } from '@/lib/ai/sim/types'
 
 function synthesizeSchedule(teamIds: string[], weeks: number, rng: () => number): Array<Array<{ home: string; away: string }>> {
@@ -26,6 +26,12 @@ export function simulateSeason(teams: SimTeamInput[], opts: MonteCarloOptions): 
   const playoffN = Math.max(2, Math.min(teams.length, opts.playoffTeams ?? Math.min(6, teams.length)))
   const teamIds = teams.map((t) => t.id)
   const byId = new Map(teams.map((t) => [t.id, t]))
+  /*
+   * Each roster's starters are fixed for the whole run, so they are chosen once here rather than
+   * re-sorted on every draw. `prepareTeamWeeklySampler` is bit-identical to `sampleTeamWeeklyScore`,
+   * so a seeded run returns the same numbers it always did — only faster.
+   */
+  const samplerById = new Map(teams.map((t) => [t.id, prepareTeamWeeklySampler(t.roster)]))
 
   const champCount: Record<string, number> = Object.fromEntries(teamIds.map((id) => [id, 0]))
   const playoffCount: Record<string, number> = Object.fromEntries(teamIds.map((id) => [id, 0]))
@@ -45,8 +51,8 @@ export function simulateSeason(teams: SimTeamInput[], opts: MonteCarloOptions): 
         const ta = byId.get(m.home)
         const tb = byId.get(m.away)
         if (!ta || !tb) continue
-        const sa = sampleTeamWeeklyScore(ta.roster, rng)
-        const sb = sampleTeamWeeklyScore(tb.roster, rng)
+        const sa = samplerById.get(ta.id)!(rng)
+        const sb = samplerById.get(tb.id)!(rng)
         if (sa > sb) wins[m.home] = (wins[m.home] ?? 0) + 1
         else if (sb > sa) wins[m.away] = (wins[m.away] ?? 0) + 1
         else {
@@ -87,8 +93,8 @@ export function simulateSeason(teams: SimTeamInput[], opts: MonteCarloOptions): 
           next.push(a)
           continue
         }
-        const sa = sampleTeamWeeklyScore(ta.roster, rng)
-        const sb = sampleTeamWeeklyScore(tb.roster, rng)
+        const sa = samplerById.get(ta.id)!(rng)
+        const sb = samplerById.get(tb.id)!(rng)
         next.push(sa >= sb ? a : b)
       }
       remaining = next

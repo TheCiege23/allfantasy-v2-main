@@ -295,3 +295,52 @@
   color: var(--warn, #fbbf24);
   background: var(--warn-soft, rgba(251, 191, 36, 0.1));
 }
+
+/* ── Competitive Edge: who you're bidding against ──────────────── */
+.af-wv-edge-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+.af-wv-edge-league,
+.af-wv-edge-rivals,
+.af-wv-edge-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.af-wv-edge-league {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text);
+}
+.af-wv-edge-rivals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+}
+.af-wv-edge-rival {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-wv-edge-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-wv-edge-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text2);
+}

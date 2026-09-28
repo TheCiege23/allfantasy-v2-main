@@ -38,6 +38,8 @@ const defKey = (team: string) => `nfl:def:${team.toUpperCase()}`
 type FetchLike = (url: string) => Promise<{ status: number; json(): Promise<unknown> }>
 
 export class RollingInsightsLiveProvider implements LiveStatsProvider {
+  /** NFL only: its id crosswalk is loaded for `sportKey: 'NFL'` (RI id -> Sleeper id). */
+  readonly sports = ['NFL'] as const
   private readonly token: string
   private readonly fetchImpl: FetchLike
   /**

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { leagueWeekProgress } from './leagueWeekProgress'
 import { getFirstStatedKickoff } from './seasonPhase'
 import {
   bandAround,
@@ -529,7 +530,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     }),
     prisma.league.findMany({
       where: { id: { in: leagues.map((l) => l.id) } },
-      select: { id: true, sport: true },
+      select: { id: true, sport: true, season: true, settings: true, status: true },
     }),
   ]).catch(() => [[], [], [], [], []] as const)
 
@@ -582,6 +583,8 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     // The season being played is the latest one on file.
     const season = leagueRows.reduce((max, r) => Math.max(max, r.seasonYear), 0)
     const seasonRows = leagueRows.filter((r) => r.seasonYear === season)
+    const progress = leagueWeekProgress(sports.find((l) => l.id === league.id) ?? { settings: league.settings, season })
+    const final = (r: OutlookMatchupRow) => progress.currentWeek == null || progress.isFinal(r.seasonYear, r.week)
 
     /*
      * ⚠ SCORING PROFILES ARE FITTED ACROSS EVERY SEASON ON FILE, NOT JUST THIS
@@ -592,7 +595,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     const scores = new Map<string, number[]>()
     const seasonsFitted = new Set<number>()
     for (const r of leagueRows) {
-      if (r.pointsFor <= 0 && r.pointsAgainst <= 0) continue
+      if (!final(r) || (r.pointsFor <= 0 && r.pointsAgainst <= 0)) continue
       seasonsFitted.add(r.seasonYear)
       const list = scores.get(r.rosterId)
       if (list) list.push(r.pointsFor)
@@ -612,7 +615,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
 
     const simTeams: SimTeam[] = []
     for (const [rosterId, list] of byRoster) {
-      const played = list.filter((x) => regular(x.week) && (x.pointsFor > 0 || x.pointsAgainst > 0))
+      const played = list.filter((x) => final(x) && regular(x.week) && (x.pointsFor > 0 || x.pointsAgainst > 0))
       simTeams.push({
         rosterId,
         wins: played.filter((x) => x.win === 1).length,
@@ -636,7 +639,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     const unscored: OutlookMatchupRow[] = []
     for (const r of seasonRows) {
       if (r.matchupId == null || !regular(r.week)) continue
-      const scored = r.pointsFor > 0 || r.pointsAgainst > 0
+      const scored = final(r) && (r.pointsFor > 0 || r.pointsAgainst > 0)
       if (!scored) unscored.push(r)
       const key = `${r.week}|${r.matchupId}|${scored ? 1 : 0}`
       const entry = pairs.get(key)
@@ -651,6 +654,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     }
     for (const f of merged.pairs) {
       if (f.leagueId !== pid || f.season !== season || !regular(f.week)) continue
+      if (progress.currentWeek != null && !progress.isFinal(f.season, f.week)) continue
       if (played.some((g) => g.week === f.week && (g.a === f.a || g.b === f.a))) continue
       played.push({ week: f.week, a: f.a, b: f.b })
     }
@@ -685,7 +689,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
       played,
       weeks,
       weeksRemaining: weeks.length,
-      expectedWins: allPlayWins(seasonRows.filter((r) => regular(r.week))),
+      expectedWins: allPlayWins(seasonRows.filter((r) => final(r) && regular(r.week))),
       seasonsFitted: [...seasonsFitted].sort((a, b) => a - b),
       format,
       missing,

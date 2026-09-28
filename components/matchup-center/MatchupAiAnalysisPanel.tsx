@@ -1,5 +1,7 @@
 'use client'
 
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import type { PlanRefusal } from '@/lib/monetization/planRefusal'
 import { Brain, Loader2, Sparkles } from 'lucide-react'
 import type { LeagueMatchupAiResult } from '@/lib/ai-matchup-engine/types'
 
@@ -8,12 +10,15 @@ export function MatchupAiAnalysisPanel({
   loading,
   result,
   error,
+  refusal = null,
   onRun,
 }: {
   sport: string
   loading: boolean
   result: LeagueMatchupAiResult | null
   error: string | null
+  /** A paywall answer, shown with its upgrade button instead of `error`. */
+  refusal?: PlanRefusal | null
   onRun: () => void
 }) {
   return (
@@ -36,7 +41,11 @@ export function MatchupAiAnalysisPanel({
         </button>
       </div>
 
-      {error ? <p className="mt-2 text-[12px] text-red-200/90">{error}</p> : null}
+      {refusal ? (
+        <PlanRefusalNotice refusal={refusal} className="mt-2" />
+      ) : error ? (
+        <p className="mt-2 text-[12px] text-red-200/90">{error}</p>
+      ) : null}
 
       {result ? (
         <div className="mt-3 space-y-2 text-[12px] leading-snug text-white/80">

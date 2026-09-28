@@ -11,6 +11,7 @@ import type {
   TradeReceipt,
   WaiverReceipt,
 } from '@/lib/core-app/decisionReceipts'
+import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
@@ -66,6 +67,9 @@ function WaiverRow({ w }: { w: WaiverReceipt }) {
 }
 
 function LineupRow({ l }: { l: LineupReceipt }) {
+  const describe = (players: Array<{ name: string; points: number }>) => {
+    return players.map((p) => `${p.name} (${p.points.toFixed(1)})`).join(', ')
+  }
   return (
     <li className="af3a-receipt" data-kind="lineup" data-outcome={l.perfect ? 'ahead' : undefined}>
       <Link className="af3a-receipt-title" href={l.href}>
@@ -74,11 +78,15 @@ function LineupRow({ l }: { l: LineupReceipt }) {
       <span className="af3a-receipt-where af3a-mono">
         {l.leagueName} · {l.season} wk {l.week}
       </span>
-      {!l.perfect && (l.benched || l.started) ? (
+      {!l.perfect && l.lineupChanges && (l.lineupChanges.in.length > 0 || l.lineupChanges.out.length > 0) ? (
         <span className="af3a-receipt-swap">
-          {l.benched ? `Benched ${l.benched.name} (${l.benched.points.toFixed(1)})` : ''}
-          {l.benched && l.started ? ' · ' : ''}
-          {l.started ? `started ${l.started.name} (${l.started.points.toFixed(1)})` : ''}
+          Best legal lineup: {l.lineupChanges.in.length > 0 ? `starts ${describe(l.lineupChanges.in)}` : ''}
+          {l.lineupChanges.in.length > 0 && l.lineupChanges.out.length > 0 ? ' · ' : ''}
+          {l.lineupChanges.out.length > 0 ? `benches ${describe(l.lineupChanges.out)}` : ''}
+        </span>
+      ) : !l.perfect && l.benched ? (
+        <span className="af3a-receipt-swap">
+          Best legal lineup includes {l.benched.name} ({l.benched.points.toFixed(1)}).
         </span>
       ) : null}
     </li>
@@ -182,6 +190,7 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const autocoachPending = data.autocoachPending ?? 0
   const autocoachUnscored = data.autocoachUnscored ?? 0
   const autocoachUnreadable = data.autocoachUnreadable ?? 0
+  const chimmyRecord = readTrackRecordLine(data.chimmyRecord)
   const chimmy: ChimmyReceipt[] = data.chimmy ?? []
   const chimmyPending = data.chimmyPending ?? 0
   const chimmyUnscored = data.chimmyUnscored ?? 0
@@ -195,7 +204,8 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const hasLineups = lineups.length > 0 || lineupsUnscored > 0 || lineupsUnreadable > 0
   const hasAutoCoach = autocoach.length > 0 || autocoachPending > 0 || autocoachUnscored > 0 || autocoachUnreadable > 0
   const hasChimmyAdds = chimmyAdds.length > 0 || chimmyAddsTooEarly > 0 || chimmyAddsUnscored > 0 || chimmyAddsUnknown > 0
-  const hasChimmy = chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
+  const hasChimmy =
+    chimmyRecord != null || chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
   const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
@@ -308,6 +318,16 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
       {hasChimmy ? (
         <>
           {headed ? <h3 className="af3a-receipt-group">Chimmy</h3> : null}
+          {chimmyRecord ? (
+            /*
+             * The whole record, not just the rows below: every start/sit call Chimmy made you that has
+             * been graded against the real scores. The percentage appears only once it means something.
+             */
+            <p className="af3a-receipt-record" data-kind="chimmy-record">
+              <b>Chimmy’s record on your start/sit calls:</b>{' '}
+              <span className="af3a-mono">{describeTrackRecord(chimmyRecord)}</span>
+            </p>
+          ) : null}
           {chimmy.length > 0 ? (
             <ul className="af3a-receipt-list">
               {chimmy.map((c) => (

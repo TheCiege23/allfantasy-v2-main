@@ -87,27 +87,43 @@ describe("OAuth new-account path is gated", () => {
   })
 })
 
-describe("Sleeper-username new-account path is BLOCKED in invite-only mode (no token-only admission)", () => {
-  it("blocks a new Sleeper account when invite-only is on, rather than admitting by token", () => {
-    // Email-bound policy: a Sleeper synthetic email cannot match a bound invite, so a NEW
-    // Sleeper account simply cannot be admitted — it is blocked, not token-consumed.
-    const createBranch = authTs.indexOf("BETA-GATE (Sleeper")
-    expect(createBranch).toBeGreaterThan(-1)
-    expect(authTs).toMatch(/if \(isInviteOnlyEnabled\(\)\) \{\s*throw new Error\("BETA_INVITE_REQUIRED"\)/)
-    // And it must NOT consume/validate an invite by token on this path.
-    expect(authTs).not.toContain("sleeperAdmissionToken")
+/*
+ * The Sleeper-username sign-in path this file used to gate is GONE, not gated. It signed a caller
+ * in with a public Sleeper username as the only credential — see the note where it lived in
+ * lib/auth.ts, and __tests__/auth-no-sleeper-username-signin.test.ts for the behavioural check.
+ */
+describe("there is no Sleeper-username account-creation path to gate", () => {
+  it("lib/auth.ts registers no `sleeper` provider and mints no sleeper_<id> accounts", () => {
+    expect(authTs).not.toMatch(/^\s*id: "sleeper",/m)
+    expect(authTs).not.toContain("@sleeper.allfantasy.ai`")
+    expect(authTs).not.toContain("username: `sleeper_")
   })
 })
 
 describe("no real AppUser-creation path bypasses the gate", () => {
-  it("the three production signup files are the only ones creating AppUsers outside admin/seed", () => {
+  it("the production signup files route every AppUser create through the admission service", () => {
     // A tripwire, not an exhaustive scan: if a NEW production create appears here without the
     // gate, this documents the expectation that it must route through the service.
-    for (const src of [register, oauth, authTs]) {
+    for (const src of [register, oauth]) {
       const createsUser = src.includes("appUser.create")
       if (createsUser) {
         expect(src).toContain("betaAdmissionService")
       }
     }
+  })
+
+  it("lib/auth.ts creates an AppUser only for the non-production dev bypass", () => {
+    // ⚠ lib/auth.ts used to import betaAdmissionService solely for the Sleeper-username path.
+    // What remains is `ensureDevAuthUser`, reachable only when isDevAuthBypassEnabled() — which
+    // is hard-false under NODE_ENV=production. A second create here must be gated like the others.
+    const creates = authTs.match(/appUser\.create\(/g) ?? []
+    expect(creates).toHaveLength(1)
+    const devFn = authTs.indexOf("async function ensureDevAuthUser")
+    const create = authTs.indexOf("appUser.create(")
+    const nextFn = authTs.indexOf("\nconst providers", devFn)
+    expect(devFn).toBeGreaterThan(-1)
+    expect(create).toBeGreaterThan(devFn)
+    expect(create).toBeLessThan(nextFn)
+    expect(authTs).toMatch(/process\.env\.NODE_ENV !== "production" && process\.env\.DEV_AUTH_BYPASS_ENABLED/)
   })
 })

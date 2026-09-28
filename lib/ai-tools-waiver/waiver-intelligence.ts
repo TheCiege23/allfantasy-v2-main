@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
 import type { SportsPlayerRecord } from '@prisma/client'
@@ -953,7 +954,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
         if (row.injuryStatus) injuryStatus = row.injuryStatus
       } else {
         const sp = await findSportsPlayerForLeagueId(sportStr, c.externalId)
-        imageUrl = sp?.imageUrl ?? null
+        imageUrl = toImageUrl(sp?.imageUrl)
       }
     }
 
@@ -987,7 +988,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
 
     const ageRow = await findSportsPlayerForLeagueId(sportStr, c.externalId)
     const isRk = isRookieHeuristic(sportStr, ageRow?.age ?? null)
-    if (!imageUrl && ageRow?.imageUrl) imageUrl = ageRow.imageUrl
+    if (!imageUrl) imageUrl = toImageUrl(ageRow?.imageUrl)
 
     const tier = tierFromScore(waiverScore, urgency)
     const faabPct = faabPctFromScore(waiverScore, faabRemaining ?? faabBudget, faabBudget)

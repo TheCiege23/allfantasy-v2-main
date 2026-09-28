@@ -33,12 +33,21 @@ function scenario(over: Partial<ReadyTradeScenario> = {}): ReadyTradeScenario {
 const row = (name: string) => screen.getByRole('row', { name: new RegExp(name, 'i') })
 
 describe('the scenario card', () => {
+  it('keeps incomplete analysis on HOLD even when value would accept', () => {
+    render(<ChimmyScenarioCard scenario={scenario({ recommendation: { action: 'hold', explanation: 'Season coverage is missing.' } })} />)
+    expect(screen.getByText('HOLD')).toBeTruthy()
+    expect(screen.queryByText('YES')).toBeNull()
+  })
+  it('shows a computed playoff change in percentage points', () => {
+    render(<ChimmyScenarioCard scenario={scenario({ playoffOdds: { available: true, before: 42, after: 38, delta: -4, reason: 'Paired estimates only.', iterations: 2000, computedAt: '2026-09-27' } })} />)
+    expect(row('playoff estimate').textContent).toContain('-4.0 pp')
+  })
   it('names both sides and the partner', () => {
     render(<ChimmyScenarioCard scenario={scenario()} />)
     const card = screen.getByTestId('chimmy-scenario')
     expect(card.textContent).toContain('with Rival')
-    expect(card.textContent).toContain('You give Bijan Robinson (RB)')
-    expect(card.textContent).toContain('You get Puka Nacua (WR)')
+    expect(within(screen.getByRole('region', { name: 'You give' })).getByText('Bijan Robinson')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'You receive' })).getByText('Puka Nacua')).toBeTruthy()
   })
 
   it('shows value and lineup before, after and change, each with its direction', () => {
@@ -111,8 +120,9 @@ describe('the trade scenario source reads in words', () => {
 })
 
 describe('the drawer reads the scenario off the envelope', () => {
+  // The Chimmy tab (and /chimmy/chat) is ChimmyPanel.tsx; the drawer renders it.
   const DRAWER = fs.readFileSync(
-    path.join(process.cwd(), 'components', 'core-app', 'comms', 'CommsDrawer.tsx'),
+    path.join(process.cwd(), 'components', 'core-app', 'comms', 'ChimmyPanel.tsx'),
     'utf8',
   )
 
@@ -122,9 +132,9 @@ describe('the drawer reads the scenario off the envelope', () => {
     expect(DRAWER).toContain('<ChimmyScenarioCard scenario={t.scenario} />')
   })
 
-  it('places it under the evidence and above the platform hand-off', () => {
+  it('places the decision comparison before the prose and platform hand-off', () => {
     const card = DRAWER.indexOf('<ChimmyScenarioCard')
-    expect(card).toBeGreaterThan(DRAWER.indexOf('<ChimmyEvidenceBlock'))
+    expect(card).toBeLessThan(DRAWER.indexOf('<ChimmyRichText text={t.text}'))
     expect(card).toBeLessThan(DRAWER.indexOf('af-cm-handoff'))
   })
 })

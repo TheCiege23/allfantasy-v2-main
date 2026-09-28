@@ -3,7 +3,7 @@
  * card links to it only when it can load.
  */
 import React from 'react'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })))
@@ -120,6 +120,17 @@ const view = (d: LiveGameDetail | null, extra: { stale?: boolean; failed?: boole
   )
 
 describe('LiveGameView', () => {
+  it('marks an HTTP poll failure stale while preserving the last game scores', async () => {
+    vi.useFakeTimers()
+    try {
+      view(detail())
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+      expect(screen.getByRole('status')).toHaveTextContent(/last update we have/)
+      expect(screen.getByText('Tampa Bay Buccaneers')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('header: both teams, scores, status and a back link', () => {
     const { container } = view(detail())
     const head = container.querySelector('.af-gv-head') as HTMLElement

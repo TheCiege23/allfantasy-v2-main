@@ -158,11 +158,11 @@ export async function POST(
     }))
 
     // Create draft session if it doesn't exist
-    await getOrCreateDraftSession(leagueId)
+    const { session: draftSession } = await getOrCreateDraftSession(leagueId)
 
     // Update draft session
     await prisma.draftSession.update({
-      where: { leagueId },
+      where: { id: draftSession.id },
       data: {
         slotOrder: slotOrder as unknown as Prisma.InputJsonValue,
         cpuAutoPick: true,

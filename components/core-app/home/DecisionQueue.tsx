@@ -66,6 +66,7 @@ export function DecisionQueue({
   help,
   freshness,
   children,
+  noLeagues = false,
 }: {
   issues: CoreIssue[]
   /** "All leagues", "NFL leagues"… — the queue always says what it covers. */
@@ -78,6 +79,8 @@ export function DecisionQueue({
   freshness?: ReactNode
   /** Non-visual companions (the prewarm), rendered inside the section so they stream with it. */
   children?: ReactNode
+  /** The viewer has no leagues at all — an empty queue then means "nothing to read", not "all clear". */
+  noLeagues?: boolean
 }) {
   const [nowMs, setNowMs] = useState(() => Date.parse(nowIso))
   useEffect(() => {
@@ -100,7 +103,16 @@ export function DecisionQueue({
         </span>
       </header>
 
-      {total === 0 ? (
+      {total === 0 && noLeagues ? (
+        /*
+         * "Nothing is waiting on you" was true and useless to someone with no leagues — it read as
+         * "all good" to a user we cannot see anything for. The connect card above says what to do.
+         */
+        <div className="af3a-card af3a-empty">
+          <h3>Nothing to decide yet.</h3>
+          <p>Connect a league and this fills with what needs you: empty slots, injured starters, drafts and trades.</p>
+        </div>
+      ) : total === 0 ? (
         <div className="af3a-card af3a-empty">
           <h3>Nothing is waiting on you.</h3>
           <p>

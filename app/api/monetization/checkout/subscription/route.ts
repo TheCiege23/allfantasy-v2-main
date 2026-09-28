@@ -11,7 +11,14 @@ import {
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
+import { isFoundingMemberUser } from "@/lib/monetization/foundingMemberServer"
+import {
+  duplicatePlanReason,
+  findLiveStripePlanFamiliesForUser,
+  findStripeCustomerIdForUser,
+} from "@/lib/monetization/stripeCustomerForUser"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
+import { enforcePaidAccountLock } from "@/lib/geo/enforcePaidAccountLock"
 import { buildSubscriptionMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
 import {
@@ -40,6 +47,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // A card-locked account never reaches Stripe (lib/subscription/paidStateRefusal).
+    const accountLock = await enforcePaidAccountLock(session.user.id)
+    if (accountLock) return accountLock
+
     const body = (await req.json()) as CheckoutSubscriptionBody
     const sku = String(body?.sku ?? "").trim()
     if (!sku) {
@@ -53,8 +64,25 @@ export async function POST(req: Request) {
     })
 
     const item = getMonetizationCatalogItemBySku(sku as MonetizationSku)
-    if (!item || item.type !== "subscription") {
+    if (!item || item.type !== "subscription" || !item.planFamily) {
       return NextResponse.json({ error: "Invalid subscription sku" }, { status: 400 })
+    }
+
+    // Nothing used to stop a second checkout for a plan the user already pays for —
+    // Stripe would simply bill both.
+    const livePlanFamilies = await findLiveStripePlanFamiliesForUser(session.user.id)
+    const duplicate = duplicatePlanReason(livePlanFamilies, item.planFamily)
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          error:
+            duplicate === "has_supreme"
+              ? "AF Supreme already includes this plan. You can manage your subscription in Settings → Billing."
+              : "You already have this plan. You can manage it in Settings → Billing.",
+          code: "already_subscribed",
+        },
+        { status: 409 }
+      )
     }
 
     // ── Coupon validation (server-side, client discount never trusted) ──────
@@ -96,14 +124,24 @@ export async function POST(req: Request) {
     }
 
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
+    /*
+     * Founding-member pricing (lib/monetization/foundingMember.ts): an account created before
+     * the paywall start gets STRIPE_FOUNDING_COUPON_ID on its subscription. Not looked up when a
+     * sponsor code was validated — that code is what the buyer was shown and it wins — and
+     * `isFoundingMemberUser` reads nothing at all while the env var is unset.
+     */
+    const foundingMember = resolvedCouponCode ? false : await isFoundingMemberUser(session.user.id)
     // Canonical checkout: charge is derived from the catalog price id
     // (STRIPE_PRICE_AF_*), guaranteeing charged == displayed catalog price.
     const checkout = await buildStripeCheckoutSessionForSku({
       sku: item.sku,
       userId: session.user.id,
       userEmail: session.user.email ?? null,
+      stripeCustomerId: await findStripeCustomerIdForUser(session.user.id),
       returnPath,
       couponCode: resolvedCouponCode,
+      couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
+      foundingMember,
     })
     if (!checkout || checkout.purchaseType !== "subscription") {
       return NextResponse.json(
@@ -136,6 +174,7 @@ export async function POST(req: Request) {
       sku: item.sku,
       purchaseType: "subscription",
       metaEvent,
+      foundingDiscountApplied: checkout.foundingDiscountApplied,
       ...(resolvedCouponCode
         ? {
             couponApplied: true,

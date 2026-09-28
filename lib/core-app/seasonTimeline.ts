@@ -80,7 +80,7 @@ function readSettings(settings: unknown): Record<string, unknown> {
  */
 export function leagueWeekFromSettings(settings: unknown): number | null {
   const s = readSettings(settings)
-  const leg = num(s.leg ?? s.current_week ?? s.currentWeek)
+  const leg = num(s.current_week ?? s.currentWeek ?? s.leg)
   // A sane bound, because a junk value here mislabels the whole timeline.
   return leg != null && leg >= 1 && leg <= 30 ? leg : null
 }

@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import { isKeeperDeadlineLocked } from '@/lib/live-draft-engine/keeper/KeeperCarryover'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export async function POST(
     return NextResponse.json({ error: 'You can only remove keepers from your own roster' }, { status: 403 })
   }
 
-  const draft = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!draft) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
   if (draft.status !== 'pre_draft') {
     return NextResponse.json({ error: 'Keepers cannot be changed after draft has started' }, { status: 400 })

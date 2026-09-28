@@ -6,6 +6,7 @@ import { buildKeeperLocks } from './KeeperDraftOrder'
 import { validateRosterKeeperSelections } from './KeeperRuleEngine'
 import type { KeeperConfig, KeeperSelection } from './types'
 import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type KeeperAutomationAction = {
   type: 'auto_keeper_pick'
@@ -29,8 +30,9 @@ export async function runKeeperAutomationTick(leagueId: string): Promise<KeeperA
   let changed = false
 
   for (let guard = 0; guard < 200; guard += 1) {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       include: { picks: { orderBy: { overall: 'asc' } } },
     })
     if (!session || session.status !== 'in_progress' || session.draftType === 'auction') break

@@ -20,6 +20,7 @@ import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/RosterFitValidation'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type AutopickFallbackPoolEntry = {
   playerName: string
@@ -170,8 +171,9 @@ export async function loadAutopickDraftContextForOnClock(
   leagueId: string,
   onClockRosterId: string
 ): Promise<AutopickDraftContext | null> {
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!draftSession || draftSession.status !== 'in_progress') return null

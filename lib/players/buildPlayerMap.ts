@@ -1,3 +1,5 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
+
 /**
  * Player image priority (see lib/players/README.md): sport-specific chains in
  * `resolveHeadshotCandidates` — RI headshot first, then official / ESPN / Sleeper.
@@ -184,7 +186,8 @@ export function resolveHeadshotCandidates(player: EnrichedPlayer): string[] {
       chain = nflChain(player)
       break
   }
-  return dedupe(chain)
+  // A provider placeholder ("contact_support") is not a URL — see lib/media/imageUrl.ts.
+  return dedupe(chain).filter((url) => toImageUrl(url) != null)
 }
 
 export function resolveHeadshot(player: EnrichedPlayer): string {
@@ -233,7 +236,7 @@ export function buildEnrichedPlayer(input: {
     position: input.position,
     team: input.team,
     sport: sportNorm,
-    headshot_url: input.headshot_url,
+    headshot_url: toImageUrl(input.headshot_url) ?? undefined,
     espn_url: espn,
     sleeper_url: sleeperNfl ?? sleeperNba,
   }

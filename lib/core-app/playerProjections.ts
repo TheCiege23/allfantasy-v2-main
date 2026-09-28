@@ -46,17 +46,10 @@ export type PlayerProjection = {
    * without them is showing a projection whose provenance it is choosing not to state.
    */
   idpProjection?: IdpProjectionSuccess
-  /**
-   * Set when this number describes a SEASON, not the coming week.
-   *
-   * ⚠ ONLY COLLEGE SETS IT TODAY, AND A SURFACE THAT IGNORES IT IS OFF BY A SEASON.
-   * NCAAF has no weekly projection feed at all, so `/core` serves the computed
-   * season-long figure instead — which is a real number, and roughly twelve times a
-   * weekly one. Rendering it unlabelled next to an NFL weekly projection invites
-   * exactly the comparison it cannot survive.
-   * `lib/projections/projectionCoverage.ts` carries the copy that explains it.
-   */
+  /** Reserved for explicit season totals; per-game baseline readers must not set this. */
   seasonLong?: true
+  /** Baseline points per game, without a game-specific opponent or weather adjustment. */
+  perGame?: true
 }
 
 type ProjectionStats = {
@@ -99,17 +92,29 @@ export async function latestProjectionWeek(): Promise<{ season: string; week: nu
   /*
    * ⚠ NO SPORT PARAMETER, AND THAT IS THE CORRECTED DESIGN. A first cut gave this a
    * `sport` and returned a college week for NCAAF. There is no college week to
-   * return: every `AFProjectionSnapshot` row is season-long (`week = null`), because
+   * return: college baseline `AFProjectionSnapshot` rows have `week = null`, because
    * the writer gates week-scoped rows on Sleeper's season state, which is the NFL's.
    * A sport-aware version here could only have invented a number or returned null and
    * switched college projections off entirely. `lookupProjections` resolves the
    * college season itself and ignores the week — see lib/core-app/ncaafProjections.ts.
    */
+  /*
+   * 🛑 THE WEEK THE FEED IS BEING REFRESHED FOR, NOT THE HIGHEST WEEK ON FILE. Those differ the
+   * moment a week is written early, and it was — every week of 2026 until the importer was fixed:
+   * its date guess ran a week ahead (see `approximateCurrentWeek` in cron/import-projections), so
+   * "highest week" answered NEXT week from each Tuesday through Monday night's game, and every
+   * lineup, matchup and waiver number shown as "this week" was next week's. The importer now pulls
+   * Sleeper's own current week each day, so the most recently fetched week IS the current one —
+   * and the early rows already on file stop deciding anything the next time it runs.
+   *
+   * ⚠ A HAND-RUN `?week=N` import becomes "the week" until the next scheduled run. That is the
+   * price of reading this from the data rather than a clock, and the reason not to prefill.
+   */
   const row = await prisma.fantasyProjection.findFirst({
     // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
     // provider feed — they must not decide, or serve as, "the week the feed holds".
     where: { source: { not: 'allfantasy' } },
-    orderBy: [{ season: 'desc' }, { week: 'desc' }],
+    orderBy: [{ fetchedAt: 'desc' }, { season: 'desc' }, { week: 'desc' }],
     select: { season: true, week: true },
   })
   return row ? { season: row.season, week: row.week } : null
@@ -347,6 +352,37 @@ export function leagueScoredLineupTotal(
     const scored = scoringSettings && componentStats ? computeLeagueProjectedPoints(componentStats, scoringSettings) : null
     if (!scored) continue
     total += scored.points
+    from += 1
+  }
+  return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }
+}
+
+/**
+ * One lineup's league-scored total, summed from players the screen has ALREADY priced.
+ *
+ * 🛑 THE ONE SUM BEHIND BOTH OF MY TEAM'S "YOUR PROJECTED SCORE" NUMBERS. The header tile
+ * ("Projected · your league") and your side of the projected-matchup card used to be two
+ * computations over two lineups: the header summed the rows the roster shows — the live Sleeper
+ * lineup, a ruled-out starter at 0 — while the matchup card re-read the STORED roster from the
+ * last sync and re-priced it with `leagueScoredLineupTotal`, which has no notion of OUT or bye.
+ * On the KBFL league (2026-09-25, week 3) that put 148.3 in the header and 175.7 in the card for
+ * the same team and week. Both surfaces now sum the same per-player numbers through this.
+ *
+ * `pointsOf` returns a starter's league-scored points (0 when he is OUT or on bye), or
+ * null/undefined when he could not be priced under this league's rules — he then counts against
+ * `projectedFrom` instead of silently adding nothing. Sleeper's "0" empty slot is not a player.
+ */
+export function sumLeagueScoredStarters(
+  starterIds: readonly string[],
+  pointsOf: (id: string) => number | null | undefined,
+): { projected: number | null; projectedFrom: number } {
+  let total = 0
+  let from = 0
+  for (const id of starterIds) {
+    if (!id || id === '0') continue
+    const v = pointsOf(id)
+    if (v == null || !Number.isFinite(v)) continue
+    total += v
     from += 1
   }
   return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }

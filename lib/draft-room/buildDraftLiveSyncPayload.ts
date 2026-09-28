@@ -15,6 +15,7 @@ import {
 } from '@/lib/live-draft-engine/postDraftFinalizeArtifacts'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type DraftLiveSyncWire = {
   leagueId: string
@@ -42,8 +43,9 @@ export async function buildDraftLiveSyncPayload(
   })
   await syncPostDraftArtifactsIfCompletedThrottled(leagueId)
 
-  const draftSessionRow = await prisma.draftSession.findUnique({
+  const draftSessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { updatedAt: true },
   })
 

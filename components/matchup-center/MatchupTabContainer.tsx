@@ -18,6 +18,7 @@ import type { LeagueMatchupAiResult, StartSitAiResult } from '@/lib/ai-matchup-e
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { cn } from '@/lib/utils'
+import { refusalOf, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 function matchupRelativeAge(loadedAt: number | null, nowMs: number): string {
   if (!loadedAt) return ''
@@ -73,11 +74,13 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
   const { runMatchupAnalysis, runStartSit, matchupLoading, startSitLoading } = useLeagueMatchupAi(league.id)
   const [matchupAi, setMatchupAi] = useState<LeagueMatchupAiResult | null>(null)
   const [matchupAiErr, setMatchupAiErr] = useState<string | null>(null)
+  const [matchupAiRefusal, setMatchupAiRefusal] = useState<PlanRefusal | null>(null)
   const [ssOpen, setSsOpen] = useState(false)
   const [ssLeft, setSsLeft] = useState<MatchupPlayerSlot | null>(null)
   const [ssRight, setSsRight] = useState<MatchupPlayerSlot | null>(null)
   const [ssResult, setSsResult] = useState<StartSitAiResult | null>(null)
   const [ssErr, setSsErr] = useState<string | null>(null)
+  const [ssRefusal, setSsRefusal] = useState<PlanRefusal | null>(null)
 
   const sportU = String(league.sport ?? 'NFL')
   const maxW = useMemo(() => maxWeekForSport(sportU), [sportU])
@@ -133,6 +136,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
   useEffect(() => {
     setMatchupAi(null)
     setMatchupAiErr(null)
+    setMatchupAiRefusal(null)
   }, [season, week])
 
   useEffect(() => {
@@ -158,11 +162,13 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
     setSsOpen(true)
     setSsResult(null)
     setSsErr(null)
+    setSsRefusal(null)
     void (async () => {
       try {
         const r = await runStartSit({ sport: sportU, playerA: a, playerB: b })
         setSsResult(r)
       } catch (e) {
+        setSsRefusal(refusalOf(e))
         setSsErr(e instanceof Error ? e.message : 'Start/sit failed')
       }
     })()
@@ -176,6 +182,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
       setSsOpen(true)
       setSsResult(null)
       setSsErr(null)
+      setSsRefusal(null)
     }
   }
 
@@ -241,14 +248,17 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
             loading={matchupLoading}
             result={matchupAi}
             error={matchupAiErr}
+            refusal={matchupAiRefusal}
             onRun={() => {
               setMatchupAiErr(null)
+              setMatchupAiRefusal(null)
               void (async () => {
                 try {
                   const r = await runMatchupAnalysis({ season, week })
                   setMatchupAi(r)
                 } catch (e) {
                   setMatchupAi(null)
+                  setMatchupAiRefusal(refusalOf(e))
                   setMatchupAiErr(e instanceof Error ? e.message : 'AI failed')
                 }
               })()
@@ -284,10 +294,12 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
             setSsRight(null)
             setSsResult(null)
             setSsErr(null)
+            setSsRefusal(null)
           }}
           loading={startSitLoading}
           result={ssResult}
           error={ssErr}
+          refusal={ssRefusal}
           left={ssLeft}
           right={ssRight}
         />

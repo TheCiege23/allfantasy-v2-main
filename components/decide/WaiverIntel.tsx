@@ -15,7 +15,13 @@ type ApiResponse =
   | { supported: false; platform: string }
   | { supported: true; intel: WaiverIntelPayload | null; error?: string }
 
-export function WaiverIntel({ leagueId }: { leagueId: string }) {
+/**
+ * `surface="core"` when mounted on the /core Waivers screen. Every rule in broadcast-deck.css is
+ * scoped under `.bdx`, which only the Decide deck provides — so on /core this panel rendered as raw,
+ * unstyled HTML (browser fonts, labels running into their values). The wrapper supplies `.bdx`
+ * without the deck's full-page ground and maps its palette onto /core's own tokens.
+ */
+export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; surface?: 'deck' | 'core' }) {
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -45,7 +51,11 @@ export function WaiverIntel({ leagueId }: { leagueId: string }) {
   const intel = data && data.supported ? data.intel : null
 
   return (
-    <div data-testid="waiver-intel" style={{ marginTop: 18 }}>
+    <div
+      data-testid="waiver-intel"
+      className={surface === 'core' ? 'bdx bdx-embed bdx-embed-core' : undefined}
+      style={{ marginTop: 18 }}
+    >
       <div className="bdx-kick">
         <h2 className="bdx-disp">Waiver intelligence</h2>
         <span className="bdx-sub">
@@ -89,7 +99,7 @@ export function WaiverIntel({ leagueId }: { leagueId: string }) {
                           {' '}
                           {t.position ?? ''}
                           {t.team ? ` · ${t.team}` : ''}
-                          {t.marketValue != null ? ` · val ${t.marketValue.toLocaleString()}` : ''}
+                          {t.marketValue != null ? ` · value ${t.marketValue.toLocaleString()}` : ''}
                         </span>{' '}
                         {t.fillsSlots.length > 0 ? (
                           <span className="bdx-sev ok">▲ fills {t.fillsSlots.join(' / ')}</span>

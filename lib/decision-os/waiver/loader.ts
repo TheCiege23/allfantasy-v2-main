@@ -10,6 +10,8 @@
 import { prisma } from '@/lib/prisma'
 import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 import { getRosterSize } from '@/lib/waiver-wire/roster-utils'
+import { myRosterCandidates } from '@/lib/core-app/myRoster'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import type { WaiverSettingsFacts, WaiverWorldInput } from './world'
 
 export interface WaiverWorldFacts {
@@ -38,6 +40,54 @@ export interface WaiverLoaderDeps {
   loadUserRoster: (leagueId: string, platformUserIds: string[]) => Promise<{ id: string; faabRemaining: number | null; waiverPriority: number | null; playerData: unknown } | null>
   /** Whether a settings DB row exists (vs sport/variant defaults) — drives settingsKnown honesty. */
   hasSettingsRow: (leagueId: string) => Promise<boolean>
+  /**
+   * The roster behind the team this user CLAIMED — tried only when `loadUserRoster` found nothing.
+   *
+   * 🛑 WHY: `loadUserRoster` matches `Roster.platformUserId` against the app user id and the linked
+   * Sleeper id, and nothing else. A Fantrax or MFL roster is keyed on the provider's own manager id
+   * (or an `orphan-<provider>-<teamId>` key), so for those leagues the waiver shadow skipped every
+   * manager as "no roster". The canonical join — claimed `LeagueTeam` → `myRosterCandidates` →
+   * `playerData.source_team_id` — lives in lib/core-app/myRoster.ts and rosterTeamIdentity.ts;
+   * this reuses it rather than growing a third copy. Optional so injected test deps stay pure.
+   */
+  loadClaimedTeamRoster?: (leagueId: string, userId: string) => Promise<WaiverRosterRow | null>
+}
+
+type WaiverRosterRow = { id: string; faabRemaining: number | null; waiverPriority: number | null; playerData: unknown }
+
+type ClaimedRosterDb = {
+  leagueTeam: {
+    findFirst: (a: unknown) => Promise<{ platformUserId: string | null; externalId: string | null } | null>
+  }
+  roster: {
+    findFirst: (a: unknown) => Promise<WaiverRosterRow | null>
+    findMany: (a: unknown) => Promise<Array<WaiverRosterRow & { platformUserId: string | null }>>
+  }
+}
+
+/** Claimed team → its roster, by the same rule every "my team" surface uses. READ-ONLY. */
+export async function loadClaimedTeamRosterFrom(
+  db: ClaimedRosterDb,
+  leagueId: string,
+  userId: string,
+): Promise<WaiverRosterRow | null> {
+  const team = await db.leagueTeam.findFirst({
+    where: { leagueId, claimedByUserId: userId },
+    select: { platformUserId: true, externalId: true },
+  })
+  if (!team) return null
+  const select = { id: true, faabRemaining: true, waiverPriority: true, playerData: true }
+  const candidates = myRosterCandidates(team, userId)
+  if (candidates.length > 0) {
+    const byKey = await db.roster.findFirst({ where: { leagueId, platformUserId: { in: candidates } }, select })
+    if (byKey) return byKey
+  }
+  // A roster under a key nobody can name (orphan-…): find it by the team's own id.
+  const rosters = await db.roster.findMany({ where: { leagueId }, select: { ...select, platformUserId: true } })
+  const mine = team.externalId
+    ? resolveRostersForTeams([team], rosters, (t) => myRosterCandidates(t, userId)).get(team.externalId)
+    : undefined
+  return mine ? { id: mine.id, faabRemaining: mine.faabRemaining, waiverPriority: mine.waiverPriority, playerData: mine.playerData } : null
 }
 
 export const defaultWaiverLoaderDeps: WaiverLoaderDeps = {
@@ -64,6 +114,8 @@ export const defaultWaiverLoaderDeps: WaiverLoaderDeps = {
     })),
   hasSettingsRow: async (leagueId) =>
     Boolean(await (prisma as unknown as { leagueWaiverSettings: { findUnique: (a: unknown) => Promise<unknown> } }).leagueWaiverSettings.findUnique({ where: { leagueId }, select: { leagueId: true } })),
+  loadClaimedTeamRoster: (leagueId, userId) =>
+    loadClaimedTeamRosterFrom(prisma as unknown as ClaimedRosterDb, leagueId, userId),
 }
 
 /**
@@ -82,8 +134,9 @@ export async function loadWaiverWorldFacts(
       deps.loadLinkedPlatformUserIds(userId),
       deps.hasSettingsRow(leagueId),
     ])
-    if (platformUserIds.length === 0) return null
-    const roster = await deps.loadUserRoster(leagueId, platformUserIds)
+    const roster =
+      (platformUserIds.length > 0 ? await deps.loadUserRoster(leagueId, platformUserIds) : null) ??
+      (deps.loadClaimedTeamRoster ? await deps.loadClaimedTeamRoster(leagueId, userId) : null)
     if (!roster) return null
     return {
       sport: String(sport ?? 'NFL'),

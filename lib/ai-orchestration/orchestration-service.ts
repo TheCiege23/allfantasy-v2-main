@@ -42,7 +42,7 @@ import {
   type ProviderInputContract,
 } from '@/lib/ai-context-envelope'
 import { resolveChimmyRoutingPlan, runChimmyOrchestrator } from '@/lib/chimmy-orchestration'
-import { getChimmyPromptStyleBlock } from '@/lib/chimmy-interface/ChimmyPromptStyleResolver'
+import { CHIMMY_IDENTITY, getChimmyPromptStyleBlock } from '@/lib/chimmy-interface/ChimmyPromptStyleResolver'
 
 /** Per-call ceiling for Claude on the Chimmy push path; see `callRole` in `runUnifiedOrchestration`. */
 const CHIMMY_CLAUDE_TIMEOUT_MS = 45_000
@@ -173,7 +173,7 @@ function buildMessages(
   const normalizedFeatureType = normalizeOrchestrationToolKey(envelope.featureType)
   const systemParts: string[] = [
     normalizedFeatureType === 'chimmy_chat'
-      ? 'You are Chimmy, AllFantasy’s sports assistant. Answer real-world sports questions (schedules, drafts, games, standings, injuries, stats) and fantasy sports questions within the supported sports and context provided. Be concise, calm, and explicit about uncertainty.'
+      ? `${CHIMMY_IDENTITY} Answer real-world sports questions (schedules, drafts, games, standings, injuries, stats) and fantasy sports questions within the supported sports and context provided, and be explicit about uncertainty.`
       : 'You are a helpful fantasy sports analyst. Be concise, calm, and explicit about uncertainty.',
     'Deterministic-first: never override hard engine outputs.',
     'Never invent player values, rankings, injuries, roster needs, team context, probabilities, or simulations.',

@@ -177,7 +177,8 @@ export function Scout({ data, gamePlanHref }: ScoutProps) {
             {' '}
             <span className="af-num">{coverage.lockedCount}</span>{' '}
             {coverage.lockedCount === 1 ? 'has a profile' : 'have profiles'} on file, held
-            internally — Competitive Edge uses them on a decision rather than showing the read.
+            internally and not shown. Competitive Edge shows each manager&apos;s own trade record
+            when you analyze a trade with them.
           </>
         ) : null}
       </p>

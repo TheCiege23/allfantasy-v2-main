@@ -39,6 +39,18 @@ const VISUAL: PlayerTradeVisual = {
 }
 
 describe('TradeVisual', () => {
+  it('keeps package prices consistent and withholds analysis debug output', () => {
+    const visual = { ...VISUAL, grade: { available: true as const, data: {
+      verdict: 'accept' as const, verdictConfidence: 'medium' as const,
+      fairnessScore: 71, fairnessDelta: 1902, starterDeltaPts: 0,
+      acceptance: 0.62, explanations: ['You are receiving ~1902 more in market value', 'Fills your TE hole'],
+      lineupNote: 'A(MIDDLE:neutral) impact 15870→15870 net 0 | avgVol 0.1.',
+    } } }
+    render(<TradeVisual state={{ available: true, data: visual }} playerName="Dalton Kincaid" />)
+    expect(screen.getByText('-130 value to you')).toBeInTheDocument()
+    expect(screen.getByText('Fills your TE hole')).toBeInTheDocument()
+    expect(screen.queryByText(/1902|avgVol/)).not.toBeInTheDocument()
+  })
   it('draws give and get with totals, the band, the engine verdict, and the hand-off', () => {
     render(<TradeVisual state={{ available: true, data: VISUAL }} playerName="Dalton Kincaid" />)
     expect(screen.getByRole('heading', { level: 3, name: "What it takes to get Kincaid from Tasha's Titans" })).toBeInTheDocument()

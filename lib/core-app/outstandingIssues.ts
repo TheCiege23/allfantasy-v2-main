@@ -112,7 +112,7 @@ export function isStaleLeague(
 ): boolean {
   const platform = String(league.platform ?? '').toLowerCase()
   if (NON_SYNCING_PLATFORMS.has(platform)) return false
-  return describeAge('roster', lastSync, now).stale
+  return describeAge('fantasy_league', lastSync, now).stale
 }
 
 export function staleLeagueIds(
@@ -161,6 +161,7 @@ export function deriveOutstandingIssues(input: {
   leagues: UserLeague[]
   /** When each league last synced, keyed by league id. */
   lastSyncByLeague?: Record<string, Date | null>
+  pausedSyncLeagueIds?: ReadonlySet<string>
   now?: Date
 }): OutstandingIssuesResult {
   const now = input.now ?? new Date()
@@ -205,7 +206,7 @@ export function deriveOutstandingIssues(input: {
      * null for CBS / MFL / Fantrax too, and those DO have an upstream that can go
      * stale — they just have no deep link yet.
      */
-    if (NON_SYNCING_PLATFORMS.has(platform)) continue
+    if (NON_SYNCING_PLATFORMS.has(platform) || input.pausedSyncLeagueIds?.has(league.id)) continue
 
     const lastSync = input.lastSyncByLeague?.[league.id] ?? null
     const age = describeAge('roster', lastSync, now)

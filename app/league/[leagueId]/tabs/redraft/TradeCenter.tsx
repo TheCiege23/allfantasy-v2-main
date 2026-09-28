@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TradeCenterModal } from './TradeCenterModal'
 import { CommissionerReviewPanel } from './CommissionerReviewPanel'
+import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { TradeDiscoveryPanel } from './TradeDiscoveryPanel'
 import { TradeBlockPanel } from './TradeBlockPanel'
 import { MarketSnapshotPanel } from './MarketSnapshotPanel'
@@ -132,7 +133,9 @@ export function TradeCenter({
     setBusyProposalId(proposalId)
     setError(null)
     try {
-      await submitTradeVote({ proposalId, action })
+      // A commissioner's decision carries the review it was made with (design step 6: decision logged).
+      const commissionerAction = action === 'commissioner_approve' || action === 'commissioner_veto'
+      await submitTradeVote({ proposalId, action, ...(commissionerAction ? { reviewId: reviewIdFor(proposalId) } : {}) })
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${action}`)
@@ -145,7 +148,7 @@ export function TradeCenter({
     setBusyProposalId(proposalId)
     setError(null)
     try {
-      await vetoRedraftTradeProposal({ proposalId })
+      await vetoRedraftTradeProposal({ proposalId, reviewId: reviewIdFor(proposalId) })
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to veto proposal')
@@ -198,7 +201,7 @@ export function TradeCenter({
             Deadline: {settings.tradeDeadlineWeek ? `Week ${settings.tradeDeadlineWeek}` : 'none'}
           </span>
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
-            Pick trading: {settings.draftPickTrading ? 'on (reference-only)' : 'off'}
+            Pick trading: {settings.draftPickTrading ? 'on (not in redraft proposals)' : 'off'}
           </span>
         </div>
       ) : null}
@@ -223,8 +226,8 @@ export function TradeCenter({
           <div>
             <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
             <p className="mt-1 font-semibold text-white">
-              {runtime.settings.pickExecutionStatus === 'reference_only'
-                ? 'Reference-only'
+              {runtime.settings.pickExecutionStatus === 'unavailable'
+                ? 'Not in proposals'
                 : runtime.settings.pickExecutionStatus}
             </p>
           </div>
@@ -253,13 +256,14 @@ export function TradeCenter({
                     {rosterNameById.get(p.receiverRosterId) ?? 'Team B'}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    {p.valueSnapshot ? (
+                    {/* The one grade, from the proposer's side — not the proposal-time snapshot's own scale. */}
+                    {p.tradeGrade?.grade ? (
                       <span
                         className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
-                        title={`Original grade at proposal time · fairness ${p.valueSnapshot.fairnessScore}/100`}
+                        title={`Grade for ${rosterNameById.get(p.proposerRosterId) ?? 'the proposer'} on this league's values`}
                         data-testid="trade-proposal-grade"
                       >
-                        {p.valueSnapshot.grade}
+                        {p.tradeGrade.grade}
                       </span>
                     ) : null}
                     <span className={`rounded border px-2 py-0.5 text-[10px] uppercase ${tone}`}>{p.status}</span>
@@ -331,7 +335,7 @@ export function TradeCenter({
                     onReversed={() => void refresh()}
                   />
                 ) : null}
-                {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel proposalId={p.id} /> : null}
+                {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel leagueId={leagueId} proposalId={p.id} /> : null}
               </div>
             )
           })

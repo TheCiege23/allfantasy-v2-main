@@ -20,7 +20,7 @@ vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: h.requireCronAuth }))
 vi.mock('@/lib/adminAuth', () => ({ requireAdminOrBearer: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: h.withSyncJobRun }))
 vi.mock('@/lib/redraft/waiverEngine', () => ({ processWaiverWindow: h.processWaiverWindow }))
-vi.mock('@/lib/redraft/seasonStatus', () => ({ engineSeasonScope: () => ({}) }))
+vi.mock('@/lib/redraft/seasonStatus', () => ({ engineSeasonScope: () => ({}), SCORING_SEASON_STATUSES: ['active', 'playoffs'] }))
 vi.mock('@/lib/prisma', () => ({ prisma: { redraftSeason: { findMany: h.seasonsFindMany } } }))
 vi.mock('@/lib/redraft/tradeProposalExpiry', () => ({ expireDueRedraftTradeProposals: h.expireDue }))
 

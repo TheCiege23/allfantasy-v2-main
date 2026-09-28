@@ -21,6 +21,7 @@ import {
   placeBid,
   resolveAuctionWin,
 } from './AuctionEngine'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type AuctionAutomationAction =
   | { type: 'auto_bid'; rosterId: string; amount: number }
@@ -134,8 +135,9 @@ export async function runAuctionAutomationTick(leagueId: string): Promise<Auctio
   const actions: AuctionAutomationAction[] = []
   const now = new Date()
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: { picks: { orderBy: { overall: 'asc' } }, league: { select: { sport: true } } },
   })
   if (!session || session.draftType !== 'auction' || session.status !== 'in_progress') {

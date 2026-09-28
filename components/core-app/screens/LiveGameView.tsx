@@ -74,13 +74,14 @@ export function LiveGameView({
         `/api/dashboard/live-scores?view=game&sport=${encodeURIComponent(sport)}&game=${encodeURIComponent(gameId)}`,
         { cache: 'no-store' },
       )
-      if (!res.ok) return
+      if (!res.ok) throw new Error('Game feed unavailable')
       const next = (await res.json()) as GameViewPayload
       if (mine !== seq.current) return
       // A failed read never replaces a game already on screen; it marks it stale.
       setPayload((prev) => (next.detail ? next : prev?.detail ? { ...prev, stale: true } : next))
     } catch {
-      setPayload((prev) => (prev?.detail ? { ...prev, stale: true } : prev))
+      if (mine !== seq.current) return
+      setPayload((prev) => (prev?.detail ? { ...prev, stale: true } : { detail: null, stale: true, failed: true }))
     }
   }, [sport, gameId])
 

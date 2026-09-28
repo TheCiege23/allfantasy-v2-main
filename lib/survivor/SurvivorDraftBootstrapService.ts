@@ -5,6 +5,7 @@ import { assignIdolsAfterDraft } from './SurvivorIdolRegistry'
 import { getSurvivorConfig, isSurvivorLeague } from './SurvivorLeagueConfig'
 import { createTribes } from './SurvivorTribeService'
 import { notifyIdolAssigned } from './notificationEngine'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 function hashSeed(value: string): number {
   let hash = 0
@@ -76,8 +77,9 @@ export async function runSurvivorPostDraftBootstrap(
     }
   }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       status: true,
       picks: {

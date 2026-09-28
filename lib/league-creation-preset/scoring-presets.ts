@@ -339,6 +339,18 @@ export function findScoringPresetRule(presetId: string): PresetRule | undefined 
   return RULES.find((r) => r.id === presetId)
 }
 
+/**
+ * Points per reception a football preset scores (0, 0.5 or 1), or `null` for a preset that is not
+ * football or does not exist. The preset builders ignore their context for this value.
+ */
+export function receptionPointsForScoringPresetId(presetId: string | null | undefined): number | null {
+  if (!presetId) return null
+  const rule = findScoringPresetRule(presetId)
+  if (!rule) return null
+  const ppr = rule.build({ leagueType: 'redraft', sport: 'NFL', idpSelected: false }).scoringSettings.ppr
+  return typeof ppr === 'number' && Number.isFinite(ppr) ? ppr : null
+}
+
 export function buildScoringFromPresetId(presetId: string, ctx: PresetCtx): {
   scoring: string
   scoringSettings: Record<string, unknown>

@@ -88,6 +88,9 @@ export type BestBallCreateSettings = {
   podPlayEnabled: boolean
   podSize: number
   tournamentAdvancementRounds: number
+  roundEndWeeks?: number[]
+  advancersPerPod?: number
+  resetBetweenRounds?: boolean
   finalRoundStructure: string
   tieRule: BestBallTieRule
   slowDraftClockMinutes: number | null
@@ -345,6 +348,8 @@ export function getDefaultBestBallSettings(
     podPlayEnabled: underdog,
     podSize: 12,
     tournamentAdvancementRounds: 0,
+    advancersPerPod: 1,
+    resetBetweenRounds: false,
     finalRoundStructure: cumulativeScoring ? 'cumulative_final' : 'single_week_final',
     tieRule: profile.scoringPeriod === 'weekly' ? 'max_week' : 'points_for',
     slowDraftClockMinutes: draftMode === 'snake' ? 60 : null,
@@ -385,6 +390,7 @@ export function getDefaultBestBallSettings(
 }
 
 export function normalizeBestBallSettings(input: {
+  teamCount?: number
   sport: LeagueSport | string
   conceptSetup?: Record<string, unknown> | null
   draftType?: string | null
@@ -430,12 +436,12 @@ export function normalizeBestBallSettings(input: {
     draftOrderType: resolveBestBallDraftModeDraftOrderType(rawDraftMode),
     draftExecutionMode: resolveBestBallDraftExecutionMode(rawDraftMode),
     contestStructure,
-    matchupFormat,
-    playoffFormat,
+    matchupFormat: contestStructure === 'tournament' ? 'cumulative' : matchupFormat,
+    playoffFormat: contestStructure === 'tournament' ? 'advancement' : playoffFormat,
     lineupTemplateId: asString(nested.lineupTemplateId, defaults.lineupTemplateId),
     rosterTemplateId: asString(nested.rosterTemplateId, defaults.rosterTemplateId),
     regularSeasonLength: asInt(nested.regularSeasonLength, defaults.regularSeasonLength, 1, 60),
-    playoffTeams: asInt(nested.playoffTeams, defaults.playoffTeams, 0, 16),
+    playoffTeams: contestStructure === 'tournament' ? 0 : asInt(nested.playoffTeams, Math.min(defaults.playoffTeams, input.teamCount ?? defaults.playoffTeams), 0, 16),
     scoringPeriod: isOneOf(nested.scoringPeriod, ['weekly', 'daily'] as const)
       ? nested.scoringPeriod
       : defaults.scoringPeriod,
@@ -447,6 +453,9 @@ export function normalizeBestBallSettings(input: {
     podPlayEnabled: asBool(nested.podPlayEnabled, defaults.podPlayEnabled),
     podSize: asInt(nested.podSize, defaults.podSize, 2, 64),
     tournamentAdvancementRounds: asInt(nested.tournamentAdvancementRounds, defaults.tournamentAdvancementRounds, 0, 10),
+    roundEndWeeks: Array.isArray(nested.roundEndWeeks) ? nested.roundEndWeeks.map(Number) : undefined,
+    advancersPerPod: asInt(nested.advancersPerPod, defaults.advancersPerPod ?? 1, 1, asInt(nested.podSize, defaults.podSize, 2, 64)),
+    resetBetweenRounds: asBool(nested.resetBetweenRounds, defaults.resetBetweenRounds ?? false),
     finalRoundStructure: asString(nested.finalRoundStructure, defaults.finalRoundStructure),
     tieRule: isOneOf(nested.tieRule, ['points_for', 'max_week', 'advance_all'] as const)
       ? nested.tieRule

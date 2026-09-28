@@ -1,17 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
+import type { ReportReason } from '@/lib/moderation/shared'
+import { ThreadListRow, type ThreadRowContext } from './ThreadListRow'
+import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
-import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
-import { MessageTime } from './MessageTime'
+import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
-import { QuotedMessage } from './QuotedMessage'
 import { SeenBy } from './SeenBy'
-import { MessageReactions } from './MessageReactions'
-import { readReactions } from '@/lib/chat-core/messageReactions'
+import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { useSession } from 'next-auth/react'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
+import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
+import { ChatSearch } from './ChatSearch'
+import { useTypingSignal } from './useTypingSignal'
+import { PeoplePicker } from './PeoplePicker'
 
 /**
  * DMs and Huddle, on the platform chat threads that already exist.
@@ -26,7 +31,8 @@ import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/compon
  * consumes the shared chat endpoints exactly as they are. The one server change
  * was teaching the EXISTING create endpoint to resolve usernames for `dm` as it
  * already did for `group` — without it, starting a DM needed a user uuid that no
- * surface in the drawer has.
+ * surface in the drawer has. (2026-09-25: one exception, `league-mates`, for the
+ * people picker — measured inside the budget; see that route's header.)
  *
  * ⚠ ONE COMPONENT, TWO TABS. A DM and a huddle differ only in `threadType` and
  * in how many people you may add. List, open, read, post and read-state are
@@ -51,6 +57,18 @@ export type PlatformThread = {
    * endpoint and the semantics all existed.
    */
   isMuted?: boolean
+  /**
+   * The list row's preview, "You:" flag, time and the other people's avatars. Filtered on the
+   * server so a preview never shows a message the thread would not (see chat-service).
+   */
+  context?: ThreadRowContext | null
+}
+
+/** A thrown Error the sheets can show as it is: the server's words when it gave any. */
+async function failure(res: Response, prefix: string, fallback: string): Promise<Error> {
+  const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+  const said = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : null
+  return new Error(said ? `${prefix}: ${said.replace(/\.$/, '')}.` : fallback)
 }
 
 type PlatformMessage = {
@@ -60,28 +78,87 @@ type PlatformMessage = {
   senderUserId: string | null
   senderName: string
   senderUsername?: string | null
+  /** Sent by the endpoint since it existed and never drawn until the bubble layout. */
+  senderAvatarUrl?: string | null
+  /** `gif` rows from /messages carry the GIF's URL as the body. */
+  messageType?: string | null
   body: string
   createdAt: string
   /** GIFs, media and polls. The endpoint returns it; dropping it hid them. */
   metadata?: Record<string, unknown> | null
 }
 
-export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: string }) {
+function toListMessage(m: PlatformMessage): ChatListMessage {
+  return {
+    id: m.id,
+    authorId: m.senderUserId,
+    authorName: m.senderName || m.senderUsername || 'Someone',
+    avatarUrl: m.senderAvatarUrl ?? null,
+    body: m.body ?? '',
+    createdAt: m.createdAt,
+    parentMessageId: m.parentMessageId ?? null,
+    metadata: m.metadata ?? null,
+    messageType: m.messageType ?? null,
+  }
+}
+
+/** What "Ask Chimmy about this chat" hands over: the thread, and its last few lines. */
+export type ThreadAskChimmy = {
+  threadId: string
+  threadType: 'dm' | 'group'
+  title: string
+  recent: Array<{ name: string; body: string }>
+}
+
+export function ThreadPanel({
+  kind,
+  privacy,
+  onAskChimmy,
+}: {
+  kind: 'dm' | 'group'
+  privacy: string
+  /**
+   * The league page's Messages tab offers "Ask Chimmy about this chat", seeded with the
+   * conversation. Absent in the drawer, whose Chimmy tab is one tap away already.
+   */
+  onAskChimmy?: (ask: ThreadAskChimmy) => void
+}) {
   const { data: session } = useSession()
   const viewerId = session?.user?.id ?? null
   const [threads, setThreads] = useState<PlatformThread[] | null>(null)
   const [openThread, setOpenThread] = useState<PlatformThread | null>(null)
   const [messages, setMessages] = useState<PlatformMessage[]>([])
   const [hiddenBlocked, setHiddenBlocked] = useState(0)
-  const [invite, setInvite] = useState('')
+  /** Why the last attempt to START a conversation failed — shown under the picker, not the list. */
+  const [startError, setStartError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [replyTo, setReplyTo] = useState<PlatformMessage | null>(null)
   const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
   const [receipts, setReceipts] = useState<Array<{ userId: string; displayName: string | null; username: string | null; lastReadAt: string | null }>>([])
   const [error, setError] = useState<string | null>(null)
-  const endRef = useRef<HTMLDivElement | null>(null)
-  const streamRef = useRef<HTMLDivElement | null>(null)
+  /** E2: the last message read FAILED — shown in place of "No messages yet.", never under it. */
+  const [readFailed, setReadFailed] = useState(false)
+  /* In-flight reaction toggles win over the poll, as in league chat — see CommsDrawer. */
+  const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
+  const [reactionBusy, setReactionBusy] = useState<string | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
+  /* The huddle header's sheets: who is in it, and add / rename / leave. */
+  const [huddleSheet, setHuddleSheet] = useState<null | 'members' | 'options'>(null)
+  const [members, setMembers] = useState<HuddleMember[] | null>(null)
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [membersError, setMembersError] = useState<string | null>(null)
+  /* "5m" has to become "6m" without a reload; a minute is the list's finest unit. */
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+  /** The whole open conversation — the drop target for photos. */
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const activeThreadId = useRef<string | null>(null)
+  /* Everyone blocked from this panel since it mounted — see `blockAuthor`. */
+  const blockedHere = useRef<Set<string>>(new Set())
   useEffect(() => () => { activeThreadId.current = null }, [])
 
   const label = kind === 'dm' ? 'DMs' : 'huddles'
@@ -95,6 +172,8 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         error?: string
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load conversations.')
+      // Times are measured against the moment the list arrived, not when the panel mounted.
+      setNow(new Date())
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
       setThreads([])
@@ -120,7 +199,14 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load messages.')
       if (activeThreadId.current !== thread.id) return
-      setMessages(data.messages ?? [])
+      setReadFailed(false)
+      /*
+       * A poll already in flight when you blocked someone can land after the block with their
+       * messages still in it; the people blocked from this panel stay out regardless.
+       */
+      setMessages(
+        (data.messages ?? []).filter((m) => !m.senderUserId || !blockedHere.current.has(m.senderUserId)),
+      )
 
       /*
        * Both ride the poll the panel already makes rather than adding timers of
@@ -139,21 +225,20 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
       setHiddenBlocked(data.hiddenBlockedCount ?? 0)
     } catch (e) {
       if (activeThreadId.current !== thread.id) return
-      setMessages([])
+      /*
+       * ⚠ KEEP WHAT IS ALREADY ON SCREEN. A failed poll used to clear the conversation; the error
+       * says the read failed, and the messages already shown are still true.
+       */
+      setReadFailed(true)
       setError(e instanceof Error ? e.message : 'Could not load messages.')
     }
   }, [])
 
   /*
-   * Only follow new messages when the reader is already at the bottom. With
-   * polling on, scrolling unconditionally would yank the view away from somebody
-   * reading back through the thread every few seconds.
+   * Following new messages only when the reader is already at the bottom — and
+   * offering "N new ↓" when they are not — now lives in ChatMessageList, so the
+   * league tab and this one cannot disagree about it.
    */
-  useEffect(() => {
-    if (isNearBottom(streamRef.current)) {
-      endRef.current?.scrollIntoView({ block: 'end' })
-    }
-  }, [messages.length])
 
   // Near-realtime: without this a message only appeared when the thread was reopened.
   useChatPolling({
@@ -171,7 +256,13 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
       /* A reply target belongs to one thread; it must not follow you into another. */
       setReplyTo(null)
       setMessages([])
+      setReadFailed(false)
       setHiddenBlocked(0)
+      setReactionOverride({})
+      setSearching(false)
+      setHuddleSheet(null)
+      setMembers(null)
+      setMembersError(null)
       void loadMessages(thread)
     },
     [loadMessages],
@@ -319,46 +410,280 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
     }
   }, [openThread, busy])
 
-  const start = useCallback(async () => {
-    const names = invite
-      .split(',')
-      .map((n) => n.trim())
-      .filter(Boolean)
-    if (names.length === 0 || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/shared/chat/threads', {
+  /*
+   * Reactions, with the same optimistic override the league tab uses: the chip
+   * moves on tap, and the 4–8s poll cannot snap it back mid-request.
+   */
+  const toggleReaction = useCallback(
+    async (m: ChatListMessage, emoji: string) => {
+      if (!openThread || reactionBusy) return
+      const current = reactionOverride[m.id] ?? readReactions(m.metadata, viewerId)
+      const next = toggleReactionLocally(current, emoji)
+      const adding = next.some((r) => r.emoji === emoji && r.mine)
+      setReactionOverride((prev) => ({ ...prev, [m.id]: next }))
+      setReactionBusy(m.id)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/reactions`,
+          {
+            method: adding ? 'POST' : 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emoji }),
+          },
+        )
+        if (!res.ok) throw new Error('Could not update reaction.')
+        await loadMessages(openThread)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not update reaction.')
+      } finally {
+        setReactionOverride((prev) => {
+          const rest = { ...prev }
+          delete rest[m.id]
+          return rest
+        })
+        setReactionBusy(null)
+      }
+    },
+    [openThread, reactionBusy, reactionOverride, viewerId, loadMessages],
+  )
+
+  /* Your own messages only — the route checks the sender, this only decides what is offered. */
+  const editMessage = useCallback(
+    async (m: ChatListMessage, nextBody: string) => {
+      if (!openThread) throw new Error('no conversation open')
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: nextBody }) },
+      )
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Could not save that edit.')
+      await loadMessages(openThread)
+    },
+    [openThread, loadMessages],
+  )
+
+  const deleteMessage = useCallback(
+    async (m: ChatListMessage) => {
+      if (!openThread) throw new Error('no conversation open')
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) throw new Error('Could not delete that message.')
+      await loadMessages(openThread)
+    },
+    [openThread, loadMessages],
+  )
+
+  /*
+   * Everybody this panel can already name: the read-receipt rows (every member of
+   * the thread, with names) and whoever has spoken. Used for "who reacted" and for
+   * the `@` list — no extra request, and never an id on screen.
+   */
+  const people = useMemo(() => {
+    const byId = new Map<string, { name: string; username: string | null; avatarUrl: string | null }>()
+    for (const r of receipts) {
+      byId.set(r.userId, { name: r.displayName || r.username || '', username: r.username, avatarUrl: null })
+    }
+    for (const m of messages) {
+      if (!m.senderUserId) continue
+      const had = byId.get(m.senderUserId)
+      byId.set(m.senderUserId, {
+        name: had?.name || m.senderName || m.senderUsername || '',
+        username: had?.username ?? m.senderUsername ?? null,
+        avatarUrl: m.senderAvatarUrl ?? had?.avatarUrl ?? null,
+      })
+    }
+    return byId
+  }, [receipts, messages])
+
+  const nameForUserId = useCallback((id: string) => people.get(id)?.name || null, [people])
+
+  const mentionMembers = useMemo(
+    () =>
+      Array.from(people.entries())
+        .filter(([id, p]) => id !== viewerId && p.username)
+        .map(([, p]) => ({ username: p.username as string, displayName: p.name, avatarUrl: p.avatarUrl })),
+    [people, viewerId],
+  )
+
+  const listMessages = useMemo(() => messages.map(toListMessage), [messages])
+
+  const signalTyping = useTypingSignal(openThread?.id ?? null)
+
+  /*
+   * Both ways in answer `{ thread }` or `{ error }`: a league-mate tapped for a DM goes through
+   * `/dm/start`; typed usernames, and every huddle, through `/threads` as before. Both refuse a
+   * conversation across a block with a neutral 403, whose words are shown as they are.
+   */
+  const startConversation = useCallback(
+    async (url: string, body: Record<string, unknown>) => {
+      if (busy) return
+      setBusy(true)
+      setStartError(null)
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          thread?: PlatformThread
+          error?: string
+        }
+        /*
+         * The endpoint says exactly what went wrong — an unknown username, or more
+         * than one person on a DM. Surfaced verbatim, because a generic failure is
+         * one the user cannot act on.
+         */
+        if (!res.ok || !data.thread) {
+          throw new Error(data.error ?? 'Could not start that conversation.')
+        }
+        await loadThreads()
+        open(data.thread)
+      } catch (e) {
+        setStartError(e instanceof Error ? e.message : 'Could not start that conversation.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [busy, loadThreads, open],
+  )
+
+  /*
+   * ── Report and Block, from the message actions sheet ──────────────────────────────
+   * Both call routes that already existed (`/report/message`, `/block`). Each THROWS on a non-OK
+   * answer so the sheet stays open and shows why; only a real OK reaches "Thanks" or "blocked".
+   */
+  const reportMessage = useCallback(
+    async (m: ChatListMessage, reason: ReportReason) => {
+      if (!openThread) throw new Error('No conversation is open.')
+      const res = await fetch('/api/shared/chat/report/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadType: kind, usernames: names }),
+        body: JSON.stringify({ messageId: m.id, threadId: openThread.id, reason }),
       })
-      const data = (await res.json().catch(() => ({}))) as {
-        thread?: PlatformThread
-        error?: string
-      }
+      if (!res.ok) throw await failure(res, 'Report not sent', 'Report not sent. Try again in a moment.')
+    },
+    [openThread],
+  )
+
+  const blockAuthor = useCallback(
+    async (m: ChatListMessage) => {
+      const blockedUserId = m.authorId
+      if (!blockedUserId) throw new Error('There is nobody to block on that message.')
+      const res = await fetch('/api/shared/chat/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId }),
+      })
+      if (!res.ok) throw await failure(res, 'Not blocked', 'Not blocked. Try again in a moment.')
       /*
-       * The endpoint says exactly what went wrong — an unknown username, or more
-       * than one person on a DM. Surfaced verbatim, because a generic failure is
-       * one the user cannot act on.
+       * Gone from the open thread NOW, not on the next poll. The server hides them from then on
+       * (the messages route filters blocked senders), so the reload agrees with this.
        */
-      if (!res.ok || !data.thread) {
-        throw new Error(data.error ?? 'Could not start that conversation.')
-      }
-      setInvite('')
-      await loadThreads()
-      open(data.thread)
+      blockedHere.current.add(blockedUserId)
+      setMessages((prev) => prev.filter((x) => x.senderUserId !== blockedUserId))
+      setReplyTo((r) => (r && r.senderUserId === blockedUserId ? null : r))
+      if (openThread) void loadMessages(openThread)
+      // A DM with them drops out of the list; the list endpoint runs conversation safety.
+      void loadThreads()
+    },
+    [openThread, loadMessages, loadThreads],
+  )
+
+  /* ── Huddle: members, add people, rename, leave ─────────────────────────────────── */
+  const loadMembers = useCallback(async (threadId: string) => {
+    setMembersLoading(true)
+    setMembersError(null)
+    try {
+      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(threadId)}/members`)
+      if (!res.ok) throw await failure(res, 'Could not load members', 'Could not load members.')
+      const data = (await res.json().catch(() => ({}))) as { members?: HuddleMember[] }
+      if (activeThreadId.current !== threadId) return
+      setMembers(Array.isArray(data.members) ? data.members : [])
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start that conversation.')
+      if (activeThreadId.current !== threadId) return
+      setMembersError(e instanceof Error ? e.message : 'Could not load members.')
     } finally {
-      setBusy(false)
+      setMembersLoading(false)
     }
-  }, [invite, kind, busy, loadThreads, open])
+  }, [])
+
+  const showMembers = useCallback(() => {
+    if (!openThread) return
+    setHuddleSheet('members')
+    void loadMembers(openThread.id)
+  }, [openThread, loadMembers])
+
+  const addPeople = useCallback(
+    async (usernames: string[]) => {
+      if (!openThread) throw new Error('No huddle is open.')
+      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames }),
+      })
+      if (!res.ok) throw await failure(res, 'Nobody added', 'Nobody added. Check the usernames and try again.')
+      const data = (await res.json().catch(() => ({}))) as { members?: HuddleMember[] }
+      const next = Array.isArray(data.members) ? data.members : null
+      if (next) {
+        setMembers(next)
+        const count = next.length
+        setOpenThread((t) => (t && t.id === openThread.id ? { ...t, memberCount: count } : t))
+      }
+      setHuddleSheet('members')
+      if (!next) void loadMembers(openThread.id)
+    },
+    [openThread, loadMembers],
+  )
+
+  const renameHuddle = useCallback(
+    async (title: string) => {
+      if (!openThread) throw new Error('No huddle is open.')
+      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      if (!res.ok) throw await failure(res, 'Not renamed', 'Not renamed. Try again in a moment.')
+      const id = openThread.id
+      setOpenThread((t) => (t && t.id === id ? { ...t, title } : t))
+      setThreads((prev) => (prev ? prev.map((t) => (t.id === id ? { ...t, title } : t)) : prev))
+      setHuddleSheet(null)
+    },
+    [openThread],
+  )
+
+  const leaveHuddle = useCallback(async () => {
+    if (!openThread) throw new Error('No huddle is open.')
+    const id = openThread.id
+    const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(id)}/leave`, { method: 'POST' })
+    if (!res.ok) throw await failure(res, 'Still in the huddle', 'Still in the huddle. Try again in a moment.')
+    /* Back to the list, and the huddle is already off it — the reload only confirms that. */
+    activeThreadId.current = null
+    setHuddleSheet(null)
+    setOpenThread(null)
+    setReplyTo(null)
+    setThreads((prev) => (prev ? prev.filter((t) => t.id !== id) : prev))
+    void loadThreads()
+  }, [openThread, loadThreads])
 
   if (openThread) {
     return (
-      <div className="af-cm-panel">
-        <div className="af-cm-privacy">{privacy}</div>
+      <div className="af-cm-panel af-cm-convo" ref={panelRef}>
+        {/*
+          Folded to one line inside a conversation: the full note sat above every message and cost
+          the thread two lines of height on a phone. The list view still shows it in full, and the
+          words are one tap away here.
+        */}
+        <details className="af-cm-privacy-mini">
+          <summary>
+            <Lock size={11} aria-hidden />
+            Private conversation
+          </summary>
+          <p>{privacy}</p>
+        </details>
 
         <div className="af-cm-threadhead">
           <button type="button" className="af-cm-back" onClick={() => {
@@ -381,86 +706,168 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             >
               {openThread.isMuted ? '🔕' : '🔔'}
             </button>
+            <button
+              type="button"
+              className="af-cm-mute"
+              data-on={searching}
+              aria-pressed={searching}
+              onClick={() => setSearching((v) => !v)}
+              aria-label="Search this conversation"
+              title="Search this conversation"
+            >
+              <Search size={15} aria-hidden />
+            </button>
+            {kind === 'group' ? (
+              <>
+                <button
+                  type="button"
+                  className="af-cm-mute"
+                  data-on={huddleSheet === 'members'}
+                  onClick={showMembers}
+                  aria-label="Huddle members"
+                  title="Huddle members"
+                >
+                  <Users size={15} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="af-cm-mute"
+                  data-on={huddleSheet === 'options'}
+                  aria-haspopup="dialog"
+                  onClick={() => setHuddleSheet('options')}
+                  aria-label="Huddle options"
+                  title="Add people, rename or leave"
+                >
+                  <MoreHorizontal size={15} aria-hidden />
+                </button>
+              </>
+            ) : null}
           </span>
+          {onAskChimmy ? (
+            <button
+              type="button"
+              className="af-cm-draft-toggle af-cm-askchimmy"
+              data-testid="league-chat-dm-ai-chat-button"
+              onClick={() =>
+                onAskChimmy({
+                  threadId: openThread.id,
+                  threadType: kind,
+                  title: openThread.title || '',
+                  recent: messages
+                    .slice(-10)
+                    .map((m) => ({ name: m.senderName || m.senderUsername || 'Someone', body: m.body ?? '' }))
+                    .filter((m) => m.body.trim().length > 0),
+                })
+              }
+            >
+              Ask Chimmy about this chat
+            </button>
+          ) : null}
         </div>
 
-        <div className="af-cm-thread" ref={streamRef}>
-          {messages.length === 0 ? (
-            <div className="af-cm-empty">
-              <p className="af-cm-empty-t">No messages yet.</p>
-              <p className="af-cm-empty-b">
-                Nobody outside this thread can read what you send here.
-              </p>
-            </div>
-          ) : (
-            messages.map((m) => {
-              const parent = m.parentMessageId
-                ? messages.find((x) => x.id === m.parentMessageId)
-                : undefined
-              return (
-                <div key={m.id} className="af-cm-msg" id={`af-cm-msg-${m.id}`}>
-                  {m.parentMessageId ? (
-                    <QuotedMessage
-                      author={parent?.senderName ?? null}
-                      text={parent ? censorProfanity(parent.body) : null}
-                      onJump={
-                        parent
-                          ? () =>
-                              document
-                                .getElementById(`af-cm-msg-${parent.id}`)
-                                ?.scrollIntoView({ block: 'center' })
-                          : undefined
-                      }
-                    />
-                  ) : null}
-                  <span className="af-cm-msg-head">
-                    <span className="af-cm-msg-author">{m.senderName}</span>
-                    <MessageTime value={m.createdAt} />
-                    <button
-                      type="button"
-                      className="af-cm-reply-btn"
-                      onClick={() => setReplyTo(m)}
-                      aria-label={`Reply to ${m.senderName}`}
-                    >
-                      Reply
-                    </button>
-                  </span>
-                  <span className="af-cm-msg-text">{censorProfanity(m.body)}</span>
-                  <RichMessage metadata={m.metadata} viewerUserId={viewerId}
-                    onVote={optionId => { void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionId }) }).then(async r => { if (!r.ok) throw new Error('Could not record vote. The poll may be closed.'); await loadMessages(openThread) }).catch(e => setError(e.message)) }}
-                    onClosePoll={m.senderUserId === viewerId ? () => { void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/close-poll`, { method: 'POST' }).then(async r => { if (!r.ok) throw new Error('Could not close poll.'); await loadMessages(openThread) }).catch(e => setError(e.message)) } : undefined}
-                  />
-                  <MessageReactions reactions={readReactions(m.metadata, viewerId)} onToggle={emoji => {
-                    void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/reactions`, {
-                      method: readReactions(m.metadata, viewerId).some(r => r.emoji === emoji && r.mine) ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
-                    }).then(async r => { if (!r.ok) throw new Error('Could not update reaction.'); await loadMessages(openThread) }).catch(e => setError(e.message))
-                  }} />
-                </div>
-              )
-            })
+        {searching ? (
+          <ChatSearch
+            threadId={openThread.id}
+            onClose={() => setSearching(false)}
+            onJump={(id) => {
+              if (!document.getElementById(`af-cm-msg-${id}`)) return false
+              setFocusRequest({ id, nonce: Date.now() })
+              return true
+            }}
+          />
+        ) : null}
+
+        <ChatMessageList
+          messages={listMessages}
+          viewerId={viewerId}
+          label={`Messages in ${openThread.title || 'this conversation'}`}
+          reactionsFor={(m) => reactionOverride[m.id] ?? readReactions(m.metadata, viewerId)}
+          reactionBusyId={reactionBusy}
+          onToggleReaction={(m, emoji) => void toggleReaction(m, emoji)}
+          onReply={(m) => setReplyTo(messages.find((x) => x.id === m.id) ?? null)}
+          onEdit={editMessage}
+          onDelete={deleteMessage}
+          onReport={reportMessage}
+          onBlock={blockAuthor}
+          nameForUserId={nameForUserId}
+          focusRequest={focusRequest}
+          renderRich={(m) => (
+            <RichMessage
+              metadata={m.metadata}
+              messageType={m.messageType}
+              body={m.body}
+              viewerUserId={viewerId}
+              onVote={(optionId) => {
+                void fetch(
+                  `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/vote`,
+                  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionId }) },
+                )
+                  .then(async (r) => {
+                    if (!r.ok) throw new Error('Could not record vote. The poll may be closed.')
+                    await loadMessages(openThread)
+                  })
+                  .catch((e) => setError(e.message))
+              }}
+              onClosePoll={
+                m.authorId === viewerId
+                  ? () => {
+                      void fetch(
+                        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/close-poll`,
+                        { method: 'POST' },
+                      )
+                        .then(async (r) => {
+                          if (!r.ok) throw new Error('Could not close poll.')
+                          await loadMessages(openThread)
+                        })
+                        .catch((e) => setError(e.message))
+                    }
+                  : undefined
+              }
+            />
           )}
-          {hiddenBlocked > 0 ? (
-            /* Say it rather than leaving a silent gap in the transcript. */
-            <p className="af-cm-empty-b">
-              {hiddenBlocked} message{hiddenBlocked === 1 ? '' : 's'} hidden from people you blocked.
-            </p>
-          ) : null}
-          {error ? <p className="af-cm-error">{error}</p> : null}
-          <div ref={endRef} />
-        </div>
+          empty={
+            readFailed ? (
+              <div className="af-cm-empty" role="alert">
+                <p className="af-cm-empty-t">Couldn&apos;t load this conversation.</p>
+                <p className="af-cm-empty-b">{error ?? 'Could not load messages.'}</p>
+                <div className="af-cm-retryrow">
+                  <button type="button" className="af-cm-retry" onClick={() => void loadMessages(openThread)}>
+                    Try again
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="af-cm-empty">
+                <p className="af-cm-empty-t">No messages yet.</p>
+                <p className="af-cm-empty-b">Nobody outside this thread can read what you send here.</p>
+              </div>
+            )
+          }
+          footer={
+            <>
+              {hiddenBlocked > 0 ? (
+                /* Say it rather than leaving a silent gap in the transcript. */
+                <p className="af-cm-empty-b">
+                  {hiddenBlocked} message{hiddenBlocked === 1 ? '' : 's'} hidden from people you blocked.
+                </p>
+              ) : null}
+              {error && !(readFailed && messages.length === 0) ? <p className="af-cm-error">{error}</p> : null}
+            </>
+          }
+        />
 
         {/*
           The same composer the league chat uses. `leagueId` is empty because a
-          DM has none: the mention hook then offers only its static suggestions
-          (and correctly withholds @all from a one-to-one), and uploads authorise
-          against `threadId` instead.
+          DM has none, so the league member search has nothing to ask — the
+          thread's own members come in through `mentionMembers` instead, and
+          uploads authorise against `threadId`.
         */}
         {/*
           Seen-by, on the LAST message you sent and nowhere else. Marking every
           message would be a column of noise, and the only one anybody actually
           wonders about is the most recent thing they said.
         */}
-        <SeenBy messages={messages} receipts={receipts} />
+        <SeenBy messages={messages} receipts={receipts} viewerUserId={viewerId} />
 
         {/*
           ⚠ HONEST ABOUT BEING LATE. Chat refreshes every 4-8s, so this can
@@ -499,7 +906,31 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           chatType={kind === 'dm' ? 'dm' : 'huddle'}
           placeholder="Message"
           onSend={sendPayload}
+          dropZoneRef={panelRef}
+          onTypingChange={signalTyping}
+          mentionMembers={mentionMembers}
         />
+
+        {kind === 'group' && huddleSheet === 'members' ? (
+          <HuddleMembersSheet
+            title={openThread.title || 'this huddle'}
+            members={members}
+            viewerId={viewerId}
+            loading={membersLoading}
+            error={membersError}
+            onClose={() => setHuddleSheet(null)}
+          />
+        ) : null}
+        {kind === 'group' && huddleSheet === 'options' ? (
+          <HuddleOptionsSheet
+            title={openThread.title || 'This huddle'}
+            onClose={() => setHuddleSheet(null)}
+            onShowMembers={showMembers}
+            onAdd={addPeople}
+            onRename={renameHuddle}
+            onLeave={leaveHuddle}
+          />
+        ) : null}
       </div>
     )
   }
@@ -508,24 +939,14 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
     <div className="af-cm-panel">
       <div className="af-cm-privacy">{privacy}</div>
 
-      <form
-        className="af-cm-composer"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void start()
-        }}
-      >
-        <input
-          className="af-cm-input"
-          value={invite}
-          onChange={(e) => setInvite(e.target.value)}
-          placeholder={kind === 'dm' ? 'Username to message' : 'Usernames, comma separated'}
-          aria-label={kind === 'dm' ? 'Username to message' : 'Usernames to add'}
-        />
-        <button type="submit" className="af-cm-send" disabled={busy || !invite.trim()}>
-          Start
-        </button>
-      </form>
+      <PeoplePicker
+        kind={kind}
+        busy={busy}
+        error={startError}
+        onEdit={() => setStartError(null)}
+        onPickDm={(person) => void startConversation('/api/shared/chat/dm/start', { username: person.username })}
+        onSubmit={(usernames) => void startConversation('/api/shared/chat/threads', { threadType: kind, usernames })}
+      />
 
       <div className="af-cm-thread">
         {threads == null ? (
@@ -542,21 +963,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             </p>
           </div>
         ) : (
-          threads.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className="af-cm-threadrow"
-              onClick={() => open(t)}
-            >
-              <span className="af-cm-threadrow-title">
-                {t.title || `${t.memberCount} people`}
-              </span>
-              {t.unreadCount > 0 ? (
-                <span className="af-cm-threadrow-unread">{t.unreadCount}</span>
-              ) : null}
-            </button>
-          ))
+          threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}
         {error ? <p className="af-cm-error">{error}</p> : null}
       </div>

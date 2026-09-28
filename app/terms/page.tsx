@@ -6,6 +6,12 @@ import LegalPageRenderer, {
 } from "@/components/legal/LegalPageRenderer"
 import { TERMS_PAGE_TITLE, TERMS_POLICY_CHECKLIST } from "@/lib/legal/TermsPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import {
+  SMS_PROGRAM_BRAND,
+  SMS_PROGRAM_OPERATOR,
+  SMS_PROGRAM_SUPPORT_EMAIL,
+} from "@/lib/legal/smsProgram"
+import { SmsOptInExample } from "@/components/legal/SmsOptInExample"
 
 interface TermsPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
@@ -35,7 +41,10 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         HI, ID, MT and NV are excluded from PAID leagues only. These are the same
         rules useGeoRestriction applies at runtime, so a drift here is a page that
         tells a user something different from what the product will do. Clause 7
-        below carries the statutory citations behind each one.
+        below states each rule. It deliberately does NOT cite the HI/ID/MT/NV
+        daily-fantasy statutes or call anything winnings: AllFantasy is not DFS
+        and holds no prizes, and that wording is what an A2P 10DLC carrier reviewer
+        read as "gambling-adjacent" (Twilio 30885, Sept 2026).
       */}
       <LegalCallout tone="warn" mark="§" title="Geographic restrictions">
         U.S. state laws may fully or partially restrict fantasy sports. AllFantasy is not available
@@ -88,7 +97,8 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
       <section id="clause-1">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">1. Acceptance of Terms</h2>
         <p>
-          By accessing or using AllFantasy (&quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;).
+          AllFantasy is operated by {SMS_PROGRAM_OPERATOR} (&quot;we,&quot; &quot;us&quot;). By accessing or using AllFantasy
+          (&quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;).
           If you do not agree, do not use the Service. We may modify these Terms; continued use after changes constitutes acceptance.
         </p>
       </section>
@@ -157,38 +167,22 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
         <ul className="list-disc list-inside space-y-2 ml-4 mt-2">
           <li>
-            <strong>Washington State</strong> — Prohibited under RCW 9.46.240. Washington law classifies all fantasy sports as sports
-            wagering. Operating, offering, or advertising fantasy sports, including free contests, is a Class C felony under
-            Washington state law. AllFantasy.ai cannot provide any services to users located in Washington state.
+            <strong>Washington State</strong> — Fantasy sports are prohibited under RCW 9.46.240. AllFantasy.ai cannot provide any
+            services to users located in Washington state.
           </li>
         </ul>
-        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.2 Paid League Restricted States</h3>
+        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.2 States Where Paid Features Are Restricted</h3>
         <p>
-          The following states prohibit paid fantasy sports contests under state law. Residents of these states may create free
-          accounts and use free features, but are prohibited from joining paid leagues, paying entry fees, or purchasing
-          subscriptions:
+          In the following states, residents may create free accounts and use free features, but may not purchase AllFantasy
+          subscriptions or join paid leagues: <strong>Hawaii, Idaho, Montana and Nevada.</strong> We apply this restriction
+          conservatively based on each state&apos;s rules on paid fantasy sports.
         </p>
-        <ul className="list-disc list-inside space-y-2 ml-4 mt-2">
-          <li>
-            <strong>Hawaii</strong> — Paid DFS prohibited per AG Opinion 16-1 (2016).
-          </li>
-          <li>
-            <strong>Idaho</strong> — Paid DFS prohibited per Idaho Code §18-3802 and AG Opinion (May 2016).
-          </li>
-          <li>
-            <strong>Montana</strong> — Paid DFS prohibited per Montana Code §23-5-802.
-          </li>
-          <li>
-            <strong>Nevada</strong> — Paid DFS requires a sports betting license per NV Gaming Control Board ruling (2015). No DFS
-            operator currently holds such a license in Nevada.
-          </li>
-        </ul>
         <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.3 VPN and Proxy Usage</h3>
         <p>
           Using a VPN, proxy, or any other method to circumvent geographic restrictions while in a restricted state is a violation
           of these Terms of Service and may constitute a violation of applicable state law. AllFantasy.ai employs VPN and proxy
           detection technology. Accounts found to be circumventing geographic restrictions may be immediately suspended and any
-          winnings or prizes forfeited.
+          paid subscription cancelled.
         </p>
         <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">7.4 User Representation</h3>
         <p>
@@ -351,13 +345,43 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
+      <section id="sms-terms">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">SMS Terms</h2>
+        <p>
+          <strong>Program.</strong> {SMS_PROGRAM_BRAND} text messages are sent by {SMS_PROGRAM_OPERATOR}. When you add a
+          mobile number and check the SMS consent box, you agree to receive verification codes, password reset codes, account
+          security alerts and, only if you enable them in notification settings, league and event notifications.
+        </p>
+        <ul className="list-disc pl-6 mt-3 space-y-1">
+          <li>Message frequency varies.</li>
+          <li>Message and data rates may apply.</li>
+          <li>Reply <strong>STOP</strong> to cancel at any time; you will receive one confirmation and no further messages. Reply START to resubscribe.</li>
+          <li>Reply <strong>HELP</strong> for help, or email {SMS_PROGRAM_SUPPORT_EMAIL}.</li>
+          <li>Consent to receive SMS is not a condition of any purchase.</li>
+          <li>Carriers are not liable for delayed or undelivered messages.</li>
+          <li>
+            Mobile numbers and SMS opt-in data are never shared with third parties for marketing. See our
+            <Link href="/privacy#sms-communications" className="text-cyan-400 hover:text-cyan-300 mx-1">Privacy Policy</Link>.
+          </li>
+        </ul>
+        <h3 id="sms-opt-in" className="text-lg font-semibold text-white mt-6 mb-2">How you opt in</h3>
+        <p>
+          Adding a mobile number is optional, and you can use {SMS_PROGRAM_BRAND} without one. You verify a number in one of
+          two places: <strong>Settings → Security → Phone</strong>, or the <strong>Phone</strong> tab on the verification page.
+          Both show the box below. It is unchecked by default, and no code is sent until you check it and ask for one. A number
+          you add during onboarding gets no alerts until you verify it there. Verification and password-reset codes are sent only
+          when you request one; every other text goes only to a verified number.
+        </p>
+        <SmsOptInExample />
+      </section>
+
       <section id="clause-24">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">24. Contact</h2>
         <p>
           Questions about these Terms? Contact us at:
         </p>
         <div className="mt-3 p-4 bg-white/5 rounded-xl border border-white/10">
-          <p className="font-semibold text-white">AllFantasy</p>
+          <p className="font-semibold text-white">{SMS_PROGRAM_OPERATOR} (AllFantasy)</p>
           <p className="text-white/60">Email: support@allfantasy.ai</p>
         </div>
       </section>

@@ -18,7 +18,8 @@ import { logAiFailure } from "@/lib/error-tracking"
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
-export type ChimmyContextRunSurface = "chat" | "intelligence_api" | "context_api"
+/** `chimmy_chat`: one question to /api/chat/chimmy — see ./chatQuestion.ts. */
+export type ChimmyContextRunSurface = "chat" | "intelligence_api" | "context_api" | "chimmy_chat"
 
 export type ChimmyRunProviderMeta = {
   name: string

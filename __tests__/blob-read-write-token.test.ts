@@ -135,8 +135,9 @@ describe('public Blob upload paths use the resolver', () => {
   it.each([
     'lib/avatar/ProfileImageUploadStorageService.ts',
     'app/api/user/profile/avatar/route.ts',
-    'app/api/shared/chat/upload/route.ts',
-    'app/api/bracket/chat-upload/route.ts',
+    // `app/api/shared/chat/upload` and `app/api/bracket/chat-upload` are no longer PUBLIC Blob
+    // paths: /messages and bracket-pool photos are stored privately, like the drawer's (see
+    // __tests__/shared-chat-upload-private.test.ts and __tests__/bracket-chat-upload-private.test.ts).
   ])('%s reads the token through getBlobReadWriteToken', async (file) => {
     const { readFileSync } = await import('node:fs')
     const { join } = await import('node:path')

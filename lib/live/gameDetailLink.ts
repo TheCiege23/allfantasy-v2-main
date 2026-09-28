@@ -11,7 +11,8 @@ import { GAME_VIEW_SPORTS } from '@/lib/live/espnGameSummary'
 export function gameDetailHref(
   game: { sport: string; gameId: string; espnDetail?: boolean },
   base: '/core/live' | '/live',
+  leagueId?: string | null,
 ): string | null {
   if (!game.espnDetail || !GAME_VIEW_SPORTS.includes(game.sport) || !/^\d{5,12}$/.test(game.gameId)) return null
-  return `${base}?sport=${encodeURIComponent(game.sport)}&game=${encodeURIComponent(game.gameId)}`
+  return `${base}?sport=${encodeURIComponent(game.sport)}&game=${encodeURIComponent(game.gameId)}${base === '/core/live' && leagueId ? `&league=${encodeURIComponent(leagueId)}` : ''}`
 }

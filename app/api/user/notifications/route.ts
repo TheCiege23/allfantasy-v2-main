@@ -87,14 +87,18 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = (await req.json().catch(() => ({}))) as { ids?: unknown }
+    const body = (await req.json().catch(() => ({}))) as { ids?: unknown; leagueId?: unknown }
     const { ids } = body
+    if (body.leagueId !== undefined && (typeof body.leagueId !== 'string' || !body.leagueId.trim())) {
+      return NextResponse.json({ error: 'leagueId must be a nonempty string' }, { status: 400 })
+    }
+    const scope = typeof body.leagueId === 'string' ? { leagueId: body.leagueId.trim() } : {}
     const userId = session.user.id
     const now = new Date()
 
     if (ids === "all") {
       await prisma.platformNotification.updateMany({
-        where: { userId, readAt: null },
+        where: { userId, readAt: null, ...scope },
         data: { readAt: now },
       })
     } else if (Array.isArray(ids)) {
@@ -103,7 +107,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "ids array required" }, { status: 400 })
       }
       await prisma.platformNotification.updateMany({
-        where: { id: { in: idList }, userId },
+        where: { id: { in: idList }, userId, ...scope },
         data: { readAt: now },
       })
     } else {

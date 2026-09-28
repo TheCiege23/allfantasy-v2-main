@@ -42,7 +42,7 @@ export async function materializeSleeperDraftSessions(
     where: {
       platform: 'sleeper',
       status: { in: ['pre_draft', 'drafting'] },
-      draftSessions: { is: null },
+      draftSessions: { none: {} },
     },
     select: { id: true },
     take,

@@ -6,6 +6,7 @@ import { enqueueLeagueEngineJob } from '@/lib/jobs/enqueue'
 import { reprocessWeekAfterStatCorrection } from '@/server/services/statCorrectionService'
 import { buildLeagueInspectSnapshot } from '@/lib/admin/operations/leagueInspectService'
 import { pauseDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type AdminRecoveryAction =
   | {
@@ -168,7 +169,7 @@ export async function runAdminLeagueRecovery(input: {
         if (action.confirm !== true) {
           return { ok: false, error: 'draft_pause requires confirm: true' }
         }
-        const ds = await prisma.draftSession.findUnique({ where: { leagueId } })
+        const ds = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
         if (!ds) {
           return { ok: false, error: 'No draft session for league' }
         }
@@ -180,8 +181,9 @@ export async function runAdminLeagueRecovery(input: {
             error: 'Draft pause only applies when session is in_progress (use inspect to verify state).',
           }
         }
-        const after = await prisma.draftSession.findUnique({
+        const after = await prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           select: { id: true, status: true, version: true },
         })
         await logAdminAudit({

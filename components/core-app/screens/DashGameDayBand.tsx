@@ -1,6 +1,7 @@
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-gameday.css'
-import { Dash34Time } from '@/components/core-app/screens/Dashboard34Live'
+import { Dash34Time, Dash34Countdown } from '@/components/core-app/screens/Dashboard34Live'
+import Link from 'next/link'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
 
@@ -47,7 +48,7 @@ import type { TodayStripData } from '@/lib/core-app/todayStrip'
 /** How recent a play must be for the slate to count as in progress. */
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000
 const PLAY_CAP = 6
-const NEXT_CAP = 5
+const NEXT_CAP = 8
 
 const TYPE_LABEL: Record<PlayFeedItem['type'], string> = {
   TOUCHDOWN: 'TD',
@@ -85,7 +86,7 @@ export function DashGameDayBand({
   })
 
   const record = strip?.record.available ? strip.record.data : null
-  if (fresh.length === 0 && !record) return null
+  if (fresh.length === 0 && !record && !strip?.next24.length) return null
 
   const visible = fresh.slice(0, PLAY_CAP)
   /*
@@ -104,9 +105,9 @@ export function DashGameDayBand({
         <span className="af-label af-gd-kicker">Game day</span>
         {record ? (
           <span className="af-gd-record af-num">
-            <b>{record.wins}</b>
-            <span className="af-gd-sep">–</span>
-            <i>{record.losses}</i>
+            <b>{record.wins} ahead</b>
+            <span className="af-gd-sep">·</span>
+            <i>{record.losses} behind</i>
             <span className="af-gd-recmeta">
               {' '}
               right now · week {record.week}
@@ -159,8 +160,16 @@ export function DashGameDayBand({
                     know the reader's zone, and a server paint would mismatch. */}
                 <Dash34Time iso={row.time} />
               </span>
-              <span className="af-gd-nexttext">{row.text}</span>
-              {row.sub ? <span className="af-gd-nextsub">{row.sub}</span> : null}
+              <div className="af-gd-nexttext">
+                <div className="af-gd-matchup">
+                  {row.game?.awayLogo ? <img src={row.game.awayLogo} alt="" width={24} height={24} loading="lazy" /> : null}
+                  <span>{row.game?.away ?? row.text}</span>
+                  {row.game ? <><span>at</span>{row.game.homeLogo ? <img src={row.game.homeLogo} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
+                </div>
+                {row.game ? <div className="af-gd-market" title={row.game.oddsAt ? `Odds checked ${row.game.oddsAt}` : undefined}>{row.game.odds}</div> : null}
+                <div className="af-gd-nextsub">{row.sub} · Starts in <Dash34Countdown to={row.time} initial="—" /></div>
+              </div>
+              {row.game ? <Link className="af-gd-scoring" href={row.game.href}>Live scoring →</Link> : null}
             </li>
           ))}
         </ul>

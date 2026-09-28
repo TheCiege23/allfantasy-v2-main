@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { createDemoChimmyReply } from '@/lib/startSit/shared'
 import { rateLimit } from '@/lib/rate-limit'
 import { assertAiSpendAllowed, isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -55,6 +56,10 @@ export async function POST(req: Request) {
       { status: 429 },
     )
   }
+
+  // Shared start/sit daily budget and the Pro requirement from paywall launch.
+  const gated = await aiCostGate(req, 'start_sit_ai', userId)
+  if (gated) return gated
 
   let body: Body = {}
   try {

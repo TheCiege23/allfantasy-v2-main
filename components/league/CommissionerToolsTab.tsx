@@ -121,7 +121,8 @@ export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: Commiss
               <option value="manual">Manual</option>
             </select>
           </ToolRow>
-          <ToolRow label="Odd Number of Playoff Teams" gated hasSubscription={hasAfCommissionerSub}>
+          {/* Free: an odd bracket seeds with byes exactly like the free 6-team one. */}
+          <ToolRow label="Odd Number of Playoff Teams">
             <Switch defaultChecked={false} />
           </ToolRow>
           <ToolRow label="Lower Bracket (Consolation)">

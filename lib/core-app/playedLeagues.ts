@@ -2,7 +2,7 @@
  * "Leagues that have actually been played" — the one definition, shared.
  *
  * 🛑 EXTRACTED RATHER THAN COPIED, AND THAT IS THE POINT. This filter and sort lived inline in
- * `app/core/[[...screen]]/page.tsx`, which was fine while the page was its only caller. The moment a
+ * `app/core/(shell)/[[...screen]]/page.tsx`, which was fine while the page was its only caller. The moment a
  * second caller needed it (`lib/core-app/weekAllSummary.ts`, which rebuilds the week board without a
  * request in scope) copying two lines would have created two implementations of one rule — the exact
  * failure CLAUDE.md records for the SQL copy of `normalizePlayerName`, where the copy disagreed with

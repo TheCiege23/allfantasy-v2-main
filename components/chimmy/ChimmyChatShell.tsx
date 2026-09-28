@@ -47,6 +47,7 @@ import {
   trackChimmyModeChangeEvent,
 } from '@/lib/chimmy-chat/analytics-events-client'
 import { buildChimmyFeedbackEvent } from '@/lib/chimmy-chat/feedback-events'
+import { questionEntry } from '@/lib/chimmy-context/telemetry/questionEntry'
 import {
   DEFAULT_CHIMMY_ASSISTANT_MODE,
   normalizeChimmyAssistantMode,
@@ -447,8 +448,13 @@ export default function ChimmyChatShell({
       initialPromptApplied.current = true
       if (clearUrlPromptAfterUse && typeof window !== 'undefined') {
         const u = new URL(window.location.href)
-        if (u.searchParams.has('prompt')) {
+        if (u.searchParams.has('prompt') || u.searchParams.has('from')) {
           u.searchParams.delete('prompt')
+          /*
+           * `from` too: the page counted this open when it rendered (recordProactiveOpen), and a
+           * refresh of a URL still carrying it would count the same click again.
+           */
+          u.searchParams.delete('from')
           window.history.replaceState({}, '', u.pathname + u.search)
         }
       }
@@ -653,6 +659,8 @@ export default function ChimmyChatShell({
         mode: analyticsMode,
         source: requestContext.source ?? null,
         topic: message?.meta?.answerContract?.answerType,
+        entry: questionEntry({ source: requestContext.source }),
+        tools: message?.meta?.toolsUsed ?? null,
       })
     ).catch(() => {})
   }, [
@@ -769,6 +777,7 @@ export default function ChimmyChatShell({
           confidencePct: result.meta?.confidencePct,
           providerStatus,
           recommendedTool: result.meta?.recommendedTool,
+          toolsUsed: result.meta?.toolsUsed,
           dataSources: result.meta?.dataSources,
           sourceLinks: result.meta?.sourceLinks,
           syncFreshness: result.meta?.syncFreshness,

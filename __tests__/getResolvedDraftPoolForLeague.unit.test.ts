@@ -25,7 +25,7 @@ const hm = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: hm.leagueFindUnique },
-    draftSession: { findUnique: hm.draftSessionFindUnique },
+    draftSession: { findUnique: hm.draftSessionFindUnique, findFirst: hm.draftSessionFindUnique },
     playerAnalyticsSnapshot: { findMany: hm.playerAnalyticsFindMany },
     devyPlayer: { findMany: hm.devyPlayerFindMany },
     injuryReportRecord: { findMany: vi.fn().mockResolvedValue([]) },

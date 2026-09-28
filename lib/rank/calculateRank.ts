@@ -27,8 +27,8 @@ export type CalculateRankResult = {
 
 /**
  * XP from every recorded league-season: imported `League` rows, legacy
- * `legacyLeague`/`legacyRoster` rows and native `franchise_seasons`, merged and
- * deduplicated by `loadCareerLedger`.
+ * `legacyLeague`/`legacyRoster` rows, claimed `LeagueTeam` rows and native
+ * `franchise_seasons`, merged and deduplicated by `loadCareerLedger`.
  *
  * ⚠ THE ROWS COME FROM THE SHARED LEDGER, WHICH `/core/rankings` ALSO READS.
  * Source precedence, the dedup key and the berth rule used to live inline here;

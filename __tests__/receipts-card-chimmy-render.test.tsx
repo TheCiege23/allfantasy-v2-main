@@ -71,3 +71,27 @@ describe('ReceiptsCard — Chimmy', () => {
     expect(container.innerHTML).toBe('')
   })
 })
+
+/* Chimmy's track record (2026-09-24): the whole record above the recent rows. */
+describe('ReceiptsCard — Chimmy record', () => {
+  it('shows your record on its start/sit calls, with the rate only when earned', () => {
+    const { container } = render(
+      <ReceiptsCard data={data({ chimmyRecord: { right: 12, wrong: 5, same: 2, ratePct: 71 } })} />,
+    )
+    expect(screen.getByText('Chimmy’s record on your start/sit calls:')).toBeTruthy()
+    expect(screen.getByText('12 right, 5 wrong (71%) · 2 too close to call')).toBeTruthy()
+    expect(container.querySelector('[data-kind="chimmy-record"]')).toBeTruthy()
+  })
+
+  it('shows the record even when no recent call is listed', () => {
+    render(<ReceiptsCard data={data({ chimmy: [], chimmyRecord: { right: 2, wrong: 1, same: 0, ratePct: null } })} />)
+    expect(screen.getByText('2 right, 1 wrong')).toBeTruthy()
+  })
+
+  it('renders nothing for a malformed record', () => {
+    const { container } = render(
+      <ReceiptsCard data={data({ chimmyRecord: { right: 3, wrong: 1, same: 0, ratePct: 400 } as never })} />,
+    )
+    expect(container.querySelector('[data-kind="chimmy-record"]')).toBeNull()
+  })
+})

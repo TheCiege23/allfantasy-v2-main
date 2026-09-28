@@ -548,7 +548,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
       </nav>
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
-      <main className="af3a-main">
+      <div className="af3a-main">
         <div className="af3a-topbar">
           <TopSearch />
           <span className="af3a-chip">
@@ -640,7 +640,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             </div>
           </section>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
@@ -758,7 +758,6 @@ export function Dash3AMatchups({
   leagues,
   week,
   winProb,
-  weekLabel,
   freshness = null,
 }: {
   /** The summary's ranked league list — only its live scores are read here. */
@@ -783,6 +782,8 @@ export function Dash3AMatchups({
     you: number
     them: number
     note: string
+    completed: boolean
+    period: string | null
   }> = [
     ...leagues
       .filter((l) => l.score)
@@ -793,6 +794,8 @@ export function Dash3AMatchups({
         you: l.score!.you,
         them: l.score!.opponent,
         note: `vs ${l.score!.opponentName}`,
+        completed: false,
+        period: null,
       })),
     ...(week?.rows ?? [])
       .filter((r) => !liveKeys.has(r.leagueId))
@@ -802,14 +805,22 @@ export function Dash3AMatchups({
         platform: r.platform,
         you: r.pointsFor,
         them: r.pointsAgainst,
-        note: `Week ${r.week} · ${r.won ? 'you won' : 'you lost'}`,
+        note: `Week ${r.week} · ${r.completed === true
+          ? r.pointsFor === r.pointsAgainst ? 'you tied' : r.pointsFor > r.pointsAgainst ? 'you won' : 'you lost'
+          : 'scores so far'}`,
+        completed: r.completed === true,
+        period: `${r.season} · Week ${r.week}`,
       })),
   ]
+  const shown = scored.slice(0, 4)
+  const periods = [...new Set(shown.map((m) => m.period))]
+  const matchupPeriod = periods.length === 1 && periods[0]
+    ? periods[0] : shown.length > 0 ? 'League periods' : 'Available scores'
   return (
             <section className="af3a-sec">
               <header className="af3a-sechead">
-                <h2>This week&rsquo;s matchups</h2>
-                <span className="af3a-note">{weekLabel ?? 'This week'}</span>
+                <h2>League matchups</h2>
+                <span className="af3a-note">{matchupPeriod}</span>
               </header>
 
               {scored.length === 0 ? (
@@ -822,7 +833,7 @@ export function Dash3AMatchups({
                 </div>
               ) : (
                 <div className="af3a-grid2">
-                  {scored.slice(0, 4).map((m) => (
+                  {shown.map((m) => (
                     <article key={m.key} className="af3a-match">
                       <span className={`af3a-tile ${platformClass(m.platform)}`}>
                         {platformTile(m.platform)}
@@ -838,7 +849,7 @@ export function Dash3AMatchups({
                          */}
                         <p>
                           {m.note}
-                          {winProb?.[m.key] != null ? (
+                          {!m.completed && winProb?.[m.key] != null ? (
                             <>
                               {' · '}
                               <b className="af3a-win">{Math.round(winProb[m.key] * 100)}% win</b>

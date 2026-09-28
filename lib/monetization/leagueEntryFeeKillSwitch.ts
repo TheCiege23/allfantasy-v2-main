@@ -19,7 +19,8 @@
  * ⚠ AND THE GUARD THAT WOULD HAVE CAUGHT THIS ALREADY EXISTS. `PROHIBITED_INTENT_PATTERNS`
  * in `compliance-guardrails.ts` matches `entry[_\s-]*fee` and maps it to
  * `in_app_dues_not_allowed`. Five checkout routes call
- * `assertNoLeagueSettlementIntent` — bracket/donate, bracket/stripe/checkout,
+ * `assertNoLeagueSettlementIntent` — bracket/donate, bracket/stripe/checkout (deleted
+ * 2026-09-25 with the in-app bracket fees it sold),
  * monetization/checkout/subscription, monetization/checkout/tokens, and
  * stripe/create-checkout-session. The entry-fee route is the ONLY checkout route
  * that does not, and it is the only one that actually charges an entry fee.

@@ -98,6 +98,12 @@ export function validateTradeAssets(params: {
   assets: TradeAssetInput[]
   /** Current fantasy week for deadline checks */
   currentWeek: number | null
+  /**
+   * A native dynasty league's future picks: `fdp:` id → the roster holding it
+   * (`loadNativeFuturePicks`). Those picks live in `future_draft_picks`, not in
+   * `playerData`, so without this an offer of one is refused as not owned.
+   */
+  nativeFuturePickOwners?: ReadonlyMap<string, string> | null
 }): TradeValidationResult {
   const { league, settings, proposer, receiver, assets, currentWeek } = params
 
@@ -211,11 +217,15 @@ export function validateTradeAssets(params: {
        * mints a pool id when the raw record has none, so its ids only match for
        * picks that carried one; `listProposablePicks` reads the stored key
        * directly, and is what the rosters API offers the picker. Both are
-       * checked so an id from either path is honoured.
+       * checked so an id from either path is honoured. A native dynasty
+       * league's `fdp:` pick is checked against its inventory instead.
        */
+      const nativeHolder = params.nativeFuturePickOwners?.get(ref)
       const hasPick =
-        picks.some((p) => p.pickId === ref) ||
-        listProposablePicks(from.playerData).some((p) => p.pickId === ref)
+        nativeHolder != null
+          ? nativeHolder === from.id
+          : picks.some((p) => p.pickId === ref) ||
+            listProposablePicks(from.playerData).some((p) => p.pickId === ref)
       if (!hasPick) {
         return { ok: false, code: 'PICK_NOT_OWNED', message: 'Pick is not on the sending roster.' }
       }

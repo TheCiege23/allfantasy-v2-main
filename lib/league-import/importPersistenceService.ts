@@ -175,6 +175,8 @@ export async function persistImportWithCanonicalAudit(input: {
   additionalWarnings?: ImportWarningRecord[]
   /** From the commissioner gate — lets the bootstrap claim the importer's own team. */
   importerSourceManagerId?: string | null
+  /** The team the importer picked as theirs — bootstrap claim only; see ImportedLeagueCommitService. */
+  importerSourceTeamId?: string | null
   /** The user confirmed they want back a league they previously deleted. */
   confirmReimportOfDeleted?: boolean
 }): Promise<{
@@ -291,6 +293,7 @@ export async function persistImportWithCanonicalAudit(input: {
       allowUpdateExisting: input.allowUpdateExisting ?? false,
       canonicalBundle: input.canonical,
       importerSourceManagerId: input.importerSourceManagerId ?? null,
+      importerSourceTeamId: input.importerSourceTeamId ?? null,
       confirmReimportOfDeleted: input.confirmReimportOfDeleted ?? false,
     })
 

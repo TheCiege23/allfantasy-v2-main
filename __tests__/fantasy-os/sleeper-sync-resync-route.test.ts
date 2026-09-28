@@ -86,11 +86,19 @@ describe('POST /api/leagues/import/resync — honest durable refresh outcome', (
     expect(json.ok).toBe(false)
   })
 
-  it('non-Sleeper provider (refresh null) → 200 ok:true, behavior unchanged', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: null })
+  /*
+   * 🛑 THIS CASE USED TO ASSERT 200 ok:true, AND THAT PINNED THE BUG. When it was written only
+   * Sleeper had a refresh step, so null meant "this provider has none". The collector is
+   * provider-neutral now: `refresh === null` means the resync persisted no league id, so NOTHING
+   * was refreshed — and "Sync now" said it had worked.
+   */
+  it('refresh null (no league to refresh) → 404 ok:false with a reason, not a success', async () => {
+    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, leagueId: '', refresh: null })
     const { status, json } = await call({ provider: 'espn', sourceId: '999' })
-    expect(status).toBe(200)
-    expect(json.ok).toBe(true)
+    expect(status).toBe(404)
+    expect(json.ok).toBe(false)
+    expect(json.refresh).toEqual({ status: 'not_refreshed' })
+    expect(String(json.error)).toMatch(/nothing was synced/i)
   })
 
   it('resync utility failure → 400 ok:false', async () => {

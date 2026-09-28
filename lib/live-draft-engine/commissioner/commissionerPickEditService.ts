@@ -20,6 +20,7 @@ import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISetting
 import { getManagerColorBySeed } from '@/lib/draft-room'
 import type { DraftSessionSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { isDraftPickRowEmpty, PICK_EDITOR_EMPTY_POSITION } from '@/lib/live-draft-engine/draftPickEmpty'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const COMMISSIONER_PICK_EDIT_ACTIONS = [
   'REMOVE_PLAYER_FROM_PICK',
@@ -231,8 +232,9 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
     // bump) can exceed that on cold Neon pools. Raise to 30s; real commits
     // complete in ~1–2s. Proper fix is to move read-only work (presentation
     // resolver, settings) outside the tx — tracked as a Slice 3.x follow-up.
-    const session = await tx.draftSession.findUnique({
+    const session = await tx.draftSession.findFirst({
       where: { leagueId: params.leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       include: {
         picks: { orderBy: { overall: 'asc' } },
         league: { select: { id: true, sport: true } },

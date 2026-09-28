@@ -72,12 +72,16 @@ function shell() {
  * it explicitly is what makes the desktop and mobile cases distinguishable
  * rather than both quietly taking the same path.
  */
-function setViewport(isDesktop: boolean) {
+function setViewport(isDesktop: boolean, isTablet = false) {
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     writable: true,
     value: (query: string) => ({
-      matches: query.includes('min-width: 721px') ? isDesktop : !isDesktop,
+      matches: query.includes('min-width: 721px')
+        ? isDesktop
+        : query.includes('max-width: 1280px')
+          ? isTablet
+          : !isDesktop,
       media: query,
       addEventListener() {},
       removeEventListener() {},
@@ -178,6 +182,25 @@ describe('the desktop rail opens without being asked', () => {
 
   it('still honours a stored open preference', () => {
     setViewport(true)
+    window.localStorage.setItem('af-rail-open', '1')
+    const { container } = render(shell())
+    expect(railFlag(container)).toBe('true')
+  })
+
+  /*
+   * 721–1280px with nothing stored: an expanded rail pushes the nav column out on a
+   * tablet, so the default there is collapsed — and it must not be saved, or a tablet
+   * visit would become the reader's desktop choice.
+   */
+  it('starts collapsed on a tablet-width desktop layout when nothing is stored', () => {
+    setViewport(true, true)
+    const { container } = render(shell())
+    expect(railFlag(container)).toBe('false')
+    expect(window.localStorage.getItem('af-rail-open')).toBeNull()
+  })
+
+  it('lets a stored open preference win on a tablet-width layout', () => {
+    setViewport(true, true)
     window.localStorage.setItem('af-rail-open', '1')
     const { container } = render(shell())
     expect(railFlag(container)).toBe('true')

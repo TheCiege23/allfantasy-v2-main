@@ -48,6 +48,8 @@ export interface NormalizedLeagueSettings {
   rosterSize: number | null
   scoring: string | null
   isDynasty: boolean
+  /** Provider-reported automatic lineup mode; absent leaves existing settings intact. */
+  best_ball?: boolean
   /** Phase OS-C5: the provider's own real league status (e.g. Sleeper's `pre_draft`/`drafting`/
    * `in_season`/`complete`), when the provider's API supplies one. `null`/absent when the provider
    * genuinely doesn't report a status — never a fabricated default. See
@@ -55,6 +57,8 @@ export interface NormalizedLeagueSettings {
    * every provider mapper despite `League.status` existing in the schema) silently hid real leagues
    * from `lib/leagues/leagueListFilter.ts`'s "no status" exclusion heuristic. */
   status?: string | null
+  /** Provider-reported current matchup period, persisted for live/final score boundaries. */
+  current_week?: number
   playoff_team_count?: number
   regular_season_length?: number
   schedule_unit?: string
@@ -229,6 +233,8 @@ export interface NormalizedDraftPick {
 
 /** Normalized transaction (waiver/trade). */
 export interface NormalizedTransaction {
+  /** Provider completion time, separate from proposal creation. */
+  completed_at?: string
   source_transaction_id: string
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string

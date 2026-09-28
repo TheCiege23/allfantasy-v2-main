@@ -9,8 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Calendar, Clock, RefreshCw, Shuffle, Cpu, Pause, ChevronDown, Lock, Trophy, TrendingDown } from 'lucide-react'
-import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { Calendar, Clock, RefreshCw, Shuffle, Cpu, Pause, ChevronDown, Trophy, TrendingDown } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 // ---------------------------------------------------------------------------
@@ -130,10 +129,8 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
   }>>([])
   const [rookieNextSeason, setRookieNextSeason] = useState(0)
   const [rookieWarning, setRookieWarning] = useState<string | null>(null)
-  const [rookiePremium, setRookiePremium] = useState(false)
   const [rookieLoading, setRookieLoading] = useState(false)
   const [rookieSaving, setRookieSaving] = useState(false)
-  const [gateOpen, setGateOpen] = useState(false)
 
   // Load
   useEffect(() => {
@@ -176,7 +173,6 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
       )
       if (res.status === 400) { setIsDynastyLike(false); return }
       const data = await res.json()
-      if (data.error === 'premiumRequired') { setRookiePremium(false); setIsDynastyLike(true); return }
       if (data.error) return
       setIsDynastyLike(true)
       setRookieMode(data.savedMode ?? data.mode ?? 'worst_to_first')
@@ -184,16 +180,14 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
       setRookieSlots(data.slots ?? [])
       setRookieNextSeason(data.season ?? 0)
       setRookieWarning(data.warning ?? null)
-      setRookiePremium(data.isPremium ?? false)
     } catch { /* silent */ }
     finally { setRookieLoading(false) }
   }, [leagueId])
 
   useEffect(() => { loadRookieOrder() }, [loadRookieOrder])
 
-  // Save rookie draft order config
+  // Save rookie draft order config. Free: both modes are a deterministic sort, not AI.
   const saveRookieConfig = useCallback(async () => {
-    if (!rookiePremium) { setGateOpen(true); return }
     setRookieSaving(true); setError(null)
     try {
       const res = await fetch(
@@ -205,14 +199,13 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         }
       )
       const data = await res.json()
-      if (data.error === 'premiumRequired') { setGateOpen(true); return }
       if (!res.ok) { setError(data.error ?? 'Save failed'); return }
       setSuccess(true); setTimeout(() => setSuccess(false), 2000)
       // Reload with new mode
       await loadRookieOrder(rookieMode)
     } catch { setError('Request failed') }
     finally { setRookieSaving(false) }
-  }, [leagueId, rookieMode, rookieEnabled, rookiePremium, loadRookieOrder])
+  }, [leagueId, rookieMode, rookieEnabled, loadRookieOrder])
 
   // Save draft time
   const saveDraftTime = useCallback(async () => {
@@ -531,12 +524,6 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                 Auto-calculated for {rookieNextSeason || 'next'} season
               </p>
             </div>
-            {!rookiePremium && (
-              <button type="button" onClick={() => setGateOpen(true)}
-                className="flex items-center gap-1 rounded-lg border border-amber-500/20 bg-amber-950/15 px-2.5 py-1.5 text-[10px] font-bold text-amber-300 hover:bg-amber-950/25">
-                <Lock className="h-3 w-3" /> {t('draft.afCommSub')}
-              </button>
-            )}
           </div>
 
           {/* Mode selector */}
@@ -548,7 +535,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
               rookieMode === 'worst_to_first'
                 ? 'border-cyan-500/30 bg-cyan-950/15'
                 : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.04]'
-            } ${!rookiePremium ? 'opacity-60' : ''}`}>
+            }`}>
               <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
                 rookieMode === 'worst_to_first' ? 'border-cyan-400 bg-cyan-400' : 'border-white/30'
               }`}>
@@ -557,8 +544,8 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
               <div className="min-w-0 flex-1">
                 <input type="radio" name="rookieMode" value="worst_to_first"
                   checked={rookieMode === 'worst_to_first'}
-                  onChange={() => { if (rookiePremium) { setRookieMode('worst_to_first'); loadRookieOrder('worst_to_first') } else setGateOpen(true) }}
-                  disabled={!isCommissioner || !rookiePremium} className="sr-only" />
+                  onChange={() => { setRookieMode('worst_to_first'); loadRookieOrder('worst_to_first') }}
+                  disabled={!isCommissioner} className="sr-only" />
                 <div className="flex items-center gap-2">
                   <TrendingDown className="h-4 w-4 text-cyan-400" />
                   <span className="text-[13px] font-semibold text-white/80">{t('draft.worstToFirst')}</span>
@@ -575,7 +562,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
               rookieMode === 'reverse_max_pf'
                 ? 'border-violet-500/30 bg-violet-950/15'
                 : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.04]'
-            } ${!rookiePremium ? 'opacity-60' : ''}`}>
+            }`}>
               <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
                 rookieMode === 'reverse_max_pf' ? 'border-violet-400 bg-violet-400' : 'border-white/30'
               }`}>
@@ -584,8 +571,8 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
               <div className="min-w-0 flex-1">
                 <input type="radio" name="rookieMode" value="reverse_max_pf"
                   checked={rookieMode === 'reverse_max_pf'}
-                  onChange={() => { if (rookiePremium) { setRookieMode('reverse_max_pf'); loadRookieOrder('reverse_max_pf') } else setGateOpen(true) }}
-                  disabled={!isCommissioner || !rookiePremium} className="sr-only" />
+                  onChange={() => { setRookieMode('reverse_max_pf'); loadRookieOrder('reverse_max_pf') }}
+                  disabled={!isCommissioner} className="sr-only" />
                 <div className="flex items-center gap-2">
                   <Trophy className="h-4 w-4 text-violet-400" />
                   <span className="text-[13px] font-semibold text-white/80">{t('draft.reverseMaxPF')}</span>
@@ -599,7 +586,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
           </div>
 
           {/* Enable toggle */}
-          {isCommissioner && rookiePremium && (
+          {isCommissioner && (
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('draft.autoSetOrder')}</p>
@@ -618,7 +605,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
           )}
 
           {/* Preview order */}
-          {rookieSlots.length > 0 && rookiePremium && (
+          {rookieSlots.length > 0 && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
@@ -679,7 +666,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
           )}
 
           {/* Save rookie config */}
-          {isCommissioner && rookiePremium && (
+          {isCommissioner && (
             <button type="button" disabled={rookieSaving} onClick={saveRookieConfig}
               className="w-full rounded-lg bg-gradient-to-r from-violet-600/70 to-cyan-600/70 px-4 py-2.5 text-sm font-medium text-white hover:from-violet-600 hover:to-cyan-600 disabled:opacity-50 transition">
               {rookieSaving ? t('scoring.saving') : t('draft.saveRookieSettings')}
@@ -699,9 +686,6 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
           </button>
         </div>
       )}
-
-      <SubscriptionGateModal isOpen={gateOpen} onClose={() => setGateOpen(false)}
-        featureId="commissioner_ai_tools" featureLabel="Rookie Draft Auto-Order" />
     </div>
   )
 }

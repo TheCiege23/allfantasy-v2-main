@@ -39,7 +39,6 @@ export async function GET(
               id: true,
               username: true,
               displayName: true,
-              email: true,
               avatarUrl: true,
               profile: { select: { avatarPreset: true } },
             },

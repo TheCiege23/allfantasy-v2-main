@@ -32,11 +32,11 @@ export async function scheduleRoundDraft(
       data: { draftScheduledAt: when, status: 'draft_scheduled' },
     })
 
-    await getOrCreateDraftSession(tl.leagueId)
+    const { session: draftSession } = await getOrCreateDraftSession(tl.leagueId)
     const dt =
       shell.draftType === 'auction' ? 'auction' : shell.draftType === 'linear' ? 'linear' : 'snake'
     await prisma.draftSession.update({
-      where: { leagueId: tl.leagueId },
+      where: { id: draftSession.id },
       data: {
         timerSeconds: shell.draftClockSeconds,
         draftType: dt,

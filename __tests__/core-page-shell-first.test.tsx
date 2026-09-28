@@ -152,7 +152,7 @@ function findElement(node: ReactNode, match: (el: AnyElement) => boolean): AnyEl
 }
 
 async function loadPage() {
-  return (await import('@/app/core/[[...screen]]/page')).default
+  return (await import('@/app/core/(shell)/[[...screen]]/page')).default
 }
 
 const pageArgs = (screen: string[], searchParams: Record<string, string>) => ({
@@ -438,6 +438,30 @@ describe('/core with an unknown segment', () => {
     // Positive control for the "before the session" assertion above: a known segment does read it.
     expect(getServerSession).toHaveBeenCalled()
   })
+
+  /*
+   * 🛑 THE FRAME'S FIRST READ ASKS FOR ROSTER IDS ONLY. Every lineup on a /core screen is read by
+   * the loader that shows it; this list's rosters were ~1.1 MB of payload on every click for the
+   * heaviest test account and nothing on the page read them. See `rosterDetail` in the loader.
+   */
+  it("reads the league list with rosterDetail: 'count'", { timeout: 180_000 }, async () => {
+    h.gated = false
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    vi.mocked(getDashboardLeagueListForUser).mockClear()
+    const AfCorePage = await loadPage()
+    await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
+    expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count' })
+  })
 })
 
-vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: vi.fn(async () => {}) }))
+/*
+ * 🛑 GATED LIKE EVERY OTHER SHELL READ, AND THAT IS THE POINT. Both were serial stages in front of
+ * (hubs) or behind (plan allowance) the shell's parallel wave, and a mock that resolved instantly
+ * could not see it — the "starts every shell read before any resolves" case above passed over two
+ * waits it had no way to observe. Gated, each must have started while the rest are still pending.
+ */
+vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: (shell.hubs = gatedValue(undefined)) }))
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/chimmy/planAllowance')>()),
+  readChimmyPlanAllowance: (shell.planAllowance = gatedValue(null)),
+}))

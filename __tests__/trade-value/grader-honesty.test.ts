@@ -6,7 +6,7 @@
  * market range" → commissionerReview.reviewRecommended = false.
  */
 import { describe, expect, it } from "vitest"
-import { gradeTrade } from "@/lib/trade-value/grader"
+import { canonicalFairnessGrade as gradeTrade } from "@/lib/decision-os/trade/fairnessGrader"
 import type { AssetValueSnapshot, SideTotals } from "@/lib/trade-value/types"
 
 function player(internalValue: number, withProjection: boolean): AssetValueSnapshot {

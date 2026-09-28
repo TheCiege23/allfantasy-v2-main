@@ -24,6 +24,7 @@ import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
+import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 
 export const dynamic = 'force-dynamic'
 
@@ -299,7 +300,7 @@ async function finalizeAcceptedTrade(
   }
 
   if (proposerOwnerId && receiverOwnerId) {
-    const legacy = await prisma.redraftLeagueTrade.create({
+    await prisma.redraftLeagueTrade.create({
       data: {
         leagueId: proposal.leagueId,
         seasonId: proposal.seasonId,
@@ -312,13 +313,15 @@ async function finalizeAcceptedTrade(
         status: 'accepted',
         processedAt: new Date(),
         expiresAt: proposal.expiresAt ?? new Date(),
-        notes: 'Normalized proposal accepted and mirrored for legacy integrity workflows',
+        notes: 'Normalized proposal accepted and mirrored for legacy readers (the redraft trades list)',
       },
     })
-    void enqueueCollusionScan(legacy.leagueId, legacy.id, [legacy.proposerRosterId, legacy.receiverRosterId]).catch((e) =>
-      console.error('[redraft/trade-votes] enqueueCollusionScan failed', e),
-    )
   }
+  // The integrity scan reviews the proposal itself — the real trade, through the one trade engine.
+  // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
+  void Promise.resolve()
+    .then(() => enqueueCollusionScan(proposal.leagueId, { kind: 'redraft', proposalId: proposal.id }, [proposal.proposerRosterId, proposal.receiverRosterId]))
+    .catch((e) => console.error('[redraft/trade-votes] enqueueCollusionScan failed', e))
 
   // Market ledger: terminal acceptance event + processed event (best-effort, idempotent).
   await recordRedraftTradeMarketEvent({
@@ -329,6 +332,19 @@ async function finalizeAcceptedTrade(
     leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposal.id,
     eventType: 'trade_processed', actorUserId: decidedByUserId,
   })
+
+  // The result, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
+  // A receiver's own accept names them; a commissioner approval or a passed league vote says who decided.
+  queueTradeStatusInDm(
+    executedByRole === 'user'
+      ? { source: 'redraft', tradeId: proposal.id, status: 'accepted', actorUserId: decidedByUserId, detail: 'Rosters are updated.' }
+      : {
+          source: 'redraft',
+          tradeId: proposal.id,
+          status: 'processed',
+          detail: executedByRole === 'commissioner' ? 'The commissioner approved it.' : 'The league vote approved it.',
+        },
+  )
 
   return NextResponse.json({ proposal: updated, resolved: true })
 }
@@ -349,11 +365,23 @@ async function isCommissionerOrCo(leagueId: string, userId: string): Promise<boo
   return league.teams.some((t) => t.isCommissioner || t.isCoCommissioner)
 }
 
+/** A decision snapshot as an object, whatever was stored. */
+function snapshotObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+/** A receipt id the client echoes back: kept only if it looks like one, never trusted as anything else. */
+function reviewIdFrom(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null
+}
+
 async function upsertDecision(
   proposalId: string,
   decision: 'accepted' | 'rejected' | 'vetoed' | 'cancelled' | 'expired' | 'processed',
   decidedByUserId: string,
   decisionReason?: string,
+  /** Merged into the decision's snapshot — e.g. the commissioner review that was shown. */
+  snapshotExtra?: Record<string, unknown>,
 ) {
   const existing = await prisma.redraftTradeDecision.findFirst({ where: { proposalId } })
   if (existing) {
@@ -363,6 +391,7 @@ async function upsertDecision(
         decision,
         decidedByUserId,
         decisionReason: decisionReason ?? null,
+        ...(snapshotExtra ? { snapshot: { ...snapshotObject(existing.snapshot), ...snapshotExtra } as Prisma.InputJsonValue } : {}),
       },
     })
   }
@@ -374,9 +403,18 @@ async function upsertDecision(
       decision,
       decidedByUserId,
       decisionReason: decisionReason ?? null,
-      snapshot: {},
+      snapshot: (snapshotExtra ?? {}) as Prisma.InputJsonValue,
     },
   })
+}
+
+/** Record the commissioner review a decision was made with (design step 6: "decision logged"). */
+async function noteCommissionerReview(proposalId: string, extra: Record<string, unknown>) {
+  const existing = await prisma.redraftTradeDecision.findFirst({ where: { proposalId } }).catch(() => null)
+  if (!existing) return
+  await prisma.redraftTradeDecision
+    .update({ where: { proposalId }, data: { snapshot: { ...snapshotObject(existing.snapshot), ...extra } as Prisma.InputJsonValue } })
+    .catch(() => undefined)
 }
 
 export async function POST(req: NextRequest) {
@@ -384,7 +422,7 @@ export async function POST(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { proposalId?: string; action?: TradeAction; reason?: string }
+  let body: { proposalId?: string; action?: TradeAction; reason?: string; reviewId?: unknown }
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -510,6 +548,7 @@ export async function POST(req: NextRequest) {
         }),
       )
     }
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'expired' })
     return NextResponse.json({ proposal: expired, resolved: true })
   }
 
@@ -549,6 +588,7 @@ export async function POST(req: NextRequest) {
         }),
       )
     }
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'cancelled', actorUserId: userId })
     return NextResponse.json({ proposal: cancelled, resolved: true })
   }
 
@@ -617,6 +657,16 @@ export async function POST(req: NextRequest) {
        * receiver has acted, the trade has NOT executed. Naming what it waits on lets the UI say
        * so instead of implying the deal is done.
        */
+      queueTradeStatusInDm({
+        source: 'redraft',
+        tradeId: proposal.id,
+        status: 'accepted',
+        actorUserId: userId,
+        detail:
+          proposal.vetoMode === 'league_vote'
+            ? 'It goes to a league vote before it processes.'
+            : 'It goes to commissioner review before it processes.',
+      })
       return NextResponse.json({
         proposal: awaitingReview,
         resolved: false,
@@ -640,6 +690,7 @@ export async function POST(req: NextRequest) {
       receiverUserId: receiverOwnerId,
       payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
     })
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'rejected', actorUserId: userId })
     return NextResponse.json({ proposal: updated, resolved: true })
   }
 
@@ -671,7 +722,9 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         )
       }
-      return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved', 'commissioner')
+      const approved = await finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved', 'commissioner')
+      await noteCommissionerReview(proposal.id, { commissionerDecision: 'approve', reviewId: reviewIdFrom(body.reviewId) })
+      return approved
     }
 
     const updated = await prisma.redraftTradeProposal.update({
@@ -681,7 +734,7 @@ export async function POST(req: NextRequest) {
         processedAt: new Date(),
       },
     })
-    await upsertDecision(proposal.id, 'vetoed', userId, body.reason)
+    await upsertDecision(proposal.id, 'vetoed', userId, body.reason, { commissionerDecision: 'veto', reviewId: reviewIdFrom(body.reviewId) })
     await recordRedraftTradeMarketEvent({
       leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposal.id,
       eventType: 'commissioner_vetoed', actorUserId: userId,
@@ -693,6 +746,7 @@ export async function POST(req: NextRequest) {
       receiverUserId: receiverOwnerId,
       payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
     })
+    queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'vetoed', detail: 'The commissioner made the call.' })
     return NextResponse.json({ proposal: updated, resolved: true })
   }
 
@@ -774,6 +828,7 @@ export async function POST(req: NextRequest) {
         receiverUserId: receiverOwnerId,
         payload: { proposalId: proposal.id, source: 'redraft_trade_vote' },
       })
+      queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'vetoed', detail: `${vetoCount} of ${threshold} veto votes were in.` })
       return NextResponse.json({ proposal: updated, resolved: true, approveCount, vetoCount, threshold })
     }
 

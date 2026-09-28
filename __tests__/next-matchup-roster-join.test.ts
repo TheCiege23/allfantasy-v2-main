@@ -318,3 +318,105 @@ describe('getNextMatchup pricing', () => {
     expect(m?.unpricedReason).toBe(NOTHING_LEAGUE_SCORED_REASON)
   })
 })
+
+/*
+ * 🛑 THE CALLER'S LINEUP AND PRICER, WHEN IT HAS THEM (My Team, 2026-09-25). The card re-read the
+ * stored roster and re-priced it without the OUT/bye rule, so it disagreed with the header above
+ * it by ~27 points on a real league. The screen-level agreement is pinned in
+ * `my-team-projection-agreement.test.ts`; these pin the seam.
+ */
+describe('getNextMatchup with a caller-supplied lineup and pricer', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    mocks.weeklyMatchupFindMany.mockResolvedValue(MATCHUP_ROWS)
+    mocks.leagueTeamFindMany.mockResolvedValue(TEAMS)
+    mocks.rosterFindMany.mockResolvedValue([
+      { platformUserId: 'sleeper-user-3', playerData: { starters: ['stale-a', 'stale-b'] } },
+      { platformUserId: 'sleeper-user-7', playerData: { starters: ['d', 'e'] } },
+    ])
+    mocks.lookupProjections.mockImplementation(async (ids: string[]) => projections(ids))
+  })
+
+  async function runWith(extra: Record<string, unknown>, scoringSettings: Record<string, unknown> | null = RULES) {
+    const { getNextMatchup } = await import('@/lib/core-app/nextMatchup')
+    return getNextMatchup({
+      leagueId: LEAGUE_ID,
+      platformLeagueId: PLATFORM_LEAGUE_ID,
+      myExternalId: '3',
+      userId: USER_ID,
+      seasonYear: 2026,
+      week: 1,
+      scoringSettings,
+      projectionWeek: { season: '2026', week: 1 },
+      ...extra,
+    })
+  }
+
+  it('prices YOUR side from the lineup you pass, not the stored roster, and never reads the feed itself', async () => {
+    const seen: Array<[string, readonly string[]]> = []
+    const priceLineups = vi.fn(async (lineups: ReadonlyMap<string, readonly string[]>) => {
+      seen.push(...lineups)
+      return new Map([...lineups].map(([rid, ids]) => [rid, { projected: ids.length * 7, projectedFrom: ids.length }]))
+    })
+    const m = await runWith({ myStarters: ['live-a', '0', 'live-b', 'live-c'], priceLineups })
+
+    expect(seen).toEqual([
+      ['3', ['live-a', 'live-b', 'live-c']],
+      ['7', ['d', 'e']],
+    ])
+    expect(m?.you.projected).toBe(21)
+    expect(m?.you.starterCount).toBe(3)
+    expect(m?.opponent?.projected).toBe(14)
+    expect(mocks.lookupProjections).not.toHaveBeenCalled()
+  })
+
+  it("🛑 prices the OPPONENT from the live lineup for this week, not the stored row", async () => {
+    const seen: Array<[string, readonly string[]]> = []
+    const priceLineups = vi.fn(async (lineups: ReadonlyMap<string, readonly string[]>) => {
+      seen.push(...lineups)
+      return new Map([...lineups].map(([rid, ids]) => [rid, { projected: ids.length * 7, projectedFrom: ids.length }]))
+    })
+    const m = await runWith({
+      myStarters: ['live-a'],
+      liveStarters: { week: 1, byRosterId: { '3': ['ignored-mine'], '7': ['d', '0', 'live-f', 'live-g'] } },
+      priceLineups,
+    })
+
+    // Yours is still the lineup the caller passed; theirs is the live one, holes dropped.
+    expect(seen).toEqual([
+      ['3', ['live-a']],
+      ['7', ['d', 'live-f', 'live-g']],
+    ])
+    expect(m?.opponent?.projected).toBe(21)
+    expect(m?.opponent?.starterCount).toBe(3)
+  })
+
+  it('a live lineup for ANOTHER week is ignored, and a roster it does not cover keeps the stored row', async () => {
+    const seen: Array<[string, readonly string[]]> = []
+    const priceLineups = vi.fn(async (lineups: ReadonlyMap<string, readonly string[]>) => {
+      seen.push(...lineups)
+      return new Map([...lineups].map(([rid, ids]) => [rid, { projected: ids.length, projectedFrom: ids.length }]))
+    })
+    await runWith({ liveStarters: { week: 2, byRosterId: { '7': ['next-week'] } }, priceLineups })
+    await runWith({ liveStarters: { week: 1, byRosterId: { '99': ['someone-else'] } }, priceLineups })
+
+    expect(seen.filter(([rid]) => rid === '7')).toEqual([
+      ['7', ['d', 'e']],
+      ['7', ['d', 'e']],
+    ])
+  })
+
+  it('a pricer that throws leaves both sides unpriced rather than taking the card down', async () => {
+    const m = await runWith({ priceLineups: async () => { throw new Error('boom') } })
+    expect(m?.you.projected).toBeNull()
+    expect(m?.opponent?.projected).toBeNull()
+  })
+
+  it('no rules on file: the pricer is not asked', async () => {
+    const priceLineups = vi.fn()
+    const m = await runWith({ priceLineups }, null)
+    expect(priceLineups).not.toHaveBeenCalled()
+    expect(m?.you.projected).toBeNull()
+  })
+})

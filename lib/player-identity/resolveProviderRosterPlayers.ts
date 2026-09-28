@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
@@ -112,7 +113,7 @@ export async function resolveProviderRosterPlayers(
       name: row.canonicalName,
       position: row.position ?? portrait?.position ?? null,
       team: row.currentTeam ?? portrait?.team ?? null,
-      imageUrl: portrait?.imageUrl ?? null,
+      imageUrl: toImageUrl(portrait?.imageUrl),
       sport: row.sport,
     })
   }

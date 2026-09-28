@@ -1,0 +1,75 @@
+/*
+ * The /core depth lock and the pre-launch "Free until" note. Tokens only — both themes come
+ * from af-core.css.
+ *
+ * ⚠ EVERY TOKEN CARRIES A FALLBACK, because the lock also renders OUTSIDE `.af-core`, where
+ * those tokens are undefined: the trade value modal and the Commissioner OS pages. The fallbacks
+ * are that surface's own tokens (globals.css / the Commissioner OS shell) before any literal.
+ */
+
+.af-core-lock {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px dashed var(--accent-line, var(--border, rgba(124, 58, 237, 0.35)));
+  background: var(--accent-soft, var(--panel2, rgba(124, 58, 237, 0.08)));
+  color: var(--text, inherit);
+}
+
+.af-core-lock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.af-core-lock-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--accent, #7c3aed);
+}
+
+.af-core-lock-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text2, var(--muted, inherit));
+}
+
+.af-core-lock-cta {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--accent, #7c3aed);
+  color: var(--accent-ink, #fff);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.af-core-lock-cta:focus-visible {
+  outline: 2px solid var(--accent, #7c3aed);
+  outline-offset: 2px;
+}
+
+.af-core-free-until {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--warn, #b45309);
+  background: var(--warn-soft, rgba(180, 83, 9, 0.1));
+  color: var(--warn, #b45309);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}

@@ -58,6 +58,8 @@ export type NormalizedOffer = {
   proposedAt: Date | null
   weekOrPeriod: number | null
   assets: NormalizedOfferAsset[]
+  /** The provider record as fetched — `ProviderTradeOffer.payload`. Undefined leaves the column alone. */
+  payload?: unknown
 }
 
 /** The subset of a Sleeper transaction this normaliser reads. */
@@ -162,15 +164,17 @@ export function normalizeSleeperTradeOffer(
       pickSeason: Number.isFinite(season) ? season : null,
       pickRound: Number.isFinite(round) ? round : null,
       /*
-       * ⚠ `owner_id` IS THE ORIGINAL OWNER, AND IT IS THE FIELD THAT MAKES A PICK VALUABLE OR NOT.
-       * `previous_owner_id` is whoever is handing it over now and `roster_id` is whoever receives
-       * it; neither says whose season the pick tracks. A 1st from the worst team and a 1st from
-       * the best are the same row without this.
+       * 🛑 `roster_id` IS THE ORIGINAL OWNER, AND IT IS THE FIELD THAT MAKES A PICK VALUABLE OR NOT.
+       * `owner_id` is the roster RECEIVING it and `previous_owner_id` the roster handing it over
+       * (`SleeperTradedPicksMapper.ts`). This read the two the other way round until 2026-09-25, so
+       * every pick that moved between two teams was recorded as going to its original owner — often
+       * a roster that did not receive anything. A 1st from the worst team and a 1st from the best
+       * are the same row without the original owner.
        */
-      pickOriginalRosterId: asRoster(pick?.owner_id),
+      pickOriginalRosterId: asRoster(pick?.roster_id),
       faabAmount: null,
       fromRosterId: asRoster(pick?.previous_owner_id),
-      toRosterId: asRoster(pick?.roster_id),
+      toRosterId: asRoster(pick?.owner_id),
     })
   }
 
@@ -224,6 +228,12 @@ export function normalizeSleeperTradeOffer(
     proposedAt: typeof tx.created === 'number' && tx.created > 0 ? new Date(tx.created) : null,
     weekOrPeriod: ctx.week,
     assets,
+    /*
+     * ⚠ THE RAW RECORD, WHICH THE COMMENT ABOVE ALWAYS PROMISED AND NOTHING WROTE. Measured
+     * 2026-09-25: every ledger row's `payload` was null, so a field this type does not model was
+     * simply lost. It is the transaction as Sleeper sent it, a kilobyte or two.
+     */
+    payload: tx,
   }
 }
 
@@ -287,6 +297,7 @@ export async function persistProviderTradeOffers(args: {
       consentedRosterIds: offer.consentedRosterIds,
       proposedAt: offer.proposedAt,
       lastSeenAt: seenAt,
+      ...(offer.payload !== undefined ? { payload: offer.payload as object } : {}),
     }
 
     const row = await prisma.providerTradeOffer.upsert({

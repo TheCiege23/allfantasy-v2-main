@@ -1,3 +1,5 @@
+import { readConfirmedLeagueConcept } from '@/lib/league/leagueConceptOptions'
+
 /**
  * Whether an import may write `League.leagueType`, and what value.
  *
@@ -38,12 +40,27 @@ export function leagueTypeForUpdate(args: {
   leagueTypeColumn: string | null | undefined
   /** See `CanonicalImportBundle.leagueTypeConfident`. */
   leagueTypeConfident: boolean | undefined
+  /**
+   * The EXISTING row's settings, when the caller has them. A league whose type a person confirmed
+   * keeps the column that confirmation wrote.
+   */
+  existingSettings?: unknown
 }): string | undefined {
   const column =
     typeof args.leagueTypeColumn === 'string' && args.leagueTypeColumn.trim()
       ? args.leagueTypeColumn
       : undefined
   if (!column) return undefined
+
+  /*
+   * 🛑 A PERSON'S ANSWER OUTRANKS EVERY IMPORT, CONFIDENT OR NOT (2026-09-25). The rule below
+   * protects a stored value from a SHRUG; it let a confident signal through — and Sleeper's
+   * `type: 2` is always confident — so re-syncing a league someone had confirmed as `zombie`
+   * rewrote the column to `dynasty`. The confirmation itself survives in settings, so the value
+   * book (which reads it first) held; every reader of the COLUMN regressed: receipts, badges, the
+   * trades screen's format line, the IDP loader.
+   */
+  if (args.existing && readConfirmedLeagueConcept(args.existingSettings) != null) return undefined
 
   /*
    * ⚠ `undefined` CONFIDENCE IS TREATED AS UNCONFIDENT, AND ONLY WHEN A LEAGUE EXISTS.

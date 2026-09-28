@@ -332,6 +332,12 @@
   color: var(--muted);
 }
 
+/* The league-type ask (LeagueTypeConfirm) — its card carries its own border and padding. */
+.af-core .af-done-league-type {
+  margin: 0 0 18px;
+  text-align: left;
+}
+
 /* The enable-alerts ask, shown once the import has given us something to alert about.
    Sits above the actions so it is seen before the user taps through to their league. */
 .af-core .af-done-push {
@@ -368,6 +374,10 @@
   line-height: 1.55;
   color: var(--faint);
 }
+
+/* Chimmy's first job in the league just connected — sits with Chimmy's note, above the push card. */
+.af-core .af-done-chimmy { display: flex; margin: 10px 0 4px; }
+.af-core .af-done-chimmy .af-btn { min-height: 44px; }
 
 @media (max-width: 560px) {
   .af-core .af-done-go,

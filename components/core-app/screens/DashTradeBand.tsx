@@ -19,11 +19,11 @@ import { TeamLogo } from '@/app/components/TeamLogo'
  * Each side therefore labels its basis and explains which contextual inputs
  * were available. A zero-signal result never appears as an earned C.
  *
- * The verdict that IS shown asks whether the deal was balanced ON THE DAY, by
- * market value of what each side received — the question a manager actually
- * asks the hour a trade lands, and one the canonical engine can answer now
- * because it prices a future pick properly instead of at zero. It renders only
- * when every asset on both sides priced; absent means exactly that.
+ * The verdict that IS shown is THE grade (lib/decision-os/trade/tradeGrade.ts):
+ * this league's values TODAY for what each side received — the same letter the
+ * Trade Center gives the deal. ⚠ It used to say "valued the day it was made",
+ * which was never true: the prices were always the newest on file. It renders
+ * only when every asset on both sides priced; absent means exactly that.
  *
  * ⚠ A PICK IS NAMED AS A PICK. "2027 4th", never the player it later became —
  * the two managers traded the pick, and resolving it would rewrite the deal
@@ -46,7 +46,8 @@ function verdictSentence(t: RecentTrade): string {
   const v = t.verdict
   if (!v) return ''
   if (v.favoursRosterId == null) return 'An even deal on paper'
-  const side = t.sides.find((s) => s.rosterId === v.favoursRosterId)
+  // String-compared: a durable-feed side carries its roster id as a string, the verdict as a number.
+  const side = t.sides.find((s) => String(s.rosterId) === String(v.favoursRosterId))
   const who = side ? side.teamName || side.managerName : null
   const strength = v.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
   /* No name resolved: say the shape of the verdict, never a placeholder. */
@@ -90,7 +91,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
       <div className="af-trade-head">
         <span className="af-label af-trade-kicker">Latest league trades</span>
         <span className="af-trade-count af-num">
-          {trades.length === 1 ? '1 in the last 2 weeks' : `${trades.length} in the last 2 weeks`}
+          {`${trades.length} latest · past 2 weeks`}
         </span>
       </div>
 
@@ -139,7 +140,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                     {s.gradeBasis || s.gradeReason ? (
                       <div className="af-trade-side-grade" data-ungraded={!s.grade}>
                         <span className="af-trade-side-letter">{s.grade ?? '—'}</span>
-                        <span><strong>{s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
+                        <span><strong>{s.gradeBasis === 'League' ? 'League grade' : s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
                       </div>
                     ) : null}
                   </div>
@@ -164,7 +165,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                   </span>
                   <span className="af-trade-conf af-num">
                     {' '}
-                    · valued the day it was made
+                    · on this league’s values today
                     {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
                   </span>
                 </p>

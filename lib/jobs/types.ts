@@ -90,6 +90,8 @@ export interface IntegrityJobPayload {
   type: IntegrityJobType
   leagueId: string
   tradeTransactionId?: string
+  /** The real trade a collusion scan reviews. A job without one (queued before 2026-09-27) is skipped. */
+  tradeRef?: { kind: "af"; tradeId: string } | { kind: "redraft"; proposalId: string }
   tradingRosterIds?: string[]
   weekNumber?: number
 }

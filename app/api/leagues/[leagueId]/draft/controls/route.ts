@@ -59,6 +59,8 @@ import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,6 +104,7 @@ const ALLOWED_ACTIONS = [
   'keeper_tick',
   'reset_draft',
   'swap_manager',
+  'create_next_draft',
 ]
 
 type AutoPickCandidate = {
@@ -163,13 +166,19 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const gate = await assertLeagueActionGate(leagueId, userId, 'draft_commissioner_control')
+  const body = await req.json().catch(() => ({}))
+  const action = String(body?.action ?? '').toLowerCase()
+
+  // Next season's draft is created from the offseason, where every in-draft control is refused;
+  // it is a commissioner action on the league, and is gated as one.
+  const gate =
+    action === 'create_next_draft'
+      ? await assertLeagueActionGate(leagueId, userId, 'settings_edit_commissioner')
+      : await assertLeagueActionGate(leagueId, userId, 'draft_commissioner_control')
   if (!gate.ok) {
     return NextResponse.json({ error: gate.err.error, code: gate.err.code }, { status: gate.err.status })
   }
 
-  const body = await req.json().catch(() => ({}))
-  const action = String(body?.action ?? '').toLowerCase()
   if (!ALLOWED_ACTIONS.includes(action)) {
     return NextResponse.json(
       { error: `Invalid action. Use one of: ${ALLOWED_ACTIONS.join(', ')}` },
@@ -177,6 +186,20 @@ export async function POST(
     )
   }
   try {
+    if (action === 'create_next_draft') {
+      const result = await createNextLeagueDraft(leagueId, userId)
+      if (!result.ok) {
+        const status = result.code === 'LEAGUE_NOT_FOUND' ? 404 : result.code === 'NEEDS_DATABASE_UPDATE' ? 503 : 409
+        return NextResponse.json({ error: result.message, code: result.code }, { status })
+      }
+      const snapshot = await buildSessionSnapshot(leagueId)
+      return NextResponse.json({
+        ok: true,
+        action: 'create_next_draft',
+        nextDraft: result,
+        session: await withViewerSession(leagueId, userId, snapshot),
+      })
+    }
     if (action === 'start') {
       const _startPoolCheck = Date.now()
       const poolReadiness = await getDraftPoolReadiness(leagueId)
@@ -317,7 +340,12 @@ export async function POST(
         )
       }
       const ok = await undoLastPick(leagueId, { reason: reasonRaw, actorUserId: userId })
-      if (!ok) return NextResponse.json({ error: 'No pick to undo' }, { status: 400 })
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'No pick to undo', hint: 'A completed draft cannot be undone — edit the pick instead.' },
+          { status: 400 },
+        )
+      }
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({ ok: true, action: 'undo_pick', session: await withViewerSession(leagueId, userId, snapshot) })
     }
@@ -364,8 +392,9 @@ export async function POST(
       const requestedPlayerName = String(body.playerName ?? body.player_name ?? '').trim()
       const requestedPosition = String(body.position ?? '').trim()
 
-      const draftSession = await prisma.draftSession.findUnique({
+      const draftSession = await prisma.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         include: { picks: { orderBy: { overall: 'asc' } }, queues: true },
       })
       if (!draftSession || draftSession.status !== 'in_progress') {
@@ -727,8 +756,9 @@ export async function POST(
       }
       // Commit R — pass expectedOverall so Commit-M race semantics apply
       // even on commissioner skip writes.
-      const skipSession = await prisma.draftSession.findUnique({
+      const skipSession = await prisma.draftSession.findFirst({
         where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
         select: { picks: { select: { id: true } } },
       })
       const expectedOverall = (skipSession?.picks.length ?? 0) + 1
@@ -777,7 +807,7 @@ export async function POST(
           const { isSalaryCapLeague, getSalaryCapConfig } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
           const { assignStartupAuctionContract } = await import('@/lib/salary-cap/AuctionStartupService')
           if (await isSalaryCapLeague(leagueId)) {
-            const draftSession = await prisma.draftSession.findUnique({ where: { leagueId } })
+            const draftSession = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
             if (draftSession) {
               const latestPick = await prisma.draftPick.findFirst({
                 where: { sessionId: draftSession.id },
@@ -844,7 +874,12 @@ export async function POST(
     }
     if (action === 'reset_draft') {
       const ok = await resetDraftSession(leagueId)
-      if (!ok) return NextResponse.json({ error: 'Cannot reset draft' }, { status: 400 })
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'Cannot reset draft. A completed draft built the rosters and season and cannot be reset here.' },
+          { status: 400 },
+        )
+      }
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({
         ok: true,

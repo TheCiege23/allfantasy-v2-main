@@ -65,6 +65,22 @@ export const RUNNING_SEASON_STATUSES: readonly string[] = [
 ]
 
 /**
+ * Every status in which games are still being played and scored: the regular season AND the
+ * playoffs.
+ *
+ * 🛑 THE SCORING JOBS USED `RUNNING_SEASON_STATUSES` AND SO DROPPED EVERY LEAGUE THE MOMENT ITS
+ * BRACKET WAS GENERATED. Generating the bracket sets `status = 'playoffs'`; score-sync and
+ * waiver processing were scoped to the running statuses only, so from the first playoff week no
+ * stats were synced, no week was sealed, no waiver ran, and nothing could ever score the
+ * bracket. The week roller keeps the narrower scope on purpose — it advances regular-season
+ * weeks, and the postseason roller owns a season in `playoffs`.
+ */
+export const SCORING_SEASON_STATUSES: readonly string[] = [
+  ...RUNNING_SEASON_STATUSES,
+  REDRAFT_SEASON_STATUS.PLAYOFFS,
+]
+
+/**
  * Map any stored spelling onto the canonical one. Returns null for a value this
  * module does not recognise — callers decide what to do with "unknown", exactly
  * as `normalizeSeasonType` does for the schedule feed. Guessing `ACTIVE` here

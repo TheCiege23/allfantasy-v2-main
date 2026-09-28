@@ -6,6 +6,7 @@ import { LanguageProviderClient } from "@/components/i18n/LanguageProviderClient
 import SessionAppProvider from "@/components/providers/SessionAppProvider"
 import { ThemeProvider } from "@/components/theme/ThemeProvider"
 import { PHProvider, PostHogUserIdentifier } from "@/components/providers/PostHogProvider"
+import { GeoRefusalWatcher } from "@/components/geo/GeoRefusalWatcher"
 
 export function AppProviders({
   children,
@@ -20,6 +21,7 @@ export function AppProviders({
         <SessionAppProvider session={session}>
           {/* PostHogUserIdentifier must be inside SessionAppProvider so useSession() works */}
           <PostHogUserIdentifier />
+          <GeoRefusalWatcher />
           <ThemeProvider>{children}</ThemeProvider>
         </SessionAppProvider>
       </LanguageProviderClient>

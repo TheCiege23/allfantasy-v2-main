@@ -646,6 +646,84 @@
 .af-cm-follow-note[data-tone='bad'] { color: var(--warn); }
 
 /*
+ * Thumbs up / down under a delivered answer (ChimmyAnswerRating.tsx). Quieter than "Did it":
+ * icon-only, no border even when chosen. Square at 44px because the drawer's labelled-icon-button
+ * rule (`.af-cm :is(button[aria-label], …)`) already makes them 44px tall for a thumb on a phone.
+ */
+.af-cm-rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  margin-left: -10px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-cm-rate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.af-cm-rate-btn:hover { color: var(--text2); background: var(--chip); }
+.af-cm-rate-btn:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+
+.af-cm-rate-btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-cm-rate-note { margin-left: 4px; }
+
+/*
+ * "Want this on your phone?" under the latest answer (components/notifications/PushOptInPrompt.tsx).
+ * A card, not a banner: it belongs to the answer above it, and it goes away on either button.
+ */
+.af-pushask {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+.af-pushask[data-state='on'] { border-color: var(--line2); background: var(--chip); }
+.af-pushask-text { margin: 0; }
+.af-pushask-error { margin: 6px 0 0; color: var(--warn); }
+.af-pushask-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.af-pushask-go,
+.af-pushask-later {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-pushask-go { border: 0; background: var(--accent); color: var(--accent-ink); }
+.af-pushask-later { border: 1px solid var(--line2); background: transparent; color: var(--text2); }
+.af-pushask-go:disabled,
+.af-pushask-later:disabled { cursor: default; opacity: 0.6; }
+.af-pushask-go:focus-visible,
+.af-pushask-later:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+
+/*
  * Players named in an answer. The headshot sits ON TOP of the initials, so a
  * dead CDN URL (the img hides itself on error) reveals the fallback rather than
  * a broken-image glyph — a face that fails must degrade to a letter, never to a
@@ -1057,6 +1135,11 @@
   line-height: 1.4;
 }
 
+/* A trade's grade, one chip per team — lib/activity/tradeGradeLabel.ts. */
+.af-cm-act-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 10.5px; color: var(--faint); }
+.af-cm-act-grade-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.af-cm-act-grade-chip b { font-weight: 800; }
+
 .af-cm-act > span:first-child { flex: 1; min-width: 0; }
 .af-cm-act-go { flex: none; font-size: 15px; color: var(--faint); }
 
@@ -1435,6 +1518,56 @@
 }
 
 .af-cm-error { color: var(--bad); }
+
+/* Out of tokens: a choice, not an error — see lib/chimmy/outOfAnswers.ts. */
+.af-cm-outofanswers {
+  margin: 4px 0 0;
+  padding: 12px 13px;
+  border: 1px solid var(--accent-line);
+  border-radius: 11px;
+  background: var(--surface2);
+}
+
+.af-cm-outofanswers-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-cm-outofanswers-body {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-cm-outofanswers-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.af-cm-outofanswers-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.af-cm-outofanswers-btn[data-primary='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
 
 .af-cm-empty {
   padding: 20px 4px;
@@ -2169,3 +2302,1127 @@
 .af-cm-rich .af-cm-rich-h { color: var(--text); }
 .af-cm-rich code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--surface2, rgba(255,255,255,.06)); }
 .af-cm-rich .af-cm-rich-hr { border: 0; border-top: 1px solid var(--line2, var(--line)); margin: 10px 0; }
+
+/*
+ * Follow-up chips under the newest Chimmy answer. Top level, last in the file, for the same reason
+ * as the block above: the quick-prompt rules they reuse centre themselves with a large top margin
+ * for the empty state, which inside an answer would float the chips away from the text they follow.
+ */
+.af-cm-turn .af-cm-followups { justify-content: flex-start; margin-top: 10px; }
+
+/*
+ * ══ Fit pass — 2026-09-24 (owner: "the chat bubble, including chimmy intelligence, looks bad
+ *    on mobile and PC") ══
+ *
+ * 🛑 THE COMPACT LAYOUT WAS KEYED ON THE SCREEN, AND IT IS THE PANEL THAT IS NARROW. Every
+ * compact rule above sits in `@media (max-width: 520px)`. Docked on a desktop the panel is 392px
+ * (352px under 1200px) on a screen far wider than 520, so it got the WIDE layout squeezed into a
+ * phone-sized column: five icon+label tabs overflowing their track with the open pill landing on
+ * its neighbours ("Leagu", "Chimm"), a league filter reading "Find a lea", a footer wrapping onto
+ * two lines. `.af-cm` is now a size container, and the compact rules below ask how wide the PANEL
+ * is — one answer for docked, phone and a narrow window alike.
+ *
+ * At every width: the tabs are an equal five-column grid (a flex row let long labels shove short
+ * ones out of the track); the composer is one line that grows as you type — no resize grip, and
+ * the send button no longer stretched to the textarea's height; the fine print is one quiet line.
+ *
+ * ⚠ CONTRACTS UNTOUCHED, AS IN EVERY LAYER ABOVE. The audience line, the scope (chip on wide,
+ * dropdown always), the cost note and the privacy notices all still render.
+ */
+.af-cm { container: af-cm / inline-size; }
+
+.af-cm-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.af-cm-tab { min-width: 0; padding-inline: 6px; white-space: nowrap; }
+.af-cm-tab > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.af-cm-audience { display: flex; align-items: center; gap: 6px; padding: 10px 4px 8px; font-size: 11px; color: var(--muted); }
+.af-cm-audience > svg { flex: none; color: var(--accent); }
+
+/* With no filter box the dropdown takes the whole row. The box, when shown, matches it. */
+.af-cm-league-picker[data-search='false'] { grid-template-columns: minmax(0, 1fr); }
+.af-cm-league-search { padding: 0 10px; border: 0; background: var(--surface); }
+.af-cm-league-search input { padding-inline: 4px; }
+
+/* Fast / Deep and what they mean, on one row instead of two. */
+.af-cm-answer-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; padding-top: 10px; }
+.af-cm-answer-mode .af-cm-scope-chips { flex: none; }
+.af-cm-answer-mode .af-cm-scope-note { flex: 1 1 180px; margin: 0; }
+
+.af-cm-trades { margin-bottom: 14px; }
+.af-cm-trades-toggle { min-height: 40px; font-size: 13px; font-weight: 700; }
+
+.af-cm-composer { align-items: flex-end; }
+.af-cm .af-cm-input { resize: none; field-sizing: content; min-height: 44px; max-height: 140px; overflow-y: auto; }
+.af-cm-composer .af-cm-icon,
+.af-cm-composer .af-cm-send { flex: none; width: 44px; height: 44px; min-height: 44px; }
+.af-cm-costnote { margin: 0; padding: 2px 20px 10px; background: transparent; font-size: 10.5px; line-height: 1.4; text-align: center; }
+
+.af-cm-foot { margin-top: 0; padding: 10px 20px; gap: 12px; }
+.af-cm-footlink { flex: none; white-space: nowrap; }
+.af-cm-footnote { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+@container af-cm (max-width: 520px) {
+  .af-cm-head { padding: 10px 14px 0; }
+  .af-cm-title { font-size: 16px; }
+  .af-cm-tabs { margin-top: 10px; padding: 3px; border-radius: 16px; }
+  /* Icon over label: five labels fit a 330px track this way, and the icons come back. */
+  .af-cm-tab { flex-direction: column; gap: 3px; min-height: 48px; padding: 5px 2px; border-radius: 13px; font-size: 10.5px; }
+  .af-cm-tab > svg { display: block; }
+  .af-cm-audience { padding: 8px 2px 6px; font-size: 10.5px; }
+
+  .af-cm-scope { padding: 0 14px 10px; }
+  .af-cm-league-picker { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; }
+  .af-cm-league-picker[data-search='false'] { grid-template-columns: minmax(0, 1fr); }
+  .af-cm-league-picker input,
+  .af-cm-league-picker select { min-height: 40px; }
+  /* The phones already dropped these two lines; the docked panel is the same width. */
+  .af-cm-scope-note { display: none; }
+  .af-cm-answer-mode { margin-top: 8px; padding-top: 8px; }
+
+  .af-cm-thread { padding: 12px 16px; }
+  .af-cm-empty { padding: 6px 0; }
+  .af-cm-welcome-icon { margin-bottom: 10px; }
+  .af-cm-empty .af-cm-empty-t { font-size: 20px; }
+  .af-cm-empty-b { font-size: 12px; }
+  .af-cm-quick { margin-top: 14px; gap: 6px; }
+
+  .af-cm-composer { padding: 8px 12px; gap: 6px; }
+  .af-cm-costnote { padding: 0 14px 8px; font-size: 10px; }
+  .af-cm-foot { padding: 8px 14px; }
+  .af-cm-footnote { display: none; }
+}
+
+/*
+ * ══ Conversation pass — 2026-09-25 (owner: "fix the League, DM and huddle messages
+ *    issues … your side / their side … fix the message box hidden issue … can the
+ *    chat bubble be moved") ══
+ *
+ * Appended as its own layer, TOP LEVEL, after the container query above — never
+ * inside another block. CLAUDE.md records what happens when a new `@media` lands
+ * inside an existing one: every rule below the insertion point silently moves into
+ * the narrower query. Each query here opens and closes on its own.
+ *
+ * ⚠ THE DEAD RULE IS LIVE NOW. `.af-cm .af-chat-picker` (max-height against the
+ * visible height) matched no element — the composer's picker wrappers never
+ * carried the class. They do now, so the rule below also has something to hold.
+ */
+
+/* ── Layout: the list owns the scroller, the wrap owns the overlays ── */
+
+.af-cm-convo { position: relative; }
+.af-cm-chatwrap { position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.af-cm-thread.af-cm-chat { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 18px; text-align: left; }
+
+.af-cm-day { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.af-cm-day::before,
+.af-cm-day::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+/* ── Rows and bubbles: theirs left with an avatar, yours right in the accent ── */
+
+.af-cm-row { position: relative; display: flex; align-items: flex-start; gap: 8px; max-width: 100%; padding: 1px 0; }
+.af-cm-row[data-run-start='true'] { margin-top: 8px; }
+.af-cm-row[data-mine='true'] { justify-content: flex-end; }
+
+.af-cm-avatar,
+.af-cm-avatar-gap { flex: none; width: 32px; height: 32px; }
+.af-cm-avatar { display: grid; place-items: center; overflow: hidden; margin-top: 18px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line2); }
+.af-cm-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-cm-avatar-initials { font-size: 11px; font-weight: 800; color: var(--text2); }
+
+.af-cm-col { display: flex; min-width: 0; max-width: min(80%, 520px); flex-direction: column; align-items: flex-start; gap: 3px; }
+.af-cm-row[data-mine='true'] .af-cm-col { align-items: flex-end; }
+.af-cm-col > .af-cm-msg-author { padding-left: 4px; font-size: 11.5px; color: var(--text2); }
+
+.af-cm-bubble {
+  position: relative;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-tap-highlight-color: transparent;
+}
+.af-cm-bubble-text { margin: 0; white-space: pre-wrap; }
+.af-cm-bubble .af-cm-rich { margin-top: 6px; }
+.af-cm-bubble .af-cm-rich:first-child { margin-top: 0; }
+/* A GIF or photo on its own needs no bubble around it. */
+.af-cm-bubble:has(> .af-cm-rich:only-child) { padding: 0; background: transparent; }
+
+/* The corner facing the speaker squares off inside a run, so a run reads as one voice. */
+.af-cm-row:not([data-mine='true']):not([data-run-start='true']) .af-cm-bubble { border-top-left-radius: 6px; }
+.af-cm-row:not([data-mine='true']):not([data-run-end='true']) .af-cm-bubble { border-bottom-left-radius: 6px; }
+.af-cm-row[data-mine='true'] .af-cm-bubble { background: var(--accent); color: var(--accent-ink); }
+.af-cm-row[data-mine='true']:not([data-run-start='true']) .af-cm-bubble { border-top-right-radius: 6px; }
+.af-cm-row[data-mine='true']:not([data-run-end='true']) .af-cm-bubble { border-bottom-right-radius: 6px; }
+.af-cm-row[data-mine='true'] .af-cm-bubble:has(> .af-cm-rich:only-child) { background: transparent; }
+
+.af-cm-bubble[data-deleted='true'] { background: transparent; box-shadow: inset 0 0 0 1px var(--line2); color: var(--muted); }
+.af-cm-row[data-mine='true'] .af-cm-bubble[data-deleted='true'] { background: transparent; color: var(--muted); }
+.af-cm-bubble-deleted { font-style: italic; }
+
+.af-cm-mention { font-weight: 700; color: var(--accent); }
+.af-cm-row[data-mine='true'] .af-cm-mention { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+.af-cm-bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-cm-row[data-menu='true'] .af-cm-bubble { box-shadow: 0 0 0 2px var(--accent-line); }
+.af-cm-row[data-flash='true'] .af-cm-bubble { box-shadow: 0 0 0 3px var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .af-cm-row[data-flash='true'] .af-cm-bubble { animation: af-cm-flash 1.6s ease-out forwards; }
+}
+@keyframes af-cm-flash {
+  0%, 45% { box-shadow: 0 0 0 3px var(--accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Long-press is the menu on touch; the OS text callout would fight it. Copy is in the menu. */
+@media (hover: none) {
+  .af-cm-bubble { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+}
+
+.af-cm-meta { padding: 0 4px; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.af-cm-edited { font-style: italic; }
+.af-cm-row .af-cm-quote { max-width: 100%; }
+
+/* Rich content inside a bubble: never cropped, a little taller than the flat rows allowed. */
+.af-cm-bubble .af-cm-gif img,
+.af-cm-bubble .af-cm-attach { max-height: 240px; object-fit: contain; }
+.af-cm-attach-btn { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.af-cm .af-cm-attach-btn[aria-label] { min-width: 0; min-height: 0; }
+.af-cm-row[data-mine='true'] .af-cm-gif figcaption { color: var(--faint); }
+
+/*
+ * Reaction chips in a row: the TARGET is 44px (the drawer's rule for anything
+ * labelled), the visible pill is 28px — drawn by a pseudo-element so the row
+ * does not grow a fat band under every reacted message.
+ */
+.af-cm-row .af-cm-rx { margin: -8px 0; gap: 2px; }
+.af-cm-row .af-cm-rx-chip { position: relative; min-height: 44px; padding: 0 9px; border: 0; background: none; }
+.af-cm-row .af-cm-rx-chip::before { content: ''; position: absolute; inset: 8px 0; border: 1px solid var(--line2); border-radius: 999px; background: var(--chip); }
+.af-cm-row .af-cm-rx-chip[data-mine='true']::before { border-color: var(--accent); background: var(--accent-soft); }
+.af-cm-row .af-cm-rx-chip > * { position: relative; }
+
+/* ── Desktop hover bar: three quick reactions, reply, more ── */
+
+/*
+ * V3 (live test 2026-09-25): the bar floated over the bubble (`top: -12px; left: 44px`) and covered
+ * the first line of the message and the reactions of the one above it — every row, measured. It now
+ * sits IN the row, beside the bubble on the side away from the speaker, in a lane the row always
+ * keeps. Showing it moves nothing, and it cannot cover a message. A narrow drawer keeps only "More"
+ * (which holds the reactions and Reply) so the lane costs a bubble 44px there, not 172.
+ */
+.af-cm-hoverbar { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .af-cm-hoverbar {
+    flex: none;
+    align-self: center;
+    z-index: 2;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--line2);
+    border-radius: 999px;
+    background: var(--surface2);
+    box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.9);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .af-cm-row[data-mine='true'] .af-cm-hoverbar { order: -1; }
+  .af-cm-row:hover .af-cm-hoverbar,
+  .af-cm-row:focus-within .af-cm-hoverbar { opacity: 1; pointer-events: auto; }
+}
+.af-cm-hoverbtn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text2); font-size: 15px; cursor: pointer; }
+.af-cm-hoverbtn:hover { background: var(--chip); color: var(--text); }
+@container af-cm (max-width: 559px) {
+  .af-cm-hoverbar > .af-cm-hoverbtn:not(:last-child) { display: none; }
+}
+
+/* ── Jump to latest, and the one-line toast ── */
+
+/*
+ * V3 (live test 2026-09-25): the pill was `position: absolute` over the bottom of the list, so it sat
+ * on whatever message was there — measured on 81 of 138 scroll positions on a phone. It is now in
+ * the flow between the list and the composer: the list gives up the pill's height while it shows, so
+ * it floats above the box with room and never covers a message.
+ */
+.af-cm-jump {
+  position: relative;
+  flex: none;
+  align-self: flex-end;
+  margin: 6px 14px 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.85);
+  cursor: pointer;
+}
+.af-cm-jump[data-new='true'] { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+
+.af-cm-toast {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  z-index: 4;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ── Message actions: one sheet on every device, anchored over the conversation ── */
+
+.af-cm-sheet-scrim { position: fixed; inset: 0; z-index: 8; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.45); }
+.af-cm-sheet {
+  width: min(100% - 16px, 440px);
+  max-height: calc(100% - 8px);
+  overflow-y: auto;
+  margin: 0 8px 8px;
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  background: var(--surface2);
+  box-shadow: 0 -12px 40px -16px rgba(0, 0, 0, 0.9);
+  overscroll-behavior: contain;
+}
+.af-cm-sheet-preview { display: flex; min-width: 0; gap: 6px; margin: 0 0 10px; font-size: 12px; color: var(--text2); }
+.af-cm-sheet-preview span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
+.af-cm-sheet-react { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.af-cm .af-cm-sheet-emoji[aria-label] { display: grid; place-items: center; min-width: 0; min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: var(--chip); color: var(--text2); font-size: 22px; line-height: 1; cursor: pointer; }
+.af-cm .af-cm-sheet-emoji[data-on='true'] { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.af-cm-sheet-picker { margin-top: 8px; }
+.af-cm-sheet-who { margin-top: 10px; }
+.af-cm-sheet-who ul { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text2); }
+.af-cm-sheet-who li { padding: 3px 0; }
+.af-cm-sheet-label { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.af-cm-sheet-actions { display: flex; flex-direction: column; margin-top: 10px; border-top: 1px solid var(--line); }
+.af-cm-sheet-btn { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.af-cm-sheet-btn:hover { background: var(--chip); }
+.af-cm-sheet-btn[data-danger='true'] { color: #fb7185; }
+.af-cm-sheet-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 44px; font-size: 13px; color: var(--text2); }
+.af-cm-sheet-confirm .af-cm-sheet-btn { border-bottom: 0; }
+.af-cm-sheet-close { width: 100%; min-height: 44px; margin-top: 8px; border: 0; border-radius: 12px; background: var(--chip); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+
+/* ── Editing your own message, in place ── */
+
+.af-cm-edit { display: flex; min-width: min(260px, 62vw); flex-direction: column; gap: 6px; }
+.af-cm-edit-input { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; font-size: 14px; resize: vertical; }
+.af-cm-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.af-cm-edit-btn { min-height: 36px; padding: 0 12px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.af-cm-edit-btn[data-primary='true'] { border-color: transparent; background: var(--bg); color: var(--accent); }
+.af-cm-edit-error { margin: 0; font-size: 12px; }
+
+/* ── Search this chat ── */
+
+.af-cm-search { flex: none; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.af-cm-search-bar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px 0 14px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.af-cm-search-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; outline: none; }
+.af-cm-search-x { display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.af-cm-search-results { max-height: min(240px, 38vh); overflow-y: auto; margin-top: 6px; border-radius: 12px; background: var(--surface2); }
+.af-cm-search-hit { display: flex; width: 100%; min-height: 44px; flex-direction: column; gap: 2px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.af-cm-search-hit:hover { background: var(--chip); }
+.af-cm-search-who { font-size: 11px; font-weight: 700; color: var(--text2); }
+.af-cm-search-who span { font-weight: 500; color: var(--muted); }
+.af-cm-search-text { display: -webkit-box; overflow: hidden; font-size: 13px; line-height: 1.4; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.af-cm-search-hit[data-expanded='true'] .af-cm-search-text { display: block; -webkit-line-clamp: unset; }
+.af-cm-search-note { margin: 0; padding: 8px 12px; font-size: 12px; color: var(--muted); }
+.af-cm-search-toggle { display: inline-flex; align-items: center; gap: 5px; }
+/* Title, mute and search on one row; both controls get a full 44px target. */
+.af-cm-threadhead .af-cm-threadtitle { display: flex; flex: 1; min-width: 0; align-items: center; gap: 2px; }
+.af-cm-threadtitle .af-cm-mute { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; margin-left: 0; font-size: 14px; color: var(--text2); }
+.af-cm-threadtitle .af-cm-mute:first-of-type { margin-left: auto; }
+
+/* ── Photos dropped onto the conversation ── */
+
+.af-cm-convo[data-af-drop='active']::after {
+  content: 'Drop photos to add them';
+  position: absolute;
+  inset: 8px;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: rgba(9, 14, 18, 0.86);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.af-cm .af-chat-uploading { padding: 0 4px; }
+
+/* ── The full-size image viewer (fills the drawer; the drawer is its containing block) ── */
+
+.af-cm-viewer { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; background: rgba(3, 4, 8, 0.94); }
+.af-cm-viewer-img { max-width: 100%; max-height: calc(100% - 64px); border-radius: 8px; object-fit: contain; }
+.af-cm-viewer-bar { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.af-cm-viewer-link { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 700; color: var(--accent); }
+.af-cm-viewer-x { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--surface); color: var(--text); cursor: pointer; }
+
+/*
+ * ── Pickers inside the drawer ──
+ * Eight forced 44px emoji tiles are 352px plus gaps — wider than a phone's drawer,
+ * so the last column hung off the edge. Columns now fit the width at 44px each.
+ */
+.af-cm .af-chat-picker .grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); }
+.af-cm .af-chat-picker .grid > button[aria-label] { min-width: 0; }
+.af-cm .af-chat-picker > * { max-width: 100%; }
+
+/*
+ * ── The on-screen keyboard ──
+ * `useCommsKeyboardInset` sets these only while a keyboard covers the screen:
+ * the panel pins to the VISIBLE region so the composer sits right above the keys.
+ * Higher specificity than every mode/width rule above, on purpose.
+ */
+.af-cm[data-mode][data-keyboard='open'] {
+  top: calc(var(--af-comms-vv-top, 0px) + 6px);
+  bottom: auto;
+  height: calc(var(--af-comms-vh, 100dvh) - 12px);
+  max-height: none;
+  animation: none;
+}
+.af-cm[data-keyboard='open'] .af-cm-foot { display: none; }
+
+/* On phones the text box and search field stay at 16px, or iOS zooms the page on focus. */
+@media (max-width: 720px) {
+  .af-cm-search-input,
+  .af-cm-edit-input { font-size: 16px; }
+}
+
+/* ── The bubble can be dragged: the browser must not scroll or select under the finger ── */
+
+.af-cm-launch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.af-cm-launch[data-dragging='true'] { cursor: grabbing; transform: scale(1.08); box-shadow: 0 24px 48px -16px rgba(34, 211, 238, 0.7); }
+
+/*
+ * ── The composer sizes to its content ──
+ * 🛑 ChatComposer's root is `flex-1`, written for a horizontal home. In the
+ * drawer's COLUMN that made it split the free height 50/50 with the conversation:
+ * a band of dead space under the message box and half the room for messages —
+ * measured in the 390px and 1280px screenshots of this pass before the fix.
+ */
+.af-cm [data-testid='league-chat-composer'] { flex: none; padding: 6px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
+.af-cm[data-keyboard='open'] [data-testid='league-chat-composer'] { padding-bottom: 6px; }
+.af-cm-convo > .af-cm-typing-note { margin: 0; padding: 2px 16px 4px; }
+.af-cm-sheet-preview b { flex: none; white-space: nowrap; }
+
+/*
+ * Six composer tools and send on one row of a phone drawer: 40px wide, still 44px
+ * tall. "Ask Chimmy" is dropped on a narrow PANEL only — the league tab's
+ * "@chimmy — ask the league's AI, publicly" sits right above it doing the same job.
+ */
+.af-cm .af-chat-tool[aria-label] { min-width: 40px; }
+/* Range syntax on purpose: comms-drawer-fit.test.tsx finds the fit pass as the LAST "(max-width: 520px)" block. */
+@container af-cm (width <= 520px) {
+  .af-cm .af-chat-ask-chimmy { display: none; }
+}
+
+/* The strips between the conversation and the box keep the panel's own gutter. */
+.af-cm-convo > .af-cm-seenby { margin: 0; padding: 2px 16px 0; }
+.af-cm-convo > .af-cm-replybar { margin: 4px 12px 0; border-radius: 0 8px 8px 0; align-items: center; font-size: 11.5px; }
+.af-cm .af-cm-convo > .af-cm-replybar .af-cm-replybar-x { min-width: 44px; min-height: 44px; margin: -10px -8px -10px auto; }
+
+/*
+ * ── The same conversation OUTSIDE the drawer: the league page and the draft room ──
+ * `.af-cm` carries the tokens and the container query the conversation is built on, and
+ * also `position: fixed` for the drawer. An embedded copy keeps the first two and sits in
+ * the page's flow instead. Its height is its own — bounded — so the list scrolls inside it
+ * and the message box stays in view; `data-fill` hands the height to a parent that has one.
+ */
+.af-cm.af-cm-embed {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  height: min(78dvh, 760px);
+  min-height: 420px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  box-shadow: none;
+  overflow: hidden;
+}
+.af-cm.af-cm-embed[data-fill='true'] { height: auto; min-height: 0; flex: 1 1 0; border: 0; border-radius: 0; }
+.af-cm-embed > .af-cm-panel { min-height: 0; }
+
+/*
+ * 🛑 THE PICKERS OPEN UPWARD, AND AN EMBEDDED CHAT CAN BE SHORT. The draft room's chat dock is
+ * ~250px tall at some widths; a 256px GIF picker opened above its composer ran out of the top
+ * of the panel and was clipped by every `overflow: hidden` on the way up — the same way the old
+ * draft composer's menu was. The embed is a SIZE container, so a picker is capped at the room
+ * actually above the box and scrolls inside that, instead of disappearing.
+ */
+.af-cm.af-cm-embed { container: af-cm / size; }
+.af-cm-embed .af-chat-picker { max-height: max(150px, calc(100cqh - 140px)); overflow-y: auto; overscroll-behavior: contain; }
+.af-cm-embed [data-testid='draft-chat-input'] { border: 0; box-shadow: none; min-height: 44px; }
+
+/* DMs / Huddles on the league page's Messages tab. */
+.af-cm-kindswitch { display: flex; flex: none; gap: 6px; padding: 10px 14px 0; }
+.af-cm-kindswitch .af-cm-draft-toggle { margin-top: 0; padding: 4px 12px; font-size: 11.5px; }
+.af-cm-threadhead .af-cm-askchimmy { margin-top: 0; white-space: nowrap; }
+
+/* "Draft room" over a message posted from the draft. */
+.af-cm-msg-tag {
+  padding: 1px 7px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* A row that is not somebody talking: a draft pick, the draft copilot. No bubble, no actions. */
+.af-cm-row.af-cm-row-system { justify-content: center; margin: 8px 0; }
+.af-cm-row-system > * { width: min(100%, 460px); }
+.af-cm-row-system[data-flash='true'] > * { box-shadow: 0 0 0 3px var(--accent); }
+
+/* Your draft is live: a way into the room from league chat. */
+.af-cm-draftlive {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 8px 14px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text2);
+  font-size: 12px;
+}
+.af-cm-draftlive b { color: var(--text); }
+.af-cm-draftlive-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--good, #34d399); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2); }
+.af-cm-draftlive-text { flex: 1 1 180px; min-width: 0; }
+.af-cm-draftlive-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/*
+ * A picker that could not fit above a short box (the draft room's dock) floats over the page
+ * instead, portalled to <body> so no panel's `overflow: hidden` or size container can cut it.
+ * It keeps `.af-cm` for the tokens; everything the drawer's `.af-cm` adds is undone here.
+ */
+.af-cm.af-cm-floatpicker {
+  position: fixed;
+  inset: auto;
+  z-index: 120;
+  display: block;
+  height: auto;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85);
+}
+.af-cm-floatpicker > .af-chat-picker { overflow-y: auto; overscroll-behavior: contain; border-radius: 14px; }
+
+/* The draft room's chat, popped out of its dock on a laptop: a tall panel on the right. */
+.af-dc-popped { box-shadow: 0 30px 90px -30px rgba(0, 0, 0, 0.9); }
+
+/*
+ * A docked chat (the draft room's dock, the league page's Messages tab) driven by a MOUSE:
+ * 44px thumb targets are a phone rule, and on a ~240px dock they cost the conversation two of
+ * its four visible lines. Touch screens keep 44px — this block only matches a fine pointer.
+ */
+@media (hover: hover) and (pointer: fine) {
+  .af-cm-embed[data-fill='true'] .af-chat-tool[aria-label],
+  .af-cm-embed[data-fill='true'] .af-chat-send[aria-label] { min-width: 32px; min-height: 32px; }
+  .af-cm-embed[data-fill='true'] [data-testid='draft-chat-input'] { min-height: 36px; }
+  .af-cm-embed[data-fill='true'] [data-testid='league-chat-composer'] { padding: 2px 4px 4px; }
+  .af-cm .af-dc-composer { padding: 6px 8px; }
+}
+
+/*
+ * Docked in the draft room, the chat IS the bottom-right corner, and the War Room's 56px round
+ * button is fixed there (bottom 16px, right 16px). Measured at 1280x900 it sat over the right
+ * end of the box and the top of the send button. Keep the box out from under it on a laptop;
+ * on a phone the chat scrolls with the page, so the corner is only briefly shared.
+ */
+@media (min-width: 768px) {
+  .af-cm .af-dc-composer[data-fab-corner='true'] { padding-right: 68px; }
+}
+
+/*
+ * The DM / Huddle privacy note, folded to one line inside an open conversation (ThreadPanel). The
+ * summary is the whole tap target; the note itself reads exactly as the full version on the list.
+ */
+.af-cm-privacy-mini {
+  flex: none;
+  margin: 8px 15px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-cm-privacy-mini > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+}
+.af-cm-privacy-mini > summary::-webkit-details-marker {
+  display: none;
+}
+.af-cm-privacy-mini > p {
+  margin: 4px 0 2px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface2);
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  .af-cm-privacy-mini > summary {
+    min-height: 44px;
+  }
+}
+
+/*
+ * ── When Chimmy cannot answer: say why, and offer Try again ──
+ * The red line above says what went wrong (describeChimmyFailure); this row appears only when asking
+ * again could fix it, and the question is already back in the box.
+ */
+.af-cm-retryrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.af-cm-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-cm-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (max-width: 720px) {
+  .af-cm-retry {
+    min-height: 44px;
+  }
+}
+
+/*
+ * ── A short screen: the keyboard is up, or the phone is on its side ──
+ * Live test 2026-09-25 (phone-18, 390x470): with the keyboard open, the header, the tabs, the "Who
+ * sees this" line and the full privacy note filled the top half, one message showed, and the
+ * footer's "Notification settings" sat on top of the message box. While you type, the conversation
+ * and the box win. Stepping aside: the privacy notes (read before you started typing, and the tab
+ * you are on still names the room), the footer, and the tab icons. Staying: the tabs, and the "Who
+ * sees this" line — the one sentence about the words you are typing right now.
+ *
+ * Two triggers, because keyboards shrink different viewports. useCommsKeyboardInset sets
+ * `data-keyboard` when only the VISUAL viewport shrinks (iOS Safari, Chrome). A browser that resizes
+ * the LAYOUT viewport never trips that hook; a short viewport height catches it, and a phone held
+ * sideways, which has the same problem with no keyboard at all. Each block is top level.
+ */
+.af-cm[data-keyboard='open'] .af-cm-privacy,
+.af-cm[data-keyboard='open'] .af-cm-privacy-mini,
+.af-cm[data-keyboard='open'] .af-cm-tab > svg {
+  display: none;
+}
+.af-cm[data-keyboard='open'] .af-cm-head { padding-top: 6px; }
+.af-cm[data-keyboard='open'] .af-cm-tabs { margin-top: 6px; }
+.af-cm[data-keyboard='open'] .af-cm-tab { min-height: 44px; padding-block: 2px; }
+.af-cm[data-keyboard='open'] .af-cm-audience { padding-block: 4px; }
+
+@media (max-height: 560px) {
+  .af-cm .af-cm-privacy,
+  .af-cm .af-cm-privacy-mini,
+  .af-cm .af-cm-foot,
+  .af-cm .af-cm-tab > svg {
+    display: none;
+  }
+  .af-cm .af-cm-head { padding-top: 6px; }
+  .af-cm .af-cm-tabs { margin-top: 6px; }
+  .af-cm .af-cm-tab { min-height: 44px; padding-block: 2px; }
+  .af-cm .af-cm-audience { padding-block: 4px; }
+}
+
+/*
+ * ── Phones: chat is the whole screen ──
+ * Owner, 2026-09-25: "full-screen on phones, like Sleeper". Every layer above made the phone
+ * dialog an inset card — page showing above and on both sides, a rounded border — which left the
+ * conversation a floating card on a 390px screen (live test phone-05). Under 521px it is now the
+ * screen: edge to edge, no border, no radius. Tablets and desktop keep the panel.
+ *
+ * The notch and the home bar pad the INSIDE (header top, footer bottom), so neither covers the
+ * close button or the links. The composer already carries its own bottom inset.
+ *
+ * With the keyboard up, the earlier rule pins the dialog to the visible region with 6px margins;
+ * full-screen drops the margins. Same specificity, later in the file, so this one wins.
+ */
+@media (max-width: 520px) {
+  .af-cm[data-mode='overlay'] {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .af-cm[data-mode='overlay'] .af-cm-head { padding-top: max(10px, env(safe-area-inset-top, 0px)); }
+  .af-cm[data-mode='overlay'] .af-cm-foot { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .af-cm[data-mode='overlay'][data-keyboard='open'] {
+    top: var(--af-comms-vv-top, 0px);
+    bottom: auto;
+    height: var(--af-comms-vh, 100dvh);
+  }
+}
+
+/*
+ * ── Links inside a message (league chat, DMs, huddles) ──────────────────────────────
+ * Top level, appended at the end on purpose: never inside an existing @media. A long URL wraps
+ * rather than pushing the bubble wider than the drawer; on your own accent bubble the link takes
+ * the bubble's ink so it stays readable.
+ */
+.af-cm-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.af-cm-row[data-mine='true'] .af-cm-link { color: inherit; }
+
+/*
+ * ── DM and huddle list rows (2026-09-25) ─────────────────────────────────────────────
+ * Avatar(s), name and time on the first line, a one-line preview and the unread count on the
+ * second. The whole row is the button and never shorter than 44px. Top level and appended at the
+ * end on purpose — never inside an existing @media, which silently moves every rule after the
+ * insertion point into the narrower query (see CLAUDE.md).
+ */
+.af-cm-dmrow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 6px;
+}
+.af-cm-dmrow-avs {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+}
+.af-cm-dmrow-av {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+.af-cm-dmrow-av img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-cm-dmrow-initials { font-size: 13px; font-weight: 800; color: var(--text2); }
+/*
+ * A huddle stacks up to three smaller faces in the same 44px square — two on a diagonal, three in
+ * a triangle — each ringed in the panel colour so the overlap reads as a stack, not a smudge.
+ */
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-av,
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 0 0 2px var(--surface2, #14191e);
+}
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-av:nth-child(1) { top: 0; left: 0; }
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-av:nth-child(2) { right: 0; bottom: 0; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av { width: 24px; height: 24px; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(1) { top: 0; left: 10px; z-index: 1; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(2) { bottom: 0; left: 0; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(3) { right: 0; bottom: 0; }
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-initials { font-size: 10px; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-initials { font-size: 9px; letter-spacing: -0.02em; }
+
+.af-cm-dmrow-main { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 3px; }
+.af-cm-dmrow-top,
+.af-cm-dmrow-bottom { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-cm-dmrow .af-cm-threadrow-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.af-cm-dmrow-time { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.af-cm-dmrow-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.af-cm-dmrow .af-cm-threadrow-unread { margin-left: auto; }
+
+/* Unread: the name and the line under it go bold and bright, and the time takes the accent. */
+.af-cm-dmrow[data-unread='true'] .af-cm-threadrow-title { font-weight: 800; }
+.af-cm-dmrow[data-unread='true'] .af-cm-dmrow-preview { font-weight: 700; color: var(--text); }
+.af-cm-dmrow[data-unread='true'] .af-cm-dmrow-time { font-weight: 700; color: var(--accent); }
+
+.af-cm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.af-cm-threadrow-unread { position: relative; }
+
+/* ── Report / Block confirm steps and the huddle sheets ──────────────────────────────── */
+.af-cm-sheet-safety { display: flex; flex-direction: column; gap: 8px; padding: 10px 6px 4px; border-bottom: 1px solid var(--line); }
+.af-cm-sheet-safety-t { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.af-cm-sheet-safety-b { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text2); }
+.af-cm-sheet-safety-l { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.af-cm-sheet-select,
+.af-cm-sheet-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.af-cm-sheet-safety-err { margin: 0; font-size: 13px; line-height: 1.4; color: #fb7185; }
+.af-cm-sheet-btn[data-primary='true'] { color: var(--accent); font-weight: 700; }
+.af-cm-sheet-actions .af-cm-sheet-safety .af-cm-sheet-btn { border-bottom: 0; }
+
+.af-cm-members { display: flex; flex-direction: column; margin: 6px 0 0; padding: 0; list-style: none; }
+.af-cm-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.af-cm-member .af-cm-dmrow-av { width: 36px; height: 36px; }
+.af-cm-member-name { flex: 1; min-width: 0; overflow: hidden; font-size: 14px; color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
+.af-cm-member-you { color: var(--muted); }
+.af-cm-member-handle { flex: none; max-width: 40%; overflow: hidden; font-size: 12px; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
+
+/*
+ * ══ People picker — 2026-09-25 (owner: pick someone from your own leagues, with search, instead
+ *    of typing an exact username). The DM and huddle "new conversation" box: a combobox whose
+ *    listbox of league-mates sits in the flow under it rather than floating, so it can never be
+ *    clipped by the drawer or hidden under the thread list.
+ *
+ * Top level and last on purpose — no rule here is inside a query, and the one width-dependent
+ * value (the gutter) uses container units with a plain fallback instead of a new breakpoint.
+ * Every tap target is 44px or more: option rows 56px, chip × 44px, Start 44px.
+ */
+.af-cm-pick {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-inline: 16px;
+  padding-inline: clamp(16px, 3cqi, 22px);
+}
+.af-cm-pick .af-cm-pick-form {
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 8px;
+  border: 0;
+  background: transparent;
+}
+.af-cm-pick .af-cm-pick-input { min-height: 44px; }
+.af-cm-pick .af-cm-pick-input:focus { box-shadow: 0 0 0 2px var(--accent-line); }
+.af-cm-pick .af-cm-pick-start {
+  width: auto;
+  min-width: 64px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+}
+.af-cm-pick .af-cm-pick-error { margin: 0; padding: 0 2px 8px; font-size: 12.5px; line-height: 1.4; }
+
+.af-cm-pick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 0 0;
+  list-style: none;
+}
+.af-cm-pick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 44px;
+  padding-left: 5px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+/* Small enough that two chips share a row on a 390px phone, so a huddle of four is two rows, not four. */
+.af-cm-pick-chip .af-cm-pick-av { width: 28px; height: 28px; }
+.af-cm-pick-chip .af-cm-dmrow-initials { font-size: 10px; }
+.af-cm-pick-chip-name { min-width: 0; max-width: 112px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.af-cm-pick-chip-x {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 42px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+}
+.af-cm-pick-chip-x:hover { color: var(--text); }
+.af-cm-pick-chip-x:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.af-cm-pick-chip-x:disabled { opacity: 0.45; cursor: default; }
+
+.af-cm-pick-pop {
+  margin: 0 0 10px;
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface2);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  scrollbar-width: thin;
+}
+.af-cm-pick-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 14px 6px;
+  background: var(--surface2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-cm-pick-list { margin: 0; padding: 0 0 6px; list-style: none; }
+.af-cm-pick-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.af-cm-pick-opt:hover { background: rgba(255, 255, 255, 0.04); }
+.af-cm-pick-opt[data-active='true'] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.af-cm-pick-opt[aria-disabled='true'] { opacity: 0.55; cursor: default; }
+.af-cm-pick-opt .af-cm-pick-av { width: 40px; height: 40px; }
+.af-cm-pick-av .af-cm-dmrow-initials { font-size: 12px; }
+.af-cm-pick-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.af-cm-pick-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.af-cm-pick-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-cm-pick-handle {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-cm-pick-league {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-cm-pick-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.af-cm-pick-opt[data-picked='true'] .af-cm-pick-check { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.af-cm-pick-note { margin: 0; padding: 12px 14px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/*
+ * Discord tab (2026-09-25): the Join / Open channel / Manage links sit under a CENTRED title, and
+ * `.af-cm-empty` loses its side padding above (`padding: 22px 0`), so the row started flush against
+ * the drawer's edge. Centred and inset here; scoped to the empty state so IntegrityFlagCard's own
+ * `.af-cm-actions` row is untouched. Three classes, to outrank `.af-core .af-cm-actions`.
+ */
+.af-cm .af-cm-empty .af-cm-actions {
+  justify-content: center;
+  padding-inline: 16px;
+}
+
+/* ── Chimmy in league chat: sparkle avatar, "✦ Chimmy" badge, the moment it was ──────────────
+ * Drawn only for rows carrying the server-owned marker (lib/league-chat/chimmyIdentity.ts).
+ * Appended as top-level blocks on purpose: nothing here sits inside an existing @media query. */
+.af-cm-avatar.af-cm-avatar-chimmy {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
+}
+.af-cm-col > .af-cm-msg-author.af-cm-chimmy-byline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding-left: 2px;
+}
+.af-cm-chimmy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.af-cm-chimmy-kind {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-cm-row[data-chimmy='true'] .af-cm-bubble {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* Market value beside "Gave" / "Got" on a Chimmy trade card, and where the trade stands. */
+.af-cm-trade-value {
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.af-cm-trade-valuenote,
+.af-cm-trade-note {
+  margin: 0;
+  font-size: 10.5px;
+}
+
+/* Decision comparisons: readable in the drawer and full-page Chimmy. */
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-text { font-size: 15px; line-height: 1.7; color: var(--text); }
+.af-cm-turn[data-role='chimmy'] { padding-block: 12px; }
+.af-cm-scn { padding: 16px; border-radius: 14px; font-size: 13px; line-height: 1.6; color: var(--text); overflow-wrap: anywhere; }
+.af-cm-scn-title { font-size: 11px; margin-block: 14px 10px; }
+.af-cm-verdict { border-left: 4px solid var(--warn); padding-left: 14px; }
+.af-cm-verdict[data-verdict='YES'] { border-color: var(--good); }
+.af-cm-verdict[data-verdict='NO'] { border-color: var(--bad); }
+.af-cm-verdict-label { display: block; font-size: 12px; color: var(--muted); }
+.af-cm-verdict > strong { display: block; font-size: 26px; line-height: 1.3; color: var(--text); margin: 4px 0; }
+.af-cm-verdict p { margin: 6px 0 0; }
+.af-cm-scn[data-kind='trade'] .af-cm-scn-sides { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-bottom: 16px; }
+.af-cm-scn[data-kind='trade'] .af-cm-scn-side { padding: 12px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.af-cm-scn-label { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+.af-cm-trade-assets { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.af-cm-trade-assets li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-cm-trade-assets strong { display: block; font-size: 13px; }
+.af-cm-trade-assets small { display: block; color: var(--muted); }
+.af-cm-asset-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 9px; background: var(--surface2); font-size: 10px; font-weight: 700; }
+.af-cm-scn-table { table-layout: fixed; }
+.af-cm-scn-table th, .af-cm-scn-table td { padding: 10px 3px; white-space: normal; overflow-wrap: anywhere; }
+.af-cm-scn-table th:first-child { width: 38%; }
+.af-cm-scn-table thead th { font-size: 10px; color: var(--muted); }
+.af-cm-scn-table td.af-cm-scn-na, .af-cm-scn-unit { color: var(--muted); }
+.af-cm-scn-assumptions { margin-top: 12px; font-size: 12px; color: var(--muted); }
+.af-cm-scn-assumptions summary { cursor: pointer; min-height: 32px; padding-block: 6px; color: var(--text); }
+.af-cm-scn-assumptions summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 420px) { .af-cm-scn[data-kind='trade'] .af-cm-scn-sides { grid-template-columns: 1fr; } .af-cm-scn { padding: 12px; } }
+
+.af-cm-expand { display: block; padding: 10px 16px; font-size: 13px; color: var(--accent); text-align: right; }
+.af-cm-panel[data-chimmy] .af-cm-ev-toggle { font-size: 12px; min-height: 36px; }
+
+.af-cm-image-open { display: grid; gap: 6px; margin-top: 10px; padding: 0; background: transparent; color: var(--accent); border: 0; cursor: pointer; text-align: left; font-size: 12px; }
+.af-cm-image-open img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; }
+.af-cm-image-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.af-cm-image-dialog { max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface,#172126); color: var(--text); }
+.af-cm-image-dialog::backdrop { background: rgba(0,0,0,.75); }
+.af-cm-image-dialog img { display: block; max-width: 100%; max-height: calc(100dvh - 110px); object-fit: contain; margin-top: 12px; }
+.af-cm-image-dialog button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); color: var(--text); cursor: pointer; }

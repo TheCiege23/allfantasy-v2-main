@@ -17,6 +17,7 @@ import { resolveAfPlanFromEntitlement } from '@/lib/tournament/resolve-af-plan-f
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import { extractLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type SurvivorCommissionerDashboardResult =
   | {
@@ -120,7 +121,7 @@ export async function buildSurvivorCommissionerDashboard(
     getJuryMembers(leagueId),
     isMergeTriggered(leagueId, week),
     getExileLeagueId(leagueId),
-    prisma.draftSession.findUnique({ where: { leagueId }, select: { id: true } }),
+    prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true } }),
     prisma.survivorGameState.findUnique({ where: { leagueId } }),
     prisma.roster.count({ where: { leagueId } }),
     prisma.survivorChatChannel.count({ where: { leagueId } }),

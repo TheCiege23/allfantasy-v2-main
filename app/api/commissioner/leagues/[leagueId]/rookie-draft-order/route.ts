@@ -1,14 +1,18 @@
 /**
  * GET: Compute and return rookie draft order preview.
- * PUT: Save rookie draft order mode config.
- * AF Commissioner Subscription required for both.
+ * PUT: Save rookie draft order mode config (commissioner only).
  * Only for dynasty/C2C/devy leagues, future seasons (not first season).
+ *
+ * ⚠ FREE, NOT AF COMMISSIONER. Both modes (worst-to-first, reverse max PF) are a
+ * deterministic sort of last season's results — nothing here is AI — yet saving was
+ * gated on `commissioner_ai_tools`, so a free dynasty league could never turn
+ * auto-ordering on and every rookie draft needed a hand-set order. Setting the order
+ * a league's own draft runs in is running the league.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import {
   computeRookieDraftOrder,
   saveRookieDraftOrderConfig,
@@ -17,7 +21,6 @@ import {
 } from '@/lib/league/rookieDraftOrder'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 
-const featureGate = new FeatureGateService()
 export const dynamic = 'force-dynamic'
 
 const VALID_VARIANTS = new Set(['dynasty', 'devy', 'c2c', 'keeper'])
@@ -50,14 +53,6 @@ export async function GET(
     return NextResponse.json({ error: 'Only available for Dynasty, C2C, Devy, and Keeper leagues' }, { status: 400 })
   }
 
-  // Premium gate
-  let isPremium = false
-  try {
-    isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'commissioner_ai_tools')).allowed
-  } catch {
-    try { isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring')).allowed } catch {}
-  }
-
   const isCommissioner = league.userId === session.user.id
   const savedConfig = await getRookieDraftOrderConfig(leagueId)
   const mode: RookieDraftOrderMode = savedConfig?.mode ?? 'worst_to_first'
@@ -73,7 +68,6 @@ export async function GET(
     savedMode: savedConfig?.mode ?? null,
     enabled: savedConfig?.enabled ?? false,
     isCommissioner,
-    isPremium,
   })
 }
 
@@ -94,17 +88,6 @@ export async function PUT(
 
   if (!isDynastyLike(league)) {
     return NextResponse.json({ error: 'Only available for Dynasty, C2C, Devy, and Keeper leagues' }, { status: 400 })
-  }
-
-  // Premium gate
-  let isPremium = false
-  try {
-    isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'commissioner_ai_tools')).allowed
-  } catch {
-    try { isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring')).allowed } catch {}
-  }
-  if (!isPremium) {
-    return NextResponse.json({ error: 'premiumRequired', message: 'Rookie draft order requires AF Commissioner Subscription.' }, { status: 403 })
   }
 
   const body = await req.json().catch(() => ({}))

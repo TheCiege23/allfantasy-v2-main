@@ -4,12 +4,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { fetchNewsContext } from '@/lib/upstream-apis'
-import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getStrategyMetaReports } from '@/lib/strategy-meta'
 import { getInsightBundle } from '@/lib/ai-simulation-integration'
 import { computeDraftRecommendation } from '@/lib/draft-helper/RecommendationEngine'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { aiCostGate, evaluateAiCostGate } from '@/lib/ai-protection/costGate'
+// Grok news was fetched on EVERY pick with no cache — see lib/mock-draft/grokNewsCache.ts.
+import { fetchPlayerNewsCached } from '@/lib/mock-draft/grokNewsCache'
 
 const openai = getOpenAIRouteClient()
 
@@ -413,6 +415,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Burst limit only — a daily cap here would cut a mock off mid-draft (see mock_ai_pick).
+    const burst = await aiCostGate(req, 'mock_ai_pick', session.user.id)
+    if (burst) return burst
+
     const body = await req.json()
     const {
       action = 'pick',
@@ -491,7 +497,7 @@ export async function POST(req: NextRequest) {
               limit: 30,
             },
           ).catch(() => null),
-          fetchPlayerNewsFromGrok(topCandidateNames.slice(0, 15), 'nfl').catch(() => []),
+          fetchPlayerNewsCached(topCandidateNames.slice(0, 15)).catch(() => []),
           strategyMetaContextPromise,
           insightBundlePromise,
         ])
@@ -682,7 +688,10 @@ export async function POST(req: NextRequest) {
         .slice(0, 3)
 
       let aiInsight = ''
-      try {
+      // The one per-pick action that calls OpenAI. Over the daily cap the deterministic
+      // suggestions above still return; only the written scout note is left out.
+      const suggestionGate = await evaluateAiCostGate(req, 'mock_ai_suggestion', session.user.id)
+      if (suggestionGate.ok) try {
         const sportLabel = normalizedSport === 'NFL'
           ? 'football'
           : normalizedSport === 'NBA'

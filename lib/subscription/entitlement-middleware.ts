@@ -24,6 +24,13 @@ export type FeatureGateMiddlewareOptions = {
   tokenSourceId?: string
   tokenDescription?: string
   tokenMetadata?: Record<string, unknown>
+  /**
+   * Take the token path EVEN THOUGH the plan grants the feature. For a feature a plan includes up to
+   * an allowance (Chimmy: AF Pro, 100 answers a day — lib/chimmy/planAllowance.ts): once it is used,
+   * the plan holder pays tokens exactly as a free account does, consent prompt and all. Requires
+   * `allowTokenFallback`. Absent or false changes nothing for any existing caller.
+   */
+  forceTokenFallback?: boolean
 }
 
 export type FeatureGateMiddlewareResult =
@@ -116,7 +123,7 @@ export async function requireFeatureEntitlement(
     options.featureId,
     options.userEmail
   )
-  if (decision.allowed) {
+  if (decision.allowed && !(options.forceTokenFallback && options.allowTokenFallback)) {
     return { ok: true, decision, tokenSpend: null, tokenPreview: null }
   }
 

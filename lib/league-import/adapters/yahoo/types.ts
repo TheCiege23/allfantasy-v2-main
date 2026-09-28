@@ -122,6 +122,13 @@ export interface YahooImportPayload {
   /** Team keys flagged as commissioner/co-commissioner in Yahoo manager metadata. */
   commissionerTeamKeys?: string[]
   /**
+   * Team keys whose manager Yahoo marks `is_commissioner` — the league's commissioner and
+   * nothing else. `commissionerTeamKeys` above is deliberately broader (co-commissioner and
+   * team co-manager flags too) because the import gate uses it only to skip an attestation;
+   * this one becomes `LeagueTeam.isCommissioner`, a permission, so it must not be.
+   */
+  headCommissionerTeamKeys?: string[]
+  /**
    * Teams whose roster request REJECTED — IMP-04. Their `rosterPlayerIds` etc. are an
    * empty placeholder, not an observation, and must never replace stored roster rows.
    * Empty array means every team's roster was fetched successfully.

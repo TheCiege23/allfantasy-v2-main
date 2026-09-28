@@ -72,7 +72,7 @@ const TIER_META: Record<
      * a card with no score reads as a broken score, where "In season" is a claim
      * this data actually supports.
      */
-    blurb: 'Rosters read, nothing blocking. Live scores are not ingested yet, so these carry no score.',
+    blurb: 'Rosters are connected and nothing needs attention. Latest matchup scores appear when available.',
     anchor: 'af-ml-playing',
   },
   quiet: {

@@ -86,6 +86,22 @@ function payload(scope: 'my' | 'all'): LivePageData {
 const cards = (c: HTMLElement) => c.querySelectorAll('.af-live-game').length
 
 describe('/core/live reaches every game', () => {
+  it('labels the fixture slate without asserting all scheduled games happen today', () => {
+    const { container } = render(<LiveScores data={payload('all')} selectedLeagueId="league-a" />)
+    expect(container.querySelector('[aria-label="2 games in slate"]')).toBeTruthy()
+    expect(container.querySelector('[aria-label="2 games today"]')).toBeNull()
+  })
+
+  it('formats upcoming kickoff timestamps with the date and Eastern time zone', () => {
+    const data = payload('all')
+    data.impact.upNext = [{ playerName: 'Brian Thomas Jr.', matchup: 'NE @ JAX', startTime: '2026-09-27T17:00Z' }]
+    const { container } = render(<LiveScores data={data} selectedLeagueId="league-a" />)
+    const time = container.querySelector('.af-live-next-time')?.textContent
+    expect(time).toContain('Sep 27')
+    expect(time).toContain('1:00 PM')
+    expect(time).toContain('EDT')
+    expect(time).not.toContain('T17:00')
+  })
   it('offers the My/All control even with a league selected', () => {
     const { container } = render(<LiveScores data={payload('my')} selectedLeagueId="league-a" />)
     const labels = [...container.querySelectorAll('.af-live-scope-btn')].map((b) => b.textContent?.trim())

@@ -32,6 +32,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     draftSession: {
       findUnique: draftSessionFindUniqueMock,
+      findFirst: draftSessionFindUniqueMock,
     },
     aiCommissionerActionLog: {
       findMany: actionLogFindManyMock,

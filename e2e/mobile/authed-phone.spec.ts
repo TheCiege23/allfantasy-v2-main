@@ -21,7 +21,7 @@ import { TC_TRADE_SEED } from "../../scripts/seed-redraft-trade-walkthrough.cons
  * `test:e2e:mobile` excludes `@db`, and `test:e2e:mobile:auth` runs only it.
  *
  * 🛑 WHY THESE SCREENS HAVE NEVER BEEN MEASURED ON A PHONE. `/core/*` is
- * auth-gated — `app/core/[[...screen]]/page.tsx` redirects to `/login` without a
+ * auth-gated — `app/core/(shell)/[[...screen]]/page.tsx` redirects to `/login` without a
  * session and to `/import` without a league — so every mobile check the repo had
  * stopped at the marketing routes. Trade Center's phone CSS was written, shipped,
  * and never once rendered at 390px by anything automated. Four of its touch

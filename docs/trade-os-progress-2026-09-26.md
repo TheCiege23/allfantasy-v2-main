@@ -1,0 +1,76 @@
+# Trade OS rebuild status
+
+## Completed and released
+
+- Shared value-grade labels and proposal verdicts; league-grade values displayed beside market prices.
+- Opponent roster counteroffers are re-evaluated as complete packages rather than inferred from shortlist prices.
+- Linked roster identity, owned future picks, supported IDP and kicker pricing, and completed-week league context corrections.
+- Active capacity excludes owned IR/taxi assignments. Picks consume no current player slots; warnings describe required cleanup rather than universal platform rejection.
+- Stored, owned salary contracts validated across commitment years and recorded dead money; stable cap-growth origin and read-only future previews.
+- Commissioner-hub card button wraps within tablet columns; production Chrome checks at 390px and 768px passed.
+- Proposal cap details show both teams' recorded commitments and contract expiry. Salary-cap counteroffers must pass affordability checks.
+- Native contract settlement and reversal preserve ownership and terms, evaluate all participants' commitment years, and record contract evidence alongside rosters.
+
+## Contract settlement release (PR #1345)
+
+Native generic (`AfLeagueTrade`) settlement moves each owned, unexpired contract with its player, preserving salary, signing year, term and status. All participants in a multi-team trade are evaluated together against recorded current/future commitments, dead money, rollover and configured floors. Contract ownership, roster changes, refreshed ledgers and contract evidence share the processing transaction. Settlement and commissioner reversal use serializable transactions with a bounded 20-second limit. Ledger reads are batched across participants and commitment years; a conflict fails safely rather than applying a partial trade.
+
+Execution snapshots record contract ownership and terms before and after settlement. A commissioner reversal refuses missing legacy salary evidence or subsequent contract changes, restores ownership with players, and recomputes legality under current rules. Cut contracts and their dead money stay with the original team. This applies to native roster IDs and stored contracts, not writes to imported host platforms or the separate redraft salary engine. Other contract mutation services still need a concurrency audit and unified transaction policy.
+
+[Reality Sports Online's documentation](https://realitysportsonline.com/Content.aspx?articleID=how-it-works) demonstrates why current and future contract commitments matter. AllFantasy uses its own stored rules, not RSO guarantees or cut penalties.
+
+## Contract ownership release
+
+Cuts, extensions and franchise tags require the current contract owner or head commissioner. League membership alone grants no write permission. The server session supplies the actor identity; native roster ownership and explicitly claimed imported teams are resolved inside the same serializable transaction as the mutation. Conditional writes include the authorized roster, status and contract version, so a stale request cannot overwrite a contract after a trade moves it. Extensions and cut events roll back as a unit if their second write fails. Invalid extension numbers and backdated cuts are rejected before any write.
+
+This closes these three mutation routes. Other acquisition, lifecycle and ledger writers still require the broader concurrency and cap-legality audit. Franchise-tag term renewal and rollover idempotency remain separate lifecycle work.
+
+## Core matchup and lineup receipt accuracy
+
+Partial current-period scores no longer claim wins or losses. Completion uses advanced saved league periods or completed season markers; past-season fallback applies only without same-season metadata. An active season can continue into January, and conflicting imports must agree before a result is claimed. Recaps exclude explicitly partial results and do not classify ties as losses; completed cards omit predictive win odds. The weekly cache version advances to retire older payloads without completion evidence. Custom negative scores remain visible and a completed 0–0 matchup is a tie rather than a schedule placeholder.
+
+Lineup receipts show all incoming and outgoing players from the optimizer's complete legal lineup. Independently selected names are no longer presented as a direct swap, which could imply replacing a tight end with a linebacker. Older receipt payloads use a safe single-player description.
+
+Sleeper documents [live scoring and later stat corrections](https://support.sleeper.com/en/articles/2441282-stat-corrections) and [weekly score adjustments](https://support.sleeper.com/en/articles/3410666-adjusting-weekly-lineups-scores). These changes distinguish partial scores from recorded outcomes; they do not promise immutable results.
+
+## Withheld proposal verdict accuracy
+
+A Chrome preview of Kaimon Rucker for Jordyn Brooks exposed an ungraded proposal still showing `100/100`, `Even` and confidence. The presentation now follows the shared grade: withheld proposals emit null fairness/confidence scores and no side advantage, explain the missing grade, and suppress directional meters and balancing advice. Trade Center and the trade modal guard legacy numeric payloads too; Chimmy receives the withheld shared grade and safe summary rather than a fairness endorsement. Available asset values and roster context remain visible. Unknown or placeholder source names do not count as independent source agreement.
+
+The tested behavior covers both missing pricing and unrelated context gaps: a fully priced shared grade remains visible when a roster or projection lookup is incomplete. This corrects the misleading display, not the 35 missing player prices in the audited league.
+
+## Core sport and period context release
+
+A college kickoff could open an urgent NFL league because the countdown action used the first league in the attention list. It now selects the highest-priority league in the scheduled game's sport, including quiet same-sport leagues, and falls back to Player Finder when none matches. The portfolio cache version advances to retire stale actions. Schedule metadata coalescing also requires the same sport before combining provider rows.
+
+The matchup card derives its period label from the displayed score rows rather than the next scheduled game. Mixed or unknown league periods use a general label instead of claiming a common week. The scores retain their existing completion evidence and odds rules.
+
+Game-day and legacy dashboard counts now explicitly describe live matchup leads, with ahead/behind labels. They no longer look like a completed win/loss record.
+
+Validation: 60 focused tests across seven files, including mixed NFL/college accounts, no matching league, mixed matchup periods, cached summaries, live-lead labels and completed/partial results.
+
+## Defender pricing diagnostics release
+
+The coverage release preserves individual defensive projection refusals through the league board, player-name join, roster API and trade review: missing history, insufficient sample, no recorded defensive production, unavailable replacement level, and scoring gaps. These diagnostics remain available even when no defender can be priced. Temporary history-read failures remain retryable outages rather than missing-history claims. Identity collisions still refuse a name-based assignment. Existing replacement-derived player prices remain unchanged. The review explains that an unpriced asset withholds the whole trade grade. Validation: 193 focused tests across 12 files.
+
+Read-only production inspection found different underlying inputs for two missing linebackers: one had recorded games with no defensive production, while the other had only two recorded games. This release exposes those limitations; it does not invent prices for either player. Sleeper documents [tackle calculation](https://support.sleeper.com/en/articles/4056297-how-are-tackles-calculated) and [stacking scoring categories](https://support.sleeper.com/en/articles/3186339-what-stacks); defender estimates must continue to use the league's actual scoring rules.
+
+## Player identity pricing release (2026-09-27)
+
+League defender and kicker values retain their Sleeper IDs alongside the safe name fallback. Two rostered players with the same name no longer discard a valid defender price, and a missing defender price cannot borrow the offensive player's market, historical or draft value. The roster picker, shared proposal grader, console review, enrichment ID and roster context used by suggestions carry this distinction. Name-only legacy trade requests receive an identity refusal when the league contains a collision; known offensive players keep their own ID-matched market price.
+
+The shared context patch preserves ID prices and refusals even when no safe name entries exist. Current defender values do not answer past-date queries for identified defenders. This closes identity joins on these paths; it does not provide missing history or establish parity for every email surface.
+
+[Sleeper's official API documentation](https://docs.sleeper.com/) defines roster and player lookups by player ID. The change follows that existing identity contract without adding provider calls or changing the league's defender value curve.
+
+## Remaining work
+
+1. Integrate affordability with all proposal/email surfaces, add salary-surplus and keeper-cost valuation, and audit signing, lifecycle, ledger refresh and season rollover. Validate settlement against a dedicated PostgreSQL salary-league fixture; no production manager trade is used as a test.
+2. Complete missing NFL/IDP/college asset pricing with documented per-player inputs and provider coverage. Do not substitute identical placeholder values.
+3. Compare actual pre/post starting lineups with eligible replacements. Calibrate game/playoff forecasts before displaying percentage claims.
+4. Implement evidence-backed role, coaching, offensive/defensive scheme, and expanding-player-pool effects with timestamps and bounded weights.
+5. Capture cap startup year during commissioner setup/import; clarify future floor enforcement and unsigned roster-completion requirements. Unsigned rookies and future acquisitions are not current funded commitments.
+6. Broaden Chrome walkthroughs and test physical iOS Safari keyboard, safe areas, dialogs, and scrolling. Viewport checks and CI WebKit do not establish physical-device compatibility.
+7. Reconcile the empty unified proposal timeline with the separate imported archive (44 completed trades in the audited IDP league), and explain provider freshness independently of live-score refresh.
+
+Trade previews and counteroffers remain unsent; no other manager is contacted by these checks.

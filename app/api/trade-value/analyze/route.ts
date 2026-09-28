@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { withApiUsage } from '@/lib/telemetry/usage'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { runTradeConsoleAnalysis } from '@/lib/trade-value-console/runTradeConsoleAnalysis'
+import { evaluateAiCostGate } from '@/lib/ai-protection/costGate'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
@@ -37,6 +38,23 @@ import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
 import { createPhaseTimer, unattributedMs } from '@/lib/logging/phaseTimer'
 import { logUsageEvent } from '@/lib/telemetry/usage'
 import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
+import { applyTradeAnalysisDepth } from '@/lib/trade-value-console/tradeAnalysisDepth'
+import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
+import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
+import { loadTradeEdge } from '@/lib/competitive-edge/tradeEdgeLoader'
+import type { EdgeDealAsset } from '@/lib/competitive-edge/tradeEdge'
+import { captureConsoleEvaluation } from '@/lib/decision-os/trade/captureConsoleEvaluation'
+import { readTradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluationReceiptStore'
+
+/** A priced line, as Competitive Edge reads the deal: picks count as picks, FAAB is not an asset it tracks. */
+function edgeAssets(lines: Array<{ position?: string | null }>): EdgeDealAsset[] {
+  return lines.flatMap((line): EdgeDealAsset[] => {
+    const position = String(line.position ?? '').toUpperCase()
+    if (position === 'FAAB') return []
+    if (position === 'PICK') return [{ kind: 'pick' }]
+    return [{ kind: 'player', position: line.position ?? null }]
+  })
+}
 
 const assetSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -44,6 +62,12 @@ const assetSchema = z.discriminatedUnion('kind', [
     playerId: z.string().optional(),
     name: z.string().optional(),
     sportHint: z.string().optional(),
+    providerIdentity: z.object({
+      provider: z.enum(['sleeper', 'yahoo']),
+      id: z.string().trim().min(1).max(128),
+      position: z.string().max(32).optional(),
+      team: z.string().max(64).optional(),
+    }).optional(),
   }),
   z.object({
     kind: z.literal('pick'),
@@ -83,8 +107,12 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         return NextResponse.json({ error: 'Too many requests. Try again shortly.' }, { status: 429 })
       }
 
-      const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+      const session = (await getServerSession(authOptions as never)) as {
+        user?: { id?: string; email?: string | null }
+      } | null
       const userId = session?.user?.id ?? null
+      // ONE plan read for the trade breakdown and Competitive Edge, started now and awaited later.
+      const paywallRead = resolveCorePaywall(userId, { email: session?.user?.email ?? null })
 
       const json = await req.json().catch(() => null)
       const parsed = bodySchema.safeParse(json)
@@ -102,8 +130,33 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         )
       }
 
+      /*
+       * 🛑 THE WRITTEN "WHY" COSTS AN OPENAI CALL ON EVERY EVALUATION; THE GRADE COSTS NOTHING.
+       * Owner's decision (2026-09-24): free users keep the verdict, AF Pro gets the AI write-up.
+       * So this never refuses — it turns the model off (`skipAi`, the deterministic path the
+       * console already has) and says why in `aiLimit`. Before paywall launch everyone gets the
+       * write-up up to a daily cap; after it, only a plan holder does.
+       */
+      let aiLimit: { reason: string; message: string; upgradePath: string | null } | null = null
+      let skipAi = Boolean(parsed.data.skipAi)
+      if (!skipAi) {
+        const aiGate = await evaluateAiCostGate(req, 'trade_center_ai', userId)
+        if (!aiGate.ok) {
+          skipAi = true
+          aiLimit = {
+            reason: aiGate.reason,
+            message:
+              aiGate.reason === 'plan' || aiGate.reason === 'sign_in'
+                ? 'The full written analysis is part of AF Pro. Your trade grade is below.'
+                : "You've reached today's limit for trade write-ups. Your trade grade is below.",
+            upgradePath: aiGate.reason === 'rate' ? null : '/pricing',
+          }
+        }
+      }
+
       const payload: TradeConsoleAnalyzeInput = {
         ...parsed.data,
+        skipAi,
         userId,
         sportFilter: parsed.data.sportFilter as TradeConsoleAnalyzeInput['sportFilter'],
       }
@@ -268,6 +321,26 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
               ? 'me'
               : null
 
+      /*
+       * Competitive Edge (lib/competitive-edge/): the other manager's own trade record, bound to THIS
+       * deal — what they would receive is what the viewer gives. Started beside the context notes, and
+       * only for a viewer whose plan has it: a locked viewer's analysis never reads the history.
+       */
+      const paywall = await paywallRead
+      const edgePartner = parsed.data.opponentTeamExternalId?.trim() || null
+      const competitiveEdgeRead =
+        parsed.data.leagueId && userId && edgePartner && paywall.competitive_edge.unlocked
+          ? loadTradeEdge({
+              leagueId: parsed.data.leagueId,
+              userId,
+              opponentTeamExternalId: edgePartner,
+              deal: { theyGet: edgeAssets(out.players.give), theySend: edgeAssets(out.players.get) },
+            }).catch((error: unknown) => {
+              console.error('[trade-value/analyze] competitive edge read failed', error)
+              return { available: false as const, reason: 'Competitive Edge could not be read just now.' }
+            })
+          : null
+
       const context =
         parsed.data.leagueId && userId
           ? await buildTradeContextNotes({
@@ -358,7 +431,22 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * try block by the parsed REQUEST. Two `const payload` in one block is an ECMAScript
        * early error, so the module would not parse and every request to this route would
        * 500. ignoreBuildErrors:true means the build would not have stopped it. */
-      const responseBody = hasContext ? { ...analysis, ...notes } : analysis
+      /*
+       * The receipt for the grade this response shows (Trade OS, design step 5). The Trade Center
+       * already graded the deal through the one grader (`gradePricedSides`); this records that grade
+       * rather than pricing the deal twice. Null until the receipts migration is applied.
+       */
+      const receiptId = await receiptIdForGrade({
+        surface: 'trade-center',
+        leagueId: parsed.data.leagueId ?? null,
+        userId,
+        give: { assets: parsed.data.sideGive, unpriceable: [] },
+        get: { assets: parsed.data.sideGet, unpriceable: [] },
+        // Roster need is priced only for a signed-in viewer in a league (`runTradeConsoleAnalysis`).
+        viewerSide: Boolean(parsed.data.leagueId && userId),
+        grade: out.grade,
+      })
+      const responseBody = { ...(hasContext ? { ...analysis, ...notes } : analysis), receiptId }
 
       /*
        * Phase attribution for this request.
@@ -397,14 +485,49 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
           unattributedMs: unattributedMs(phase),
           assetsGive: parsed.data.sideGive.length,
           assetsGet: parsed.data.sideGet.length,
-          skipAi: Boolean(parsed.data.skipAi),
+          // The EFFECTIVE skip — a capped or plan-withheld call reads as skipped, with the reason.
+          skipAi,
+          aiLimit: aiLimit?.reason ?? null,
         },
       }).catch(() => {})
 
-      return NextResponse.json(decisionOs ? { ...responseBody, decisionOs } : responseBody)
+      const withAiLimit = aiLimit ? { ...responseBody, aiLimit } : responseBody
+      /*
+       * Trade depth (AF Pro): the verdict above is free, the breakdown is not —
+       * lib/trade-value-console/tradeAnalysisDepth.ts. Withheld HERE, because every client that
+       * posts to this route (the Trade Center, the league trades tab, the value modal) is a
+       * browser component and would otherwise receive it.
+       */
+      const competitiveEdge = competitiveEdgeRead ? await competitiveEdgeRead : null
+      const withOpinion = decisionOs ? { ...withAiLimit, decisionOs } : withAiLimit
+      // Its own depth, so the trade-depth filter below keeps it (tradeAnalysisDepth.ts, SEPARATELY_GATED).
+      const withEdge = competitiveEdge ? { ...withOpinion, competitiveEdge } : withOpinion
+      // Preserve this exact result. A failed receipt write must not erase a valid
+      // evaluation or tell the manager that it was saved when it was not.
+      const saved = await captureConsoleEvaluation(payload, analysis, notes).catch(() => null)
+      const evaluationReceipt = saved ? { status: 'saved' as const, ...saved }
+        : out.league ? { status: 'unavailable' as const } : null
+      return NextResponse.json(applyTradeAnalysisDepth({ ...withEdge, evaluationReceipt }, paywall.trade_depth))
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })
     }
   },
 )
+
+/** Read an original evaluation. Account ownership and current league access are both required. */
+export async function GET(req: Request) {
+  const headers = { 'Cache-Control': 'private, no-store' }
+  const session = await getServerSession(authOptions)
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Sign in to view your saved evaluation.' }, { status: 401, headers })
+  const id = new URL(req.url).searchParams.get('evaluation')
+  if (!id || id.length > 128) return NextResponse.json({ error: 'Evaluation not found.' }, { status: 404, headers })
+  try {
+    const receipt = await readTradeEvaluationReceipt(userId, id)
+    if (!receipt) return NextResponse.json({ error: 'Evaluation not found.' }, { status: 404, headers })
+    return NextResponse.json({ receipt }, { headers })
+  } catch {
+    return NextResponse.json({ error: 'Saved evaluations are temporarily unavailable.' }, { status: 503, headers })
+  }
+}

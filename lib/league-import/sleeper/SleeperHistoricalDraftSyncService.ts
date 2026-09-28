@@ -9,6 +9,7 @@ import {
 import { getSourceTeamIdFromPlayerData } from './SleeperHistoricalMatchupSyncService'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
+import { normalizePickNumber, sleeperOwnerByRosterId, sleeperPickOwnerId } from './sleeperDraftPickIdentity'
 
 interface PendingSleeperDraftFact {
   sourceDraftId: string
@@ -19,6 +20,8 @@ interface PendingSleeperDraftFact {
   playerId: string
   managerId?: string
   season: number
+  /** `{ ownerSleeperId }` — who owned the drafting team that season (see `sleeperPickOwnerId`). */
+  metadata?: { ownerSleeperId: string }
 }
 
 export interface SleeperHistoricalDraftSyncSummary {
@@ -43,29 +46,6 @@ function getErrorMessage(error: unknown): string {
   }
 
   return 'Unknown error'
-}
-
-function normalizePickNumber(rawPick: any, fallbackPickNumber: number): number {
-  const directPick = Number(rawPick?.pick_no)
-  if (Number.isFinite(directPick) && directPick > 0) {
-    return directPick
-  }
-
-  const round = Number(rawPick?.round)
-  const draftSlot = Number(rawPick?.draft_slot)
-  const rosterSize = Number(rawPick?.draft_slot_count)
-  if (
-    Number.isFinite(round) &&
-    round > 0 &&
-    Number.isFinite(draftSlot) &&
-    draftSlot > 0 &&
-    Number.isFinite(rosterSize) &&
-    rosterSize > 0
-  ) {
-    return (round - 1) * rosterSize + draftSlot
-  }
-
-  return fallbackPickNumber
 }
 
 function normalizeManagerId(rawPick: any): string | undefined {
@@ -181,6 +161,7 @@ async function collectSleeperDraftFacts(args: {
       if (!raw) return undefined
       return canonicalByHistoricalRosterId.get(raw) ?? canonicalIdByManagerId.get(raw) ?? raw
     }
+    const ownerByRosterId = sleeperOwnerByRosterId(seasonRosters)
 
     const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
     const sourceDraftIds = Array.from(
@@ -242,6 +223,7 @@ async function collectSleeperDraftFacts(args: {
           continue
         }
 
+        const ownerSleeperId = sleeperPickOwnerId(pick, ownerByRosterId)
         pendingRows.push({
           sourceDraftId,
           leagueId: args.internalLeagueId,
@@ -251,6 +233,7 @@ async function collectSleeperDraftFacts(args: {
           playerId,
           managerId: canonicalManagerId(normalizeManagerId(pick)),
           season: seasonLeague.season,
+          ...(ownerSleeperId ? { metadata: { ownerSleeperId } } : {}),
         })
         draftProducedRows = true
       }

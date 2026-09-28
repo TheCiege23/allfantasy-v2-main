@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { TOKEN_ENTRY_TYPES } from '@/lib/tokens/constants'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 
 /**
  * The free floor for Chimmy: two questions a day.
@@ -10,7 +11,7 @@ import { TOKEN_ENTRY_TYPES } from '@/lib/tokens/constants'
  * production 2026-08-28: 32 of 34 users sit at a ZERO balance while a Chimmy message
  * costs 10, i.e. nearly every account could not ask a single question.
  */
-export const FREE_CHIMMY_QUESTIONS_PER_DAY = 2
+export { FREE_CHIMMY_QUESTIONS_PER_DAY }
 
 /** The rule the route actually spends against, so the floor tracks real pricing. */
 const CHIMMY_SPEND_RULE_CODE = 'ai_chimmy_chat_message'

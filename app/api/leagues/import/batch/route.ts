@@ -114,11 +114,12 @@ export async function POST(req: NextRequest) {
       season?: number
       leagues?: LeagueRecord[]
       sleeperUserId?: string
+      /** Ignored — kept in the type so older clients still parse. The linked profile is the authority. */
       sleeperUsername?: string
       isLastSeason?: boolean
     }
 
-    const { season, leagues, sleeperUserId, sleeperUsername, isLastSeason } = body
+    const { season, leagues, sleeperUserId, isLastSeason } = body
 
     if (season == null || !Array.isArray(leagues)) {
       return NextResponse.json({ error: 'season and leagues required' }, { status: 400 })
@@ -136,24 +137,49 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const sleeperUserIdTrimmed = typeof sleeperUserId === 'string' ? sleeperUserId.trim() : ''
-    const sleeperUsernameTrimmed = typeof sleeperUsername === 'string' ? sleeperUsername.trim() : ''
+    /*
+     * 🛑 THE SLEEPER IDENTITY COMES FROM THIS LOGIN'S OWN LINK, NEVER FROM THE REQUEST BODY.
+     *
+     * This used to take `sleeperUserId` straight from the body, prefer it over the saved link,
+     * and upsert it onto the caller's profile with no Sleeper lookup at all. Sleeper user ids are
+     * public — every league's /users list prints them — so any signed-in caller could bind any
+     * Sleeper account to their login and import its leagues as their own, and the real owner was
+     * then locked out by `sleeperUserId`'s unique key. Nothing in this repo calls this route, so
+     * only a hand-built request ever exercised that path.
+     *
+     * Linking happens where the handle is resolved against Sleeper (the import discover route).
+     * Here the body may only CONFIRM the link it already has: a different id is refused rather
+     * than silently ignored, so a caller that meant another account finds out.
+     */
+    const bodySleeperUserId = typeof sleeperUserId === 'string' ? sleeperUserId.trim() : ''
     const existingProfile = await prisma.userProfile
       .findUnique({
         where: { userId },
-        select: { sleeperUserId: true },
+        select: { sleeperUserId: true, sleeperUsername: true },
       })
       .catch(() => null)
-    const resolvedSleeperUserId = sleeperUserIdTrimmed || existingProfile?.sleeperUserId?.trim() || ''
+    const resolvedSleeperUserId = existingProfile?.sleeperUserId?.trim() || ''
 
     if (!resolvedSleeperUserId) {
-      return NextResponse.json({ error: 'sleeperUserId required' }, { status: 400 })
+      return NextResponse.json(
+        {
+          error:
+            'Link your Sleeper account first: open Import, pick Sleeper, type your Sleeper username and press "Find my leagues".',
+        },
+        { status: 400 },
+      )
+    }
+    if (bodySleeperUserId && bodySleeperUserId !== resolvedSleeperUserId) {
+      return NextResponse.json(
+        { error: 'That Sleeper account is not the one linked to this login.' },
+        { status: 403 },
+      )
     }
 
     const rl = consumeRateLimit({
       scope: 'leagues',
       action: 'import_batch',
-      sleeperUsername: sleeperUsernameTrimmed || resolvedSleeperUserId,
+      sleeperUsername: existingProfile?.sleeperUsername?.trim() || resolvedSleeperUserId,
       ip: getClientIp(req),
       maxRequests: 3,
       windowMs: 60_000,
@@ -165,21 +191,6 @@ export async function POST(req: NextRequest) {
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec || 60) } }
       )
     }
-
-    await prisma.userProfile.upsert({
-      where: { userId },
-      update: {
-        sleeperUserId: resolvedSleeperUserId,
-        ...(sleeperUsernameTrimmed ? { sleeperUsername: sleeperUsernameTrimmed.toLowerCase() } : {}),
-        sleeperLinkedAt: new Date(),
-      },
-      create: {
-        userId,
-        sleeperUserId: resolvedSleeperUserId,
-        ...(sleeperUsernameTrimmed ? { sleeperUsername: sleeperUsernameTrimmed.toLowerCase() } : {}),
-        sleeperLinkedAt: new Date(),
-      },
-    })
 
     const leaguesById = new Map<string, SleeperLeagueApi>()
     for (const sleeperSport of SLEEPER_IMPORT_SPORTS) {

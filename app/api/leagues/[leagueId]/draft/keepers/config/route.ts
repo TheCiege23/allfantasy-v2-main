@@ -9,6 +9,7 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import type { KeeperConfig } from '@/lib/live-draft-engine/keeper/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ export async function PATCH(
   }
 
   const body = await req.json().catch(() => ({}))
-  const draft = await prisma.draftSession.findUnique({ where: { leagueId } })
+  const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!draft) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
   if (draft.status !== 'pre_draft') {
     return NextResponse.json({ error: 'Keeper config cannot be changed after draft has started' }, { status: 400 })

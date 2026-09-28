@@ -82,6 +82,8 @@ type YahooTeamMetadata = {
   managerGuid: string | null
   managerName: string
   isCommissioner: boolean
+  /** Strictly Yahoo's own `is_commissioner` — see `isYahooHeadCommissionerManager`. */
+  isHeadCommissioner: boolean
 }
 
 export class YahooApiResponseError extends Error {
@@ -196,6 +198,16 @@ function isYahooCommissionerManager(manager: Record<string, any>): boolean {
     manager.isCoManager,
     manager.co_manager,
   ].some(isTruthyProviderFlag)
+}
+
+/**
+ * ⚠ NARROWER THAN `isYahooCommissionerManager` ON PURPOSE. That one also counts co-commissioner
+ * and team CO-MANAGER flags, which is fine for the import gate (it only decides whether to ask
+ * for an attestation) and wrong for `LeagueTeam.isCommissioner`, which is a permission: a
+ * co-manager of one team is not the league's commissioner.
+ */
+function isYahooHeadCommissionerManager(manager: Record<string, any>): boolean {
+  return [manager.is_commissioner, manager.isCommissioner].some(isTruthyProviderFlag)
 }
 
 function getYahooLogoUrl(source: unknown): string | null {
@@ -667,6 +679,7 @@ function parseYahooTeamsMetadata(teamsData: any): Map<string, YahooTeamMetadata>
     if (!teamKey) continue
     const managerIdentity = buildManagerIdentity(team, teamKey)
     const isCommissioner = getYahooManagers(team).some(isYahooCommissionerManager)
+    const isHeadCommissioner = getYahooManagers(team).some(isYahooHeadCommissionerManager)
     metadataByTeamKey.set(teamKey, {
       teamName: typeof team.name === 'string' ? team.name : managerIdentity.managerName,
       logoUrl: getYahooLogoUrl(team),
@@ -675,6 +688,7 @@ function parseYahooTeamsMetadata(teamsData: any): Map<string, YahooTeamMetadata>
       managerGuid: managerIdentity.managerGuid,
       managerName: managerIdentity.managerName,
       isCommissioner,
+      isHeadCommissioner,
     })
   }
 
@@ -1148,6 +1162,9 @@ export async function fetchYahooLeagueForImport(
       ? teams.find((t) => t.managerGuid === loggedInGuid || t.managerId === loggedInGuid)?.teamKey ?? null
       : null
   const commissionerTeamKeys = teamKeys.filter((teamKey) => metadataByTeamKey.get(teamKey)?.isCommissioner)
+  const headCommissionerTeamKeys = teamKeys.filter(
+    (teamKey) => metadataByTeamKey.get(teamKey)?.isHeadCommissioner,
+  )
 
   const transactions =
     transactionsResult.status === 'fulfilled' ? parseYahooTransactions(transactionsResult.value) : []
@@ -1169,6 +1186,7 @@ export async function fetchYahooLeagueForImport(
     previousSeasons,
     viewerTeamKey,
     commissionerTeamKeys,
+    headCommissionerTeamKeys,
     failedRosterTeamKeys,
   }
 }
@@ -1251,3 +1269,7 @@ export async function fetchYahooWeeklyMatchupsForSync(
 
 /** Test seam for the roster split — see `parseEspnRosterEntriesForTest`. */
 export { parseYahooRoster as parseYahooRosterForTest }
+export {
+  isYahooCommissionerManager as isYahooCommissionerManagerForTest,
+  isYahooHeadCommissionerManager as isYahooHeadCommissionerManagerForTest,
+}

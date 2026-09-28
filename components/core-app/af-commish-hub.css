@@ -1699,3 +1699,19 @@
     display: none;
   }
 }
+
+/* Commissioner depth (AF Commissioner) — CommissionerHub.tsx `HubDepthGate`. */
+.af-ch-depth-open {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.af-ch-depth-open > .af-core-free-until {
+  justify-self: start;
+}
+
+.af-ch-depth-lock {
+  min-width: 0;
+}

@@ -59,6 +59,8 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: mockAfLeagueTradeFindFirst,
       findUniqueOrThrow: vi.fn(),
       update: mockAfLeagueTradeUpdate,
+      // The counter closes its parent with a CONDITIONAL claim; one row claimed = still pending.
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     afLeagueTradeVote: { upsert: vi.fn(), count: vi.fn() },
     $transaction: vi.fn(),
@@ -146,6 +148,10 @@ async function counterBackAtProposer(receiverRoster = roster(ROSTER_A, USER_A)) 
     status: 'pending',
     metadata: {},
     proposedByUserId: USER_A,
+    // A offered this to B, so B may counter it (see counterRefusal).
+    proposerRosterId: ROSTER_A,
+    receiverRosterId: ROSTER_B,
+    items: [],
   })
   mockAfLeagueTradeCreate.mockResolvedValue({ id: NEW_TRADE })
 

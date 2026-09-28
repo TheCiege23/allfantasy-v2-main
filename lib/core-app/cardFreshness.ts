@@ -82,15 +82,19 @@ export function earliestInstant(values: Iterable<Date | string | null | undefine
  * left out of both — "never synced" is not a fault for them.
  */
 export function leagueDataFreshness(
-  leagues: ReadonlyArray<{ platform?: string | null; lastSyncedAt?: Date | string | null }>,
-): { oldestAt: string | null; neverSynced: number; syncable: number } {
-  const syncable = leagues.filter((l) => normalizeSourcePlatform(l.platform) != null)
+  leagues: ReadonlyArray<{ id?: string; platform?: string | null; lastSyncedAt?: Date | string | null }>,
+  pausedLeagueIds?: ReadonlySet<string> | null,
+): { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number } {
+  const providers = leagues.filter((l) => normalizeSourcePlatform(l.platform) != null)
+  const syncable = providers.filter((l) => !l.id || !pausedLeagueIds?.has(l.id))
+  const paused = providers.length - syncable.length
   const synced = syncable.map((l) => toDate(l.lastSyncedAt)).filter((d): d is Date => d != null)
   const oldest = earliestInstant(synced)
   return {
     oldestAt: oldest ? oldest.toISOString() : null,
     neverSynced: syncable.length - synced.length,
     syncable: syncable.length,
+    ...(paused > 0 ? { paused } : {}),
   }
 }
 

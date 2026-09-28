@@ -98,6 +98,44 @@ function escalatedDismissalCooldownMs(count: number): number | null {
 
 // ── Main evaluation ───────────────────────────────────────────────────────────
 
+export type ChimmyAlertPreferenceMuteReason = Extract<
+  ChimmyAlertSuppressionReason,
+  'muted_class' | 'muted_type' | 'muted_class_pref' | 'muted_type_override' | 'league_disabled' | 'league_muted_class'
+>
+
+/**
+ * Steps 1–5 of `evaluateAlertSuppression`: whether the USER switched this alert off — by class,
+ * by type, or for its league — and nothing else. Exported so a sender that does not run the whole
+ * engine (the scheduled sweeps in cron/alert-sweep) honours the same switches the Settings panel
+ * shows, rather than a copy of them. Null when nothing the user set silences it.
+ */
+export function preferenceMuteReason(
+  alert: Pick<ChimmyAlert, 'class' | 'type'> & { leagueId?: string | null },
+  prefs: ChimmyAlertUserPreferences | null | undefined,
+): ChimmyAlertPreferenceMuteReason | null {
+  if (!prefs) return null
+
+  // 1. Global muted class
+  if (prefs.mutedClasses?.includes(alert.class)) return 'muted_class'
+
+  // 2. Global muted type
+  if (prefs.mutedTypes?.includes(alert.type)) return 'muted_type'
+
+  // 3. Per-class pref mute
+  if (prefs.classPrefs?.[alert.class]?.muted) return 'muted_class_pref'
+
+  // 4. Per-type override mute
+  if (prefs.typeOverrides?.[alert.type]?.muted) return 'muted_type_override'
+
+  // 5. Per-league disable / class mute
+  if (alert.leagueId) {
+    const leaguePref = prefs.leaguePrefs?.find((lp) => lp.leagueId === alert.leagueId)
+    if (leaguePref?.disabled) return 'league_disabled'
+    if (leaguePref?.mutedClasses?.includes(alert.class)) return 'league_muted_class'
+  }
+  return null
+}
+
 /**
  * Evaluate whether an alert should be suppressed, and why.
  *
@@ -125,36 +163,9 @@ export function evaluateAlertSuppression(
 ): ChimmyAlertSuppressionDecision {
   const effectiveCooldownMultiplier = resolveEffectiveCooldownMultiplier(alert, prefs)
 
-  // 1. Global muted class
-  if (prefs.mutedClasses?.includes(alert.class)) {
-    return { suppress: true, reason: 'muted_class', effectiveCooldownMultiplier }
-  }
-
-  // 2. Global muted type
-  if (prefs.mutedTypes?.includes(alert.type)) {
-    return { suppress: true, reason: 'muted_type', effectiveCooldownMultiplier }
-  }
-
-  // 3. Per-class pref mute
-  if (prefs.classPrefs?.[alert.class]?.muted) {
-    return { suppress: true, reason: 'muted_class_pref', effectiveCooldownMultiplier }
-  }
-
-  // 4. Per-type override mute
-  if (prefs.typeOverrides?.[alert.type]?.muted) {
-    return { suppress: true, reason: 'muted_type_override', effectiveCooldownMultiplier }
-  }
-
-  // 5. Per-league disable / class mute
-  if (alert.leagueId) {
-    const leaguePref = prefs.leaguePrefs?.find((lp) => lp.leagueId === alert.leagueId)
-    if (leaguePref?.disabled) {
-      return { suppress: true, reason: 'league_disabled', effectiveCooldownMultiplier }
-    }
-    if (leaguePref?.mutedClasses?.includes(alert.class)) {
-      return { suppress: true, reason: 'league_muted_class', effectiveCooldownMultiplier }
-    }
-  }
+  // 1–5. The user's own mute switches.
+  const muted = preferenceMuteReason(alert, prefs)
+  if (muted) return { suppress: true, reason: muted, effectiveCooldownMultiplier }
 
   // 6. Commissioner-specific gates
   if (context.role === 'commissioner' && prefs.commissionerPrefs) {

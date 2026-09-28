@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import type { UrgencyLevel } from '../types'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
@@ -435,6 +436,7 @@ export function WaiverWireModal({
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<ApiResult | null>(null)
   const [queue, setQueue] = useState<Array<{ playerId: string; name: string; bid: number }>>([])
   const [detailPick, setDetailPick] = useState<ApiPick | null>(null)
@@ -455,6 +457,7 @@ export function WaiverWireModal({
     if (!open) {
       setResult(null)
       setError(null)
+      setRefusal(null)
       setQueue([])
       setDetailPick(null)
       setDetailBody(null)
@@ -510,6 +513,7 @@ export function WaiverWireModal({
     }
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const effectiveLeagueId = isGlobalMode ? null : leagueId || null
       const r = await fetch('/api/ai-tools/waiver-intelligence', {
@@ -527,6 +531,7 @@ export function WaiverWireModal({
       })
       const j = (await r.json()) as ApiResult & { ok?: boolean; error?: string }
       if (!r.ok || !j.ok) {
+        setRefusal(readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() }))
         setError(j.error || 'Could not load waiver intelligence.')
         setResult(null)
         return
@@ -732,6 +737,7 @@ export function WaiverWireModal({
         }
         loading={false}
         error={error}
+        refusal={refusal}
         empty={false}
         emptyMessage="No waiver candidates matched. Try another sport, league, or position."
         onRefresh={() => void runAnalysis()}

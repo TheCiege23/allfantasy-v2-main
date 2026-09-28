@@ -7,6 +7,8 @@ import {
   getUpcomingPickOwners,
 } from '@/lib/live-draft-engine/DraftOrderService'
 import type { DraftType, SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * THE DRAFT — live, scheduled, or finished.
@@ -66,8 +68,9 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
 
   let session: SessionRow | null
   try {
-    session = (await prisma.draftSession.findUnique({
+    session = (await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         id: true,
         status: true,
@@ -224,7 +227,13 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
   }
 
   // ── The viewer's own next turn ─────────────────────────────────────────────
-  const mine = slotOrder.find((e) => e.rosterId === userId)
+  let viewerRosterId: string | null = null
+  try {
+    viewerRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
+  } catch {
+    // Keep league context usable without guessing ownership when lookup fails.
+  }
+  const mine = slotOrder.find((e) => e.rosterId === viewerRosterId)
   if (mine && !isAuction && nextOverall <= totalPicks) {
     let theirNext: number | null = null
     for (let o = nextOverall; o <= totalPicks; o += 1) {

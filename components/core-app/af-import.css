@@ -1308,3 +1308,12 @@
 .af-core .af-im-blocked--selected .af-label {
   color: var(--warn);
 }
+
+/* The preview's "what comes across" list — one line per bucket, the state spelled out in words. */
+.af-im-coverage-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.af-im-coverage-list > li {
+  margin: 2px 0;
+}

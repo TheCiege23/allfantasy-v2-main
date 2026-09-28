@@ -7,6 +7,8 @@ export type LeagueForAi = {
   platformLeagueId: string
   name: string | null
   sport: string
+  season?: number
+  scoring?: string | null
   settings: unknown
 }
 
@@ -23,6 +25,8 @@ export async function assertLeagueAccess(
       platformLeagueId: true,
       name: true,
       sport: true,
+      season: true,
+      scoring: true,
       settings: true,
     },
   })

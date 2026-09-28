@@ -6,12 +6,15 @@ import {
   type TradeGradesPayload,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { currentTradeIds } from '@/lib/trade-intel/sleeperTradeSync'
+import { archiveCompletedFeedTrades } from '@/lib/import-os/collector/archiveFeedTrades'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
 import type { ResolvedPlayerMedia } from '@/lib/player-media'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { TradeRecord } from './trades'
 
 function expectationNote(expectation: TradeExpectation | null, rosterId: number): string {
@@ -39,6 +42,8 @@ export function toTradeRecord(
   viewerOwnerId: string | null,
   expectation: TradeExpectation | null,
   mediaByPlayerId: Map<string, ResolvedPlayerMedia> = new Map(),
+  /** THE grade, from `trade.sides[0]`'s side — see `TradeRecord.leagueGrade`. */
+  leagueGrade: TradeGradeView | null = null,
 ): TradeRecord {
   const mine = trade.sides.find((s) => viewerOwnerId != null && s.ownerId === viewerOwnerId)
   const side = mine ?? trade.sides[0]
@@ -71,6 +76,7 @@ export function toTradeRecord(
           }
         }),
         picks: s.picksIn.map((p) => p.label),
+        pickDrafted: s.picksIn.map((p) => p.resolved?.name?.trim() || null),
         grade: provisional ? projected?.letter ?? null : s.currentGrade,
         gradeBasis: provisional ? 'Market' : 'Realized',
         gradeNote: provisional
@@ -78,6 +84,7 @@ export function toTradeRecord(
           : `Realized under this league's scoring: net ${s.cumulativeNet.toFixed(1)} fantasy points while the assets were held. This result grade does not claim a team-needs or playoff-probability adjustment.`,
       }
     }),
+    leagueGrade,
   }
 }
 
@@ -106,6 +113,15 @@ export async function getReconciledTradeGrades(
   ])
   const known = new Set(initial?.trades.map((t) => t.id.split(':').pop()) ?? [])
   const missingCompleted = feed?.some((t) => t.status === 'complete' && !known.has(t.id)) ?? false
+  /*
+   * 🛑 THE SAME MOMENT IS THE ARCHIVE'S GAP (2026-09-25). A completed trade the ledger lacks is one
+   * the archive (/core Trades' grade list, the board, Chimmy's history) lacks too — it waited for a
+   * sync lane, hours to a day. Written from this same feed now, in the background: idempotent, and
+   * never allowed to slow or fail the read that noticed it.
+   */
+  if (missingCompleted && feed) {
+    void archiveCompletedFeedTrades({ sleeperLeagueId: leagueId, feed }).catch(() => undefined)
+  }
   const grades = missingCompleted ? await getTradeGrades(leagueId, { force: true }) : initial
   const refreshedIds = new Set(grades?.trades.map((t) => t.id.split(':').pop()) ?? [])
   const incomplete =
@@ -120,7 +136,12 @@ export async function getReconciledTradeGrades(
   }
 }
 
-export async function getSleeperTradeHistory(leagueId: string, viewerOwnerId: string | null) {
+export async function getSleeperTradeHistory(
+  leagueId: string,
+  viewerOwnerId: string | null,
+  /** The viewer's own AF row for this league — the copy every grade here is priced on. */
+  opts: { afLeagueId?: string | null } = {},
+) {
   const reconciled = await getReconciledTradeGrades(leagueId)
   const grades = reconciled.grades
   if (!grades) return null
@@ -130,14 +151,27 @@ export async function getSleeperTradeHistory(leagueId: string, viewerOwnerId: st
       .map((playerId) => ({ playerId, sport: 'nfl' })),
   ).catch(() => new Map<string, ResolvedPlayerMedia>())
   const history: TradeRecord[] = []
+  const currentSeason = new Date().getUTCFullYear()
   // Only trades without realized points need the same market projection used
   // in the email. Bound expensive enrichment to four concurrent trades.
   for (let i = 0; i < trades.length; i += 4) {
     history.push(...await Promise.all(trades.slice(i, i + 4).map(async (trade) => {
-      const expectation = hasNoSignal(trade)
-        ? await loadTradeExpectation(leagueId, trade).catch(() => null)
-        : null
-      return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId)
+      const [expectation, leagueGrade] = await Promise.all([
+        hasNoSignal(trade)
+          ? loadTradeExpectation(leagueId, trade, { afLeagueId: opts.afLeagueId ?? null }).catch(() => null)
+          : Promise.resolve(null),
+        /*
+         * 🛑 THE ONE GRADE, WHICH THIS HISTORY NEVER CARRIED (2026-09-27). Every archived trade on
+         * the Trade Center timeline read "— → —" with no value on any asset, because the only
+         * letter on the record was the realized-points one. This is the letter the grade email,
+         * the league grade list and the live-scan rows already show — graded on the viewer's own
+         * AF row, memoised grader, so sixty trades cost one chart read.
+         */
+        opts.afLeagueId
+          ? oneGradeForCompletedTrade(opts.afLeagueId, trade, currentSeason).catch(() => null)
+          : Promise.resolve(null),
+      ])
+      return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId, leagueGrade)
     })))
   }
   return {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
+import { TodayRecord } from '@/components/core-app/dash-v2/TodayRecord'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
 
@@ -84,9 +85,13 @@ describe('DashGameDayBand', () => {
     const { container } = render(
       <DashGameDayBand strip={withRecord} plays={[]} now={NOW} regularSeasonUnderway />,
     )
-    expect(container.textContent).toContain('4')
-    expect(container.textContent).toContain('2')
+    expect(container.textContent).toContain('4 ahead')
+    expect(container.textContent).toContain('2 behind')
     expect(container.textContent).toContain('week 1')
+    const tile = render(<TodayRecord state={withRecord.record} />)
+    expect(tile.container.textContent).toContain('Live matchup leads')
+    expect(tile.container.textContent).toContain('Ahead / Behind')
+    expect(tile.container.textContent).not.toContain('Today’s record')
   })
 
   it('never prints a fantasy point total for a play', () => {

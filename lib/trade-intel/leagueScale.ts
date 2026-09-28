@@ -122,7 +122,7 @@ export function assessLeagueScale(args: {
   const notes: string[] = []
   if (teamCount !== BASELINE_TEAM_COUNT) {
     notes.push(
-      `Every stored price is a ${BASELINE_TEAM_COUNT}-team price. This is a ${teamCount}-team league, so picks are converted to their ${BASELINE_TEAM_COUNT}-team equivalent before they are valued.`,
+      `The historical pick curve uses a ${BASELINE_TEAM_COUNT}-team reference. This is a ${teamCount}-team league, so picks are converted to their ${BASELINE_TEAM_COUNT}-team equivalent before they are valued.`,
     )
   }
   if (scrutiny === 'deep' || scrutiny === 'very-deep') {
@@ -154,7 +154,7 @@ export function assessLeagueScale(args: {
     notes.push(
       `${unpriced.length} of ${slots.length} starting slots are positions our market feed does not price (${[
         ...new Set(unpriced),
-      ].join(', ')}). Any deal involving them is graded on the half we can see.`,
+      ].join(', ')}). Defenders and kickers use league-derived values where available. Check each asset's value; a missing price withholds the proposal grade.`,
     )
   }
 

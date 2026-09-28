@@ -13,6 +13,9 @@ import {
   CheckCircle2,
   Zap,
 } from 'lucide-react'
+import { getPlanPresentations } from '@/lib/monetization/planPresentation'
+import { PLAN_FAMILY_INCLUDES, PLAN_FAMILY_SHORT_TAGLINE } from '@/lib/monetization/planIncludes'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 
 export const metadata: Metadata = {
   title: 'AF Legacy | AI Fantasy Football Draft Tool | AllFantasy',
@@ -166,7 +169,20 @@ const FEATURE_STYLE: Record<string, { border: string; bg: string; label: string;
   },
 }
 
+function formatUsd(amount: number): string {
+  return `$${amount.toFixed(2)}`
+}
+
+/*
+ * ⚠ THIS PAGE IS WHERE AF LEGACY LOCKS USED TO SEND BUYERS, AND IT HAD NO WAY TO
+ * PAY. Every Legacy lock now goes straight to `/upgrade?plan=war_room`; this page
+ * still gets the nav, footer and search traffic, so it sells the plan too.
+ * Prices come from the catalog, never written here — see app/pricing/page.tsx.
+ */
+const LEGACY_CHECKOUT_PATH = upgradePathForPlan('af_war_room', { from: 'war-room-page' })
+
 export default function WarRoomPage() {
+  const legacy = getPlanPresentations().find((p) => p.planFamily === 'af_war_room') ?? null
   return (
     <div className="min-h-screen bg-[#050814] text-white">
 
@@ -225,6 +241,19 @@ export default function WarRoomPage() {
               Preview Other Sports
             </a>
           </div>
+
+          {legacy?.monthly ? (
+            <p className="mt-5 text-[13px] text-white/55">
+              AF Legacy is {formatUsd(legacy.monthly.amountUsd)} a month.{' '}
+              <Link
+                href={LEGACY_CHECKOUT_PATH}
+                className="font-semibold text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
+                data-testid="war-room-hero-get-legacy"
+              >
+                Get AF Legacy
+              </Link>
+            </p>
+          ) : null}
 
           <p className="mt-5 text-[11px] text-white/30">
             Chimmy gives recommendations, not guarantees — built to support smarter fantasy strategy
@@ -316,6 +345,56 @@ export default function WarRoomPage() {
             })}
           </div>
         </section>
+
+        {/* ── Get AF Legacy ─────────────────────────────────────────────────── */}
+        {legacy ? (
+          <section
+            id="get-legacy"
+            className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.05] p-6 sm:p-8"
+            data-testid="war-room-buy-section"
+          >
+            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-cyan-300/70">
+              The Plan
+            </p>
+            <h2 className="mb-2 text-[22px] font-black text-white">Get AF Legacy</h2>
+            <p className="mb-4 max-w-2xl text-[13px] leading-relaxed text-white/55">
+              {PLAN_FAMILY_SHORT_TAGLINE.af_war_room}
+            </p>
+            <ul className="mb-6 space-y-2">
+              {PLAN_FAMILY_INCLUDES.af_war_room.map((line) => (
+                <li key={line} className="flex gap-2 text-[13px] leading-snug text-white/75">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" aria-hidden />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="tabular-nums">
+                {legacy.monthly ? (
+                  <p className="text-white">
+                    <span className="text-[28px] font-black">{formatUsd(legacy.monthly.amountUsd)}</span>
+                    <span className="ml-1 text-[13px] text-white/50">/ month</span>
+                  </p>
+                ) : null}
+                {legacy.yearly ? (
+                  <p className="text-[12px] text-white/50">
+                    or {formatUsd(legacy.yearly.amountUsd)} a year
+                    {legacy.savings ? ` (save ${formatUsd(legacy.savings.savedUsd)})` : ''}
+                  </p>
+                ) : null}
+              </div>
+              <Link
+                href={LEGACY_CHECKOUT_PATH}
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-7 py-3 text-[15px] font-bold text-black transition hover:bg-cyan-300 active:scale-[0.98] sm:w-auto"
+                data-testid="war-room-get-legacy"
+              >
+                <Swords className="h-4 w-4" />
+                Get AF Legacy
+              </Link>
+            </div>
+            <p className="mt-3 text-[11px] text-white/35">Checkout is handled securely by Stripe.</p>
+          </section>
+        ) : null}
 
         {/* ── How It Works ──────────────────────────────────────────────────── */}
         <section>

@@ -62,7 +62,7 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
               /*
                * ⚠ FOUR BRANCHES, NOT THREE — THE FOURTH IS THE LARGEST POPULATION.
                * This list is the membership predicate for the whole /core shell: the rail
-               * is built from it, and `app/core/[[...screen]]/page.tsx` gates `?league=`
+               * is built from it, and `app/core/(shell)/[[...screen]]/page.tsx` gates `?league=`
                * on it ("a league query is also an authorization boundary"). So a league
                * missing here is a league the user cannot reach ANYWHERE in /core, by a
                * link or by hand.
@@ -339,13 +339,41 @@ export async function loadLeagueSeriesMap(
 }
 
 /**
+ * Which of two rows for the SAME league and the SAME season to keep: the one imported first, then
+ * the lower id. Never "whichever the database returned first".
+ *
+ * 🛑 THAT IS WHAT IT WAS, AND IT FLIPPED THE LEAGUE ID ON ALMOST EVERY PAGE LOAD. One Sleeper league
+ * is one `League` row PER IMPORTER, and a viewer who imported a league somebody else also imported
+ * sees both — same season, same name. The query orders by `[season desc, name asc]`, which ties
+ * them, so Postgres returned either one and the rail's link for that league changed between loads.
+ * Measured 2026-09-25 on KBFL: `c3edd6f0…` and `42957321…` alternated, and every `?league=` link
+ * built from the other copy was dropped by `/core` as "not your league".
+ */
+export function defaultLeagueRowTieBreak(a: Record<string, unknown>, b: Record<string, unknown>): number {
+  const created = (x: Record<string, unknown>) => {
+    const raw = x.createdAt
+    const t = raw instanceof Date ? raw.getTime() : typeof raw === 'string' ? Date.parse(raw) : NaN
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
+  }
+  const ca = created(a)
+  const cb = created(b)
+  if (ca !== cb) return ca < cb ? -1 : 1
+  const ia = String(a.id ?? '')
+  const ib = String(b.id ?? '')
+  return ia < ib ? -1 : ia > ib ? 1 : 0
+}
+
+/**
  * @param seriesByPlatformLeagueId optional chain map from `loadLeagueSeriesMap`. Omit it and
  * this behaves exactly as before — every existing caller is unaffected, which matters because
  * a dozen surfaces read this list and none of them asked for their rows to start disappearing.
+ * @param preferOnTie decides between two rows of the same league and season; negative keeps `a`.
+ * Defaults to `defaultLeagueRowTieBreak`.
  */
 export function collapseLeagueSeasons<T extends Record<string, unknown>>(
   rows: T[],
   seriesByPlatformLeagueId?: ReadonlyMap<string, string>,
+  preferOnTie: (a: T, b: T) => number = defaultLeagueRowTieBreak,
 ): T[] {
   const byLeague = new Map<string, T>()
   const passthrough: T[] = []
@@ -371,14 +399,69 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(
     }
     const seasonOf = (x: T) => (typeof x.season === 'number' ? (x.season as number) : -1)
     if (seasonOf(lg) > seasonOf(seen)) byLeague.set(key, lg)
+    else if (seasonOf(lg) === seasonOf(seen) && preferOnTie(lg, seen) < 0) byLeague.set(key, lg)
   }
 
   return [...passthrough, ...byLeague.values()]
 }
 
+/**
+ * Each league's `settings`, minus the importer's `identity_mappings` table.
+ *
+ * 🛑 `identity_mappings` IS ~98% OF THIS LIST'S PAYLOAD AND NOTHING THAT READS THE LIST USES IT.
+ * Measured read-only on the test database (ep-muddy-leaf) 2026-09-26: across 229 leagues it is 13.5 MB
+ * of JSON, up to 211 KB for ONE league, against a few KB for every other key. For a user in 93
+ * leagues the membership query returned 7.4 MB and took 450–800 ms warm; without `settings` it is
+ * 121 KB and ~110 ms. This list is the first serial read of every `/core` render — the shell cannot
+ * start its other reads until it lands — so that cost was paid on every tab click.
+ *
+ * Only the import pipeline reads `identity_mappings`, from the league row itself; the two other
+ * mentions in the tree (`buildTemplatePayloadFromLeague`, `decision-os/world/assemble`) exclude it
+ * on purpose. Every OTHER key is kept, so no consumer of this list loses a field it reads today.
+ *
+ * ⚠ `jsonb_typeof` GUARDS THE `-`: on a jsonb scalar it throws, and one malformed row would fail the
+ * whole read. ⚠ AND A FAILURE FALLS BACK TO THE FULL COLUMN, never to missing settings: the list's
+ * consumers read entry fees and roster positions out of it, and silently dropping those is a worse
+ * outcome than the old speed.
+ */
+async function readListSettings(ids: string[]): Promise<Map<string, unknown>> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string; settings: unknown }>>`
+      SELECT id,
+             CASE WHEN jsonb_typeof(settings::jsonb) = 'object'
+                  THEN settings::jsonb - 'identity_mappings'
+                  ELSE settings::jsonb END AS settings
+      FROM leagues
+      WHERE id = ANY(${ids})`
+    return new Map(rows.map((r) => [r.id, r.settings]))
+  } catch (err) {
+    console.error('[League List] slim settings read failed; reading the full column', err)
+    const rows = await (prisma as any).league
+      .findMany({ where: { id: { in: ids } }, select: { id: true, settings: true } })
+      .catch(() => [] as Array<{ id: string; settings: unknown }>)
+    return new Map((rows as Array<{ id: string; settings: unknown }>).map((r) => [r.id, r.settings]))
+  }
+}
+
 export async function getDashboardLeagueListForUser(
   userId: string,
-  opts?: { collapseSeries?: boolean },
+  opts?: {
+    collapseSeries?: boolean
+    /**
+     * `'full'` (the default) returns every roster of every league with its `playerData`; `'count'`
+     * returns roster ids only — enough for the team-count fallback below, and the shape stays an
+     * array.
+     *
+     * ⚠ OPT-IN, AND ONLY FOR A CALLER WHOSE WHOLE READ PATH WAS CENSUSED. The /core page is the one
+     * that asks: nothing it hands these rows to reads `rosters` (every loader that needs a lineup —
+     * dash34, portfolio insights, the waivers board — queries rosters itself), and the list is the
+     * FIRST serial read of every /core render. For the heaviest test account `rosters` was ~1.1 MB of
+     * the list's 2.1 MB after `identity_mappings` went (2026-09-26). Eleven other callers DO read
+     * `rosters` off this list (live scores, Chimmy grounding, the dashboard strips, `/api/league/list`
+     * …), which is why the default is unchanged.
+     */
+    rosterDetail?: 'full' | 'count'
+  },
 ): Promise<DashboardLeagueListPayload> {
   const [profile, appUser] = await Promise.all([
     prisma.userProfile
@@ -405,7 +488,7 @@ export async function getDashboardLeagueListForUser(
               /*
                * ⚠ FOUR BRANCHES, NOT THREE — THE FOURTH IS THE LARGEST POPULATION.
                * This list is the membership predicate for the whole /core shell: the rail
-               * is built from it, and `app/core/[[...screen]]/page.tsx` gates `?league=`
+               * is built from it, and `app/core/(shell)/[[...screen]]/page.tsx` gates `?league=`
                * on it ("a league query is also an authorization boundary"). So a league
                * missing here is a league the user cannot reach ANYWHERE in /core, by a
                * link or by hand.
@@ -470,7 +553,9 @@ export async function getDashboardLeagueListForUser(
           guillotineMode: true,
           bestBallMode: true,
           logoUrl: true,
-          settings: true,
+          /*
+           * 🛑 NOT `settings` — IT IS READ BELOW, WITHOUT `identity_mappings`. See `readListSettings`.
+           */
           syncStatus: true,
           syncError: true,
           lastSyncedAt: true,
@@ -490,14 +575,17 @@ export async function getDashboardLeagueListForUser(
             where: { claimedByUserId: userId },
             select: { isCommissioner: true, isCoCommissioner: true, role: true },
           },
-          rosters: {
-            select: {
-              id: true,
-              platformUserId: true,
-              playerData: true,
-              faabRemaining: true,
-            },
-          },
+          rosters:
+            opts?.rosterDetail === 'count'
+              ? { select: { id: true } }
+              : {
+                  select: {
+                    id: true,
+                    platformUserId: true,
+                    playerData: true,
+                    faabRemaining: true,
+                  },
+                },
         },
       })
       .catch((err: unknown) => {
@@ -558,7 +646,7 @@ export async function getDashboardLeagueListForUser(
   ])
 
   const genericLeagueIds = (genericLeagues as { id: string }[]).map((lg) => lg.id).filter(Boolean)
-  const [redraftSeasonMaxRows, leagueHistoryMaxRows] =
+  const [redraftSeasonMaxRows, leagueHistoryMaxRows, settingsById] =
     genericLeagueIds.length > 0
       ? await Promise.all([
           prisma.redraftSeason
@@ -581,8 +669,12 @@ export async function getDashboardLeagueListForUser(
               console.error('[League List] league_season max query failed', err)
               return [] as { leagueId: string; _max: { season: number | null } }[]
             }),
+          readListSettings(genericLeagueIds),
         ])
-      : [[], []]
+      : [[], [], new Map<string, unknown>()]
+  for (const lg of genericLeagues as { id: string; settings?: unknown }[]) {
+    lg.settings = settingsById.get(lg.id) ?? null
+  }
 
   const redraftMaxByLeagueId = new Map<string, number>()
   for (const row of redraftSeasonMaxRows) {
@@ -777,7 +869,21 @@ export async function getDashboardLeagueListForUser(
         (filtered as any[]).map((l) => String(l?.id ?? '')).filter(Boolean),
       )
     : undefined
-  const deduped = collapseLeagueSeasons(filtered as any[], seriesMap)
+  /*
+   * Two importers' rows of one league, same season: the viewer's OWN import wins, then
+   * `defaultLeagueRowTieBreak`. Either way the same row every time — see that function for what
+   * a database-order tie cost.
+   */
+  const viewerOwnedRowIds = new Set(
+    (genericLeagues as Array<{ id?: unknown; userId?: unknown }>)
+      .filter((lg) => lg.userId === userId)
+      .map((lg) => String(lg.id)),
+  )
+  const preferViewerRow = (a: Record<string, unknown>, b: Record<string, unknown>): number => {
+    const own = Number(viewerOwnedRowIds.has(String(b.id))) - Number(viewerOwnedRowIds.has(String(a.id)))
+    return own !== 0 ? own : defaultLeagueRowTieBreak(a, b)
+  }
+  const deduped = collapseLeagueSeasons(filtered as any[], seriesMap, preferViewerRow)
 
   const leaguesSorted = deduped.sort((a: any, b: any) => {
     const aDate = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0

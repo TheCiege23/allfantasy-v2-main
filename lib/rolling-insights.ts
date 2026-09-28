@@ -4,6 +4,7 @@ import { recordProviderSync } from './provider-sync-logger';
 import { getRollingInsightsConfigFromEnv } from './provider-config';
 import { ROLLING_INSIGHTS_SPORTS } from './workers/api-config';
 import { rollingInsightsProvider } from './workers/providers/rolling-insights';
+import { toImageUrl } from '@/lib/media/imageUrl';
 
 interface RollingInsightsToken {
   accessToken: string;
@@ -140,7 +141,8 @@ function normalizeRIPlayer(raw: unknown): RIPlayer | null {
     weight: asNumber(obj.weight),
     college: asString(obj.college),
     dob: asString(obj.dob),
-    img: asString(obj.img ?? obj.image ?? obj.headshot_url),
+    // RI sends the literal `contact_support` for a missing headshot — see lib/media/imageUrl.ts.
+    img: toImageUrl(obj.img ?? obj.image ?? obj.headshot_url),
     positionCategory: asString(obj.positionCategory ?? obj.position_category),
     status: asString(obj.status),
     DK_salary: asNumber(obj.DK_salary ?? obj.dk_salary),
@@ -916,7 +918,7 @@ export function normalizeRIDepthChartPlayers(
       position: asString(obj.position) ?? position,
       number: asNumber(obj.number),
       status: asString(obj.status),
-      img: asString(obj.img),
+      img: toImageUrl(obj.img),
     });
   }
 

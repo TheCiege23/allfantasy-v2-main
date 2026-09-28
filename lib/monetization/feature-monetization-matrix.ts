@@ -1,6 +1,7 @@
 import type { SubscriptionFeatureId, SubscriptionPlanId } from "@/lib/subscription/types"
 import type { TokenSpendRuleCode } from "@/lib/tokens/constants"
 import { getTokenSpendRuleMatrixEntry } from "@/lib/tokens/pricing-matrix"
+import { upgradePathForPlan } from "@/lib/monetization/upgradeDestination"
 
 export type MonetizationAccessType = "free" | "subscription_only" | "subscription_or_tokens"
 
@@ -51,13 +52,14 @@ function buildUpgradePathForPlanAndFeature(
   if (requiredPlanId === "commissioner") {
     return `/commissioner-upgrade?feature=${encodeURIComponent(featureId)}`
   }
+  // AF Legacy and Supreme are bought on /upgrade. `/war-room` is Legacy's product
+  // page and cannot take a payment; `/pricing` does not sell Legacy at all.
   if (requiredPlanId === "war_room") {
-    return `/war-room?feature=${encodeURIComponent(featureId)}`
+    return upgradePathForPlan("af_war_room", { feature: featureId })
   }
-  if (requiredPlanId === "supreme") {
-    return `/pricing?plan=supreme&feature=${encodeURIComponent(featureId)}`
-  }
-  return `/pricing?highlight=supreme&feature=${encodeURIComponent(featureId)}`
+  // Supreme is also the answer for any plan with no checkout of its own: it
+  // unlocks every feature (feature-access `hasFeatureAccessForPlans`).
+  return upgradePathForPlan("af_supreme", { feature: featureId })
 }
 
 export function buildMonetizationUpgradePathForFeature(featureId: SubscriptionFeatureId): string {

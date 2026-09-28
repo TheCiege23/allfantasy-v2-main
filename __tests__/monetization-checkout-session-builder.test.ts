@@ -66,6 +66,8 @@ describe("buildStripeCheckoutSessionForSku — pricing-truth", () => {
       purchaseType: "subscription",
     })
     expect(params.allow_promotion_codes).toBe(true)
+    // The paid-state card check reads the billing address (lib/subscription/paidStateRefusal).
+    expect(params.billing_address_collection).toBe("required")
     expect(params.customer_email).toBe("buyer@example.com")
     expect(params.subscription_data?.metadata).toMatchObject({ sku: "af_pro_monthly" })
     expect(String(params.success_url)).toContain("https://app.example.com/pricing")
@@ -82,6 +84,60 @@ describe("buildStripeCheckoutSessionForSku — pricing-truth", () => {
     expect(params.mode).toBe("payment")
     expect(params.line_items).toEqual([{ price: "price_tokens_5_test", quantity: 1 }])
     expect(params.subscription_data).toBeUndefined()
+  })
+
+  it("reuses the user's Stripe customer instead of sending customer_email", async () => {
+    await buildStripeCheckoutSessionForSku({
+      sku: "af_pro_monthly",
+      userId: "user_1",
+      userEmail: "buyer@example.com",
+      stripeCustomerId: "cus_existing",
+    })
+    const params = sessionsCreateMock.mock.calls[0][0]
+    expect(params.customer).toBe("cus_existing")
+    // The Checkout API rejects a session carrying both.
+    expect(params.customer_email).toBeUndefined()
+  })
+
+  it("CHARGES a validated sponsor discount — the session carries the coupon, not just metadata", async () => {
+    const couponsRetrieve = vi.fn().mockRejectedValue(Object.assign(new Error("No such coupon"), { code: "resource_missing" }))
+    const couponsCreate = vi.fn().mockImplementation(async (p: { id: string }) => ({ id: p.id }))
+    getStripeClientMock.mockReturnValue({
+      checkout: { sessions: { create: sessionsCreateMock } },
+      coupons: { retrieve: couponsRetrieve, create: couponsCreate },
+    })
+
+    await buildStripeCheckoutSessionForSku({
+      sku: "af_pro_monthly",
+      userId: "user_1",
+      couponCode: "WASSUPFRED",
+      couponPercentOff: 20,
+    })
+
+    expect(couponsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "af_sponsor_wassupfred_20pct", percent_off: 20, duration: "once" })
+    )
+    const params = sessionsCreateMock.mock.calls[0][0]
+    expect(params.discounts).toEqual([{ coupon: "af_sponsor_wassupfred_20pct" }])
+    // Mutually exclusive with `discounts` in the Checkout API.
+    expect(params.allow_promotion_codes).toBeUndefined()
+  })
+
+  it("reuses an existing sponsor coupon rather than creating a second one", async () => {
+    const couponsRetrieve = vi.fn().mockResolvedValue({ id: "af_sponsor_wassupfred_20pct" })
+    const couponsCreate = vi.fn()
+    getStripeClientMock.mockReturnValue({
+      checkout: { sessions: { create: sessionsCreateMock } },
+      coupons: { retrieve: couponsRetrieve, create: couponsCreate },
+    })
+    await buildStripeCheckoutSessionForSku({
+      sku: "af_pro_monthly",
+      userId: "user_1",
+      couponCode: "WASSUPFRED",
+      couponPercentOff: 20,
+    })
+    expect(couponsCreate).not.toHaveBeenCalled()
+    expect(sessionsCreateMock.mock.calls[0][0].discounts).toEqual([{ coupon: "af_sponsor_wassupfred_20pct" }])
   })
 
   it("fails soft (null, no Stripe call) when the price id env var is unset", async () => {

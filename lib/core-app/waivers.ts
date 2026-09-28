@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { myRosterCandidates } from './myRoster'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { describeTiebreakRule } from './waiverRuleLabels'
 
 /**
  * Waivers — "targets, bids and claim order, priced against this league's FAAB
@@ -83,6 +84,7 @@ export type WaiversData = {
 const WAIVER_TYPE_LABEL: Record<string, string> = {
   faab: 'FAAB blind bidding',
   rolling: 'Rolling waiver priority',
+  reverse_standings: 'Reverse standings priority',
   fcfs: 'First come, first served',
   standard: 'Standard waiver priority',
   off: 'No waivers — free agents are instant',
@@ -101,11 +103,11 @@ const DAY_LABEL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
  * rendered as an ingested fact, which is the exact failure this codebase keeps
  * having to undo.
  *
- * LeagueWaiverSettings is the ingested table: 90 rows, four distinct waiver types,
- * and 85 carrying a real processing day and time. The section was never missing
- * data — it was reading the wrong table.
+ * LeagueWaiverSettings holds the rule mirror, but it also receives bootstrap
+ * defaults. In particular, Sleeper's mapper does not import the processing day
+ * or UTC time, so a populated mirror field is not proof of a provider schedule.
  */
-async function resolveWaiverRules(leagueId: string): Promise<{
+async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
   waiverType: SectionState<WaiverTypeInfo>
   processTime: SectionState<WaiverRunInfo>
   tiebreak: SectionState<string>
@@ -156,6 +158,10 @@ async function resolveWaiverRules(leagueId: string): Promise<{
           available: false,
           reason: 'this league has waivers turned off — free agents are claimed instantly',
         }
+      // The Sleeper mapper imports type/budget, not its daily schedule or UTC
+      // processing time. This mirror can contain AllFantasy bootstrap defaults.
+      : platform === 'sleeper'
+        ? { available: false, reason: 'Sleeper’s processing schedule was not imported — check the league’s waiver settings on Sleeper.' }
       : day != null && day >= 0 && day <= 6 && time
         ? { available: true, data: { dayOfWeek: day, dayLabel: DAY_LABEL[day], timeUtc: time } }
         : { available: false, reason: 'no waiver run schedule was ingested for this league' }
@@ -172,11 +178,11 @@ async function resolveWaiverRules(leagueId: string): Promise<{
   const tiebreak: SectionState<string> =
     kind === 'off'
       ? { available: false, reason: 'no waivers to tie — free agents are claimed instantly' }
-      : rawTiebreak
-        ? { available: true, data: TIEBREAK_LABEL[rawTiebreak.toLowerCase()] ?? rawTiebreak }
-        : kind === 'rolling' || kind === 'standard'
+      : kind === 'rolling' || kind === 'standard' || kind === 'reverse_standings'
           ? { available: true, data: 'Waiver priority order' }
-          : { available: false, reason: 'this league’s tiebreak rule was not published' }
+          : rawTiebreak
+            ? { available: true, data: describeTiebreakRule(rawTiebreak) }
+            : { available: false, reason: 'this league’s tiebreak rule was not published' }
 
   /*
    * Claim limits. `claimLimitPerPeriod` is a real nullable column; the minimum
@@ -200,15 +206,6 @@ async function resolveWaiverRules(leagueId: string): Promise<{
         }
 
   return { waiverType, processTime, tiebreak, claimLimits }
-}
-
-const TIEBREAK_LABEL: Record<string, string> = {
-  faab: 'Highest FAAB bid',
-  highest_bid: 'Highest FAAB bid',
-  priority: 'Waiver priority order',
-  waiver_order: 'Waiver priority order',
-  reverse_standings: 'Reverse standings order',
-  random: 'Random draw',
 }
 
 /**
@@ -239,7 +236,7 @@ export async function getWaiversData(
   const league = await lc.league()
   if (!league) return null
 
-  const rules = await resolveWaiverRules(leagueId)
+  const rules = await resolveWaiverRules(leagueId, String(league.platform ?? 'manual').trim().toLowerCase())
 
   const base = {
     league: {
@@ -327,7 +324,9 @@ export async function getWaiversData(
   const withBudget = allRosters.filter((r) => r.faabRemaining != null)
 
   const budget: SectionState<WaiverBudget> =
-    mine.faabRemaining == null
+    rules.waiverType.available && rules.waiverType.data.kind !== 'faab'
+      ? { available: false, reason: 'This league does not use FAAB bidding.' }
+      : mine.faabRemaining == null
       ? {
           available: false,
           // Exactly the case the handoff calls out. NOT defaulted to 0 — "$0"

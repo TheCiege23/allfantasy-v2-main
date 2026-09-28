@@ -463,8 +463,10 @@ describe('the real cron schedule, after this fix', () => {
     const phases = jobs.map((j: { phaseMs: number }) => j.phaseMs)
     expect(new Set(phases).size).toBe(4)
 
+    // Every 5 minutes since the 5-minute offer sweep (2026-09-25); its full-feed rotation still runs
+    // every 15, gated inside the route by `claimRotationTick` rather than by this schedule.
     const tradeWatcher = fast.find((c: { path: string }) => c.path === '/api/cron/trade-grade-notify')
-    expect(tradeWatcher?.schedule).toBe('*/15 * * * *')
+    expect(tradeWatcher?.schedule).toBe('*/5 * * * *')
   })
 
   it('the remaining 30-minute incident jobs stay minutes apart in CATCH-UP too', () => {

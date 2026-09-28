@@ -16,6 +16,7 @@ import {
 } from '@/lib/subscription/feature-gate-matrix'
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import { previewTokenSpend } from '@/lib/tokens/client-confirm'
+import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
 
 type FeatureGateProps = {
   featureId: SubscriptionFeatureId
@@ -58,7 +59,14 @@ export function FeatureGate({
     [featureId]
   )
   const [tokenCost, setTokenCost] = useState<number | null>(null)
-  const tokenRuleCode = tokenRuleCodeOverride ?? matrixEntry.tokenFallbackRuleCode
+  /*
+   * ⚠ ONLY OFFER TOKENS A SCREEN WILL ACCEPT. The matrix maps a fallback rule to many features
+   * whose routes never charge it — planning tools, draft strategy, 3-5 year planning — so this
+   * card said "Or use N tokens for one-time use" and sent people to buy tokens nothing would
+   * take (lib/tokens/tokenPurchasable.ts).
+   */
+  const candidateRuleCode = tokenRuleCodeOverride ?? matrixEntry.tokenFallbackRuleCode
+  const tokenRuleCode = isTokenPurchasableRule(candidateRuleCode) ? candidateRuleCode : null
 
   useEffect(() => {
     if (loading || featureAccess || !showTokenFallback || !tokenRuleCode) {

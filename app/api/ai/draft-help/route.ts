@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueAccess, requireSleeper } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { fetchSleeperLeagueBundle } from '@/lib/ai/league-settings-ai/sleeper'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   if (!league) {
     return NextResponse.json({ error: 'League not found or forbidden' }, { status: 403 })
   }
+
+  const gated = await aiCostGate(req, 'draft_ai', userId)
+  if (gated) return gated
 
   try {
     let sleeperExtra = ''

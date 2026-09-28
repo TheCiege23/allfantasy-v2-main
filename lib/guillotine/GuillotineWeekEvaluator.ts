@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import type { GuillotineWeekEvalResult, PeriodScoreRow } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface WeekEvaluatorInput {
   leagueId: string
@@ -35,13 +36,18 @@ export function isPastCorrectionCutoff(args: {
   }
   if (args.correctionWindow === 'custom_cutoff') {
     if (args.customCutoffDayOfWeek != null && args.customCutoffTimeUtc) {
+      /*
+       * 🛑 THIS COUNTED FROM `now`, SO IT COULD NEVER PASS. It found the next cutoff day AFTER
+       * today and asked whether today was past it — always no. The cutoff belongs to the PERIOD:
+       * the first configured day/time at or after the period ended.
+       */
       const [h, m] = args.customCutoffTimeUtc.split(':').map(Number)
-      const nextCutoff = new Date(now)
-      nextCutoff.setUTCDate(nextCutoff.getUTCDate() + 1)
-      const dayOffset = (args.customCutoffDayOfWeek - nextCutoff.getUTCDay() + 7) % 7
-      nextCutoff.setUTCDate(nextCutoff.getUTCDate() + dayOffset)
-      nextCutoff.setUTCHours(h ?? 0, m ?? 0, 0, 0)
-      return now >= nextCutoff
+      const cutoff = new Date(args.periodEndedAt)
+      cutoff.setUTCHours(h ?? 0, m ?? 0, 0, 0)
+      const dayOffset = (args.customCutoffDayOfWeek - cutoff.getUTCDay() + 7) % 7
+      cutoff.setUTCDate(cutoff.getUTCDate() + dayOffset)
+      if (cutoff < args.periodEndedAt) cutoff.setUTCDate(cutoff.getUTCDate() + 7)
+      return now >= cutoff
     }
     return true
   }
@@ -52,8 +58,9 @@ export function isPastCorrectionCutoff(args: {
  * Load draft slot order for a league (slot -> rosterId or rosterId -> slot).
  */
 export async function getDraftSlotByRoster(leagueId: string): Promise<Map<string, number>> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { slotOrder: true },
   })
   const order = session?.slotOrder as Array<{ slot: number; rosterId: string }> | null
@@ -161,6 +168,7 @@ export async function savePeriodScores(args: {
           seasonPointsCumul: s.seasonPointsCumul,
         },
         update: {
+          season,
           periodPoints: s.periodPoints,
           seasonPointsCumul: s.seasonPointsCumul,
         },

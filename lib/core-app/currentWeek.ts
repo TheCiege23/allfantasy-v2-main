@@ -1,10 +1,13 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { readLeagueWeekMetadata } from './leagueWeekMetadata'
+import { leagueWeekFromSettings } from './seasonTimeline'
 
 /**
  * Which week of `WeeklyMatchup` is "this week".
  *
- * ⚠ IT IS THE EARLIEST UNPLAYED WEEK, NEVER `max(week)`. The obvious reading —
+ * Prefer the saved provider period. Without it, use the earliest unplayed week,
+ * never `max(week)`. The obvious reading —
  * latest season, latest week on file — is correct only while every row on file
  * is a COMPLETED week, which was true for as long as the table held nothing
  * but finished 2025 rows.
@@ -35,6 +38,22 @@ import { prisma } from '@/lib/prisma'
 
 export type CurrentWeek = { seasonYear: number; week: number }
 
+/** Portfolio default: the most common provider period in the newest season. */
+export function resolveStatedWeek(leagues: Array<{ season: number | null; settings: unknown }>): CurrentWeek | null {
+  const periods = leagues.flatMap((league) => {
+    const week = leagueWeekFromSettings(league.settings)
+    return league.season != null && week != null ? [{ seasonYear: league.season, week }] : []
+  })
+  if (!periods.length) return null
+  const newestSeason = Math.max(...periods.map((period) => period.seasonYear))
+  const counts = new Map<number, number>()
+  for (const period of periods) {
+    if (period.seasonYear === newestSeason) counts.set(period.week, (counts.get(period.week) ?? 0) + 1)
+  }
+  const week = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0]
+  return { seasonYear: newestSeason, week }
+}
+
 /** A row counts as played once either side has put up a point. */
 const UNPLAYED = { pointsFor: { lte: 0 }, pointsAgainst: { lte: 0 } } as const
 
@@ -43,6 +62,9 @@ export async function resolveCurrentWeek(
 ): Promise<CurrentWeek | null> {
   const ids = platformLeagueIds.filter((v) => typeof v === 'string' && v.length > 0)
   if (ids.length === 0) return null
+
+  const stated = resolveStatedWeek(await readLeagueWeekMetadata(ids, 'platform'))
+  if (stated) return stated
 
   const newest = await prisma.weeklyMatchup
     .findFirst({

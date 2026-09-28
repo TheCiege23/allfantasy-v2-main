@@ -2,8 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Only a member of the league may pick a seat here. Membership is granted by a join that passed
+ * the invite, capacity, dues, rank and password gates (`/api/leagues/join` records it before
+ * sending the manager to this picker). Without this check any signed-in user who knew a league id
+ * could take any open team.
+ */
+async function isLeagueMember(leagueId: string, userId: string): Promise<boolean> {
+  const [league, member] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
+    prisma.redraftLeagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId } },
+      select: { id: true },
+    }),
+  ])
+  return Boolean(member) || league?.userId === userId
+}
 
 /**
  * GET: list unclaimed placeholder rosters in this imported league, for the
@@ -26,6 +44,9 @@ export async function GET(
   })
   if (myRoster) {
     return NextResponse.json({ ok: true, alreadyClaimed: true, rosters: [] })
+  }
+  if (!(await isLeagueMember(leagueId, userId))) {
+    return NextResponse.json({ ok: true, alreadyClaimed: false, rosters: [] })
   }
 
   const allRosters = await prisma.roster.findMany({
@@ -81,35 +102,17 @@ export async function POST(
   const rosterId = typeof body?.rosterId === 'string' ? body.rosterId : ''
   if (!rosterId) return NextResponse.json({ error: 'rosterId is required' }, { status: 400 })
 
+  if (!(await isLeagueMember(leagueId, userId))) {
+    return NextResponse.json({ error: 'Join this league before choosing a team.', code: 'NOT_A_MEMBER' }, { status: 403 })
+  }
+
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.roster.findFirst({
-      where: { leagueId, platformUserId: userId },
-      select: { id: true },
-    })
-    if (existing) {
-      return NextResponse.json(
-        { error: 'You already hold a roster in this league.', code: 'ALREADY_CLAIMED' },
-        { status: 409 },
-      )
+    const seat = await assignLeagueSeat(tx, { leagueId, rosterId, userId })
+    if (!seat.ok) {
+      const status = seat.code === 'ROSTER_NOT_FOUND' ? 404 : seat.code === 'USER_NOT_FOUND' ? 403 : 409
+      const code = seat.code === 'ALREADY_HOLDS_ROSTER' ? 'ALREADY_CLAIMED' : seat.code
+      return NextResponse.json({ error: seat.message, code }, { status })
     }
-    const target = await tx.roster.findFirst({
-      where: { id: rosterId, leagueId },
-      select: { id: true, platformUserId: true },
-    })
-    if (!target) {
-      return NextResponse.json({ error: 'Roster not found in this league.' }, { status: 404 })
-    }
-    const owner = await tx.appUser.findUnique({
-      where: { id: target.platformUserId },
-      select: { id: true },
-    })
-    if (owner) {
-      return NextResponse.json(
-        { error: 'That roster is already claimed.', code: 'ROSTER_TAKEN' },
-        { status: 409 },
-      )
-    }
-    await tx.roster.update({ where: { id: target.id }, data: { platformUserId: userId } })
-    return NextResponse.json({ ok: true, rosterId: target.id })
+    return NextResponse.json({ ok: true, rosterId: seat.rosterId })
   })
 }

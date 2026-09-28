@@ -23,7 +23,7 @@ export function useScopedConversation<T extends { id: string; role: string; text
     setLoadedKey(storageKey)
   }, [storageKey])
   useEffect(() => {
-    if (loadedKey === storageKey && storageKey) { try { sessionStorage.setItem(storageKey, JSON.stringify(all)) } catch { /* Private mode or storage quota: keep the in-memory conversation. */ } }
+    if (loadedKey === storageKey && storageKey) { try { sessionStorage.setItem(storageKey, JSON.stringify(all, (key, value) => key === 'imagePreview' && typeof value === 'string' && !value.startsWith('/api/chat/chimmy?attachment=') ? undefined : value)) } catch { /* Private mode or storage quota: keep the in-memory conversation. */ } }
   }, [all, loadedKey, storageKey])
 
   /*
@@ -46,18 +46,36 @@ export function useScopedConversation<T extends { id: string; role: string; text
    * overwritten a tick later, which fails silently and intermittently.
    */
   const hydrated = useRef<Set<string>>(new Set())
+  /*
+   * ⚠ A FAILED READ IS NOT AN EMPTY ONE (E2, 2026-09-25). Both used to end at "Nothing asked yet.",
+   * which tells someone with a real transcript they never asked anything. The failure is kept per
+   * owner+scope, so it is reported only for the thread that actually failed to load, and
+   * `retryHistory` asks again.
+   */
+  const [failedKey, setFailedKey] = useState<string | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const currentKey = owner ? `${owner}:${scope}` : null
+  const retryHistory = useCallback(() => {
+    if (!currentKey) return
+    hydrated.current.delete(currentKey)
+    setFailedKey(null)
+    setRetryNonce((n) => n + 1)
+  }, [currentKey])
   useEffect(() => {
     if (!owner || loadedKey !== storageKey) return
     const key = `${owner}:${scope}`
     if (hydrated.current.has(key)) return
-    hydrated.current.add(key)
     let cancelled = false
     void (async () => {
       try {
         const res = await fetch(`/api/chat/chimmy?leagueId=${encodeURIComponent(scope)}`, {
           headers: { accept: 'application/json' },
         })
-        if (!res.ok || cancelled) return
+        if (cancelled) return
+        if (!res.ok) {
+          setFailedKey(key)
+          return
+        }
         const body = (await res.json()) as { turns?: unknown }
         const incoming = Array.isArray(body?.turns)
           ? (body.turns as Array<Record<string, unknown>>).filter(
@@ -68,20 +86,23 @@ export function useScopedConversation<T extends { id: string; role: string; text
                 ['you', 'chimmy'].includes(String(t.role)),
             )
           : []
-        if (cancelled || incoming.length === 0) return
+        if (cancelled) return
+        hydrated.current.add(key)
+        if (incoming.length === 0) return
         setAll((previous) => {
           const state = previous[scope] ?? { turns: [], draft: '' }
           if (state.turns.length > 0) return previous
           return { ...previous, [scope]: { ...state, turns: incoming.slice(-80) as unknown as T[] } }
         })
       } catch {
-        /* Offline, blocked, or the read failed: the drawer still works, it just starts empty. */
+        /* Offline, blocked, or the read failed: the drawer still works, and says the read failed. */
+        if (!cancelled) setFailedKey(key)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [owner, scope, loadedKey, storageKey])
+  }, [owner, scope, loadedKey, storageKey, retryNonce])
   const setTurns = useCallback((action: SetStateAction<T[]>) => setAll(previous => {
     const state = previous[scope] ?? { turns: [], draft: '' }
     return { ...previous, [scope]: { ...state, turns: (typeof action === 'function' ? action(state.turns) : action).slice(-80) } }
@@ -109,5 +130,14 @@ export function useScopedConversation<T extends { id: string; role: string; text
     if (added.length === 0) return previous
     return { ...previous, [target]: { ...state, turns: [...state.turns, ...added].slice(-80) } }
   }), [scope])
-  return { turns: loadedKey === storageKey ? all[scope]?.turns ?? [] : [], draft: loadedKey === storageKey ? all[scope]?.draft ?? '' : '', setTurns, setDraft, carryInto }
+  return {
+    ready: loadedKey === storageKey,
+    turns: loadedKey === storageKey ? all[scope]?.turns ?? [] : [],
+    draft: loadedKey === storageKey ? all[scope]?.draft ?? '' : '',
+    setTurns,
+    setDraft,
+    carryInto,
+    historyFailed: currentKey != null && failedKey === currentKey,
+    retryHistory,
+  }
 }

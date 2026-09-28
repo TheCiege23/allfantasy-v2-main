@@ -119,6 +119,14 @@ describe('chimmyToolsForClaude', () => {
 })
 
 describe('runChimmyToolLoop on Claude', () => {
+  it('gives the main answer path Decision OS evidence outside the shared cached prompt', async () => {
+    h.anthropicCreate.mockResolvedValue(answer('Projections are unavailable.'))
+    await runChimmyToolLoop({ ...base, groundingLine: 'DECISION OS: lineup decision blocked; projections missing.' })
+    const params = h.anthropicCreate.mock.calls[0][0]
+    const evidence = params.system.find((block: { text: string }) => block.text.includes('lineup decision blocked'))
+    expect(evidence).toEqual({ type: 'text', text: 'DECISION OS: lineup decision blocked; projections missing.' })
+    expect(params.system[0].text).not.toContain('projections missing')
+  })
   it('answers on Claude, never touching Grok', async () => {
     h.anthropicCreate.mockResolvedValue(answer('You have three games left.'))
 
@@ -142,6 +150,22 @@ describe('runChimmyToolLoop on Claude', () => {
     expect(params.tools.map((t: any) => t.name)).toContain('get_stat_leaders')
     expect(params.fallbacks).toBe('default')
     expect(opts.headers).toEqual({ 'anthropic-beta': 'server-side-fallback-2026-07-01' })
+  })
+
+  /*
+   * The user's saved Chimmy preferences ride AFTER the cached instructions, like the clock: per-user
+   * text inside the cached block would bust the cache for everyone and could be served to someone else.
+   */
+  it("sends the user's saved style after the cached instructions, never inside them", async () => {
+    h.anthropicCreate.mockResolvedValue(answer('ok'))
+
+    await runChimmyToolLoop({ ...base, styleLine: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
+
+    const [params] = h.anthropicCreate.mock.calls[0]
+    expect(params.system).toHaveLength(4)
+    expect(params.system[0]).toMatchObject({ text: 'You are Chimmy.', cache_control: { type: 'ephemeral' } })
+    expect(params.system[2]).toEqual({ type: 'text', text: '## CHIMMY PERSONALIZATION\n- Explanation style: concise' })
+    expect(params.system[0].text).not.toContain('PERSONALIZATION')
   })
 
   it('lets CHIMMY_CLAUDE_MODEL choose the model', async () => {
@@ -183,8 +207,27 @@ describe('runChimmyToolLoop on Claude', () => {
     h.anthropicCreate.mockResolvedValue(wantsTools({ id: 't', name: 'get_league_standings' }))
 
     expect(await runChimmyToolLoop(base)).toBeNull()
-    expect(h.anthropicCreate).toHaveBeenCalledTimes(3)
-    expect(h.execute).toHaveBeenCalledTimes(2)
+    expect(h.anthropicCreate).toHaveBeenCalledTimes(4)
+    expect(h.execute).toHaveBeenCalledTimes(3)
+  })
+
+  /*
+   * ⚠ THE LAST TURN MUST ANSWER. `none` is the one forcing mode compatible with adaptive thinking,
+   * and the tools still travel with it because the history now carries tool_use blocks.
+   */
+  it('sends the final turn with tool_choice none and the tools still attached, and returns its answer', async () => {
+    h.anthropicCreate
+      .mockResolvedValueOnce(wantsTools({ id: 't1', name: 'find_league_by_name', input: { name: 'KBFL' } }))
+      .mockResolvedValueOnce(wantsTools({ id: 't2', name: 'get_playoff_outlook' }))
+      .mockResolvedValueOnce(wantsTools({ id: 't3', name: 'optimize_my_lineup' }))
+      .mockResolvedValueOnce(answer('You are 62% to make it; start Reed.'))
+
+    const out = await runChimmyToolLoop(base)
+
+    expect(out).toMatchObject({ text: 'You are 62% to make it; start Reed.', turns: 4 })
+    const calls = h.anthropicCreate.mock.calls.map((c) => c[0])
+    expect(calls.map((p) => p.tool_choice)).toEqual([{ type: 'auto' }, { type: 'auto' }, { type: 'auto' }, { type: 'none' }])
+    expect(calls[3].tools.length).toBeGreaterThan(0)
   })
 
   it('treats a refusal or a truncated answer as no answer', async () => {
@@ -232,6 +275,21 @@ describe('runChimmyToolLoop on Claude', () => {
     // The loop mutates one array, so by now the answer has been appended — match, don't index the end.
     expect(msgs[0]).toEqual({ role: 'user', content: 'start Chase?' })
     expect(msgs[1]).toEqual({ role: 'assistant', content: 'Yes.' })
-    expect(msgs[2]).toEqual({ role: 'user', content: 'who leads in touchdowns?' })
+    expect(msgs[2]).toEqual({ role: 'user', content: 'CURRENT USER REQUEST:\nwho leads in touchdowns?' })
   })
+})
+
+it('keeps unified memory while making the new selected-league request authoritative on Claude', async () => {
+  h.anthropicCreate.mockResolvedValue(answer('Best Ball roster review'))
+  const history = [{ role: 'user' as const, content: 'Grade the old KBFL trade screenshot' }]
+  await runChimmyToolLoop({ ...base, question: 'Review my Best Ball roster', conversation: history })
+  const params = h.anthropicCreate.mock.calls[0][0]
+  expect(params.messages.slice(0, 2)).toEqual([...history, { role: 'user', content: 'CURRENT USER REQUEST:\nReview my Best Ball roster' }])
+  const focus = params.system.at(-1)
+  expect(focus.text).toContain('do not reopen unrelated old or unanswered questions')
+  expect(focus.text).toContain('Current selected league: l1')
+  expect(focus.text).toContain('Use the supplied current roster and injury counts')
+  expect(focus.text).toContain('Stored starter placement or an injury list is not proof')
+  expect(focus.cache_control).toBeUndefined()
+  expect(params.system[0].text).toBe('You are Chimmy.')
 })

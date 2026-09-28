@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return jsonError(gate.status === 404 ? 'League not found' : 'Forbidden', gate.status)
 
-  const [league, userRole, profile, commissionerEntitlement, scoringConfig] = await Promise.all([
+  const [league, userRole, commissionerEntitlement, scoringConfig] = await Promise.all([
     prisma.league.findFirst({
       where: { id: leagueId },
       include: {
@@ -40,10 +40,6 @@ export async function GET(req: NextRequest) {
       },
     }),
     getLeagueRole(leagueId, userId),
-    prisma.userProfile.findFirst({
-      where: { userId },
-      select: { afCommissionerSub: true },
-    }),
     new EntitlementResolver()
       .resolveForUser(userId, 'commissioner_ai_tools')
       .catch(() => ({ hasAccess: false })),
@@ -74,7 +70,8 @@ export async function GET(req: NextRequest) {
     leagueOwnerUserId: league.userId,
     viewerHasTeam,
     survivorFairPlayLimited,
-    hasAfCommissionerSub: Boolean(profile?.afCommissionerSub) || Boolean(commissionerEntitlement.hasAccess),
+    // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
+    hasAfCommissionerSub: Boolean(commissionerEntitlement.hasAccess),
     canEdit,
     /** Raw `League.settings` JSON for commissioner merges (description, schedule prefs, etc.). */
     settingsSnapshot: rawLeagueSettings && typeof rawLeagueSettings === 'object' ? rawLeagueSettings : {},

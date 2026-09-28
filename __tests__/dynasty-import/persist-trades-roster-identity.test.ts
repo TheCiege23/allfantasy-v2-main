@@ -159,3 +159,47 @@ describe('persistTradesForSeason — provider-native roster identity', () => {
     expect(upsertTrade).toHaveBeenCalledTimes(1)
   })
 })
+
+/*
+ * ⚠ `platform` WAS HARD-CODED TO 'sleeper' ON CREATE, so the first non-Sleeper trade to reach this
+ * writer would have been labelled a Sleeper trade. The parameter defaults to 'sleeper' so every
+ * existing caller (backfill-orchestrator, archiveFeedTrades) writes exactly what it wrote before.
+ */
+describe('persistTradesForSeason — platform label', () => {
+  it("defaults to 'sleeper' when the caller names no platform", async () => {
+    await persistTradesForSeason('L1', 2026, [trade('1', '2')], new Map([['1', 'ownerA']]))
+    expect(sideFor('ownerA').platform).toBe('sleeper')
+  })
+
+  it('writes the platform the caller names', async () => {
+    await persistTradesForSeason('L1', 2026, [trade('1', '2')], new Map([['1', 'ownerA']]), 'espn')
+    expect(sideFor('ownerA').platform).toBe('espn')
+  })
+})
+
+/*
+ * ⚠ `sport` WAS HARD-CODED TO 'nfl' ON CREATE, so every trade from an imported NBA/MLB/NHL league
+ * was labelled NFL. An omitted sport must leave an UPDATE alone: the Sleeper backfill passes none,
+ * and must not revert a sport the live sync already wrote correctly.
+ */
+describe('persistTradesForSeason — sport label', () => {
+  function updateFor(rosterOwner: string) {
+    const call = upsertTrade.mock.calls
+      .map(([args]) => args as { create: Record<string, unknown>; update: Record<string, unknown> })
+      .find((args) => args.create.historyId === `hist-${rosterOwner}`)
+    if (!call) throw new Error(`no LeagueTrade row written for ${rosterOwner}`)
+    return call.update
+  }
+
+  it("creates 'nfl' and leaves an update's sport alone when the caller names none", async () => {
+    await persistTradesForSeason('L1', 2026, [trade('1', '2')], new Map([['1', 'ownerA']]), 'sleeper')
+    expect(sideFor('ownerA').sport).toBe('nfl')
+    expect(updateFor('ownerA')).not.toHaveProperty('sport')
+  })
+
+  it("writes the league's sport, lowercased, on create AND update", async () => {
+    await persistTradesForSeason('L1', 2026, [trade('1', '2')], new Map([['1', 'ownerA']]), 'espn', 'NBA')
+    expect(sideFor('ownerA').sport).toBe('nba')
+    expect(updateFor('ownerA').sport).toBe('nba')
+  })
+})

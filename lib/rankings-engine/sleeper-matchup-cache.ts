@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getLeagueMatchups } from '@/lib/sleeper-client'
+import { readLeagueWeekMetadata } from '@/lib/core-app/leagueWeekMetadata'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 
 /*
  * ⚠ NO DEFAULT SEASON, ON PURPOSE. This module shipped with
@@ -28,12 +30,17 @@ export async function ensureMatchupsCached(
   /** Active-game lane may tighten the current-week refresh without changing historical cadence. */
   staleThresholdMs = STALE_THRESHOLD_MS,
 ): Promise<void> {
-  const existing = await prisma.weeklyMatchup.groupBy({
+  const [existing, metadata] = await Promise.all([prisma.weeklyMatchup.groupBy({
     by: ['week'],
     where: { leagueId, seasonYear },
     _max: { updatedAt: true },
     _sum: { pointsFor: true },
-  })
+  }), readLeagueWeekMetadata([leagueId], 'platform')])
+  const league = metadata.find((row) => row.season === seasonYear)
+  const providerWeek = leagueWeekFromSettings(league?.settings)
+  const currentWeek = providerWeek != null && providerWeek <= maxWeek &&
+    !['complete', 'completed', 'finished'].includes(String(league?.status ?? '').toLowerCase())
+    ? providerWeek : null
 
   const cachedWeeks = new Map<number, { updatedAt: Date; totalPoints: number }>()
   for (const r of existing) {
@@ -56,8 +63,8 @@ export async function ensureMatchupsCached(
    * maxWeek as before. That is at most three Sleeper fetches per staleness
    * window instead of refetching the whole season.
    */
-  let frontierWeek: number | null = null
-  for (let w = 1; w <= maxWeek; w++) {
+  let frontierWeek: number | null = currentWeek
+  for (let w = 1; currentWeek == null && w <= maxWeek; w++) {
     const c = cachedWeeks.get(w)
     if (c && c.totalPoints === 0) {
       frontierWeek = w
@@ -77,8 +84,7 @@ export async function ensureMatchupsCached(
     if (!cached) {
       missingWeeks.push(w)
     } else if (refreshWeeks.has(w) && now - cached.updatedAt.getTime() > staleThresholdMs) {
-      await prisma.weeklyMatchup.deleteMany({ where: { leagueId, seasonYear, week: w } })
-      missingWeeks.push(w)
+        missingWeeks.push(w)
     }
   }
 
@@ -121,9 +127,13 @@ export async function ensureMatchupsCached(
     })
 
     if (rows.length > 0) {
-      await prisma.weeklyMatchup.createMany({
-        data: rows,
-        skipDuplicates: true,
+      // Keep the last usable scores until a non-empty replacement has arrived.
+      // Replacing a week atomically also preserves them if the insert fails.
+      await prisma.$transaction(async (tx) => {
+        if (cachedWeeks.has(week)) {
+          await tx.weeklyMatchup.deleteMany({ where: { leagueId, seasonYear, week } })
+        }
+        await tx.weeklyMatchup.createMany({ data: rows, skipDuplicates: true })
       })
     }
   }

@@ -8,7 +8,7 @@
 
 import type { CreateLeagueV2State } from './state'
 import { getDefaultKeeperSetup } from './state'
-import { getEffectiveLeagueType, isFootballLike, isDynastyConcept } from './state'
+import { getEffectiveLeagueType, isFootballLike, isDynastyConcept, resolveBestBallSetupForWizard } from './state'
 import { finalizeCanonicalCreatePayload } from '@/lib/league-creation/normalizeCreateLeaguePayload'
 import { resolveEffectiveDraftType, isThirdRoundReversalAvailable } from '@/lib/create-league-v2/rules-engine'
 import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
@@ -69,6 +69,9 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   const conceptSetup: Record<string, unknown> = {
     visibility: state.privacy,
     isPublic: state.privacy === 'public',
+    // A guillotine week has no opponent, so there is no head-to-head game for a median game to
+    // double. The wizard hides the box for guillotine; this drops a choice made before switching.
+    medianGame: state.medianGame === true && lt !== 'guillotine',
     draftDate: state.draftDate,
     draftTime: state.draftTime,
     draftTimezone: state.timezone,
@@ -88,6 +91,9 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   }
   if (isDynastyConcept(lt) && state.dynasty) {
     const d = state.dynasty
+    conceptSetup.startupRosterDepth = d.startupRosterDepth
+    conceptSetup.benchCount = d.benchCount
+    conceptSetup.irCount = d.irCount
     conceptSetup.taxiSlots = d.taxiSlotCount
     conceptSetup.taxiEligibilityYears = d.taxiEligibilityYears
     conceptSetup.taxiLockDeadlineWeek = d.taxiLockDeadlineWeek
@@ -130,7 +136,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
       draftType: state.draftType,
       timezone: state.timezone,
       language: state.language,
-      conceptSetup: { bestBall: state.bestBall },
+      conceptSetup: { bestBall: resolveBestBallSetupForWizard(state) },
     })
     conceptSetup.bestBall = bestBall
   }
@@ -139,7 +145,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
 
   const tradeReviewMode =
     state.tradeReviewMode === 'none'
-      ? 'none'
+      ? 'instant'
       : state.tradeReviewMode === 'league_vote'
         ? 'league_vote'
         : 'commissioner'
@@ -154,7 +160,8 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     timezone: state.timezone,
     language: state.language === 'es' ? 'es' : 'en',
     tradeReviewMode,
-    ...(state.sport === 'SOCCER' && state.soccerPipeline ? { soccerPipeline: state.soccerPipeline } : {}),
+    // A state restored from sessionStorage from before the wizard defaulted this still has null.
+    ...(state.sport === 'SOCCER' ? { soccerPipeline: state.soccerPipeline ?? 'euro' } : {}),
   }
 
   if (Object.keys(conceptSetup).length > 0) {

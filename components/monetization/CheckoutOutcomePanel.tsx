@@ -130,6 +130,31 @@ export function CheckoutOutcomePanel({
     )
   }
 
+  /*
+   * ⚠ "REFUNDED IN FULL" IS THE SENTENCE THAT MATTERS HERE, for the same reason
+   * "nothing was charged" is below: the card WAS charged, and the buyer's first
+   * question is whether they get it back. They do (lib/subscription/paidStateRefusal).
+   */
+  if (phase === 'refused') {
+    return (
+      <section className="af-mz-outcome" data-state="bad" role="status">
+        <span className="af-mz-outcome-tag">Refunded</span>
+        <h2 className="af-mz-outcome-title">We couldn&apos;t complete that purchase.</h2>
+        <p className="af-mz-outcome-body">
+          <strong>Your payment has been refunded in full, and nothing will be charged again.</strong>{' '}
+          The card&apos;s billing address is in a state where paid fantasy features aren&apos;t allowed, so
+          paid features aren&apos;t available on this account. Free features still work. If the billing
+          address was wrong, email support@allfantasy.ai.
+        </p>
+        <div className="af-mz-outcome-actions">
+          <Link href="/core" className="af-mz-btn af-mz-btn--primary">
+            Keep using AllFantasy.ai for free
+          </Link>
+        </div>
+      </section>
+    )
+  }
+
   const cancelled = phase === 'cancelled'
   return (
     <section className="af-mz-outcome" data-state={cancelled ? 'off' : 'bad'} role="status">

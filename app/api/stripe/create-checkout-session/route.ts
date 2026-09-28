@@ -10,10 +10,21 @@ import {
 } from "@/lib/monetization/compliance-guardrails";
 
 type Body = {
-  mode: "donate" | "lab";
+  mode: "donate";
   amount: number;
   currency: "usd";
 };
+
+/*
+ * 🛑 THE "BRACKET LAB PASS" ($9.99, `mode: "lab"`) IS NO LONGER SOLD. It promised
+ * "simulation + strategy exploration tools for this tournament", and nothing ever
+ * delivered them: no page renders the Lab dashboard (components/lab/LabDashboardShell),
+ * the /api/lab routes it calls do not exist, and the webhook files a lab purchase under
+ * LEGACY_PURCHASE_TYPES and grants nothing. Anyone who paid would have had a fair refund
+ * or chargeback claim. Checked 2026-09-25 against live Stripe: no lab session was ever
+ * created, so no one is owed anything. Donations are unchanged.
+ */
+const RETIRED_MODES = new Set(["lab"]);
 
 export async function POST(req: Request) {
   try {
@@ -25,6 +36,15 @@ export async function POST(req: Request) {
     const APP_URL = getBaseUrl();
 
     const body = (await req.json()) as Body;
+    if (RETIRED_MODES.has(String(body?.mode ?? ""))) {
+      return NextResponse.json(
+        { error: "The Bracket Lab Pass is no longer sold." },
+        { status: 410 }
+      );
+    }
+    if (body?.mode !== "donate") {
+      return NextResponse.json({ error: "Invalid checkout mode" }, { status: 400 });
+    }
     assertNoLeagueSettlementIntent(body?.mode ?? "", {
       route: "/api/stripe/create-checkout-session",
       purchase_type: body?.mode ?? "",
@@ -45,27 +65,17 @@ export async function POST(req: Request) {
       );
     }
 
-    const isLab = body.mode === "lab";
     const amountCents = Math.round(body.amount * 100);
 
-    if (isLab && amountCents !== 999) {
-      return NextResponse.json(
-        { error: "Invalid Lab Pass amount" },
-        { status: 400 }
-      );
-    }
-
-    if (!isLab && (amountCents < 100 || amountCents > 50000)) {
+    if (amountCents < 100 || amountCents > 50000) {
       return NextResponse.json(
         { error: "Donation must be between $1 and $500" },
         { status: 400 }
       );
     }
 
-    const productName = isLab ? "Bracket Lab Pass (Tournament)" : "Donation";
-    const description = isLab
-      ? "Access to simulation + strategy exploration tools for this tournament."
-      : "Optional support to fund servers, data costs, and performance improvements.";
+    const productName = "Donation";
+    const description = "Optional support to fund servers, data costs, and performance improvements.";
 
     const stripe = getStripeClient();
 

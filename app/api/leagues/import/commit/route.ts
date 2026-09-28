@@ -20,7 +20,37 @@ import {
 import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
-import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-import/commissionerGate'
+import {
+  assertImportCommissioner,
+  OPEN_READ_PROVIDERS,
+  recordImportAttestation,
+} from '@/lib/league-import/commissionerGate'
+import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
+import { importerManagerIdForRosters } from '@/lib/league-import/importerManagerId'
+import { redactAndCap } from '@/lib/security/redactSecrets'
+
+/**
+ * What the caller sees when something we did not anticipate throws.
+ *
+ * 🛑 AN UNCAUGHT THROW HERE USED TO BECOME AN EMPTY-BODY 500, and the import screen then showed
+ * the browser's own parse error — "Failed to execute 'json' on 'Response': Unexpected end of JSON
+ * input" — as if it were an explanation. Every branch of this route answers JSON; this makes the
+ * unexpected one do the same, with a sentence a person can act on.
+ *
+ * "nothing was changed" is true of the source platform in every case (import never writes there),
+ * and true of AllFantasy for any throw before the league row is created; after it, the idempotent
+ * run record means pressing Import again resumes rather than duplicates.
+ */
+const IMPORT_FAILED_MESSAGE =
+  'Import failed on our side — nothing was changed. Try again in a minute.'
+
+/** Log line for an unexpected failure: the error's name and message, credentials and URLs removed. */
+function describeUnexpectedImportError(error: unknown): string {
+  const raw = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+  /* A provider fetch failure can carry the full request URL — and Rolling Insights puts its
+     token in the query string. Drop URLs outright, then run the shared redactor. */
+  return redactAndCap(raw.replace(/https?:\/\/[^\s"'<>]+/gi, '[url]'), 500)
+}
 
 function mapImportCommitErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
@@ -32,35 +62,19 @@ function mapImportCommitErrorStatus(code: string): number {
   return 500
 }
 
-/**
- * The gate's own failure, mapped to a real HTTP status instead of the flat 403 every
- * `!gate.ok` used to get.
- *
- * 🛑 `CommissionerGateResult.notFound`'S OWN DOC COMMENT ALREADY SAID "maps to 404, not
- * 403" — nothing ever read it here. Every gate rejection answered 403 regardless of
- * cause, so a league that does not exist, a league Sleeper is rate-limiting us on right
- * now, and a genuine "you are not this league's commissioner" all produced the identical
- * response shape. A bulk run over many leagues needs exactly this distinction: a 429 on
- * one league is a signal to slow the whole run down, a 404 never resolves on retry, and
- * neither is the caller lacking permission.
- *
- * Mirrors the two lines directly above for the SAME reasoning, applied to the gate's
- * result instead of the normalization pipeline's `code` — 404 for "does not exist", 503
- * for "the provider itself is unavailable" (5xx is bucketed with 429 here: both mean
- * "their side, retry later", and REST convention reserves 429 for the rate-limit case
- * specifically, so it passes through as its own number rather than being folded into
- * 503). Everything else this function has never had a status for (not-linked, not-a-
- * member, attestation-required) keeps the 403 it already had — this only corrects the
- * two cases that were provably wrong, not every judgement call in the file.
- */
-function mapGateFailureStatus(gate: { notFound?: boolean; status?: number | null }): number {
-  if (gate.notFound) return 404
-  if (gate.status === 429) return 429
-  if (gate.status != null && gate.status >= 500) return 503
-  return 403
-}
+/* The gate-refusal status mapping (404 / 429 / 503 / 403) lives in
+   `lib/league-import/commissionerGateResponse.ts`, shared with the two legacy import routes. */
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handleImportCommit(req)
+  } catch (error) {
+    console.error('[api/leagues/import/commit] unexpected failure:', describeUnexpectedImportError(error))
+    return NextResponse.json({ error: IMPORT_FAILED_MESSAGE, code: 'IMPORT_FAILED' }, { status: 500 })
+  }
+}
+
+async function handleImportCommit(req: NextRequest): Promise<Response> {
   const auth = await requireVerifiedUser()
   if (!auth.ok) {
     return auth.response
@@ -81,6 +95,16 @@ export async function POST(req: NextRequest) {
      * reasons must not silently resurrect something the user threw away.
      */
     confirmReimportOfDeleted?: boolean
+    /**
+     * The team the importer says is theirs, for a provider that cannot tell us (Fleaflicker, and
+     * Fantrax without a stored Secret ID). A `source_team_id` from the preview's `managers`.
+     *
+     * 🛑 DELIBERATELY NOT `importerSourceManagerId`. That value is PROVIDER-PROVEN and also lets
+     * `claimExistingLeagueForMember` attach the caller to ANOTHER account's league. A team someone
+     * picked from a list proves nothing, so it is validated against this league's own rosters and
+     * only ever claims a team in the league row this request creates or already owns.
+     */
+    claimSourceTeamId?: string
   }
   try {
     body = await req.json()
@@ -119,20 +143,7 @@ export async function POST(req: NextRequest) {
       : undefined,
   })
   if (!gate.ok) {
-    return NextResponse.json(
-      {
-        error: gate.reason ?? 'Commissioner verification failed.',
-        code: gate.requiresAttestation
-          ? 'ATTESTATION_REQUIRED'
-          : gate.notFound
-            ? 'LEAGUE_NOT_FOUND'
-            : gate.status === 429 || (gate.status != null && gate.status >= 500)
-              ? 'PROVIDER_UNAVAILABLE'
-              : 'NOT_COMMISSIONER',
-        requiresAttestation: gate.requiresAttestation ?? false,
-      },
-      { status: mapGateFailureStatus(gate) },
-    )
+    return commissionerGateFailureResponse(gate)
   }
 
   const result = await runImportedLeagueNormalizationPipeline({
@@ -145,6 +156,37 @@ export async function POST(req: NextRequest) {
       { error: result.error },
       { status: mapImportCommitErrorStatus(result.code) }
     )
+  }
+
+  /*
+   * The self-identified team, accepted only where nothing better exists: an OPEN_READ provider
+   * whose gate proved no identity of its own. Where the provider DID say which team is the
+   * caller's, a client-picked one must not compete with it.
+   */
+  const claimSourceTeamId =
+    typeof body.claimSourceTeamId === 'string' ? body.claimSourceTeamId.trim() : ''
+  if (claimSourceTeamId) {
+    if (!OPEN_READ_PROVIDERS.includes(provider) || gate.sourceManagerId) {
+      return NextResponse.json(
+        {
+          error: 'Choosing your team is not needed for this league — we already know which team is yours.',
+          code: 'CLAIM_TEAM_NOT_ACCEPTED',
+        },
+        { status: 400 },
+      )
+    }
+    const known = result.normalized.rosters.some(
+      (r) => String(r.source_team_id) === claimSourceTeamId,
+    )
+    if (!known) {
+      return NextResponse.json(
+        {
+          error: 'That team is not in this league. Go back and pick your team again.',
+          code: 'CLAIM_TEAM_NOT_IN_LEAGUE',
+        },
+        { status: 400 },
+      )
+    }
   }
 
   try {
@@ -169,7 +211,16 @@ export async function POST(req: NextRequest) {
        * caller may import at all — and it was dropped here. That is why every
        * non-Sleeper import landed with no claimed team and went invisible.
        */
-      importerSourceManagerId: gate.sourceManagerId ?? null,
+      // ⚠ Translated into the rosters' key space: MFL's gate answers with a FRANCHISE id, its
+      // rosters key managers on owner_id. See lib/league-import/importerManagerId.ts.
+      importerSourceManagerId: importerManagerIdForRosters(
+        provider,
+        gate.sourceManagerId,
+        result.normalized.rosters,
+      ),
+      /* Validated above against this league's rosters; feeds ONLY the bootstrap's claim on the
+         importer's own league row — never the cross-account join. */
+      importerSourceTeamId: claimSourceTeamId || null,
     })
 
     // Stamp the attestation on the new league so the gate is auditable.

@@ -22,6 +22,7 @@ type Row = {
   season?: number | null
   week?: number | null
   seasonType?: string | null
+  startTime?: Date | null
 }
 
 function feed(source: string, count: number, week: number | null, extra: Partial<Row> = {}): Row[] {
@@ -42,6 +43,23 @@ function countBySource(out: Row[]): Record<string, number> {
 }
 
 describe('pickFreshestSourceRows — per-week, coverage-gated', () => {
+  it('selects one daily slate when providers disagree between week zero and no week', () => {
+    const startTime = new Date('2026-09-12T23:00:00Z')
+    const out = pickFreshestSourceRows([
+      ...feed('thesportsdb', 13, 0, { startTime }),
+      ...feed('espn_live', 13, null, { startTime }),
+    ], NOW, 'day')
+    expect(countBySource(out)).toEqual({ espn_live: 13 })
+  })
+
+  it('keeps future daily fixtures without letting their coverage displace today’s live source', () => {
+    const out = pickFreshestSourceRows([
+      ...feed('espn_live', 2, null, { startTime: new Date('2026-09-12T23:00:00Z') }),
+      ...feed('thesportsdb', 2, 0, { startTime: new Date('2026-09-12T23:00:00Z') }),
+      ...feed('thesportsdb', 10, 0, { startTime: new Date('2026-09-13T23:00:00Z') }),
+    ], NOW, 'day')
+    expect(countBySource(out)).toEqual({ espn_live: 2, thesportsdb: 10 })
+  })
   it('drops a partial ranked feed for a week it cannot cover (production NCAAF week 2: espn 24 of 131)', () => {
     const out = pickFreshestSourceRows(
       [...feed('espn', 24, 2), ...feed('thesportsdb', 131, 2), ...feed('api_sports', 126, 2)],

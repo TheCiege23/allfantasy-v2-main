@@ -56,12 +56,14 @@ import {
   assessConcentration,
   assessDeadline,
   assessRosterCrunch,
+  activeRosterCapacity,
   assessUnpriced,
 } from './rosterShape'
 import { assessContention, postureNote } from './contention'
 import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
+import { resolveViewerLeagueRoster } from './viewerLeagueRoster'
 import {
   byeCollisionDelta,
   computeRosterNeed,
@@ -225,101 +227,14 @@ export async function buildTradeContextNotes(args: {
   if (!league || !requirements || league.season == null) return EMPTY
 
   /*
-   * The viewer's own roster in this league. Matched through LeagueTeam because
-   * `Roster.platformUserId` is the PLATFORM's id for them, not ours — the same
-   * two-id-space trap the scoreboard hit.
-   *
-   * ⚠ A CLAIMED TEAM IS NOT GUARANTEED, AND THIS FUNCTION RETURNS EVERYTHING.
-   * Claiming is a deliberate action a manager may never have taken, and until
-   * this fell back, an unclaimed league produced NO notes at all — not just no
-   * leverage: no byes, no roster need, no league scale, no format rules. One
-   * missing `claimedByUserId` silently emptied the entire ledger for that
-   * league, and nothing on screen said why. `buildNativeActiveTrades` already
-   * does this dual lookup for exactly this reason.
+   * The viewer's own team and roster row. `resolveViewerLeagueRoster` carries the whole reasoning —
+   * the claimed-team-then-linked-account fallback and the two id spaces a Roster row can be keyed
+   * in — and is shared with the league-graded trade verdict, so the notes and the grade cannot
+   * describe different rosters.
    */
-  const team = await (async () => {
-    const claimed = await prisma.leagueTeam
-      .findFirst({
-        where: { leagueId, claimedByUserId: userId },
-        select: { platformUserId: true, externalId: true },
-      })
-      .catch(() => null)
-    if (claimed?.platformUserId) return claimed
-
-    /*
-     * The linked Sleeper account. Deliberately second: a claim is an explicit
-     * statement about THIS league, and a linked platform id is an inference
-     * from an id space shared across all of them.
-     */
-    const profile = await prisma.userProfile
-      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
-      .catch(() => null)
-    const linked = profile?.sleeperUserId?.trim()
-    if (!linked) return null
-    return prisma.leagueTeam
-      .findFirst({
-        where: { leagueId, platformUserId: linked },
-        select: { platformUserId: true, externalId: true },
-      })
-      .catch(() => null)
-  })()
-  /*
-   * ⚠ AN EMPTY LEDGER AND A LEDGER THAT FOUND NOTHING LOOK IDENTICAL ON SCREEN.
-   * Both render as no notes. Only one of them is something the manager can fix,
-   * so the reason rides back and the analyzer prints it under "what we
-   * couldn't see" rather than leaving a silent blank.
-   */
-  if (!team?.platformUserId) {
-    return {
-      ...EMPTY,
-      contextGap:
-        'which of these teams is yours — claim your team, or link the account you play on, and the league-specific read turns on',
-    }
-  }
-
-  /*
-   * 🛑 TWO ID SPACES, AND THE VIEWER'S OWN ROSTER IS THE ONE ROW THAT LANDS IN
-   * THE OTHER ONE — so keying this the obvious way misses exactly the manager
-   * this whole ledger exists for, and nobody else.
-   *
-   * `SleeperLeagueCreationBootstrapService` writes `Roster.platformUserId` as
-   * `managerUserIds.get(source_manager_id) ?? source_manager_id` — the
-   * AllFantasy user id whenever the manager resolves to a linked account, the
-   * raw Sleeper id when they do not. `LeagueTeam.platformUserId` on the same
-   * pass is written as `r.source_manager_id || null`: always the Sleeper id.
-   * The viewer is by definition resolved (they are looking at the screen), so
-   * their Roster row carries the AF id while their LeagueTeam row carries the
-   * Sleeper id, and a lookup by the team's id finds all eleven strangers and
-   * misses them. `Roster.redraftRosterId`'s own schema note records the same
-   * split from the data side: "23 carry an app uuid in platformUserId rather
-   * than a platform id".
-   *
-   * `buildNativeActiveTrades` in /api/league/trades-panel already does this
-   * dual lookup, and says why. This did not, so a fully imported league
-   * reported itself unsynced under "what we couldn't see" and every note group
-   * — byes, roster need, league scale, format rules — came back empty.
-   *
-   * ⚠ ORDERED, NOT `findFirst` OVER AN UNORDERED `in`. Both rows can exist at
-   * once: the bootstrap writes the AF-id row and a later `/api/league/sync`
-   * (`lib/league-sync-core.ts`, which keys on Sleeper `owner_id`) creates a
-   * SECOND row for the same manager. Picking arbitrarily between them means a
-   * manager's roster silently alternates between two vintages across reloads.
-   * Newest write wins.
-   */
-  const rosterOwnerIds = [...new Set([team.platformUserId, userId].filter(Boolean))]
-  const roster = await prisma.roster
-    .findFirst({
-      where: { leagueId, platformUserId: { in: rosterOwnerIds } },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, playerData: true },
-    })
-    .catch(() => null)
-  if (!roster) {
-    return {
-      ...EMPTY,
-      contextGap: 'your roster in this league, which has not been synced yet',
-    }
-  }
+  const viewer = await resolveViewerLeagueRoster(leagueId, userId)
+  if (!viewer.ok) return { ...EMPTY, contextGap: viewer.gap }
+  const { team, roster } = viewer
   const rosterRowId = roster.id
 
   /*
@@ -512,7 +427,7 @@ export async function buildTradeContextNotes(args: {
     if (!d || d.factor === 1) continue
     const pct = Math.round((d.factor - 1) * 100)
     needNotes.push(
-      `${g.name} is worth about ${Math.abs(pct)}% ${pct > 0 ? 'more' : 'less'} to you than his market price — ${d.basis}`,
+      `${g.name} is worth about ${Math.abs(pct)}% ${pct > 0 ? 'more' : 'less'} to you than his base value — ${d.basis}`,
     )
   }
 
@@ -572,11 +487,19 @@ export async function buildTradeContextNotes(args: {
     settings: league.settings,
     starters: league.starters,
     rosterIds,
+    capacity: activeRosterCapacity({
+      slots: league.starters,
+      players: rosterIds,
+      reserve: pd.reserve,
+      taxi: pd.taxi,
+      outgoingIds: players.filter((player) => give.some((line) => line.name === player.name))
+        .flatMap((player) => player.sleeperId ? [player.sleeperId] : []),
+    }),
     format: null,
     /* Needed to discount a devy asset by how far off his draft eligibility is. */
     season: league.season,
-    incoming: get.length + (args.picksToMe?.length ?? 0),
-    outgoing: give.length + (args.picksToThem?.length ?? 0),
+    incoming: get.length,
+    outgoing: give.length,
     futureLean: (args.picksToMe?.length ?? 0) - (args.picksToThem?.length ?? 0),
     pricedGive: args.pricedGive ?? [],
     pricedGet: args.pricedGet ?? [],
@@ -1134,6 +1057,7 @@ async function buildScaleNotes(args: {
   starters: unknown
   rosterIds: string[]
   format: string | null
+  capacity: ReturnType<typeof activeRosterCapacity>
   incoming: number
   outgoing: number
   futureLean: number
@@ -1153,17 +1077,9 @@ async function buildScaleNotes(args: {
     if (scale) notes.push(...scale.notes)
   }
 
-  /*
-   * Roster size is the FULL `roster_positions` list, bench and IR included —
-   * that is what the platform enforces. Using only the starting slots would
-   * report every legal roster as illegal.
-   */
-  const rosterSize = Array.isArray(args.starters) ? args.starters.length : null
   const crunch = assessRosterCrunch({
-    rosterSize,
-    held: args.rosterIds.length,
+    ...args.capacity,
     incoming: args.incoming,
-    outgoing: args.outgoing,
   })
   if (crunch.basis) notes.push(crunch.basis)
 

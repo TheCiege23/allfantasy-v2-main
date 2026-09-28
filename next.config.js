@@ -303,13 +303,16 @@ const nextConfig = {
   async rewrites() {
     return [
       // PostHog ingestion proxy — avoids ad-blocker interference
+      // Assets go through our own route, NOT straight to us-assets.i.posthog.com:
+      // that host is behind Cloudflare, which 403s ("DNS points to prohibited IP")
+      // the visitor's cf-* headers an external rewrite forwards. See the route.
       {
         source: '/ingest/static/:path*',
-        destination: 'https://us-assets.i.posthog.com/static/:path*',
+        destination: '/api/ph-assets/static/:path*',
       },
       {
         source: '/ingest/array/:path*',
-        destination: 'https://us-assets.i.posthog.com/array/:path*',
+        destination: '/api/ph-assets/array/:path*',
       },
       {
         source: '/ingest/:path*',

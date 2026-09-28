@@ -48,15 +48,26 @@ export function DraftChatDock({ unreadCount = 0, ...chatProps }: DraftChatDockPr
     <div
       className={cn(
         'flex flex-col border-t border-slate-700 bg-slate-950/50 transition-all duration-300 ease-out',
-        expanded ? 'flex-1 min-h-[200px]' : 'h-12'
+        /* h-full: the panel inside fills the dock, so its list scrolls and the box stays in view. */
+        expanded ? 'h-full min-h-[200px] flex-1' : 'h-12'
       )}
     >
-      {/* Chat Header/Toggle */}
+      {/*
+        Chat Header/Toggle. A slim bar: the dock sits under a CHAT tab already, and on a laptop
+        the whole dock is ~240px — the old 46px bar cost the conversation a line and a half.
+      */}
       <button
+        type="button"
         onClick={toggleExpanded}
+        aria-expanded={expanded}
+        aria-label={expanded ? 'Collapse chat' : 'Expand chat'}
+        data-testid="draft-chat-dock-toggle"
         className={cn(
-          'flex items-center justify-between px-4 py-3',
-          'text-sm font-semibold text-white',
+          'flex items-center justify-between',
+          expanded
+            ? 'min-h-[36px] px-3 py-1.5 text-[11px] tracking-[0.12em] md:min-h-[28px] md:py-1'
+            : 'h-full px-4 py-3 text-sm',
+          'font-semibold text-white',
           'hover:bg-slate-800/30 transition-colors',
           'border-b border-slate-700',
           expanded ? 'bg-slate-900/50' : 'bg-slate-900/80'

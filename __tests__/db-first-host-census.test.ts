@@ -118,7 +118,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * gstatic host never appears as a literal in this codebase for the census to find.
    */
   { name: 'cdn-media', why: 'Google Fonts stylesheet consumed as a <link> href, not a data read', test: /^fonts\.googleapis\.com$/i },
-  { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|www\.youtube\.com|fancred\.app)$/i },
+  { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
    * /leagues/<id>/settings and "Open in Sleeper" buttons. It sat in the
@@ -148,6 +148,13 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
   { name: 'platform-infra', why: 'email, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
+   * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
+   * extensions and remote config from it for /ingest/static and /ingest/array (an
+   * external rewrite forwarded cf-connecting-ip and Cloudflare 403'd it; see that route).
+   * Product analytics, not a read Postgres could serve.
+   */
+  { name: 'platform-infra', why: 'PostHog analytics SDK assets (extensions, remote config) proxied for the browser', test: /^us-assets\.i\.posthog\.com$/i },
+  /*
    * OUTBOUND PUBLISHING, moved out of the data-API ledger on 2026-08-28. We WRITE to
    * these; they are not reads that Postgres could have served, which is what the
    * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
@@ -167,7 +174,8 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * outside scripts/, that is a finding regardless of what this ledger says.
    */
   { name: 'platform-infra', why: 'Neon control plane — database branch lifecycle, not a data feed', test: /^console\.neon\.tech$/i },
-  { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|api\.klipy\.(com|ai))$/i },
+  // klipy.com and giphy.com are the attribution links under the picker — Klipy's terms ask for one.
+  { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|klipy\.com|api\.klipy\.(com|ai))$/i },
   { name: 'chat-integration', why: 'Discord OAuth, bot API and deep links — a chat platform, not a data feed', test: /^discord\.com$/i },
   { name: 'namespace', why: 'an XML/JSON-LD namespace, never fetched', test: /^(schema\.org|www\.w3\.org|www\.sitemaps\.org)$/i },
   { name: 'geo-ip', why: 'request-time geolocation, not sports data', test: /^(proxycheck\.io|ipapi\.co|ip-api\.com)$/i },

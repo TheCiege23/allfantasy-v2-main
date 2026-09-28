@@ -1,8 +1,12 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
+import type { TradeRecord } from '@/lib/core-app/trades'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
+import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
@@ -13,6 +17,7 @@ import {
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
 import {
   analysisUnpricedReason,
   pickUnpricedReason,
@@ -30,7 +35,7 @@ import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
 import { TradeAssetSheet, usePhoneViewport } from '@/components/core-app/screens/TradeAssetSheet'
@@ -39,6 +44,11 @@ import {
   suggestionToPickedAssets,
 } from '@/components/core-app/screens/TradePartnerSuggestions'
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
+import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
+import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -170,7 +180,17 @@ type Line = {
    */
   stock?: 'up' | 'down' | 'flat' | null
   stockDelta?: number | null
+  /**
+   * After an analysis: `marketValue` moved by this league's scoring and your roster need — the
+   * number the grade is taken on (Guap, 2026-09-24). Absent before analysis, when every row is the
+   * plain market value; null when the line is unpriced.
+   */
+  leagueValue?: number | null
+  /** What moved `marketValue` to `leagueValue`, each with its reason. */
+  adjustments?: ValueAdjustment[]
 }
+
+type ValueAdjustment = { kind: 'scoring' | 'need'; factor: number; reason: string }
 
 /**
  * One line of the analysis echo.
@@ -179,17 +199,51 @@ type Line = {
  * pricer returns 0 with this flag when it finds nothing at all; the builder took the 0 as a price,
  * so a team defense read "0" after Analyze — and was not counted as unpriced.
  */
-type EngineLine = Line & { unpriced?: boolean; sport?: string | null }
+type EngineLine = Line & {
+  playerId?: string | null
+  enrichmentPlayerId?: string | null
+  unpriced?: boolean
+  sport?: string | null
+  valueAdjustments?: ValueAdjustment[]
+}
+
+function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines: EngineLine[]) {
+  const compatible = lines.filter(line => valuePositionsAgree(asset.position, line.position))
+  const sleeperId = asset.providerIdentity?.provider === 'sleeper' ? asset.providerIdentity.id : null
+  const exact = compatible.filter(line =>
+    (asset.playerId && line.playerId === asset.playerId) ||
+    (sleeperId && line.enrichmentPlayerId === sleeperId),
+  )
+  if (exact.length) return exact.length === 1 ? exact[0] : undefined
+  // Older responses have no IDs. A unique compatible name on this side is safe;
+  // a conflicting verified provider ID must never fall through to a name.
+  const named = compatible.filter(line => line.name.toLowerCase() === asset.name.toLowerCase() &&
+    !(sleeperId && line.enrichmentPlayerId && line.enrichmentPlayerId !== sleeperId))
+  return named.length === 1 ? named[0] : undefined
+}
 
 type AnalyzeResult = {
+  evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
+  salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
+  counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
-  fairnessScore?: number
-  confidenceScore?: number
+  fairnessScore?: number | null
+  confidenceScore?: number | null
   percentDiff?: number
   degraded?: boolean
   dataGaps?: string[]
   giveTotal?: number
   getTotal?: number
+  /** What the grade is priced in; see `lib/trade-value-console/types.ts`. */
+  valueBasis?: {
+    graded: 'league' | 'market'
+    label: string
+    scoringAdjusted: boolean
+    needAdjusted: boolean
+    needGap: string | null
+  }
+  /** THE grade — the same object every other trade surface shows for this deal. */
+  grade?: TradeGradeView
   players?: { give: EngineLine[]; get: EngineLine[] }
   byeNotes?: string[]
   needNotes?: string[]
@@ -209,6 +263,8 @@ type AnalyzeResult = {
     alternateTargetsNote?: string
     why?: string
   }
+  /** The partner's own trade record, bound to this deal — present only for a viewer whose plan has it. */
+  competitiveEdge?: TradeEdgeState
 }
 
 /**
@@ -219,10 +275,18 @@ function money(v: number | null | undefined): string {
   return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
 }
 
+/**
+ * The value a row is counted at: the league value once an analysis has priced it, the market value
+ * before. One rule for every total on the page, so the totals always add up to the grade beside them.
+ */
+function valueOf(l: Line): number | null | undefined {
+  return l.leagueValue !== undefined ? l.leagueValue : l.marketValue
+}
+
 /** Sum that ignores unpriced lines rather than treating them as zero. */
 function totalOf(lines: Line[]): string {
   const priced = lines
-    .map((l) => l.marketValue)
+    .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   if (priced.length === 0) return '—'
   return priced.reduce((a, b) => a + b, 0).toLocaleString()
@@ -231,9 +295,32 @@ function totalOf(lines: Line[]): string {
 /** The same sum as a number, null when nothing on the side is priced. */
 function pricedTotal(lines: Line[]): number | null {
   const priced = lines
-    .map((l) => l.marketValue)
+    .map(valueOf)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   return priced.length === 0 ? null : priced.reduce((a, b) => a + b, 0)
+}
+
+/** "+18%" / "−4%" for a factor. */
+function pctOf(factor: number): string {
+  const pct = Math.round((factor - 1) * 100)
+  return `${pct > 0 ? '+' : '−'}${Math.abs(pct)}%`
+}
+
+/**
+ * How far this league moved a row off its market price, beside the price it moved to. Nothing
+ * when it did not move. The reasons are listed in text under the verdict — this is only the marker,
+ * so no fact on the page depends on a hover a phone cannot do.
+ */
+function LeagueMove({ line }: { line: Line }) {
+  const league = line.leagueValue
+  const market = line.marketValue
+  if (league == null || market == null || market === 0 || league === market) return null
+  return (
+    <span className="af-tc-league-move" data-dir={league > market ? 'up' : 'down'}>
+      {pctOf(league / market)}
+      <small>base {money(market)}</small>
+    </span>
+  )
 }
 
 function unpricedCount(lines: Line[]): number {
@@ -358,11 +445,22 @@ function AllLeaguesTradeHub(props: {
  * desktop render is byte-for-byte the page it was, a rotate or resize never loses picker or
  * analyser state, and nothing depends on knowing the viewport before hydration.
  */
-export type MobileStep = 'give' | 'get' | 'review'
+export type MobileStep = 'offers' | 'give' | 'get' | 'review'
 
+/*
+ * ⚠ OFFERS IS A STEP OF ITS OWN (2026-09-24). The inbox, its timeline, the value alerts and the
+ * league's trade history used to be untagged, so they rendered on EVERY step: a manager building a
+ * deal on a phone scrolled past the whole inbox to reach the roster on each of the three steps, and
+ * the history block below the builder repeated the inbox a second time. Guap: "the trade system
+ * feels clunky on PC and mobile". Reading offers and building a deal are two jobs; on a phone each
+ * now gets the screen to itself. Desktop is untouched — the tags only act below 720px.
+ *
+ * The labels are short because four tabs share 390px.
+ */
 const MOBILE_STEPS: Array<{ key: MobileStep; label: string }> = [
-  { key: 'give', label: 'You send' },
-  { key: 'get', label: 'You get' },
+  { key: 'offers', label: 'Offers' },
+  { key: 'give', label: 'Send' },
+  { key: 'get', label: 'Get' },
   { key: 'review', label: 'Review' },
 ]
 
@@ -389,6 +487,7 @@ function toInput(a: PickedAsset) {
     return {
       kind: 'player' as const,
       ...(a.playerId ? { playerId: a.playerId } : {}),
+      ...(a.providerIdentity ? { providerIdentity: a.providerIdentity } : {}),
       name: a.name,
       ...(a.sportHint ? { sportHint: a.sportHint } : {}),
     }
@@ -400,6 +499,8 @@ function toInput(a: PickedAsset) {
 }
 
 export function TradeCenter(props: {
+  /** Authenticated account identity, supplied by the server for device draft isolation. */
+  viewerId?: string | null
   league: { id: string; name: string; format: string | null; teamCount: number | null } | null
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
@@ -419,7 +520,27 @@ export function TradeCenter(props: {
    * Null for a native league, or when the resolver could not verify a host.
    */
   sourceLink?: SourceScreenLink | null
+  /**
+   * Trade depth (AF Pro): the breakdown under the verdict, who to trade with, and the finder.
+   * The routes withhold that data from a locked viewer; this decides what is drawn. Null renders
+   * everything, as before.
+   */
+  depthAccess?: CoreDepthAccess | null
+  /**
+   * The league's trade history (the `Trades` screen), rendered after the builder. Passed in rather
+   * than rendered beside this component so it can belong to the phone's Offers step instead of
+   * trailing every step.
+   */
+  history?: ReactNode
+  completedHistory?: readonly TradeRecord[]
+  /**
+   * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
+   * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
+   */
+  edgeAccess?: CoreDepthAccess | null
 }) {
+  const depthAccess = props.depthAccess ?? null
+  const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -433,6 +554,10 @@ export function TradeCenter(props: {
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
+  // Offers poll independently. Rebuilding the full route while editing can remount
+  // this form and discard an unsaved proposal or its in-flight analysis.
+  const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
+  useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
   const [draftNote, setDraftNote] = useState<string | null>(null)
   /*
    * Non-null means the next send ANSWERS that offer rather than opening a new one.
@@ -447,6 +572,18 @@ export function TradeCenter(props: {
   const [mobileStep, setMobileStep] = useState<MobileStep>('give')
   const isPhone = usePhoneViewport()
   const stepAnchorRef = useRef<HTMLDivElement | null>(null)
+  const verdictRef = useRef<HTMLElement | null>(null)
+  /** Offers waiting on this manager, reported by the inbox; badges the Offers tab. */
+  const [needsYou, setNeedsYou] = useState<number | null>(null)
+
+  /*
+   * A trade email or push links to `?trade=<id>`, and that trade is on the Offers step (its inbox
+   * or its history). Read after mount rather than during render so the server and client agree on
+   * the first paint; `useFocusTradeFromUrl` then brings the trade itself into view.
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('trade')) setMobileStep('offers')
+  }, [])
   /* The "+ Add asset" button that opened the phone sheet — where focus returns on close. */
   const sheetOpenerRef = useRef<HTMLElement | null>(null)
 
@@ -481,21 +618,42 @@ export function TradeCenter(props: {
    * pick proposable rather than only priceable.
    */
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
+  const proposalFingerprint = JSON.stringify([props.viewerId, props.league?.id, giveAssets, getAssets, partnerRosterId])
+  const proposalFingerprintRef = useRef(proposalFingerprint)
+  proposalFingerprintRef.current = proposalFingerprint
+  useEffect(() => setBusy(false), [proposalFingerprint])
 
-  /** The engine's lines, keyed by name, merged onto what was added. */
+  /** FAAB labels are identical on both sides; players resolve by identity per side. */
   const pricedBy = useMemo(() => {
     const m = new Map<string, EngineLine>()
     for (const l of [...(result?.players?.give ?? []), ...(result?.players?.get ?? [])]) {
-      m.set(l.name.toLowerCase(), l)
+      if (l.position === 'FAAB' || l.name.toLowerCase().startsWith('faab $')) m.set(l.name.toLowerCase(), l)
     }
     return m
   }, [result])
 
+  const { data: rosterData } = useLeagueRosters(
+    props.league?.id ?? null,
+    Boolean(props.league?.id),
+    props.viewerId,
+  )
+
   const toLines = useCallback(
-    (assets: PickedAsset[]): Line[] =>
-      assets.map((a) => {
+    (assets: PickedAsset[], engineLines?: EngineLine[] | null): Line[] => {
+      /*
+       * The league value the grade used, when the analysis sent one. Absent on an older response
+       * (and in fixtures written before it existed), which leaves the row on its market value.
+       */
+      const leagueOf = (engine: EngineLine | undefined): Pick<Line, 'leagueValue' | 'adjustments'> =>
+        engine && engine.leagueValue !== undefined
+          ? { leagueValue: engine.unpriced ? null : (engine.leagueValue ?? null), adjustments: engine.valueAdjustments ?? [] }
+          : {}
+      /* Index among the assets the analysis was sent — its lines come back in that order. */
+      let valuedIndex = 0
+      return assets.map((a) => {
+        const engineAt = valuedByVerdict(a) ? engineLines?.[valuedIndex++] : undefined
         if (a.kind === 'player') {
-          const engine = pricedBy.get(a.name.toLowerCase())
+          const engine = playerEngineLine(a, engineLines ?? [])
           /*
            * Engine price wins; the list value is the fallback. An engine line flagged `unpriced`
            * wins too — as "no price": its 0 is a placeholder, and the verdict was computed without
@@ -523,6 +681,7 @@ export function TradeCenter(props: {
             imageUrl: a.imageUrl ?? null,
             stock: a.stock ?? null,
             stockDelta: a.stockDelta ?? null,
+            ...leagueOf(engine),
           }
         }
         if (a.kind === 'faab') {
@@ -546,35 +705,19 @@ export function TradeCenter(props: {
             team: null,
             marketValue,
             unpricedWhy: marketValue == null ? pricedOnAnalysisReason().label : null,
+            ...leagueOf(engine),
           }
         }
-        /*
-         * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
-         *
-         * This field has now been fixed three times in three places — the rosters route,
-         * the hand-typed pick, and here — because pricing at PICK time bakes a number into
-         * stored state, so every path that creates a pick has to remember to set it. Any
-         * path that forgets produces an em dash on the row and "1 unpriced" on a total
-         * that then understates itself by a whole first-rounder.
-         *
-         * The round is all the curve needs and every pick carries one, so deriving it here
-         * makes ONE rule serve every path — including a draft serialized into localStorage
-         * before the rule existed, which no amount of fixing creation sites can reach.
-         *
-         * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
-         * slot it projects to; the curve here only knows the round, so it is the fallback
-         * and not the override.
-         *
-         * ⚠ AND A PICK THE ROUTE COULD NOT PLACE STAYS UNPRICED. The picker defaults a missing
-         * round to 1 when it builds the asset, so pricing that round here would show a pick with no
-         * round as a first-rounder. `unpricedReason` is what survives from the route to say so.
-         */
+        // A league quote overrides saved draft values, including values from older pricing models.
         const pick: Line = {
           name: a.label,
           position: 'PICK',
           team: null,
           marketValue:
-            a.value ??
+            props.league?.id
+              ? (valuedByVerdict(a) ? readPickPreviewValue({ leagueId: props.league.id,
+                  book: rosterData?.pickPreviewBook, year: a.year, round: a.round }) : null)
+              : a.value ??
             (!a.unpricedReason && Number.isFinite(a.round) && a.round >= 1
               ? pickValueByOverall({
                   round: a.round,
@@ -583,18 +726,31 @@ export function TradeCenter(props: {
                 })
               : null),
         }
-        const why = pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null
+        /*
+         * ⚠ AFTER AN ANALYSIS A PICK SHOWS THE PRICE THE GRADE USED. The league preview and
+         * evaluator share a pricer; an analysis retains its exact value even if the market refreshes. The
+         * engine names picks differently from the builder, so the line is matched by its place in the
+         * deal (the analysis returns lines in the order it was sent), and only if it IS a pick line.
+         */
+        if (engineAt && engineAt.pricedSource === 'pick' && engineAt.leagueValue !== undefined) {
+          const graded = engineAt.unpriced ? null : (engineAt.leagueValue ?? null)
+          pick.marketValue = engineAt.unpriced ? null : (engineAt.marketValue ?? null)
+          pick.leagueValue = graded
+          pick.adjustments = []
+        }
+        const why = pick.marketValue == null ? (a.unpricedReason ?? pricedOnAnalysisReason()).label : null
         return {
           ...pick,
           // Said on the row because the verdict below it silently has one asset fewer.
           unpricedWhy: why && !valuedByVerdict(a) ? `${why} — left out of the verdict` : why,
         }
-      }),
-    [pricedBy, props.league?.teamCount],
+      })
+    },
+    [pricedBy, props.league?.id, props.league?.teamCount, rosterData?.pickPreviewBook],
   )
 
-  const give = toLines(giveAssets)
-  const get = toLines(getAssets)
+  const give = toLines(giveAssets, result?.players?.give)
+  const get = toLines(getAssets, result?.players?.get)
 
   /*
    * 🛑 LOADED AS SOON AS THE LEAGUE IS KNOWN, NOT ONLY ONCE SOMEONE STARTS BUILDING.
@@ -615,10 +771,6 @@ export function TradeCenter(props: {
    * ⚠ THIS DOES ADD ONE REQUEST PER TRADE-PAGE LOAD, and that is the deliberate trade: it is the
    * request that fetches the content the page is for.
    */
-  const { data: rosterData } = useLeagueRosters(
-    props.league?.id ?? null,
-    Boolean(props.league?.id),
-  )
   /*
    * ⚠ IDENTITY, NOT THE PROPOSE GATE. `viewerRosterId` is the engine's strict
    * predicate and is null on every imported league, so filtering "everyone but
@@ -647,12 +799,21 @@ export function TradeCenter(props: {
   const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
   const valueActions = props.valueActions ?? []
 
+  /*
+   * 🛑 EVERY CHANGE TO THE DEAL CLEARS THE VERDICT. `loadOffer` below says why — a score left up
+   * while the assets change underneath "is the one way this page can state something false" — and
+   * yet adding or removing an asset left it up: add a player after analysing and the grade still
+   * described the old deal while the totals described the new one. Found by the trade audit
+   * (2026-09-24). The verdict now always belongs to the deal on screen, or is absent.
+   */
   const addAsset = useCallback(
     (side: 'give' | 'get', asset: PickedAsset) => {
       const setter = side === 'give' ? setGiveAssets : setGetAssets
       /* Immutable update — never write into the existing array. */
       setter((prev) => [...prev, asset])
       setPicking(null)
+      setResult(null)
+      setError(null)
     },
     [],
   )
@@ -660,6 +821,8 @@ export function TradeCenter(props: {
   const removeAsset = useCallback((side: 'give' | 'get', index: number) => {
     const setter = side === 'give' ? setGiveAssets : setGetAssets
     setter((prev) => prev.filter((_, i) => i !== index))
+    setResult(null)
+    setError(null)
   }, [])
 
   /**
@@ -765,11 +928,18 @@ export function TradeCenter(props: {
 
   const noSignal = useMemo(() => {
     if (!result) return false
+    /*
+     * With the server's grade, "no signal" means exactly "the grade is withheld" — the same rule
+     * every other surface follows. A data gap that does not touch the price (an opponent roster we
+     * could not read) no longer hides a letter the offer card beside it is showing.
+     */
+    if (result.grade) return !result.grade.graded
     const allUnpriced = [...give, ...get].every((l) => l.marketValue == null)
     return Boolean(result.degraded) || (give.length + get.length > 0 && allUnpriced)
   }, [result, give, get])
 
   const analyze = useCallback(async () => {
+    const analyzedProposal = proposalFingerprintRef.current
     const sendGive = giveAssets.filter(valuedByVerdict)
     const sendGet = getAssets.filter(valuedByVerdict)
     /*
@@ -819,6 +989,7 @@ export function TradeCenter(props: {
         }),
       })
       const j = (await r.json().catch(() => ({}))) as AnalyzeResult & { error?: string }
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       if (!r.ok) {
         setError(j.error ?? 'Analysis failed.')
         setResult(null)
@@ -826,29 +997,37 @@ export function TradeCenter(props: {
       }
       setResult(j)
     } catch {
+      if (proposalFingerprintRef.current !== analyzedProposal) return
       setError('Network error.')
       setResult(null)
     } finally {
-      setBusy(false)
+      if (proposalFingerprintRef.current === analyzedProposal) setBusy(false)
     }
   }, [props.league?.id, giveAssets, getAssets, partnerRoster?.teamExternalId])
 
   /*
-   * ⚠ A LETTER PER SIDE, OR NO LETTER AT ALL. `projectedLetterFor` returns null
-   * without signal rather than leaving that judgement to this component, so an
-   * unpriced deal shows no badge instead of a C that reads as "even".
-   *
-   * `percentDiff` is signed from the viewer's side, so the opponent's grade is
-   * the mirror of it.
+   * On a phone the verdict lands below both sides and the value bar — off screen, under a sticky
+   * bar, after a wait of several seconds. Bring it up when it arrives, unless it is already visible.
+   * `scroll-margin-top` in the stylesheet keeps it clear of the sticky step bar.
    */
-  const yourGrade = projectedLetterFor({
-    percentDiff: result?.percentDiff ?? null,
-    hasSignal: Boolean(result) && !noSignal,
-  })
-  const theirGrade = projectedLetterFor({
-    percentDiff: result?.percentDiff != null ? -result.percentDiff : null,
-    hasSignal: Boolean(result) && !noSignal,
-  })
+  useEffect(() => {
+    if (!result || !isPhone) return
+    const el = verdictRef.current
+    if (!el) return
+    const top = el.getBoundingClientRect().top
+    if (top < 0 || top > window.innerHeight * 0.6) el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [result, isPhone])
+
+  /*
+   * 🛑 THE LETTERS COME FROM THE SERVER'S GRADE, OR THERE ARE NONE (2026-09-24; fallback removed
+   * 2026-09-27). This is the one object the league page, the inbox, /core Trades and Chimmy show for
+   * the same deal. A response without it used to fall back to `projectedLetterFor(percentDiff)` —
+   * a second copy of the arithmetic, run in the browser, which is how a surface drifts onto its own
+   * scale. No grade on the response means no badge: the analyze route always sends one now.
+   */
+  const serverGrade = result?.grade ?? null
+  const yourGrade = serverGrade?.graded ? serverGrade.letter : null
+  const theirGrade = serverGrade?.graded ? serverGrade.partnerLetter : null
 
   /*
    * ── Draft persistence ──────────────────────────────────────────
@@ -865,19 +1044,58 @@ export function TradeCenter(props: {
    * mean a manager who saved while offline and then came back online silently
    * loses the newer copy to a stale server row.
    */
-  const draftKey = props.league?.id ? `af-trade-draft:${props.league.id}` : null
+  const draftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id)
+  const workingDraftKey = tradeDeviceDraftKey(props.viewerId, props.league?.id, true)
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null)
+  const [deviceDraftAvailable, setDeviceDraftAvailable] = useState<boolean | null>(null)
+  const draftContext = JSON.stringify([props.viewerId, props.league?.id])
+  const draftContextRef = useRef(draftContext)
+  draftContextRef.current = draftContext
+
+  useEffect(() => {
+    let recovered: ReturnType<typeof decodeTradeDraft> = null
+    if (workingDraftKey) {
+      try {
+        const raw = window.localStorage.getItem(workingDraftKey)
+        recovered = raw ? decodeTradeDraft(JSON.parse(raw)) : null
+      } catch { /* Storage can be unavailable on a private device. */ }
+    }
+    setGiveAssets(recovered?.give ?? [])
+    setGetAssets(recovered?.get ?? [])
+    setPicking(null)
+    setPartnerRosterId(recovered?.partnerRosterId ?? null)
+    setCountering(null)
+    setResult(null)
+    setError(null)
+    setDraftNote(recovered && (recovered.give.length || recovered.get.length)
+      ? 'Recovered this device’s in-progress proposal — analyse it again to get a verdict.' : null)
+    setDeviceDraftAvailable(null)
+    setHydratedDraftKey(workingDraftKey)
+  }, [workingDraftKey, props.league?.id, props.viewerId])
+
+  useEffect(() => {
+    // Do not overwrite recovery data with the initial empty render, or an old
+    // account/league's assets while the new context is being restored.
+    if (!workingDraftKey || hydratedDraftKey !== workingDraftKey) return
+    try {
+      if (!giveAssets.length && !getAssets.length) window.localStorage.removeItem(workingDraftKey)
+      else window.localStorage.setItem(workingDraftKey, JSON.stringify({ give: giveAssets, get: getAssets, partnerRosterId, at: Date.now() }))
+      setDeviceDraftAvailable(true)
+    } catch { setDeviceDraftAvailable(false) }
+  }, [workingDraftKey, hydratedDraftKey, giveAssets, getAssets, partnerRosterId])
 
   const saveDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const savingContext = draftContextRef.current
 
     let local = false
     try {
-      window.localStorage.setItem(
+      if (draftKey) window.localStorage.setItem(
         draftKey,
         JSON.stringify({ give: giveAssets, get: getAssets, at: Date.now() }),
       )
-      local = true
+      local = Boolean(draftKey)
     } catch {
       /* Private browsing and full quotas both throw. */
     }
@@ -897,6 +1115,7 @@ export function TradeCenter(props: {
       /* Offline is a fallback, not a failure. */
     }
 
+    if (draftContextRef.current !== savingContext) return
     setDraftNote(
       remote
         ? 'Saved to your account — it will be here on your other devices.'
@@ -911,12 +1130,16 @@ export function TradeCenter(props: {
     setGetAssets(Array.isArray(get) ? (get as PickedAsset[]) : [])
     /* A restored deal is not an analysed one. */
     setResult(null)
+    setCountering(null)
+    setPartnerRosterId(null)
     setDraftNote(note)
   }, [])
 
   const restoreDraft = useCallback(async () => {
     const leagueId = props.league?.id
-    if (!draftKey || !leagueId) return
+    if (!leagueId) return
+    const restoringContext = draftContextRef.current
+    const restoringProposal = proposalFingerprintRef.current
 
     /*
      * ⚠ THE ACCOUNT WINS WHEN BOTH EXIST, and that is a choice rather than an
@@ -929,8 +1152,9 @@ export function TradeCenter(props: {
       const j = (await r.json().catch(() => ({}))) as {
         draft?: { payload?: { give?: unknown; get?: unknown } } | null
       }
-      const payload = j?.draft?.payload
-      if (payload && (Array.isArray(payload.give) || Array.isArray(payload.get))) {
+      if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
+      const payload = decodeTradeDraft(j?.draft?.payload)
+      if (r.ok && payload) {
         applyDraft(
           payload.give,
           payload.get,
@@ -942,13 +1166,15 @@ export function TradeCenter(props: {
       /* Fall through to the browser copy. */
     }
 
+    if (draftContextRef.current !== restoringContext || proposalFingerprintRef.current !== restoringProposal) return
     try {
-      const raw = window.localStorage.getItem(draftKey)
+      const raw = draftKey ? window.localStorage.getItem(draftKey) : null
       if (!raw) {
         setDraftNote('No saved draft for this league, on your account or in this browser.')
         return
       }
-      const parsed = JSON.parse(raw) as { give?: PickedAsset[]; get?: PickedAsset[] }
+      const parsed = decodeTradeDraft(JSON.parse(raw))
+      if (!parsed) { setDraftNote('That saved draft could not be read.'); return }
       applyDraft(
         parsed.give,
         parsed.get,
@@ -985,25 +1211,32 @@ export function TradeCenter(props: {
     return { give: g, get: k, givePct, diff, pct }
   })()
 
+  /* The rows this league moved off their market price — listed under the verdict with each reason. */
+  const movedLines = [...give, ...get].filter((l) => (l.adjustments ?? []).length > 0 && l.leagueValue != null)
+
   const legend = assetTypesFor(props.leagueType, props.leagueVariant)
 
   const valueSources = Array.from(
     new Set(
       [...(result?.players?.give ?? give), ...(result?.players?.get ?? get)]
         .map((line) => line.pricedSource?.trim())
-        .filter((source): source is string => Boolean(source)),
+        .filter((source): source is string => typeof source === 'string' && source.length > 0 && !['unknown', 'placeholder', 'unpriced'].includes(source.toLowerCase())),
     ),
   )
-  const yourIncentive = intel?.contenderRecommendation ?? intel?.why ??
+  const yourIncentive = noSignal
+    ? 'The complete proposal value is unavailable. Review the priced assets and your roster before deciding.'
+    : intel?.contenderRecommendation ?? intel?.why ??
     (balance?.diff != null && balance.diff >= 0
-      ? `You receive about ${money(balance.diff)} more in current market value.`
+      ? `You receive about ${money(balance.diff)} more in current league value.`
       : 'The deal may improve your roster construction even when the raw market total is close.')
   const theirIncentive = balance?.diff != null && balance.diff <= 0
-    ? `They receive about ${money(Math.abs(balance.diff))} more in current market value.`
+    ? `They receive about ${money(Math.abs(balance.diff))} more in current league value.`
     : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
-  const agreementBlocker = intel?.tradeWarnings?.[0] ??
+  const agreementBlocker = noSignal
+    ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'The complete proposal could not be valued.'
+    : intel?.tradeWarnings?.[0] ??
     (balance?.diff != null && balance.diff > 0
-      ? `The current market baseline favors you by ${money(balance.diff)}, so they may ask for another asset.`
+      ? `The displayed league value favors you by ${money(balance.diff)}, so they may ask for another asset.`
       : unpricedCount([...give, ...get]) > 0
         ? 'One or more assets are unpriced, which lowers confidence until fresh data is available.'
         : 'Manager preference, roster limits, and each team’s competitive window can still prevent agreement.')
@@ -1026,7 +1259,9 @@ export function TradeCenter(props: {
 
     const parts = [side('I give', give), side('I get', get)].filter(Boolean).join('. ')
     const league = props.league?.name ? ` in ${props.league.name}` : ''
-    const verdict = result?.labels?.fairnessLabel
+    const verdict = noSignal
+      ? ' The proposal grade is unavailable.'
+      : result?.labels?.fairnessLabel
       ? ` The analyzer says: ${result.labels.fairnessLabel}.`
       : ''
 
@@ -1040,7 +1275,7 @@ export function TradeCenter(props: {
         },
       }),
     )
-  }, [give, get, props.league?.name, result])
+  }, [give, get, props.league?.name, result, noSignal])
 
   if (!props.league) {
     return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
@@ -1059,6 +1294,7 @@ export function TradeCenter(props: {
     return (
       <TradeAssetPicker
         sport={null}
+        leagueId={props.league?.id}
         onClose={() => setPicking(null)}
         onPick={(a) => addAsset(side, a)}
         /*
@@ -1067,6 +1303,7 @@ export function TradeCenter(props: {
           they do not hold and the engine would refuse it on send.
         */
         rosterPicks={r?.picks ?? []}
+        pickPreviewBook={rosterData?.pickPreviewBook}
         rosterLabel={side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
@@ -1098,27 +1335,58 @@ export function TradeCenter(props: {
    * a manager who added only what they want got an error box after a network round trip. Naming
    * the missing step is the same information a turn earlier, as a control instead of a complaint.
    */
+  /*
+   * ⚠ ON A BUILDING STEP IT POINTS AT WHAT IS STILL MISSING, AND ANALYSES ONCE NOTHING IS. It used
+   * to say "Review trade" on both building steps, so a manager who added what they send was sent to
+   * Review, told "Add what you get", and sent back — two wasted taps on every deal, measured as the
+   * clunkiest part of the phone flow in the 2026-09-24 audit. Now: the empty side is the next
+   * step, and a deal with both sides goes straight to Review WITH the analysis running, because
+   * that is the only thing anyone does on arrival there.
+   */
+  const bothSides = giveAssets.length > 0 && getAssets.length > 0
+  const analyzeLabel = busy ? 'Analyzing…' : result ? 'Analyze again' : 'Analyze trade'
   const primary: { label: string; disabled: boolean; run: () => void } =
-    mobileStep !== 'review'
-      ? { label: 'Review trade', disabled: !hasAssets, run: () => goToStep('review') }
-      : giveAssets.length === 0 && getAssets.length > 0
-        ? { label: 'Add what you send', disabled: false, run: () => goToStep('give') }
-        : getAssets.length === 0 && giveAssets.length > 0
-          ? { label: 'Add what you get', disabled: false, run: () => goToStep('get') }
-          : {
-              label: busy ? 'Analyzing…' : result ? 'Analyze again' : 'Analyze trade',
-              disabled: !hasAssets || busy,
-              run: () => void analyze(),
+    mobileStep === 'offers'
+      ? hasAssets
+        ? { label: 'Back to your trade', disabled: false, run: () => goToStep('review') }
+        : { label: 'Build a trade', disabled: false, run: () => goToStep('give') }
+      : mobileStep !== 'review'
+        ? bothSides
+          ? {
+              label: result ? 'See the verdict' : analyzeLabel,
+              disabled: busy,
+              run: () => {
+                goToStep('review')
+                if (!result) void analyze()
+              },
             }
+          : mobileStep === 'give'
+            ? giveAssets.length === 0 && getAssets.length > 0
+              ? { label: 'Add what you send', disabled: true, run: () => undefined }
+              : { label: 'Next: what you get', disabled: false, run: () => goToStep('get') }
+            : getAssets.length === 0 && giveAssets.length > 0
+              ? { label: 'Add what you get', disabled: true, run: () => undefined }
+              : { label: 'Next: what you send', disabled: false, run: () => goToStep('give') }
+        : giveAssets.length === 0 && getAssets.length > 0
+          ? { label: 'Add what you send', disabled: false, run: () => goToStep('give') }
+          : getAssets.length === 0 && giveAssets.length > 0
+            ? { label: 'Add what you get', disabled: false, run: () => goToStep('get') }
+            : {
+                label: analyzeLabel,
+                disabled: !hasAssets || busy,
+                run: () => void analyze(),
+              }
 
   return (
     <div className="af-tc" data-mobile-step={mobileStep}>
+      <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       <header className="af-tc-head">
         <div className="af-label">Core · Trades</div>
         <h1>Trade Center</h1>
         <p className="af-tc-lede">
           Build a deal across any league you&rsquo;re in and any asset class it allows. Context
-          below the verdict is additive &mdash; it never touches the score above it.
+          explains the league scoring used in the grade. Roster fit, schedule and
+          strategy notes help you judge the deal alongside that value.
         </p>
         {/*
           🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
@@ -1146,7 +1414,7 @@ export function TradeCenter(props: {
 
       {/* Every league at a glance, before this one's context — see the strip's own header. */}
       {props.leagues && props.leagues.length > 0 ? (
-        <details className="af-tc-switcher">
+        <details className="af-tc-switcher" data-mstep="offers">
           <summary>Switch league <span>{props.leagues.length} connected</span></summary>
           <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
         </details>
@@ -1182,7 +1450,7 @@ export function TradeCenter(props: {
         deal contains. Scoped by the league's type when the caller knows it; the
         full six otherwise, because an unknown type must not read as a rule.
       */}
-      <details className="af-tc-disclosure">
+      <details className="af-tc-disclosure" data-mstep="offers">
         <summary>{legend.types.length} tradeable asset types <span>View league rules</span></summary>
         <div className="af-tc-legend">
           <span className="af-tc-legend-label">
@@ -1214,9 +1482,12 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {draftKey ? (
-        <div className="af-tc-draft">
+      {props.league?.id ? (
+        <div className="af-tc-draft" data-mstep="offers review">
           <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
+          {workingDraftKey ? <span className="af-tc-row-sub">{deviceDraftAvailable === false
+            ? 'Device recovery is unavailable. Use Save draft to save to your account.'
+            : 'In-progress proposals recover on this device. Use Save draft to sync across devices.'}</span> : null}
           <span className="af-tc-spacer" />
           <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
             Restore draft
@@ -1230,15 +1501,19 @@ export function TradeCenter(props: {
         job: read what was offered, then price it. Below the builder they would
         be a footnote to a deal the manager had already hand-built.
       */}
-      <TradeInbox
-        leagueId={props.league?.id ?? null}
-        onLoad={loadOffer}
-        onCounter={startCounter}
-        reloadToken={inboxReloadToken}
-      />
+      <div className="af-tc-mstep-wrap" data-mstep="offers">
+        <TradeInbox
+          leagueId={props.league?.id ?? null}
+          onLoad={loadOffer}
+          onCounter={startCounter}
+          reloadToken={inboxReloadToken}
+          importedHistory={props.completedHistory}
+          onNeedsYouCount={setNeedsYou}
+        />
+      </div>
 
       {valueActions.length > 0 ? (
-        <details className="af-tc-value-actions">
+        <details className="af-tc-value-actions" data-mstep="offers">
           <summary><span>Value change alerts</span><b>{valueActions.length} players across your leagues</b></summary>
           <div className="af-tc-value-action-list">
             {valueActions.map((player) => (
@@ -1275,7 +1550,14 @@ export function TradeCenter(props: {
       <div className="af-tc-stepbar">
         <nav className="af-tc-steps" aria-label="Trade builder steps">
           {MOBILE_STEPS.map((s, i) => {
-            const count = s.key === 'give' ? giveAssets.length : s.key === 'get' ? getAssets.length : null
+            const count =
+              s.key === 'give'
+                ? giveAssets.length
+                : s.key === 'get'
+                  ? getAssets.length
+                  : s.key === 'offers'
+                    ? needsYou || null // no badge for zero or unknown; a "0" reads as a read we may not have
+                    : null
             return (
               <button
                 key={s.key}
@@ -1330,15 +1612,19 @@ export function TradeCenter(props: {
       {otherRosters.length > 0 ? (
         <div className="af-tc-partner" data-mstep="get">
           {/* Item #8: who is worth trading with, and a deal to start from. */}
-          <TradePartnerSuggestions
-            ranking={partnerRanking}
-            selectedRosterId={partnerRosterId}
-            onChoose={(rosterId) => {
-              setPartnerRosterId(rosterId)
-              setResult(null)
-            }}
-            onStartWith={startSuggestedDeal}
-          />
+          {depthAccess && depthLocked ? (
+            <CoreDepthLock access={depthAccess} what="Who to trade with" />
+          ) : (
+            <TradePartnerSuggestions
+              ranking={partnerRanking}
+              selectedRosterId={partnerRosterId}
+              onChoose={(rosterId) => {
+                setPartnerRosterId(rosterId)
+                setResult(null)
+              }}
+              onStartWith={startSuggestedDeal}
+            />
+          )}
           <span className="af-label">Trading with</span>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (
@@ -1463,9 +1749,10 @@ export function TradeCenter(props: {
                   <StockMark stock={l.stock} delta={l.stockDelta} />
                   <span
                     className="af-tc-row-value"
-                    data-unpriced={l.marketValue == null ? 'true' : undefined}
+                    data-unpriced={valueOf(l) == null ? 'true' : undefined}
                   >
-                    {money(l.marketValue)}
+                    {money(valueOf(l))}
+                    <LeagueMove line={l} />
                   </span>
                   <button
                     type="button"
@@ -1651,14 +1938,22 @@ export function TradeCenter(props: {
                     <span className="af-tc-spacer" />
                     <span
                       className="af-num"
-                      data-unpriced={l.marketValue == null ? 'true' : undefined}
+                      data-unpriced={valueOf(l) == null ? 'true' : undefined}
                       title={l.marketValue == null && l.unpricedWhy ? l.unpricedWhy : undefined}
                       aria-label={
                         l.marketValue == null && l.unpricedWhy ? `No value: ${l.unpricedWhy}` : undefined
                       }
                     >
-                      {money(l.marketValue)}
+                      {money(valueOf(l))}
+                      <LeagueMove line={l} />
                     </span>
+                    {/*
+                      Said in text, not only in `title`: a tooltip needs a hover, and a phone has none.
+                      Without this the review shows an em dash with no way to learn why.
+                    */}
+                    {l.marketValue == null && l.unpricedWhy ? (
+                      <span className="af-tc-review-why">{l.unpricedWhy}</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -1714,15 +2009,89 @@ export function TradeCenter(props: {
         ⚠ THE VERDICT IS SUPPRESSED WHEN THE FORMAT BLOCKS THE DEAL. A score
         beneath a "this cannot happen" banner still gets read as a score.
       */}
+      {/*
+        The analysis takes several seconds — league values plus a written read. The only sign of it
+        used to be the button label, on a control the manager had just scrolled away from, so the
+        page looked idle. The slot the verdict will fill says what is happening instead.
+      */}
+      {busy && !result ? (
+        <section className="af-tc-verdict af-tc-verdict--pending" data-mstep="review" aria-busy="true" aria-live="polite">
+          <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
+          <p className="af-tc-verdict-pending-copy">
+            Pricing this deal against your league&rsquo;s values and rosters &mdash; usually 5 to 15 seconds.
+          </p>
+          <span className="af-tc-verdict-pending-bar" aria-hidden />
+        </section>
+      ) : null}
+
       {result && !blocked ? (
-        <section className="af-tc-verdict" data-mstep="review">
+        <section ref={verdictRef} className="af-tc-verdict" data-mstep="review">
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
-              projected &mdash; the realized grade locks in once real production posts
+              trade value today &mdash; roster fit and realized production are separate
             </span>
           </div>
 
+          {/*
+            What the grade is priced in, always, so a letter never appears without its rules.
+            The shared trade-value letter uses this league's chart and scoring. Personal roster
+            utility is shown separately, so completion cannot remove a factor from the headline grade.
+          */}
+          {result.valueBasis ? (
+            <p className="af-tc-basis">
+              <b>{result.valueBasis.graded === 'league' ? 'Graded on league value' : 'Graded on market value'}</b>
+              <span>{result.valueBasis.label}</span>
+            </p>
+          ) : null}
+          {/*
+            Which league type that chart is for, and whether anyone confirmed it. The league-type
+            control sits in this page's header (CoreLeagueContextBar, `#league-type`).
+          */}
+          <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
+          {serverGrade?.graded ? (
+            <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
+              This trade-value grade uses the same league scoring and asset-price rules as trade history and email.
+              Roster fit does not change the letter. Refreshed market values can change a later evaluation.
+            </p>
+          ) : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>Open this saved evaluation</Link> · Original values preserved at {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString()}.</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">This evaluation could not be saved. Keep a copy before relying on it later.</p> : null}
+          {serverGrade?.graded && serverGrade.rosterFit ? (
+            <div className="af-tc-cap-check" data-testid="trade-roster-fit">
+              <div className="af-label">Your roster fit · separate from the trade-value grade</div>
+              <p>Personal utility: {money(serverGrade.rosterFit.giveValue)} given, {money(serverGrade.rosterFit.getValue)} received.
+                {' '}This is a roster-fit estimate, not a win probability or the grade sent by email.</p>
+              {serverGrade.rosterFit.moves.map((move, index) => (
+                <p key={`${move.side}:${move.name}:${index}`}>
+                  {move.name}: {money(move.base)} base → {money(move.leagueValue)} personal utility. {move.reasons.join('; ')}.
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          {result.salaryCap && result.salaryCap.status !== 'not_applicable' ? (
+            <div className="af-tc-cap-check" role="status">
+              <div className="af-label">Salary-cap affordability</div>
+              {result.salaryCap.status === 'unavailable' ? (
+                <p>{result.salaryCap.reason} The value grade does not establish cap legality.</p>
+              ) : (
+                <>
+                  <p>{result.salaryCap.legal ? 'Both teams satisfy configured cap and floor rules across recorded commitment years.' : 'This package fails configured cap or floor rules. Review the years below before proposing it.'}</p>
+                  <ul>
+                    {result.salaryCap.contracts.map((c, i) => <li key={`${c.side}-${c.name}-${i}`}>{c.side === 'give' ? 'You send' : 'You receive'} {c.name}: salary {money(c.salary)} through {c.expires}</li>)}
+                  </ul>
+                  <ul>
+                    {result.salaryCap.impact.years?.map(y => <li key={y.capYear}>
+                      <strong>{y.capYear}</strong> · Your post-trade cap room {money(y.fromCap - y.fromCapHit)} · {theirLabel} {money(y.toCap - y.toCapHit)}
+                      <span className="af-tc-row-sub">Your commitments {money(y.fromCapHit)} / cap {money(y.fromCap)} · Their commitments {money(y.toCapHit)} / cap {money(y.toCap)} · {y.fromLegal && y.toLegal ? 'Passes configured rules' : 'Fails cap or floor rules'}</span>
+                    </li>)}
+                  </ul>
+                  <p className="af-tc-row-sub">Includes stored contracts and dead money. Unsigned rookie contracts and future acquisitions are not included. Revalidation is required when accepting.</p>
+                </>
+              )}
+            </div>
+          ) : null}
           <div className="af-tc-verdict-row">
             {yourGrade || theirGrade ? (
               <div className="af-tc-grade-row">
@@ -1741,16 +2110,16 @@ export function TradeCenter(props: {
             ) : null}
             <span className="af-tc-spacer" />
             <div className="af-tc-score">
-              {typeof result.fairnessScore === 'number' ? (
+              {!noSignal && typeof result.fairnessScore === 'number' ? (
                 <span className="af-tc-score-num af-num">
                   {Math.round(result.fairnessScore)}
                   <small>/100</small>
                 </span>
               ) : null}
               <strong className="af-tc-score-label">
-                {result.labels?.fairnessLabel ?? 'No verdict'}
+                {noSignal ? 'Grade unavailable' : result.labels?.fairnessLabel ?? 'No verdict'}
               </strong>
-              {result.labels?.confidenceLabel ? (
+              {!noSignal && result.labels?.confidenceLabel ? (
                 <span className="af-tc-conf">{result.labels.confidenceLabel}</span>
               ) : null}
             </div>
@@ -1763,7 +2132,7 @@ export function TradeCenter(props: {
             viewer. The dot used to sit on an unlabelled bar; a manager reading
             41 could not tell whether that was good or bad for them.
           */}
-          {typeof result.fairnessScore === 'number' ? (
+          {!noSignal && typeof result.fairnessScore === 'number' ? (
             <div className="af-tc-track-wrap">
               <div className="af-tc-track">
                 <span className="af-tc-track-mid" aria-hidden />
@@ -1786,10 +2155,66 @@ export function TradeCenter(props: {
             the callout that keeps those apart.
           */}
           {noSignal ? (
-            <p className="af-tc-nosignal">
-              We could not price enough of this deal to stand behind a verdict. An even-looking
-              score here means we have no signal, not that the trade is fair.
-            </p>
+            serverGrade && !serverGrade.graded ? (
+              <p className="af-tc-nosignal">
+                Not graded: {serverGrade.reason}
+              </p>
+            ) : (
+              <p className="af-tc-nosignal">
+                We could not price enough of this deal to stand behind a verdict.
+              </p>
+            )
+          ) : null}
+
+          {movedLines.length > 0 || result.valueBasis?.needGap ? (
+            <div className="af-tc-moves">
+              <div className="af-label">Why the values moved</div>
+              {movedLines.length > 0 ? (
+                <ul>
+                  {movedLines.map((l) => (
+                    <li key={l.name}>
+                      <span className="af-tc-moves-name">{l.name}</span>
+                      <span className="af-num">
+                        {money(l.marketValue)} &rarr; {money(l.leagueValue)}
+                      </span>
+                      {(l.adjustments ?? []).map((a) => (
+                        <span key={`${a.kind}-${a.reason}`} className="af-tc-moves-why" data-dir={a.factor > 1 ? 'up' : 'down'}>
+                          <b>{pctOf(a.factor)}</b> {a.reason}
+                        </span>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {result.valueBasis?.needGap ? (
+                <p className="af-tc-row-sub">Roster need was not priced: we could not see {result.valueBasis.needGap}.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!noSignal && (result.counterOffers ?? []).length > 0 ? (
+            <div className="af-tc-moves">
+              <div className="af-label">Re-evaluated counteroffers</div>
+              <p className="af-tc-row-sub">Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.</p>
+              <ul>
+                {result.counterOffers!.map(counter => (
+                  <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
+                    <strong>{counter.addTo === 'get' ? 'Ask for' : 'Offer'} {counter.name}</strong>
+                    <span className="af-tc-row-sub">Base value {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
+                    <span className="af-tc-row-sub">
+                      You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
+                    </span>
+                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
+                      playerId: counter.asset.kind === 'player'
+                        ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
+                      providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
+                      position: counter.position, team: null, value: counter.marketValue })}>
+                      Add to proposal
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
 
           {(result.dataGaps ?? []).length > 0 ? (
@@ -1825,19 +2250,24 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {intel ? (
+      {result && depthAccess && depthLocked ? (
+        <div className="af-tc-mstep-wrap" data-mstep="review">
+          <CoreDepthLock access={depthAccess} what="The full trade breakdown" />
+        </div>
+      ) : intel ? (
         <section className="af-tc-dos" data-mstep="review">
           <div className="af-label">Decision OS · this deal</div>
-          {intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
+          {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
+          {noSignal ? <p className="af-tc-why">Proposal grade unavailable. Priced assets and roster context alone do not establish that the complete trade is fair.</p> : intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
 
           <div className="af-tc-pairs">
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">Wins now</div>
-              <div className="af-tc-pair-value">{intel.whoWinsNow ?? '—'}</div>
+              <div className="af-tc-pair-label">Asset production lean</div>
+              <div className="af-tc-pair-value">{intel.whoWinsNow === 'unknown' ? 'Unavailable' : intel.whoWinsNow ?? '—'}</div>
             </div>
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">Wins long term</div>
-              <div className="af-tc-pair-value">{intel.whoWinsLongTerm ?? '—'}</div>
+              <div className="af-tc-pair-label">League value lean</div>
+              <div className="af-tc-pair-value">{noSignal || intel.whoWinsLongTerm === 'unknown' ? 'Unavailable' : intel.whoWinsLongTerm ?? '—'}</div>
             </div>
           </div>
 
@@ -1858,12 +2288,12 @@ export function TradeCenter(props: {
 
           <div className="af-label">How these values become advice</div>
           <div className="af-tc-value-layers">
-            <div><span>Market baseline</span><strong>{money(balance?.give)} sent · {money(balance?.get)} received</strong></div>
-            <div><span>Lineup effect</span><strong>{result?.needNotes?.[0] ?? 'No league-specific lineup edge was measured.'}</strong></div>
+            <div><span>League value</span><strong>{money(balance?.give)} sent · {money(balance?.get)} received</strong></div>
+            <div><span>Roster need</span><strong>{result?.needNotes?.[0] ?? 'No league-specific roster-need edge was measured.'}</strong></div>
             <div><span>Consolidation</span><strong>{give.length} assets out · {get.length} assets in{result?.scaleNotes?.[0] ? ` · ${result.scaleNotes[0]}` : ''}</strong></div>
             <div><span>Team direction</span><strong>{result?.postureNotes?.[0] ?? intel?.rebuilderRecommendation ?? 'Use the contender and rebuilder reads for your current direction.'}</strong></div>
             <div><span>Data freshness</span><strong>{valueSources.length ? `Latest available ${valueSources.join(' + ')} snapshots` : 'No priced source was returned for this deal.'}</strong></div>
-            <div><span>Source agreement</span><strong>{valueSources.length > 1 ? `Sources are shown separately because their methods can disagree; this verdict combines ${valueSources.length} available baselines.` : valueSources.length === 1 ? `One market source (${valueSources[0]}) priced the deal, so there is no cross-source consensus yet.` : 'No source comparison is possible until the assets are priced.'}</strong></div>
+            <div><span>Source agreement</span><strong>{noSignal ? 'Pricing coverage is incomplete; no source consensus or proposal verdict is available.' : valueSources.length > 1 ? `Pricing methods in this deal: ${valueSources.join(', ')}. Different methods can price different assets; this does not establish independent source agreement.` : valueSources.length === 1 ? `One market source (${valueSources[0]}) priced the deal, so there is no cross-source consensus yet.` : 'No source comparison is possible until the assets are priced.'}</strong></div>
           </div>
 
           {/*
@@ -1871,7 +2301,7 @@ export function TradeCenter(props: {
             neither. They are the two honest answers to "should I do this",
             because the right one depends on a fact only the manager knows.
           */}
-          {intel.contenderRecommendation || intel.rebuilderRecommendation ? (
+          {!noSignal && (intel.contenderRecommendation || intel.rebuilderRecommendation) ? (
             <div className="af-tc-reads">
               {intel.contenderRecommendation ? (
                 <div className="af-tc-read" data-tone="contender">
@@ -1899,7 +2329,7 @@ export function TradeCenter(props: {
             </>
           ) : null}
 
-          {(intel.rebalanceSuggestions ?? []).length > 0 ? (
+          {!noSignal && (intel.rebalanceSuggestions ?? []).length > 0 ? (
             <>
               <div className="af-label">Rebalance ideas</div>
               <ul className="af-tc-list">
@@ -1927,6 +2357,17 @@ export function TradeCenter(props: {
             <p className="af-tc-row-sub">{intel.alternateTargetsNote}</p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* Competitive Edge: the partner's own trade record, once there is a deal with them to read it against. */}
+      {result && partnerRoster ? (
+        <div className="af-tc-mstep-wrap" data-mstep="review">
+          <TradeCompetitiveEdge
+            access={props.edgeAccess ?? null}
+            edge={result.competitiveEdge}
+            partnerName={theirLabel}
+          />
+        </div>
       ) : null}
 
       {/*
@@ -1969,7 +2410,9 @@ export function TradeCenter(props: {
         exactly why steps are keyed on `data-mstep` and never on a class name.
       */}
       <div className="af-tc-mstep-wrap" data-mstep="get">
-        <TradeFinderPanel leagueId={props.league?.id ?? null} />
+        <CoreDepthGate access={depthAccess} what="The trade finder" showFreeUntil={false}>
+          <TradeFinderPanel leagueId={props.league?.id ?? null} />
+        </CoreDepthGate>
       </div>
 
       <div className="af-tc-actions" data-mstep="review">
@@ -1989,7 +2432,7 @@ export function TradeCenter(props: {
           type="button"
           className="af-btn af-btn--ghost"
           onClick={() => void saveDraft()}
-          disabled={!draftKey || (giveAssets.length === 0 && getAssets.length === 0)}
+          disabled={!props.league?.id || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           Save draft
         </button>
@@ -1997,6 +2440,16 @@ export function TradeCenter(props: {
           Ask Chimmy to explain
         </button>
       </div>
+
+      {/*
+        The league's history, last on the page as it always was on desktop. On a phone it belongs
+        to Offers — the place a trade email lands — instead of trailing every building step.
+      */}
+      {props.history ? (
+        <div className="af-tc-mstep-wrap" data-mstep="offers">
+          {props.history}
+        </div>
+      ) : null}
     </div>
   )
 }

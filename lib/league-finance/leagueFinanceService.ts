@@ -29,8 +29,10 @@ export async function getOrCreateLeagueFinance(leagueId: string, tx?: Prisma.Tra
   const entryFeeUsd = extractEntryFeeUsdFromSettings(league.settings)
   const entryFeeCents = entryFeeUsd != null ? Math.round(entryFeeUsd * 100) : 0
 
-  return db.leagueFinance.create({
-    data: {
+  return db.leagueFinance.upsert({
+    where: { leagueId },
+    update: {},
+    create: {
       leagueId,
       isPaidLeague: entryFeeCents > 0,
       entryFeeCents,

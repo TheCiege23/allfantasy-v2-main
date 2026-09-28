@@ -15,7 +15,24 @@ function getSlotForOverall(overall: number, teamCount: number): { round: number;
   }
 }
 
-async function mockDraftAssetApis(page: Page, leagueId: string) {
+const sportFixtures = {
+  NFL: { position: 'RB', secondPosition: 'WR', team: 'NYJ', secondTeam: 'DAL', keeperPosition: 'QB' },
+  NBA: { position: 'PG', secondPosition: 'SF', team: 'BOS', secondTeam: 'LAL', keeperPosition: 'C' },
+  NHL: { position: 'C', secondPosition: 'LW', team: 'NYR', secondTeam: 'BOS', keeperPosition: 'G' },
+  MLB: { position: 'OF', secondPosition: '1B', team: 'NYY', secondTeam: 'LAD', keeperPosition: 'SP' },
+  NCAAF: { position: 'RB', secondPosition: 'WR', team: 'ALA', secondTeam: 'UGA', keeperPosition: 'QB' },
+  NCAAB: { position: 'G', secondPosition: 'F', team: 'DUKE', secondTeam: 'UNC', keeperPosition: 'C' },
+  SOCCER: { position: 'FWD', secondPosition: 'MID', team: 'ARS', secondTeam: 'CHE', keeperPosition: 'GK' },
+} as const
+
+async function mockDraftAssetApis(page: Page, leagueId: string, sport: keyof typeof sportFixtures) {
+  const fixture = sportFixtures[sport]
+  await page.route('https://draft-assets.example.invalid/logo.svg', route => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="blue"/></svg>' }))
+  let failedHeadshotRequests = 0
+  await page.route('https://draft-assets.example.invalid/broken.png', async route => {
+    failedHeadshotRequests++
+    await route.fulfill({ status: 403, body: 'Image unavailable' })
+  })
   const slotOrder = [
     { slot: 1, rosterId: 'roster-1', displayName: 'Alpha' },
     { slot: 2, rosterId: 'roster-2', displayName: 'Beta' },
@@ -42,24 +59,24 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
     {
       playerId: 'p-broken',
       name: 'Broken Image Back',
-      position: 'RB',
-      team: 'NYJ',
+      position: fixture.position,
+      team: fixture.team,
       adp: 8.2,
       byeWeek: 7,
       display: {
         playerId: 'p-broken',
         displayName: 'Broken Image Back',
-        sport: 'NFL',
+        sport,
         assets: {
-          headshotUrl: null,
-          teamLogoUrl: null,
+          headshotUrl: 'https://draft-assets.example.invalid/broken.png',
+          teamLogoUrl: 'https://draft-assets.example.invalid/logo.svg',
         },
         team: {
-          teamId: 'NYJ',
-          abbreviation: 'NYJ',
-          displayName: 'NYJ',
-          sport: 'NFL',
-          logoUrl: null,
+          teamId: fixture.team,
+          abbreviation: fixture.team,
+          displayName: fixture.team,
+          sport,
+          logoUrl: 'https://draft-assets.example.invalid/logo.svg',
         },
         stats: {
           primaryStatLabel: 'ADP',
@@ -70,19 +87,19 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
           byeWeek: 7,
         },
         metadata: {
-          position: 'RB',
-          teamAbbreviation: 'NYJ',
+          position: fixture.position,
+          teamAbbreviation: fixture.team,
           byeWeek: 7,
           injuryStatus: null,
-          sport: 'NFL',
+          sport,
         },
       },
     },
     {
       playerId: 'p-2',
       name: 'Stable Receiver',
-      position: 'WR',
-      team: 'DAL',
+      position: fixture.secondPosition,
+      team: fixture.secondTeam,
       adp: 12.4,
       byeWeek: 9,
     },
@@ -103,8 +120,8 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
         rosterId: 'roster-1',
         displayName: 'Alpha',
         playerName: 'Existing Keeper',
-        position: 'QB',
-        team: 'BUF',
+        position: fixture.keeperPosition,
+        team: fixture.team,
         byeWeek: 8,
         playerId: 'p-keep',
         source: 'user',
@@ -220,7 +237,7 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ entries: poolEntries, sport: 'NFL', count: poolEntries.length }),
+      body: JSON.stringify({ entries: poolEntries, sport, count: poolEntries.length }),
     })
   })
   await page.route(`**/api/leagues/${leagueId}/draft/queue`, async (route) => {
@@ -297,7 +314,7 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
       contentType: 'application/json',
       body: JSON.stringify({
         ok: true,
-        recommendation: { player: { name: 'Broken Image Back', position: 'RB', team: 'NYJ' }, reason: 'Best value', confidence: 88 },
+        recommendation: { player: { name: 'Broken Image Back', position: fixture.position, team: fixture.team }, reason: 'Best value', confidence: 88 },
         alternatives: [],
       }),
     })
@@ -330,6 +347,7 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
       body: JSON.stringify({ ok: true }),
     })
   })
+  return () => failedHeadshotRequests
 }
 
 async function openDraftRoomHarness(page: Page) {
@@ -338,7 +356,8 @@ async function openDraftRoomHarness(page: Page) {
 }
 
 test.describe('@draft-asset-pipeline click audit', () => {
-  test('player cards handle open, queue, drafted update, and image fallback', async ({ page }) => {
+  for (const sport of Object.keys(sportFixtures) as (keyof typeof sportFixtures)[]) {
+  test(`${sport}: player cards handle open, queue, drafted update, and image fallback`, async ({ page }) => {
     const leagueId = `e2e-draft-assets-${Date.now()}`
 
     /*
@@ -368,9 +387,9 @@ test.describe('@draft-asset-pipeline click audit', () => {
       console.log('[draft-asset-pipeline][console.error]', msg.text())
     })
 
-    await mockDraftAssetApis(page, leagueId)
+    const failedHeadshots = await mockDraftAssetApis(page, leagueId, sport)
 
-    await page.goto(`/e2e/draft-room?leagueId=${leagueId}&sport=NFL`)
+    await page.goto(`/e2e/draft-room?leagueId=${leagueId}&sport=${sport}`)
     await openDraftRoomHarness(page)
     const desktop = page.getByTestId('draft-desktop-layout')
 
@@ -444,24 +463,12 @@ test.describe('@draft-asset-pipeline click audit', () => {
     ).toContainText('Broken Image Back')
 
     await expect(desktop.getByTestId('draft-player-card-0-headshot-fallback')).toBeVisible({ timeout: 15_000 })
-    /*
-     * ⚠ THE TEAM LOGO RESOLVES; IT DOES NOT FALL BACK. This asserted the initials badge
-     * and could never pass, because a null team logo with a KNOWN abbreviation is
-     * deliberately resolved rather than degraded -- normalizePlayer.ts:107:
-     *
-     *   let teamLogoUrl = display.assets.teamLogoUrl ?? null
-     *   if (!teamLogoUrl && teamAbbr) teamLogoUrl = getTeamLogo(teamAbbr, sport)
-     *
-     * so this fixture's `teamLogoUrl: null` + `abbreviation: 'NYJ'` yields a league asset
-     * and TeamLogoOrFallback takes its `showImg` branch. The headshot has no equivalent
-     * derivation, which is why its fallback above is correct and this one was not.
-     *
-     * Asserting the resolved image is also the stronger claim for an asset-pipeline spec:
-     * it proves the pipeline recovered a logo the payload did not carry. Reaching the
-     * initials badge would need a player with no resolvable team, which neither fixture
-     * has.
-     */
-    await expect(desktop.getByTestId('draft-player-card-0-team-logo-image')).toBeVisible({ timeout: 15_000 })
+    await expect.poll(failedHeadshots).toBeGreaterThan(0)
+    // Synthetic media verifies browser decoding. Live identity and URL coverage
+    // are separate acceptance checks from this isolated API fixture journey.
+    const logo = desktop.getByTestId('draft-player-card-0-team-logo-image')
+    await expect(logo).toBeVisible({ timeout: 15_000 })
+    await expect.poll(() => logo.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
 
     /*
      * ⚠ NO CONFIRM STEP ON A SNAKE PICK. `draft-confirm-pick-button` lives inside
@@ -476,4 +483,5 @@ test.describe('@draft-asset-pipeline click audit', () => {
     await expect(page.getByText(/sleeperId|ffcPlayerId|external_source_id/i)).toHaveCount(0)
     await expect(page.getByTestId('draft-player-asset-retry')).toHaveCount(0)
   })
+  }
 })

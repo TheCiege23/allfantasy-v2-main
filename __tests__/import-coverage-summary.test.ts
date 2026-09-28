@@ -40,7 +40,7 @@ describe('summarizeImportCoverage', () => {
    * The Fleaflicker shape, which is the reason this module exists: two API calls, so
    * scoring, schedule, draft, trades and past seasons are all genuinely absent.
    */
-  it('names the platform, not us, when a provider does not publish something', () => {
+  it('says what did not come across, naming the platform, without claiming the platform lacks it', () => {
     const summary = summarizeImportCoverage(
       fullCoverage({
         scoringSettings: { state: 'missing' },
@@ -54,7 +54,9 @@ describe('summarizeImportCoverage', () => {
     )
 
     expect(summary.sentence).toContain('Fleaflicker')
-    expect(summary.sentence).toContain("doesn't publish")
+    /* A missing bucket is what THIS import brought across — not a fact about the platform. */
+    expect(summary.sentence).toMatch(/^We couldn't bring across /)
+    expect(summary.sentence).not.toMatch(/doesn.t publish/)
     // The user-facing nouns, not the internal keys.
     expect(summary.sentence).toContain('scoring rules')
     expect(summary.sentence).toContain('trade history')

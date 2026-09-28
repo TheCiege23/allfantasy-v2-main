@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ensureMatchupThreadsForUser } from '@/lib/chat-core/matchupThreads'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createPlatformThread, getPlatformChatThreads } from '@/lib/platform/chat-service'
-import { resolveConversationSafetyForUser } from '@/lib/moderation'
+import { hasBlockBetween, resolveConversationSafetyForUser } from '@/lib/moderation'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -23,6 +23,9 @@ async function getNflStateForMatchupRooms(): Promise<{ season: number; week: num
     return null
   }
 }
+
+/** One neutral answer for every block refusal: it names nobody and says nothing about direction. */
+const CONVERSATION_NOT_AVAILABLE = "You can't start a conversation with this person."
 
 export async function GET() {
   const user = await resolvePlatformUser()
@@ -122,6 +125,27 @@ export async function POST(req: NextRequest) {
       )
     }
     memberUserIds = uniqueMembers
+  }
+
+  /*
+   * 🛑 A BLOCK MUST STOP A NEW CONVERSATION, IN BOTH DIRECTIONS. Nothing checked it here, so a
+   * blocked user could open a fresh DM (or pull the blocker into a huddle) with the person who
+   * blocked them. Checked for EVERY thread type that names other members — an `ai` thread takes
+   * `memberUserIds` too, and would otherwise be the way round this. The refusal is deliberately
+   * neutral — it must not tell anyone that they were blocked, or by whom — and a failed lookup
+   * refuses too rather than guessing "no block".
+   */
+  let blocked: boolean
+  try {
+    blocked = await hasBlockBetween(user.appUserId, memberUserIds)
+  } catch {
+    return NextResponse.json(
+      { error: 'Unable to start this conversation right now. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
+  if (blocked) {
+    return NextResponse.json({ error: CONVERSATION_NOT_AVAILABLE }, { status: 403 })
   }
 
   const created = await createPlatformThread({

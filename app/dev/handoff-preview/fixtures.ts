@@ -1,11 +1,7 @@
 import { BRIDGE_SURFACES, type DiscordBridgeData } from '@/lib/core-app/discordBridge'
 import type { QueueTrack } from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
-import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
-import {
-  TRADE_GRADE_DIMENSION_FRAMEWORK,
-  TRADE_GRADING_POLICY_VERSION,
-} from '@/lib/trade-intel/tradeGradingPolicy'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { LeagueTileModel } from '@/components/core-app/league-tile/leagueTileModel'
 
@@ -273,125 +269,37 @@ export const PREVIEW_TRADE: GradedTrade = {
   ],
 }
 
-function expAsset(name: string, position: string, market: number | null, prior: number | null) {
-  return {
-    key: `preview-${name.toLowerCase().replace(/\s+/g, '-')}`,
-    name,
-    position,
-    isPick: false,
-    marketValue: market,
-    valueStdDev: null,
-    valueSpread: market != null ? Math.round(market * 0.12) : null,
-    valueSources: ['af-value', 'fantasycalc'],
-    valueConfidence: 'moderate' as const,
-    priorPoints: prior,
-    priorGames: prior != null ? 16 : null,
-    priorPerGame: prior != null ? Math.round((prior / 16) * 10) / 10 : null,
-  }
-}
-
-export const PREVIEW_EXPECTATION: TradeExpectation = {
-  available: true,
-  leagueNote: '12-team superflex dynasty · full PPR · TE premium (+0.5/rec)',
-  priorSeason: '2025',
-  scoringMode: 'league-scored',
-  missing: ['2027 first-round pick landing spot'],
-  evaluation: {
-    concept: 'dynasty',
-    format: 'dynasty',
-    policyVersion: TRADE_GRADING_POLICY_VERSION,
-    objective: 'Balance multi-season roster value, competitive window, lineup improvement, and future optionality.',
-    historicalMode: 'live',
-    scope: 'market-only',
-    complete: false,
-    dimensionFramework: {
-      version: TRADE_GRADE_DIMENSION_FRAMEWORK.version,
-      primary: [...TRADE_GRADE_DIMENSION_FRAMEWORK.primary],
-      secondary: [...TRADE_GRADE_DIMENSION_FRAMEWORK.secondary],
-    },
-    factors: [
-      { id: 'user-strategy', status: 'missing', detail: 'Preview fixture has no confirmed manager strategy.' },
-      { id: 'league-settings', status: 'used', detail: 'Dynasty, superflex, PPR, and tight-end premium settings are included.' },
-      { id: 'roster-settings', status: 'used', detail: 'Starter requirements and roster gaps are included.' },
-      { id: 'team-needs', status: 'used', detail: 'Position changes and starter gaps are included.' },
-      { id: 'playoff-impact', status: 'missing', detail: 'Preview fixture has no playoff simulation.' },
-      { id: 'format-objective', status: 'used', detail: 'Dynasty multi-season value is applied.' },
-      { id: 'historical-context', status: 'not-applicable', detail: 'This preview represents a current trade.' },
-    ],
-    withheldReason: 'Preview fixture shows market context only; a complete contextual grade requires manager strategy and playoff simulation.',
-  },
-  sides: [
-    {
-      rosterId: 1,
-      managerName: 'Reviewer One',
-      assetsIn: [expAsset('Sample Runner', 'RB', 6200, 241.6)],
-      assetsOut: [
-        expAsset('Sample Catcher', 'WR', 4100, 198.2),
-        expAsset('Sample Tight', 'TE', 2600, 121.4),
-        {
-          key: 'preview-2027-1st',
-          name: '2027 1st',
-          position: null,
-          isPick: true,
-          marketValue: 1800,
-          valueStdDev: null,
-          valueSpread: 700,
-          valueSources: ['af-value'],
-          valueConfidence: 'low' as const,
-          priorPoints: null,
-          priorGames: null,
-          priorPerGame: null,
-        },
-      ],
-      marketIn: 6200,
-      marketOut: 8500,
-      marketNet: -2300,
-      priorIn: 241.6,
-      priorOut: 319.6,
-      priorNet: -78,
-      positionDelta: { RB: 1, WR: -1, TE: -1 },
-      starterGaps: [{ position: 'TE', required: 1, rostered: 0 }],
-      projected: {
-        letter: 'D',
-        valueEdge: -0.31,
-        valueNet: -2300,
-        uncertainty: 900,
-        insideNoise: false,
-        productionDisagrees: false,
-        confidence: 'moderate',
-      },
-    },
-    {
-      rosterId: 2,
-      managerName: 'Reviewer Two',
-      assetsIn: [
-        expAsset('Sample Catcher', 'WR', 4100, 198.2),
-        expAsset('Sample Tight', 'TE', 2600, 121.4),
-      ],
-      assetsOut: [expAsset('Sample Runner', 'RB', 6200, 241.6)],
-      marketIn: 8500,
-      marketOut: 6200,
-      marketNet: 2300,
-      priorIn: 319.6,
-      priorOut: 241.6,
-      priorNet: 78,
-      positionDelta: { RB: -1, WR: 1, TE: 1 },
-      starterGaps: [],
-      projected: {
-        letter: 'A',
-        valueEdge: 0.31,
-        valueNet: 2300,
-        uncertainty: 900,
-        insideNoise: false,
-        productionDisagrees: false,
-        confidence: 'moderate',
-      },
-    },
+/**
+ * THE grade for `PREVIEW_TRADE`, as the trade email receives it: side one's view of the deal (side one
+ * receives the `get` lines, side two the `give` lines), with the league type it was priced under.
+ * Shaped exactly like `oneGradeForCompletedTrade` output, so the preview renders the real template.
+ */
+export const PREVIEW_GRADE: TradeGradeView = {
+  graded: true,
+  letter: 'F',
+  partnerLetter: 'A',
+  percentDiff: -38,
+  label: 'Major overpay',
+  sideAdvantage: 'opponent',
+  action: 'decline',
+  recommendation: 'An overpay on league value — about 3,420 short. Decline, or ask for substantially more.',
+  giveValue: 9060,
+  getValue: 5640,
+  giveMarket: 8710,
+  getMarket: 5640,
+  basis: 'Dynasty · Superflex · 12 teams · PPR',
+  scoringApplied: true,
+  needApplied: false,
+  needGap: null,
+  lines: [
+    { side: 'give', name: 'Sample Catcher', marketValue: 4210, leagueValue: 4210 },
+    { side: 'give', name: 'Sample Tight', marketValue: 1890, leagueValue: 2240 },
+    { side: 'give', name: '2027 1st', marketValue: 2610, leagueValue: 2610 },
+    { side: 'get', name: 'Sample Runner', marketValue: 5640, leagueValue: 5640 },
   ],
+  moves: [],
+  leagueType: { type: 'dynasty', label: 'Dynasty', source: 'platform', platform: 'Sleeper' },
 }
-
-/* ── 32a / 31a fixtures ───────────────────────────────────────────────────── */
-
 
 /**
  * A fixture league for the Discord bridge preview.

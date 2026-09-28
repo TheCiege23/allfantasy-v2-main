@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { HIGHLIGHT_TO_PLAN_FAMILY } from "@/lib/monetization/entitlements";
+import { purchaseReturnPath, upgradePathForPlan } from "@/lib/monetization/upgradeDestination";
 import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync";
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
@@ -27,6 +28,8 @@ import { PLAN_FAMILY_INCLUDES, PLAN_FAMILY_SHORT_TAGLINE } from "@/lib/monetizat
 import { StripePaymentHint } from "@/components/monetization/StripePaymentHint";
 import CouponInput from "@/components/promotions/CouponInput";
 import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
+import { useLaunchOffer } from "@/components/launch/LaunchOfferContext";
+import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
 
 export type PlanFamily =
   | "af_pro"
@@ -131,18 +134,6 @@ function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-export function normalizePlanFamilyInput(input: string | null | undefined): PlanFamily | null {
-  if (!input) return null;
-  const value = input.trim().toLowerCase();
-  if (value === "af_pro" || value === "pro") return "af_pro";
-  if (value === "af_commissioner" || value === "commissioner") return "af_commissioner";
-  // Legacy "all-access" deep links now resolve to the surviving AF Supreme bundle.
-  if (value === "af_all_access" || value === "all_access") return "af_supreme";
-  if (value === "af_war_room" || value === "war_room") return "af_war_room";
-  if (value === "af_supreme" || value === "supreme") return "af_supreme";
-  return null;
-}
-
 export default function MonetizationPurchaseSurface({
   pagePath,
   title,
@@ -173,8 +164,18 @@ export default function MonetizationPurchaseSurface({
   const geo = useGeoRestriction();
   const blockPaidCommerce = geo.isPaidBlocked && !geo.loading;
 
+  /*
+   * Countdown + founding-member offer, from app/upgrade/layout.tsx (null on /pro, /all-access and
+   * anywhere else without that layout). A founding member is NOT nudged toward the sponsor code:
+   * Stripe takes one discount per checkout, so typing a code replaces the founding discount.
+   */
+  const launchOffer = useLaunchOffer();
+  const foundingMember = launchOffer?.founding?.audience === "member";
+
   const searchParams = useSearchParams();
   const highlightParam = searchParams?.get("highlight");
+  // Back from Stripe or from signing in, the buyer lands on the plan they chose.
+  const returnPath = purchaseReturnPath(pagePath, searchParams);
 
   useEffect(() => {
     if (!highlightParam) return;
@@ -295,7 +296,7 @@ export default function MonetizationPurchaseSurface({
     const result = await resolveCheckoutUrl({
       sku,
       productType,
-      returnPath: pagePath,
+      returnPath,
       couponCode: appliedCouponCode,
     });
     if (!result.ok) {
@@ -354,7 +355,7 @@ export default function MonetizationPurchaseSurface({
               </Link>
               <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    href="/signup"
+                    href={`/signup?next=${encodeURIComponent(returnPath)}`}
                     className="inline-flex min-h-[54px] items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-400 via-cyan-400 to-fuchsia-400 px-8 text-lg font-extrabold text-[#041018] shadow-2xl shadow-cyan-500/30 ring-2 ring-cyan-300/40 transition hover:from-cyan-300 hover:to-fuchsia-300 hover:scale-[1.04] focus:outline-none focus:ring-4 focus:ring-emerald-300"
                     style={{ letterSpacing: '0.04em' }}
                     data-testid="pricing-cta-signup"
@@ -362,7 +363,7 @@ export default function MonetizationPurchaseSurface({
                     Unlock Full Access — Sign Up Free
                   </Link>
                 <Link
-                  href={`/login?next=${encodeURIComponent(pagePath)}`}
+                  href={`/login?next=${encodeURIComponent(returnPath)}`}
                   className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/20 bg-white/[0.06] px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
                   data-testid="pricing-cta-signin"
                 >
@@ -385,7 +386,8 @@ export default function MonetizationPurchaseSurface({
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
-                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> One subscription for the full Pro + Commissioner + AF Legacy stack — best value for serious players.</span>
+                    {/* ⚠ NOT "Pro + Commissioner + AF Legacy": SUPREME_INCLUDED_PLAN_IDS is [pro, commissioner]. */}
+                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> AF Pro and AF Commissioner in one subscription, for less than buying both. AF Legacy is sold separately.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
@@ -513,6 +515,8 @@ export default function MonetizationPurchaseSurface({
           <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
+        <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />
+
         <section className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="monetization-plan-explanations">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/80">What each plan includes</h2>
           <p className="mt-1 text-[11px] text-white/50">
@@ -539,8 +543,9 @@ export default function MonetizationPurchaseSurface({
             ))}
           </div>
           <p className="mt-4 text-xs leading-relaxed text-white/55" data-testid="pricing-token-model-copy">
-            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for heavy-use features. Costs vary by
-            action; subscribers may get discounts on eligible rules.
+            {/* No subscriber discount: every plan's `discountedTokenSpendPct` is 0 (lib/tokens/subscription-policy.ts). */}
+            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for single AI actions, each
+            priced before you spend. A plan doesn&apos;t discount them, and they don&apos;t unlock a plan.
           </p>
         </section>
 
@@ -573,7 +578,7 @@ export default function MonetizationPurchaseSurface({
               setAppliedCouponPct(0)
             }}
           />
-          {!appliedCouponCode && (
+          {!appliedCouponCode && !foundingMember && (
             <p className="mt-2 text-[11px] text-white/35">
               Try <span className="font-black text-amber-300/60">WassupFred</span> for 20% off your first subscription or token pack
             </p>
@@ -648,7 +653,7 @@ export default function MonetizationPurchaseSurface({
                     </ul>
                     {focused && focusPlanFamily !== "af_supreme" ? (
                       <Link
-                        href="/pricing?highlight=supreme"
+                        href={upgradePathForPlan("af_supreme")}
                         onClick={() =>
                           trackUpgradeEntryClicked({
                             targetPlan: "supreme",
@@ -688,7 +693,7 @@ export default function MonetizationPurchaseSurface({
                                 ? `Continue — ${appliedCouponPct}% off applied`
                                 : "Continue with Stripe — Monthly"}
                           </button>
-                          {!appliedCouponCode && (
+                          {!appliedCouponCode && !foundingMember && (
                             <p className="mt-1.5 text-center text-[10px] text-white/30">
                               Use <span className="font-bold text-amber-300/60">WassupFred</span> for 20% off first purchase
                             </p>

@@ -837,8 +837,6 @@ export async function GET(request: Request) {
       errors: [
         ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors),
         ...(s.platform?.errors ?? []),
-        // A platform league whose feed ESPN did not serve wrote nothing — say so rather than count it as quiet.
-        ...((s.platform?.unfetched ?? 0) > 0 ? [`${s.platform!.unfetched} ESPN/Yahoo leagues served no activity feed`] : []),
         // A relay failure must be visible, not swallowed by the isolating catch above.
         ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
         ...(s.managerProjection.error ? [`manager_projection: ${s.managerProjection.error}`] : []),
@@ -849,6 +847,14 @@ export async function GET(request: Request) {
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
         // A platform league deferred by its own budget wrote nothing — say so, or it reads as quiet.
         ...((s.platform?.skippedForTime ?? 0) > 0 ? [`${s.platform!.skippedForTime} external-provider leagues deferred by the ${PLATFORM_BUDGET_MS / 1000}s platform budget`] : []),
+        // A platform league whose provider served no feed wrote nothing — say so rather than count it as quiet.
+        // ⚠ A WARNING, NOT AN ERROR: `buildSyncJobRunPayload` marks the whole run `failed` for any
+        // entry in `errors`, so one ESPN league without a feed failed every run that also ingested
+        // hundreds of rows correctly. A provider with nothing to serve is a gap, not a crash — the
+        // run reads `partial`. Real per-league failures stay in `errors` via `platform.errors`.
+        // ⚠ This said "ESPN/Yahoo". Only the ESPN and MFL branches can report `fetched: false`; Yahoo's
+        // is hard-coded true. Update the parenthetical if another branch starts reporting it.
+        ...((s.platform?.unfetched ?? 0) > 0 ? [`${s.platform!.unfetched} external-provider leagues (ESPN/MFL) served no activity feed`] : []),
         // A relay whose window closed before its first batch reports 0/0 with no error, which reads
         // as "nothing to do". Name it -- this is the failure that hid 7,645 rows for three days.
         ...(s.relay.starved ? ["outbox relay skipped: its window closed before the first batch"] : []),
@@ -862,12 +868,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "imported_activity_store_unavailable" }, { status: 503 })
   }
   return NextResponse.json({
-    ok: summary.failed === 0,
+    // 🛑 This was `summary.failed === 0` — the SLEEPER loop only. A thrown ESPN/Yahoo/MFL/Fleaflicker
+    // league lands in `platform.failed`, and the fire still answered ok:true.
+    ok: summary.failed === 0 && (summary.platform?.failed ?? 0) === 0,
     discovered: summary.discovered,
     processed: summary.processed,
     failed: summary.failed,
     skippedForTime: summary.skippedForTime,
-    // The ESPN/Yahoo counters, so a fire's body says whether the platform loop ran (it silently did not until this fix).
+    // The external-provider (ESPN/Yahoo/MFL/Fantrax/Fleaflicker) counters, so a fire's body says whether the platform loop ran (it silently did not until this fix).
     platform: summary.platform ?? null,
     relay: summary.relay,
     managerProjection: summary.managerProjection,

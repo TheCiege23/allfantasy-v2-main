@@ -29,7 +29,7 @@ export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): 
   for (const roster of rosters) {
     const ids = getRosterPlayerIds(roster.playerData)
     releasedPlayerIds.push(...ids)
-    const emptyData = Array.isArray(roster.playerData) ? [] : { ...(roster.playerData as object), players: [] }
+    const emptyData = Array.isArray(roster.playerData) ? [] : clearReleasedRosterData(roster.playerData)
     await prisma.roster.update({
       where: { id: roster.id },
       data: { playerData: emptyData as object },
@@ -41,4 +41,22 @@ export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): 
     releasedPlayerIds,
     releaseTiming: input.releaseTiming,
   })
+}
+
+/** Keep roster metadata while removing every lineup reference to released players. */
+export function clearReleasedRosterData(playerData: unknown): Record<string, unknown> {
+  const data = playerData && typeof playerData === 'object' && !Array.isArray(playerData)
+    ? { ...(playerData as Record<string, unknown>) } : {}
+  for (const key of ['players', 'starters', 'bench', 'ir', 'taxi', 'devy']) {
+    if (key === 'players' || Array.isArray(data[key])) data[key] = []
+  }
+  const sections = data.lineup_sections
+  if (sections && typeof sections === 'object' && !Array.isArray(sections)) {
+    const cleared = { ...(sections as Record<string, unknown>) }
+    for (const key of ['starters', 'bench', 'ir', 'taxi', 'devy']) {
+      if (Array.isArray(cleared[key])) cleared[key] = []
+    }
+    data.lineup_sections = cleared
+  }
+  return data
 }

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { positionsForSport } from '@/lib/trending-players/position-filters'
@@ -137,6 +138,7 @@ export function TrendingPlayersModal({
   const [contextMode, setContextMode] = useState('general')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [detail, setDetail] = useState<TrendPlayerCard | null>(null)
 
@@ -183,6 +185,7 @@ export function TrendingPlayersModal({
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const r = await fetch('/api/ai-tools/trending-players/dashboard', {
         method: 'POST',
@@ -201,11 +204,13 @@ export function TrendingPlayersModal({
       })
       const j = await r.json()
       if (!r.ok) {
+        setRefusal(readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() }))
         setError(j.error || 'Failed to load trends')
         setData(null)
         return
       }
       if (!j.ok) {
+        setRefusal(readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() }))
         setError(j.error || 'Trending unavailable')
         setData(null)
         return
@@ -277,6 +282,7 @@ export function TrendingPlayersModal({
         showApiPills={false}
         loading={false}
         error={error}
+        refusal={refusal}
         empty={!loading && !data?.risers?.length && !data?.fallers?.length}
         emptyMessage="No trend rows for these filters. Try another sport, window, or connect league imports."
         onRefresh={load}

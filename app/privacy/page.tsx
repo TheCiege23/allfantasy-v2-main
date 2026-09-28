@@ -6,6 +6,11 @@ import LegalPageRenderer, {
   LegalGrid,
 } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import {
+  SMS_PROGRAM_BRAND,
+  SMS_PROGRAM_OPERATOR,
+  SMS_PROGRAM_SUPPORT_EMAIL,
+} from "@/lib/legal/smsProgram"
 
 interface PrivacyPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
@@ -48,8 +53,9 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
       <section id="introduction">
         <h2>1. Introduction</h2>
         <p>
-          AllFantasy (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) operates the AllFantasy.ai
-          website and related services (collectively, the &quot;Service&quot;). This Privacy Policy
+          AllFantasy is operated by {SMS_PROGRAM_OPERATOR} (&quot;we,&quot; &quot;our,&quot; or
+          &quot;us&quot;), which operates the AllFantasy.ai website and related services
+          (collectively, the &quot;Service&quot;). This Privacy Policy
           explains how we collect, use, disclose, and safeguard your information when you use our
           Service.
         </p>
@@ -67,6 +73,7 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
             <ul>
               <li>Fantasy platform usernames (Sleeper, Yahoo, MFL, Fantrax)</li>
               <li>Email address and account information</li>
+              <li>Mobile phone number, if you choose to add one</li>
               <li>Feedback and correspondence</li>
               <li>Community league submissions and ideas</li>
             </ul>
@@ -77,6 +84,11 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
               <li>Usage data (pages visited, features used)</li>
               <li>IP address and approximate location</li>
               <li>Cookies and similar technologies</li>
+              <li>
+                Session recordings: how you move through our pages (clicks, scrolling and what is on
+                screen), with everything you type masked. Our analytics provider, PostHog, records them
+                so we can find bugs and improve the Service.
+              </li>
             </ul>
           </LegalBox>
         </LegalGrid>
@@ -98,6 +110,31 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
         <LegalCallout tone="good" mark="✓">
           <strong>Important:</strong> We never request or store your passwords for third-party
           platforms. We only access data available through their APIs.
+        </LegalCallout>
+      </section>
+
+      <section id="sms-communications">
+        <h2>SMS communications</h2>
+        <p>
+          Adding a mobile number is optional. If you provide one and check the SMS consent box,{" "}
+          {SMS_PROGRAM_OPERATOR} ({SMS_PROGRAM_BRAND}) will send text messages to that number,
+          including verification codes, password reset codes, account security alerts, and — only
+          if you turn them on in your notification settings — league and event notifications.
+          Message frequency varies. Message and data rates may apply.
+        </p>
+        <p>
+          Reply <strong>STOP</strong> to any message to opt out, or <strong>HELP</strong> for help.
+          You can also turn SMS notifications off in your account settings or contact{" "}
+          <a href={`mailto:${SMS_PROGRAM_SUPPORT_EMAIL}`}>{SMS_PROGRAM_SUPPORT_EMAIL}</a>. We keep a
+          record of your SMS consent (date, number and the wording you agreed to).
+        </p>
+        <LegalCallout tone="accent">
+          <strong>
+            Mobile numbers and SMS opt-in data and consent are never shared with, sold to, or rented
+            to third parties or affiliates for marketing or promotional purposes.
+          </strong>{" "}
+          We share your number only with the messaging provider that delivers our texts on our
+          behalf.
         </LegalCallout>
       </section>
 
@@ -221,8 +258,39 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
         </p>
         {/* 17a requires this line to stay visually distinct rather than buried. */}
         <LegalCallout tone="accent">
-          <strong>We do not sell your personal information to third parties for marketing.</strong>
+          <strong>
+            We do not sell your personal information. We share limited data with Meta and Google for
+            ad measurement, as described below.
+          </strong>
         </LegalCallout>
+      </section>
+
+      {/*
+        Mirrors app/layout.tsx (Meta Pixel, GTM) and every trackMetaServerEvent /
+        sendMetaCAPIEvent caller (signup, league create, World Cup bracket create/entry,
+        checkout, Stripe webhook, instant trade ViewContent, /api/meta/events) — hashed email
+        + account id, IP, user agent. meta-capi never sends a phone number. Adding a new Meta
+        event or data field means updating this text.
+      */}
+      <section id="advertising-and-measurement">
+        <h2>Advertising and measurement</h2>
+        <p>
+          We use advertising and measurement tools from Meta (the Meta Pixel and the Conversions API)
+          and Google (Google Tag Manager and the Google tags it loads). When you visit AllFantasy, these
+          tools may collect your IP address, browser and device information, the pages you view, and
+          cookie identifiers.
+        </p>
+        <p>
+          When you take certain actions, such as signing up, creating a league, creating or entering a
+          bracket, starting checkout, subscribing or making a purchase, we tell Meta that the action
+          happened. We include a hashed (scrambled) copy of your email address and account ID, your IP
+          address and your browser information, so we can measure how our ads perform. We never send
+          your phone number.
+        </p>
+        <p>
+          You can limit ad personalization in your Meta and Google ad settings, and you can block these
+          cookies in your browser.
+        </p>
       </section>
 
       <LegalGrid>

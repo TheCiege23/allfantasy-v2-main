@@ -2,6 +2,7 @@ import "server-only"
 import { createPlatformNotification } from "@/lib/platform/notification-service"
 import { prisma } from "@/lib/prisma"
 import { sendSms } from "@/lib/twilio-client"
+import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
 import {
   getWorldCupNotificationPreferenceResolution,
   isWorldCupNotificationTypeEnabled,
@@ -124,8 +125,13 @@ async function dispatchWorldCupNotification(
           : "inapp_disabled"
     }
 
+    // Same per-recipient daily text budget as NotificationDispatcher (lib/notifications/smsDailyCap).
     if (smsEligible && resolution.phone) {
-      smsSent = await sendSms(resolution.phone, truncateText(input.smsBody, 320))
+      if (await reserveSmsToday(userId)) {
+        smsSent = await sendSms(resolution.phone, truncateText(input.smsBody, 320))
+      } else if (!skippedReason) {
+        skippedReason = "sms_daily_cap"
+      }
     }
 
     diagnostics.push({

@@ -13,11 +13,14 @@
  *
  * Kept in English on purpose: brand and proper nouns (AllFantasy, Sleeper, ESPN,
  * Yahoo, MFL, Fantrax), tier names (AF Pro / Commissioner / AF Supreme / AF Legacy),
- * sport codes, prices, and the illustrative mockup league names. No customer-facing
- * "AI" in any locale.
+ * sport codes, and the illustrative mockup league names. No customer-facing "AI" in
+ * any locale.
+ *
+ * 🛑 PRICES ARE NOT TYPED HERE. They come from `planPrice(sku)` (catalog-backed, see
+ * ./copy.ts) — four locales of hand-typed prices had drifted from what checkout charges.
  */
 
-import { NOCTURNE_COPY, type NocturneCopy } from './copy'
+import { NOCTURNE_COPY, PRO_CHIMMY_DAILY, planPrice, type NocturneCopy } from './copy'
 import type { LanguageCode } from '@/lib/i18n/constants'
 
 // ── Spanish ──────────────────────────────────────────────────────────────────
@@ -34,14 +37,14 @@ const es: NocturneCopy = {
     ariaFooterNav: 'Pie de página',
   },
   hero: {
-    badge: 'Solo fantasy · Sin apuestas · Gratis para jugadores',
+    badge: 'Solo fantasy · Sin apuestas · Todas las ligas gratis',
     titleTop: 'Cada liga que juegas.',
     titleAccent: 'Una pantalla.',
     body:
       'Reúne Sleeper, ESPN, Yahoo y más en un solo centro de control que te muestra qué necesita tu atención, a quién alinear y adónde ir — en todas tus ligas a la vez.',
     primary: 'Empieza gratis',
     secondary: 'Mira cómo funciona',
-    finePrint: 'Explora cada liga gratis · Planes de pago desde $9.99/mes · Cancela cuando quieras',
+    finePrint: `Crea, importa y dirige ligas gratis · Planes de pago desde ${planPrice('af_pro_monthly')}/mes · Cancela cuando quieras`,
     mockup: {
       title: 'Tus ligas',
       clock: 'Semana 12 · Dom 11:41',
@@ -54,7 +57,7 @@ const es: NocturneCopy = {
       lockedTitle: 'Ventaja proyectada esta semana',
       lockedSub: 'En tus 4 ligas',
       lockedValue: '+14.6',
-      lockedTag: 'AF Legacy',
+      lockedTag: 'AF Pro',
     },
   },
   stats: {
@@ -130,60 +133,49 @@ const es: NocturneCopy = {
   },
   pricing: {
     kicker: 'Precios simples',
-    title: 'Gratis para verlo todo. Mejora para actuar.',
+    title: 'Todas las ligas son gratis. Mejora para tener ventaja.',
     body:
-      'Explora cada liga, marcadores en vivo y clasificaciones gratis. Elige Pro para herramientas de jugador, Commissioner para dirigir tus ligas, Supreme para proyecciones y análisis entre ligas, o AF Legacy para el resultado completo — sala de draft en vivo, herramientas dynasty y acceso prioritario.',
-    footnote:
-      'Cada plan de pago incluye una asignación mensual de tokens y puede facturarse mensual o anualmente. Cancela cuando quieras.',
+      'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, waivers, marcadores en vivo y clasificaciones incluidos, gratis para siempre. Elige Pro para Chimmy y herramientas de jugador, Commissioner para automatización e integridad de liga, o Supreme para ambos.',
+    footnote: 'Los planes de pago se facturan mensual o anualmente. Cancela cuando quieras desde Configuración → Facturación.',
     tiers: [
       {
-        key: 'free', name: 'Gratis', price: '$0', priceSuffix: 'para siempre, para jugadores', priceYear: null,
+        key: 'free', name: 'Gratis', price: '$0', priceSuffix: 'para siempre', priceYear: null,
         plan: null, featured: false, badge: null, cta: 'Empieza gratis',
         features: [
+          { text: 'Crea e importa ligas ilimitadas' },
+          { text: 'Drafts, cambios, waivers y marcadores en vivo' },
           { text: 'Todas tus ligas en un tablero' },
-          { text: 'Marcadores, enfrentamientos y clasificaciones en vivo' },
-          { text: 'Búsqueda de jugadores en todas tus ligas' },
-          { text: 'Ventajas proyectadas e insights completos', locked: true },
+          { text: 'Lo básico del comisionado: ajustes, invitaciones y playoffs' },
         ],
       },
       {
-        key: 'pro', name: 'AF Pro', price: '$9.99', priceSuffix: '/ mes', priceYear: 'o $99.99/año',
+        key: 'pro', name: 'AF Pro', price: planPrice('af_pro_monthly'), priceSuffix: '/ mes', priceYear: `o ${planPrice('af_pro_yearly')}/año`,
         plan: 'pro', featured: false, badge: null, cta: 'Obtén AF Pro',
         features: [
           { text: 'Todo lo de Gratis' },
+          { text: `Chimmy: ${PRO_CHIMMY_DAILY} respuestas al día` },
           { text: 'Herramientas de cambios y waivers' },
           { text: 'Guía de alineación y start/sit' },
-          { text: 'Preparación de draft y mock drafts' },
         ],
       },
       {
-        key: 'commissioner', name: 'Commissioner', price: '$14.99', priceSuffix: '/ mes', priceYear: 'o $149.99/año',
+        key: 'commissioner', name: 'Commissioner', price: planPrice('af_commissioner_monthly'), priceSuffix: '/ mes', priceYear: `o ${planPrice('af_commissioner_yearly')}/año`,
         plan: 'commissioner', featured: false, badge: null, cta: 'Obtén Commissioner',
         features: [
-          { text: 'Todo lo de Pro' },
-          { text: 'Suite completa de comisionado' },
-          { text: 'Draft de dispersión y lotería ponderada' },
-          { text: 'Monitoreo de integridad y difusión' },
+          { text: 'Todo lo de Gratis' },
+          { text: 'Automatización de liga y tablas de puntuación personalizadas' },
+          { text: 'Monitoreo de integridad y salud de la liga' },
+          { text: 'Resúmenes, power rankings e historias' },
         ],
       },
       {
-        key: 'supreme', name: 'AF Supreme', price: '$19.99', priceSuffix: '/ mes', priceYear: 'o $199.99/año',
-        plan: 'supreme', featured: false, badge: null, cta: 'Obtén AF Supreme',
+        key: 'supreme', name: 'AF Supreme', price: planPrice('af_supreme_monthly'), priceSuffix: '/ mes', priceYear: `o ${planPrice('af_supreme_yearly')}/año`,
+        plan: 'supreme', featured: true, badge: 'Mejor valor', cta: 'Obtén AF Supreme',
         features: [
-          { text: 'Todo lo de Commissioner' },
-          { text: 'Proyecciones y ventajas proyectadas' },
-          { text: 'Análisis entre ligas y portafolio' },
-          { text: 'Mayor asignación mensual de tokens' },
-        ],
-      },
-      {
-        key: 'legacy', name: 'AF Legacy', price: '$29.99', priceSuffix: '/ mes', priceYear: 'o $299.99/año',
-        plan: 'war_room', featured: true, badge: 'Resultado completo', cta: 'Obtén AF Legacy',
-        features: [
-          { text: 'Todo lo de Supreme' },
-          { text: 'Sala de draft en vivo' },
-          { text: 'Herramientas dynasty y devy avanzadas' },
-          { text: 'Acceso prioritario y anticipado' },
+          { text: 'Todo lo de AF Pro y Commissioner' },
+          { text: 'Herramientas de planificación dynasty y devy' },
+          { text: 'Cuesta menos que comprar ambos' },
+          { text: 'Para comisionados que también juegan' },
         ],
       },
     ],
@@ -236,14 +228,14 @@ const zh: NocturneCopy = {
     ariaFooterNav: '页脚',
   },
   hero: {
-    badge: '仅限梦幻体育 · 无博彩 · 玩家免费',
+    badge: '仅限梦幻体育 · 无博彩 · 所有联盟免费',
     titleTop: '你参加的每个联盟。',
     titleAccent: '一块屏幕。',
     body:
       '把 Sleeper、ESPN、Yahoo 等联盟汇聚到一个指挥中心，一眼看清哪些需要你处理、该派谁上场、下一步去哪——同时管理你的所有联盟。',
     primary: '免费开始',
     secondary: '看看怎么用',
-    finePrint: '免费浏览每个联盟 · 付费方案每月 $9.99 起 · 随时取消',
+    finePrint: `免费创建、导入和运营联盟 · 付费方案每月 ${planPrice('af_pro_monthly')} 起 · 随时取消`,
     mockup: {
       title: '你的联盟',
       clock: '第 12 周 · 周日 11:41',
@@ -256,7 +248,7 @@ const zh: NocturneCopy = {
       lockedTitle: '本周预计优势',
       lockedSub: '涵盖全部 4 个联盟',
       lockedValue: '+14.6',
-      lockedTag: 'AF Legacy',
+      lockedTag: 'AF Pro',
     },
   },
   stats: {
@@ -331,59 +323,49 @@ const zh: NocturneCopy = {
   },
   pricing: {
     kicker: '简单定价',
-    title: '免费看全部，升级去行动。',
+    title: '所有联盟免费。升级获得优势。',
     body:
-      '免费浏览每个联盟、实时比分和排名。选择 Pro 获得球员工具，Commissioner 管理你的联盟，Supreme 获得预测与跨联盟分析，或 AF Legacy 获得完整输出——实时选秀室、王朝工具和优先访问。',
-    footnote: '每个付费方案都包含每月代币额度，可按月或按年计费。随时取消。',
+      '想建多少联盟就建多少，导入、运营都免费——选秀、交易、waiver、实时比分和排名全部包含，永久免费。选择 Pro 获得 Chimmy 和球员工具，Commissioner 获得联盟自动化与公平性工具，或 Supreme 两者兼得。',
+    footnote: '付费方案可按月或按年计费。可随时在 设置 → 账单 中取消。',
     tiers: [
       {
-        key: 'free', name: '免费', price: '$0', priceSuffix: '永久免费，面向玩家', priceYear: null,
+        key: 'free', name: '免费', price: '$0', priceSuffix: '永久免费', priceYear: null,
         plan: null, featured: false, badge: null, cta: '免费开始',
         features: [
+          { text: '无限创建和导入联盟' },
+          { text: '选秀、交易、waiver 和实时比分' },
           { text: '所有联盟在一个面板' },
-          { text: '实时比分、对阵和排名' },
-          { text: '跨所有联盟的球员搜索' },
-          { text: '预计优势与完整洞察', locked: true },
+          { text: '管理员基础功能：设置、邀请和季后赛' },
         ],
       },
       {
-        key: 'pro', name: 'AF Pro', price: '$9.99', priceSuffix: '/月', priceYear: '或 $99.99/年',
+        key: 'pro', name: 'AF Pro', price: planPrice('af_pro_monthly'), priceSuffix: '/月', priceYear: `或 ${planPrice('af_pro_yearly')}/年`,
         plan: 'pro', featured: false, badge: null, cta: '获取 AF Pro',
         features: [
           { text: '包含免费版全部' },
+          { text: `Chimmy：每天 ${PRO_CHIMMY_DAILY} 次回答` },
           { text: '交易与 waiver 工具' },
           { text: '先发/替补与阵容建议' },
-          { text: '选秀准备与模拟选秀' },
         ],
       },
       {
-        key: 'commissioner', name: 'Commissioner', price: '$14.99', priceSuffix: '/月', priceYear: '或 $149.99/年',
+        key: 'commissioner', name: 'Commissioner', price: planPrice('af_commissioner_monthly'), priceSuffix: '/月', priceYear: `或 ${planPrice('af_commissioner_yearly')}/年`,
         plan: 'commissioner', featured: false, badge: null, cta: '获取 Commissioner',
         features: [
-          { text: '包含 Pro 全部' },
-          { text: '完整的管理员工具套件' },
-          { text: '分配选秀与加权抽签' },
-          { text: '公平性监控与广播' },
+          { text: '包含免费版全部' },
+          { text: '联盟自动化与自定义计分表' },
+          { text: '公平性监控与联盟健康' },
+          { text: '周报、实力排名与联盟故事' },
         ],
       },
       {
-        key: 'supreme', name: 'AF Supreme', price: '$19.99', priceSuffix: '/月', priceYear: '或 $199.99/年',
-        plan: 'supreme', featured: false, badge: null, cta: '获取 AF Supreme',
+        key: 'supreme', name: 'AF Supreme', price: planPrice('af_supreme_monthly'), priceSuffix: '/月', priceYear: `或 ${planPrice('af_supreme_yearly')}/年`,
+        plan: 'supreme', featured: true, badge: '最超值', cta: '获取 AF Supreme',
         features: [
-          { text: '包含 Commissioner 全部' },
-          { text: '预测与预计优势' },
-          { text: '跨联盟分析与组合' },
-          { text: '更高的每月代币额度' },
-        ],
-      },
-      {
-        key: 'legacy', name: 'AF Legacy', price: '$29.99', priceSuffix: '/月', priceYear: '或 $299.99/年',
-        plan: 'war_room', featured: true, badge: '完整输出', cta: '获取 AF Legacy',
-        features: [
-          { text: '包含 Supreme 全部' },
-          { text: '实时选秀室' },
-          { text: '王朝与新秀深度工具' },
-          { text: '优先与抢先访问' },
+          { text: '包含 AF Pro 和 Commissioner 全部' },
+          { text: '王朝与新秀规划工具' },
+          { text: '比分别购买两者更便宜' },
+          { text: '为同时参赛的管理员打造' },
         ],
       },
     ],
@@ -435,14 +417,14 @@ const fil: NocturneCopy = {
     ariaFooterNav: 'Footer',
   },
   hero: {
-    badge: 'Fantasy sports lang · Walang sugal · Libre para sa mga manlalaro',
+    badge: 'Fantasy sports lang · Walang sugal · Libre ang bawat league',
     titleTop: 'Bawat league na nilalaro mo.',
     titleAccent: 'Isang screen.',
     body:
       'Isama ang Sleeper, ESPN, Yahoo at iba pa sa iisang command center na nagpapakita kung ano ang kailangan mong asikasuhin, sino ang ilalaro, at saan pupunta — sa lahat ng iyong league nang sabay-sabay.',
     primary: 'Magsimula nang libre',
     secondary: 'Tingnan kung paano ito gumagana',
-    finePrint: 'Libreng tuklasin ang bawat league · Bayad na plano mula $9.99/buwan · Kanselahin anumang oras',
+    finePrint: `Libreng gumawa, mag-import at magpatakbo ng league · Bayad na plano mula ${planPrice('af_pro_monthly')}/buwan · Kanselahin anumang oras`,
     mockup: {
       title: 'Ang iyong mga league',
       clock: 'Linggo 12 · Lin 11:41',
@@ -455,7 +437,7 @@ const fil: NocturneCopy = {
       lockedTitle: 'Inaasahang bentahe ngayong linggo',
       lockedSub: 'Sa lahat ng 4 na league',
       lockedValue: '+14.6',
-      lockedTag: 'AF Legacy',
+      lockedTag: 'AF Pro',
     },
   },
   stats: {
@@ -530,60 +512,49 @@ const fil: NocturneCopy = {
   },
   pricing: {
     kicker: 'Simpleng presyo',
-    title: 'Libreng makita ang lahat. Mag-upgrade para kumilos.',
+    title: 'Libre ang bawat league. Mag-upgrade para sa bentahe.',
     body:
-      'Tuklasin ang bawat league, live na score at standing nang libre. Piliin ang Pro para sa mga tool ng manlalaro, Commissioner para patakbuhin ang iyong mga league, Supreme para sa mga projection at cross-league analytics, o AF Legacy para sa buong output — live draft room, dynasty tools at priority access.',
-    footnote:
-      'Bawat bayad na plano ay may buwanang token allowance at maaaring singilin buwanan o taunan. Kanselahin anumang oras.',
+      'Gumawa, mag-import at magpatakbo ng kahit ilang league — kasama ang draft, trade, waiver, live na score at standing, libre habambuhay. Piliin ang Pro para kay Chimmy at sa mga tool ng manlalaro, Commissioner para sa league automation at integrity tools, o Supreme para sa pareho.',
+    footnote: 'Ang bayad na plano ay sinisingil buwanan o taunan. Kanselahin anumang oras sa Settings → Billing.',
     tiers: [
       {
-        key: 'free', name: 'Libre', price: '$0', priceSuffix: 'habambuhay, para sa mga manlalaro', priceYear: null,
+        key: 'free', name: 'Libre', price: '$0', priceSuffix: 'habambuhay', priceYear: null,
         plan: null, featured: false, badge: null, cta: 'Magsimula nang libre',
         features: [
+          { text: 'Gumawa at mag-import ng walang limitasyong league' },
+          { text: 'Draft, trade, waiver at live na score' },
           { text: 'Lahat ng league sa isang board' },
-          { text: 'Live na score, matchup at standing' },
-          { text: 'Paghahanap ng manlalaro sa lahat ng league' },
-          { text: 'Inaasahang bentahe at buong insight', locked: true },
+          { text: 'Mga pangunahing commissioner tool: settings, invite at playoffs' },
         ],
       },
       {
-        key: 'pro', name: 'AF Pro', price: '$9.99', priceSuffix: '/buwan', priceYear: 'o $99.99/taon',
+        key: 'pro', name: 'AF Pro', price: planPrice('af_pro_monthly'), priceSuffix: '/buwan', priceYear: `o ${planPrice('af_pro_yearly')}/taon`,
         plan: 'pro', featured: false, badge: null, cta: 'Kunin ang AF Pro',
         features: [
           { text: 'Lahat ng nasa Libre' },
+          { text: `Chimmy: ${PRO_CHIMMY_DAILY} sagot bawat araw` },
           { text: 'Mga tool sa trade at waiver' },
           { text: 'Gabay sa start/sit at lineup' },
-          { text: 'Paghahanda sa draft at mock draft' },
         ],
       },
       {
-        key: 'commissioner', name: 'Commissioner', price: '$14.99', priceSuffix: '/buwan', priceYear: 'o $149.99/taon',
+        key: 'commissioner', name: 'Commissioner', price: planPrice('af_commissioner_monthly'), priceSuffix: '/buwan', priceYear: `o ${planPrice('af_commissioner_yearly')}/taon`,
         plan: 'commissioner', featured: false, badge: null, cta: 'Kunin ang Commissioner',
         features: [
-          { text: 'Lahat ng nasa Pro' },
-          { text: 'Kumpletong suite ng commissioner tools' },
-          { text: 'Dispersal draft at weighted lottery' },
-          { text: 'Integrity monitoring at broadcast' },
+          { text: 'Lahat ng nasa Libre' },
+          { text: 'League automation at custom na scoring table' },
+          { text: 'Integrity monitoring at kalusugan ng league' },
+          { text: 'Mga recap, power ranking at kuwento' },
         ],
       },
       {
-        key: 'supreme', name: 'AF Supreme', price: '$19.99', priceSuffix: '/buwan', priceYear: 'o $199.99/taon',
-        plan: 'supreme', featured: false, badge: null, cta: 'Kunin ang AF Supreme',
+        key: 'supreme', name: 'AF Supreme', price: planPrice('af_supreme_monthly'), priceSuffix: '/buwan', priceYear: `o ${planPrice('af_supreme_yearly')}/taon`,
+        plan: 'supreme', featured: true, badge: 'Pinakasulit', cta: 'Kunin ang AF Supreme',
         features: [
-          { text: 'Lahat ng nasa Commissioner' },
-          { text: 'Mga projection at inaasahang bentahe' },
-          { text: 'Cross-league analytics at portfolio' },
-          { text: 'Mas mataas na buwanang token allowance' },
-        ],
-      },
-      {
-        key: 'legacy', name: 'AF Legacy', price: '$29.99', priceSuffix: '/buwan', priceYear: 'o $299.99/taon',
-        plan: 'war_room', featured: true, badge: 'Buong output', cta: 'Kunin ang AF Legacy',
-        features: [
-          { text: 'Lahat ng nasa Supreme' },
-          { text: 'Live draft room' },
-          { text: 'Malalim na dynasty at devy tools' },
-          { text: 'Priority at maagang access' },
+          { text: 'Lahat ng nasa AF Pro at Commissioner' },
+          { text: 'Mga dynasty at devy planning tool' },
+          { text: 'Mas mura kaysa bilhin ang dalawa' },
+          { text: 'Para sa mga commissioner na naglalaro rin' },
         ],
       },
     ],
@@ -636,14 +607,14 @@ const vi: NocturneCopy = {
     ariaFooterNav: 'Chân trang',
   },
   hero: {
-    badge: 'Chỉ fantasy sports · Không cá cược · Miễn phí cho người chơi',
+    badge: 'Chỉ fantasy sports · Không cá cược · Mọi giải đều miễn phí',
     titleTop: 'Mọi giải đấu bạn chơi.',
     titleAccent: 'Một màn hình.',
     body:
       'Đưa Sleeper, ESPN, Yahoo và hơn thế vào một trung tâm điều khiển duy nhất, cho bạn thấy điều gì cần chú ý, nên xếp ai ra sân và đi đâu tiếp theo — trên tất cả các giải cùng lúc.',
     primary: 'Bắt đầu miễn phí',
     secondary: 'Xem cách hoạt động',
-    finePrint: 'Khám phá mọi giải miễn phí · Gói trả phí từ $9.99/tháng · Hủy bất cứ lúc nào',
+    finePrint: `Tạo, nhập và vận hành giải miễn phí · Gói trả phí từ ${planPrice('af_pro_monthly')}/tháng · Hủy bất cứ lúc nào`,
     mockup: {
       title: 'Các giải của bạn',
       clock: 'Tuần 12 · CN 11:41',
@@ -656,7 +627,7 @@ const vi: NocturneCopy = {
       lockedTitle: 'Lợi thế dự kiến tuần này',
       lockedSub: 'Trên cả 4 giải',
       lockedValue: '+14.6',
-      lockedTag: 'AF Legacy',
+      lockedTag: 'AF Pro',
     },
   },
   stats: {
@@ -731,60 +702,49 @@ const vi: NocturneCopy = {
   },
   pricing: {
     kicker: 'Giá đơn giản',
-    title: 'Miễn phí để xem tất cả. Nâng cấp để hành động.',
+    title: 'Mọi giải đều miễn phí. Nâng cấp để có lợi thế.',
     body:
-      'Khám phá mọi giải, tỉ số trực tiếp và bảng xếp hạng miễn phí. Chọn Pro cho công cụ người chơi, Commissioner để điều hành các giải, Supreme cho dự báo và phân tích xuyên giải, hoặc AF Legacy cho đầu ra đầy đủ — phòng draft trực tiếp, công cụ dynasty và quyền truy cập ưu tiên.',
-    footnote:
-      'Mỗi gói trả phí bao gồm hạn mức token hàng tháng và có thể thanh toán theo tháng hoặc theo năm. Hủy bất cứ lúc nào.',
+      'Tạo, nhập và vận hành bao nhiêu giải tùy thích — gồm draft, trao đổi, waiver, tỉ số trực tiếp và bảng xếp hạng, miễn phí trọn đời. Chọn Pro cho Chimmy và công cụ người chơi, Commissioner cho tự động hóa và công cụ công bằng của giải, hoặc Supreme cho cả hai.',
+    footnote: 'Gói trả phí thanh toán theo tháng hoặc theo năm. Hủy bất cứ lúc nào trong Cài đặt → Thanh toán.',
     tiers: [
       {
-        key: 'free', name: 'Miễn phí', price: '$0', priceSuffix: 'trọn đời, cho người chơi', priceYear: null,
+        key: 'free', name: 'Miễn phí', price: '$0', priceSuffix: 'trọn đời', priceYear: null,
         plan: null, featured: false, badge: null, cta: 'Bắt đầu miễn phí',
         features: [
+          { text: 'Tạo & nhập không giới hạn số giải' },
+          { text: 'Draft, trao đổi, waiver & tỉ số trực tiếp' },
           { text: 'Tất cả giải trên một bảng' },
-          { text: 'Tỉ số, cặp đấu & bảng xếp hạng trực tiếp' },
-          { text: 'Tìm cầu thủ trên mọi giải' },
-          { text: 'Lợi thế dự kiến & phân tích đầy đủ', locked: true },
+          { text: 'Công cụ commissioner cơ bản: cài đặt, lời mời & playoff' },
         ],
       },
       {
-        key: 'pro', name: 'AF Pro', price: '$9.99', priceSuffix: '/tháng', priceYear: 'hoặc $99.99/năm',
+        key: 'pro', name: 'AF Pro', price: planPrice('af_pro_monthly'), priceSuffix: '/tháng', priceYear: `hoặc ${planPrice('af_pro_yearly')}/năm`,
         plan: 'pro', featured: false, badge: null, cta: 'Chọn AF Pro',
         features: [
           { text: 'Mọi thứ trong Miễn phí' },
+          { text: `Chimmy: ${PRO_CHIMMY_DAILY} câu trả lời mỗi ngày` },
           { text: 'Công cụ trao đổi & waiver' },
           { text: 'Hướng dẫn start/sit & đội hình' },
-          { text: 'Chuẩn bị draft & mock draft' },
         ],
       },
       {
-        key: 'commissioner', name: 'Commissioner', price: '$14.99', priceSuffix: '/tháng', priceYear: 'hoặc $149.99/năm',
+        key: 'commissioner', name: 'Commissioner', price: planPrice('af_commissioner_monthly'), priceSuffix: '/tháng', priceYear: `hoặc ${planPrice('af_commissioner_yearly')}/năm`,
         plan: 'commissioner', featured: false, badge: null, cta: 'Chọn Commissioner',
         features: [
-          { text: 'Mọi thứ trong Pro' },
-          { text: 'Bộ công cụ commissioner đầy đủ' },
-          { text: 'Dispersal draft & xổ số có trọng số' },
-          { text: 'Giám sát công bằng & phát sóng' },
+          { text: 'Mọi thứ trong Miễn phí' },
+          { text: 'Tự động hóa giải & bảng tính điểm tùy chỉnh' },
+          { text: 'Giám sát công bằng & sức khỏe giải' },
+          { text: 'Tổng kết, bảng xếp hạng sức mạnh & câu chuyện' },
         ],
       },
       {
-        key: 'supreme', name: 'AF Supreme', price: '$19.99', priceSuffix: '/tháng', priceYear: 'hoặc $199.99/năm',
-        plan: 'supreme', featured: false, badge: null, cta: 'Chọn AF Supreme',
+        key: 'supreme', name: 'AF Supreme', price: planPrice('af_supreme_monthly'), priceSuffix: '/tháng', priceYear: `hoặc ${planPrice('af_supreme_yearly')}/năm`,
+        plan: 'supreme', featured: true, badge: 'Đáng giá nhất', cta: 'Chọn AF Supreme',
         features: [
-          { text: 'Mọi thứ trong Commissioner' },
-          { text: 'Dự báo & lợi thế dự kiến' },
-          { text: 'Phân tích xuyên giải & danh mục' },
-          { text: 'Hạn mức token hàng tháng cao hơn' },
-        ],
-      },
-      {
-        key: 'legacy', name: 'AF Legacy', price: '$29.99', priceSuffix: '/tháng', priceYear: 'hoặc $299.99/năm',
-        plan: 'war_room', featured: true, badge: 'Đầu ra đầy đủ', cta: 'Chọn AF Legacy',
-        features: [
-          { text: 'Mọi thứ trong Supreme' },
-          { text: 'Phòng draft trực tiếp' },
-          { text: 'Công cụ dynasty & devy chuyên sâu' },
-          { text: 'Truy cập ưu tiên & sớm' },
+          { text: 'Mọi thứ trong AF Pro & Commissioner' },
+          { text: 'Công cụ lập kế hoạch dynasty & devy' },
+          { text: 'Rẻ hơn mua riêng cả hai' },
+          { text: 'Dành cho commissioner cũng tham gia chơi' },
         ],
       },
     ],

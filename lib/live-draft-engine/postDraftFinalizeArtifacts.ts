@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const POST_DRAFT_ARTIFACT_STABLE_THROTTLE_MS = 60_000
 const MAX_THROTTLE_KEYS = 200
@@ -69,8 +70,20 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
        * Non-fatal: the draft is already finalized and the rosters already
        * materialized by this point. A commissioner can still create the season
        * by hand, exactly as before.
-       */
+      */
       if (summary.seasonId) {
+        try {
+          const { ensureNativeTournamentEntries } = await import('@/lib/bestball/nativeTournament')
+          await ensureNativeTournamentEntries(leagueId, summary.seasonId)
+        } catch (tournamentErr) {
+          // A tournament failure must not prevent another league format's season from starting.
+          // Tournament entry creation is retry-safe and the scoring worker retries open contests.
+          console.error('[postDraftFinalizeArtifacts] tournament entry ensure failed', {
+            leagueId,
+            error: tournamentErr instanceof Error ? tournamentErr.message : String(tournamentErr),
+          })
+        }
+
         try {
           const { ensureGuillotineSeason } = await import('@/lib/guillotine/ensureGuillotineSeason')
           const guillotine = await ensureGuillotineSeason({
@@ -87,6 +100,28 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
           console.error('[postDraftFinalizeArtifacts] guillotine season ensure failed', {
             leagueId,
             error: guillotineErr instanceof Error ? guillotineErr.message : String(guillotineErr),
+          })
+        }
+
+        /*
+         * A zombie league's season start: team rows, the Whisperer, `status: 'active'`.
+         * Nothing else ever set `active`, so the scheduled resolver never ran a zombie week.
+         * Same placement and same reason as the guillotine shell above; non-fatal the same way.
+         */
+        try {
+          const { ensureZombieSeasonActivated } = await import('@/lib/zombie/activateNativeZombieLeague')
+          const zombie = await ensureZombieSeasonActivated({ leagueId, redraftSeasonId: summary.seasonId })
+          if (zombie.ok && zombie.activated) {
+            console.info('[postDraftFinalizeArtifacts] zombie league activated', {
+              leagueId,
+              zombieLeagueId: zombie.zombieLeagueId,
+              whispererPicked: zombie.whispererPicked,
+            })
+          }
+        } catch (zombieErr) {
+          console.error('[postDraftFinalizeArtifacts] zombie activation failed', {
+            leagueId,
+            error: zombieErr instanceof Error ? zombieErr.message : String(zombieErr),
           })
         }
       }
@@ -107,8 +142,9 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
  * Throttled on success to avoid redundant work on every poll; on failure the throttle entry is cleared so the next request retries.
  */
 export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: string): Promise<void> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { status: true },
   })
   if (session?.status !== 'completed') return
@@ -137,8 +173,9 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
  * Calls `completeDraftSession` which is idempotent when already completed.
  */
 export async function repairDraftCompletionIfBoardFull(leagueId: string): Promise<boolean> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, rounds: true, teamCount: true },
   })
   if (!session || session.status === 'completed') return false

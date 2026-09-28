@@ -81,8 +81,8 @@ describe('league Core navigation', () => {
     )
 
     const notes = screen.getByRole('list', { name: 'Views not available for this league' })
-    expect(notes).toHaveTextContent('Fleaflicker doesn’t publish trade history')
-    expect(notes).toHaveTextContent('Fleaflicker doesn’t publish draft results')
+    expect(notes).toHaveTextContent('We couldn’t bring across trade history from Fleaflicker')
+    expect(notes).toHaveTextContent('We couldn’t bring across draft results from Fleaflicker')
   })
 
   it('stays silent when every view is available', () => {
@@ -117,7 +117,7 @@ describe('describeHiddenTabs', () => {
 
   it('names the provider for a limit that is the provider’s', () => {
     expect(describeHiddenTabs({ ...full, tradeSupported: false, platform: 'ESPN' })[0]).toBe(
-      'ESPN doesn’t publish trade history, so there is no Trades view for this league.',
+      'We couldn’t bring across trade history from ESPN for this league yet, so there is no Trades view.',
     )
   })
 
@@ -135,7 +135,7 @@ describe('describeHiddenTabs', () => {
 
   it('falls back to a neutral subject rather than printing an empty platform', () => {
     expect(describeHiddenTabs({ ...full, draftSupported: false, platform: '' })[0]).toContain(
-      'This platform doesn’t publish draft results',
+      'We couldn’t bring across draft results from this platform',
     )
   })
 })

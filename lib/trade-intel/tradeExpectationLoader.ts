@@ -6,7 +6,8 @@ import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getSeasonStatsBoard, scoreStatLine } from '@/lib/sports-data/sleeperMarketService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
-import { buildTradeExpectation, type TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
+import { buildTradeExpectation, withOneGrade, type TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { fetchLeagueRosters } from '@/lib/trade-intel/sleeperTradeSync'
 import { getDynastyProcessValues } from '@/lib/trade-intel/dynastyProcessSync'
 import { buildAfPickValues, buildAfValues, type PickEntries, type SourceEntries } from '@/lib/trade-intel/afValue'
@@ -31,12 +32,25 @@ function priorSeasonOf(trade: GradedTrade): string {
 export async function loadTradeExpectation(
   sleeperLeagueId: string,
   trade: GradedTrade,
+  opts: {
+    /**
+     * The VIEWER'S copy of the league. One Sleeper league is one AF row per importer, and each row
+     * carries its own settings and confirmed league type, so the letter depends on which row is read.
+     * 🛑 Without it this read `findFirst({ platformLeagueId })` — an arbitrary importer's row — which
+     * is how the grade email printed B (+24%) beside an app screen reading A (+25%) (2026-09-25).
+     * Given and not a copy of this league: no row, so the grade withholds rather than borrow another.
+     */
+    afLeagueId?: string | null
+  } = {},
 ): Promise<TradeExpectation | null> {
   const [context, leagueRow] = await Promise.all([
     getLeagueContext(sleeperLeagueId).catch(() => null),
     prisma.league.findFirst({
-      where: { platformLeagueId: sleeperLeagueId },
+      where: opts.afLeagueId
+        ? { id: opts.afLeagueId, platformLeagueId: sleeperLeagueId }
+        : { platformLeagueId: sleeperLeagueId },
       select: {
+        id: true,
         leagueType: true,
         leagueVariant: true,
         isDynasty: true,
@@ -198,7 +212,7 @@ export async function loadTradeExpectation(
     if (Object.keys(rosteredByPosition).length === 0) rosteredByPosition = null
   }
 
-  return buildTradeExpectation({
+  const expectation = buildTradeExpectation({
     trade,
     context,
     marketValues,
@@ -218,4 +232,11 @@ export async function loadTradeExpectation(
       marketValues?.pickByRound[`${season}:${round}`] ??
       null,
   })
+
+  // The letter is THE grade (see `withOneGrade`); only a two-sided, market-only read is regraded.
+  if (expectation.evaluation.scope !== 'market-only') return expectation
+  const oneGrade = leagueRow?.id && trade.sides.length === 2
+    ? await oneGradeForCompletedTrade(leagueRow.id, trade, Number(context.season)).catch(() => null)
+    : null
+  return withOneGrade(expectation, oneGrade)
 }

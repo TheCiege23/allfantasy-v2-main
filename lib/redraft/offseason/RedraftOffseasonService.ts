@@ -90,7 +90,24 @@ export async function enterRedraftOffseason(
     if (team.claimedByUserId) teamByOwner.set(team.claimedByUserId, team)
     if (team.platformUserId) teamByOwner.set(team.platformUserId, team)
   }
-  const records = season.rosters.map((roster, index) => {
+  /*
+   * 🛑 THE CHAMPION WAS THE REGULAR-SEASON LEADER. `champion` was `records[0]`, and records
+   * were ordered by wins then points — so `LeagueSeason.championName`,
+   * `FranchiseSeason.wonChampionship` and every career rank built on them credited the top seed,
+   * whoever actually won the bracket. The playoff finalizer already wrote the real result into
+   * the bracket's `structure` (`championRosterId`, `runnerUpRosterId`, `finalStandings` with a
+   * finish per team); it is read here, and the standings order is only the fallback for a
+   * season that finished without a bracket.
+   */
+  const bracketResult = readBracketResult(season.playoffBracket?.structure)
+  const standingsLeader = season.rosters[0] ?? null
+  const ranked = bracketResult
+    ? season.rosters
+        .map((roster, index) => ({ roster, index, finish: bracketResult.finishByRosterId.get(roster.id) }))
+        .sort((a, b) => (a.finish ?? Number.MAX_SAFE_INTEGER) - (b.finish ?? Number.MAX_SAFE_INTEGER) || a.index - b.index)
+        .map((row) => row.roster)
+    : season.rosters
+  const records = ranked.map((roster, index) => {
     const franchise = teamByOwner.get(roster.ownerId)
     return {
       snapshotVersion: 1,
@@ -115,8 +132,15 @@ export async function enterRedraftOffseason(
       completedAt: season.updatedAt.toISOString(),
     }
   })
-  const champion = records[0]
-  const runnerUp = records[1]
+  const champion = bracketResult
+    ? records.find((r) => r.rosterId === bracketResult.championRosterId) ?? records[0]
+    : records[0]
+  const runnerUp = bracketResult
+    ? records.find((r) => r.rosterId === bracketResult.runnerUpRosterId) ?? records[1]
+    : records[1]
+  const regularSeasonWinner = standingsLeader
+    ? records.find((r) => r.rosterId === standingsLeader.id) ?? null
+    : null
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     let snapshot = existing
@@ -131,7 +155,7 @@ export async function enterRedraftOffseason(
           championTeamId: champion?.franchiseId ?? null,
           championName: champion?.franchiseName ?? null,
           runnerUpName: runnerUp?.franchiseName ?? null,
-          regularSeasonWinnerName: champion?.franchiseName ?? null,
+          regularSeasonWinnerName: regularSeasonWinner?.franchiseName ?? null,
           teamRecords: records as unknown as Prisma.InputJsonValue,
           teamCount: records.length,
           scoringFormat: league.scoring,
@@ -237,8 +261,12 @@ export async function enterRedraftOffseason(
   await publishLeagueFanoutEvent({
     leagueId: season.leagueId,
     eventType: 'league_entered_offseason',
-    title: 'League entered offseason',
-    message: 'The season is complete and the league has entered the offseason. Renewal and next-season planning are now available.',
+    // The champion is named in the one message every member receives at season's end — nothing
+    // else announced the result (the playoff events go to the event log only).
+    title: champion?.franchiseName ? `${champion.franchiseName} won the championship` : 'League entered offseason',
+    message: champion?.franchiseName
+      ? `${champion.franchiseName} are your ${season.season} champions. The league has entered the offseason — renewal and next-season planning are now available.`
+      : 'The season is complete and the league has entered the offseason. Renewal and next-season planning are now available.',
     category: 'league_announcements',
     visibility: 'all_members',
     actorUserId,
@@ -249,4 +277,36 @@ export async function enterRedraftOffseason(
   })
 
   return { ok: true, snapshotId: result.snapshot.id, alreadyInOffseason: !result.created }
+}
+
+type BracketResult = {
+  championRosterId: string
+  runnerUpRosterId: string | null
+  finishByRosterId: Map<string, number>
+}
+
+/**
+ * The finished bracket, as `finalizeNflRedraftPlayoffRuntimeSeason` wrote it into
+ * `RedraftPlayoffBracket.structure`. Null when there is no finished bracket to read.
+ */
+export function readBracketResult(structure: unknown): BracketResult | null {
+  if (!structure || typeof structure !== 'object' || Array.isArray(structure)) return null
+  const s = structure as Record<string, unknown>
+  const championRosterId = typeof s.championRosterId === 'string' && s.championRosterId ? s.championRosterId : null
+  if (!championRosterId) return null
+  const finishByRosterId = new Map<string, number>()
+  if (Array.isArray(s.finalStandings)) {
+    for (const row of s.finalStandings) {
+      if (!row || typeof row !== 'object') continue
+      const r = row as Record<string, unknown>
+      if (typeof r.rosterId === 'string' && typeof r.finish === 'number' && Number.isFinite(r.finish)) {
+        finishByRosterId.set(r.rosterId, r.finish)
+      }
+    }
+  }
+  const runnerUpRosterId = typeof s.runnerUpRosterId === 'string' && s.runnerUpRosterId ? s.runnerUpRosterId : null
+  // A structure written without finalStandings still names the top two.
+  if (!finishByRosterId.has(championRosterId)) finishByRosterId.set(championRosterId, 1)
+  if (runnerUpRosterId && !finishByRosterId.has(runnerUpRosterId)) finishByRosterId.set(runnerUpRosterId, 2)
+  return { championRosterId, runnerUpRosterId, finishByRosterId }
 }

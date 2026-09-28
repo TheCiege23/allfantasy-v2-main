@@ -1,5 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { evaluateAiCostGate } from '@/lib/ai-protection/costGate'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
@@ -336,7 +339,17 @@ export const POST = withApiUsage({ endpoint: "/api/instant/trade", tool: "Instan
     const tepContext = tePremium ? `\n\nLeague Format: TEP (Tight End Premium) — TE values are boosted ~15%. Factor this into your analysis; mention TEP advantage for any TEs involved.` : ''
     let aiNarrative: { bullets: Array<{ text: string; driverId: string }>; sensitivity: { text: string; driverId: string } } | null = null
 
-    const skipCheck = shouldSkipGpt(gptContract)
+    /*
+     * Two OpenAI calls per check (this narrative and the negotiation toolkit below), on a
+     * logged-out tool with only an IP burst limit in front of it. One daily-capped allowance
+     * covers both; over it, BOTH are skipped and the deterministic result still returns —
+     * the same path a skipped contract already takes. The tool stays free: it brings people in.
+     */
+    const aiSession = (await getServerSession(authOptions as never).catch(() => null)) as
+      | { user?: { id?: string } }
+      | null
+    const aiGate = await evaluateAiCostGate(req, 'instant_trade', aiSession?.user?.id ?? null)
+    const skipCheck: string = aiGate.ok ? shouldSkipGpt(gptContract) : `ai_limit:${aiGate.reason}`
     if (skipCheck !== 'ok') {
       console.warn(`[instant-trade] Skipping GPT: ${skipCheck}`)
     } else {
@@ -414,7 +427,7 @@ export const POST = withApiUsage({ endpoint: "/api/instant/trade", tool: "Instan
     }
 
     const negContract = buildNegotiationGptContract(drivers)
-    const negSkip = shouldSkipNegotiationGpt(negContract)
+    const negSkip: string = aiGate.ok ? shouldSkipNegotiationGpt(negContract) : `ai_limit:${aiGate.reason}`
     let negotiationGpt: { opener: string; rationale: string; fallback: string; counters: Array<{ description: string; driverIds: string[] }> } | null = null
 
     if (negSkip !== 'ok') {

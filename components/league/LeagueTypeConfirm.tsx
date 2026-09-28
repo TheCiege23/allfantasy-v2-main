@@ -11,6 +11,12 @@ import {
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
 import { cn } from '@/lib/utils'
+import {
+  LEAGUE_TYPE_DECIDES_GRADES,
+  LEAGUE_TYPE_GRADES_EXPLAINER,
+  leagueTypeSourceText,
+  type LeagueTypeBasis,
+} from '@/lib/league/leagueTypeGrading'
 
 /**
  * Ask the commissioner what kind of league this actually is.
@@ -51,6 +57,8 @@ type State = {
     baseFormat?: string | null
   } | null
   rankableType: string | null
+  /** What trade grades use right now — absent from an older API response. */
+  gradedAs?: LeagueTypeBasis
   canConfirm: boolean
 }
 
@@ -108,7 +116,7 @@ export function LeagueTypeConfirm({
        * read out of the league name stays editable — a "$20" in a title is a
        * hint, and awarding money credit on a hint is how a rank gets inflated.
        */
-      setChoice(data.confirmation?.type ?? data.suggestion.suggested ?? null)
+      setChoice(data.confirmation?.type ?? data.gradedAs?.type ?? data.suggestion.suggested ?? null)
       const base = data.confirmation?.baseFormat
       setPirateBase(isPirateBaseFormat(base) ? base : null)
       setBuyIn(
@@ -179,7 +187,7 @@ export function LeagueTypeConfirm({
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-black uppercase tracking-[0.16em] text-[#9fb4c7]">
-          {confirmed ? 'League format' : 'Is this a specialty league?'}
+          {confirmed ? 'League type' : 'What kind of league is this?'}
         </h3>
         <span
           className={cn(
@@ -189,7 +197,7 @@ export function LeagueTypeConfirm({
               : 'border-[#3fd0e8]/40 text-[#3fd0e8]',
           )}
         >
-          {confirmed ? 'Confirmed' : 'Counts toward rankings'}
+          {confirmed ? 'Confirmed' : 'Decides your trade grades'}
         </span>
       </header>
 
@@ -200,16 +208,25 @@ export function LeagueTypeConfirm({
             {leagueConceptLabel(state.confirmation?.type)}
             {confirmedBaseLabel ? ` · ${confirmedBaseLabel}` : ''}
           </strong>
-          {state.confirmation?.buyIn != null ? ` · $${state.confirmation.buyIn} buy-in` : ''}. Change
-          it below if that&rsquo;s wrong.
+          {state.confirmation?.buyIn != null ? ` · $${state.confirmation.buyIn} buy-in` : ''}. Every
+          trade here is graded as this type. Change it below if that&rsquo;s wrong.
         </p>
       ) : (
         <>
-          <p className="mt-3 text-sm text-[#a3b2c2]">
-            {state.leagueName ? `“${state.leagueName}” ` : 'This league '}imported as{' '}
-            <strong className="text-[#e6edf3]">{state.storedType ?? 'redraft'}</strong>. Sleeper
-            can&rsquo;t describe formats like zombie or tournament leagues, so we&rsquo;re guessing
-            from the name — and until someone confirms, it scores as an ordinary league.
+          {/*
+            🛑 THE ASK LEADS WITH WHAT IT DECIDES (2026-09-25). This card spoke only of rankings, and
+            the league type also chooses the chart every trade in the league is graded on — the
+            thing a manager actually sees. Said first, with where today's answer came from.
+          */}
+          <p className="mt-3 text-sm font-bold text-[#e6edf3]">{LEAGUE_TYPE_DECIDES_GRADES}</p>
+          <p className="mt-1 text-sm text-[#a3b2c2]">{LEAGUE_TYPE_GRADES_EXPLAINER}</p>
+          <p className="mt-2 text-sm text-[#a3b2c2]">
+            {state.leagueName ? `“${state.leagueName}” ` : 'This league '}is graded as{' '}
+            <strong className="text-[#e6edf3]">
+              {state.gradedAs ? state.gradedAs.label : (state.storedType ?? 'redraft')}
+            </strong>
+            {state.gradedAs ? ` — ${leagueTypeSourceText(state.gradedAs)}` : ''}. Sleeper can&rsquo;t
+            describe formats like zombie or tournament leagues, so confirm it here.
           </p>
           <ul className="mt-2 space-y-1 text-xs text-[#74869a]">
             {state.suggestion.reasons.map((r) => (

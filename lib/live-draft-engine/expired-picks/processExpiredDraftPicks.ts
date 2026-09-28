@@ -27,6 +27,7 @@ import {
   notifyQueuePlayerUnavailable,
 } from '@/lib/draft-notifications'
 import { publishDraftIntelForUpcomingManagers, sendDraftIntelDm } from '@/lib/draft-intelligence'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 type TradedPickRecord = {
@@ -113,8 +114,9 @@ export async function processExpiredDraftPickForLeague(
 
     await reconcileOvernightDraftTimerForLeague(leagueId, now)
 
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       include: { picks: { orderBy: { overall: 'asc' } }, queues: true },
     })
     if (!session) {
@@ -189,8 +191,9 @@ export async function processExpiredDraftPickForLeague(
       return { leagueId, outcome: 'skipped', reason: 'no_on_clock_roster' }
     }
 
-    const fresh = await prisma.draftSession.findUnique({
+    const fresh = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         version: true,
         timerEndAt: true,
@@ -243,8 +246,9 @@ export async function processExpiredDraftPickForLeague(
       }
     }
 
-    const mid = await prisma.draftSession.findUnique({
+    const mid = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         version: true,
         status: true,

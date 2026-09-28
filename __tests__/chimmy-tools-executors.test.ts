@@ -7,7 +7,10 @@ const h = vi.hoisted(() => ({
   leaders: vi.fn(),
   findLeague: vi.fn(),
   tradeBlock: vi.fn(),
+  injuries: vi.fn(),
 }))
+
+vi.mock('@/lib/chimmy/tools/myRosterInjuriesTool', () => ({ buildMyRosterInjuriesContext: h.injuries }))
 
 vi.mock('@/lib/chimmy/tradeBlockGrounding', () => ({ buildTradeBlockContext: h.tradeBlock }))
 
@@ -122,6 +125,42 @@ describe('tool specs', () => {
       'get_player_game_log',
       'get_season_stat_leaders',
       'get_real_standings',
+      /*
+       * The analyst tools (2026-09-24). Each RUNS an engine that already ships — the lineup fill,
+       * the start/sit and waiver scenarios, the Trade Center evaluator, the Season Outlook
+       * simulator, the Week board — over rows the session already reaches, and returns prose.
+       * None writes: "optimize" computes a lineup, it never sets one (we hold no platform write
+       * access). The first four need the membership-proven league; the last two fall back to
+       * every league through `listMemberLeagues`, like get_my_starters_playing.
+       */
+      'optimize_my_lineup',
+      'compare_start_options',
+      'evaluate_trade',
+      /*
+       * Trade IDEAS across the league in scope (lib/chimmy/tradeFinderGrounding.ts): every roster
+       * priced as the player card prices it, partners and packages from the deterministic finder.
+       * Proposes nothing to anyone — it returns prose, like evaluate_trade.
+       */
+      'find_trade_ideas',
+      'evaluate_waiver_move',
+      'get_playoff_outlook',
+      'get_my_matchup',
+      /*
+       * League chat and the waiver wire (2026-09-25). Both SELECT-only and gated on the proven
+       * league: the chat tool reads ONLY the public league channel of `LeagueChatMessage` (never a
+       * DM, Huddle or private row — see __tests__/chimmy/tools/league-chat-tool.test.ts), and the
+       * waiver tool reads the native engine's tables or what an import stored.
+       */
+      'get_league_chat',
+      'get_waiver_status',
+      /*
+       * 🛑 THE TWO PROPOSE TOOLS ARE ON THIS LIST ONLY BECAUSE THEY WRITE NOTHING. Each returns
+       * prose and adds a confirm card to the context; the lineup engine and the trade service are
+       * reached only from /api/chimmy/actions/confirm, behind the user's tap and a signed token.
+       * Pinned in __tests__/chimmy/actions/lineup-action.test.ts and trade-action.test.ts.
+       */
+      'propose_lineup_change',
+      'propose_trade',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })
@@ -265,5 +304,28 @@ describe('find_league_by_name binds scope from a null start', () => {
     expect(out).toMatch(/cannot tell who is signed in/i)
     expect(h.findLeague).not.toHaveBeenCalled()
     expect(ctx.leagueId).toBeNull()
+  })
+})
+
+describe('injury tool scope', () => {
+  it('reads the selected league instead of spending the cross-league scan budget', async () => {
+    h.injuries.mockResolvedValue('Selected roster injuries')
+    await executeChimmyTool('get_my_injuries', {}, CTX)
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: 'l1', sport: null })
+  })
+  it('keeps an explicit account-wide injury request available', async () => {
+    h.injuries.mockResolvedValue('All roster injuries')
+    await executeChimmyTool('get_my_injuries', { scope: 'all', sport: 'nfl' }, CTX)
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: null, sport: 'NFL' })
+  })
+  it('uses account-wide context when no league is selected', async () => {
+    h.injuries.mockResolvedValue('All roster injuries')
+    await executeChimmyTool('get_my_injuries', {}, { userId: 'u1', leagueId: null })
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: null, sport: null })
+  })
+  it('does not broaden the selected scope for an invalid scope or model-supplied league id', async () => {
+    h.injuries.mockResolvedValue('Selected roster injuries')
+    await executeChimmyTool('get_my_injuries', { scope: 'anything', leagueId: 'foreign' }, CTX)
+    expect(h.injuries).toHaveBeenCalledWith({ userId: 'u1', leagueId: 'l1', sport: null })
   })
 })

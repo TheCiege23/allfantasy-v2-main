@@ -111,7 +111,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
     sub: 'Connect Sleeper and ESPN. See what needs you across every league, and exactly where to go and fix it.',
     ctaPrimary: 'Get started free',
     ctaSecondary: 'See how it works',
-    reassure: 'Free forever for players · Read-only · Cancel anytime',
+    reassure: 'Every league free forever · Imports are read-only · Cancel anytime',
     cardTitle: 'Your leagues',
     cardWeek: 'Week 12 · example',
     cardFootBefore: 'Two fixes worth ',
@@ -143,10 +143,13 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
     ],
   },
   pricing: {
-    h2: 'Free to see it all. Upgrade to act on it.',
+    // ⚠ NOT "Upgrade to act on it" and NOT "free for players": creating, importing and
+    // RUNNING leagues is free for players and commissioners alike (the Oct 15 paywall rule),
+    // so the paid line is the edge on top — never the league itself.
+    h2: 'Every league is free. Upgrade for the edge.',
     body: prices
-      ? `Every league, live score and standing is free. Paid plans from ${prices.min}/mo add trade grades, projections and commissioner tools.`
-      : 'Every league, live score and standing is free. Paid plans add trade grades, projections and commissioner tools.',
+      ? `Create, import and run as many leagues as you want — drafts, trades, waivers and live scoring included, free. Paid plans from ${prices.min}/mo add Chimmy, deeper trade and player analysis, and commissioner automation.`
+      : 'Create, import and run as many leagues as you want — drafts, trades, waivers and live scoring included, free. Paid plans add Chimmy, deeper trade and player analysis, and commissioner automation.',
     ctaPrimary: 'Start free',
     ctaSecondary: 'Compare plans',
   },
@@ -168,8 +171,8 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
       {
         q: 'What does it cost?',
         a: prices
-          ? `Free forever for players. Paid plans run ${prices.min}–${prices.max}/mo and can be cancelled anytime.`
-          : 'Free forever for players. Every paid plan can be cancelled anytime.',
+          ? `Creating, importing and running leagues is free forever. Paid plans run ${prices.min}–${prices.max}/mo and can be cancelled anytime.`
+          : 'Creating, importing and running leagues is free forever. Every paid plan can be cancelled anytime.',
       },
     ],
   },
@@ -238,7 +241,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
     sub: 'Conecta Sleeper y ESPN. Mira qué necesita tu atención en cada liga, y exactamente dónde entrar a resolverlo.',
     ctaPrimary: 'Empieza gratis',
     ctaSecondary: 'Mira cómo funciona',
-    reassure: 'Gratis para siempre · Solo lectura · Cancela cuando quieras',
+    reassure: 'Todas las ligas gratis · Importaciones en solo lectura · Cancela cuando quieras',
     cardTitle: 'Tus ligas',
     cardWeek: 'Semana 12 · ejemplo',
     cardFootBefore: 'Dos ajustes que valen ',
@@ -270,10 +273,10 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
     ],
   },
   pricing: {
-    h2: 'Gratis para verlo todo. Mejora tu plan para actuar.',
+    h2: 'Todas las ligas son gratis. Mejora tu plan para tener ventaja.',
     body: prices
-      ? `Todas tus ligas, marcadores en vivo y posiciones son gratis. Los planes de pago desde ${prices.min}/mes agregan calificación de cambios, proyecciones y herramientas de comisionado.`
-      : 'Todas tus ligas, marcadores en vivo y posiciones son gratis. Los planes de pago agregan calificación de cambios, proyecciones y herramientas de comisionado.',
+      ? `Crea, importa y dirige todas las ligas que quieras — drafts, cambios, waivers y marcadores en vivo incluidos, gratis. Los planes de pago desde ${prices.min}/mes agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.`
+      : 'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, waivers y marcadores en vivo incluidos, gratis. Los planes de pago agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.',
     ctaPrimary: 'Empieza gratis',
     ctaSecondary: 'Comparar planes',
   },
@@ -295,8 +298,8 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
       {
         q: '¿Cuánto cuesta?',
         a: prices
-          ? `Gratis para siempre para jugadores. Los planes de pago van de ${prices.min} a ${prices.max} al mes y se cancelan cuando quieras.`
-          : 'Gratis para siempre para jugadores. Cualquier plan de pago se cancela cuando quieras.',
+          ? `Crear, importar y dirigir ligas es gratis para siempre. Los planes de pago van de ${prices.min} a ${prices.max} al mes y se cancelan cuando quieras.`
+          : 'Crear, importar y dirigir ligas es gratis para siempre. Cualquier plan de pago se cancela cuando quieras.',
       },
     ],
   },

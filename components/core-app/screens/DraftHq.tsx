@@ -2,6 +2,8 @@
 
 import '@/components/core-app/af-draft-hq.css'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 
 /**
  * Screen 8 — Draft HQ.
@@ -17,6 +19,9 @@ import type { DraftHqData } from '@/lib/core-app/draftHq'
 
 export type DraftHqProps = {
   data: DraftHqData
+  /** Competitive Edge — loaded by the page only when the viewer's plan includes it. */
+  edge?: DraftEdgeState | null
+  edgeAccess?: CoreDepthAccess | null
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -30,7 +35,7 @@ const STATUS_TONE: Record<string, string> = {
   completed: 'done',
 }
 
-export function DraftHq({ data }: DraftHqProps) {
+export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) {
   return (
     <div className="af-dh">
       {/* ── Board settings ──────────────────────────────────────────── */}
@@ -69,11 +74,21 @@ export function DraftHq({ data }: DraftHqProps) {
             </div>
           </>
         ) : (
-          <Unavailable reason={data.session.reason} />
+          <>
+            <h1 className="af-display af-dh-title">Draft HQ</h1>
+            <Unavailable reason={data.session.reason} />
+          </>
         )}
       </section>
 
       {/* ── Pick inventory ──────────────────────────────────────────── */}
+      {/*
+        Left out when it would only repeat the board's own sentence word for word ("no upcoming
+        draft is scheduled…" printed twice, one card under the other).
+      */}
+      {!data.pickSlots.available &&
+      !data.session.available &&
+      data.pickSlots.reason === data.session.reason ? null : (
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
           <h2 className="af-label">Your picks</h2>
@@ -98,6 +113,7 @@ export function DraftHq({ data }: DraftHqProps) {
           <Unavailable reason={data.pickSlots.reason} />
         )}
       </section>
+      )}
 
       {/* ── What you drafted ────────────────────────────────────────── */}
       <section className="af-frame af-dh-section">
@@ -171,13 +187,22 @@ export function DraftHq({ data }: DraftHqProps) {
             <p className="af-dh-grade-scale">{data.grades.data.scale}</p>
 
             {/*
-              Partial coverage is said out loud. A grade built on two thirds of a draft is
-              still worth showing -- silently presenting it as complete is not.
+              ⚠ `partial` MEANS THE SEASON IS STILL BEING PLAYED (draftReportService: any graded
+              season whose status is not 'complete'). This used to read "Some picks could not be
+              graded" — beside a header saying 96/96 were. Missing picks are their own sentence,
+              from the counts.
             */}
             {data.grades.data.partial ? (
               <p className="af-dh-grade-partial">
-                Some picks could not be graded, so these letters cover only the picks that
-                could be.
+                The {data.grades.data.season} season is still being played, so these grades will
+                move as the points come in.
+              </p>
+            ) : null}
+            {data.grades.data.gradedPicks < data.grades.data.totalPicks ? (
+              <p className="af-dh-grade-partial">
+                {data.grades.data.totalPicks - data.grades.data.gradedPicks} of{' '}
+                {data.grades.data.totalPicks} picks could not be graded, so these letters cover
+                only the ones that could.
               </p>
             ) : null}
 
@@ -189,7 +214,9 @@ export function DraftHq({ data }: DraftHqProps) {
                   </span>
                   <span className="af-dh-grade-who">
                     <span className="af-dh-grade-team">{t.teamName ?? t.name}</span>
-                    <span className="af-dh-grade-sub af-num">{t.picks} picks</span>
+                    <span className="af-dh-grade-sub af-num">
+                      {t.picks} {t.picks === 1 ? 'pick' : 'picks'}
+                    </span>
                   </span>
                   {/*
                     Only shown when it moved. In redraft the two grades are the same by
@@ -208,6 +235,13 @@ export function DraftHq({ data }: DraftHqProps) {
           <Unavailable reason={data.grades.reason} />
         )}
       </section>
+
+      {/*
+        -- Competitive Edge: how the others draft -------------------------
+        After the grades, which say how each draft TURNED OUT; this says what each manager
+        actually TAKES, draft after draft (lib/competitive-edge/draftEdge.ts). Counts, never labels.
+      */}
+      <DraftCompetitiveEdge access={edgeAccess} edge={edge} />
 
       <section className="af-frame af-dh-section af-dh-boardfull">
         <header className="af-dh-section-head">

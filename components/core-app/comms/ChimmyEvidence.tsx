@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 /**
  * WHAT AN ANSWER WAS BUILT FROM, RENDERED WHERE THE ANSWER IS.
@@ -103,6 +103,18 @@ const SOURCE_LABELS: Record<string, string> = {
   get_trade_block: 'Trade block (marked in AllFantasy)',
   get_upcoming_games: 'Upcoming games',
   get_stat_leaders: 'Stat leaders',
+  get_my_starters_playing: 'Which of your starters play today',
+  get_my_injuries: 'Injuries across your leagues',
+  get_player_season_stats: 'Season stats',
+  get_player_game_log: 'Game logs',
+  get_season_stat_leaders: 'Season stat leaders',
+  get_real_standings: 'Real-world standings',
+  optimize_my_lineup: "Your best lineup, scored under your league's rules",
+  compare_start_options: 'Start/sit comparison under your league\'s scoring',
+  evaluate_trade: "Trade grade and lineup impact, run against your league's rosters",
+  evaluate_waiver_move: 'Waiver add/drop, run against your roster',
+  get_playoff_outlook: 'Season simulation (playoff, bye and title odds)',
+  get_my_matchup: "This week's matchup and win probability",
 }
 
 /** Rubric signal slugs. These are a fixed, small set — see confidence-rubric.ts. */
@@ -188,6 +200,7 @@ function freshnessWord(
 
 export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) {
   const [expanded, setExpanded] = useState(false)
+  const detailId = useId()
 
   const {
     confidencePct,
@@ -231,7 +244,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
         {level ? (
           <span className="af-cm-ev-level af-num" data-level={level}>
             {level} confidence
-            {confidencePct != null ? ` · ${confidencePct}%` : ''}
+
           </span>
         ) : null}
 
@@ -265,7 +278,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
             className="af-cm-ev-toggle"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-controls="af-cm-ev-detail"
+            aria-controls={detailId}
           >
             {expanded ? 'Hide' : 'What is this based on?'}
           </button>
@@ -273,7 +286,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
       </div>
 
       {expanded ? (
-        <div className="af-cm-ev-detail" id="af-cm-ev-detail" data-testid="chimmy-evidence-detail">
+        <div className="af-cm-ev-detail" id={detailId} data-testid="chimmy-evidence-detail">
           {rationale ? <p className="af-cm-ev-why">{rationale}</p> : null}
 
           {dataSources.length > 0 ? (

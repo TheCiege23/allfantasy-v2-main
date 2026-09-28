@@ -24,6 +24,7 @@
  * nothing to map. Inventing a lookup for it was explicitly out of scope.
  */
 
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { prisma } from '@/lib/prisma'
 import {
   deriveCanonicalPlayerIdentity,
@@ -504,7 +505,7 @@ export async function backfillCanonicalPlayers(
       position: normalizePosition(best.position) || 'UNK',
       league: sportKey,
       team: best.team,
-      imageUrl: best.imageUrl,
+      imageUrl: toImageUrl(best.imageUrl),
       height: best.height,
       weight: best.weight,
       injuryStatus: classifySourceStatus(best.status).injuryStatus,

@@ -48,6 +48,7 @@ import { isIdpLeague } from '@/lib/idp'
 import type { LeagueSport } from '@prisma/client'
 import type { PoolPlayerRecord } from '@/lib/sport-teams/types'
 import type { RecommendationInput } from './types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 /**
  * Real keeper-lock extraction (Phase 30) from DraftSession.keeperSelections
@@ -370,7 +371,7 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
       where: { id: input.leagueId },
       select: { sport: true, platform: true, isDynasty: true, settings: true, starters: true },
     }),
-    prisma.draftSession.findUnique({ where: { leagueId: input.leagueId } }),
+    prisma.draftSession.findFirst({ where: { leagueId: input.leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER }),
     prisma.roster.findUnique({ where: { id: input.rosterId }, select: { platformUserId: true } }),
   ])
 

@@ -3,11 +3,14 @@
  * Use from API route, DraftWorker, autopick fallback, and tests.
  */
 
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
+import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
+import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { isDevyLeague } from '@/lib/devy'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
 import { isC2CLeague, getC2CPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/merged-devy-c2c'
@@ -61,6 +64,7 @@ import {
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -273,6 +277,49 @@ const POSITION_FULL_TO_ABBREV: Record<string, string> = {
   'right tackle': 'rt',
 }
 
+/** True when the league's lineup starts two quarterbacks — a superflex slot or two QB slots. */
+export async function leagueStartsTwoQuarterbacks(leagueId: string): Promise<boolean> {
+  const payload = await getLeagueDraftTemplatePayload(leagueId).catch(() => null)
+  const slots = payload?.template?.slots ?? []
+  let qbStarters = 0
+  for (const slot of slots) {
+    const name = String(slot.slotName ?? '').trim().toUpperCase()
+    const starters = Math.max(0, Number(slot.starterCount ?? 0))
+    if (starters === 0) continue
+    // Our templates spell it three ways (`SUPERFLEX`, `SUPER_FLEX`, `SF`).
+    if (name === 'SUPERFLEX' || name === 'SUPER_FLEX' || name === 'SF') return true
+    if (name === 'QB') qbStarters += starters
+  }
+  return qbStarters >= 2
+}
+
+/** TheSportsDB lists staff beside players ("Assistant Coach", "Owner", "General Manager"). */
+export function isNonPlayerRosterRole(position: string | null | undefined): boolean {
+  return /coach|owner|president|manager|chairman|ceo|director|scout|trainer|\bhc\b/i.test(String(position ?? ''))
+}
+
+/** Photo sources, best first — the same order the SportsPlayer query ranks them in. */
+const NON_NFL_PHOTO_SOURCE_ORDER = ['thesportsdb', 'api_football', 'cfbd', 'sleeper', 'rolling_insights', 'backfill']
+
+/**
+ * The photo for a name only when exactly ONE person carries it in the best source that has the
+ * name at all. Two people with the name in that source is ambiguous and yields nothing — a lower
+ * source is not consulted, because it cannot say which of the two the pool row is.
+ */
+export function uniqueNamePhoto(bySource: Map<string, string[]> | undefined): string | null {
+  if (!bySource) return null
+  const ordered = [
+    ...NON_NFL_PHOTO_SOURCE_ORDER.filter((src) => bySource.has(src)),
+    ...[...bySource.keys()].filter((src) => !NON_NFL_PHOTO_SOURCE_ORDER.includes(src)),
+  ]
+  for (const src of ordered) {
+    const urls = [...new Set(bySource.get(src) ?? [])]
+    if (urls.length === 0) continue
+    return urls.length === 1 ? urls[0]! : null
+  }
+  return null
+}
+
 function normalizePositionForMapKey(pos: string | null | undefined): string {
   const lower = String(pos ?? '').trim().toLowerCase()
   return POSITION_FULL_TO_ABBREV[lower] ?? lower
@@ -323,16 +370,51 @@ type AveragedAdpRow = {
   adp: number
 }
 
-async function loadLatestAveragedAdpRowsFromDb(
+/**
+ * ADP boards for two-quarterback lineups. A superflex/2QB board and a 1QB board are different
+ * markets: Josh Allen is ~18.7 on Sleeper's 1QB board and ~1.2 on its 2QB board, and averaging the
+ * two put every QB ~10 picks early in a 1QB league (and late in a superflex one).
+ */
+const QB_HEAVY_ADP_SCORINGS = ['2qb', 'superflex']
+
+export async function loadLatestAveragedAdpRowsFromDb(
   sport: LeagueSport,
   format: 'redraft' | 'dynasty',
+  twoQuarterbacks = false,
+  context?: { season: number; scoring: string | null },
 ): Promise<AveragedAdpRow[]> {
+  if (twoQuarterbacks) {
+    const qbHeavy = await loadLatestAveragedAdpRowsForScorings(sport, format, { in: QB_HEAVY_ADP_SCORINGS }, context?.season)
+    // No 2QB board for this format is better answered by the 1QB board than by nothing.
+    if (qbHeavy.length > 0) return qbHeavy
+  }
+  const token = context?.scoring?.trim().toLowerCase().replace(/[-_\s]/g, '')
+  const aliases = token === 'ppr' || token === 'fbppr' || token === 'ncaafppr' ? ['ppr']
+    : ['halfppr', 'fbhalfppr', 'ncaafhalfppr'].includes(token ?? '') ? ['halfPPR', 'half-ppr', 'half_ppr', 'halfppr']
+    : ['standard', 'nonppr', 'fbstandard', 'ncaafstandard'].includes(token ?? '') ? ['standard', 'non-ppr', 'nonppr']
+    : context?.scoring ? [context.scoring] : null
+  return loadLatestAveragedAdpRowsForScorings(sport, format, aliases ? { in: aliases } : { notIn: QB_HEAVY_ADP_SCORINGS }, context?.season)
+}
+
+async function loadLatestAveragedAdpRowsForScorings(
+  sport: LeagueSport,
+  format: 'redraft' | 'dynasty',
+  scoring: { in: string[] } | { notIn: string[] },
+  season?: number,
+): Promise<AveragedAdpRow[]> {
+  const sourceExclusions = sport === 'NFL' && season != null && !('in' in scoring && scoring.in.some(value => QB_HEAVY_ADP_SCORINGS.includes(value)))
+    ? [...ADP_IMPORT_SOURCES_EXCLUDED, 'fantrax', 'sleeper', 'espn', 'mfl', 'nffc']
+    : ADP_IMPORT_SOURCES_EXCLUDED
+  const observedSince = season != null ? new Date(Date.now() - 7 * 86400000) : null
   const findLatest = () =>
     prisma.adpDataRecord.findFirst({
       where: {
         sport,
         format,
-        source: { notIn: ADP_IMPORT_SOURCES_EXCLUDED },
+        ...(season != null ? { season } : {}),
+        ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
+        scoring,
+        source: { notIn: sourceExclusions },
       },
       orderBy: [{ season: 'desc' }, { week: 'desc' }, { createdAt: 'desc' }],
       select: { season: true, week: true },
@@ -360,9 +442,11 @@ async function loadLatestAveragedAdpRowsFromDb(
     where: {
       sport,
       format,
+      scoring,
       season: latest.season,
       week: latest.week,
-      source: { notIn: ADP_IMPORT_SOURCES_EXCLUDED },
+      ...(observedSince ? { createdAt: { gte: observedSince } } : {}),
+      source: { notIn: sourceExclusions },
     },
     select: {
       playerName: true,
@@ -378,7 +462,7 @@ async function loadLatestAveragedAdpRowsFromDb(
   for (const row of rows) {
     const name = String(row.playerName ?? '').trim()
     const position = String(row.position ?? '').trim().toUpperCase()
-    if (!name || !position || !Number.isFinite(Number(row.adp))) continue
+    if (!name || !position || typeof row.adp !== 'number' || !Number.isFinite(row.adp) || row.adp <= 0) continue
     const team = row.team ? String(row.team).trim().toUpperCase() : null
     const key = adpLookupKey(name, position, team)
     if (!perPlayerSource.has(key)) {
@@ -726,6 +810,45 @@ function resolveConflictingExternalIds(
   return rows
 }
 
+const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal'])
+
+export function isFollowUpDraftMode(draftModeLabel: string | null | undefined): boolean {
+  return FOLLOW_UP_DRAFT_MODES.has(String(draftModeLabel ?? '').toLowerCase())
+}
+
+/**
+ * What a draft's own mode takes out of the pool.
+ *
+ * - A league's SECOND draft (rookie, supplemental, dispersal) picks from players nobody holds.
+ *   Rosters carry over into it — a rookie draft ADDS to standing rosters — so without this the
+ *   pool offered every starter already on a team.
+ * - "Rookies only" / "Veterans only" were enforced at pick time but never applied to the board,
+ *   so a rookie draft listed every veteran and refused them one by one. When no entry carries a
+ *   rookie flag at all, "rookies only" keeps the full pool rather than an empty board.
+ */
+export function applyDraftModePoolFilters(
+  entries: NormalizedDraftEntry[],
+  session: { draftModeLabel?: string | null; playerPool?: string | null } | null | undefined,
+  rostered: ReadonlyArray<{ playerId: string | null; playerName: string | null }>,
+): NormalizedDraftEntry[] {
+  let out = entries
+  if (isFollowUpDraftMode(session?.draftModeLabel) && rostered.length > 0) {
+    out = filterExcludedDraftEntries(
+      out,
+      new Set(rostered.map((r) => normalizeDraftPoolNameForDedupe(r.playerName ?? '')).filter(Boolean)),
+      new Set(rostered.map((r) => String(r.playerId ?? '').trim()).filter(Boolean)),
+    )
+  }
+  // The board matches what pick validation (`validateSpecialtyDraftPools`) already enforces.
+  const pool = String(session?.playerPool ?? '').toLowerCase()
+  if (pool === 'rookies_only' && out.some((e) => e.isRookie === true)) {
+    out = out.filter((e) => e.isRookie === true)
+  } else if (pool === 'veterans_only') {
+    out = out.filter((e) => e.isRookie !== true)
+  }
+  return out
+}
+
 function filterExcludedDraftEntries(
   entries: NormalizedDraftEntry[],
   excludeDraftedNames?: ReadonlySet<string>,
@@ -814,10 +937,19 @@ export async function getResolvedDraftPoolForLeague(
         leagueSettings: { select: { draftType: true } },
       },
     }),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       /* `teamCount` is here for the AI ADP context hash below - see the block comment there. */
-      select: { devyConfig: true, c2cConfig: true, keeperSelections: true, draftType: true, teamCount: true },
+      select: {
+        devyConfig: true,
+        c2cConfig: true,
+        keeperSelections: true,
+        draftType: true,
+        teamCount: true,
+        draftModeLabel: true,
+        playerPool: true,
+      },
     }),
   ])
   perfLeagueDraft()
@@ -847,7 +979,8 @@ export async function getResolvedDraftPoolForLeague(
       ? 'dynasty'
       : 'redraft'
   const perfAdpRows = perfStart('4. loadLatestAveragedAdpRowsFromDb')
-  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat).catch(
+  const twoQuarterbacks = sport === 'NFL' ? await leagueStartsTwoQuarterbacks(leagueId) : false
+  const averagedAdpRows = await loadLatestAveragedAdpRowsFromDb(sport, adpFormat, twoQuarterbacks, league ? { season: league.season, scoring: league.scoring } : undefined).catch(
     () => [] as AveragedAdpRow[],
   )
   perfAdpRows()
@@ -1417,6 +1550,24 @@ export async function getResolvedDraftPoolForLeague(
   const sportsPlayerSleeperIdByLooseTeamKey = new Map<string, string>()
   const sportsPlayerImageByStrictTeamKey = new Map<string, string>()
   const sportsPlayerSleeperIdByStrictTeamKey = new Map<string, string>()
+  /**
+   * Non-NFL photos by NAME, per source — used only when the name is unambiguous on both sides.
+   *
+   * Outside NFL the pool rows come from Rolling Insights ("PG", "D", "Memphis Grizzlies") and the
+   * photos from TheSportsDB / API-Football / CFBD ("Point Guard", "Defenceman", and a team that
+   * is often a different one — measured on the test DB 2026-09-24, both sources disagree on team
+   * and position for the same person). Every key above carries a position, so those photos never
+   * attached: 601 NBA, 1,127 NHL, 1,106 MLB, ~1,400 soccer and ~5,100 college football photos sat
+   * unused and the board showed initials (or, before the headshot fix, a stranger's face).
+   */
+  const nonNflImagesByName = new Map<string, Map<string, string[]>>()
+  const poolNameCounts = new Map<string, number>()
+  if (sport !== 'NFL') {
+    for (const r of rawListFiltered as RawRow[]) {
+      const nk = normalizeDraftPoolNameForDedupe(String(r.name ?? r.playerName ?? r.full_name ?? ''))
+      if (nk) poolNameCounts.set(nk, (poolNameCounts.get(nk) ?? 0) + 1)
+    }
+  }
   if (rawListFiltered.length > 0) {
     try {
       /**
@@ -1481,6 +1632,13 @@ export async function getResolvedDraftPoolForLeague(
         // Filter: must classify as a real headshot URL (https://, not data: URI,
         // not /teamLogos/ path, not a naked filename).
         if (classifyAvatarSource(row.imageUrl) !== 'headshot') continue
+        if (sport !== 'NFL' && !isNonPlayerRosterRole(row.position)) {
+          const bySource = nonNflImagesByName.get(nk) ?? new Map<string, string[]>()
+          const urls = bySource.get(row.source) ?? []
+          urls.push(row.imageUrl)
+          bySource.set(row.source, urls)
+          nonNflImagesByName.set(nk, bySource)
+        }
         if (tk && strictTeamKey && !sportsPlayerImageByStrictTeamKey.has(strictTeamKey)) {
           sportsPlayerImageByStrictTeamKey.set(strictTeamKey, row.imageUrl)
         }
@@ -1876,7 +2034,14 @@ export async function getResolvedDraftPoolForLeague(
       const teamMatch = lookupTeam ? sportsPlayerImageByLooseTeamKey.get(looseTeamKey) : null
       const namePosMatch = sportsPlayerImageByNameKey.get(`${lookupName}|${normalizeKeyPart(position)}`) ?? null
       const nameOnlyMatch = !lookupTeam ? sportsPlayerImageByNameKey.get(`${lookupName}|`) : null
-      backfilledHeadshot = teamMatch ?? namePosMatch ?? nameOnlyMatch ?? null
+      backfilledHeadshot =
+        teamMatch ??
+        namePosMatch ??
+        nameOnlyMatch ??
+        (sport !== 'NFL' && poolNameCounts.get(lookupName) === 1
+          ? uniqueNamePhoto(nonNflImagesByName.get(lookupName))
+          : null) ??
+        null
     }
 
     /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
@@ -2030,8 +2195,8 @@ export async function getResolvedDraftPoolForLeague(
           imageUrl:
             backfilledHeadshot ??
             sprHeadshotUrl ??
-            (row as RawRow).imageUrl ??
-            (poolMatch as { image_url?: string | null }).image_url ??
+            toImageUrl((row as RawRow).imageUrl) ??
+            toImageUrl((poolMatch as { image_url?: string | null }).image_url) ??
             null,
           sourcePlayerId,
           sourceSleeperId,
@@ -2050,7 +2215,7 @@ export async function getResolvedDraftPoolForLeague(
           injuryStatus: normalizedInjuryStatus,
           status: dbInjuryHit?.gameStatus ?? row.status ?? null,
           adp: resolvedAdp,
-          imageUrl: backfilledHeadshot ?? sprHeadshotUrl ?? (row as RawRow).imageUrl ?? null,
+          imageUrl: backfilledHeadshot ?? sprHeadshotUrl ?? toImageUrl((row as RawRow).imageUrl) ?? null,
           sourcePlayerId,
           sourceSleeperId,
         }
@@ -2196,11 +2361,32 @@ export async function getResolvedDraftPoolForLeague(
 
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[])
   let entries = normalizePlayerList(dedupedEnrichedList, sport)
+  // Stored crests over the static registry's guesses (see draftPoolTeamLogos.ts).
+  entries = applyStoredTeamLogos(entries, await loadDraftPoolTeamLogoResolver(sport))
   entries = filterExcludedDraftEntries(
     entries,
     options.excludeDraftedNames,
     options.excludeDraftedPlayerIds,
   )
+
+  if (isFollowUpDraftMode(draftSession?.draftModeLabel)) {
+    // The league's CURRENT rosters only: last season's rows are never marked dropped, so reading
+    // every season would hide a player a team has since released.
+    const latestSeason = await prisma.redraftSeason
+      .findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+      .catch(() => null)
+    const rostered = latestSeason
+      ? await prisma.redraftRosterPlayer
+          .findMany({
+            where: { droppedAt: null, roster: { leagueId, seasonId: latestSeason.id } },
+            select: { playerId: true, playerName: true },
+          })
+          .catch(() => [] as Array<{ playerId: string; playerName: string }>)
+      : []
+    entries = applyDraftModePoolFilters(entries, draftSession, rostered)
+  } else {
+    entries = applyDraftModePoolFilters(entries, draftSession, [])
+  }
 
   // Phase 2: filter out teamless (free-agent/released) players from the live pool.
   // DEF/DST units are exempt â they legitimately may not carry a team abbreviation.

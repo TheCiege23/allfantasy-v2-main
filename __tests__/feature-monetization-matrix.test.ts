@@ -64,7 +64,8 @@ describe("Feature monetization matrix", () => {
     }
     for (const featureId of WAR_ROOM_FEATURES) {
       expect(getRequiredPlanForFeature(featureId)).toBe("war_room")
-      expect(buildFeatureUpgradePath(featureId)).toContain("/war-room")
+      // AF Legacy is bought on /upgrade; /war-room is its product page and cannot take a payment.
+      expect(buildFeatureUpgradePath(featureId)).toContain("/upgrade?plan=war_room")
     }
   })
 

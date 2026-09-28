@@ -18,7 +18,6 @@ interface BracketMessageRow {
     id: string
     username?: string | null
     displayName?: string | null
-    email?: string | null
     avatarUrl?: string | null
     profile?: { avatarPreset?: string | null } | null
   }
@@ -65,7 +64,7 @@ export function bracketMessagesToPlatform(
       threadId,
       parentMessageId: m.replyToId ?? null,
       senderUserId: m.user?.id ?? null,
-      senderName: m.user?.displayName || m.user?.email || "User",
+      senderName: m.user?.displayName || m.user?.username || "Manager",
       senderUsername: m.user?.username ?? null,
       senderAvatarUrl: m.user?.avatarUrl ?? null,
       senderAvatarPreset: m.user?.profile?.avatarPreset ?? null,

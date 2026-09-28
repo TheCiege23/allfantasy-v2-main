@@ -17,6 +17,7 @@ import {
   isKeeperEligibleFromCarryover,
 } from '@/lib/live-draft-engine/keeper/KeeperCarryover'
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,8 +37,9 @@ export async function GET(
 
   const snapshot = await buildSessionSnapshot(leagueId)
   if (!snapshot) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { status: true },
   })
 
@@ -101,8 +103,9 @@ export async function POST(
     return NextResponse.json({ error: 'Only commissioner can apply override' }, { status: 403 })
   }
 
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
   })
   if (!draftSession) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
   if (draftSession.status !== 'pre_draft') {

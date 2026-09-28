@@ -1,5 +1,7 @@
 'use client'
 
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import type { PlanRefusal } from '@/lib/monetization/planRefusal'
 import { Loader2, Scale, X } from 'lucide-react'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import type { StartSitAiResult } from '@/lib/ai-matchup-engine/types'
@@ -10,6 +12,7 @@ export function MatchupStartSitModal({
   loading,
   result,
   error,
+  refusal = null,
   left,
   right,
 }: {
@@ -18,6 +21,8 @@ export function MatchupStartSitModal({
   loading: boolean
   result: StartSitAiResult | null
   error: string | null
+  /** A paywall answer, shown with its upgrade button instead of `error`. */
+  refusal?: PlanRefusal | null
   left: MatchupPlayerSlot
   right: MatchupPlayerSlot
 }) {
@@ -55,7 +60,11 @@ export function MatchupStartSitModal({
           </div>
         ) : null}
 
-        {error ? <p className="mt-3 text-[13px] text-red-200/90">{error}</p> : null}
+        {refusal ? (
+          <PlanRefusalNotice refusal={refusal} className="mt-3" />
+        ) : error ? (
+          <p className="mt-3 text-[13px] text-red-200/90">{error}</p>
+        ) : null}
 
         {result && !loading ? (
           <div className="mt-3 space-y-2 text-[12px] leading-snug text-white/80">

@@ -6,6 +6,7 @@ import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
+import { getTokenPurchasableRule, type TokenBuyer } from '@/lib/tokens/tokenPurchasable'
 import '@/components/core-app/af-tokens.css'
 
 /**
@@ -29,11 +30,9 @@ import '@/components/core-app/af-tokens.css'
 
 type SpendRule = {
   code: string
-  featureLabel: string
-  category: string
-  tier: 'low' | 'mid' | 'high'
+  label: string
+  who: TokenBuyer
   tokenCost: number
-  requiredPlan: string | null
 }
 
 type SpendEntry = {
@@ -47,18 +46,13 @@ export type TokenCentreV4Props = {
   packs: Array<{ sku: string; amountUsd: number; tokenAmount: number | null }>
 }
 
-/** The bands from lib/tokens/pricing-matrix.ts, in ascending cost. */
-const BAND_ORDER: Array<{ max: number; key: string; label: string }> = [
-  { max: 1, key: 'lookup', label: 'Lookup' },
-  { max: 10, key: 'subject', label: 'One subject' },
-  { max: 30, key: 'team', label: 'One team' },
-  { max: 75, key: 'league', label: 'Whole league' },
-  { max: Number.POSITIVE_INFINITY, key: 'agentic', label: 'Multi-step' },
-]
-
-function bandFor(cost: number) {
-  return BAND_ORDER.find((b) => cost <= b.max) ?? BAND_ORDER[BAND_ORDER.length - 1]
+/** Who can buy it, when that is narrower than "any member". */
+const WHO_KEY: Partial<Record<TokenBuyer, string>> = {
+  commissioner: 'tokens.v4.whoCommissioner',
+  pool_manager: 'tokens.v4.whoPoolManager',
 }
+
+const CHIMMY_RULE = 'ai_chimmy_chat_message'
 
 export function TokenCentreV4({ packs }: TokenCentreV4Props) {
   const { t } = useLanguage()
@@ -79,22 +73,34 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
       ])
       if (cancelled) return
       const raw = (rulesRes?.rules ?? rulesRes?.data ?? []) as Array<Record<string, unknown>>
-      setRules(
-        raw.map((r) => ({
-          code: String(r.code ?? ''),
-          featureLabel: String(r.featureLabel ?? r.code ?? ''),
-          category: String(r.category ?? ''),
-          tier: (String(r.tier ?? 'low') as SpendRule['tier']),
-          tokenCost: Number(r.tokenCost ?? 0),
-          requiredPlan: r.requiredPlan ? String(r.requiredPlan) : null,
-        }))
-      )
+      /*
+       * 🛑 ONLY WHAT A SCREEN CAN ACTUALLY SELL. The API returns every priced rule — 64 of them —
+       * and this page used to list them all under "What things cost", so it advertised 51
+       * actions no screen could buy (lib/tokens/tokenPurchasable.ts). The cost still comes from
+       * the live rule; the list and the plain-words label come from the allowlist.
+       */
+      const buyable: SpendRule[] = []
+      for (const r of raw) {
+        const known = getTokenPurchasableRule(String(r.code ?? ''))
+        const tokenCost = Number(r.tokenCost ?? 0)
+        if (!known || !(tokenCost > 0)) continue
+        buyable.push({ code: known.code, label: known.label, who: known.who, tokenCost })
+      }
+      buyable.sort((a, b) => a.tokenCost - b.tokenCost || a.label.localeCompare(b.label))
+      setRules(buyable)
       const entries = (histRes?.entries ?? histRes?.data ?? []) as Array<Record<string, unknown>>
+      /*
+       * ⚠ THE HISTORY API'S FIELDS ARE `spendFeatureLabel`, `description` AND `tokenDelta`
+       * (TokenSpendService `toLedgerView`). This read `label` / `reason` / `delta`, which it
+       * never sends, so every row rendered a blank name and "0".
+       */
       setHistory(
         entries.map((e, i) => ({
           id: String(e.id ?? i),
-          label: String(e.label ?? e.reason ?? e.code ?? ''),
-          delta: Number(e.delta ?? 0),
+          label: String(
+            e.spendFeatureLabel ?? e.description ?? e.tokenPackageSku ?? e.entryType ?? e.label ?? '',
+          ),
+          delta: Number(e.tokenDelta ?? e.delta ?? 0),
           createdAt: e.createdAt ? String(e.createdAt) : null,
         }))
       )
@@ -104,24 +110,8 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
     }
   }, [])
 
-  /*
-   * Grouped by band rather than listed flat. 64 actions in one list is a wall;
-   * grouped by what they reason over, the price becomes self-explaining — which
-   * is the whole argument for banding by scope instead of by a "tier" label.
-   */
-  const grouped = useMemo(() => {
-    const map = new Map<string, { label: string; cost: number; rules: SpendRule[] }>()
-    for (const r of rules) {
-      const band = bandFor(r.tokenCost)
-      const entry = map.get(band.key) ?? { label: band.label, cost: r.tokenCost, rules: [] }
-      entry.rules.push(r)
-      entry.cost = Math.max(entry.cost, r.tokenCost)
-      map.set(band.key, entry)
-    }
-    return BAND_ORDER.map((b) => ({ key: b.key, ...map.get(b.key) })).filter(
-      (g): g is { key: string; label: string; cost: number; rules: SpendRule[] } => g.rules != null
-    )
-  }, [rules])
+  /** What one Chimmy question costs, so a pack can say what it buys in plain terms. */
+  const chimmyCost = useMemo(() => rules.find((r) => r.code === CHIMMY_RULE)?.tokenCost ?? null, [rules])
 
   async function buy(sku: string) {
     setError(null)
@@ -174,32 +164,35 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
           <p className="af-tk-sub af-tk-sub--tight">{t('tokens.v4.costsSubtitle')}</p>
         </div>
 
-        {grouped.length === 0 ? (
+        {rules.length === 0 ? (
           <p className="af-tk-empty">{t('tokens.v4.loading')}…</p>
         ) : (
-          grouped.map((g) => (
-            <div key={g.key} className="af-tk-band">
-              <div className="af-tk-band-head">
-                <span className="af-tk-band-cost af-num">{g.cost}</span>
-                <span className="af-tk-band-name">{g.label}</span>
-                <span className="af-tk-band-count">{g.rules.length}</span>
-              </div>
-              <ul className="af-tk-rules">
-                {g.rules.map((r) => (
-                  <li key={r.code} className="af-tk-rule">
-                    <span className="af-tk-rule-name">{r.featureLabel}</span>
-                    {/*
-                      One price column, not two. There is no subscriber discount
-                      any more, so a struck-through "list price" beside an
-                      identical "your price" would be invented drama.
-                    */}
-                    <span className="af-tk-rule-cost af-num">{r.tokenCost}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
+          <ul className="af-tk-rules" data-testid="tokens-buyable-list">
+            {rules.map((r) => (
+              <li key={r.code} className="af-tk-rule" data-testid={`tokens-rule-${r.code}`}>
+                <span className="af-tk-rule-name">
+                  {r.label}
+                  {WHO_KEY[r.who] ? <span className="af-tk-rule-who"> · {t(WHO_KEY[r.who]!)}</span> : null}
+                </span>
+                {/*
+                  One price column, not two. There is no subscriber discount
+                  any more, so a struck-through "list price" beside an
+                  identical "your price" would be invented drama.
+                */}
+                <span className="af-tk-rule-cost af-num">{r.tokenCost}</span>
+              </li>
+            ))}
+          </ul>
         )}
+      </section>
+
+      {/* ── What tokens don't buy ────────────────────────────── */}
+      <section className="af-tk-free" data-testid="tokens-not-included">
+        <h2 className="af-tk-h2">{t('tokens.v4.notTitle')}</h2>
+        <ul className="af-tk-not">
+          <li>{t('tokens.v4.notPlan')}</li>
+          <li>{t('tokens.v4.notUnlisted')}</li>
+        </ul>
       </section>
 
       {/* ── What's free ──────────────────────────────────────── */}
@@ -219,6 +212,11 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
               </span>
               <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
               <span className="af-tk-pack-price af-num">${p.amountUsd.toFixed(2)}</span>
+              {p.tokenAmount != null && chimmyCost ? (
+                <span className="af-tk-pack-about" data-testid={`tokens-pack-about-${p.sku}`}>
+                  {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString())}
+                </span>
+              ) : null}
               {/*
                 The token suite drives every purchase through
                 `tokens-buy-cta-{sku}` and reads the balance from

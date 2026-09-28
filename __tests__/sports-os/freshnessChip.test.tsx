@@ -15,7 +15,7 @@ const meta = (over: Partial<FreshnessMeta> = {}): FreshnessMeta => ({
   ...over,
 })
 
-/** Exactly what `app/core/[[...screen]]/page.tsx` computes and passes down. */
+/** Exactly what `app/core/(shell)/[[...screen]]/page.tsx` computes and passes down. */
 const serverProps = (m: FreshnessMeta, nowMs = SERVER_NOW) => ({
   meta: m,
   initialLabel: freshnessLabel(m, nowMs),

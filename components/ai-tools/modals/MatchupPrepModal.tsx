@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowRight, ChevronRight, Loader2, MessageSquare, Swords, Trophy } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type {
@@ -92,6 +93,7 @@ export function MatchupPrepModal({
   const [viewTab, setViewTab] = useState<MatchupPrepViewTabId>('overview')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [data, setData] = useState<MatchupPrepDashboardResult | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<
     Array<{ externalId: string; teamName: string; ownerName: string; isYou?: boolean }>
@@ -135,10 +137,12 @@ export function MatchupPrepModal({
     if (!leagueId.trim()) {
       setData(null)
       setError(null)
+      setRefusal(null)
       return
     }
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const r = await fetch('/api/ai-tools/matchup-prep/dashboard', {
         method: 'POST',
@@ -158,6 +162,7 @@ export function MatchupPrepModal({
       const json = (await r.json()) as MatchupPrepDashboardResult | { ok: false; error?: string }
       if (!r.ok || !json.ok) {
         setData(null)
+        setRefusal(readPlanRefusal(r.status, json, { returnTo: currentPathForReturn() }))
         setError((json as { error?: string }).error || 'Matchup prep failed.')
         return
       }
@@ -229,6 +234,7 @@ export function MatchupPrepModal({
       wide
       loading={loading && !data}
       error={error}
+      refusal={refusal}
       headerBadge={headerBadge}
       onRefresh={() => void load()}
       refreshing={loading}

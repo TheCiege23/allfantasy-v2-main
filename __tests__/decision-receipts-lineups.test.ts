@@ -129,6 +129,18 @@ describe('getLineupReceipts', () => {
     expect(out?.lineups[0]).toMatchObject({ pointsLeft: 0, perfect: true, benched: null, started: null })
   })
 
+  it('preserves both independent LB and TE changes rather than pairing the highest bench score with the lowest starter', async () => {
+    db({ settings: { roster_positions: ['LB', 'TE', 'BN', 'BN'] }, players: {
+      lb1: { name: 'Other LB', position: 'LB' }, lb2: { name: 'Jack Gibbens', position: 'LB' },
+      te1: { name: 'Tucker Kraft', position: 'TE' }, te2: { name: 'Sam LaPorta', position: 'TE' },
+    }, scores: [row(5, 'lb1', 12, true), row(5, 'lb2', 26, false), row(5, 'te1', 2.5, true), row(5, 'te2', 9, false)] })
+    const out = await getLineupReceipts({ userId: USER, leagues: [ICE], currentWeek: 6 })
+    expect(out?.lineups[0]).toMatchObject({ pointsLeft: 20.5, lineupChanges: {
+      in: [{ name: 'Jack Gibbens', points: 26 }, { name: 'Sam LaPorta', points: 9 }],
+      out: [{ name: 'Tucker Kraft', points: 2.5 }, { name: 'Other LB', points: 12 }],
+    } })
+  })
+
   it(`🛑 only completed weeks — the ${LINEUP_RECEIPT_WEEKS} before the current one — and weeks with no scores are counted, not zero`, async () => {
     db({ scores: WEEK5 })
     const out = await getLineupReceipts({ userId: USER, leagues: [ICE], currentWeek: 6 })

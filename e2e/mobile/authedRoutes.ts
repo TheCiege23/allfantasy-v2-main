@@ -54,7 +54,7 @@ export type AuthedRoute = {
    * is scoped; only the selector says what proves the right screen rendered.
    *
    * 🛑 WITHOUT IT, `/core/my-team` CERTIFIES THE WRONG SCREEN AND STILL PASSES.
-   * `app/core/[[...screen]]/page.tsx:2037` only loads `getMyTeamData` when a
+   * `app/core/(shell)/[[...screen]]/page.tsx:2037` only loads `getMyTeamData` when a
    * league is in context; with none it renders `getMyTeamPulse`, the cross-league
    * "pick a league" board. Both live at the same pathname, so the premise guard
    * cannot tell them apart — the lane would report a green My Team that had never

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
+import { groupNotificationRows } from '@/lib/core-app/notificationGroups'
 import type {
   NotificationFilter,
   NotificationRow,
@@ -98,7 +99,7 @@ function Row({
         </span>
         {/* The specific reason. Never "you have an update". */}
         <span className="af-nt-detail">{row.detail}</span>
-        {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt)}</span> : null}
+        {!urgent ? <span className="af-nt-time af-num">{timeAgo(row.createdAt)}{row.relatedIds && row.relatedIds.length > 1 ? ` · ${row.relatedIds.length} matching notices` : ''}</span> : null}
       </span>
 
       {row.action ? (
@@ -155,6 +156,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
   const [markedAll, setMarkedAll] = useState(false)
+  const [readError, setReadError] = useState<string | null>(null)
 
   const match = useCallback(
     (r: NotificationRow) => filter === 'all' || r.kind === filter,
@@ -164,9 +166,9 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
   const actToday = useMemo(() => data.actToday.filter(match), [data.actToday, match])
   const rest = useMemo(
     () =>
-      data.rest
+      groupNotificationRows(data.rest
         .filter(match)
-        .map((r) => (readIds.has(r.id) ? { ...r, read: true } : r)),
+        .map((r) => (readIds.has(r.id) ? { ...r, read: true } : r))),
     [data.rest, match, readIds],
   )
 
@@ -181,14 +183,22 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
    */
   const markRead = useCallback(async (ids: string[] | 'all') => {
     const payload =
-      ids === 'all' ? 'all' : ids.filter((id) => !id.startsWith('issue:'))
+      ids === 'all' ? 'all' : [...new Set(ids.flatMap((id) =>
+        groupNotificationRows(data.rest).find((r) => r.id === id)?.relatedIds ?? [id],
+      ))].filter((id) => !id.startsWith('issue:'))
     if (payload !== 'all' && payload.length === 0) return
     setMarking(true)
-    await fetch('/api/user/notifications', {
+    setReadError(null)
+    const response = await fetch('/api/user/notifications', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: payload }),
+      body: JSON.stringify({ ids: payload, ...(data.leagueId ? { leagueId: data.leagueId } : {}) }),
     }).catch(() => null)
+    if (!response?.ok) {
+      setReadError('Could not mark notifications read. Please try again.')
+      setMarking(false)
+      return
+    }
     if (payload === 'all') setMarkedAll(true)
     setReadIds((prev) => {
       const next = new Set(prev)
@@ -197,7 +207,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
       return next
     })
     setMarking(false)
-  }, [data.rest])
+  }, [data.rest, data.leagueId])
 
   /*
    * 🛑 THE TRUE COUNT, FROM THE LOADER - DO NOT RECOMPUTE IT FROM `rest`.
@@ -246,6 +256,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           {marking ? 'Marking…' : 'Mark all read'}
         </button>
       </header>
+      {readError ? <p role="alert">{readError}</p> : null}
 
       {/*
         🛑 THE ASK LIVES HERE BECAUSE MOBILE NEVER REACHED THE OTHER ONE.

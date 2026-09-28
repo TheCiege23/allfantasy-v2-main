@@ -27,6 +27,7 @@ import {
   type DraftExecutionMode,
   type RookiePickOrderMethod,
 } from '@/lib/draft-types/draftTypeRegistry'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,8 +81,9 @@ export async function GET(
       where: { leagueId },
       select: { draftType: true, cpuAutoPick: true, aiAutoPick: true },
     }),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { thirdRoundReversal: true, status: true, draftType: true },
     }),
     league.isDynasty
@@ -214,13 +216,14 @@ export async function PATCH(
     // Mirror a draftType change onto an existing pre-draft DraftSession so
     // the engine picks it up without requiring a session reset.
     if ('draftType' in draftUpdates) {
-      const existing = await prisma.draftSession.findUnique({
+      const existing = await prisma.draftSession.findFirst({
         where: { leagueId },
-        select: { status: true },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { id: true, status: true },
       })
       if (existing && existing.status === 'pre_draft') {
         await prisma.draftSession.update({
-          where: { leagueId },
+          where: { id: existing.id },
           data: { draftType: draftUpdates.draftType as string },
         })
       }
@@ -244,9 +247,10 @@ export async function PATCH(
   }
 
   if (Object.keys(sessionUpdates).length > 0) {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
-      select: { status: true },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, status: true },
     })
     if (!session) {
       return NextResponse.json(
@@ -260,7 +264,7 @@ export async function PATCH(
     // slot assignments. Commissioner is on the hook for explaining a
     // mid-draft flip to the league.
     await prisma.draftSession.update({
-      where: { leagueId },
+      where: { id: session.id },
       data: { ...sessionUpdates, version: { increment: 1 }, updatedAt: new Date() },
     })
   }

@@ -142,9 +142,12 @@ export function buildTradeDecisionSnapshot(input: {
         reason: input.serverDecisionResult.reason,
         participants: input.serverDecisionResult.participants.map((participant) => {
           const outcome = outcomeByRosterId.get(participant.rosterId) ?? null
+          // THE grade (lib/decision-os/trade/tradeGrade.ts) — the letter every trade screen shows.
           const marketLine = participant.grade && participant.valueGiven != null && participant.valueReceived != null
-            ? `Market grade ${participant.grade}: receives ${Math.round(participant.valueReceived)} in value and sends ${Math.round(participant.valueGiven)}.`
-            : `Market grade withheld at ${participant.coveragePct}% asset coverage.`
+            ? `League-value grade ${participant.grade}${participant.gradeLabel ? ` (${participant.gradeLabel})` : ''}: receives ${Math.round(participant.valueReceived)} and sends ${Math.round(participant.valueGiven)} on this league's values.`
+            : participant.gradeWithheld
+              ? `League-value grade withheld: ${participant.gradeWithheld.replace(/\.$/, '')}.`
+              : `League-value grade withheld at ${participant.coveragePct}% asset coverage.`
           const outcomeLine = outcome
             ? `${verified?.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability changes from ${outcome.beforePct.toFixed(1)}% to ${outcome.afterPct.toFixed(1)}% (${outcome.deltaPct >= 0 ? '+' : ''}${outcome.deltaPct.toFixed(1)}%).`
             : 'A verified paired outcome simulation was not available for this team.'
@@ -208,10 +211,25 @@ export function buildTradeDecisionSnapshot(input: {
 
 export async function writeTradeDecisionSnapshot(
   tx: Prisma.TransactionClient,
-  input: { tradeId: string; leagueId: string; proposedByUserId: string; snapshot: TradeDecisionSnapshotPayload },
+  input: {
+    tradeId: string
+    leagueId: string
+    proposedByUserId: string
+    snapshot: TradeDecisionSnapshotPayload
+    /**
+     * The one trade engine's receipt for this proposal (`receiptColumns` in
+     * `lib/decision-os/trade/receiptStore.ts`) — so a proposal's receipt lives in this row, not in a
+     * second table. Pass it ONLY when `receiptColumnsReady()` said the columns exist: writing a column
+     * the database lacks aborts this transaction, and with it the trade.
+     */
+    receipt?: { surface: string; inputHash: string; evaluationReceipt: Prisma.InputJsonValue } | null
+  },
 ) {
   return tx.tradeDecisionSnapshot.create({
+    // Only the id comes back, so the insert never RETURNs a column an unmigrated database lacks.
+    select: { id: true },
     data: {
+      ...(input.receipt ?? {}),
       tradeId: input.tradeId,
       leagueId: input.leagueId,
       proposedByUserId: input.proposedByUserId,

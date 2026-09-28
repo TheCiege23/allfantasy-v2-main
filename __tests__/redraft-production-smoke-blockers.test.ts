@@ -98,8 +98,13 @@ describe('redraft production smoke blockers', () => {
   })
 
   it('draft chat scrolls internally instead of moving the whole page', () => {
-    expect(draftChat).toContain('data-testid="draft-chat-scroll-root"')
-    expect(draftChat).toContain('el.scrollTop = el.scrollHeight')
+    /*
+     * The draft room renders the shared ChatMessageList, which owns the scroller (named
+     * draft-chat-scroll-root here) and follows new messages by setting ITS OWN scrollTop.
+     */
+    const list = read('components/core-app/comms/ChatMessageList.tsx')
+    expect(draftChat).toContain('scrollTestId="draft-chat-scroll-root"')
+    expect(list).toContain('el.scrollTop = el.scrollHeight')
     expect(draftChat).not.toContain('bottomRef.current?.scrollIntoView')
   })
 

@@ -55,30 +55,53 @@ describe("buildTradeAssetsForRoster", () => {
     expect(result.assetsReceived).toEqual([])
   })
 
-  it("assigns draft picks to the RECEIVING roster and debits the previous owner", () => {
+  /*
+   * 🛑 SLEEPER'S PICK FIELDS (2026-09-25): `roster_id` is the ORIGINAL owner, `owner_id` the roster
+   * RECEIVING the pick, `previous_owner_id` the roster giving it up. This test once asserted
+   * `roster_id` was the receiver — true only for a pick coming home — and so locked in a scan that
+   * showed "You receive: Nothing" for every other pick. The fixture below is a pick NEITHER side
+   * originally owned, the one shape where each reading gives a different answer.
+   */
+  it("assigns a draft pick to owner_id (receiver) and debits previous_owner_id, never roster_id", () => {
     const tx = {
       drops: {},
       adds: {},
-      draft_picks: [{ season: "2027", round: 1, roster_id: 2, previous_owner_id: 1 }],
+      draft_picks: [{ season: "2027", round: 1, roster_id: 7, owner_id: 2, previous_owner_id: 1 }],
     }
     const receiver = buildTradeAssetsForRoster({ tx: tx as never, userRosterId: 2, players })
+    expect(receiver.assetsReceived).toHaveLength(1)
     expect(receiver.assetsReceived[0]!.isPick).toBe(true)
     expect(receiver.assetsReceived[0]!.pickRound).toBe("2027 1st")
+    expect(receiver.assetsReceived[0]!.pickOriginalRosterExternalId).toBe("7")
     expect(receiver.assetsGiven).toEqual([])
 
     // The roster giving the pick up must see it as an outgoing asset — the
     // original dashboard logic only ever credited the receiver, so the sender's
     // side of a pick trade silently showed as empty.
     const sender = buildTradeAssetsForRoster({ tx: tx as never, userRosterId: 1, players })
+    expect(sender.assetsGiven).toHaveLength(1)
     expect(sender.assetsGiven[0]!.pickRound).toBe("2027 1st")
+    expect(sender.assetsGiven[0]!.pickOriginalRosterExternalId).toBe("7")
     expect(sender.assetsReceived).toEqual([])
+
+    // The original owner is not in the deal: its pick moving between two other teams is nothing to it.
+    const original = buildTradeAssetsForRoster({ tx: tx as never, userRosterId: 7, players })
+    expect(original.assetsGiven).toEqual([])
+    expect(original.assetsReceived).toEqual([])
+  })
+
+  it("a pick coming home is received by its original owner", () => {
+    const tx = { drops: {}, adds: {}, draft_picks: [{ season: "2028", round: 2, roster_id: 3, owner_id: 3, previous_owner_id: 5 }] }
+    const home = buildTradeAssetsForRoster({ tx: tx as never, userRosterId: 3, players })
+    expect(home.assetsReceived.map((a) => a.pickRound)).toEqual(["2028 2nd"])
+    expect(buildTradeAssetsForRoster({ tx: tx as never, userRosterId: 5, players }).assetsGiven.map((a) => a.pickRound)).toEqual(["2028 2nd"])
   })
 
   it("uses ordinal suffixes correctly", () => {
     const rounds = [1, 2, 3, 4].map(
       (round) =>
         buildTradeAssetsForRoster({
-          tx: { drops: {}, adds: {}, draft_picks: [{ season: "2027", round, roster_id: 1 }] } as never,
+          tx: { drops: {}, adds: {}, draft_picks: [{ season: "2027", round, roster_id: 3, owner_id: 1, previous_owner_id: 3 }] } as never,
           userRosterId: 1,
           players,
         }).assetsReceived[0]!.pickRound,

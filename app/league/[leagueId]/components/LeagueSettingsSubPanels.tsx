@@ -47,6 +47,7 @@ import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
 import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { NflScoringSettingsPanel } from '@/components/league-settings/NflScoringSettingsPanel'
 import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoringSettingsPanel'
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
@@ -57,6 +58,8 @@ import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerS
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 /** Matches `LeagueShellLeague` without importing `LeagueShell` (avoid circular imports). */
 export type LeagueSettingsModalLeague = League & {
@@ -723,8 +726,19 @@ export function SettingsSubPanelBody({
     ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
     : null
   const mockDraftHref = ctx.sleeperLeagueId ? `https://sleeper.com/mock-draft/${ctx.sleeperLeagueId}` : null
-  const inviteUrl =
-    ctx.platformLeagueId.length > 0
+  // A league hosted here is joined here. Its `platformLeagueId` is `manual-<uuid>`, so the Sleeper
+  // link this used to build for every league — shown, copied and QR-coded right after creation —
+  // led nowhere. `/join?code=` resolves `settings.inviteCode`, which create writes from the
+  // league's first invite token (and the invite panel's own endpoint re-mints if missing).
+  const nativeInviteCode =
+    (typeof settings.inviteCode === 'string' && settings.inviteCode.trim()) ||
+    ctx.league.invites?.find((invite) => invite.isActive)?.token ||
+    ''
+  const inviteUrl = isNativePlatform(ctx.league.platform)
+    ? nativeInviteCode
+      ? `${typeof window !== 'undefined' ? window.location.origin : 'https://allfantasy.ai'}/join?code=${encodeURIComponent(nativeInviteCode)}`
+      : ''
+    : ctx.platformLeagueId.length > 0
       ? `https://sleeper.com/leagues/${ctx.platformLeagueId}`
       : 'https://sleeper.com/'
 
@@ -1080,6 +1094,16 @@ function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: 
     setCopied(true)
     window.setTimeout(() => setCopied(false), 2000)
   }
+  if (!inviteUrl) {
+    return (
+      <div className="space-y-4">
+        <Row label="Members" value={`${filled} / ${total} teams`} />
+        <p className="text-[12px] text-white/60">
+          This league has no invite link yet. Open the commissioner invite settings to create one.
+        </p>
+      </div>
+    )
+  }
   return (
     <div className="space-y-4">
       <Row label="Members" value={`${filled} / ${total} teams`} />
@@ -1103,7 +1127,9 @@ function InvitePanel({ inviteUrl, filled, total }: { inviteUrl: string; filled: 
           WhatsApp
         </a>
       </div>
-      <p className="text-[11px] text-white/35">Invite metadata from Sleeper may include invite_code when synced.</p>
+      {inviteUrl.includes('sleeper.com') ? (
+        <p className="text-[11px] text-white/35">Invite metadata from Sleeper may include invite_code when synced.</p>
+      ) : null}
     </div>
   )
 }
@@ -1324,12 +1350,14 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
   const [week, setWeek] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<{ title?: string; body?: string } | null>(null)
 
   const run = async () => {
     if (!ctx.isCommissioner) return
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const w = week.trim() ? parseInt(week, 10) : undefined
       const res = await fetch('/api/ai/commish-note', {
@@ -1342,7 +1370,15 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
         }),
       })
       const data = (await res.json()) as { title?: string; body?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? 'Generate failed')
+      if (!res.ok) {
+        const refused = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+        if (refused) {
+          setRefusal(refused)
+          setResult(null)
+          return
+        }
+        throw new Error(data.error ?? 'Generate failed')
+      }
       setResult({ title: data.title, body: data.body })
       if (data.body) setBody(data.body)
     } catch (e) {
@@ -1388,7 +1424,11 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
       >
         {loading ? 'Generating…' : '✨ Generate with Chimmy'}
       </button>
-      {error ? <p className="text-[12px] text-rose-300">{error}</p> : null}
+      {refusal ? (
+        <PlanRefusalNotice refusal={refusal} />
+      ) : error ? (
+        <p className="text-[12px] text-rose-300">{error}</p>
+      ) : null}
       {result?.title ? (
         <p className="text-[12px] font-semibold text-[#ffb8d1]">{result.title}</p>
       ) : null}

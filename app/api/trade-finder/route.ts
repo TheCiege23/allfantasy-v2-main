@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { buildBaselineMeta } from '@/lib/engine/response-guard'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { buildLeagueDecisionContext, summarizeLeagueDecisionContext } from '@/lib/league-decision-context'
 import { getLeagueInfo, getLeagueRosters, getTradedDraftPicks, getAllPlayers } from '@/lib/sleeper-client'
 import { findPlayerByName, FantasyCalcPlayer } from '@/lib/fantasycalc'
@@ -303,6 +304,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
       )
     }
+
+    // OpenAI per search, and sign-in was never required. Signed-out searches keep a small
+    // daily allowance until paywall launch; after it, Trade Finder needs an account and the plan.
+    const gated = await aiCostGate(request, 'trade_finder', session?.user?.id ?? null)
+    if (gated) return gated
 
     const [sleeperLeague, sleeperRosters, sleeperTradedPicks, allPlayers] = await Promise.all([
       getLeagueInfo(data.league_id),

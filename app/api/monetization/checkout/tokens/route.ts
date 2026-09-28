@@ -11,7 +11,9 @@ import {
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
+import { findStripeCustomerIdForUser } from "@/lib/monetization/stripeCustomerForUser"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
+import { enforcePaidAccountLock } from "@/lib/geo/enforcePaidAccountLock"
 import {
   normalizeCouponCode,
   validateCouponForUser,
@@ -38,6 +40,10 @@ export async function POST(req: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // A card-locked account never reaches Stripe (lib/subscription/paidStateRefusal).
+    const accountLock = await enforcePaidAccountLock(session.user.id)
+    if (accountLock) return accountLock
 
     const body = (await req.json()) as CheckoutTokensBody
     const sku = String(body?.sku ?? "").trim()
@@ -103,8 +109,10 @@ export async function POST(req: Request) {
       sku: item.sku,
       userId: session.user.id,
       userEmail: session.user.email ?? null,
+      stripeCustomerId: await findStripeCustomerIdForUser(session.user.id),
       returnPath,
       couponCode: resolvedCouponCode,
+      couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
     })
     if (!checkout || checkout.purchaseType !== "tokens") {
       return NextResponse.json(

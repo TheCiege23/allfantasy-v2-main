@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'League not found' }, { status: 404 })
     }
 
+    // A reshuffle is a pre-draft action. It used to check neither the lock nor the draft's
+    // status, so a live draft's order could be reshuffled under the managers on the clock.
+    const [lockRow, currentDraft] = await Promise.all([
+      prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftOrderLocked: true } }),
+      prisma.draftSession.findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { status: true },
+      }),
+    ])
+    if (lockRow?.draftOrderLocked) {
+      return NextResponse.json({ error: 'The draft order is locked. Unlock it to randomize.' }, { status: 409 })
+    }
+    if (currentDraft && !['pre_draft', 'configuring', 'configured'].includes(currentDraft.status)) {
+      return NextResponse.json({ error: 'The draft has already started; its order can no longer change.' }, { status: 409 })
+    }
+
     let order = [...league.teams]
     for (let i = 0; i < count; i++) {
       order = fisherYates(order)
@@ -93,7 +111,12 @@ export async function POST(req: NextRequest) {
     })
 
     try {
-      await syncDraftSessionFromLeagueSettings(leagueId, updated, league.leagueSize ?? league.teams.length)
+      await syncDraftSessionFromLeagueSettings(
+        leagueId,
+        updated,
+        league.leagueSize ?? league.teams.length,
+        new Set(['draftOrderSlots']),
+      )
     } catch (e) {
       console.warn('[randomize-order] syncDraftSessionFromLeagueSettings', e)
     }

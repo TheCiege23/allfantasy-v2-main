@@ -70,6 +70,13 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
       ui_host: 'https://us.posthog.com',
       defaults: '2026-01-30',
       capture_exceptions: true,
+      // Session replays must not carry the browser console. The PostHog project has
+      // console-log recording ON, and a set client value wins over it
+      // (_isConsoleLogCaptureEnabled: client ?? server), so this is the one switch.
+      // Anything a component logs (ids, emails, API payloads) would otherwise ship to a
+      // third party inside the replay. Inputs are masked by the project's replay settings
+      // (maskAllInputs), and the Privacy Policy discloses recordings under 2.2.
+      enable_recording_console_log: false,
       debug: process.env.NODE_ENV === 'development',
     })
   }, [])

@@ -1,5 +1,5 @@
 /**
- * The league's IDP board, keyed by the only thing the trade evaluator knows: a name.
+ * The league's IDP board, keyed by player ID with an unambiguous name fallback.
  *
  * This is the seam between `loadLeagueIdpVorp` (which speaks Sleeper ids) and
  * `lib/hybrid-valuation.ts` (which prices by name). It exists because the two
@@ -29,16 +29,24 @@ import type { PrismaClient } from '@prisma/client'
 
 import { getLeagueInfo, getLeagueRosters, getPlayersBySport } from '@/lib/sleeper-client'
 import { loadLeagueIdpVorp, resolveLeagueIdpScoring, type LeagueIdpVorpResult } from './leagueIdpVorp'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /** What a priced defender is worth in this league, and what he plays. */
 export interface IdpNamedValue {
+  name?: string
   value: number
   /** Normalised IDP group (LB / DL / DB) as the board resolved it. */
   position: string
   sleeperId: string
+  /** League-scored history estimate, in points for the board's target week. */
+  projection?: { points: number; season: number; week: number }
 }
 
 export interface IdpTradeValueMap {
+  /** Player IDs preserve distinct values even when the name join is ambiguous. */
+  bySleeperId?: ReadonlyMap<string, IdpNamedValue>
+  unpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>
+  unpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>
   /**
    * Lowercased, trimmed full name -> value. Only unambiguous names appear; see
    * `ambiguousNames`.
@@ -61,7 +69,10 @@ export interface IdpTradeValueMap {
 }
 
 const EMPTY = (skipped: IdpTradeValueMap['skipped']): IdpTradeValueMap => ({
+  bySleeperId: new Map(),
   byNameLower: new Map(),
+  unpricedReasonBySleeperId: new Map(),
+  unpricedReasonByNameLower: new Map(),
   skipped,
   coverage: { defenders: 0, projected: 0, priced: 0, named: 0 },
   ambiguousNames: [],
@@ -139,7 +150,7 @@ export async function loadIdpTradeValuesByName(
       isDynasty: args.isDynasty,
     })
 
-    if (board.skipped !== null || board.valueBySleeperId.size === 0) {
+    if ((board.skipped !== null || board.valueBySleeperId.size === 0) && !board.unpricedReasonBySleeperId?.size) {
       return { ...EMPTY(board.skipped ?? 'no_rostered_players'), coverage: { ...board.coverage, named: 0 } }
     }
 
@@ -174,25 +185,42 @@ export async function loadIdpTradeValuesByName(
     }
 
     const byNameLower = new Map<string, IdpNamedValue>()
+    const bySleeperId = new Map<string, IdpNamedValue>()
+    const unpricedReasonBySleeperId = new Map(board.unpricedReasonBySleeperId ?? [])
+    const unpricedReasonByNameLower = new Map<string, UnpricedReason>()
+    for (const [pid, gap] of unpricedReasonBySleeperId) {
+      const name = players?.[pid]?.full_name?.trim().toLowerCase()
+      if (name && nameCounts.get(name) === 1) unpricedReasonByNameLower.set(name, gap)
+      else if (name) unpricedReasonByNameLower.set(name, { code: 'ambiguous_identity', label: 'Multiple rostered players share this name; choose a player ID to value this asset' })
+    }
     const ambiguousNames: string[] = []
     for (const [sleeperId, value] of board.valueBySleeperId) {
       const info = players?.[sleeperId]
+      const points = board.projectionBySleeperId?.get(sleeperId)
+      const scope = board.projectedFor
+      const entry: IdpNamedValue = {
+        value, name: info?.full_name?.trim(), position: (info?.position ?? '').toUpperCase() || 'IDP', sleeperId,
+        ...(points != null && Number.isFinite(points) && scope
+          ? { projection: { points, season: scope.season, week: scope.week } } : {}),
+      }
+      bySleeperId.set(sleeperId, entry)
       const nm = info?.full_name?.trim().toLowerCase()
       if (!nm) continue
       if ((nameCounts.get(nm) ?? 0) > 1) {
         ambiguousNames.push(nm)
+        const gap: UnpricedReason = { code: 'ambiguous_identity', label: 'Multiple rostered players share this name; choose a player ID to value this asset' }
+        unpricedReasonByNameLower.set(nm, gap)
         continue
       }
-      byNameLower.set(nm, {
-        value,
-        position: (info?.position ?? '').toUpperCase() || 'IDP',
-        sleeperId,
-      })
+      byNameLower.set(nm, entry)
     }
 
     return {
+      bySleeperId,
       byNameLower,
-      skipped: null,
+      unpricedReasonBySleeperId,
+      unpricedReasonByNameLower,
+      skipped: board.skipped,
       coverage: { ...board.coverage, named: byNameLower.size },
       ambiguousNames: [...new Set(ambiguousNames)],
     }

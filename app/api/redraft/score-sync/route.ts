@@ -1,3 +1,5 @@
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { runNativeTournamentWeek } from '@/lib/bestball/nativeTournament'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -7,13 +9,17 @@ import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
 import { checkAllMatchupsComplete } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
+import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
-import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
+import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
+import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
+import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -90,6 +96,14 @@ async function runLegacyAutomationBridge() {
     }),
   )
 
+  // Bashing expiry, the announcement queue, scheduled weekly updates, animation delivery. Their own
+  // route is on no schedule and the cron list is full, so they ride this tick. See zombieAutomation.ts.
+  const zombieHousekeeping = await runZombieHousekeeping().catch((e: unknown) => ({
+    leaguesChecked: 0,
+    announcementsPosted: 0,
+    errors: [e instanceof Error ? e.message : String(e)],
+  }))
+
   const c2cLeagues = await prisma.c2CLeague.findMany({ select: { leagueId: true } })
   let c2cMatchupsRecalculated = 0
   for (const { leagueId } of c2cLeagues) {
@@ -118,6 +132,8 @@ async function runLegacyAutomationBridge() {
     survivorBridge,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
+    zombieHousekeepingLeagues: zombieHousekeeping.leaguesChecked,
+    zombieHousekeepingErrors: zombieHousekeeping.errors,
     c2cLeaguesSynced: c2cLeagues.length,
   }
 }
@@ -142,11 +158,13 @@ async function runLegacyAutomationBridge() {
  * cached stat rows, which is what repairs a league that missed a tick.
  */
 async function runRedraftReconciliation() {
-  const seasons = await prisma.redraftSeason.findMany({
-    where: engineSeasonScope(),
-    select: { id: true, leagueId: true, sport: true },
-    take: 50,
+  const eligible = await prisma.redraftSeason.findMany({
+    // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
+    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
+    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
+    orderBy: { id: 'asc' },
   })
+  const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
 
   let reconciled = 0
   let skippedUnresolvedWeek = 0
@@ -155,11 +173,57 @@ async function runRedraftReconciliation() {
   let weeksFinalized = 0
   let finalizeFailed = 0
   const finalizeRefusals: Record<string, number> = {}
+  let tournamentFailed = 0
+  const tournamentOutcomes: Record<string, number> = {}
+  let guillotineChops = 0
+  let guillotineFailed = 0
+  const guillotineOutcomes: Record<string, number> = {}
+  let playoffMatchupsScored = 0
+  let playoffFailed = 0
+  const playoffOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
     if (!resolved.ok || resolved.phase === 'preseason') {
       skippedUnresolvedWeek += 1
+      continue
+    }
+
+    /*
+     * A season in its playoffs is scored by the bracket, not by the regular-season pipeline.
+     *
+     * ⚠ THE REGULAR-SEASON STEPS ARE SKIPPED, NOT MERELY HARMLESS. There are no `RedraftMatchup`
+     * rows in a playoff week, so recalculation and the sweep would do nothing — but
+     * `updateStandings` rewrites every roster's `playoffSeed` from the regular-season table,
+     * which is the seeding the bracket was generated from and must not drift under it.
+     *
+     * The stat sync still runs first: the playoff teams' players need this week's rows, and
+     * nothing else fetched them once the season left the running statuses.
+     */
+    if (season.status === REDRAFT_SEASON_STATUS.PLAYOFFS && !isNativeTournamentLeague(season.league)) {
+      try {
+        await syncPlayerWeeklyScoresForRedraftSeason({
+          seasonId: season.id,
+          week: resolved.fantasyWeek,
+          actorId: 'system:score-sync',
+        })
+      } catch {
+        // A provider gap this tick; the scorer seals only on rows that exist, so it simply waits.
+      }
+      try {
+        const playoff = await scoreActivePlayoffRound(
+          { seasonId: season.id, calendarWeek: resolved.fantasyWeek },
+          {
+            syncWeekStats: async ({ seasonId, week }) => {
+              await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
+            },
+          },
+        )
+        playoffOutcomes[playoff.outcome] = (playoffOutcomes[playoff.outcome] ?? 0) + 1
+        playoffMatchupsScored += playoff.matchupsScored
+      } catch {
+        playoffFailed += 1
+      }
       continue
     }
     try {
@@ -234,6 +298,34 @@ async function runRedraftReconciliation() {
     } catch {
       finalizeFailed += 1
     }
+
+    /*
+     * A native guillotine league chops its lowest team once each finished week. It runs after the
+     * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
+     * even when this tick's sync failed. One chop per week, guarded inside.
+     */
+    if (isNativeTournamentLeague(season.league)) {
+      try {
+        const outcome = await runNativeTournamentWeek(season.id, resolved.fantasyWeek)
+        tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
+      } catch { tournamentFailed += 1 }
+    }
+    try {
+      const guillotine = await runNativeGuillotineWeek(
+        { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
+        {
+          syncWeekStats: async ({ seasonId, week }) => {
+            await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:score-sync-backfill' })
+          },
+        },
+      )
+      if (guillotine.outcome !== 'not_guillotine') {
+        guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
+      }
+      if (guillotine.outcome === 'chopped') guillotineChops += 1
+    } catch {
+      guillotineFailed += 1
+    }
   }
 
   return {
@@ -245,6 +337,14 @@ async function runRedraftReconciliation() {
     weeksFinalized,
     finalizeFailed,
     finalizeRefusals,
+    tournamentFailed,
+    tournamentOutcomes,
+    guillotineChops,
+    guillotineFailed,
+    guillotineOutcomes,
+    playoffMatchupsScored,
+    playoffFailed,
+    playoffOutcomes,
   }
 }
 
@@ -342,8 +442,12 @@ export async function GET(request: Request) {
       status:
         r.survivorBridge.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
+        r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
-        r.redraft.finalizeFailed > 0
+        r.redraft.finalizeFailed > 0 ||
+        r.redraft.guillotineFailed > 0 ||
+        r.redraft.tournamentFailed > 0 ||
+        r.redraft.playoffFailed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -352,6 +456,8 @@ export async function GET(request: Request) {
         survivorFailed: r.survivorBridge.failed,
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
+        zombieHousekeepingLeagues: r.zombieHousekeepingLeagues,
+        zombieHousekeepingErrors: r.zombieHousekeepingErrors.slice(0, 10),
         c2cLeaguesSynced: r.c2cLeaguesSynced,
         redraft: r.redraft,
       },

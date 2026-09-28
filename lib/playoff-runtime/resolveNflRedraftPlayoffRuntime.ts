@@ -13,6 +13,8 @@ import {
   type NflRedraftPlayoffRuntimeState,
   type NflRedraftPlayoffTeamInput,
 } from './canonicalNflRedraftPlayoffRuntime'
+import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
+import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
 
 export type NflRedraftPlayoffRuntimeResolved =
   | {
@@ -270,7 +272,9 @@ export async function resolveNflRedraftPlayoffRuntime(input: {
   const general = rules.general ?? {}
   const sport = String(general.sport ?? season.sport ?? 'NFL').toUpperCase()
   const format = 'format' in general ? String((general as { format?: unknown }).format ?? 'redraft') : 'redraft'
-  if (sport !== 'NFL' || format !== 'redraft') {
+  // Same coverage as the schedule runtime: a season the roller can advance must be able to
+  // reach its bracket and champion.
+  if (!runsStandardWeeklySeason(sport, format)) {
     return { ok: false, reason: 'not_nfl_redraft' }
   }
 
@@ -429,7 +433,7 @@ export async function generateNflRedraftPlayoffRuntimeBracket(input: {
           id,
           seasonId: state.seasonId,
           bracketId: bracket.id,
-          roundNumber: round.bracketType === 'consolation' ? 100 + round.roundNumber : round.roundNumber,
+          roundNumber: round.bracketType === 'consolation' ? CONSOLATION_ROUND_OFFSET + round.roundNumber : round.roundNumber,
           roundName: round.roundName,
           status: round.status,
         },

@@ -35,8 +35,8 @@ export async function POST(
   const capYear = Number(body.capYear ?? new Date().getFullYear())
   if (!Number.isInteger(capYear)) return NextResponse.json({ error: 'Invalid capYear' }, { status: 400 })
 
-  const result = await applyCut(leagueId, String(contractId), capYear)
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
+  const result = await applyCut(leagueId, String(contractId), capYear, userId)
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 400 })
 
   const config = await getSalaryCapConfig(leagueId)
   if (config) {

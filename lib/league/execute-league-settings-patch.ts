@@ -15,12 +15,15 @@ import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
+import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { structuralPatchRefusal } from '@/lib/league/structuralSettingsLock'
+import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -168,28 +171,31 @@ export async function executeLeagueSettingsPatch(
   })
   if (!league) return jsonError('League not found', 404)
 
-  const [profile, commissionerEntitlement] = await Promise.all([
-    prisma.userProfile.findFirst({
-      where: { userId },
-      select: { afCommissionerSub: true },
-    }),
-    new EntitlementResolver()
-      .resolveForUser(userId, 'commissioner_ai_tools')
-      .catch(() => ({ hasAccess: false })),
-  ])
-  const hasSub = Boolean(profile?.afCommissionerSub) || Boolean(commissionerEntitlement.hasAccess)
+  // Sport, season, team count, format and dynasty are fixed once the draft has started —
+  // regardless of which door (sectioned or not) the request came through.
+  const structuralRefusal = await structuralPatchRefusal(leagueId, body, league)
+  if (structuralRefusal) return jsonError(structuralRefusal, 409)
+  if (body.leagueSize != null) {
+    const size = Number(body.leagueSize)
+    if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
+  }
+
+  // The entitlement alone: OR-ing the profile flag kept a lapsed plan's access (livePlanFlags.ts).
+  const commissionerEntitlement = await new EntitlementResolver()
+    .resolveForUser(userId, 'commissioner_ai_tools')
+    .catch(() => ({ hasAccess: false }))
+  const hasSub = Boolean(commissionerEntitlement.hasAccess)
 
   const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
   if (premiumCommissionerKeys.length > 0 && !hasSub) {
     return jsonError('AF Commissioner or AF Supreme is required for Commissioner Intelligence and League Helper settings.', 403)
   }
 
-  if (body.playoffTeams != null) {
-    const pt = Number(body.playoffTeams)
-    if ((pt === 7 || pt === 9) && !hasSub) {
-      return jsonError('7- and 9-team playoff brackets require an AF Commissioner subscription.', 403)
-    }
-  }
+  // ⚠ 7- and 9-team playoff brackets are NOT a paid feature. They were refused here without
+  // AF Commissioner, but the bracket engine seeds any field the same way — pad to the next power
+  // of two and hand the top seeds first-round byes (canonicalNflRedraftPlayoffRuntime) — so a
+  // 7-team bracket is built exactly like the free 6-team one. Running a league is free; only the
+  // league-size bound below applies.
 
   if (body.timezone != null) {
     const tz = String(body.timezone)
@@ -237,6 +243,8 @@ export async function executeLeagueSettingsPatch(
   if (body.rounds != null) {
     const r = Number(body.rounds)
     if (!Number.isFinite(r) || r < 1 || r > 50) return jsonError('rounds must be 1–50', 400)
+    const roundsError = await validateDraftRoundsFitRoster(leagueId, r)
+    if (roundsError) return jsonError(roundsError, 400)
   }
 
   const preset = body.pickTimerPreset != null ? String(body.pickTimerPreset) : undefined
@@ -267,6 +275,11 @@ export async function executeLeagueSettingsPatch(
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
   }
+
+  // `settingsMerge` spreads any key into `League.settings`, the chat link included, so it is checked
+  // here — before the first write below — against the one rule (lib/league/leagueChatThreadLink.ts).
+  const chatLinkRefusal = leagueChatThreadLinkRefusalInPatch(leagueId, body.settingsMerge)
+  if (chatLinkRefusal) return jsonError(chatLinkRefusal, 400)
 
   const updatedFieldNames: string[] = []
 
@@ -466,7 +479,13 @@ export async function executeLeagueSettingsPatch(
 
   if (shouldPatchLs && updated) {
     try {
-      await syncDraftSessionFromLeagueSettings(leagueId, updated, teamCount)
+      // Only the keys this request patched: a timezone or keeper-count save must not re-push
+      // rounds, type and order over what the draft room set. The sync itself refuses a draft
+      // that has started.
+      const patchedKeys = new Set(
+        [...LEAGUE_SETTINGS_ROW_PATCH_KEYS].filter((k) => body[k] !== undefined),
+      )
+      await syncDraftSessionFromLeagueSettings(leagueId, updated, teamCount, patchedKeys)
     } catch (e) {
       console.warn('[executeLeagueSettingsPatch] syncDraftSessionFromLeagueSettings', e)
     }

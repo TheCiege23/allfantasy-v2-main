@@ -18,10 +18,11 @@
  *
  *   1. VERIFY THE BUILD YOU MEANT TO VERIFY. Probing "the site" proves nothing about the commit
  *      you just pushed -- the old build answers every probe just as well. With --expect-sha this
- *      waits for /api/af-debug/sha to report that commit before asserting anything, and reports
- *      NOT_DEPLOYED if it never arrives. That outcome is not a technicality: on 2026-09-02
- *      auto-deploy was silently off, two commits sat unshipped for an hour, and every probe
- *      against the stale build passed.
+ *      waits for /api/af-debug/sha to report that commit, or a descendant that contains it,
+ *      before asserting anything, and reports NOT_DEPLOYED if neither arrives within the budget
+ *      (see ./deploy-verify-wait.mjs for why a descendant must count). That outcome is not a
+ *      technicality: on 2026-09-02 auto-deploy was silently off, two commits sat unshipped for
+ *      an hour, and every probe against the stale build passed.
  *
  *   2. AN UNREACHABLE SITE IS NOT A REGRESSION AND MUST NOT BE REPORTED AS ONE. A cold container
  *      here has taken 39s to answer /api/health while the cron loop saturated it. Probes retry,
@@ -39,9 +40,28 @@
  * assertion targets the actual harm rather than today's implementation choice.
  */
 
+import { classifyServed, parseWaitMinutes, waitForSha } from './deploy-verify-wait.mjs'
+
 const BASE = (process.env.VERIFY_BASE_URL || 'https://allfantasy.ai').replace(/\/$/, '')
 const CANONICAL_HOSTS = new Set(['allfantasy.ai', 'www.allfantasy.ai'])
 const BOGUS = 'deploy-verify-not-a-real-token'
+
+/**
+ * ⚠ GITHUB'S RUNNERS ARE A DATA CENTRE, AND THE VPN GATE REFUSES DATA CENTRES.
+ * Since 2026-09-24 middleware.ts sends an anonymized client to /vpn-blocked for
+ * every non-public page and answers 403 on the API. Without a credential, the
+ * redirect probes would go red — and worse, the page probes would follow the
+ * redirect and pass by rendering /vpn-blocked instead of /login.
+ *
+ * A machine credential is the documented pass (lib/http/machineCredential): the
+ * request is not a person, so neither the geo nor the VPN gate applies. It grants
+ * nothing else — every probed route still runs its own checks. Sent only to a
+ * canonical host, never to an arbitrary VERIFY_BASE_URL.
+ */
+const MACHINE_HEADERS =
+  process.env.CRON_SECRET && CANONICAL_HOSTS.has(new URL(BASE).hostname.toLowerCase())
+    ? { 'x-cron-secret': process.env.CRON_SECRET }
+    : {}
 
 /**
  * Hosts that mean "every interface" to a server and nothing at all to a client.
@@ -171,6 +191,7 @@ async function probe({ path, method = 'GET' }, attempt = 1) {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method,
+      headers: MACHINE_HEADERS,
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
     })
@@ -183,7 +204,7 @@ async function probe({ path, method = 'GET' }, attempt = 1) {
       } catch { /* unparseable is a finding, not something to follow */ }
       const samePath = target && target.pathname === new URL(`${BASE}${path}`).pathname
       if (target && samePath && CANONICAL_HOSTS.has(target.hostname.toLowerCase())) {
-        const hop = await fetch(target, { method, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
+        const hop = await fetch(target, { method, headers: MACHINE_HEADERS, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
         return { status: hop.status, location: hop.headers.get('location'), viaCanonicalHop: true }
       }
     }
@@ -197,21 +218,11 @@ async function probe({ path, method = 'GET' }, attempt = 1) {
   }
 }
 
-async function waitForSha(expected, budgetMs = 15 * 60_000) {
-  const deadline = Date.now() + budgetMs
-  let last = null
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${BASE}/api/af-debug/sha`, { signal: AbortSignal.timeout(20_000) })
-      const body = await res.json()
-      last = typeof body?.sha === 'string' ? body.sha : null
-      if (last && last.startsWith(expected.slice(0, 9))) return { deployed: true, sha: last }
-    } catch {
-      // A cold or restarting container is expected while a deploy lands. Keep waiting.
-    }
-    await new Promise((r) => setTimeout(r, 30_000))
-  }
-  return { deployed: false, sha: last }
+/** What production says it is running, or null. The wait logic lives in ./deploy-verify-wait.mjs. */
+async function readServedSha() {
+  const res = await fetch(`${BASE}/api/af-debug/sha`, { signal: AbortSignal.timeout(20_000) })
+  const body = await res.json()
+  return typeof body?.sha === 'string' && body.sha.trim() !== '' ? body.sha.trim() : null
 }
 
 function selfTest() {
@@ -293,10 +304,33 @@ function selfTest() {
     }
   }
 
+  /*
+   * The wait's decisions, same rule. Only 'deployed' and 'descendant' may start the probes;
+   * an OLDER build and a "could not tell" must keep waiting. Probing an older build is the
+   * 2026-09-02 lie (every probe passes against code that lacks the change), so the cases
+   * that must NOT verify matter more than the ones that must.
+   */
+  const PUSHED = '3c83857ea0fe8b58c709361fd619b5efe71c418b'
+  const waitCases = [
+    [PUSHED, true, 'deployed'],
+    ['3c83857ea', null, 'deployed'], // abbreviated either way round
+    ['e5f0387068c07bcee4f2e89002eb509cb67eb85a', true, 'descendant'],
+    ['5a9cdd17769c209cb28f45c301cf37e024058882', false, 'not-yet'],
+    ['5a9cdd17769c209cb28f45c301cf37e024058882', null, 'undetermined'],
+    [null, null, 'unreadable'],
+  ]
+  for (const [served, contains, expectedKind] of waitCases) {
+    const kind = classifyServed(PUSHED, served, contains)
+    if (kind !== expectedKind) {
+      console.error(`  SELF-TEST FAILED: serving ${served ?? '(nothing)'} (contains=${contains}) classified '${kind}', expected '${expectedKind}'`)
+      bad++
+    }
+  }
+
   if (bad === 0) {
     console.log(
       `  self-test ok -- ${mustFail.length} bad Locations caught, ${mustPass.length} good ones accepted, ` +
-        `${pageCases.length} page verdicts correct`,
+        `${pageCases.length} page verdicts correct, ${waitCases.length} wait decisions correct`,
     )
     return true
   }
@@ -313,16 +347,41 @@ async function main() {
   const shaArg = args.find((a) => a.startsWith('--expect-sha='))
   if (shaArg) {
     const expected = shaArg.slice('--expect-sha='.length).trim()
-    console.log(`Waiting for the deploy of ${expected.slice(0, 9)} ...`)
-    const { deployed, sha } = await waitForSha(expected)
-    if (!deployed) {
-      console.error(`\nNOT_DEPLOYED -- after 15 min /api/af-debug/sha still reports ${sha ?? 'nothing'}, not ${expected.slice(0, 9)}.`)
-      console.error('   The push did not reach production, so nothing below would have tested it.')
-      console.error('   Check that auto-deploy is enabled on the Railway service: it was silently off on')
-      console.error('   2026-09-02 and two commits sat unshipped for an hour while probes kept passing.')
+    /*
+     * ⚠ THE BUDGET WAS 15 MINUTES AND PRODUCTION BUILDS NOW TAKE 16–21. Every push-triggered
+     * run on 2026-09-24 ended NOT_DEPLOYED with the build still in flight, so the probes never
+     * ran against a single deploy — a monitor that is always red is as blind as one that is
+     * always green. The default is now 40 minutes, overridable because build times drift.
+     */
+    const minutes = parseWaitMinutes(args, process.env)
+    console.log(`Waiting up to ${minutes} min for production to serve ${expected.slice(0, 9)} or a descendant ...`)
+    const result = await waitForSha(expected, { budgetMs: minutes * 60_000, readServedSha })
+    if (!result.deployed) {
+      const served = result.sha ? result.sha.slice(0, 9) : 'nothing'
+      const why =
+        result.relation === 'undetermined'
+          ? `and whether that contains ${expected.slice(0, 9)} could not be established`
+          : result.relation === 'unreadable'
+            ? `no readable sha at the end of the wait (last seen: ${served})`
+            : `which does not contain ${expected.slice(0, 9)}`
+      console.error(`\nNOT_DEPLOYED -- after ${minutes} min /api/af-debug/sha reports ${result.relation === 'unreadable' ? '' : served + ', '}${why}.`)
+      if (result.relation === 'undetermined') {
+        console.error('   It could not be established whether it does: the GitHub compare API did not answer and')
+        console.error('   local git has no history for it. Read this as "unverified", not as a failed deploy.')
+      } else {
+        console.error('   The push did not reach production, so nothing below would have tested it.')
+        console.error('   Check the Railway build for this commit, and that auto-deploy is enabled: it was')
+        console.error('   silently off on 2026-09-02 and two commits sat unshipped for an hour while probes')
+        console.error('   kept passing. If builds have simply got slower, raise VERIFY_WAIT_MINUTES.')
+      }
       process.exit(2)
     }
-    console.log(`  deployed: ${sha.slice(0, 9)}`)
+    const mins = Math.round(result.waitedMs / 60_000)
+    console.log(
+      result.via === 'descendant'
+        ? `  deployed: ${result.sha.slice(0, 9)}, a descendant that contains ${expected.slice(0, 9)} (after ${mins} min) -- verifying that build`
+        : `  deployed: ${result.sha.slice(0, 9)} (after ${mins} min)`,
+    )
   }
 
   /*
@@ -401,7 +460,7 @@ async function main() {
   for (const p of PAGE_PROBES) {
     let res
     try {
-      res = await fetch(`${BASE}${p.path}`, { signal: AbortSignal.timeout(30_000) })
+      res = await fetch(`${BASE}${p.path}`, { headers: MACHINE_HEADERS, signal: AbortSignal.timeout(30_000) })
     } catch (err) {
       console.error(`\nUNREACHABLE -- ${p.path}: ${err instanceof Error ? err.message : String(err)}`)
       console.error('   Not a render regression; a reachability or capacity problem.')

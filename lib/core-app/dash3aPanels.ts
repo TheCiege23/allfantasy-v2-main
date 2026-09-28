@@ -2,6 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildRosterIdMap } from './rosterIdMatch'
+import { readLeagueWeekMetadata } from './leagueWeekMetadata'
+import { leagueWeekProgress } from './leagueWeekProgress'
 
 /**
  * The three 3a panels that were shipped as "no engine exists".
@@ -318,6 +320,8 @@ export async function getRivalRecords(
    * the awaited type a union with `never[]`, and a Map valued at that union
    * types `push` as taking `never`.
    */
+  const periodMetadata = await readLeagueWeekMetadata(leagues.map((league) => league.id))
+  const progressByLeague = new Map(periodMetadata.map((league) => [league.id, leagueWeekProgress(league)]))
   const rowsByPlatformLeague = new Map<string, (typeof allRows)[number][]>()
   for (const r of allRows) {
     const list = rowsByPlatformLeague.get(r.leagueId)
@@ -357,7 +361,9 @@ export async function getRivalRecords(
       pointsFor: number
     }
     const byWeek = new Map<string, WeekRowLite[]>()
+    const progress = progressByLeague.get(league.id)
     for (const r of rows) {
+      if (progress?.currentWeek != null && !progress.isFinal(r.seasonYear, r.week)) continue
       const k = `${r.seasonYear}:${r.week}`
       const list = byWeek.get(k)
       if (list) list.push(r)

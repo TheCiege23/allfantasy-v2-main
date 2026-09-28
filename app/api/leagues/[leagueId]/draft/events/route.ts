@@ -17,6 +17,7 @@ import {
 } from '@/lib/live-draft-engine/postDraftFinalizeArtifacts'
 import { getProviderStatus } from '@/lib/provider-config'
 import { runAutomationTicksThrottled } from '@/lib/live-draft-engine/draftAutomationTicks'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,8 +44,9 @@ export async function GET(
 
   const url = new URL(req.url)
   const since = url.searchParams?.get('since')
-  const draftSession = await prisma.draftSession.findUnique({
+  const draftSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { updatedAt: true },
   })
   if (!draftSession) {

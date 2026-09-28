@@ -30,7 +30,9 @@ describe('🛑 the feed no longer hides pending offers', () => {
 
   it('🛑 the completed-only filter is gone', () => {
     const code = strip(SYNC)
-    expect(code).not.toMatch(/status\s*===\s*'complete'/)
+    // Completion timestamps can inspect status; only a completed-only gate would hide offers.
+    expect(code).not.toMatch(/if\s*\(\s*t\.status\s*!==\s*'complete'\s*\)\s*continue/)
+    expect(code).toContain('if (!NOTIFIABLE_STATUSES.has(t.status)) continue')
     expect(code).toContain('NOTIFIABLE_STATUSES')
   })
 
@@ -51,7 +53,8 @@ describe('🛑 the feed no longer hides pending offers', () => {
   it('carries the status forward rather than just the id', () => {
     // The copy downstream depends on knowing WHICH kind of trade this was.
     expect(strip(SYNC)).toMatch(/out\.push\(\{\s*id:.*status:/)
-    expect(strip(NOTIFY)).toContain('statusById')
+    // The plan branches on it: an offer and a completion are announced to different people.
+    expect(strip(NOTIFY)).toContain("trade.status === 'pending'")
   })
 })
 
@@ -75,15 +78,26 @@ describe('🛑 the first run after this change must not spam', () => {
 
   it('the bootstrap path still records everything and notifies nothing', () => {
     const code = strip(NOTIFY)
-    expect(code).toMatch(/if \(!seenRecord\)\s*\{[\s\S]{0,220}?bootstrap: true/)
+    // The window is wider since the 5-minute sweep: a sliced read must bootstrap from a FULL read
+    // (or defer), which puts that branch between the test and the bootstrap return.
+    expect(code).toMatch(/if \(!seenRecord\)\s*\{[\s\S]{0,900}?bootstrap: true/)
   })
 })
 
 describe('🛑 the copy tells the truth about which it is', () => {
-  it('the push title is not hardcoded to "accepted"', () => {
+  /*
+   * ⚠ TWO ASSERTIONS WERE RETIRED HERE ON 2026-09-24, and why matters. They checked that ONE code
+   * path chose "offer" or "accepted" by status (`isOffer ? …`). That path could never see an offer:
+   * it built every email from the graded ledger, which holds completed trades only, so `isOffer`
+   * was always false and these source checks passed over a feature that never fired. Offers and
+   * completions are now separate paths, each with fixed copy, and the behaviour — who is told, with
+   * which words, linked where — is asserted by running it in `trade-notify-offers.test.ts`.
+   */
+  it('each path carries its own copy: offers say "offer", completions say "accepted"', () => {
     const code = strip(NOTIFY)
-    expect(code).toMatch(/isOffer \? `Trade offer in \$\{leagueName\}`/)
-    expect(code).not.toMatch(/title: `Trade accepted in \$\{leagueName\}`,/)
+    expect(code).toMatch(/title: `Trade offer in \$\{leagueName\}`/)
+    expect(code).toMatch(/title: `Trade accepted in \$\{leagueName\}`/)
+    expect(code).toContain('buildPendingTradeOfferEmail(')
   })
 
   it('🛑 the EMAIL SUBJECT is not hardcoded either — the harder half to notice', () => {
@@ -97,10 +111,6 @@ describe('🛑 the copy tells the truth about which it is', () => {
     expect(code).not.toMatch(/`Trade completed in \$\{leagueName\}/)
   })
 
-  it('the notifier actually passes the status to the email builder', () => {
-    // Threading it into the type but not the call is a silent no-op.
-    expect(strip(NOTIFY)).toMatch(/status: isOffer \? 'pending' : 'complete'/)
-  })
 
   it('defaults to completed, so every other caller is unchanged', () => {
     expect(strip(EMAIL)).toMatch(/status\?: 'complete' \| 'pending'/)

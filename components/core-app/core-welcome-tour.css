@@ -1,8 +1,15 @@
+/*
+ * 🛑 THE CARD SAT ON TOP OF THE CHAT BUBBLE. Both were anchored to the bottom-right corner — the
+ * card at 24px (82px on a phone), the bubble at `--af-fab-bottom` — so during the tour a tap on the
+ * bubble hit the card, and a drag selected page text (live test 2026-09-25, phone/tablet/desktop
+ * -01). The card now takes slot 1 of the corner's shared geometry (af-core.css): directly above the
+ * bubble, clearing it by the standard gap, at every width. Nothing else renders in slot 1.
+ */
 .af-welcome {
   position: fixed;
   z-index: 170;
-  right: 24px;
-  bottom: 24px;
+  right: var(--af-fab-inset, 18px);
+  bottom: var(--af-fab-slot-1, 86px);
   width: min(390px, calc(100vw - 32px));
   padding: 20px;
   border: 1px solid var(--accent-line);
@@ -46,9 +53,10 @@
 @media (max-width: 720px) {
   .af-welcome {
     right: 12px;
-    bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+    /* Above the bubble, which sits above the tab bar; the slot token already carries the home-indicator inset. */
+    bottom: var(--af-fab-slot-1, 136px);
     width: calc(100vw - 24px);
-    max-height: min(440px, calc(100dvh - 130px - env(safe-area-inset-top, 0px)));
+    max-height: min(440px, calc(100dvh - var(--af-fab-slot-1, 136px) - 16px - env(safe-area-inset-top, 0px)));
     overflow-y: auto;
     padding: 17px;
   }

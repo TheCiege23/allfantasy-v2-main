@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { speculationGate, type SpeculationGate } from '@/components/core-app/speculationGate'
+
 /**
  * Warms the screens a manager opens next, after the one he opened has landed.
  *
@@ -73,10 +75,13 @@ export function LeagueTabsPrewarm({
   leagueId,
   activeKey,
   availableKeys,
+  gate = speculationGate,
 }: {
   leagueId: string
   activeKey: string
   availableKeys: readonly string[]
+  /** The page's shared gate; a test passes its own so no state leaks between cases. */
+  gate?: SpeculationGate
 }) {
   const router = useRouter()
   /* A stable dependency: the array identity changes on every render, its contents do not. */
@@ -92,11 +97,23 @@ export function LeagueTabsPrewarm({
     let idleHandle: number | null = null
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null
 
+    /*
+     * 🛑 ONE AT A TIME, THROUGH THE SHARED GATE — NOT BOTH IN ONE LOOP. This fired both targets
+     * back to back, and nothing held it off while the rail was warming leagues or the manager
+     * had just clicked. `speculationGate.ts` records what that did to production. A target the
+     * gate refuses waits for it to open rather than being dropped: two spaced renders are not
+     * a burst, and these two are the screens a manager most often opens next.
+     */
+    const queue = [...targets]
     const prefetch = () => {
-      if (cancelled) return
-      for (const key of targets) {
-        router.prefetch(`/core/${key}?league=${encodeURIComponent(leagueId)}`)
+      if (cancelled || queue.length === 0) return
+      if (!gate.tryAcquire()) {
+        timeoutHandle = setTimeout(prefetch, Math.max(gate.msUntilOpen(), 50))
+        return
       }
+      const key = queue.shift()!
+      router.prefetch(`/core/${key}?league=${encodeURIComponent(leagueId)}`)
+      if (queue.length > 0) timeoutHandle = setTimeout(prefetch, gate.msUntilOpen())
     }
 
     /*
@@ -134,7 +151,7 @@ export function LeagueTabsPrewarm({
       }
       if (timeoutHandle != null) clearTimeout(timeoutHandle)
     }
-  }, [leagueId, activeKey, availableSignature, router])
+  }, [leagueId, activeKey, availableSignature, router, gate])
 
   return null
 }

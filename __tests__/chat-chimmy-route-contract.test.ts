@@ -36,12 +36,15 @@ const prismaLeagueFindUniqueMock = vi.fn()
 const prismaRedraftMemberFindUniqueMock = vi.fn()
 const prismaRosterCountMock = vi.fn()
 const prismaLeagueTeamFindFirstMock = vi.fn()
+const prepareDecisionMock = vi.hoisted(() => vi.fn())
 const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
 vi.mock("@/lib/chimmy/tools/myRosterInjuriesTool", () => ({
   buildMyRosterInjuriesContext: buildMyRosterInjuriesMock,
 }))
+
+vi.mock("@/lib/chimmy/decisionAnswerService", () => ({ prepareChimmyDecisionAnswer: prepareDecisionMock }))
 
 vi.mock("next-auth", () => ({
   getServerSession: getServerSessionMock,
@@ -185,6 +188,8 @@ vi.setConfig({ testTimeout: 60000 })
 describe("POST /api/chat/chimmy contract", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // These fixtures isolate orchestration/billing. Decision-service behavior is tested below and in chimmy-decision-answer.
+    prepareDecisionMock.mockResolvedValue(null)
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
     runAiProtectionMock.mockResolvedValue(null)
     enrichChatWithDataMock.mockResolvedValue({
@@ -299,7 +304,7 @@ describe("POST /api/chat/chimmy contract", () => {
 
     expect(res.status).toBe(401)
     await expect(res.json()).resolves.toEqual({ error: "Unauthorized" })
-  })
+  }, 180_000)
 
   it("returns rate limit response from AI protection", async () => {
     runAiProtectionMock.mockResolvedValueOnce(
@@ -411,6 +416,43 @@ describe("POST /api/chat/chimmy contract", () => {
         },
       },
     })
+  })
+
+
+  it("returns an engine decision without asking a model to replace it", async () => {
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
+      status: "ready", leagueId: "league-1", answer: "Engine verdict: hold this player.", sources: ["trade_engine"] })
+    const form = new FormData()
+    form.append("message", "Should I trade this player?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.response).toBe("Engine verdict: hold this player.")
+    expect(body.meta.decision).toMatchObject({ status: "ready", authority: "explanation_only", leagueId: "league-1" })
+    expect(spendTokensForRuleMock).toHaveBeenCalled()
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
+  })
+
+  it("returns a missing-evidence gap before spending tokens", async () => {
+    prepareDecisionMock.mockResolvedValueOnce({ version: 1, kind: "trade", decisionType: "manager.trade.evaluate", authority: "explanation_only",
+      status: "needs_data", leagueId: null, answer: "Sync your roster before asking again.", sources: [], gap: { code: "roster_missing", remedy: "Sync your roster." } })
+    const form = new FormData()
+    form.append("message", "Should I trade this player?")
+    form.append("leagueId", "league-1")
+    form.append("confirmTokenSpend", "true")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(form) as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.response).toBe("Sync your roster before asking again.")
+    expect(body.meta.tokenSpend).toBeNull()
+    expect(body.meta.decision).toMatchObject({ status: "needs_data", leagueId: null })
+    expect(body.meta.leagueGrounding).toMatchObject({ grounded: false, leagueId: null })
+    expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+    expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
 
   it("continues the Chimmy run when token preview fails", async () => {
@@ -635,6 +677,21 @@ describe("POST /api/chat/chimmy contract", () => {
     const { POST } = await import("@/app/api/chat/chimmy/route")
     await POST(buildMultipartRequest(formData) as any)
     expect(buildMyRosterInjuriesMock).not.toHaveBeenCalled()
+  })
+
+  it("grounds a scoped Best Ball roster review in its own injuries instead of a player-name shortcut", async () => {
+    previewSpendMock.mockResolvedValueOnce({ ruleCode: "ai_chimmy_chat_message", tokenCost: 0, canSpend: true, currentBalance: 999999999, requiresConfirmation: false })
+    buildMyRosterInjuriesMock.mockResolvedValueOnce("SELECTED-LEAGUE INJURY CHECK\nOmar Cooper: IR. Best Ball is automatic.")
+    const formData = new FormData()
+    formData.append("message", "Review my BB Dynasty League 26! Best Ball roster using Decision OS. Focus on current injuries and roster depth.")
+    formData.append("leagueId", "league-1")
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const response = await POST(buildMultipartRequest(formData) as any)
+    expect(response.status).toBe(200)
+    expect(buildMyRosterInjuriesMock).toHaveBeenCalledWith({ userId: "user-1", leagueId: "league-1" })
+    const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
+    expect(request?.userMessage).toContain("MY ROSTER INJURIES (SELECTED LEAGUE)")
+    expect(request?.userMessage).toContain("Omar Cooper: IR")
   })
 
   it("sends the connected rosters the user selected after league authorization", async () => {
@@ -904,7 +961,7 @@ describe("POST /api/chat/chimmy contract", () => {
       const body = await res.json()
       expect(body.conversationId).toBe("chimmy:user-1")
       // No conversation key — that omission is what unions the legacy per-league rows.
-      expect(getRecentChatHistoryMock).toHaveBeenCalledWith({ userId: "user-1", limit: 80 })
+      expect(getRecentChatHistoryMock).toHaveBeenCalledWith({ userId: "user-1", limit: 80, throwOnError: true })
       expect(getRecentChatHistoryMock.mock.calls[0][0]).not.toHaveProperty("conversationId")
       // Each turn carries its OWN league, so a cross-league thread is not read as one league's.
       expect(body.turns.map((t: { text: string; leagueId: string | null }) => [t.text, t.leagueId])).toEqual([
@@ -975,10 +1032,19 @@ describe("POST /api/chat/chimmy contract", () => {
       const ok = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
       expect((await ok.json()).turns).toHaveLength(2)
 
-      getRecentChatHistoryMock.mockRejectedValueOnce(new Error("db down"))
+      /*
+       * 🛑 E2 (2026-09-25): A FAILED READ IS A 5xx, NOT AN EMPTY THREAD. This used to pin
+       * `200 { turns: [] }`, which the drawer rendered as "Nothing asked yet." for someone with a
+       * real transcript. It now says the read failed, in words with no internals in them.
+       */
+      getRecentChatHistoryMock.mockRejectedValueOnce(new Error("db down at 10.0.0.1:5432"))
       const degraded = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
-      expect(degraded.status).toBe(200)
-      expect((await degraded.json()).turns).toEqual([])
+      expect(degraded.status).toBe(500)
+      const body = await degraded.json()
+      expect(body.turns).toBeUndefined()
+      expect(JSON.stringify(body)).not.toContain("10.0.0.1")
+      // The route asks the store to REPORT a failure rather than paper over it with [].
+      expect(getRecentChatHistoryMock.mock.calls.at(-1)?.[0]).toMatchObject({ throwOnError: true })
     })
 
     it("clamps the limit so one request cannot ask for the whole table", async () => {

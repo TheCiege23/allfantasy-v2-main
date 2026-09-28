@@ -79,6 +79,14 @@ describe('classifyResult', () => {
 })
 
 describe('getCommissionerWaiverOversight', () => {
+  it('does not advertise an AllFantasy mirror schedule as Sleeper’s next processing time', async () => {
+    const imported = await getCommissionerWaiverOversight({ leagueId: 'L', platform: 'sleeper', role: 'commissioner', now: NOW })
+    const native = await getCommissionerWaiverOversight({ leagueId: 'L', platform: 'manual', role: 'commissioner', now: NOW })
+    if (!imported.available || !native.available) throw new Error('expected available')
+    expect(imported.nextRun).toBeNull()
+    expect(native.nextRun).not.toBeNull()
+  })
+
   it('tells an imported league its waivers run on the platform', async () => {
     m.leagueWaiverSettings.findUnique.mockResolvedValue(null)
     m.waiverRun.findFirst.mockResolvedValue(null)

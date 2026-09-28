@@ -240,7 +240,7 @@ describe('🛑 the final-stage transition, ported from the engine that was delet
      */
     h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 2, isInFinalStage: false })
     const out = await recordChopAudit(input())
-    expect(h.transition).toHaveBeenCalledWith('gs1', 4)
+    expect(h.transition).toHaveBeenCalledWith('gs1', 5)
     expect(out).toMatchObject({ finalStageReached: true })
   })
 

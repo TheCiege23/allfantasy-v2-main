@@ -10,6 +10,7 @@ import { leagueDisplayName } from './leagueHome'
 import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { leagueWeekFromSettings } from './seasonTimeline'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -320,7 +321,11 @@ export async function getMatchupPulse(
 
   const weekByPlid = new Map<string, { season: number; week: number }>()
   for (const [plid, rows] of summaryByPlid) {
-    const resolved = resolveCurrentWeekFrom(rows)
+    const league = mine.find((team) => team.league?.platformLeagueId === plid)?.league
+    const statedWeek = leagueWeekFromSettings(league?.settings)
+    const resolved = statedWeek && league?.season
+      ? { season: Number(league.season), week: statedWeek }
+      : resolveCurrentWeekFrom(rows)
     if (resolved) weekByPlid.set(plid, { season: resolved.season, week: resolved.week })
   }
 

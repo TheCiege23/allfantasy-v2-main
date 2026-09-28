@@ -107,6 +107,13 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
     partnerTeamId: v.partner.externalId,
   })
   const others = v.packages.filter((p) => p.id !== rec?.id)
+  // The package totals own the market-value display. The separate analysis
+  // model can price differently and must not publish a conflicting raw total.
+  const explanations = v.grade.available
+    ? v.grade.data.explanations.filter((reason) => !/market value/i.test(reason))
+    : []
+  const lineupNote = v.grade.available && !/avgVol|A\([^)]*\).*impact|→.*net\s/i.test(v.grade.data.lineupNote)
+    ? v.grade.data.lineupNote : null
 
   return (
     <section className="af-card af-pf-tv" aria-labelledby="af-pf-tv-h" data-fairness={rec?.fairness ?? 'none'}>
@@ -170,13 +177,13 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
             )}
           </div>
 
-          {rec.reasons.length > 0 || (v.grade.available && v.grade.data.explanations.length > 0) ? (
+          {rec.reasons.length > 0 || explanations.length > 0 || lineupNote ? (
             <ul className="af-pf-tv-reasons">
               {rec.reasons.map((r) => (
                 <li key={r}>{r}</li>
               ))}
-              {v.grade.available ? v.grade.data.explanations.map((r) => <li key={r}>{r}</li>) : null}
-              {v.grade.available && v.grade.data.lineupNote ? <li>{v.grade.data.lineupNote}</li> : null}
+              {explanations.map((r) => <li key={r}>{r}</li>)}
+              {lineupNote ? <li>{lineupNote}</li> : null}
             </ul>
           ) : null}
 

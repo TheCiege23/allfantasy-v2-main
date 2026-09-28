@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { countSeatsHeldByPeople } from '@/lib/league/leagueSeats'
 import crypto from "crypto"
 
 export type InviteValidationError =
@@ -194,16 +195,9 @@ export async function validateFantasyInviteCode(
     inviteExpiresAt && !Number.isNaN(inviteExpiresAt.getTime()) && inviteExpiresAt.getTime() < Date.now()
   )
 
-  // Slice 7/7.1: auto-materialization fills empty slots with orphan AI rosters
-  // (platformUserId prefix "orphan-"). Those must NOT count toward invite
-  // capacity — they're placeholder seats that will be evicted when a real
-  // human joins via evictOrphanForNewHumanRoster.
-  const memberCount = await prisma.roster.count({
-    where: {
-      leagueId: league.id,
-      NOT: { platformUserId: { startsWith: 'orphan-' } },
-    },
-  })
+  // Seats held by people, not rosters that exist: a native league is created with a roster
+  // for every seat, so counting rosters read every new league as full.
+  const memberCount = await countSeatsHeldByPeople(prisma, league.id)
   const leagueSize = league.leagueSize ?? null
   const isFull = leagueSize != null && memberCount >= leagueSize
   const requiresPassword = visibility === "password_protected" && Boolean(passwordHash)
@@ -222,8 +216,6 @@ export async function validateFantasyInviteCode(
   if (visibility === "invite_only" && !allowInviteLink) {
     return { valid: false, error: "INVITE_DISABLED", preview }
   }
-  if (isFull) return { valid: false, error: "LEAGUE_FULL", preview }
-
   if (options?.userId) {
     const existing = await prisma.roster.findUnique({
       where: {
@@ -233,6 +225,8 @@ export async function validateFantasyInviteCode(
     })
     if (existing) return { valid: false, error: "ALREADY_MEMBER", preview }
   }
+
+  if (isFull) return { valid: false, error: "LEAGUE_FULL", preview }
 
   if (requiresPassword) {
     if (!options?.password?.trim()) return { valid: false, error: "PASSWORD_REQUIRED", preview }

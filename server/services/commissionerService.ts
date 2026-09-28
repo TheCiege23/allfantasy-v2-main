@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { undoLastPick } from '@/lib/live-draft-engine/DraftSessionService'
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
 import { recomputeStandingsForSeason } from '@/server/services/standingsEngine'
@@ -77,6 +78,7 @@ export async function reverseLastDraftPick(leagueId: string, userId: string) {
 
   const before = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, nextOverallPick: true, currentRoundNum: true },
   })
 

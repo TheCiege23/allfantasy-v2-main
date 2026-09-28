@@ -23,6 +23,7 @@ import { prisma } from '@/lib/prisma'
 import { buildSlotOrderForLeague } from '@/lib/live-draft-engine/DraftSessionService'
 import { materializeDraftSlots } from '@/lib/league-setup/materializeDraftSlots'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface AutoMaterializeResult {
   ok: true
@@ -46,8 +47,9 @@ export type AutoMaterializeOutcome = AutoMaterializeResult | AutoMaterializeFail
 export async function autoMaterializeDraftForLeague(leagueId: string): Promise<AutoMaterializeOutcome> {
   if (!leagueId) return { ok: false, reason: 'Missing leagueId' }
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, teamCount: true, slotOrder: true },
   })
   if (!session) return { ok: false, reason: 'Draft session not found' }

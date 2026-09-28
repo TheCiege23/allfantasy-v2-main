@@ -1,24 +1,13 @@
-import MonetizationPurchaseSurface, {
-  type PlanFamily,
-} from "@/components/monetization/MonetizationPurchaseSurface";
-
-function normalizePlanFamilyInput(input: string | null | undefined): PlanFamily | null {
-  if (!input) return null;
-  const value = input.trim().toLowerCase();
-  if (value === "af_pro" || value === "pro") return "af_pro";
-  if (value === "af_commissioner" || value === "commissioner") return "af_commissioner";
-  if (value === "af_war_room" || value === "war_room") return "af_war_room";
-  if (value === "af_supreme" || value === "supreme") return "af_supreme";
-  if (value === "af_all_access" || value === "all_access") return "af_supreme";
-  return null;
-}
+import MonetizationPurchaseSurface from "@/components/monetization/MonetizationPurchaseSurface";
+import { normalizePlanFamilyInput } from "@/lib/monetization/upgradeDestination";
 
 export default function UpgradePage({
   searchParams,
 }: {
-  searchParams?: { plan?: string };
+  searchParams?: { plan?: string | string[] };
 }) {
-  const focusPlanFamily = normalizePlanFamilyInput(searchParams?.plan);
+  const plan = Array.isArray(searchParams?.plan) ? searchParams?.plan[0] : searchParams?.plan;
+  const focusPlanFamily = normalizePlanFamilyInput(plan);
   return (
     <MonetizationPurchaseSurface
       pagePath="/upgrade"

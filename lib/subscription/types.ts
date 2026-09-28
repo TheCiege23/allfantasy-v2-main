@@ -90,7 +90,7 @@ export type SubscriptionPlanId =
   | 'pro'
   | 'commissioner'
   | 'war_room'
-  /** Top tier: AF Supreme — includes the full Pro + Commissioner + Legacy stack + highest token allowances. */
+  /** AF Supreme — bundles AF Pro + AF Commissioner (SUPREME_INCLUDED_PLAN_IDS). Does NOT include AF Legacy. */
   | 'supreme'
   /** Enterprise workspace tier — grants the Fantasy OS executive workspace (`fantasy_os_workspace` feature). */
   | 'enterprise'

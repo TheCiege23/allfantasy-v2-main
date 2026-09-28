@@ -1,28 +1,38 @@
-import React, { useState, useCallback } from 'react'
-import PinnedSection from './PinnedSectionTestable'
-import { Bot, MessageCircle, Users, Loader2 } from 'lucide-react'
-import LeagueMessageRow from './LeagueMessageRow'
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { Bot, MessageCircle, Users } from 'lucide-react'
+import ThreadPanel from '@/components/core-app/comms/ThreadPanel'
+import { DM_PRIVACY, HUDDLE_PRIVACY } from '@/components/core-app/comms/privacyCopy'
+import '@/components/core-app/af-comms.css'
+
+/**
+ * AF Chat: Chimmy · Direct · Huddle.
+ *
+ * ⚠ NOTHING IN THE APP MOUNTS THIS — only its test does (checked 2026-09-25 across `@/`,
+ * relative, dynamic and `vi.mock` imports). It used to render DMs and Huddles through
+ * `LeagueMessageRow`, a test stub that drew no message text, behind tabs marked "soon" and
+ * disabled, fed by hard-coded thread ids (`af-dm-main`) that do not exist. Its test had been
+ * red on main for all seven cases.
+ *
+ * It now hands Direct and Huddle to `ThreadPanel`, the drawer's real DM/Huddle conversation,
+ * so if anything does mount it, it works. Whether to keep it at all is the owner's call.
+ */
 
 export type AfSubTab = 'chimmy' | 'direct' | 'af_huddle'
 
-const AF_SUB_TABS: Array<{
-  id: AfSubTab
-  label: string
-  title: string
-  Icon: typeof MessageCircle
-  comingSoon?: boolean
-}> = [
-  { id: 'chimmy', label: 'Chimmy', title: 'Chimmy AI', Icon: Bot },
-  { id: 'direct', label: 'Direct', title: 'Direct messages — coming soon', Icon: MessageCircle, comingSoon: true },
-  { id: 'af_huddle', label: 'Huddle', title: 'AF Huddle — coming soon', Icon: Users, comingSoon: true },
+const AF_SUB_TABS: Array<{ id: AfSubTab; label: string; title: string; Icon: typeof MessageCircle }> = [
+  { id: 'chimmy', label: 'Chimmy', title: 'Chimmy', Icon: Bot },
+  { id: 'direct', label: 'Direct', title: 'Direct messages', Icon: MessageCircle },
+  { id: 'af_huddle', label: 'Huddle', title: 'AF Huddle', Icon: Users },
 ]
 
 type AFChatDMPanelProps = {
   userId: string
-  messages?: any[] // Optional for testability
 }
 
-export default function AFChatDMPanel({ userId, messages }: AFChatDMPanelProps) {
+export default function AFChatDMPanel({ userId }: AFChatDMPanelProps) {
   const [afTab, setAfTab] = useState<AfSubTab>('chimmy')
 
   return (
@@ -37,291 +47,34 @@ export default function AFChatDMPanel({ userId, messages }: AFChatDMPanelProps) 
               key={tab.id}
               type="button"
               title={tab.title}
-              onClick={() => !tab.comingSoon && setAfTab(tab.id)}
-              disabled={tab.comingSoon}
+              aria-pressed={isActive}
+              onClick={() => setAfTab(tab.id)}
               className={`relative flex flex-1 items-center justify-center gap-1 py-2 transition-colors ${
-                tab.comingSoon
-                  ? 'cursor-not-allowed text-white/20'
-                  : isActive
-                  ? 'border-b-2 border-cyan-500 bg-white/[0.04] text-cyan-300'
-                  : 'text-white/40 hover:text-white/70'
+                isActive ? 'border-b-2 border-cyan-500 bg-white/[0.04] text-cyan-300' : 'text-white/40 hover:text-white/70'
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden />
               <span className="sr-only">{tab.label}</span>
-              {tab.comingSoon && (
-                <span className="absolute -top-0.5 right-0.5 rounded text-[7px] font-bold uppercase tracking-wider text-white/25">
-                  soon
-                </span>
-              )}
             </button>
           )
         })}
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {afTab === 'direct' ? <DMChatPanel userId={userId} messages={messages} /> : null}
-        {afTab === 'af_huddle' ? <HuddleChatPanel userId={userId} messages={messages} /> : null}
-        {/* Chimmy tab intentionally omitted for testability */}
-      </div>
-    </div>
-  )
-}
-
-function DMChatPanel({ userId, messages: testMessages }: { userId: string, messages?: any[] }) {
-  // Placeholder state for demonstration; replace with real DM threadId logic
-  const dmThreadId = 'af-dm-main' // TODO: wire to real DM thread selection
-  const [messages, setMessages] = useState<any[]>(testMessages ?? [])
-  const [pinned, setPinned] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [threadParent, setThreadParent] = useState<any | null>(null)
-
-  // ...existing code...
-
-  // Fetch messages and pinned messages (skip in test mode)
-  const loadMessages = useCallback(async () => {
-    if (testMessages) return;
-    setLoading(true)
-    try {
-      const [msgRes, pinRes] = await Promise.all([
-        fetch(`/api/shared/chat/threads/${encodeURIComponent(dmThreadId)}/messages?limit=50`, { cache: 'no-store' }),
-        fetch(`/api/shared/chat/threads/${encodeURIComponent(dmThreadId)}/pinned`, { cache: 'no-store' }),
-      ])
-      const msgJson = await msgRes.json().catch(() => ({}))
-      const pinJson = await pinRes.json().catch(() => ({}))
-      setMessages(Array.isArray(msgJson?.messages) ? msgJson.messages : [])
-      setPinned(Array.isArray(pinJson?.pinned) ? pinJson.pinned : [])
-    } catch {
-      setMessages([])
-      setPinned([])
-    } finally {
-      setLoading(false)
-    }
-  }, [dmThreadId, testMessages])
-
-  // Pin/unpin handlers
-  const handlePin = useCallback(async (messageId: string) => {
-    try {
-      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(dmThreadId)}/pin`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messageId }),
-      })
-      if (res.ok) void loadMessages()
-    } catch {}
-  }, [dmThreadId, loadMessages])
-  const handleUnpin = useCallback(async (pinMessageId: string) => {
-    try {
-      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(dmThreadId)}/unpin`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ pinMessageId }),
-      })
-      if (res.ok) void loadMessages()
-    } catch {}
-  }, [dmThreadId, loadMessages])
-
-  // Initial load
-  // React.useEffect(() => { loadMessages() }, [loadMessages])
-
-  // Threaded chat: show only replies to threadParent if set
-  const baseMessages = testMessages ?? messages;
-  const visibleMessages = threadParent
-    ? baseMessages.filter((msg) => msg.parentMessageId === threadParent.id)
-    : baseMessages.filter((msg) => !msg.parentMessageId)
-  if (threadParent) {
-    // Forced test error for visibility
-    if (typeof window !== 'undefined' && window.location && window.location.href.includes('vitest')) {
-      if (visibleMessages.length === 0) {
-        throw new Error('[DMChatPanel TEST] visibleMessages is empty in thread view! baseMessages: ' + JSON.stringify(baseMessages));
-      }
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      <PinnedSection
-        pinned={pinned}
-        onUnpin={handleUnpin}
-        onSelectPinned={(_pinMessage, referencedMessageId) => {}}
-        canUnpin={true}
-        className="mb-2"
-      />
-      <div className="flex-1 overflow-y-auto px-2 py-2">
-        {threadParent && (
-          <>
-            <div data-testid="dm-thread-view-active" />
-            <div className="mb-2 flex items-center gap-2 ml-2">
-              <button type="button" onClick={() => setThreadParent(null)} className="rounded p-1 text-cyan-400 hover:bg-cyan-900/40" aria-label="Back to main chat">
-                <svg className="h-4 w-4 rotate-90" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
-              </button>
-              <span className="text-xs text-cyan-300">Viewing replies to:</span>
-              <span className="text-xs text-white/80 truncate max-w-[180px]">{threadParent.body}</span>
-            </div>
-          </>
-        )}
-        {loading ? (
-          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#a78bfa' }} /></div>
-        ) : (
-          <div className="space-y-2">
-            {visibleMessages.map((m, index) => {
-              // Find replies to this message
-              const replies = baseMessages.filter((msg) => msg.parentMessageId === m.id)
-              return (
-                <div key={m.id}>
-                  <LeagueMessageRow
-                    msg={m}
-                    threadId={dmThreadId}
-                    previousMsg={index > 0 ? visibleMessages[index - 1] : null}
-                    onPin={() => handlePin(m.id)}
-                    onReaction={() => {}}
-                    showPin={true}
-                    currentUserId={userId}
-                    highlighted={false}
-                    onReply={() => {}}
-                    onStartDm={() => {}}
-                    onPollVote={() => {}}
-                    pollVotingEnabled={false}
-                    canClosePoll={false}
-                    onPollClose={() => {}}
-                    onMediaOpen={() => {}}
-                    allMessages={baseMessages} // Always pass full messages array
-                  />
-                  {/* Threaded chat: visual indicator and thread view button */}
-                  {replies.length > 0 && !threadParent && (
-                    <button
-                      type="button"
-                      className="ml-8 mb-2 text-xs text-cyan-400 hover:underline"
-                      onClick={() => setThreadParent(m)}
-                    >
-                      <MessageCircle className="inline h-4 w-4 mr-1" />
-                      {replies.length} repl{replies.length === 1 ? "y" : "ies"}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {afTab === 'chimmy' ? (
+          <div className="p-3 text-[12px] text-white/60">
+            <Link href="/chimmy/chat" className="font-semibold text-cyan-300 underline">
+              Open Chimmy
+            </Link>{' '}
+            — your private read on trades, waivers and lineups.
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function HuddleChatPanel({ userId, messages: testMessages }: { userId: string, messages?: any[] }) {
-  // Placeholder state for demonstration; replace with real huddle threadId logic
-  const huddleThreadId = 'af-huddle-main' // TODO: wire to real huddle thread selection
-  const [messages, setMessages] = useState<any[]>(testMessages ?? [])
-  const [pinned, setPinned] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [threadParent, setThreadParent] = useState<any | null>(null)
-
-  // Fetch messages and pinned messages (skip in test mode)
-  const loadMessages = useCallback(async () => {
-    if (testMessages) return;
-    setLoading(true)
-    try {
-      const [msgRes, pinRes] = await Promise.all([
-        fetch(`/api/shared/chat/threads/${encodeURIComponent(huddleThreadId)}/messages?limit=50`, { cache: 'no-store' }),
-        fetch(`/api/shared/chat/threads/${encodeURIComponent(huddleThreadId)}/pinned`, { cache: 'no-store' }),
-      ])
-      const msgJson = await msgRes.json().catch(() => ({}))
-      const pinJson = await pinRes.json().catch(() => ({}))
-      setMessages(Array.isArray(msgJson?.messages) ? msgJson.messages : [])
-      setPinned(Array.isArray(pinJson?.pinned) ? pinJson.pinned : [])
-    } catch {
-      setMessages([])
-      setPinned([])
-    } finally {
-      setLoading(false)
-    }
-  }, [huddleThreadId, testMessages])
-
-  // Pin/unpin handlers
-  const handlePin = useCallback(async (messageId: string) => {
-    try {
-      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(huddleThreadId)}/pin`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messageId }),
-      })
-      if (res.ok) void loadMessages()
-    } catch {}
-  }, [huddleThreadId, loadMessages])
-  const handleUnpin = useCallback(async (pinMessageId: string) => {
-    try {
-      const res = await fetch(`/api/shared/chat/threads/${encodeURIComponent(huddleThreadId)}/unpin`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ pinMessageId }),
-      })
-      if (res.ok) void loadMessages()
-    } catch {}
-  }, [huddleThreadId, loadMessages])
-
-  // Threaded chat: show only replies to threadParent if set
-  const visibleMessages = threadParent
-    ? messages.filter((msg) => msg.parentMessageId === threadParent.id)
-    : messages.filter((msg) => !msg.parentMessageId)
-  // ...existing code...
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      <PinnedSection
-        pinned={pinned}
-        onUnpin={handleUnpin}
-        onSelectPinned={(_pinMessage, referencedMessageId) => {}}
-        canUnpin={true}
-        className="mb-2"
-      />
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2">
-        {threadParent && (
-          <div className="mb-2 flex items-center gap-2 ml-2">
-            <button type="button" onClick={() => setThreadParent(null)} className="rounded p-1 text-cyan-400 hover:bg-cyan-900/40" aria-label="Back to main chat">
-              <svg className="h-4 w-4 rotate-90" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
-            </button>
-            <span className="text-xs text-cyan-300">Viewing replies to:</span>
-            <span className="text-xs text-white/80 truncate max-w-[180px]">{threadParent.body}</span>
-          </div>
-        )}
-        {loading ? (
-          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#a78bfa' }} /></div>
         ) : (
-          visibleMessages.map((m, index) => {
-            // Find replies to this message
-            const replies = messages.filter((msg) => msg.parentMessageId === m.id)
-            return (
-              <div key={m.id}>
-                <LeagueMessageRow
-                  msg={m}
-                  threadId={huddleThreadId}
-                  previousMsg={index > 0 ? visibleMessages[index - 1] : null}
-                  onPin={() => handlePin(m.id)}
-                  onReaction={() => {}}
-                  showPin={true}
-                  currentUserId={userId}
-                  highlighted={false}
-                  onReply={() => {}}
-                  onStartDm={() => {}}
-                  onPollVote={() => {}}
-                  pollVotingEnabled={false}
-                  canClosePoll={false}
-                  onPollClose={() => {}}
-                  onMediaOpen={() => {}}
-                  allMessages={messages}
-                />
-                {/* Threaded chat: visual indicator and thread view button */}
-                {replies.length > 0 && !threadParent && (
-                  <button
-                    type="button"
-                    className="ml-8 mb-2 text-xs text-cyan-400 hover:underline"
-                    onClick={() => setThreadParent(m)}
-                  >
-                    <MessageCircle className="inline h-4 w-4 mr-1" />
-                    {replies.length} repl{replies.length === 1 ? "y" : "ies"}
-                  </button>
-                )}
-              </div>
-            )
-          })
+          <div className="af-cm af-cm-embed" data-fill="true">
+            <ThreadPanel
+              key={afTab}
+              kind={afTab === 'direct' ? 'dm' : 'group'}
+              privacy={afTab === 'direct' ? DM_PRIVACY : HUDDLE_PRIVACY}
+            />
+          </div>
         )}
       </div>
     </div>

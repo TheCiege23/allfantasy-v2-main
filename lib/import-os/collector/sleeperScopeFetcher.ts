@@ -10,6 +10,7 @@
  * Read-only: every provider call is a GET against Sleeper's public keyless API.
  */
 import { createHash } from 'crypto'
+import { isCompletedTrade } from '@/lib/league-import/transactionFinality'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import type { ScopeFetcher, ScopeFetchResult } from '@/lib/import-os/runner'
 import type { SleeperSyncScope } from './types'
@@ -63,11 +64,13 @@ function checkpointForScope(scope: SleeperSyncScope, n: NormalizedImportResult):
      * transaction would make the checkpoint move on waiver churn and free-agent adds, so the scope
      * would re-apply constantly while changing nothing — the checkpoint's whole job is to say
      * "nothing to do". Sorted because Sleeper's per-week ordering is not stable across fetches.
+     * ⚠ Finality is per provider (this collector serves all of them) — same predicate as
+     * `persistLiveTrades`, or a non-Sleeper trade would never move the checkpoint.
      */
     case 'transactions':
       return hash(
         (n.transactions ?? [])
-          .filter((t) => t.type === 'trade' && String(t.status).toLowerCase() === 'complete')
+          .filter((t) => t.type === 'trade' && isCompletedTrade(n.source?.source_provider ?? 'sleeper', t.status))
           .map((t) => `${t.source_transaction_id}:${t.week ?? ''}`)
           .sort(),
       )
@@ -89,7 +92,7 @@ function recordsForScope(scope: SleeperSyncScope, n: NormalizedImportResult): { 
       }))
     case 'transactions':
       return (n.transactions ?? [])
-        .filter((t) => t.type === 'trade' && String(t.status).toLowerCase() === 'complete')
+        .filter((t) => t.type === 'trade' && isCompletedTrade(n.source?.source_provider ?? 'sleeper', t.status))
         .map((t) => ({ id: `trade:${t.source_transaction_id}` }))
     default:
       return []

@@ -4,6 +4,7 @@ import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import { lineupLink } from '@/lib/core-app/platformLinks'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import { MyTeamLockClock } from '@/components/core-app/MyTeamLockClock'
+import { LineupIntelligenceActions } from '@/components/core-app/LineupIntelligenceActions'
 import {
   BoardHead,
   FooterSummary,
@@ -81,6 +82,7 @@ function detailOf(row: MyTeamRow): string {
  * — then the two that need a replacement found, then the risk, then our own gap.
  */
 function tagsOf(row: MyTeamRow): Array<{ key: string; tag: string; detail: string; sev: Sev }> {
+  if (row.bestBall) return [{ key: 'auto', tag: 'AUTO', detail: 'Best Ball lineup', sev: 'info' }]
   const out: Array<{ key: string; tag: string; detail: string; sev: Sev }> = []
   if (row.empty > 0) {
     out.push({
@@ -108,12 +110,16 @@ function tagsOf(row: MyTeamRow): Array<{ key: string; tag: string; detail: strin
 }
 
 function Lock({ row, now }: { row: MyTeamRow; now: number }) {
+  if (row.bestBall) return <span className="af-bd-stat">Automatic</span>
   /*
    * ⚠ THE EM DASH NEEDS AN ACCESSIBLE NAME OR IT IS SILENCE. `title` alone is
    * not reliably announced and "—" read aloud is nothing at all, so the reason
    * travels as the label.
    */
   if (row.lockAt == null) {
+    if ((row.started ?? 0) > 0) {
+      return <span className="af-bd-stat" title="Some games have started. Check individual locks on your platform.">Games started{row.unknownKickoffs ? ' · schedule incomplete' : ''}</span>
+    }
     const why = 'Lock time unknown — no kickoff on file for any of these starters.'
     return (
       <span className="af-bd-stat" title={why} aria-label={why}>
@@ -149,9 +155,9 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
     <span
       className="af-bd-stat"
       data-sev={label.locked ? 'bad' : label.urgent ? 'bad' : 'warn'}
-      title={`First kickoff ${kickoff}`}
+      title={`Next starter kickoff ${kickoff}. Individual locks and AutoSubs must be checked on your platform.`}
     >
-      {label.locked ? label.text : <MyTeamLockClock atMs={atMs} initial={label.text} />}
+      {label.locked ? 'Check player locks' : <MyTeamLockClock atMs={atMs} initial={label.text} elapsedLabel="Check player locks" />}
     </span>
   )
 }
@@ -253,6 +259,10 @@ function Row({
           <span className="af-bd-cta" />
         )}
       </div>
+      <div className="af-mt-board-actions">
+        <span>{row.bestBall ? 'Provider selects the scoring lineup · review roster depth' : <>{row.started ? `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{row.lockAt ? 'Next player deadline' : 'Check individual locks'}{row.unknownKickoffs ? ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}</span>
+        <LineupIntelligenceActions leagueId={row.leagueId} leagueName={row.leagueName} bestBall={row.bestBall} />
+      </div>
     </li>
   )
 }
@@ -276,6 +286,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
    */
   const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
   const total = pulse.considered
+  const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
   /*
    * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
@@ -285,7 +296,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
    * the DISPLAYED time instead would merge rows an hour apart, because
    * `formatLockLabel` rounds to the hour past a day.
    */
-  const ranks = rankTiers(rows.map((r) => `${r.locked ? 1 : 0}|${r.severity}|${r.lockAt ?? ''}`))
+  const ranks = rankTiers(rows.map((r) => `${(r.actionableSeverity ?? r.severity) === 0 ? 1 : 0}|${r.actionableSeverity ?? r.severity}|${r.lockAt ?? ''}`))
   /* Nothing separated any row from any other, so the board is a set, not a ranking. */
   const unordered = ranks.length > 0 && ranks.every((r) => r === null)
 
@@ -312,14 +323,15 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   }
 
   const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup
-  const hidden = Math.max(0, total - rows.length)
+  const hidden = Math.max(0, activeTotal - rows.length)
+  const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
 
   return (
     <div className="af-bd">
       <BoardHead
         eyebrow="Core · My team"
         title="My team"
-        blurb="Your most urgent lineups across every league, ranked by time left before lock."
+        blurb="Review remaining lineup problems across your leagues. Deadlines follow individual players; confirm locks and AutoSubs on your platform."
       />
 
       <section className="af-bd-sec" aria-labelledby="af-mt-board">
@@ -352,7 +364,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
                   ? `Top ${rows.length} · ranked by urgency`
                   : `Top ${rows.length} · nothing is broken, so ranked by lock time`
           }
-          count={`${pulse.checked.toLocaleString()} of ${total.toLocaleString()} teams read`}
+          count={`${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
         />
         {rows.length > 0 ? (
           <>
@@ -365,9 +377,9 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             */}
             {pulse.needs.length === 0 ? (
               <p className="af-bd-note af-bd-note--plain">
-                Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
+                {pulse.automatic ? 'No manual lineup problems found in the available data. Best Ball scoring lineups are selected automatically; review those leagues for roster injuries and depth.' : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
                 no empty slots, nobody ruled out
-                {pulse.byeChecked ? ', nobody on a bye' : ''}. These are the ones locking soonest.
+                {pulse.byeChecked ? ', nobody on a bye' : ''}. These are the ones locking soonest.</>}
               </p>
             ) : null}
             <ul className="af-bd-rows">
@@ -403,6 +415,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
           </p>
         )}
       </section>
+      {pulse.paused ? <p className="af-bd-note">{pulse.paused} {pulse.paused === 1 ? 'league is' : 'leagues are'} paused on this account and excluded from lineup urgency. <Link href={allHref}>View all leagues</Link> to review them.</p> : null}
 
       {/*
         ⚠ THE UNREADABLE COUNT IS ITS OWN LINE, NOT FOLDED INTO THE FOOTER. A
@@ -410,11 +423,17 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         clean; putting it in the same sentence as "nothing needs you there" is
         the claim this whole loader refuses to make.
       */}
+      {(pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0 ? (
+        <p className="af-bd-note">
+          {(pulse.automatic ?? 0) > 0 ? `${pulse.automatic} Best Ball teams use automatic lineups. ` : null}
+          {(pulse.notChecked.inactive ?? 0) > 0 ? `${pulse.notChecked.inactive} pre-draft, completed, or inactive teams are excluded from manual lineup tasks.` : null}
+        </p>
+      ) : null}
       {unreadable > 0 ? (
         <p className="af-bd-note">
           <strong>
-            {unreadable} of your {total.toLocaleString()} claimed{' '}
-            {total === 1 ? 'team' : 'teams'} could not be checked.
+            {unreadable} of your {activeTotal.toLocaleString()} {pulse.paused ? 'active ' : ''}claimed{' '}
+            {activeTotal === 1 ? 'team' : 'teams'} could not be checked.
           </strong>{' '}
           {/* Singular counts read as broken copy on a screen full of real numbers. */}
           {pulse.notChecked.noRoster > 0
@@ -424,8 +443,8 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
           {pulse.notChecked.noLineup > 0
             ? `${pulse.notChecked.noLineup} ${pulse.notChecked.noLineup === 1 ? 'has' : 'have'} a roster but no starting lineup on file`
             : ''}
-          . That is a gap in what we hold, not a verdict on those lineups —{' '}
-          <Link href="/core/sync">re-sync</Link> to close it.
+          . This is a gap in available data, not a verdict on those lineups. {' '}
+          <Link href={allHref}>Review league setup</Link> or <Link href="/core/sync">re-sync imported leagues</Link>.
         </p>
       ) : null}
 
@@ -445,10 +464,15 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
         hidden={hidden}
         total={total}
         href={allHref}
+        emptyText={pulse.paused ? 'Every active league is on this board.' : undefined}
         quiet={
-          unreadable > 0
-            ? 'are either set or could not be read — the line above says which.'
-            : 'are set — nothing needs you there.'
+          hiddenNeeds > 0
+            ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
+            : unreadable > 0
+              ? 'are either set or could not be read — the line above says which.'
+            : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
+              ? 'have no remaining manual lineup task.'
+              : 'are set — nothing needs you there.'
         }
       />
     </div>

@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import type { UserLeague } from '@/app/dashboard/types'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
@@ -111,6 +112,7 @@ export function StartSitModal({
   const [mode, setMode] = useState<StartSitMode>('balanced')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<AnalyzeResult | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<
     Array<{ externalId: string; teamName: string; ownerName: string; isYou?: boolean }>
@@ -166,6 +168,7 @@ export function StartSitModal({
     if (!activeLeagueId) {
       setResult(null)
       setError(null)
+      setRefusal(null)
       return
     }
     if (isGlobalMode && sportFilter === 'ALL') {
@@ -175,6 +178,7 @@ export function StartSitModal({
     }
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const effectiveSport =
         sportFilter === 'ALL' && activeLeague
@@ -193,6 +197,7 @@ export function StartSitModal({
       })
       const j = (await r.json()) as AnalyzeResult & { ok?: boolean; error?: string; code?: string }
       if (!r.ok || !j.ok) {
+        setRefusal(readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() }))
         setError(j.error || 'Analysis failed.')
         setResult(null)
         return
@@ -237,6 +242,7 @@ export function StartSitModal({
       wide
       loading={false}
       error={error}
+      refusal={refusal}
       empty={!canAnalyze}
       emptyMessage={
         isGlobalMode

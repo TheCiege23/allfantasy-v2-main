@@ -12,6 +12,7 @@ import type { DraftImportPreview } from '@/lib/draft-import'
 import { validatePreview } from '@/lib/draft-import'
 import { prisma } from '@/lib/prisma'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,8 +42,9 @@ export async function POST(
   if (!preview?.slotOrder || !Array.isArray(preview.picks)) {
     return NextResponse.json({ error: 'preview with slotOrder and picks required' }, { status: 400 })
   }
-  const existingSession = await prisma.draftSession.findUnique({
+  const existingSession = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       status: true,
       picks: { select: { id: true } },

@@ -211,3 +211,19 @@ describe('rollSeasonWeeks — unsupported formats', () => {
     expect(out.failed).toBe(0)
   })
 })
+describe('linked tournament ownership', () => {
+  it('does not send a tournament through the head-to-head week roller', async () => {
+    findManySeasons.mockResolvedValue([{id:'s',leagueId:'l',sport:'NFL',currentWeek:1,totalWeeks:3,playoffStartWeek:4,league:{bbContestId:'c',bestBallMode:true,settings:{best_ball_settings:{contestStructure:'tournament'}}}}])
+    const out=await rollSeasonWeeks()
+    expect(out.held).toBe(1)
+    expect(advanceWeek).not.toHaveBeenCalled()
+    expect(resolveWeek).not.toHaveBeenCalled()
+  })
+  it('does not create a head-to-head playoff bracket for a linked tournament', async () => {
+    findManySeasons.mockResolvedValue([{...SEASON,status:'regular_season_complete',league:{bbContestId:'c',bestBallMode:true,settings:{best_ball_settings:{contestStructure:'tournament'}}}}])
+    const out=await rollPostseason()
+    expect(out.held).toBe(1)
+    expect(generateBracket).not.toHaveBeenCalled()
+    expect(finalizeSeason).not.toHaveBeenCalled()
+  })
+})

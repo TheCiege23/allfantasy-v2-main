@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { getGateDef } from "@/lib/subscription/featureGating"
+import { getGateDef, getUpgradeUrlWithHighlightForFeature } from "@/lib/subscription/featureGating"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import type { SubscriptionFeatureId } from "@/lib/subscription/types"
 
@@ -20,11 +20,7 @@ export async function requireEntitlement(
 
   if (!result.hasAccess) {
     const def = getGateDef(featureId)
-    const hash =
-      typeof def.highlightParam === "string" && def.highlightParam.length > 0
-        ? def.highlightParam
-        : undefined
-    const upgradeUrl = def.upgradeUrl + (hash ? `?highlight=${encodeURIComponent(hash)}` : "")
+    const upgradeUrl = getUpgradeUrlWithHighlightForFeature(featureId)
     return NextResponse.json(
       {
         error: result.message,

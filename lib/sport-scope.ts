@@ -84,9 +84,23 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  *   5. the finalizer able to close it — `DATE_WINDOWED_SPORTS` in `weekFinalizer.ts`,
  *      since `SportsGame.week` for NHL is noise (29 distinct values, 1..500).
  *
- * ⚠ NBA CLEARS (1) AND (4) AND IS STILL ABSENT. Its season starts 2026-10-20, so
- * nothing above has been checked against a real NBA slate. Adding it is a
- * measurement, not an edit.
+ * NBA (added 2026-09-25, before its 2026-10-20 opener), against the same list. Every
+ * item was checked in CODE and in committed fixtures; none against a real NBA slate,
+ * because none has been played yet:
+ *   1. stats: `rollingInsightsGameLogs.ts` extracts NBA's group-less `/live` box
+ *      (fixtures/live.NBA.json), `NBA_STAT_ALIASES` names every key it scores and
+ *      each vendor spelling is in that fixture; the multi-sport ingest sweeps NBA;
+ *   2. schedule: `thesportsdb` in SportsGame, as for NHL — `split` season style, so
+ *      the whole 2026-27 season files under 2026 (`seasonStartYear`);
+ *   3. statuses: `FT`/`AOT` -> final, quarter codes -> live, anything else holds;
+ *   4. opener: 2026-10-20 in dailySportSeasonStarts.ts (a Tuesday, like NHL);
+ *   5. finalizer: `DATE_WINDOWED_SPORTS`, added in the same change;
+ *   6. roster ids: `rosterGameLogIdBridge` and the pool tie-break (#1276) cover it.
+ * It is added before the opener, not after, because the finalizer's sweep looks back
+ * only three weeks: waiting past calendar week 4 would leave week 1 unsealable. A
+ * wholesale stat or slate failure refuses by name rather than sealing zeros (a partial
+ * one under the coverage floor's 20% tolerance would not); the first NBA weeks still
+ * owe the observation contracts/rolling-insights/GAPS.md describes.
  *
  * NCAAB (2026-09-24), against the same list — and one item the list did not have:
  *   1. stats: 110,640 `player_game_stats` rows for 2025-26 (backfilled), daily sweep since;
@@ -102,7 +116,7 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  *      keyed on PlayerIdentityMap.id; queried directly every starter scored 0 (#1200 bridges it).
  *      Any next sport must check this too.
  */
-export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NCAAB']
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'NCAAB']
 
 /** Whether a league in this sport can run a season to completion today. */
 export function canRunSeasonForSport(sport: string | null | undefined): boolean {

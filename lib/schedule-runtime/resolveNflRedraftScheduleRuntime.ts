@@ -13,6 +13,7 @@ import {
   type ScheduleRuntimeMatchupInput,
   type ScheduleRuntimeTeamInput,
 } from './canonicalScheduleRuntime'
+import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 
 type RedraftRosterRow = {
   id: string
@@ -203,7 +204,10 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   const loadRules = deps.loadRules ?? defaultScheduleRuntimeDeps.loadRules
   const rules = await loadRules(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
-  if (String(rules.general.sport).toUpperCase() !== 'NFL' || normalize(rules.general.format) !== 'redraft') {
+  // Any season-capable sport running a standard weekly season — not only NFL redraft, which
+  // left every keeper, dynasty and best-ball league (and every NHL/NCAAB one) on week 1 forever.
+  // The reason code keeps its name for its consumers; it now means "format not covered".
+  if (!runsStandardWeeklySeason(rules.general.sport, rules.general.format)) {
     return { ok: false, reason: 'not_nfl_redraft' }
   }
   if (!season.rosters.length) return { ok: false, reason: 'rosters_unavailable' }

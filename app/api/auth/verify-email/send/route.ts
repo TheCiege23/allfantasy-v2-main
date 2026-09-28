@@ -49,7 +49,8 @@ export async function POST(req: Request) {
 
   const rawToken = makeToken(32)
   const tokenHash = sha256Hex(rawToken)
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
+  const { emailVerifyLinkExpiresAt } = await import("@/lib/auth/emailVerifyLink")
+  const expiresAt = emailVerifyLinkExpiresAt()
 
   /*
    * ⚠ OLDER LINKS ARE RETIRED ONLY AFTER THE NEW ONE IS DELIVERED — see the end of

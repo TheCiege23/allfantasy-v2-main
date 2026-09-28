@@ -70,13 +70,25 @@ export type SyncRunOutcome = {
 }
 
 /** The backstop. Not a cap on work — see the header. */
-export const MAX_ROUNDS = 40
+export const MAX_ROUNDS = 200
+
+export type SyncCheckpoint = {
+  only: string[] | null
+  total: number
+  synced: number
+  locked: number
+  failed: number
+  rounds: number
+}
 
 export type RunSyncRoundsDeps = {
+  initialOnly?: string[]
+  initialCheckpoint?: SyncCheckpoint
   /** Posts one round. `only` is null on the first round, then the previous `remaining`. */
   post: (only: string[] | null) => Promise<SyncPostResult>
   /** Progress between rounds. A 50-league account is minutes of work. */
   onProgress?: (text: string) => void
+  onCheckpoint?: (checkpoint: SyncCheckpoint) => void
   /** Overridable so a test can reach the backstop without 40 fabricated rounds. */
   maxRounds?: number
 }
@@ -84,13 +96,13 @@ export type RunSyncRoundsDeps = {
 export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOutcome> {
   const maxRounds = deps.maxRounds ?? MAX_ROUNDS
 
-  let only: string[] | null = null
-  let total = 0
-  let synced = 0
-  let locked = 0
-  let failed = 0
-  let rounds = 0
-  let exhausted = false
+  let only: string[] | null = deps.initialCheckpoint?.only ?? deps.initialOnly ?? null
+  let total = deps.initialCheckpoint?.total ?? 0
+  let synced = deps.initialCheckpoint?.synced ?? 0
+  let locked = deps.initialCheckpoint?.locked ?? 0
+  let failed = deps.initialCheckpoint?.failed ?? 0
+  let rounds = deps.initialCheckpoint?.rounds ?? 0
+  let exhausted = rounds >= maxRounds && Boolean(only?.length)
 
   while (rounds < maxRounds) {
     rounds += 1
@@ -121,7 +133,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
 
     /* The denominator is fixed by the first round: later rounds recompute the
        same candidate set server-side, so it should not move under us. */
-    if (rounds === 1) total = round.totalCandidates ?? 0
+    if (rounds === 1) total = round.totalCandidates ?? deps.initialOnly?.length ?? 0
     synced += round.synced ?? 0
     locked += round.locked ?? 0
     failed += round.failed ?? 0
@@ -140,9 +152,10 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
       }
     }
 
-    deps.onProgress?.(`Synced ${synced + locked + failed} of ${total}…`)
+    deps.onProgress?.(`Checked ${synced + locked + failed} of ${total} · synced ${synced}…`)
 
     const rest = Array.isArray(round.remaining) ? round.remaining : []
+    deps.onCheckpoint?.({ only: rest, total, synced, locked, failed, rounds })
     /* Stop 1 — the honest terminator. */
     if (rest.length === 0) break
     /* Stop 2 — a server that reported work left but attempted none of it. */
@@ -173,7 +186,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
   return {
     status: stragglers > 0 ? 'partial' : 'done',
     tone: stragglers > 0 ? 'attention' : 'ok',
-    message: stragglers > 0 ? `Synced ${synced} of ${total}` : `Synced ${synced}`,
+    message: stragglers > 0 ? `Synced ${synced} of ${total} · ${failed} failed · ${locked} already syncing` : `Synced ${synced}`,
     total,
     synced,
     locked,

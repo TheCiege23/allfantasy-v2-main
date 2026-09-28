@@ -20,6 +20,7 @@ import { idpValueForRank } from '@/lib/idp-kicker-values'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { buildIdpValuations } from './idpValuation'
 import { loadIdpProjections } from './loadIdpProjections'
+import { idpProjectionUnpricedReason, idpReplacementUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 export interface LoadLeagueIdpVorpArgs {
   prisma: PrismaClient
@@ -43,6 +44,7 @@ export interface LoadLeagueIdpVorpArgs {
 }
 
 export interface LeagueIdpVorpResult {
+  unpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>
   /** Points over replacement by Sleeper id. Null for a player replacement could not price. */
   vorpBySleeperId: Map<string, number | null>
   /** Rank within his own position group, by this league's projections. */
@@ -85,6 +87,7 @@ const EMPTY = (
   vorpBySleeperId: new Map(),
   positionRankBySleeperId: new Map(),
   valueBySleeperId: new Map(),
+  unpricedReasonBySleeperId: new Map(),
   skipped,
   coverage,
   projectionBySleeperId: new Map(),
@@ -113,6 +116,7 @@ export async function resolveLeagueIdpScoring(
       scoring: NonNullable<ReturnType<typeof extractScoringSettings>>
       /** The `League.id` the rules came from, whichever id space the caller asked in. */
       leagueId: string
+      projectionWindow?: { season: number; week: number }
     }
   | { ok: false; reason: 'no_scoring_settings' | 'not_an_idp_league' }
 > {
@@ -131,7 +135,13 @@ export async function resolveLeagueIdpScoring(
   const scoring = extractScoringSettings(league?.settings)
   if (!league || !scoring) return { ok: false, reason: 'no_scoring_settings' }
   if (!hasIdpScoring(scoring)) return { ok: false, reason: 'not_an_idp_league' }
-  return { ok: true, scoring, leagueId: league.id }
+  const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+    ? league.settings as Record<string, unknown> : {}
+  const season = Number(settings.season)
+  const week = Number(settings.current_week)
+  const projectionWindow = Number.isInteger(season) && season >= 2000 &&
+    Number.isInteger(week) && week >= 1 && week <= 18 ? { season, week } : undefined
+  return { ok: true, scoring, leagueId: league.id, ...(projectionWindow ? { projectionWindow } : {}) }
 }
 
 export async function loadLeagueIdpVorp(
@@ -153,6 +163,7 @@ export async function loadLeagueIdpVorp(
     rosterSlots: args.rosterPositions,
     numTeams: args.numTeams,
     isDynasty: args.isDynasty,
+    projectionWindow: resolved.projectionWindow,
   })
 }
 
@@ -166,6 +177,8 @@ export interface PriceIdpBoardArgs {
   rosterSlots: readonly string[] | null | undefined
   numTeams: number
   isDynasty?: boolean
+  /** Imported league period; an early game must not advance the entire board. */
+  projectionWindow?: { season: number; week: number }
 }
 
 /**
@@ -209,15 +222,23 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
    * The week to project is the one after the newest on file, resolved from the DATA rather
    * than a clock — the ingest runs on its own schedule and the offseason stalls it entirely.
    */
-  const newest = await args.prisma.playerGameStat
+  let historyUnavailable = false
+  const newest = args.projectionWindow ? { _max: { season: args.projectionWindow.season } } : await args.prisma.playerGameStat
     .aggregate({ where: { sportType: 'NFL' }, _max: { season: true } })
-    .catch(() => null)
+    .catch(() => { historyUnavailable = true; return null })
   const season = newest?._max.season
-  if (season == null) return EMPTY('no_projection_history')
+  if (season == null) return {
+    ...EMPTY('no_projection_history', { defenders: defenders.length, projected: 0, priced: 0 }),
+    unpricedReasonBySleeperId: new Map(defenders.map((d) => [d.sleeperId, idpProjectionUnpricedReason(historyUnavailable ? 'history_unavailable' : 'no_history')])),
+  }
 
-  const newestWeek = await args.prisma.playerGameStat
+  const newestWeek = args.projectionWindow ? { _max: { weekOrRound: args.projectionWindow.week - 1 } } : await args.prisma.playerGameStat
     .aggregate({ where: { sportType: 'NFL', season }, _max: { weekOrRound: true } })
-    .catch(() => null)
+    .catch(() => { historyUnavailable = true; return null })
+  if (historyUnavailable) return {
+    ...EMPTY('no_projection_history', { defenders: defenders.length, projected: 0, priced: 0 }),
+    unpricedReasonBySleeperId: new Map(defenders.map((d) => [d.sleeperId, idpProjectionUnpricedReason('history_unavailable')])),
+  }
   const week = (newestWeek?._max.weekOrRound ?? 0) + 1
 
   const { bySleeperId } = await loadIdpProjections({
@@ -228,12 +249,17 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
   })
 
   let projected = 0
+  const unpricedReasonBySleeperId = new Map<string, UnpricedReason>()
   const valuationInput = defenders.map((d) => {
     const outcome = bySleeperId.get(d.sleeperId)
     const points = outcome?.ok
       ? computeLeagueProjectedPoints(outcome.statLine, scoring)?.points ?? null
       : null
     if (points != null) projected++
+    else unpricedReasonBySleeperId.set(d.sleeperId,
+      outcome && !outcome.ok ? idpProjectionUnpricedReason(outcome.reason)
+        : outcome?.ok ? { code: 'idp_scoring_unavailable', label: 'Defensive projection cannot be scored under this league’s rules' }
+          : idpProjectionUnpricedReason('no_history'))
     return { playerId: d.sleeperId, position: d.position, projectedPoints: points }
   })
 
@@ -243,7 +269,14 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
     numTeams: args.numTeams,
   })
   if (!valuation.ok) {
-    return EMPTY('valuation_refused', { defenders: defenders.length, projected, priced: 0 })
+    for (const d of defenders) {
+      if (!unpricedReasonBySleeperId.has(d.sleeperId)) unpricedReasonBySleeperId.set(d.sleeperId, idpReplacementUnpricedReason())
+    }
+    return {
+      ...EMPTY('valuation_refused', { defenders: defenders.length, projected, priced: 0 }),
+      unpricedReasonBySleeperId,
+      projectedFor: { season, week },
+    }
   }
 
   const vorpBySleeperId = new Map<string, number | null>()
@@ -254,6 +287,7 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
     vorpBySleeperId.set(p.playerId, p.vorp)
     positionRankBySleeperId.set(p.playerId, p.positionRank)
     if (p.vorp != null) priced++
+    else if (!unpricedReasonBySleeperId.has(p.playerId)) unpricedReasonBySleeperId.set(p.playerId, idpReplacementUnpricedReason())
   }
 
   /*
@@ -286,6 +320,7 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
     vorpBySleeperId,
     positionRankBySleeperId,
     valueBySleeperId,
+    unpricedReasonBySleeperId,
     skipped: null,
     coverage: { defenders: defenders.length, projected, priced },
     projectionBySleeperId,

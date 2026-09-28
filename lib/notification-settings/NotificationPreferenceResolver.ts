@@ -3,7 +3,7 @@ import type {
   NotificationCategoryId,
   NotificationChannelPrefs,
 } from "./types"
-import { NOTIFICATION_CATEGORY_IDS } from "./types"
+import { NOTIFICATION_CATEGORY_IDS, OPT_IN_NOTIFICATION_CATEGORY_IDS } from "./types"
 
 const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   enabled: true,
@@ -13,13 +13,35 @@ const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   push: true,
 }
 
+/** An opt-in category's default: off everywhere until the user turns it on. */
+const OPT_IN_CHANNEL: NotificationChannelPrefs = {
+  enabled: false,
+  inApp: false,
+  email: false,
+  sms: false,
+  push: false,
+}
+
 /**
- * Returns default preferences (all categories enabled, in-app + push + email, no SMS).
+ * The default for ONE category. Almost every category shares DEFAULT_CHANNEL; the opt-in ones
+ * (`OPT_IN_NOTIFICATION_CATEGORY_IDS`, today only league chat) start off on every channel.
+ *
+ * ⚠ THIS IS ALSO THE FALLBACK FOR A PARTIALLY SAVED ROW, not just a missing one — `resolve…`
+ * below reads `defaults.categories[id]` field by field. So an opt-in category saved as
+ * `{ enabled: true }` alone does NOT silently switch its email on: absent channels stay off.
+ */
+export function getDefaultCategoryPreferences(id: NotificationCategoryId): NotificationChannelPrefs {
+  return OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id) ? { ...OPT_IN_CHANNEL } : { ...DEFAULT_CHANNEL }
+}
+
+/**
+ * Returns default preferences: every category enabled with in-app + push + email and no SMS,
+ * except the opt-in categories, which start off on every channel.
  */
 export function getDefaultNotificationPreferences(): NotificationPreferences {
   const categories: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>> = {}
   for (const id of NOTIFICATION_CATEGORY_IDS) {
-    categories[id] = { ...DEFAULT_CHANNEL }
+    categories[id] = getDefaultCategoryPreferences(id)
   }
   return { globalEnabled: true, categories }
 }
@@ -84,7 +106,7 @@ export function getNotificationPreferencesFingerprint(
 ): string {
   const resolved = resolveNotificationPreferences(prefs)
   const categories = NOTIFICATION_CATEGORY_IDS.map((id) => {
-    const value = resolved.categories?.[id] ?? DEFAULT_CHANNEL
+    const value = resolved.categories?.[id] ?? getDefaultCategoryPreferences(id)
     const push = value.push ?? value.inApp
     return `${id}:${value.enabled ? "1" : "0"}${value.inApp ? "1" : "0"}${value.email ? "1" : "0"}${value.sms ? "1" : "0"}${push ? "1" : "0"}`
   })

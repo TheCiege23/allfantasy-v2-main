@@ -9,7 +9,7 @@ const hm = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    draftSession: { findUnique: hm.draftSessionFindUnique },
+    draftSession: { findUnique: hm.draftSessionFindUnique, findFirst: hm.draftSessionFindUnique },
     roster: { findUnique: hm.rosterFindUnique },
   },
 }))

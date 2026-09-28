@@ -9,18 +9,34 @@ import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken";
 import { claimGuestTrialForUser } from "@/lib/legacy/claimGuestTrialForUser";
-import { isInviteOnlyEnabled } from "@/lib/beta-invite/betaAdmissionService";
-import { lookupSleeperUser } from "@/lib/sleeper/user-lookup";
 import { getTierFromXP, getXPRemainingToNextTier } from "@/lib/xp-progression/TierResolver";
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret";
 import { isPostOAuthRedirectPreservedPath } from "@/lib/auth/postOAuthRedirectPolicy";
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute";
+import { refreshAccountGeoLock } from "@/lib/geo/accountGeoLockServer";
+import type { JWT } from "next-auth/jwt";
+
+/**
+ * Stamp the account-level Washington lock onto the session token, from the
+ * DATABASE only — see lib/geo/accountGeoLock for the rule and its cost bounds.
+ * `undefined` from the refresh means the read failed: keep what the token had.
+ * Never throws; this runs inside the jwt callback.
+ */
+async function applyAccountGeoLock(token: JWT): Promise<void> {
+  const userId = typeof token.id === "string" ? token.id : typeof token.sub === "string" ? token.sub : null;
+  if (!userId) return;
+  try {
+    const lock = await refreshAccountGeoLock(userId);
+    if (lock !== undefined) token.geoLock = lock;
+  } catch (err) {
+    console.error("[auth] account geo lock refresh failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 /** Only used while `next build` evaluates API routes; never used at runtime on Vercel if env is set. */
 const BUILD_TIME_AUTH_SECRET_PLACEHOLDER =
@@ -42,11 +58,6 @@ function getAuthSecret(): string {
   throw new Error(
     "NEXTAUTH_SECRET (or AUTH_SECRET) is not set. Add it to your local environment and Vercel project settings."
   );
-}
-
-function buildSleeperAvatarUrl(avatar: string | null | undefined): string | null {
-  if (!avatar) return null;
-  return `https://sleepercdn.com/avatars/${avatar}`;
 }
 
 function isDevAuthBypassEnabled(): boolean {
@@ -244,104 +255,21 @@ const providers: NextAuthOptions["providers"] = [
       }
     },
   }),
-  CredentialsProvider({
-    id: "sleeper",
-    name: "Sleeper",
-    credentials: {
-      sleeperUsername: { label: "Sleeper Username", type: "text" },
-    },
-    async authorize(credentials) {
-      const rawUsername = credentials?.sleeperUsername;
-
-      if (!rawUsername) {
-        return null;
-      }
-
-      const sleeperUsername = rawUsername.trim();
-
-      if (!sleeperUsername) {
-        return null;
-      }
-
-      const sleeperLookup = await lookupSleeperUser(sleeperUsername);
-
-      if (sleeperLookup.status === "unavailable") {
-        throw new Error("SLEEPER_LOOKUP_UNAVAILABLE");
-      }
-
-      if (sleeperLookup.status !== "found") {
-        return null;
-      }
-
-      const sleeperUser = sleeperLookup.user;
-      const sleeperUserId = sleeperUser.user_id;
-      const displayName = sleeperUser.display_name?.trim() || sleeperUsername;
-      const avatarUrl = buildSleeperAvatarUrl(sleeperUser.avatar);
-
-      let user = await prisma.appUser.findFirst({
-        where: {
-          username: `sleeper_${sleeperUserId}`,
-        },
-      });
-
-      if (!user) {
-        // ── P0-1 BETA-GATE (Sleeper-username new-account path) ───────────────────────
-        // A Sleeper-username account has only a SYNTHETIC email, and P0-1 invites are
-        // strictly EMAIL-BOUND (no token-only admission — an invite is not a transferable
-        // access code). There is therefore no way to admit a NEW Sleeper account under the
-        // closed beta, so it is blocked: the user must sign up with a real email or a social
-        // account (both email-matched) first. Existing Sleeper accounts hit the `else`
-        // branch above and sign in normally without ever needing an invite.
-        if (isInviteOnlyEnabled()) {
-          throw new Error("BETA_INVITE_REQUIRED");
-        }
-
-        user = await prisma.appUser.create({
-          data: {
-            email: `${sleeperUserId}@sleeper.allfantasy.ai`,
-            username: `sleeper_${sleeperUserId}`,
-            displayName,
-            avatarUrl,
-          },
-        });
-        // New Sleeper-auth account (create branch only; the `else` below is an
-        // update of an existing account, which must stay silent). The email is a
-        // synthetic non-inbox address — included but clearly labeled by method.
-        // Fire-and-forget.
-        void notifyOwnerOfNewSignup({
-          email: user.email,
-          method: "sleeper",
-          userId: user.id,
-          username: user.username,
-        });
-      } else {
-        const needsUpdate =
-          user.displayName !== displayName || user.avatarUrl !== avatarUrl;
-
-        if (needsUpdate) {
-          user = await prisma.appUser.update({
-            where: { id: user.id },
-            data: {
-              displayName,
-              avatarUrl,
-            },
-          });
-        }
-      }
-
-      await ensureSharedAccountProfile({
-        userId: user.id,
-        displayName: user.displayName ?? displayName ?? user.username ?? null,
-      });
-
-      return {
-        id: user.id,
-        email: user.email,
-        name: user.displayName || user.username || user.email,
-        image: user.avatarUrl,
-      };
-    },
-  }),
+  /*
+   * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
+   *
+   * A `sleeper` credentials provider lived here: it took a Sleeper USERNAME and nothing
+   * else, looked it up on Sleeper's public API and signed the caller in as (or created)
+   * `sleeper_<id>`. A Sleeper username is public, so that was a sign-in with no secret —
+   * anyone could become the account bound to anyone's handle. No page on main called it,
+   * but NextAuth serves every registered provider at
+   * /api/auth/callback/<id> whether or not a button links to it, and production listed
+   * it at /api/auth/providers. Zero `sleeper_%` accounts existed when it was removed
+   * (production app_users, read 2026-09-26).
+   *
+   * Sleeper has no OAuth. Linking a Sleeper account to an EXISTING login is a separate,
+   * lower-stakes operation (see the import discover route); it is never a way in.
+   */
 ];
 
 if (isDevAuthBypassEnabled()) {
@@ -750,6 +678,8 @@ export const authOptions: NextAuthOptions = {
               .catch(() => undefined)
             if (fresh !== undefined) token.username = fresh?.username ?? null
           }
+          // From the database, never from `updatePayload` — see applyAccountGeoLock.
+          await applyAccountGeoLock(token)
           return token
         }
 
@@ -760,6 +690,10 @@ export const authOptions: NextAuthOptions = {
           token.username = (user as { username?: string | null }).username ?? null;
           token.picture = user.image;
         }
+
+        // Sign-in included: a Washington sign-in over a normal connection is
+        // exactly the observation that locks the account (lib/geo/accountGeoLock).
+        await applyAccountGeoLock(token)
 
         return token;
       } catch (err) {

@@ -102,8 +102,10 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 /** The recap of a played week, from your scored results plus the week's top starter. */
 export function recapFrom(week: WeekAllData | null, topScorer: WeeklyRecap['topScorer']): WeeklyRecap | null {
   if (!week || week.rows.length === 0 || week.season == null || week.week == null) return null
-  const wins = week.rows.filter((r) => r.won)
-  const losses = week.rows.filter((r) => !r.won)
+  const settled = week.rows.filter((r) => r.completed !== false)
+  if (!settled.length) return null
+  const wins = settled.filter((r) => r.pointsFor > r.pointsAgainst)
+  const losses = settled.filter((r) => r.pointsFor < r.pointsAgainst)
   const margin = (r: (typeof week.rows)[number]) => round1(Math.abs(r.pointsFor - r.pointsAgainst))
   const biggest = [...wins].sort((a, b) => margin(b) - margin(a))[0]
   const closest = [...losses].sort((a, b) => margin(a) - margin(b))[0]

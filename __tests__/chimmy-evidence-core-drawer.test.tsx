@@ -38,7 +38,7 @@ describe('what an answer was built from', () => {
     render(<ChimmyEvidenceBlock evidence={evidence()} />)
 
     expect(screen.getByText(/medium confidence/i)).toBeTruthy()
-    expect(screen.getByText(/78%/)).toBeTruthy()
+    expect(screen.queryByText(/78%/)).toBeNull()
     expect(screen.getByText(/2 sources/)).toBeTruthy()
     /* 120 minutes reads as hours, not as a raw minute count. */
     expect(screen.getByText(/2h behind/)).toBeTruthy()
@@ -231,8 +231,9 @@ describe('what an answer was built from', () => {
  * are READ off the envelope and handed to the block.
  */
 describe('the drawer reads the evidence off the envelope', () => {
+  // The Chimmy tab (and /chimmy/chat) is ChimmyPanel.tsx; the drawer renders it.
   const DRAWER = fs.readFileSync(
-    path.join(process.cwd(), 'components', 'core-app', 'comms', 'CommsDrawer.tsx'),
+    path.join(process.cwd(), 'components', 'core-app', 'comms', 'ChimmyPanel.tsx'),
     'utf8',
   )
 

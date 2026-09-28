@@ -2,6 +2,7 @@ import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { YahooImportPayload } from './types'
 import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
+import { commissionerTeamSet } from '../commissionerTeamSet'
 
 function detectYahooScoringFormat(raw: YahooImportPayload): string | null {
   const receptionCategory = raw.settings?.statCategories.find((category) => {
@@ -52,11 +53,18 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
         ? Math.max(0, raw.settings.playoffStartWeek - raw.league.startWeek)
         : raw.league.endWeek ?? undefined
 
+    /* ⚠ `headCommissionerTeamKeys`, NOT `commissionerTeamKeys`: the broad list also carries team
+       co-managers, and this becomes `LeagueTeam.isCommissioner` — a permission. */
+    const commissionerTeams = commissionerTeamSet(
+      raw.headCommissionerTeamKeys,
+      raw.teams.map((team) => team.teamKey),
+    )
     const rosters = raw.teams.map((team) => ({
       source_team_id: team.teamKey,
       source_manager_id: team.managerGuid || team.managerId || team.teamKey,
       owner_name: team.managerName || team.teamName,
       team_name: team.teamName,
+      is_commissioner: commissionerTeams.has(team.teamKey),
       avatar_url: team.logoUrl,
       wins: team.wins,
       losses: team.losses,

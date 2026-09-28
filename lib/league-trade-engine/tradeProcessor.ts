@@ -10,6 +10,8 @@ import {
   removePlayerFromRosterData,
 } from '@/lib/waiver-wire/roster-utils'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
+import { parseInventoryPickId, transferNativeFuturePick } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { settleTradeContracts, type SalarySettlementEvidence } from '@/lib/salary-cap/TradeContractSettlement'
 
 export type LeagueTradeTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -64,8 +66,10 @@ export async function applyTradeAssetsInTransaction(
     receiverRosterId: string
     participantRosterIds?: string[]
     assets: TradeAssetInput[]
+    /** Recorded on a native future pick's row as the trade that last moved it. */
+    tradeId?: string | null
   },
-): Promise<void> {
+): Promise<SalarySettlementEvidence | undefined> {
   const participantIds = [...new Set([
     input.proposerRosterId,
     input.receiverRosterId,
@@ -76,6 +80,11 @@ export async function applyTradeAssetsInTransaction(
   if (rosters.length !== participantIds.length) throw new Error('Roster league mismatch')
   const dataByRoster = new Map<string, unknown>(rosters.map((r) => [r.id, r.playerData]))
   const faabByRoster = new Map<string, number>(rosters.map((r) => [r.id, r.faabRemaining ?? 0]))
+
+  const salaryEvidence = await settleTradeContracts(tx, input.leagueId, participantIds,
+    input.assets.filter(a => a.itemType === 'player').map(a => ({
+      playerId: a.itemReference ?? '', fromRosterId: a.fromRosterId, toRosterId: a.toRosterId,
+    })))
 
   for (const a of input.assets) {
     const fromId = a.fromRosterId
@@ -102,6 +111,17 @@ export async function applyTradeAssetsInTransaction(
     if (a.itemType === 'rookie_pick' || a.itemType === 'future_pick' || a.itemType === 'devy_pick') {
       const ref = String(a.itemReference ?? '')
       if (!ref) throw new Error('Pick ref required')
+      // A native dynasty league's future pick lives in `future_draft_picks`, not in `playerData`.
+      if (parseInventoryPickId(ref)) {
+        await transferNativeFuturePick(tx, {
+          leagueId: input.leagueId,
+          ref,
+          fromRosterId: fromId,
+          toRosterId: toId,
+          tradeId: input.tradeId ?? null,
+        })
+        continue
+      }
       const fromData = dataByRoster.get(fromId)
       const toData = dataByRoster.get(toId)
       const pickObj = extractPickObject(fromData, ref)
@@ -140,4 +160,5 @@ export async function applyTradeAssetsInTransaction(
       },
     })
   }
+  return salaryEvidence
 }

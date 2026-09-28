@@ -6,8 +6,15 @@ import { computePlayerVorp as computePlayerVorpEngine, computePickVorp as comput
 import { IDP_CEILING_UNCERTAINTY_BAND, isIdpPosition, isKickerPosition } from './idp-kicker-values';
 import { isUserParty } from './user-matching';
 import { getPlayerAnalytics, type PlayerAnalytics } from './player-analytics';
+import type { UnpricedReason } from './trade-value/unpricedReason';
+import { analysisUnpricedReason } from './trade-value/unpricedReason';
+import { leagueValueForPlayer, valuePositionsAgree, type TradePlayerIdentity } from './league-values/playerValueIdentity';
+import type { LeagueNamedValue } from './league-values/leagueTradeValues';
 
 export interface ValuationContext {
+  leagueValueBySleeperId?: ReadonlyMap<string, LeagueNamedValue>;
+  leagueUnpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>;
+  leagueUnpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>;
   asOfDate: string;
   isSuperFlex: boolean;
   fantasyCalcPlayers?: FantasyCalcPlayer[];
@@ -34,7 +41,7 @@ export interface ValuationContext {
    */
   leagueValueByNameLower?: ReadonlyMap<
     string,
-    { value: number; position: string; basis: 'idp-vorp' | 'kicker-flat' }
+    LeagueNamedValue
   >;
 }
 
@@ -98,6 +105,7 @@ export interface PricedAsset {
    * the source string is one widening away from meaning something else again.
    */
   unpriced?: true;
+  unpricedReason?: UnpricedReason;
   position?: string;
   age?: number;
   details?: {
@@ -442,18 +450,46 @@ function historicalSnapshotIsRecent(
 
 export async function pricePlayer(
   name: string,
-  ctx: ValuationContext
+  ctx: ValuationContext,
+  identity?: TradePlayerIdentity,
 ): Promise<PricedAsset> {
   const fcPlayers = await getFantasyCalcPlayers(ctx);
-
-  const fcPlayer = findPlayerByName(fcPlayers, name);
-  const overridePos = ctx.playerPositionOverrides?.[name.toLowerCase().trim()];
-  const position = overridePos || fcPlayer?.player.position || 'UNKNOWN';
+  const nameKey = name.toLowerCase().trim();
+  const knownPosition = identity?.position || ctx.playerPositionOverrides?.[nameKey];
+  const sleeperId = identity?.sleeperId?.trim();
+  const leagueValue = leagueValueForPlayer({ name, identity: { sleeperId, position: knownPosition },
+    bySleeperId: ctx.leagueValueBySleeperId, byNameLower: ctx.leagueValueByNameLower });
+  const namedMarketPlayer = findPlayerByName(fcPlayers, name);
+  const candidate = sleeperId
+    ? fcPlayers.find(p => p.player.sleeperId === sleeperId) ?? null
+    : namedMarketPlayer;
+  const fcPlayer = candidate && valuePositionsAgree(knownPosition, candidate.player.position)
+    && valuePositionsAgree(leagueValue?.position, candidate.player.position) ? candidate : null;
+  const overridePos = knownPosition;
+  const position = overridePos || leagueValue?.position || fcPlayer?.player.position || 'UNKNOWN';
   const age = fcPlayer?.player.maybeAge ?? null;
+  const hindsight = isHindsightQuery(ctx.asOfDate);
+  const refuse = (unpricedReason: UnpricedReason): PricedAsset => ({
+    name, type: 'player', value: 0, assetValue: { marketValue: 0, impactValue: 0, vorpValue: 0, volatility: 0.5 },
+    source: 'unknown', unpriced: true, position, unpricedReason,
+  });
+  const nameGap = ctx.leagueUnpricedReasonByNameLower?.get(nameKey);
+  const idGap = sleeperId ? ctx.leagueUnpricedReasonBySleeperId?.get(sleeperId) : null;
+  if (!sleeperId && nameGap) return refuse(nameGap);
+  if ((!leagueValue || hindsight) && !fcPlayer && (idGap || nameGap)) return refuse(idGap ?? nameGap!);
+  const nonMarketPosition = isIdpPosition(position) || ['K', 'PK', 'KICKER', 'PLACE KICKER', 'K/P', 'DEF', 'DST', 'D/ST'].includes(position.toUpperCase());
+  if (nonMarketPosition && (identity || ctx.leagueValueBySleeperId) && (!leagueValue || hindsight)) {
+    return refuse(analysisUnpricedReason({ position, sport: 'NFL' }));
+  }
+  if (!leagueValue && !fcPlayer && (candidate || (sleeperId && namedMarketPlayer))) {
+    return refuse({ code: 'ambiguous_identity', label: 'The available value belongs to a different player; choose a matching player ID' });
+  }
+  // Historical and draft-value stores join by name, so they cannot verify an explicit ID.
+  if (sleeperId && !leagueValue && !fcPlayer) return refuse(analysisUnpricedReason({ position, sport: 'NFL' }));
 
   let analyticsData: PlayerAnalytics | null = null;
   try {
-    analyticsData = await getPlayerAnalytics(name);
+    if (!leagueValue && !nonMarketPosition) analyticsData = await getPlayerAnalytics(name);
   } catch (e) {
     console.warn(`[hybrid-valuation] Could not fetch analytics for "${name}":`, e);
   }
@@ -474,7 +510,6 @@ export async function pricePlayer(
    * past, and otherwise serves as a bounded-age fallback for players the live board
    * does not carry.
    */
-  const hindsight = isHindsightQuery(ctx.asOfDate);
   const historicalResult = getHistoricalPlayerValue(name, ctx.asOfDate, ctx.isSuperFlex);
   const priceFromHistorical = (): PricedAsset => {
     const mv = historicalResult.value as number;
@@ -499,20 +534,15 @@ export async function pricePlayer(
   /*
    * This league's own IDP board, when the caller supplied one.
    *
-   * ⚠ AHEAD OF THE FANTASYCALC BRANCH ON PURPOSE, THOUGH TODAY THEY CANNOT COLLIDE.
-   * FantasyCalc prices no defenders — `PlayerValueSnapshot` carries 7,043 rows and
-   * zero of them — and the map only ever contains players the board resolved as IDP,
-   * so neither branch can currently steal the other's players. The order states which
-   * should win if that changes: inside a league that genuinely scores IDP, a value
-   * derived from that league's own scoring and starting slots beats a generic
-   * cross-league market number, which is the whole reason the board exists.
+   * Player IDs and compatible positions keep a defender from inheriting a same-name
+   * offensive market price. In an IDP league the board uses that player's projection,
+   * the league's scoring, and its starting slots.
    *
    * ⚠ NOT APPLIED TO A HINDSIGHT QUERY. The board is built from the CURRENT
    * projection week; answering "what was he worth last March" with it would quietly
    * restate today's price as history.
    */
-  const leagueValue = ctx.leagueValueByNameLower?.get(name.toLowerCase().trim());
-  if (leagueValue && leagueValue.value > 0) {
+  if (!hindsight && leagueValue && leagueValue.value > 0) {
     const mv = leagueValue.value;
     const vol = computePlayerVolatility(null, leagueValue.position, age, analyticsData);
     return {

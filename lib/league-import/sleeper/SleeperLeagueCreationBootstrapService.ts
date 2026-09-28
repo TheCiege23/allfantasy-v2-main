@@ -99,7 +99,19 @@ export async function bootstrapLeagueFromNormalizedImport(
    * the caller may import at all. `checkEspn` returns the viewer's team, and the
    * value was simply dropped between there and here.
    */
-  importer?: { userId: string; sourceManagerId?: string | null } | null,
+  importer?: {
+    userId: string
+    sourceManagerId?: string | null
+    /**
+     * The team the importer picked as theirs, for a provider with no way to say which team is the
+     * caller's (Fleaflicker). Validated upstream against this league's own rosters.
+     *
+     * ⚠ KEYED ON THE TEAM, NOT THE MANAGER. Fleaflicker falls back to the TEAM id as the manager id
+     * for an ownerless team, so mapping a manager id could, in principle, claim a different row that
+     * happens to share the value. The team id is the one thing that names exactly one row.
+     */
+    sourceTeamId?: string | null
+  } | null,
 ): Promise<SleeperLeagueBootstrapResult> {
   const standingsByTeam = new Map(
     normalized.standings.map((s) => [s.source_team_id, s])
@@ -147,11 +159,25 @@ export async function bootstrapLeagueFromNormalizedImport(
     }),
   ])
   const claimByTeam = new Map(storedTeams.map((t) => [t.externalId, t.claimedByUserId]))
+
+  /*
+   * The importer's self-identified team. A resolver mapping (provider-proven) wins over it, and it
+   * NEVER takes a team already held by a different account — the same "never overwrite a claim"
+   * rule the Fantrax/ESPN self-claim keeps. A re-import by the same person is a no-op.
+   */
+  const importerTeamId = importer?.sourceTeamId?.trim() || null
+  const claimFor = (r: { source_team_id: string; source_manager_id: string }): string | null => {
+    const resolved = managerUserIds.get(r.source_manager_id) ?? null
+    if (resolved) return resolved
+    if (!importer?.userId || !importerTeamId || String(r.source_team_id) !== importerTeamId) return null
+    const heldBy = claimByTeam.get(r.source_team_id) ?? null
+    return heldBy && heldBy !== importer.userId ? null : importer.userId
+  }
   const rosterPlan = planImportedRosterWrites({
     provider,
     stored: storedRosters,
     incoming: normalized.rosters.map((r) => {
-      const linkedUserId = managerUserIds.get(r.source_manager_id) ?? null
+      const linkedUserId = claimFor(r)
       const claimedByUserId = claimByTeam.get(r.source_team_id) ?? null
       return {
         teamId: r.source_team_id,
@@ -204,7 +230,7 @@ export async function bootstrapLeagueFromNormalizedImport(
     // resolveLeagueIdentity) can find the user's own team. The raw
     // source_manager_id is preserved on `platformUserId` (below) and in roster
     // metadata; unresolved/orphan managers are never claimed.
-    const resolvedClaim = managerUserIds.get(r.source_manager_id) ?? null
+    const resolvedClaim = claimFor(r)
 
     await prisma.leagueTeam.upsert({
       where: {

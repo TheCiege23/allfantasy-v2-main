@@ -45,7 +45,7 @@ const PRODUCTION_FILES = [
 ]
 
 /** Where the model-admin screen and its gate actually live now. */
-const CORE_SHELL_PAGE = "app/core/[[...screen]]/page.tsx"
+const CORE_SHELL_PAGE = "app/core/(shell)/[[...screen]]/page.tsx"
 /** The redirect stub left behind at the old address. */
 const LEGACY_REDIRECT_PAGE = "app/leagues/[leagueId]/admin/model/page.tsx"
 

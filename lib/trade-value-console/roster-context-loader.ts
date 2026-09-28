@@ -10,6 +10,11 @@ import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { pricedAssetToEngineAsset } from './priced-asset-to-asset'
 import { sportsRecordToPricedAsset } from './sports-db-valuation'
+import { loadImportedFuturePicks } from '@/lib/league-trade-engine/importedFuturePicks'
+import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { inventoryPickId, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
+import { livePickValue } from './leagueTradePricing'
+import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 
 /** Mirrors internal `RosterContext` in trade-engine (not exported). */
 export type TradeEngineRosterContext = {
@@ -27,32 +32,12 @@ export type NegotiationAvailablePick = {
   value?: number
 }
 
-function parseDraftPicksRaw(playerData: unknown): Array<{ year: number; round: number }> {
-  const rec = playerData && typeof playerData === 'object' ? (playerData as Record<string, unknown>) : null
-  const arr = rec && Array.isArray(rec.draftPicks) ? rec.draftPicks : []
-  const out: Array<{ year: number; round: number }> = []
-  for (const item of arr) {
-    if (!item || typeof item !== 'object') continue
-    const o = item as Record<string, unknown>
-    const season = o.season ?? o.year
-    const year =
-      typeof season === 'number'
-        ? season
-        : typeof season === 'string'
-          ? parseInt(season, 10)
-          : NaN
-    const round = typeof o.round === 'number' ? o.round : 1
-    if (!Number.isFinite(year)) continue
-    out.push({ year, round })
-  }
-  return out
-}
-
 async function loadUserFaabAndNegotiationPicks(args: {
   userRoster: { faabRemaining: number | null; playerData: unknown }
   effectiveSport: SupportedSport
   nflCtx: ValuationContext
   dataGaps: string[]
+  picks: InventoryPick[]
 }): Promise<{ userFaabRemaining: number | null; availablePicks: NegotiationAvailablePick[] }> {
   const faab = args.userRoster.faabRemaining
   const userFaabRemaining = typeof faab === 'number' && Number.isFinite(faab) ? faab : null
@@ -62,20 +47,18 @@ async function loadUserFaabAndNegotiationPicks(args: {
     return { userFaabRemaining, availablePicks }
   }
 
-  const raw = parseDraftPicksRaw(args.userRoster.playerData)
-  for (let i = 0; i < Math.min(raw.length, 12); i++) {
-    const p = raw[i]
+  for (const p of args.picks) {
     try {
-      const priced = await pricePick({ year: p.year, round: p.round, tier: null }, args.nflCtx)
+      const priced = await pricePick({ year: p.season, round: p.round, tier: null }, args.nflCtx)
       availablePicks.push({
-        id: `pick_${p.year}_r${p.round}_${i}`,
+        id: inventoryPickId(p),
         displayName: priced.name,
         round: p.round,
-        season: p.year,
-        value: priced.assetValue.marketValue,
+        season: p.season,
+        value: livePickValue(args.nflCtx.fantasyCalcPlayers ?? [], p.season, p.round, null) ?? priced.assetValue.marketValue,
       })
     } catch {
-      args.dataGaps.push(`Could not price draft pick ${p.year} R${p.round}`)
+      args.dataGaps.push(`Could not price draft pick ${p.season} R${p.round}`)
     }
   }
 
@@ -116,8 +99,8 @@ function normalizeStarters(raw: unknown): string[] {
   return raw.map((x) => String(x).trim().toUpperCase()).filter(Boolean)
 }
 
-async function resolveNflIdToName(playerIds: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
+async function resolveNflIdToName(playerIds: string[]): Promise<Map<string, { name: string; position: string | null }>> {
+  const map = new Map<string, { name: string; position: string | null }>()
   if (playerIds.length === 0) return map
   try {
     const { getAllPlayers } = await import('@/lib/sleeper-client')
@@ -127,7 +110,7 @@ async function resolveNflIdToName(playerIds: string[]): Promise<Map<string, stri
       const name =
         p?.full_name ||
         (p ? `${(p as { first_name?: string }).first_name ?? ''} ${(p as { last_name?: string }).last_name ?? ''}`.trim() : '')
-      if (name) map.set(id, name)
+      if (name) map.set(id, { name, position: p?.position ?? null })
     }
   } catch {
     /* ignore */
@@ -141,16 +124,19 @@ async function rosterIdsToAssets(args: {
   nflCtx: ValuationContext
   dataGaps: string[]
 }): Promise<Asset[]> {
-  const ids = args.playerIds.slice(0, 45)
+  const ids = [...new Set(args.playerIds)]
   const out: Asset[] = []
 
   if (args.sport === 'NFL') {
     const nameMap = await resolveNflIdToName(ids)
     for (const id of ids) {
-      const name = nameMap.get(id)?.trim() || id
+      const player = nameMap.get(id)
+      const name = player?.name.trim() || id
       try {
-        const pa = await pricePlayer(name, args.nflCtx)
-        out.push(pricedAssetToEngineAsset(pa))
+        const pa = await pricePlayer(name, args.nflCtx, player ? { sleeperId: id, position: player.position } : undefined)
+        out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id,
+          ...(player ? { valuationIdentity: { provider: 'sleeper' as const, id,
+            ...(player.position ? { position: player.position } : {}) } } : {}) })
       } catch {
         args.dataGaps.push(`Could not price roster player "${name}"`)
       }
@@ -160,11 +146,11 @@ async function rosterIdsToAssets(args: {
 
   for (const id of ids) {
     try {
-      const row = await getPlayer(id)
+      const row = await getPlayer(id, { sport: args.sport })
       if (row) {
         const pa = sportsRecordToPricedAsset(row)
         if (pa) {
-          out.push(pricedAssetToEngineAsset(pa))
+          out.push({ ...pricedAssetToEngineAsset(pa), rosterPlayerId: id, valuationPlayerId: row.id })
         } else {
           // Honesty pass: no dynasty value and no projection for this player.
           // Previously a hardcoded 1200 stood in here, which made unpriceable
@@ -215,7 +201,7 @@ export async function loadTradeEngineRosterContext(args: {
 
   const league = await prisma.league.findFirst({
     where: { id: args.leagueId },
-    select: { id: true, starters: true, sport: true },
+    select: { id: true, starters: true, sport: true, platform: true, leagueType: true, isDynasty: true, season: true, settings: true },
   })
   if (!league) {
     return {
@@ -230,7 +216,7 @@ export async function loadTradeEngineRosterContext(args: {
 
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId: args.leagueId },
-    select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, claimedByUserId: true },
+    select: { id: true, externalId: true, teamName: true, ownerName: true, platformUserId: true, claimedByUserId: true },
     orderBy: { pointsFor: 'desc' },
   })
 
@@ -243,10 +229,17 @@ export async function loadTradeEngineRosterContext(args: {
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId: args.leagueId },
-    select: { platformUserId: true, playerData: true, faabRemaining: true },
+    select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
   })
 
-  const userRoster = rosters.find((r) => r.platformUserId === args.userId)
+  const claimedTeam = teams.find(t => t.claimedByUserId === args.userId)
+  // Imported viewer rows can carry either the app ID or the provider ID. The shared
+  // resolver also handles linked, unclaimed teams and chooses the newest synced row.
+  const viewer = await resolveViewerLeagueRoster(args.leagueId, args.userId).catch(() => null)
+  const userPlatformId = viewer?.ok ? viewer.team.platformUserId : claimedTeam?.platformUserId ?? args.userId
+  const userRoster = viewer?.ok
+    ? rosters.find(r => r.id === viewer.roster.id)
+    : rosters.find(r => r.platformUserId === args.userId) ?? rosters.find(r => r.platformUserId === userPlatformId)
   if (!userRoster) {
     args.dataGaps.push('No synced roster row for your account in this league — lineup impact uses trade assets only.')
     return {
@@ -259,23 +252,37 @@ export async function loadTradeEngineRosterContext(args: {
     }
   }
 
+  let ownedPicks: InventoryPick[] = []
+  try {
+    if (isNativeFuturePickLeague(league)) {
+      ownedPicks = (await loadNativeFuturePicks(args.leagueId))?.picks.filter(p => p.ownerTeamId === userRoster.id) ?? []
+    } else {
+      const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+        ? league.settings as Record<string, unknown> : null
+      const inventory = await loadImportedFuturePicks({ leagueId: args.leagueId, platform: league.platform,
+        isDynasty: league.isDynasty, leagueSeason: league.season,
+        status: typeof settings?.status === 'string' ? settings.status : null, teams, rosters })
+      ownedPicks = inventory.picksByRosterId.get(userRoster.id) ?? []
+      if (inventory.readFailed) args.dataGaps.push('Future pick ownership could not be loaded; no pick sweeteners are suggested.')
+    }
+  } catch { args.dataGaps.push('Future pick ownership could not be loaded; no pick sweeteners are suggested.') }
   const { userFaabRemaining, availablePicks } = await loadUserFaabAndNegotiationPicks({
     userRoster,
     effectiveSport: args.effectiveSport,
     nflCtx: args.nflCtx,
     dataGaps: args.dataGaps,
+    picks: ownedPicks,
   })
 
   let oppRoster = null as (typeof rosters)[0] | null
   if (args.opponentTeamExternalId) {
     const team = teams.find((t) => t.externalId === args.opponentTeamExternalId)
-    if (team?.platformUserId) {
+    if (team?.platformUserId && team.platformUserId !== userPlatformId) {
       oppRoster = rosters.find((r) => r.platformUserId === team.platformUserId) ?? null
     }
   }
-  if (!oppRoster) {
-    oppRoster = rosters.find((r) => r.platformUserId !== args.userId) ?? null
-  }
+  // An absent or stale selection must not silently become a different manager's roster.
+  // Counteroffers and lineup context belong to the explicitly selected counterparty.
 
   const sport = normalizeToSupportedSport(league.sport)
   let positions = normalizeStarters(league.starters)

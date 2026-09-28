@@ -73,6 +73,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'leagueFeed', // lib/league-feed/leagueFeedSettings.ts
   'commissionerRecipes', // Commissioner Hub automation switches (PR #954)
   'idpChimmyPrefs', // lib/idp/ai/idpChimmy.ts
+  'chimmySpeaksUp', // lib/league-chat/chimmyIdentity.ts — "Chimmy speaks up in league chat" (Commissioner Hub)
 
   // ── AllFantasy commissioner tools and their state ─────────────────────────
   'commissioner_ratings', // /api/leagues/[id]/commissioner-rating

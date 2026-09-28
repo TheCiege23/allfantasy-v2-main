@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchWithChain: vi.fn(),
   fantasyProjectionUpsert: vi.fn(),
   getWeekBoard: vi.fn(),
+  resolveCurrentNflWeek: vi.fn(),
 }))
 
 vi.mock("server-only", () => ({}))
@@ -27,6 +28,13 @@ vi.mock("@/lib/workers/api-chain", () => ({
  */
 vi.mock("@/lib/sports-data/sleeperMarketService", () => ({
   getWeekBoard: mocks.getWeekBoard,
+}))
+/*
+ * Sleeper's own `state/nfl` week decides which week's lines the fallback pulls. Mocked so no test
+ * reaches the network, and so the week the feed is filed under is something a test states.
+ */
+vi.mock("@/lib/tournament/resolveNflWeek", () => ({
+  resolveCurrentNflWeek: mocks.resolveCurrentNflWeek,
 }))
 /*
  * ⚠ `sportsDataCache` IS NOT OPTIONAL HERE, AND ITS ABSENCE DID NOT LOOK LIKE A
@@ -67,6 +75,7 @@ describe("import-projections cron route", () => {
     mocks.fantasyProjectionUpsert.mockResolvedValue({})
     // No Sleeper board unless a test asks for one — see the mock note above.
     mocks.getWeekBoard.mockResolvedValue(null)
+    mocks.resolveCurrentNflWeek.mockResolvedValue({ season: 2026, week: 6 })
   })
 
   afterEach(() => {
@@ -204,6 +213,93 @@ describe("import-projections cron route", () => {
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
     expect(body.results.NFL).toMatchObject({ ok: true, synced: 0 })
+  })
+})
+
+/**
+ * 🛑 THE WEEK THE SLEEPER LINES ARE FILED UNDER. The fallback used to count seven-day blocks from
+ * September 1, which is a week ahead whenever the opener falls after the 7th — 2026's was the 10th.
+ * Measured on production: every week's lines were written from the Tuesday BEFORE that week, and
+ * `latestProjectionWeek()` served next week's numbers as "this week" for all of every game week.
+ */
+describe("import-projections — which NFL week the Sleeper fallback pulls", () => {
+  const board = {
+    players: {
+      "4046": { playerId: "4046", name: "Jayden Reed", position: "WR", team: "GB", stats: { pts_ppr: 12.4 } },
+    },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv("CRON_SECRET", "cron-secret")
+    mocks.fantasyProjectionUpsert.mockResolvedValue({})
+    mocks.fetchWithChain.mockResolvedValue({ data: [], fromCache: false, source: "rolling_insights" })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("pulls and files Sleeper's own current week — not a date guess", async () => {
+    vi.useFakeTimers()
+    // Tuesday of NFL week 3, 2026. The Sept-1 guess says 4 here; Sleeper says 3.
+    vi.setSystemTime(new Date("2026-09-22T11:00:00Z"))
+    mocks.resolveCurrentNflWeek.mockResolvedValue({ season: 2026, week: 3 })
+    mocks.getWeekBoard.mockResolvedValue(board)
+
+    const { GET } = await import("@/app/api/cron/import-projections/route")
+    const res = await GET(req("https://www.allfantasy.ai/api/cron/import-projections?sport=NFL", "cron-secret"))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.results.NFL).toMatchObject({ ok: true, synced: 1, source: "sleeper" })
+    expect(mocks.getWeekBoard).toHaveBeenCalledWith("2026", 3)
+    expect(mocks.fantasyProjectionUpsert.mock.calls[0]![0].where.uniq_fantasy_projection_player_week_scoring_source).toMatchObject({
+      week: 3,
+      season: "2026",
+    })
+  })
+
+  it("writes NOTHING when Sleeper's week cannot be established — and says so in season", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"))
+    mocks.resolveCurrentNflWeek.mockResolvedValue(null)
+    mocks.getWeekBoard.mockResolvedValue(board)
+
+    const { GET } = await import("@/app/api/cron/import-projections/route")
+    const res = await GET(req("https://www.allfantasy.ai/api/cron/import-projections?sport=NFL", "cron-secret"))
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(body.results.NFL.ok).toBe(false)
+    expect(body.results.NFL.error).toMatch(/Could not establish the current NFL week/)
+    expect(mocks.getWeekBoard).not.toHaveBeenCalled()
+    expect(mocks.fantasyProjectionUpsert).not.toHaveBeenCalled()
+  })
+
+  it("will not file one season's lines under another season's week", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"))
+    mocks.resolveCurrentNflWeek.mockResolvedValue({ season: 2026, week: 7 })
+    mocks.getWeekBoard.mockResolvedValue(board)
+
+    const { GET } = await import("@/app/api/cron/import-projections/route")
+    const res = await GET(req("https://www.allfantasy.ai/api/cron/import-projections?sport=NFL&season=2025", "cron-secret"))
+
+    expect(res.status).toBe(500)
+    expect(mocks.getWeekBoard).not.toHaveBeenCalled()
+  })
+
+  it("a hand-run ?week= wins and never asks Sleeper", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"))
+    mocks.getWeekBoard.mockResolvedValue(board)
+
+    const { GET } = await import("@/app/api/cron/import-projections/route")
+    await GET(req("https://www.allfantasy.ai/api/cron/import-projections?sport=NFL&week=5", "cron-secret"))
+
+    expect(mocks.getWeekBoard).toHaveBeenCalledWith("2026", 5)
+    expect(mocks.resolveCurrentNflWeek).not.toHaveBeenCalled()
   })
 })
 

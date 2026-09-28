@@ -68,6 +68,17 @@ export interface PersistImportedLeagueOptions {
    * run the gate (the legacy per-provider routes) behave exactly as before.
    */
   importerSourceManagerId?: string | null
+  /**
+   * The team the importer SAID is theirs (`source_team_id`), for a provider that cannot tell us.
+   * Already validated by the caller against this league's own rosters.
+   *
+   * 🛑 NOT A SECOND SPELLING OF `importerSourceManagerId`, AND IT MUST NEVER BECOME ONE. That field
+   * is provider-proven and also drives `claimExistingLeagueForMember`, which attaches the caller to
+   * ANOTHER account's league. This one is a person's own say-so, so it reaches exactly one place:
+   * the bootstrap's claim on the league row THIS request writes — and even there it never takes a
+   * team somebody already holds.
+   */
+  importerSourceTeamId?: string | null
 }
 
 export interface PersistImportedLeagueResult {
@@ -130,6 +141,8 @@ export function buildTier0LeagueColumnPatch(
   const setIfStr = (key: string, v: unknown): void => {
     if (typeof v === 'string' && v.length > 0) out[key] = v
   }
+
+  setIfBool('bestBallMode', l.best_ball)
 
   // Waiver + trade window
   setIfStr('waiverType', l.waiver_type)
@@ -768,7 +781,20 @@ export async function persistImportedLeagueFromNormalization(
       seasonYear,
       sourceManagerId: options.importerSourceManagerId,
     })
-    if (joined) return joined
+    if (joined) {
+      /*
+       * ⚠ THE JOIN RETURNS BEFORE THE ORDINARY PATH'S `calculateAndSaveRank` BELOW, so
+       * without this a joiner is never ranked (measured: `rank_calculated_at` stayed null
+       * after a successful join). The ledger counts their claimed team, so rank them here.
+       * Non-fatal, like the call it mirrors — a failed rank must not undo a successful join.
+       */
+      try {
+        await calculateAndSaveRank(userId)
+      } catch (err) {
+        console.warn('[ImportedLeagueCommitService] calculateAndSaveRank (join) non-fatal:', err)
+      }
+      return joined
+    }
   }
 
   const resolvedSport = resolveImportedLeagueSport(normalized)
@@ -839,6 +865,7 @@ export async function persistImportedLeagueFromNormalization(
       existing: Boolean(existing),
       leagueTypeColumn: canonicalBundle?.leagueTypeColumn,
       leagueTypeConfident: canonicalBundle?.leagueTypeConfident,
+      existingSettings: existing?.settings,
     }),
     presetKey: canonicalBundle?.presetKey ?? undefined,
     scoringPresetId: canonicalBundle?.scoringPresetId ?? undefined,
@@ -904,6 +931,7 @@ export async function persistImportedLeagueFromNormalization(
       await bootstrapLeagueFromImport(league.id, normalized, {
         userId,
         sourceManagerId: options.importerSourceManagerId ?? null,
+        sourceTeamId: options.importerSourceTeamId ?? null,
       })
     },
   )

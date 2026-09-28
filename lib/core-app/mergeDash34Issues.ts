@@ -115,6 +115,13 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
       }
     }
 
+    if (l.needsWaivers && l.bestBallMissing?.length) {
+      synthesized.push({ id: `${l.id}:best-ball-coverage`, severity: 'warn', glyph: '⚑',
+        title: `Best Ball roster coverage — ${l.name}`,
+        meta: `Eligible roster cannot cover ${l.bestBallMissing.join(', ')}. Review waiver replacements; your lineup is selected automatically.`,
+        leagueId: l.id, leagueName: l.name, platform: l.platform, deadline: null,
+        action: { label: 'Review waivers', href: `/core/waivers?league=${encodeURIComponent(l.id)}`, external: false } })
+    }
     if (l.priority === 'urgent') {
       const id = `${l.id}:starter-out`
       /*
@@ -125,28 +132,30 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
        */
       if (seenIds.has(id) || (l.hurtStarters ?? 0) === 0) continue
       const flagged = l.flaggedStarters?.[0]
+      const flaggedCount = Math.max(l.hurtStarters ?? 0, l.flaggedStarters?.length ?? 0)
+      const multiple = flaggedCount > 1
       const checked = l.lineupVerification
       const kickoff = kickoffInstant(l.hurtStarterKickoffAt)
       synthesized.push({
         id,
         severity: 'bad',
         glyph: '⚑',
-        title: flagged ? `${flagged.name} · ${flagged.slot} · ${flagged.status} — ${l.name}` : `Starter who cannot play — ${l.name}`,
-        meta: `${titleCasePlatform(l.platform)} › Lineup${checked?.week != null ? ` · Week ${checked.week}` : ''} · ${flagged ? `Listed ${flagged.status} in your starting lineup${(l.flaggedStarters?.length ?? 0) > 1 ? `; ${l.flaggedStarters!.length - 1} more flagged` : ''}` : 'a starter is ruled out'}${
+        title: multiple ? `${flaggedCount} starters who cannot play — ${l.name}` : flagged ? `${flagged.name} · ${flagged.slot} · ${flagged.status} — ${l.name}` : `Starter who cannot play — ${l.name}`,
+        meta: `${titleCasePlatform(l.platform)} › Lineup${checked?.week != null ? ` · Week ${checked.week}` : ''} · ${multiple ? 'Review all flagged starting slots' : flagged ? `Listed ${flagged.status} in your starting lineup` : 'a starter is ruled out'}${
           /* The absolute clock, not a countdown: the card renders "IN 1h 04m" from `deadline`
              itself, and a second relative string baked in here would drift against it the moment
              the page sat open. `kickoffClock` pins locale and zone so the server paint and the
              client hydration produce the same characters. It is the SOONEST flagged starter's
              kickoff, which is the row's deadline — not necessarily `flagged` (the first one). */
-          kickoff ? ` · kicks off ${kickoffClock(kickoff.toISOString())}` : ''
+          kickoff ? ` · ${multiple ? 'earliest flagged starter ' : ''}kicks off ${kickoffClock(kickoff.toISOString())}` : ''
         }${checked ? ` · ${verificationStamp(checked.checkedAt)}` : ''}`,
         leagueId: l.id,
         leagueName: l.name,
         platform: l.platform,
         deadline: kickoff,
         action: {
-          label: flagged ? `Review ${flagged.name}` : 'See who is flagged',
-          href: `/core/my-team?league=${encodeURIComponent(l.id)}${flagged ? `#lineup-player-${encodeURIComponent(flagged.playerId)}` : ''}`,
+          label: multiple ? 'Review flagged starters' : flagged ? `Review ${flagged.name}` : 'See who is flagged',
+          href: `/core/my-team?league=${encodeURIComponent(l.id)}${flagged && !multiple ? `#lineup-player-${encodeURIComponent(flagged.playerId)}` : ''}`,
           external: false,
         },
       })

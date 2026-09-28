@@ -1,4 +1,7 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
+import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
+import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { MissionControlView } from '@/components/commissioner-os/mission-control/MissionControlView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 import { formatRelativeTime } from '@/lib/commissioner-ui/utils/time'
@@ -36,6 +39,9 @@ const RECENT_ACTIVITY_PREVIEW_COUNT = 5
  * program.
  */
 export default async function MissionControlPage() {
+  const depth = await resolveCommissionerOsDepth()
+  if (!depth.unlocked) return <CommissionerDepthLocked access={depth} what="Mission Control" />
+
   const adapter = await getDecisionOSAdapter()
 
   const [activityTrendResponse, leagueHealthResponse, recommendationsResponse, managerHighlightsResponse, kpisResponse, activityResponse, automationSummaryResponse, analyticsSummaryResponse, reportsSummaryResponse, notificationsSummaryResponse] = await Promise.all([
@@ -72,6 +78,7 @@ export default async function MissionControlPage() {
 
   return (
     <CommissionerPageContainer>
+      <FreeUntilNote access={depth} />
       <MissionControlView
         dataMode={adapter.mode}
         leagueHealth={

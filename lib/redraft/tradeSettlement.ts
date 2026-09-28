@@ -12,7 +12,9 @@
  *    sufficiency check.
  *  - `draft_pick` / `future_consideration`: reference-only. Redraft has no owned-pick inventory, so
  *    these are recorded on the proposal but not settled here (documented in
- *    docs/trade-center-rebuild-audit.md).
+ *    docs/trade-center-rebuild-audit.md). ⚠ Since 2026-09-25 a proposal can no longer be CREATED with
+ *    a `draft_pick` (both validators refuse it, DRAFT_PICK_NOT_SETTLED); this branch remains only so a
+ *    row written before that still settles its players and FAAB.
  *
  * Must be called inside a Prisma `$transaction` so player + FAAB movement is atomic.
  */

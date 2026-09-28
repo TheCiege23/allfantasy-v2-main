@@ -37,6 +37,21 @@ describe('freshnessStamp', () => {
 })
 
 describe('relativeAge / latestInstant', () => {
+  it('excludes only account-paused provider connections while preserving active unread warnings', () => {
+    const leagues = [
+      { id: 'paused', platform: 'sleeper', lastSyncedAt: ago(14 * 86_400_000) },
+      { id: 'active', platform: 'sleeper', lastSyncedAt: ago(60_000) },
+      { id: 'unread', platform: 'espn', lastSyncedAt: null },
+      { id: 'native', platform: 'manual', lastSyncedAt: null },
+    ]
+    expect(leagueDataFreshness(leagues, new Set(['paused', 'native']))).toEqual({
+      oldestAt: ago(60_000).toISOString(), neverSynced: 1, syncable: 2, paused: 1,
+    })
+    expect(leagueDataFreshness(leagues, null).oldestAt).toBe(ago(14 * 86_400_000).toISOString())
+    expect(leagueDataFreshness([leagues[0]], new Set(['paused']))).toEqual({
+      oldestAt: null, neverSynced: 0, syncable: 0, paused: 1,
+    })
+  })
   it('says an age exactly the way the injury rows beside it do (dash34 formatAgo)', () => {
     const now = NOW.getTime()
     for (const ms of [0, 59_999, 60_000, 30 * 60_000, 3_599_999, 3_600_000, 23 * 3_600_000, 86_400_000, 6 * 86_400_000, 7 * 86_400_000, 34 * 86_400_000, 40 * 86_400_000, 400 * 86_400_000]) {

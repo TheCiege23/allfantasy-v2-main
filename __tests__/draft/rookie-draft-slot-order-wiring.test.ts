@@ -11,9 +11,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * rendered, and the actual draft used the plain default order regardless.
  *
  * These tests pin the fix at both layers: the new resolver's Team→Roster id
- * mapping (there is no FK between `LeagueTeam` and `Roster`, so they're paired
- * by canonical id order — the same convention `getStandingsForLottery` already
- * uses for the identical problem), and `buildSlotOrderForLeague`'s precedence
+ * mapping (there is no FK between `LeagueTeam` and `Roster`, so each team is
+ * resolved to its own roster through `buildRosterIdResolver` — it was once
+ * paired by sorted id, which is arbitrary for UUIDs), and `buildSlotOrderForLeague`'s precedence
  * (manual `draftOrderSlots` still wins over the auto rookie order; the rookie
  * order wins over the bare creation-order default).
  */
@@ -58,7 +58,7 @@ describe('resolveRookieDraftSlotOrderForLeague', () => {
     expect(result).toBeNull()
   })
 
-  it('maps LeagueTeam ids to Roster ids by canonical id order, preserving the computed pick order', async () => {
+  it("maps each LeagueTeam to its OWN roster, preserving the computed pick order", async () => {
     mockGetRookieDraftOrderConfig.mockResolvedValueOnce({ mode: 'worst_to_first', enabled: true })
     // computeRookieDraftOrder's own sort put the worst team (t3) first, even
     // though t3 is neither first alphabetically nor first by id.
@@ -69,30 +69,47 @@ describe('resolveRookieDraftSlotOrderForLeague', () => {
         { slot: 3, teamId: 't2', teamName: '', ownerName: 'Owner 2' },
       ],
     })
+    // 🛑 This used to pair the two lists by sorted id — t1↔r1, t2↔r2, t3↔r3 — which for random
+    // UUIDs is an arbitrary pairing, so "worst team picks first" handed that pick to whoever's
+    // roster id happened to sort alongside. Here the id orders deliberately disagree with
+    // ownership: t1 owns r2, t2 owns r3 (through its owner), t3 owns r1.
     mockLeagueFindUnique.mockResolvedValueOnce({
-      rosters: [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }],
-      teams: [{ id: 't1' }, { id: 't2' }, { id: 't3' }],
+      rosters: [
+        { id: 'r1', platformUserId: 'u3' },
+        { id: 'r2', platformUserId: 'u1' },
+        { id: 'r3', platformUserId: 'u2' },
+      ],
+      teams: [
+        { id: 't1', externalId: 'r2', claimedByUserId: 'u1', platformUserId: null },
+        { id: 't2', externalId: 'sleeper-2', claimedByUserId: 'u2', platformUserId: null },
+        { id: 't3', externalId: 'r1', claimedByUserId: 'u3', platformUserId: null },
+      ],
     })
 
     const result = await resolveRookieDraftSlotOrderForLeague('league-1')
 
     expect(result).toEqual([
-      { slot: 1, rosterId: 'r3', displayName: 'Worst Team' },
-      { slot: 2, rosterId: 'r1', displayName: 'Middle Team' },
-      { slot: 3, rosterId: 'r2', displayName: 'Owner 2' },
+      { slot: 1, rosterId: 'r1', displayName: 'Worst Team' },
+      { slot: 2, rosterId: 'r2', displayName: 'Middle Team' },
+      { slot: 3, rosterId: 'r3', displayName: 'Owner 2' },
     ])
   })
 
-  it('falls back to the LeagueTeam id itself when a roster is missing at that index', async () => {
+  it('declines an order it cannot place completely instead of seating a LeagueTeam id', async () => {
+    // A team id in slotOrder is a seat the pick authority never accepts — nobody is on the clock.
+    // Returning null keeps the league's default order instead.
     mockGetRookieDraftOrderConfig.mockResolvedValueOnce({ mode: 'worst_to_first', enabled: true })
     mockComputeRookieDraftOrder.mockResolvedValueOnce({
       slots: [{ slot: 1, teamId: 't1', teamName: 'Only Team', ownerName: 'Owner 1' }],
     })
-    mockLeagueFindUnique.mockResolvedValueOnce({ rosters: [], teams: [{ id: 't1' }] })
+    mockLeagueFindUnique.mockResolvedValueOnce({
+      rosters: [],
+      teams: [{ id: 't1', externalId: 'x', claimedByUserId: null, platformUserId: null }],
+    })
 
     const result = await resolveRookieDraftSlotOrderForLeague('league-1')
 
-    expect(result).toEqual([{ slot: 1, rosterId: 't1', displayName: 'Only Team' }])
+    expect(result).toBeNull()
   })
 })
 

@@ -19,7 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: mocks.leagueFindUnique },
     redraftSeason: { findFirst: mocks.seasonFindFirst },
     redraftRoster: { findMany: mocks.rosterFindMany },
-    draftSession: { findUnique: mocks.sessionFindUnique },
+    draftSession: { findUnique: mocks.sessionFindUnique, findFirst: mocks.sessionFindUnique },
     draftPick: { groupBy: mocks.pickGroupBy },
     leagueTradeHistory: { findMany: mocks.historyFindMany },
     leagueTrade: { count: mocks.tradeCount },

@@ -176,15 +176,17 @@ test('locks advanced setup for non-commissioner and enables it for AF Commission
   await openCreate(page)
   await page.getByTestId('g30-step-summary').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toBeVisible()
-  await expect(page.getByTestId('g30-advanced-superflex').locator('input')).toBeDisabled()
+  await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeDisabled()
+  // League formats are free and are no longer in the paid checklist at all.
+  await expect(page.getByTestId('g30-advanced-superflex')).toHaveCount(0)
 
   await page.unroute('**/api/subscription/entitlements**')
   await stubEntitlements(page, true)
   await openCreate(page)
   await page.getByTestId('g30-step-summary').click()
   await expect(page.getByTestId('g30-commissioner-upsell')).toHaveCount(0)
-  await expect(page.getByTestId('g30-advanced-superflex').locator('input')).toBeEnabled()
-  await page.getByTestId('g30-advanced-superflex').locator('input').check()
+  await expect(page.getByTestId('g30-advanced-aiCommissionerTools').locator('input')).toBeEnabled()
+  await page.getByTestId('g30-advanced-aiCommissionerTools').locator('input').check()
   await expect(page.getByTestId('g30-league-preview')).toContainText('1')
 })
 

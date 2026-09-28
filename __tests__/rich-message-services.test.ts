@@ -69,8 +69,11 @@ describe("rich message services", () => {
       withGifEnv({ KLIPY_API_KEY: "k", NEXT_PUBLIC_TENOR_API_KEY: "t", GIPHY_API_KEY: "g" })
       expect(getGifProviderName()).toBe("klipy")
 
+      // Tenor's API was shut down on 2026-06-30; a leftover Tenor key is skipped, never chosen.
       withGifEnv({ NEXT_PUBLIC_TENOR_API_KEY: "t", GIPHY_API_KEY: "g" })
-      expect(getGifProviderName()).toBe("tenor")
+      expect(getGifProviderName()).toBe("giphy")
+      withGifEnv({ NEXT_PUBLIC_TENOR_API_KEY: "t" })
+      expect(getGifProviderName()).toBeNull()
 
       withGifEnv({ GIPHY_API_KEY: "g" })
       expect(getGifProviderName()).toBe("giphy")

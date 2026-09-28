@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
+import { internalHopHeaders } from '@/lib/http/internalHop'
 import { createZombieUniverseForTier } from '@/lib/zombie/setupEngine'
 import type { ZombieUniverseTierId } from '@/lib/zombie/zombie-universe-tier'
 import { isZombieEligibleLeagueSport } from '@/lib/zombie/zombie-sport-eligibility'
@@ -138,11 +139,14 @@ export async function POST(req: Request) {
         },
       }
 
+      // Self-calls come back through Cloudflare from a data-centre address; the
+      // signed hop keeps the VPN gate from refusing them (lib/http/internalHop).
       const res = await fetch(`${origin}/api/league/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           cookie,
+          ...(await internalHopHeaders('POST', `${origin}/api/league/create`)),
         },
         body: JSON.stringify(merged),
       })
@@ -168,7 +172,11 @@ export async function POST(req: Request) {
         })
         await fetch(`${origin}/api/zombie/league`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie },
+          headers: {
+            'Content-Type': 'application/json',
+            cookie,
+            ...(await internalHopHeaders('POST', `${origin}/api/zombie/league`)),
+          },
           body: JSON.stringify({
             leagueId,
             sport,

@@ -374,6 +374,18 @@ const ALLOWED_PATH_PATTERNS = [
    * call out, in a list a human reads.
    */
   /^scripts\/.*(audit|compare|prune|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
+  /*
+   * ONE file, by exact path, for the reason `prune` is a verb above: it must ask GitHub a
+   * question Postgres cannot answer. scripts/deploy-verify-wait.mjs asks the compare API
+   * whether the commit production serves CONTAINS the one just pushed — deploy-verify.yml
+   * runs it after every push to main, and CI's depth-1 checkout has no history to answer it
+   * with git. CI monitoring, never a request path.
+   *
+   * ⚠ Exact path, NOT a `verify` verb: ten scripts carry "verify" in their name (Stripe price
+   * parity and signup import among them), and a verb would exempt every call any of them
+   * makes, including ones nobody has written yet.
+   */
+  /^scripts\/deploy-verify-wait\.mjs$/,
   /^lib\/.*(ingest|ingestion|sync)/i,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,

@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
 import type { LeagueLifecycleState, LeagueSport, Prisma } from '@prisma/client'
@@ -522,7 +523,7 @@ async function resolvePlayerIndex(
         adp: existing?.adp ?? null,
         injuryStatus: existing?.injuryStatus ?? null,
         stats: existing?.stats ?? {},
-        headshotUrl: row.imageUrl || existing?.headshotUrl || null,
+        headshotUrl: toImageUrl(row.imageUrl) || existing?.headshotUrl || null,
         teamLogoUrl: existing?.teamLogoUrl || null,
       })
     }

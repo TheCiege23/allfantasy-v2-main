@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
+import { internalHopHeaders } from '@/lib/http/internalHop'
 import { mergeC2CSources } from '@/lib/league-import/c2cMultiSourceMerge'
 import { IMPORT_PROVIDERS, type C2CImportSource } from '@/lib/league-import/types'
 
@@ -64,7 +65,12 @@ export async function POST(req: NextRequest) {
   const fetchPreview = async (s: C2CImportSource) => {
     const r = await fetch(`${origin}/api/leagues/import/preview`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', cookie },
+      // The signed hop keeps the VPN gate from judging this by Railway's address.
+      headers: {
+        'Content-Type': 'application/json',
+        cookie,
+        ...(await internalHopHeaders('POST', `${origin}/api/leagues/import/preview`)),
+      },
       body: JSON.stringify({ provider: s.provider, sourceId: s.sourceId }),
     })
     if (!r.ok) {

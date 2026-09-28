@@ -152,6 +152,12 @@ describe('buildWeeklyRoutine', () => {
     expect(build({ awards: a }).awards).toEqual(a)
   })
 
+  it('partial scores do not enter a recap and ties are not losses', () => {
+    expect(build({ lastWeek: { ...lastWeek, rows: lastWeek.rows.map((r) => ({ ...r, completed: false })) } }).recap).toBeNull()
+    const rows = [{ ...lastWeek.rows[0], completed: true, pointsFor: 100, pointsAgainst: 100, won: false }]
+    expect(build({ lastWeek: { ...lastWeek, rows } }).recap).toMatchObject({ wins: 0, losses: 0, closestLoss: null })
+  })
+
   it('passes your upsets through (none by default)', () => {
     expect(build().upsets).toEqual([])
     const u = [{ leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, winProbability: 0.22, winChance: '22%', pointsFor: 120, pointsAgainst: 96.5 }]

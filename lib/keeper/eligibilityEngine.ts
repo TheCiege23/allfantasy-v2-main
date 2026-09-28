@@ -50,13 +50,56 @@ export async function computeKeeperEligibility(
     include: { players: true },
   })
 
+  /*
+   * 🛑 BOTH INPUTS TO A KEEPER'S COST WERE CONSTANTS: `yearsKept = 0` and `originalRound = 8`
+   * for every player. A first-round pick and a waiver pickup cost the same round, and the
+   * max-years rule could never trip. The league's own history answers both.
+   */
+  const [picks, keeps, latestDraft] = await Promise.all([
+    prisma.draftPick.findMany({
+      where: { session: { leagueId } },
+      select: { playerId: true, playerName: true, position: true, round: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.keeperRecord.findMany({
+      where: { leagueId, status: 'locked' },
+      select: { playerId: true, playerName: true, position: true, costRound: true, seasonId: true, lockedAt: true },
+      orderBy: { lockedAt: 'desc' },
+    }),
+    prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { rounds: true },
+    }),
+  ])
+  const nameKey = (name: string | null | undefined, position: string | null | undefined) =>
+    `${String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${String(position ?? '').trim().toUpperCase()}`
+  const draftedRound = new Map<string, number>()
+  for (const pick of picks) {
+    for (const key of [pick.playerId?.trim(), nameKey(pick.playerName, pick.position)]) {
+      if (key && !draftedRound.has(key)) draftedRound.set(key, pick.round)
+    }
+  }
+  const keptCount = new Map<string, number>()
+  const lastKeptCost = new Map<string, number>()
+  for (const keep of keeps) {
+    for (const key of [keep.playerId?.trim(), nameKey(keep.playerName, keep.position)]) {
+      if (!key) continue
+      keptCount.set(key, (keptCount.get(key) ?? 0) + 1)
+      if (keep.costRound != null && !lastKeptCost.has(key)) lastKeptCost.set(key, keep.costRound)
+    }
+  }
+  const undraftedRound = latestDraft?.rounds ?? null
+
   const out: KeeperEligibilityRow[] = []
 
   for (const roster of rosters) {
     for (const p of roster.players) {
       if (p.droppedAt) continue
 
-      const yearsKept = 0
+      const idKey = p.playerId?.trim()
+      const nKey = nameKey(p.playerName, p.position)
+      const yearsKept = (idKey ? keptCount.get(idKey) : undefined) ?? keptCount.get(nKey) ?? 0
       let ineligibleReason: string | null = null
       let isEligible = true
 
@@ -71,7 +114,14 @@ export async function computeKeeperEligibility(
         ineligibleReason = 'not_drafted'
       }
 
-      const originalRound = 8
+      // The round he last cost: his keeper round if kept last year, else where he was drafted,
+      // else — a free-agent pickup — the draft's last round.
+      const originalRound =
+        (idKey ? lastKeptCost.get(idKey) : undefined) ??
+        lastKeptCost.get(nKey) ??
+        (idKey ? draftedRound.get(idKey) : undefined) ??
+        draftedRound.get(nKey) ??
+        undraftedRound
       const { costRound, costLabel, costAuction } = computeCostRound(league, originalRound, yearsKept)
 
       if (isEligible && costRound !== null && costRound < 1) {

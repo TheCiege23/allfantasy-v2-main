@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 const draftFactFindFirst = vi.fn()
 const draftFactDeleteMany = vi.fn()
@@ -62,7 +62,7 @@ vi.mock('@/lib/dynasty-import/normalize-historical', () => ({
 }))
 
 import { getSleeperHistoricalLeagueChain } from '@/lib/league-import/sleeper/SleeperHistoricalLeagueChain'
-import { getLeagueDrafts, getLeagueUsers, getLeagueRosters } from '@/lib/sleeper-client'
+import { getDraftPicks, getLeagueDrafts, getLeagueUsers, getLeagueRosters } from '@/lib/sleeper-client'
 import { syncSleeperHistoricalDraftFactsAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalDraftSyncService'
 import { syncSleeperHistoricalSeasonStateAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalSeasonStateSyncService'
 import { persistDynastySeason } from '@/lib/dynasty-import/normalize-historical'
@@ -270,5 +270,43 @@ describe('Sleeper historical roster/season-state sync — completion gate', () =
       expect(metadata.sourceProvider).toBe('sleeper')
       expect(metadata.rawSettings).toBeDefined()
     }
+  })
+})
+
+describe('🛑 Sleeper historical draft sync — each pick records who owned the team that made it', () => {
+  /*
+   * `managerId` falls back to the raw roster slot for a manager who has since left, and Sleeper
+   * reuses slots — so it cannot say WHO drafted. `metadata.ownerSleeperId` can, and Competitive
+   * Edge on Draft HQ reads nothing else (lib/competitive-edge/draftEdgeLoader.ts).
+   */
+  beforeEach(() => {
+    vi.clearAllMocks()
+    leagueFindUnique.mockResolvedValue({ id: 'league-1', platform: 'sleeper', platformLeagueId: 'lg-current', sport: 'nfl' })
+    chainMock.mockResolvedValue([{ season: 2024, externalLeagueId: 'lg-2024', league: { season: '2024', status: 'complete' } }] as never)
+    draftFactFindFirst.mockResolvedValue(null)
+    // The sync also counts traded picks with a direct fetch; keep it off the network.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('writes that season’s roster owner onto each pick — and never `picked_by`, which is whoever clicked', async () => {
+    vi.mocked(getLeagueRosters).mockResolvedValueOnce([
+      { roster_id: 1, owner_id: 'sl-a' },
+      { roster_id: 2, owner_id: null },
+    ] as never)
+    vi.mocked(getLeagueDrafts).mockResolvedValueOnce([{ draft_id: 'd-2024' }] as never)
+    vi.mocked(getDraftPicks).mockResolvedValueOnce([
+      { player_id: 'p1', round: 1, pick_no: 1, roster_id: 1, picked_by: 'sl-commish' },
+      // An orphaned team that season: the commissioner picked for it.
+      { player_id: 'p2', round: 1, pick_no: 2, roster_id: 2, picked_by: 'sl-commish' },
+    ] as never)
+
+    const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+
+    expect(result.refreshed).toBe(true)
+    const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
+    expect(rows.map((r) => r.playerId)).toEqual(['p1', 'p2'])
+    expect(rows[0]!.metadata).toEqual({ ownerSleeperId: 'sl-a' })
+    expect(rows[1]).not.toHaveProperty('metadata')
   })
 })

@@ -201,12 +201,12 @@ describe('SleeperLeagueMapper — waiver_type enum coercion', () => {
     expect(withWaiverType(2)?.waiver_type).toBe('faab')
   })
 
-  it('Sleeper 1 → rolling', () => {
-    expect(withWaiverType(1)?.waiver_type).toBe('rolling')
+  it('Sleeper 1 → reverse standings', () => {
+    expect(withWaiverType(1)?.waiver_type).toBe('reverse_standings')
   })
 
-  it('Sleeper 0 → off', () => {
-    expect(withWaiverType(0)?.waiver_type).toBe('off')
+  it('Sleeper 0 → rolling, including leagues with daily waivers', () => {
+    expect(withWaiverType(0)?.waiver_type).toBe('rolling')
   })
 })
 

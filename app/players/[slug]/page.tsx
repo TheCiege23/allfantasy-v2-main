@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { getPlayerDetail, getRelatedPlayers, resolvePublicPlayer } from '@/lib/core-app/playerFinder'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import { parsePlayerSlug, playerPath, playerSlug } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import { getOgImageUrl } from '@/lib/seo/SocialShareMetadataService'
@@ -180,7 +181,7 @@ export default async function PublicPlayerPage({ params }: Params) {
    * league ids and no user, and report that they cannot cross-reference.
    */
   const session = (await getServerSession(authOptions as never).catch(() => null)) as {
-    user?: { id?: string }
+    user?: { id?: string; email?: string | null }
   } | null
   /*
    * ⚠ THE CATCH IS LOAD BEARING ON THIS ROUTE SPECIFICALLY. Everywhere else a
@@ -205,7 +206,18 @@ export default async function PublicPlayerPage({ params }: Params) {
       .map((l) => l.id)
   }
 
-  const detail = await getPlayerDetail(identity.playerReference, leagueIds, userId).catch(() => null)
+  /*
+   * Signed in, this page answers the same per-league questions /core does — so the same player-depth
+   * paywall applies, or it would be the free way round the Player Finder's (coreDepthAccess.ts).
+   * Signed out there is nothing per-league to lock.
+   */
+  const playerDepth = userId
+    ? await resolveCoreDepth(userId, 'player_depth', { email: session?.user?.email ?? null })
+    : null
+
+  const detail = await getPlayerDetail(identity.playerReference, leagueIds, userId, {
+    includeMoves: playerDepth?.unlocked !== false,
+  }).catch(() => null)
   if (!detail) notFound()
 
   const descriptor = [detail.player.position, detail.player.team].filter(Boolean).join(' · ')
@@ -286,6 +298,7 @@ export default async function PublicPlayerPage({ params }: Params) {
           detail={detail}
           leagueCount={leagueIds.length}
           signedIn={Boolean(userId)}
+          depthAccess={playerDepth}
         />
 
         {/*

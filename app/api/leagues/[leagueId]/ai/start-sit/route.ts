@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { runStartSitAiEngine } from '@/lib/ai-matchup-engine/runStartSitAiEngine'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
@@ -47,6 +48,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const gated = await aiCostGate(req, 'start_sit_ai', session.user.id)
+  if (gated) return gated
 
   let body: {
     sport?: string

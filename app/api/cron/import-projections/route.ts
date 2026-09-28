@@ -29,6 +29,7 @@ import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { getWeekBoard } from "@/lib/sports-data/sleeperMarketService"
 import { projectionCoverageFor } from "@/lib/projections/projectionCoverage"
+import { resolveCurrentNflWeek } from "@/lib/tournament/resolveNflWeek"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -93,12 +94,35 @@ function isInSeason(sport: ProjectionSport, now = new Date()): boolean {
   return SEASON_ACTIVE_MONTHS[sport].includes(now.getMonth() + 1)
 }
 
-/** Best-effort week when the provider row doesn't include one — not used for freshness (fetchedAt is). */
+/**
+ * Best-effort week when a CHAIN row doesn't include one — not used for freshness (fetchedAt is).
+ *
+ * 🛑 NEVER THE WEEK OF THE SLEEPER FALLBACK, WHICH IS THE ROWS THAT ACTUALLY GET WRITTEN. Counting
+ * seven-day blocks from September 1 is a week AHEAD for any season whose opener is after the 7th:
+ * 2026's opened on the 10th, so on Tuesday 22 September — two days before week 3's opener — this
+ * said week 4. Measured on production 2026-09-24: every week's Sleeper lines were first written the
+ * Tuesday BEFORE the week they are for, and week 3's stopped refreshing on the 21st, three days
+ * before its first kickoff. `latestProjectionWeek()` therefore handed every "this week" surface —
+ * My Team, matchups, waivers, player cards, Chimmy's lineup tools — NEXT week's projections for
+ * the whole of every game week. The fallback now asks Sleeper (see `currentNflProjectionWeek`).
+ */
 function approximateCurrentWeek(now = new Date()): number {
   const seasonStart = new Date(now.getFullYear(), 8, 1) // September 1
   const diffDays = Math.floor((now.getTime() - seasonStart.getTime()) / 86_400_000)
   const week = Math.floor(diffDays / 7) + 1
   return Math.min(22, Math.max(1, week))
+}
+
+/**
+ * The NFL week to pull Sleeper's lines for: Sleeper's own `state/nfl` week — the week its
+ * `projections/nfl/{season}/{week}` board is keyed on — or null when that cannot be established
+ * for this season. Null means WRITE NOTHING: yesterday's lines for the right week are still right,
+ * and lines filed under a guessed week become "the current week" for every reader.
+ */
+async function currentNflProjectionWeek(season: string): Promise<number | null> {
+  const state = await resolveCurrentNflWeek()
+  if (!state || String(state.season) !== season) return null
+  return state.week
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -248,6 +272,7 @@ async function handle(req: NextRequest) {
         ? chainResult.data.filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
         : []
       let usedSource = chainResult.source ?? "chain"
+      let weekUnresolved = false
 
       // The chain is tried first so a recovered provider is preferred, but it has
       // been failing outright — fall back to the Sleeper feed that actually works
@@ -260,9 +285,13 @@ async function handle(req: NextRequest) {
         // provider failing again.
         const weekParam = url.searchParams.get("week")
         const parsedWeek = weekParam == null ? null : toFiniteNumber(weekParam)
-        const week = parsedWeek != null && parsedWeek > 0 ? parsedWeek : approximateCurrentWeek()
-        rows = await fetchSleeperNflProjections(season, week)
-        if (rows.length > 0) usedSource = "sleeper"
+        const week = parsedWeek != null && parsedWeek > 0 ? parsedWeek : await currentNflProjectionWeek(season)
+        if (week == null) {
+          weekUnresolved = true
+        } else {
+          rows = await fetchSleeperNflProjections(season, week)
+          if (rows.length > 0) usedSource = "sleeper"
+        }
       }
 
       if (rows.length === 0) {
@@ -286,8 +315,11 @@ async function handle(req: NextRequest) {
           error:
             chainResult.error ??
             (emptyIsFailure
-              ? `No projection rows for ${sport} ${season} (provider: ${chainResult.source ?? "none"}). ` +
-                `${sport} is in season, so an empty ingest is a failure, not an idle no-op.`
+              ? weekUnresolved
+                ? `Could not establish the current ${sport} week from Sleeper's state for season ${season}, so ` +
+                  `nothing was written rather than filing lines under a guessed week. Pass ?week= to run by hand.`
+                : `No projection rows for ${sport} ${season} (provider: ${chainResult.source ?? "none"}). ` +
+                  `${sport} is in season, so an empty ingest is a failure, not an idle no-op.`
               : null),
         }
         continue

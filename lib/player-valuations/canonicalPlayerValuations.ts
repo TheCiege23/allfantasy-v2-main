@@ -18,7 +18,6 @@ export type CanonicalPlayerIdentity = FantasyCalcPlayerIdentity
 export type CanonicalValuationSettings = FantasyCalcSettings
 
 export type {
-  EnhancedTradeAnalysis,
   EnhancedTradeAsset,
   FantasyCalcCache,
   FantasyCalcPlayer,
@@ -32,9 +31,7 @@ export type {
 } from '@/lib/fantasycalc'
 
 export {
-  analyzeTradeEnhanced,
   applyTierJumpOverride,
-  calculateTradeBalance,
   compareTradeValues,
   compressScore,
   confidenceScore,

@@ -1,25 +1,37 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { searchGifs } from '@/lib/rich-message/GIFIntegrationResolver'
+import { getGifProviderName, isGifSearchConfigured, searchGifs } from '@/lib/rich-message/GIFIntegrationResolver'
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
-it('falls through a failing primary and empty secondary to usable GIFs', async () => {
+it('falls through a failing primary to usable GIFs', async () => {
   vi.stubEnv('VITE_KLIPY_API_KEY', 'primary')
-  vi.stubEnv('TENOR_API_KEY', 'secondary')
   vi.stubEnv('GIPHY_API_KEY', 'last')
   const fetcher = vi.fn()
     .mockResolvedValueOnce({ ok: false })
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ results: [] }) })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: 'gif1', images: { original: { url: 'https://media.giphy.com/test.gif' } } }] }) })
   vi.stubGlobal('fetch', fetcher)
   expect((await searchGifs('football', 3))[0].provider).toBe('giphy')
-  expect(fetcher).toHaveBeenCalledTimes(3)
+  expect(fetcher).toHaveBeenCalledTimes(2)
   expect(fetcher.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
 })
 it('continues after a network exception without exposing provider credentials', async () => {
   vi.stubEnv('VITE_KLIPY_API_KEY', 'primary')
-  vi.stubEnv('TENOR_API_KEY', '')
-  vi.stubEnv('NEXT_PUBLIC_TENOR_API_KEY', '')
   vi.stubEnv('GIPHY_API_KEY', 'last')
   const fetcher = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: 'ok', images: { original: { url: 'https://media.giphy.com/ok.gif' } } }] }) })
   vi.stubGlobal('fetch', fetcher)
   expect(await searchGifs('football')).toEqual([expect.objectContaining({ id: 'ok', provider: 'giphy' })])
+})
+it('🛑 never calls the dead Tenor API, even with a Tenor key still set', async () => {
+  // Production still carries NEXT_PUBLIC_TENOR_API_KEY; Google shut the API down on 2026-06-30.
+  vi.stubEnv('VITE_KLIPY_API_KEY', '')
+  vi.stubEnv('KLIPY_API_KEY', '')
+  vi.stubEnv('GIPHY_API_KEY', '')
+  vi.stubEnv('GIPHY_SDK_KEY', '')
+  vi.stubEnv('NEXT_PUBLIC_GIPHY_API_KEY', '')
+  vi.stubEnv('TENOR_API_KEY', 'still-set')
+  vi.stubEnv('NEXT_PUBLIC_TENOR_API_KEY', 'still-set')
+  const fetcher = vi.fn()
+  vi.stubGlobal('fetch', fetcher)
+  expect(await searchGifs('football')).toEqual([])
+  expect(fetcher).not.toHaveBeenCalled()
+  expect(isGifSearchConfigured()).toBe(false)
+  expect(getGifProviderName()).toBeNull()
 })

@@ -3,6 +3,15 @@
 import { useCallback, useState } from 'react'
 import type { LeagueMatchupAiResult, StartSitAiResult } from '@/lib/ai-matchup-engine/types'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
+import { currentPathForReturn, PlanRefusalError, readPlanRefusal } from '@/lib/monetization/planRefusal'
+
+/** A paywall answer becomes a PlanRefusalError (with its way forward); anything else a plain Error. */
+function failure(status: number, json: unknown, fallback: string): Error {
+  const refusal = readPlanRefusal(status, json, { returnTo: currentPathForReturn() })
+  if (refusal) return new PlanRefusalError(refusal)
+  const msg = (json as { error?: unknown } | null)?.error
+  return new Error(typeof msg === 'string' && msg ? msg : fallback)
+}
 
 export function useLeagueMatchupAi(leagueId: string) {
   const [matchupLoading, setMatchupLoading] = useState(false)
@@ -19,7 +28,7 @@ export function useLeagueMatchupAi(leagueId: string) {
           body: JSON.stringify({ season: args.season, week: args.week }),
         })
         const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(json?.error ?? 'Matchup AI failed')
+        if (!res.ok) throw failure(res.status, json, 'Matchup AI failed')
         return json.analysis as LeagueMatchupAiResult
       } finally {
         setMatchupLoading(false)
@@ -43,7 +52,7 @@ export function useLeagueMatchupAi(leagueId: string) {
           }),
         })
         const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(json?.error ?? 'Start/sit AI failed')
+        if (!res.ok) throw failure(res.status, json, 'Start/sit AI failed')
         return json.result as StartSitAiResult
       } finally {
         setStartSitLoading(false)

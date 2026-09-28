@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { CHIMMY_TRADE_SYSTEM_PROMPT } from '@/lib/trade-value-console/chimmy-prompt'
 
 export async function POST(req: Request) {
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Sign in required' }, { status: 401 })
   }
+
+  const gated = await aiCostGate(req, 'trade_ai', session.user.id)
+  if (gated) return gated
 
   let payload: Record<string, unknown> = {}
   try {

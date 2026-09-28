@@ -33,7 +33,7 @@ export async function GET(
         name: true,
         createdAt: true,
         tiebreakerPoints: true,
-        user: { select: { displayName: true, email: true } },
+        user: { select: { displayName: true, username: true } },
       },
     })
 
@@ -76,7 +76,8 @@ export async function GET(
         return {
           entryId: e.id,
           entryName: e.name,
-          ownerName: e.user?.displayName ?? e.user?.email ?? "Unknown",
+          // Never the email: standings are shown to every member of the pool.
+          ownerName: e.user?.displayName || e.user?.username || "Manager",
           points: scoreByEntry.get(e.id) ?? 0,
           picksCount: pickCountByEntry.get(e.id) ?? 0,
           createdAt: e.createdAt,

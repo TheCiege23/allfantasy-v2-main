@@ -99,7 +99,7 @@ const STALE_WHILE_REVALIDATE_MS = 2 * 60 * 60_000
 registerScreenSummary<PortfolioData | null>({
   screen: PORTFOLIO_SCREEN,
   /** ⚠ Bump whenever `PortfolioData` changes shape — the version is part of the cache key. */
-  version: 1,
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   /*

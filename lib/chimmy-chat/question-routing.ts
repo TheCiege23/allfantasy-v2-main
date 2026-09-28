@@ -136,6 +136,12 @@ export const GLOBAL_SPORT_CONTEXT =
  */
 export const IN_THEIR_OWN_LEAGUE = /\bin\s+(?:my|our|this)\s+[\w\s]*league\b/
 
+/** A market price needs a format, but does not need somebody's private roster. */
+export function isGeneralMarketValueQuestion(message: string): boolean {
+  return /\b(?:trade\s+value|dynasty\s+value|redraft\s+value|market\s+value|fantasycalc)\b/i.test(message)
+    && !/\b(?:my|our|this|that)\s+(?:\w+\s+){0,3}(?:league|team|roster)\b|\b(?:should|would|could|can)\s+(?:i|we)|\b(?:trade\s+block|trading|offer|swap|give|receive|accept|decline|grade|evaluate|fair)\b|\bin\s+.+\s+league\b/i.test(message)
+}
+
 export function requiresLeagueGrounding(args: {
   message: string
   intent: string
@@ -154,6 +160,7 @@ export function requiresLeagueGrounding(args: {
   if (source.includes('trade') || source.includes('waiver') || source.includes('lineup')) {
     return true
   }
+  if (isGeneralMarketValueQuestion(message)) return false
   /*
    * ⚠ "HOW DOES THE WAIVER PRIORITY RESET WORK ON SLEEPER?" WAS REFUSED FOR WANT OF A LEAGUE (eval
    * gap, 2026-09-16). Any `waiver` or `trade` word forced grounding, even in a question about how a

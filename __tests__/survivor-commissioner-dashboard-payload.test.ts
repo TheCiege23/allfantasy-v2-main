@@ -35,7 +35,7 @@ const {
   resolveSurvivorAccessContext: vi.fn(),
   prisma: {
     league: { findUnique: vi.fn() },
-    draftSession: { findUnique: vi.fn() },
+    draftSession: { findFirst(...a: unknown[]) { return (this as any).findUnique(...a) }, findUnique: vi.fn() },
     survivorGameState: { findUnique: vi.fn() },
     roster: { count: vi.fn() },
     survivorChatChannel: { count: vi.fn() },

@@ -16,10 +16,13 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { AIToolModalShell } from '../AIToolModalShell'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { buildLeagueFormatLabel } from '@/lib/leagues/leagueFormatLabel'
-import { describeTradeCanonicalOpinion } from '@/lib/decision-os/trade/canonicalVisibility'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 type SportFilter = 'ALL' | (typeof SUPPORTED_SPORTS)[number]
 
@@ -108,6 +111,7 @@ export function TradeValueModal({
   const [getRows, setGetRows] = useState<SideRow[]>([emptyPlayerRow()])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [searchGive, setSearchGive] = useState<SearchHit[]>([])
   const [searchGet, setSearchGet] = useState<SearchHit[]>([])
@@ -133,6 +137,7 @@ export function TradeValueModal({
     if (!open) {
       setResult(null)
       setError(null)
+      setRefusal(null)
       setLoading(false)
       prefillGiveConsumed.current = false
     }
@@ -385,6 +390,7 @@ export function TradeValueModal({
     }
     setLoading(true)
     setError(null)
+    setRefusal(null)
     try {
       const body = {
         sportFilter,
@@ -407,6 +413,7 @@ export function TradeValueModal({
       })
       const j = await r.json()
       if (!r.ok) {
+        setRefusal(readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() }))
         setError((j as { error?: string }).error || 'Analysis failed')
         setResult(null)
         return
@@ -450,28 +457,21 @@ export function TradeValueModal({
     }
   }, [detailId])
 
-  const fairnessScore = typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
-  const labels = result?.labels as { fairnessLabel?: string; confidenceLabel?: string } | undefined
-  /**
-   * Phase 3B (alongside). Absent unless DECISION_OS_TRADE_CANONICAL_VISIBLE is on AND the
-   * canonical engine produced a comparison, so `undefined` here means "no second opinion"
-   * rather than "an opinion of nothing".
+  /*
+   * 🛑 THE ONE GRADE, SHOWN AS A LETTER (Trade OS, 2026-09-27). This modal used to print no letter of
+   * the one grade at all — its only letter was the canonical memo's "Decision OS" second opinion, a
+   * scale of its own that could "disagree with the console". That block is gone; this is the letter
+   * every other trade screen shows for the same deal.
    */
-  const decisionOs = result?.decisionOs as
-    | {
-        grade: string | null
-        confidence: number
-        advantage: 'even' | 'you' | 'opponent' | null
-        agreesWithConsole: boolean | null
-      }
+  const proposalGrade = result?.grade as
+    | { graded?: boolean; reason?: string; letter?: string; partnerLetter?: string }
     | undefined
-  /**
-   * The three honesty states, resolved by a tested pure function rather than decided in JSX. The
-   * previous version named all three in a comment and branched on `grade` alone, so `confidence: 0`
-   * — which is EVERY trade observation production has recorded — rendered as a confident grade.
-   */
-  const decisionOsState = describeTradeCanonicalOpinion(decisionOs ?? null)
+  const proposalUnavailable = proposalGrade?.graded === false
+  const fairnessScore = !proposalUnavailable && typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
+  const labels = result?.labels as { fairnessLabel?: string; confidenceLabel?: string } | undefined
   const secondary = result?.secondary as Record<string, unknown> | undefined
+  // Trade depth (AF Pro): the route withheld the breakdown below the verdict for a locked viewer.
+  const tradeDepth = (result?.depth ?? null) as CoreDepthAccess | null
   const evaluation = result?.evaluation as { bullets?: string[]; sensitivity?: string } | undefined
   const chimmyPayload = result?.chimmyPayload as Record<string, unknown> | undefined
   const rosterSummary = result?.rosterSummary as
@@ -494,7 +494,7 @@ export function TradeValueModal({
   const tradeIntelligence = result?.tradeIntelligence as
     | {
         fairnessVerdict?: string
-        confidenceScore?: number
+        confidenceScore?: number | null
         whoWinsNow?: string
         whoWinsLongTerm?: string
         contenderRecommendation?: string
@@ -646,7 +646,9 @@ export function TradeValueModal({
       }
       chimmyContext={chimmyPayload ?? { source: 'trade_value_modal' }}
     >
-      {error ? (
+      {refusal ? (
+        <PlanRefusalNotice refusal={refusal} className="mb-3" />
+      ) : error ? (
         <div className="mb-3 rounded-[10px] border border-[#f06060]/25 bg-[rgba(240,96,96,0.08)] px-3 py-2 text-[12px] text-[#f08080]">
           {error}
         </div>
@@ -878,10 +880,10 @@ export function TradeValueModal({
           </div>
           <p className="text-[20px] font-black tabular-nums text-[#00d4aa]">
             {fairnessScore != null ? fairnessScore : '—'}
-            <span className="text-[11px] font-bold text-[#5c6480]">/100</span>
+            {fairnessScore != null ? <span className="text-[11px] font-bold text-[#5c6480]">/100</span> : null}
           </p>
         </div>
-        <div className="relative mt-4">
+        {fairnessScore != null ? <div className="relative mt-4">
           <div className="mb-1 flex justify-between text-[9px] font-bold uppercase tracking-wide text-[#5c6480]">
             <span>LOPSIDED</span>
             <span className="text-[#9ba3bf]">EVEN</span>
@@ -893,47 +895,17 @@ export function TradeValueModal({
               style={{ left: `${Math.min(100, Math.max(0, fairnessScore ?? 50))}%` }}
             />
           </div>
-        </div>
+        </div> : null}
         <p className="mt-3 text-[12px] leading-relaxed text-[#9ba3bf]">
-          <span className="font-semibold text-[#00d4aa]">{labels?.fairnessLabel ?? 'Run analysis to score this deal.'}</span>{' '}
-          {labels?.confidenceLabel ? <span className="text-[#5c6480]">· {labels.confidenceLabel}</span> : null}
+          <span className="font-semibold text-[#00d4aa]">{proposalUnavailable ? 'Grade unavailable' : labels?.fairnessLabel ?? 'Run analysis to score this deal.'}</span>{' '}
+          {proposalUnavailable ? proposalGrade.reason : labels?.confidenceLabel ? <span className="text-[#5c6480]">· {labels.confidenceLabel}</span> : null}
         </p>
-        {/*
-          * A SECOND OPINION, NEVER THE VERDICT. The console's own answer above is unchanged; this
-          * sits beneath it, clearly attributed.
-          *
-          * ⚠ The three states are resolved by `describeTradeCanonicalOpinion`, NOT here. An earlier
-          * version listed all three in this comment and then branched on `grade` alone — the
-          * comment was right and the code was wrong, and nothing caught it because this modal has
-          * no test. Keep the branching in the tested function; this block only chooses words.
-          */}
-        {decisionOsState ? (
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#9ba3bf]">
-            <span className="rounded-[3px] bg-[#1b2030] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-[#7c88ad]">
-              Decision OS
-            </span>
-            {decisionOsState?.kind === 'opinion' ? (
-              <>
-                <span className="font-semibold text-[#c8d4f0]">Grade {decisionOsState.grade}</span>
-                <span className="text-[#5c6480]">{'·'} confidence {decisionOsState.confidence}/100</span>
-                {decisionOsState.agreesWithConsole === true ? (
-                  <span className="text-[#00d4aa]">{'·'} agrees with the console</span>
-                ) : decisionOsState.agreesWithConsole === false ? (
-                  <span className="text-[#d98b7c]">{'·'} disagrees with the console</span>
-                ) : (
-                  <span className="text-[#5c6480]">{'·'} not comparable to the console verdict</span>
-                )}
-              </>
-            ) : decisionOsState?.kind === 'no_signal' ? (
-              <span className="text-[#5c6480]">
-                nothing in this deal could be priced {'·'} confidence 0/100, so there is no second
-                opinion {'—'} not a neutral one
-              </span>
-            ) : (
-              <span className="text-[#5c6480]">
-                could not price this deal {'·'} no second opinion, not a neutral one
-              </span>
-            )}
+        {proposalGrade?.graded && proposalGrade.letter ? (
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[#9ba3bf]" data-testid="trade-value-one-grade">
+            <span className="font-semibold text-[#c8d4f0]">Your grade {proposalGrade.letter}</span>
+            {proposalGrade.partnerLetter ? (
+              <span className="text-[#5c6480]">{'·'} theirs {proposalGrade.partnerLetter}</span>
+            ) : null}
           </p>
         ) : null}
         {rosterSummary?.lineupSimulation ? (
@@ -946,6 +918,12 @@ export function TradeValueModal({
         ) : null}
       </div>
 
+      {tradeDepth && tradeDepth.unlocked === false ? (
+        <div className="mt-4">
+          <CoreDepthLock access={tradeDepth} what="The full trade breakdown" />
+        </div>
+      ) : null}
+
       {tradeIntelligence ? (
         <div
           className="at-panel mt-4 border border-sky-500/20 bg-[rgba(56,189,248,0.04)] px-4 py-4"
@@ -956,14 +934,14 @@ export function TradeValueModal({
             <p className="mb-0 text-[11px] font-semibold uppercase tracking-wider text-sky-200/90">
               Trade Value AI engine
             </p>
-            {typeof tradeIntelligence.confidenceScore === 'number' ? (
+            {!proposalUnavailable && typeof tradeIntelligence.confidenceScore === 'number' ? (
               <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold tabular-nums text-sky-100/90">
                 Confidence {tradeIntelligence.confidenceScore}%
               </span>
             ) : null}
           </div>
-          <p className="text-[13px] leading-relaxed text-[#c8d4f0]">{tradeIntelligence.fairnessVerdict}</p>
-          {tradeIntelligence.why ? (
+          <p className="text-[13px] leading-relaxed text-[#c8d4f0]">{proposalUnavailable ? 'Proposal grade unavailable. Priced assets alone do not establish that the complete trade is fair.' : tradeIntelligence.fairnessVerdict}</p>
+          {!proposalUnavailable && tradeIntelligence.why ? (
             <p className="mt-3 text-[12px] leading-relaxed text-[#b0bdd8]" data-testid="trade-value-why-summary">
               {tradeIntelligence.why}
             </p>
@@ -989,34 +967,34 @@ export function TradeValueModal({
           ) : null}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Who wins now</p>
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Asset production lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
                 {tradeIntelligence.whoWinsNow === 'you'
                   ? 'You (proj-first when available)'
                   : tradeIntelligence.whoWinsNow === 'opponent'
                     ? 'Opponent (proj-first when available)'
-                    : 'Even / mixed'}
+                    : tradeIntelligence.whoWinsNow === 'unknown' ? 'Unavailable' : 'Even / mixed'}
               </p>
             </div>
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Who wins long term</p>
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">League value lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
-                {tradeIntelligence.whoWinsLongTerm === 'you'
+                {proposalUnavailable ? 'Unavailable' : tradeIntelligence.whoWinsLongTerm === 'you'
                   ? 'You (framework lean)'
                   : tradeIntelligence.whoWinsLongTerm === 'opponent'
                     ? 'Opponent (framework lean)'
-                    : 'Even / close'}
+                    : tradeIntelligence.whoWinsLongTerm === 'unknown' ? 'Unavailable' : 'Even / close'}
               </p>
             </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/[0.06] px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-emerald-200/70">Contender read</p>
-              <p className="text-[12px] leading-snug text-[#c8e6d8]">{tradeIntelligence.contenderRecommendation}</p>
+              <p className="text-[12px] leading-snug text-[#c8e6d8]">{proposalUnavailable ? 'Proposal value is unavailable; review complete projections and eligibility.' : tradeIntelligence.contenderRecommendation}</p>
             </div>
             <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.06] px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-violet-200/70">Rebuilder read</p>
-              <p className="text-[12px] leading-snug text-[#d8cff5]">{tradeIntelligence.rebuilderRecommendation}</p>
+              <p className="text-[12px] leading-snug text-[#d8cff5]">{proposalUnavailable ? 'The shared evaluator withheld the complete proposal grade.' : tradeIntelligence.rebuilderRecommendation}</p>
             </div>
           </div>
           {tradeIntelligence.tradeWarnings && tradeIntelligence.tradeWarnings.length > 0 ? (
@@ -1029,7 +1007,7 @@ export function TradeValueModal({
               </ul>
             </div>
           ) : null}
-          {tradeIntelligence.rebalanceSuggestions && tradeIntelligence.rebalanceSuggestions.length > 0 ? (
+          {!proposalUnavailable && tradeIntelligence.rebalanceSuggestions && tradeIntelligence.rebalanceSuggestions.length > 0 ? (
             <div className="mt-3 rounded-lg border border-[#a78bfa]/25 bg-[#a78bfa]/[0.06] px-3 py-2">
               <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd]">Rebalance ideas</p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-[#e8e0ff]">
@@ -1085,7 +1063,7 @@ export function TradeValueModal({
         </div>
       ) : null}
 
-      {toolkit?.counters && toolkit.counters.length > 0 ? (
+      {!proposalUnavailable && toolkit?.counters && toolkit.counters.length > 0 ? (
         <div className="at-panel mt-3 p-3">
           <p className="at-section-title mb-2">Rebalance</p>
           <p className="mb-2 text-[11px] text-[#5c6480]">Players / pieces to adjust to even the deal:</p>
@@ -1395,6 +1373,12 @@ export function TradeValueModal({
               body: JSON.stringify({ payload: chimmyPayload }),
             })
             const j = await r.json().catch(() => null)
+            // A refusal used to do nothing at all here; show it with its way forward.
+            const refused = readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
+            if (refused) {
+              setRefusal(refused)
+              return
+            }
             if (j?.chimmy) {
               alert(JSON.stringify(j.chimmy, null, 2))
             }

@@ -108,6 +108,17 @@ describe('generic trade execution snapshot', () => {
     expect(state).toHaveLength(2) // deduped
   })
 
+  it('stores salary ownership evidence alongside roster evidence', async () => {
+    const { writeGenericTradeExecutionSnapshot } = await import('@/lib/league-trade-engine/tradeExecutionSnapshot')
+    const original = { id: 'c', configId: 'cfg', rosterId: 'r-1', playerId: 'p', salary: 30,
+      yearSigned: 2026, yearsTotal: 2, contractYear: 1, status: 'active', deadMoneyRemaining: null }
+    await writeGenericTradeExecutionSnapshot(tx, { ...INPUT,
+      salaryEvidence: { before: [original], after: [{ ...original, rosterId: 'r-2' }] } })
+    const data = snapshotCreateMock.mock.calls[0][0].data
+    expect(data.beforeState.salaryContracts[0].rosterId).toBe('r-1')
+    expect(data.afterState.salaryContracts[0]).toEqual({ ...original, rosterId: 'r-2' })
+  })
+
   describe('the actor role names who actually acted', () => {
     it.each([
       ['awaiting_commissioner', 'commissioner'],

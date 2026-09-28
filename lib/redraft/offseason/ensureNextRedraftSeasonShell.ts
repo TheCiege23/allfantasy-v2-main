@@ -34,6 +34,33 @@ export async function ensureNextRedraftSeasonShell(
   })
   if (!league) return null
 
+  /*
+   * 🛑 NEXT SEASON'S TEAMS ARE LAST SEASON'S TEAMS — CLONE THEM, DO NOT REBUILD THEM.
+   * This used to rebuild every roster from `LeagueTeam`, sending each unclaimed team to the
+   * commissioner. The moment a commissioner who owns a team also had an unclaimed one, that was
+   * two rosters for one owner, `@@unique([seasonId, ownerId])` rejected the second, and the whole
+   * shell rolled back — no next season, so no keeper window and nowhere for a dynasty roster to
+   * go. Cloning keeps each team's identity (`roster:<id>` for an orphan) exactly as the season
+   * engine wrote it, which is also what lets carryover match teams across the two seasons.
+   */
+  const previousRosters = await prisma.redraftRoster.findMany({
+    where: { leagueId, seasonId: completedSeasonId },
+    orderBy: { id: 'asc' },
+    select: { ownerId: true, ownerName: true, teamName: true, avatarUrl: true },
+  })
+  const shells: Array<{ ownerId: string; ownerName: string; teamName: string | null; avatarUrl: string | null }> = []
+  if (previousRosters.length > 0) {
+    shells.push(...previousRosters)
+  } else {
+    const used = new Set<string>()
+    for (const t of league.teams) {
+      let ownerId = t.claimedByUserId ?? league.userId
+      if (used.has(ownerId)) ownerId = `roster:${t.externalId || t.id}`
+      used.add(ownerId)
+      shells.push({ ownerId, ownerName: t.ownerName, teamName: t.teamName, avatarUrl: t.avatarUrl })
+    }
+  }
+
   const nextSeasonYear = completedSeason.season + 1
 
   return prisma.$transaction(async (tx) => {
@@ -51,13 +78,12 @@ export async function ensureNextRedraftSeasonShell(
     })
 
     const rosters: { id: string }[] = []
-    for (const t of league.teams) {
-      const ownerId = t.claimedByUserId ?? league.userId
+    for (const t of shells) {
       const r = await tx.redraftRoster.create({
         data: {
           seasonId: rs.id,
           leagueId,
-          ownerId,
+          ownerId: t.ownerId,
           ownerName: t.ownerName,
           teamName: t.teamName,
           avatarUrl: t.avatarUrl,

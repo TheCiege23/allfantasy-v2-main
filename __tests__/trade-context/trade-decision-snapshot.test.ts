@@ -85,7 +85,7 @@ describe('immutable trade-time decision snapshot', () => {
     expect(snapshot.evidence).toMatchObject({ as_of_asset_values: 'available', as_of_projections: 'available', paired_outcome_simulation: 'missing' })
     expect(snapshot.completeness).toBe('partial')
     expect(snapshot.decisionResult).toMatchObject({ scope: 'market', participants: [{ rosterId: 'r1', grade: 'A' }] })
-    expect(((snapshot.decisionResult as { participants: Array<{ reason: string }> }).participants[0]?.reason)).toContain('Market grade A')
+    expect(((snapshot.decisionResult as { participants: Array<{ reason: string }> }).participants[0]?.reason)).toContain('League-value grade A')
   })
 
   it('writes one append-only row keyed to the trade instead of updating a prior receipt', async () => {

@@ -1,11 +1,15 @@
-﻿import { prisma } from '@/lib/prisma'
-import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+﻿import { resolveCreatedSeasonWeeks } from './createdSeasonLength'
+import { prisma } from '@/lib/prisma'
+import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -157,6 +161,13 @@ async function ensureRedraftSeason(leagueId: string) {
       sport: true,
       season: true,
       medianGame: true,
+      playoffStartWeek: true,
+      playoffTeams: true,
+      playoffWeeksPerRound: true,
+      dynastyConfig: { select: { regularSeasonWeeks: true } },
+      bbContestId: true,
+      bestBallMode: true,
+      settings: true,
     },
   })
   if (!league) throw new Error('League not found')
@@ -164,8 +175,15 @@ async function ensureRedraftSeason(leagueId: string) {
   const sportKey = leagueSportToConfigSport(String(league.sport ?? 'NFL'))
   const cfg = tryGetSportConfig(sportKey)
   const seasonYear = Number(league.season ?? currentSeasonYear()) || currentSeasonYear()
-  const totalWeeks = cfg?.defaultSeasonWeeks ?? 17
-  const playoffStartWeek = cfg?.defaultPlayoffStartWeek ?? 15
+  const totalWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
+  // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
+  // It used to be the sport default always, while the bracket read the league setting — so the
+  // regular season and the playoffs could overlap or leave a gap.
+  const leaguePlayoffStart = Number(league.playoffStartWeek)
+  const playoffStartWeek = isNativeTournamentLeague(league) ? totalWeeks + 1 :
+    Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
+      ? leaguePlayoffStart
+      : cfg?.defaultPlayoffStartWeek ?? 15
 
   const season = await prisma.redraftSeason.create({
     data: {
@@ -294,7 +312,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
   return { redraftRoster, created: true, genericRoster }
 }
 
-async function ensureScheduleForNewSeason(params: {
+export async function ensureScheduleForNewSeason(params: {
   seasonId: string
   leagueId: string
   sport: string
@@ -306,6 +324,13 @@ async function ensureScheduleForNewSeason(params: {
     where: { seasonId: params.seasonId },
   })
   if (existingScheduleCount > 0) return
+
+  /*
+   * A guillotine league has no opponents: every surviving team plays the chop line, scored by
+   * `runNativeGuillotineWeek`. A head-to-head schedule would pair survivors with teams that have
+   * been chopped and emptied, and those matchups could never go final.
+   */
+  if (await isGuillotineLeague(params.leagueId).catch(() => false)) return
 
   // RedraftRoster has no createdAt column; order by id (cuid, roughly
   // creation-ordered) for a deterministic, schema-valid roster sequence so the
@@ -394,8 +419,9 @@ export async function syncCompletedDraftToRedraftSeason(
    * `not_redraft_league` therefore stays in the result type and is no longer produced.
    */
 
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     include: {
       picks: { orderBy: { overall: 'asc' } },
     },
@@ -439,6 +465,7 @@ export async function syncCompletedDraftToRedraftSeason(
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
+      isDraftPickSkipped(pick) ||
       isDraftPickRowEmpty({
         playerName: pick.playerName,
         position: pick.position,

@@ -5986,6 +5986,8 @@ model UserProfile {
   leagueImportDetailPending Boolean?            @default(false) @map("league_import_detail_pending")
   chimmyTtsVoiceId          String?             @map("chimmy_tts_voice_id")
   dashboardOnboarding       Json?
+  /// Account-scoped Core preferences, including paused external sync keys.
+  corePreferences           Json?               @map("core_preferences")
   /// Draft / war-room: risk and build prefs (AF War Room AI).
   riskProfile               String?             @db.VarChar(32)
   draftStyle                String?             @db.VarChar(32)
@@ -6422,7 +6424,9 @@ model League {
   draftPickAuditLogs                    DraftPickAuditLog[]
   draftIntroViews                       DraftIntroView[]
   draftRecaps                           DraftRecap[]
-  draftSessions                         DraftSession?
+  /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
+  /// 2026-09-24; read the current one with `orderBy: CURRENT_DRAFT_SESSION_ORDER, take: 1`.
+  draftSessions                         DraftSession[]
   dynastyConfig                         DynastyLeagueConfig?
   findLeagueListings                    FindLeagueListing[]
   guillotineAiInsights                  GuillotineAIInsight[]
@@ -12203,13 +12207,18 @@ model TradeManagerStrategy {
   @@map("trade_manager_strategies")
 }
 
-/// Append-only evidence captured when an AllFantasy trade proposal is created.
+/// Append-only evidence captured when an AllFantasy trade proposal is created — and, since
+/// 2026-09-26, THE one receipt table for every `evaluateTrade()` call: a proposal's receipt is in its
+/// own row, an evaluation that is not a trade gets a row with `tradeId` NULL.
 /// Historical decision grades may use this row; current data must never overwrite it.
 model TradeDecisionSnapshot {
   id                 String   @id @default(cuid())
-  tradeId            String   @unique
-  leagueId           String
-  proposedByUserId   String
+  /// The AfLeagueTrade this receipt belongs to. NULL for an evaluation that is not a trade — an ad-hoc
+  /// `evaluateTrade()` call from /trade-evaluator or the legacy analyzer (2026-09-26). Every reader
+  /// selects by `tradeId`, so those rows are invisible to trade screens by construction.
+  tradeId            String?  @unique
+  leagueId           String?
+  proposedByUserId   String?
   policyVersion      String   @db.VarChar(48)
   format             String   @db.VarChar(32)
   leagueContext      Json
@@ -12225,9 +12234,18 @@ model TradeDecisionSnapshot {
   /// ⚠ Timestamptz for the same reason as TradeManagerStrategy above — the migration that
   /// created this table was hand-written with `TIMESTAMPTZ`.
   capturedAt         DateTime @default(now()) @db.Timestamptz(6)
+  /// Which surface evaluated it: `proposal`, `trade-evaluator`, `legacy-trade-analyze`. NULL on rows
+  /// written before the one trade engine.
+  surface            String?  @db.VarChar(48)
+  /// sha256 of the normalized deal, so the same deal evaluated twice can be found.
+  inputHash          String?  @db.VarChar(64)
+  /// The full `TradeEvaluationReceipt` from `lib/decision-os/trade/evaluateTrade.ts`, as computed.
+  evaluationReceipt  Json?
 
   @@index([leagueId, capturedAt])
   @@index([proposedByUserId, capturedAt])
+  @@index([inputHash])
+  @@index([surface, capturedAt])
   @@map("trade_decision_snapshots")
 }
 
@@ -12404,10 +12422,21 @@ model MockDraftChat {
   @@map("mock_draft_chats")
 }
 
-/// Live draft session for a league. One active session per league at a time.
+/// Live draft session for a league. One OPEN session per league at a time — but a league runs
+/// many drafts over its life: a startup, then a rookie draft each year, plus dispersal and
+/// supplemental pools.
+///
+/// `leagueId` carried `@unique` until 2026-09-24, which enforced one draft per league EVER and
+/// is what blocked dynasty year two. "One open at a time" is now enforced where it belongs, by
+/// a partial unique index that Prisma's schema language cannot express:
+///   CREATE UNIQUE INDEX "draft_sessions_leagueId_open_key"
+///     ON "draft_sessions"("leagueId") WHERE "status" <> 'completed';
+/// It lives in the migration only, so do NOT "restore" the `@unique` to make the schema look
+/// symmetrical — that reinstates the bug. Read a league's current draft with
+/// `CURRENT_DRAFT_SESSION_ORDER` from `lib/draft-room/currentDraftSession.ts`.
 model DraftSession {
   id                         String                        @id @default(uuid())
-  leagueId                   String                        @unique
+  leagueId                   String
   status                     String                        @default("pre_draft")
   draftType                  String                        @default("snake")
   rounds                     Int                           @default(15)
@@ -18766,4 +18795,27 @@ model ProviderTradeOfferAsset {
   @@index([playerId])
   @@index([offerId, assetType])
   @@map("provider_trade_offer_assets")
+}
+
+/// Private request deduplication and crash recovery for Chimmy answers.
+model ChimmyRequestReceipt {
+  id                String   @id
+  userId            String   @map("user_id")
+  fingerprint       String
+  ownerToken        String   @map("owner_token")
+  status            String   @default("processing")
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  response          Json?
+  httpStatus        Int?     @map("http_status")
+  billKind          String?  @map("bill_kind")
+  billState         String?  @map("bill_state")
+  allowanceEndpoint String?  @map("allowance_endpoint")
+  windowStart       DateTime? @map("window_start") @db.Timestamptz(6)
+  windowEnd         DateTime? @map("window_end") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt], map: "chimmy_receipts_user_created")
+  @@index([status, expiresAt], map: "chimmy_receipts_recovery")
+  @@map("chimmy_request_receipts")
 }

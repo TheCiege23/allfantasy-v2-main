@@ -141,6 +141,13 @@ export const PURGEABLE_KEY_PREFIXES: readonly string[] = [
   'core-career:profile:v',
   // lib/core-app/portfolioInsightsSummary.ts: reads at most 36 days back; rows live 400 days.
   'core-portfolio:totals:v1:',
+  // lib/trade-intel/tradeNotifyService.ts claimSend: a create-only delivery claim, never read. Rows
+  // live 30 days; an undelivered alert is dropped after OWED_MAX_AGE_MS (48h), so no retry can
+  // reach an expired claim. Distinct from the seen records (`trade-notify:v1:`), which must stay.
+  'trade-notify:sent:v1:',
+  // lib/trade-intel/screenTradeAlerts.ts: a create-only per-league-per-minute throttle claim, never
+  // read; a row only has to outlive its own minute. Rows live 24h.
+  'trade-notify:screen:v1:',
 ]
 
 /**

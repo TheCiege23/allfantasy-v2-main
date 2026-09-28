@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
+import { queueTradeStatusInDm } from '@/lib/chat-notifications/tradeOfferDm'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { proposalId?: string; reason?: string }
+  let body: { proposalId?: string; reason?: string; reviewId?: unknown }
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -51,6 +52,8 @@ export async function POST(req: NextRequest) {
 
   const proposalId = body.proposalId?.trim()
   if (!proposalId) return NextResponse.json({ error: 'proposalId required' }, { status: 400 })
+  // A receipt id the client echoes back: kept only if it looks like one.
+  const reviewId = typeof body.reviewId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(body.reviewId) ? body.reviewId : null
 
   // Load the canonical proposal — legacy RedraftLeagueTrade IDs return 404 here
   const proposal = await prisma.redraftTradeProposal.findUnique({
@@ -101,6 +104,13 @@ export async function POST(req: NextRequest) {
         decision: 'vetoed',
         decidedByUserId: userId,
         decisionReason: body.reason ?? null,
+        // Merged, not replaced: an earlier decision's snapshot keeps what it recorded.
+        snapshot: {
+          ...(existingDecision.snapshot && typeof existingDecision.snapshot === 'object' && !Array.isArray(existingDecision.snapshot)
+            ? (existingDecision.snapshot as Record<string, unknown>)
+            : {}),
+          reviewId,
+        },
       },
     })
   } else {
@@ -111,7 +121,8 @@ export async function POST(req: NextRequest) {
         decision: 'vetoed',
         decidedByUserId: userId,
         decisionReason: body.reason ?? null,
-        snapshot: {},
+        // The commissioner review they were shown (design step 6: "decision logged").
+        snapshot: { reviewId },
       },
     })
   }
@@ -137,6 +148,9 @@ export async function POST(req: NextRequest) {
     leagueId: proposal.leagueId, seasonId: proposal.seasonId, tradeProposalId: proposalId,
     eventType: 'commissioner_vetoed', actorUserId: userId,
   })
+
+  // The ruling, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
+  queueTradeStatusInDm({ source: 'redraft', tradeId: proposalId, status: 'vetoed', detail: 'The commissioner made the call.' })
 
   return NextResponse.json({
     proposalId: vetoed.id,

@@ -37,7 +37,10 @@ describe('⚠ the value existed all along and was dropped', () => {
   })
 
   it('the route now hands it to the persist path', () => {
-    expect(ROUTE).toContain('importerSourceManagerId: gate.sourceManagerId ?? null')
+    // Translated into the rosters' key space first (MFL franchise id -> owner id); see
+    // __tests__/league-import/importer-manager-id.test.ts for the behaviour.
+    expect(ROUTE).toContain('importerSourceManagerId: importerManagerIdForRosters(')
+    expect(ROUTE).toContain('gate.sourceManagerId,')
   })
 
   it('survives every hop to the bootstrap', () => {
@@ -72,8 +75,11 @@ describe('⚠ every hop stays optional, so existing callers are untouched', () =
   it('the bootstrap parameter is optional', () => {
     // app/api/import-espn, app/api/mfl/import and LeagueImportToExistingService
     // all call these without the hint and must behave exactly as before.
-    expect(BOOTSTRAP).toContain('importer?: { userId: string; sourceManagerId?: string | null } | null,')
-    expect(WRAPPER).toContain('importer?: { userId: string; sourceManagerId?: string | null } | null,')
+    expect(BOOTSTRAP).toMatch(/importer\?: \{\s*userId: string\s*sourceManagerId\?: string \| null/)
+    expect(BOOTSTRAP).toMatch(/sourceTeamId\?: string \| null\s*\} \| null,/)
+    expect(WRAPPER).toContain(
+      'importer?: { userId: string; sourceManagerId?: string | null; sourceTeamId?: string | null } | null,',
+    )
   })
 
   it('the options field is optional', () => {

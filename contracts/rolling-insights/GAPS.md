@@ -275,9 +275,9 @@ across fifteen games and said nothing:
   genuinely empty week. Without the report those are identical.
 - A player whose stats do not map is skipped, never written as zero, so a wrong table cannot
   persist wrong scores.
-- `SEASON_CAPABLE_SPORTS` in `lib/sport-scope.ts` is **deliberately still NFL-only.** Widening it
+- `SEASON_CAPABLE_SPORTS` in `lib/sport-scope.ts` was NFL-only when this was written. Widening it
   claims a season can run to completion, and the mapping being right is necessary but not
-  sufficient for that claim.
+  sufficient for that claim. (It now lists NHL and NCAAB, each with its evidence, and NBA — below.)
 
 **What is left before the gate can move**, now that the spellings are verified: no NBA or NHL row
 has ever reached `player_game_stats` (measured 2026-09-19 — NFL 253,054 / MLB 66,525 / SOCCER 3,322
@@ -285,6 +285,18 @@ has ever reached `player_game_stats` (measured 2026-09-19 — NFL 253,054 / MLB 
 **2026-10-20**, both recorded in `lib/season-week/dailySportSeasonStarts.ts`. So the remaining step
 is observational, not a probe: after the opener, confirm rows land, confirm the sync reports no
 unmapped keys, and then widen the gate.
+
+⚠ **NBA's gate moved 2026-09-25, BEFORE its opener, so for NBA that observation is still OWED.**
+The order above could not hold for NBA: the week finalizer only sweeps three weeks back
+(`WEEK_FINALIZE_LOOKBACK_WEEKS`), so widening after calendar week 4 would leave week 1 unsealable
+and every NBA league on week 1 for good. What stands in for the observation until then is that a
+WHOLESALE wrong mapping or missing slate REFUSES rather than seals — `stat_coverage_below_floor`,
+`no_games_on_slate` in the score-sync telemetry. A partial gap under the 0.8 coverage floor does
+not refuse; it seals those starters at zero, which is what the first-week read is for. After 2026-10-20: confirm NBA rows land in
+`player_game_stats`, and that the first NBA week seals. ⚠ "The sync lists no unmapped keys" is NOT
+a usable check for NBA as written: unlike NCAAB (`NCAAB_KNOWN_UNSCORED`), NBA has no list of fields
+it deliberately leaves unscored, so `fouls`, `minutes`, the `*_attempted` counts and the rebound
+halves will always be listed. Read that warning for a key that looks like a SCORED stat instead.
 
 #### 📏 MEASURED 2026-09-19 on prod (`icy-field-51189449`) — three more blockers, none about field names
 

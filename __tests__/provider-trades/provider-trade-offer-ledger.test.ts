@@ -72,8 +72,11 @@ describe('normalizeSleeperTradeOffer', () => {
   })
 
   /**
-   * 🛑 THE THREE PICK ROSTER FIELDS ARE THREE DIFFERENT THINGS AND ARE EASY TO TRANSPOSE.
-   * `owner_id` is whose season the pick tracks — the only one that makes it valuable or not.
+   * 🛑 THE THREE PICK ROSTER FIELDS ARE THREE DIFFERENT THINGS AND WERE TRANSPOSED HERE ONCE.
+   * Sleeper: `roster_id` is whose season the pick tracks (the original owner — the only field that
+   * makes it valuable or not), `owner_id` the roster RECEIVING it, `previous_owner_id` the giver.
+   * This test used to assert the opposite and so locked in a ledger that sent every traded pick to
+   * its original owner (2026-09-25). `SleeperTradedPicksMapper.ts` documents the same shape.
    */
   it('keeps a pick original owner apart from its giver and receiver', () => {
     const offer = normalizeSleeperTradeOffer(
@@ -82,7 +85,7 @@ describe('normalizeSleeperTradeOffer', () => {
         type: 'trade',
         status: 'pending',
         roster_ids: [1, 2],
-        draft_picks: [{ season: '2027', round: 1, roster_id: 2, previous_owner_id: 1, owner_id: 7 }],
+        draft_picks: [{ season: '2027', round: 1, roster_id: 7, previous_owner_id: 1, owner_id: 2 }],
       },
       { week: null },
     )

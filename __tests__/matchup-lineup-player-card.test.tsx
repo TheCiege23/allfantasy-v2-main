@@ -36,6 +36,7 @@ function cell(over: Partial<MatchupPlayerCell> = {}): MatchupPlayerCell {
     projected: 21.4,
     actual: null,
     empty: false,
+    unavailable: null,
     ...over,
   }
 }
@@ -136,5 +137,28 @@ describe('matchup lineup — player names open the card', () => {
     )
     expect(screen.getByText('Slot empty')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Gibbs/ })).toBeNull()
+  })
+})
+
+describe('matchup lineup — a starter who will not play', () => {
+  const board = (you: MatchupPlayerCell, opponent: MatchupPlayerCell | null = null) =>
+    render(<Matchup data={data({ available: true, data: [{ slotLabel: 'RB', you, opponent }] })} />)
+
+  it('🛑 prints OUT beside a ruled-out starter’s 0.0, so the zero reads as a reason, not a bad projection', () => {
+    const { container } = board(cell({ projected: 0, unavailable: 'out' }))
+    const flag = container.querySelector('.af-mu-half-pts .af-mu-flag')
+    expect(flag?.textContent).toBe('OUT')
+    expect(flag?.closest('.af-mu-half-pts')?.textContent).toBe('OUT0.0')
+  })
+
+  it('prints BYE for a starter whose club is off', () => {
+    const { container } = board(cell({ projected: 0, unavailable: 'bye' }))
+    expect(container.querySelector('.af-mu-flag')?.textContent).toBe('BYE')
+    expect(container.querySelector('.af-mu-flag')?.getAttribute('title')).toMatch(/not playing this week/)
+  })
+
+  it('no flag on an available starter, nor on one we merely could not price', () => {
+    const { container } = board(cell(), cell({ playerId: 'x', sleeperId: 'x', name: 'Unpriced Guy', projected: null }))
+    expect(container.querySelector('.af-mu-flag')).toBeNull()
   })
 })

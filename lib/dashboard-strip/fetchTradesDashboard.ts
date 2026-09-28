@@ -1,10 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 import { getAllPlayers, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/api-cache/SleeperCacheLayer'
+import { buildTradeAssetsForRoster } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import type {
   PendingTrade,
   PendingTradeLeague,
-  TradeAsset,
   TradesDashboardResponse,
 } from '@/app/dashboard/dashboardStripApiTypes'
 
@@ -36,60 +36,13 @@ function isPendingTradeStatus(s: string | undefined): boolean {
   return u === 'pending' || u === 'proposed' || u === 'waiting' || u === 'requested'
 }
 
-function buildTradeAssetsForRoster(args: {
-  tx: SleeperTransaction
-  userRosterId: number
-  players: Record<string, { full_name?: string; first_name?: string; last_name?: string; position?: string; team?: string }>
-}): { assetsGiven: TradeAsset[]; assetsReceived: TradeAsset[] } {
-  const { tx, userRosterId, players } = args
-  const assetsGiven: TradeAsset[] = []
-  const assetsReceived: TradeAsset[] = []
-
-  const drops = tx.drops ?? {}
-  const adds = tx.adds ?? {}
-
-  for (const [playerId, rosterId] of Object.entries(drops)) {
-    if (Number(rosterId) !== userRosterId) continue
-    const pl = players[playerId]
-    const name =
-      pl?.full_name ?? ([pl?.first_name, pl?.last_name].filter(Boolean).join(' ') || playerId)
-    assetsGiven.push({
-      playerId,
-      playerName: name,
-      position: pl?.position ?? '—',
-      team: pl?.team ?? '—',
-    })
-  }
-
-  for (const [playerId, rosterId] of Object.entries(adds)) {
-    if (Number(rosterId) !== userRosterId) continue
-    const pl = players[playerId]
-    const name =
-      pl?.full_name ?? ([pl?.first_name, pl?.last_name].filter(Boolean).join(' ') || playerId)
-    assetsReceived.push({
-      playerId,
-      playerName: name,
-      position: pl?.position ?? '—',
-      team: pl?.team ?? '—',
-    })
-  }
-
-  for (const pick of tx.draft_picks ?? []) {
-    const roundLabel = `${pick.season} ${pick.round}${pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th'}`
-    if (pick.roster_id === userRosterId) {
-      assetsReceived.push({
-        playerId: null,
-        playerName: `Draft pick`,
-        position: 'PICK',
-        team: '—',
-        isPick: true,
-        pickRound: roundLabel,
-      })
-    }
-  }
-
-  return { assetsGiven, assetsReceived }
-}
+/*
+ * 🛑 THIS FILE CARRIED ITS OWN COPY OF `buildTradeAssetsForRoster` (2026-09-25), and the copy read a
+ * Sleeper pick's `roster_id` as the receiver — it is the ORIGINAL owner (`owner_id` receives,
+ * `previous_owner_id` gives). So the strip showed a received pick only when it came home, never
+ * listed a pick the user gave away, and dropped FAAB. It uses the one reader now, the same one the
+ * Trade Center and the offer ledger use, so the strip and the trade screen cannot disagree.
+ */
 
 /** Pending Sleeper trades for the user’s teams (dashboard / Today Actions). */
 export async function fetchTradesDashboard(userId: string): Promise<TradesDashboardResponse> {

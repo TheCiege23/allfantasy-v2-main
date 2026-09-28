@@ -25,6 +25,7 @@ import {
   changePassword,
 } from "@/lib/security-settings"
 import type { SettingsProfile } from "./settings-types"
+import { SmsConsentCheckbox } from "@/components/legal/SmsConsentCheckbox"
 
 export function SecuritySettingsSection({
   profile,
@@ -52,6 +53,7 @@ export function SecuritySettingsSection({
   const [phoneInput, setPhoneInput] = useState(profile?.phone ?? "")
   const [phoneSending, setPhoneSending] = useState(false)
   const [phoneCodeSent, setPhoneCodeSent] = useState(false)
+  const [smsConsent, setSmsConsent] = useState(false)
   const [phoneCode, setPhoneCode] = useState("")
   const [phoneVerifying, setPhoneVerifying] = useState(false)
   const [phoneResult, setPhoneResult] = useState<"verified" | "invalid" | "error" | "rate_limited" | null>(null)
@@ -161,11 +163,14 @@ export function SecuritySettingsSection({
 
   const handleSendPhoneCode = async () => {
     const trimmed = phoneInput.replace(/[\s()-]/g, "").trim()
-    if (!trimmed) return
+    if (!trimmed || !smsConsent) return
     setPhoneSending(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
-    const result = await startPhoneVerification(trimmed.startsWith("+") ? trimmed : `+1${trimmed}`)
+    const result = await startPhoneVerification(trimmed.startsWith("+") ? trimmed : `+1${trimmed}`, {
+      smsConsent: true,
+      consentSource: "settings-security",
+    })
     setPhoneSending(false)
     if (result.ok) setPhoneCodeSent(true)
     else if (result.rateLimited) setPhoneResult("rate_limited")
@@ -232,6 +237,7 @@ export function SecuritySettingsSection({
     setPhoneInput(profile?.phone ?? "")
     setPhoneCodeSent(false)
     setPhoneCode("")
+    setSmsConsent(false)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
   }
@@ -527,10 +533,11 @@ export function SecuritySettingsSection({
                 style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
               />
             </div>
+            <SmsConsentCheckbox id="settings-sms-consent" checked={smsConsent} onChange={setSmsConsent} />
             {!phoneCodeSent ? (
               <button
                 type="button"
-                disabled={phoneSending || !phoneInput.trim()}
+                disabled={phoneSending || !phoneInput.trim() || !smsConsent}
                 onClick={handleSendPhoneCode}
                 className="rounded-lg border px-3 py-2 text-sm font-medium"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
@@ -564,7 +571,7 @@ export function SecuritySettingsSection({
                   </button>
                   <button
                     type="button"
-                    disabled={phoneSending}
+                    disabled={phoneSending || !smsConsent}
                     onClick={handleSendPhoneCode}
                     className="rounded-lg border px-3 py-2 text-sm font-medium"
                     style={{ borderColor: "var(--border)", color: "var(--text)" }}

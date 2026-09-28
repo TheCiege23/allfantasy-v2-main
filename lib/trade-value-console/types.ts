@@ -3,6 +3,9 @@ import type { SupportedSport } from '@/lib/sport-scope'
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import type { LeagueValueAdjustment } from '@/lib/trade-value/leagueTradeValue'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { EvaluatedCounterOffer } from './counterOffers'
 
 export type TradeSportFilter = 'ALL' | SupportedSport
 
@@ -16,7 +19,9 @@ export type TradeStrategyMode =
 export type TeamContextMode = 'my_team' | 'team_a' | 'team_b' | 'neutral'
 
 export type TradeAssetInput =
-  | { kind: 'player'; playerId?: string; name?: string; sportHint?: string }
+  | { kind: 'player'; playerId?: string; name?: string; sportHint?: string;
+      /** Provider-qualified reference; a Yahoo number must never be read as a Sleeper ID. */
+      providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string } }
   | {
       kind: 'pick'
       year: number
@@ -129,8 +134,17 @@ export type TradeConsolePlayerLine = {
   unpriced?: boolean
   /** Why, when `unpriced`; see `lib/trade-value/unpricedReason.ts`. */
   unpricedReason?: UnpricedReason | null
+  /**
+   * `marketValue` after THIS league's scoring and the viewer's roster need — the number the verdict
+   * is graded on (Guap, 2026-09-24). Null when the line is unpriced. See `lib/trade-value/leagueTradeValue.ts`.
+   */
+  leagueValue?: number | null
+  /** Each factor that moved `marketValue` to `leagueValue`, with its reason. Empty when nothing did. */
+  valueAdjustments?: LeagueValueAdjustment[]
   /** From `resolveNormalizedPlayerSportsProfiles` + league scoring stack. */
   effectiveProjection?: number | null
+  projectionSource?: 'league_idp_history'
+  projectionScope?: { season: number; week: number }
   projectionNotes?: string[]
   injuryNewsSummary?: string | null
   weatherSummary?: string | null
@@ -145,6 +159,8 @@ export type TradeConsoleOpponentRosterTarget = {
   name: string
   position: string | null
   marketValue: number
+  providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string }
+  playerId?: string
 }
 
 /** Deterministic, data-grounded summary for UI + Chimmy (no invented stats). */
@@ -174,9 +190,9 @@ export type TradeConsoleSourceFlags = {
 
 export type TradeIntelligence = {
   fairnessVerdict: string
-  confidenceScore: number
-  whoWinsNow: 'you' | 'opponent' | 'even'
-  whoWinsLongTerm: 'you' | 'opponent' | 'even'
+  confidenceScore: number | null
+  whoWinsNow: 'you' | 'opponent' | 'even' | 'unknown'
+  whoWinsLongTerm: 'you' | 'opponent' | 'even' | 'unknown'
   contenderRecommendation: string
   rebuilderRecommendation: string
   tradeWarnings: string[]
@@ -201,6 +217,7 @@ export type TradeIntelligence = {
 }
 
 export type TradeConsoleAnalyzeResult = {
+  evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   ok: true
   /** `league` = roster + scoring from a league row; `global` = sport/asset analysis without league. */
   analysisMode: 'league' | 'global'
@@ -209,16 +226,36 @@ export type TradeConsoleAnalyzeResult = {
   league: TradeConsoleLeagueSnapshot | null
   labels: {
     fairnessLabel: string
-    sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed'
+    sideAdvantage: 'even' | 'you' | 'opponent' | 'mixed' | null
     confidenceLabel: string
   }
-  fairnessScore: number
-  confidenceScore: number
+  fairnessScore: number | null
+  confidenceScore: number | null
   percentDiff: number
   giveTotal: number
   getTotal: number
   giveMarket: number
   getMarket: number
+  /**
+   * What `giveTotal`/`getTotal` and the grade are priced in. Always present on a success, so a grade
+   * never appears without the rules behind it.
+   */
+  valueBasis: {
+    /** 'league' when league rules or roster need moved any value; 'market' when grading on the chart alone. */
+    graded: 'league' | 'market'
+    /** The chart, in words: "Dynasty · Superflex · 12 teams · Half PPR · TE premium +0.5". */
+    label: string
+    scoringAdjusted: boolean
+    needAdjusted: boolean
+    /** Why roster need could not be priced, when it could not. Null when it ran or was not attempted. */
+    needGap: string | null
+  }
+  /**
+   * THE grade for this deal — letter, label and recommendation — from the one grader every trade
+   * surface uses (`lib/decision-os/trade/leagueTradeGrader.ts`). The Trade Center reads its letters from
+   * here, so a deal shows the same letter here as on its pending-offer card and in Chimmy.
+   */
+  grade: TradeGradeView
   degraded: boolean
   dataGaps: string[]
   dataSources: string[]
@@ -250,6 +287,8 @@ export type TradeConsoleAnalyzeResult = {
   negotiationToolkit: Record<string, unknown> | null
   /** Present when league opponent roster was loaded; not part of the trade's receive side. */
   opponentRosterTargets?: TradeConsoleOpponentRosterTarget[]
+  counterOffers?: EvaluatedCounterOffer[]
+  salaryCap?: import('./proposalCap').ProposalCapResult
   tradeIntelligence: TradeIntelligence
   chimmyPayload: Record<string, unknown>
   /** Time engine + lock hints (same as other AI tools). */

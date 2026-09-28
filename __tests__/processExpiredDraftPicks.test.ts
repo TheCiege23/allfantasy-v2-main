@@ -22,6 +22,7 @@ vi.mock('@/lib/prisma', () => ({
     draftSession: {
       findMany: hm.draftSessionFindMany,
       findUnique: hm.draftSessionFindUnique,
+      findFirst: hm.draftSessionFindUnique,
     },
     draftPick: { findFirst: hm.draftPickFindFirst },
   },

@@ -290,12 +290,21 @@ function AdminOverviewDeck({
             <span>Duplicate-manager verification</span>
             <span className="text-emerald-100/65">Open</span>
           </a>
+          <a href="/admin/adp-import" className="rounded-2xl border border-cyan-300/20 px-4 py-3 text-sm font-bold text-cyan-100">Licensed market ADP import</a>
           {/* Rose, not cyan/emerald: this one writes to a real league someone is playing in. */}
           <a
             href="/admin/league-recovery"
             className="flex items-center justify-between rounded-2xl border border-rose-300/15 bg-rose-300/[0.08] px-4 py-3 text-sm font-bold text-rose-100 transition hover:border-rose-300/35"
           >
             <span>League recovery (writes to real leagues)</span>
+            <span className="text-rose-100/65">Open</span>
+          </a>
+          {/* Rose for the same reason: it moves and deletes stored chat photos. */}
+          <a
+            href="/admin/chat-photo-migration"
+            className="flex items-center justify-between rounded-2xl border border-rose-300/15 bg-rose-300/[0.08] px-4 py-3 text-sm font-bold text-rose-100 transition hover:border-rose-300/35"
+          >
+            <span>Chat photo migration (public → private storage)</span>
             <span className="text-rose-100/65">Open</span>
           </a>
           <a
@@ -2173,7 +2182,7 @@ export default async function AdminPage({
           ) : null}
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Users</h2>
             <div className="mt-4 overflow-x-auto">
@@ -2253,7 +2262,7 @@ export default async function AdminPage({
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 [&>div]:min-w-0">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Payments</h2>
             <div className="mt-4 overflow-x-auto">

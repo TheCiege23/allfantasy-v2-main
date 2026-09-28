@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -139,7 +140,9 @@ export async function resolveSleeperPlayerIdentities(
       entry.position = r.position ?? null
       entry.team = r.team ?? null
       entry.source = 'sports_player'
-      if (r.imageUrl) entry.imageUrl = r.imageUrl
+      // A vendor placeholder (`contact_support`) must not overwrite a real Sleeper CDN URL.
+      const img = toImageUrl(r.imageUrl)
+      if (img) entry.imageUrl = img
     }
   } catch {
     /* leave those ids unresolved */

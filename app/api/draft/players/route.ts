@@ -1,3 +1,4 @@
+import { toImageUrl } from '@/lib/media/imageUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -78,7 +79,7 @@ function toResponseRow(r: PlayerRow, adp: number | null) {
     name: r.name,
     position: r.position ?? '',
     team: r.team ?? '',
-    imageUrl: r.imageUrl,
+    imageUrl: toImageUrl(r.imageUrl),
     status: r.status,
     adp,
     /*

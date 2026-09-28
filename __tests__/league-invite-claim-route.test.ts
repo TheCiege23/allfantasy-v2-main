@@ -9,7 +9,10 @@ const {
   leagueManagerClaimCreateMock,
   leagueInviteUpdateMock,
   rosterFindManyMock,
+  rosterFindFirstMock,
   rosterUpdateMock,
+  redraftLeagueMemberUpsertMock,
+  assignLeagueSeatMock,
   userProfileFindFirstMock,
   platformIdentityFindManyMock,
   transactionMock,
@@ -22,11 +25,19 @@ const {
   leagueManagerClaimCreateMock: vi.fn(),
   leagueInviteUpdateMock: vi.fn(),
   rosterFindManyMock: vi.fn(),
+  rosterFindFirstMock: vi.fn(),
   rosterUpdateMock: vi.fn(),
+  redraftLeagueMemberUpsertMock: vi.fn(),
+  assignLeagueSeatMock: vi.fn(),
   userProfileFindFirstMock: vi.fn(),
   platformIdentityFindManyMock: vi.fn(),
-  transactionMock: vi.fn(async (ops: Array<Promise<unknown>>) => Promise.all(ops)),
+  // Both forms: an array of queries (imported path) and an interactive callback (native path).
+  transactionMock: vi.fn(async (ops: unknown): Promise<unknown> =>
+    typeof ops === 'function' ? (ops as (tx: unknown) => Promise<unknown>)({}) : Promise.all(ops as Array<Promise<unknown>>),
+  ),
 }))
+
+vi.mock('@/lib/league/leagueSeats', () => ({ assignLeagueSeat: assignLeagueSeatMock }))
 
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
@@ -52,7 +63,11 @@ vi.mock('@/lib/prisma', () => ({
     },
     roster: {
       findMany: rosterFindManyMock,
+      findFirst: rosterFindFirstMock,
       update: rosterUpdateMock,
+    },
+    redraftLeagueMember: {
+      upsert: redraftLeagueMemberUpsertMock,
     },
     userProfile: {
       findFirst: userProfileFindFirstMock,
@@ -89,6 +104,16 @@ describe('POST /api/league/invite/claim', () => {
       },
     })
     leagueManagerClaimFindFirstMock.mockResolvedValue(null)
+    rosterFindFirstMock.mockResolvedValue(null)
+    redraftLeagueMemberUpsertMock.mockResolvedValue({ id: 'member-1' })
+    transactionMock.mockImplementation(async (ops: unknown): Promise<unknown> =>
+      typeof ops === 'function'
+        ? (ops as (tx: unknown) => Promise<unknown>)({
+            leagueManagerClaim: { create: leagueManagerClaimCreateMock },
+            leagueInvite: { update: leagueInviteUpdateMock },
+          })
+        : Promise.all(ops as Array<Promise<unknown>>),
+    )
     rosterFindManyMock.mockResolvedValue([
       {
         id: 'roster-1',
@@ -164,6 +189,69 @@ describe('POST /api/league/invite/claim', () => {
     await expect(res.json()).resolves.toEqual({
       error: 'This imported team belongs to a different linked manager account.',
     })
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
+
+  /**
+   * A league created on AllFantasy keys each team by its roster id. The import match below never
+   * found it, so the claim set only the team's `claimedByUserId` and left the roster owned by its
+   * `open-slot-` placeholder: the manager could see the draft and never pick.
+   */
+  it('hands a native open team to the claimant through the seat writer', async () => {
+    leagueInviteFindFirstMock.mockResolvedValue({
+      id: 'invite-1',
+      leagueId: 'league-1',
+      useCount: 0,
+      maxUses: 50,
+      expiresAt: null,
+      league: { id: 'league-1', platform: 'manual' },
+    })
+    leagueTeamFindFirstMock.mockResolvedValue({
+      id: 'team-row-3',
+      leagueId: 'league-1',
+      externalId: 'roster-3',
+      claimedByUserId: null,
+      isOrphan: true,
+      platformUserId: 'open-slot-league-1-3',
+    })
+    assignLeagueSeatMock.mockResolvedValue({ ok: true, rosterId: 'roster-3', teamNumber: 3, alreadyHeld: false })
+
+    const { POST } = await import('@/app/api/league/invite/claim/route')
+    const req = new Request('http://localhost/api/league/invite/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'invite-token', teamExternalId: 'roster-3' }),
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    expect(assignLeagueSeatMock).toHaveBeenCalledWith(expect.anything(), {
+      leagueId: 'league-1',
+      rosterId: 'roster-3',
+      userId: 'af-user-1',
+    })
+    // The imported branch's roster lookup by sourceTeamId is not what decides a native claim.
+    expect(rosterFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a second team to someone who already holds one', async () => {
+    rosterFindFirstMock.mockResolvedValue({ id: 'roster-1' })
+    leagueTeamFindFirstMock.mockResolvedValue({
+      id: 'team-row-3',
+      leagueId: 'league-1',
+      externalId: 'roster-3',
+      claimedByUserId: null,
+      isOrphan: true,
+      platformUserId: 'open-slot-league-1-3',
+    })
+    const { POST } = await import('@/app/api/league/invite/claim/route')
+    const req = new Request('http://localhost/api/league/invite/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'invite-token', teamExternalId: 'roster-3' }),
+    })
+    const res = await POST(req as any)
+    expect(res.status).toBe(409)
     expect(transactionMock).not.toHaveBeenCalled()
   })
 })

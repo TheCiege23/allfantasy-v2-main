@@ -42,16 +42,21 @@ function LockCountdown({
   platform,
   week,
   daysAway,
+  next = false,
+  asOf,
 }: {
   at: Date
   anyEmptySlot: boolean
   platform: string
   week: number | null
   daysAway: number
+  next?: boolean
+  asOf?: number
 }) {
-  const [now, setNow] = useState<number>(() => Date.now())
+  const [now, setNow] = useState<number>(() => asOf ?? Date.now())
 
   useEffect(() => {
+    setNow(Date.now())
     // A ticking second hand on a deadline eight days out is noise; it only
     // earns the re-render when the number is actually moving for the reader.
     const period = daysAway >= 1 ? 60_000 : 1_000
@@ -68,7 +73,7 @@ function LockCountdown({
   const s = total % 60
 
   const label = locked
-    ? 'Locked'
+    ? 'Games started'
     : d > 0
       ? `${d}d ${h}h ${m}m`
       : `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
@@ -87,11 +92,12 @@ function LockCountdown({
         and are headings.
       */}
       <span className="af-label af-mt-lock-label">
-        {week != null ? `Week ${week} locks` : 'Lineup locks'}
+        {week != null ? `Week ${week} · ${next ? 'next player kickoff' : 'first kickoff'}` : next ? 'Next player kickoff' : 'First kickoff'}
       </span>
       <span className="af-num af-mt-lock-time">{label}</span>
       <span className="af-mt-lock-note">
         {at.toUTCString().slice(0, 22)} UTC
+        {' · confirm individual locks and AutoSubs on your platform'}
         {anyEmptySlot ? ' · a starting slot is still empty' : null}
       </span>
       {anyEmptySlot && !locked ? (
@@ -279,13 +285,14 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
  * of coverage — and "you are favoured by 12" is exactly the sentence someone
  * would act on.
  */
-function edge(m: NextMatchup): string | null {
+function edge(m: NextMatchup, bestBall: boolean): string | null {
   const you = m.you
   const them = m.opponent
   if (!them || you.projected == null || them.projected == null) return null
   if (you.projectedFrom < you.starterCount || them.projectedFrom < them.starterCount) return null
 
   const diff = Math.round((you.projected - them.projected) * 10) / 10
+  if (bestBall) return `Listed starters project ${Math.abs(diff).toFixed(1)} ${diff >= 0 ? 'ahead' : 'behind'}; eligible Best Ball bench replacements are not included.`
   if (Math.abs(diff) < 3) return 'Projected within three points — this is a coin flip.'
   return diff > 0
     ? `You are projected ahead by ${Math.abs(diff).toFixed(1)}.`
@@ -531,7 +538,7 @@ function ProjHeader() {
  * different and much weaker statement than "we checked and he is the play".
  * Saying so out loud is the whole value of running the check every week.
  */
-function BenchCheckStrip({ check }: { check: BenchCheck }) {
+function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
   const gap = check.benchProjected - check.starterProjected
   return (
     <div className="af-mt-bench-check" data-verdict={check.verdict}>
@@ -561,6 +568,11 @@ function BenchCheckStrip({ check }: { check: BenchCheck }) {
           </>
         )}
       </span>
+      <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
+        tab: 'chimmy', leagueId,
+        prefill: `Should I start ${check.benchName} instead of ${check.starterName} in this league? Use Decision OS to compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
+      } }))}>Ask Chimmy about this swap</button>
+      <span className="af-mt-bench-caveat">Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.</span>
     </div>
   )
 }
@@ -568,11 +580,19 @@ function BenchCheckStrip({ check }: { check: BenchCheck }) {
 function SlotRow({
   slot,
   platform,
+  leagueId,
+  sourceLink,
   anchor,
+  automatic,
+  sourceHref,
 }: {
   slot: LineupSlot
+  automatic?: boolean
+  sourceHref?: string
   anchor?: string
   platform: string
+  leagueId: string
+  sourceLink: MyTeamData['league']['sourceLink']
 }) {
   return (
     /*
@@ -609,9 +629,9 @@ function SlotRow({
               <div className="af-mt-player-meta">Nobody is starting in this slot</div>
             </div>
           </div>
-          <Link href="/import" className="af-btn af-mt-fix">
+          {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
             Fix in {platform}
-          </Link>
+          </Link> : null}
         </>
       )}
 
@@ -622,7 +642,7 @@ function SlotRow({
         player rather than under the slot gutter is what makes it read as
         attached to THIS row in a table layout.
       */}
-      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} /> : null}
+      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
     </li>
   )
 }
@@ -706,6 +726,16 @@ export function MyTeam({ data }: MyTeamProps) {
   }, [data.league.id])
 
   const platform = data.league.platform === 'manual' ? 'your platform' : data.league.platform
+  const bestBall = data.bestBall === true || data.league.bestBall === true
+
+  if (data.preDraft || data.eliminated || data.completed) return <div className="af-mt">
+    <h1>{data.league.name}</h1>
+    <section className="af-frame af-mt-section">
+      <h2>{data.preDraft ? 'Draft pending' : data.eliminated ? 'Team eliminated' : 'Season complete'}</h2>
+      <p>{data.preDraft ? 'This league has not finished its draft. Empty roster slots do not need a lineup fix yet.' : data.eliminated ? 'This team is no longer competing. Empty roster slots do not need a lineup fix.' : 'This season has finished. There are no active weekly lineup tasks.'}</p>
+      <a className="af-btn" href={`/core?league=${encodeURIComponent(data.league.id)}`}>Open league overview</a>
+    </section>
+  </div>
 
   const proj = data.projections.available ? data.projections.data : null
 
@@ -724,6 +754,7 @@ export function MyTeam({ data }: MyTeamProps) {
       new CustomEvent(COMMS_OPEN_EVENT, {
         detail: {
           tab: 'chimmy',
+          leagueId: data.league.id,
           prefill: buildProjectionQuestion(data.league.name, proj?.week ?? null),
         },
       }),
@@ -741,7 +772,10 @@ export function MyTeam({ data }: MyTeamProps) {
     <div className="af-mt">
       {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
       {/* ── Lock banner ─────────────────────────────────────────────── */}
-      {data.lock.available ? (
+      {bestBall ? <div className="af-mt-lock" data-urgent={false}>
+        <span className="af-label af-mt-lock-label">Best Ball · automatic lineup</span>
+        <span className="af-mt-lock-note">Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.</span>
+      </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
             ⚠ A LOCK MORE THAN A WEEK OUT IS A COVERAGE GAP, NOT A DEADLINE, and
@@ -764,6 +798,8 @@ export function MyTeam({ data }: MyTeamProps) {
             platform={platform}
             week={data.lock.data.week}
             daysAway={data.lock.data.daysAway}
+            next={data.lock.data.next}
+            asOf={data.lock.data.asOf}
           />
         )
       ) : (
@@ -809,7 +845,7 @@ export function MyTeam({ data }: MyTeamProps) {
               this the advice has nowhere to go. Resolved server-side through the
               one hardened resolver, and absent entirely for a native league.
             */}
-            {data.league.sourceLink ? (
+            {data.league.sourceLink && !bestBall ? (
               <SourceActionLink
                 link={data.league.sourceLink}
                 className="af-btn af-mt-source"
@@ -841,7 +877,7 @@ export function MyTeam({ data }: MyTeamProps) {
                   <div className="af-mt-tile-value af-num">
                     {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
                   </div>
-                  <div className="af-label">Projected · your league</div>
+                  <div className="af-label">{bestBall ? 'Listed starters · your league' : 'Projected · your league'}</div>
                 </div>
               {/*
                 ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
@@ -857,7 +893,7 @@ export function MyTeam({ data }: MyTeamProps) {
                   <div className="af-mt-tile-value af-num">
                     {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
                   </div>
-                  <div className="af-label">Projected · standard</div>
+                  <div className="af-label">{bestBall ? 'Listed starters · standard' : 'Projected · standard'}</div>
                   {proj && !proj.standardComparable ? (
                     <div className="af-mt-tile-why">
                       Standard scoring does not price defenders, so there is no
@@ -921,7 +957,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <section className="af-frame af-mt-matchup">
           <div className="af-mt-mu-head">
             <h2 className="af-label">
-              Week {data.nextMatchup.data.week} · projected matchup
+              Week {data.nextMatchup.data.week} · {bestBall ? 'listed starter projections' : 'projected matchup'}
             </h2>
             {data.nextMatchup.data.bye ? (
               <span className="af-mt-mu-bye">no opponent recorded — bye</span>
@@ -943,8 +979,8 @@ export function MyTeam({ data }: MyTeamProps) {
               </div>
             )}
           </div>
-          {edge(data.nextMatchup.data) ? (
-            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data)}</p>
+          {edge(data.nextMatchup.data, bestBall) ? (
+            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall)}</p>
           ) : data.nextMatchup.data.unpricedReason ? (
             // Two dashes and nothing else read as a broken screen; say why, where the read goes.
             <p className="af-mt-mu-edge">
@@ -1024,7 +1060,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <header className="af-mt-section-head">
           <h2 className="af-label">Starters</h2>
           <span className="af-mt-section-note">
-            Lineup from {platform}. To change it, open {platform} — AllFantasy only reads.
+            {bestBall ? `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
           </span>
           <ProjHeader />
         </header>
@@ -1036,7 +1072,11 @@ export function MyTeam({ data }: MyTeamProps) {
                 key={`${slot.slotLabel}-${i}`}
                 anchor={slot.player ? `lineup-player-${slot.player.sleeperId}` : `lineup-slot-${i}`}
                 slot={slot}
+                automatic={bestBall}
+                sourceHref={data.league.sourceLink?.href}
                 platform={platform}
+                leagueId={data.league.id}
+                sourceLink={data.league.sourceLink}
               />
             ))}
           </ul>

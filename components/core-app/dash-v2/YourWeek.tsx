@@ -3,15 +3,9 @@ import type { WeekAllData } from '@/lib/core-app/weekAll'
 /**
  * Your week — real scored matchups, from WeeklyMatchup.
  *
- * ⚠ THE SEASON IS ALWAYS LABELLED. Every row on production is season 2025 while
- * the clock reads 2026, so presenting these as "this week" would be the lie. The
- * header states the season and week the numbers come from, and the module reads
- * as history when it is history.
- *
- * ⚠ NO WIN PROBABILITY. The handoff shows a projected % per matchup. These are
- * finished games with a final score — a probability over a settled result is
- * theatre. The real margin is shown instead, which is the thing the % was
- * standing in for.
+ * Season and week travel with the scores. Partial or legacy rows carry a Live
+ * label; W/L/T requires explicit completion evidence. The margin is observed,
+ * not projected.
  */
 export function YourWeek({ data }: { data: WeekAllData | null }) {
   if (!data || data.rows.length === 0) {
@@ -34,7 +28,7 @@ export function YourWeek({ data }: { data: WeekAllData | null }) {
                 data.week != null && data.season != null
                   ? ` (week ${data.week}, ${data.season})`
                   : ''
-              }. Scores appear here once games are final.`
+              }. Scores appear here once games start.`
             : 'No scored matchups on file for your leagues yet. Weekly results are cached from the platform when a league syncs — once that runs, every league’s week shows here with its real margin.'}
         </p>
       </div>
@@ -46,10 +40,12 @@ export function YourWeek({ data }: { data: WeekAllData | null }) {
       <ul className="af-d2-week">
         {data.rows.map((row) => {
           const margin = row.pointsFor - row.pointsAgainst
+          const completed = row.completed === true
+          const result = !completed ? 'Live' : margin === 0 ? 'T' : margin > 0 ? 'W' : 'L'
           return (
             <li key={`${row.leagueId}-${row.week}`} className="af-d2-week-row">
-              <span className={`af-d2-week-mark af-num${row.won ? ' is-win' : ' is-loss'}`}>
-                {row.won ? 'W' : 'L'}
+              <span className={`af-d2-week-mark af-num${completed && margin !== 0 ? margin > 0 ? ' is-win' : ' is-loss' : ''}`}>
+                {result}
               </span>
               <span className="af-d2-week-name">{row.leagueName}</span>
               <span className="af-d2-week-score af-num">

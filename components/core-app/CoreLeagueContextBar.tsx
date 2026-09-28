@@ -16,6 +16,7 @@ import {
   type LeagueConceptType,
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
+import { LEAGUE_TYPE_DECIDES_GRADES } from '@/lib/league/leagueTypeGrading'
 import '@/components/core-app/af-league-tabs.css'
 
 export type CoreLeagueRecommendationValue = { action: string; rationale: string }
@@ -128,6 +129,13 @@ export default function CoreLeagueContextBar({
    */
   const [pirateDraft, setPirateDraft] = useState(false)
   const [canConfirm, setCanConfirm] = useState(false)
+  /*
+   * 🛑 WHETHER A PERSON HAS CONFIRMED THE TYPE, SAID OUT LOUD (2026-09-25). The select used to be
+   * pre-filled with the imported guess and look exactly like an answer, and choosing the value it
+   * already showed fired no change — so a correct guess could not be confirmed at all. Every trade
+   * grade in the league is priced on this type.
+   */
+  const [confirmed, setConfirmed] = useState(false)
   const [typeStatus, setTypeStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>('loading')
 
   useEffect(() => {
@@ -143,16 +151,22 @@ export default function CoreLeagueContextBar({
           confirmation?: { type?: unknown; baseFormat?: unknown } | null
           suggestion?: { suggested?: unknown }
           storedType?: unknown
+          /** The type trade grades are priced under right now (`leagueTypeBasis`). */
+          gradedAs?: { type?: unknown } | null
           canConfirm?: boolean
         }>
       })
       .then((payload) => {
-        const raw = payload.confirmation?.type ?? payload.storedType ?? payload.suggestion?.suggested
+        // What the grades use comes before the stored column, which can lag it (a Sleeper keeper
+        // league is stored `redraft` and graded as keeper). A confirmation outranks both.
+        const raw =
+          payload.confirmation?.type ?? payload.gradedAs?.type ?? payload.storedType ?? payload.suggestion?.suggested
         const base = payload.confirmation?.baseFormat
         setLeagueType(isLeagueConceptType(raw) ? raw : null)
         setPirateBase(raw === 'pirate' && isPirateBaseFormat(base) ? base : null)
         setPirateDraft(false)
         setCanConfirm(Boolean(payload.canConfirm))
+        setConfirmed(isLeagueConceptType(payload.confirmation?.type))
         setTypeStatus('ready')
       })
       .catch((error: unknown) => {
@@ -175,8 +189,9 @@ export default function CoreLeagueContextBar({
         body: JSON.stringify(next === 'pirate' ? { type: next, baseFormat: base } : { type: next }),
       })
       if (!response.ok) throw new Error('save failed')
+      setConfirmed(true)
       setTypeStatus('saved')
-      window.setTimeout(() => setTypeStatus('ready'), 1600)
+      window.setTimeout(() => setTypeStatus('ready'), 2400)
     } catch {
       setLeagueType(previous.leagueType)
       setPirateBase(previous.pirateBase)
@@ -259,7 +274,8 @@ export default function CoreLeagueContextBar({
         <span className="af-lctx-chip" data-tone="chimmy">
           Chimmy · {CORE_SURFACE_LABELS[surface]}
         </span>
-        <div className="af-lctx-type">
+        {/* `#league-type`: every trade grade's "Confirm your league type" link lands here. */}
+        <div className="af-lctx-type" id="league-type" data-confirmed={confirmed ? 'true' : 'false'}>
           <label htmlFor={selectId}>League type</label>
           {canConfirm ? (
             <select
@@ -307,16 +323,32 @@ export default function CoreLeagueContextBar({
               </select>
             </>
           ) : null}
+          {/*
+            Confirming the type already shown. A select cannot do it — picking the value it holds
+            fires no change — so an unconfirmed league gets an explicit button.
+          */}
+          {canConfirm && !confirmed && typeStatus === 'ready' && leagueType && !pirateDraft ? (
+            <button
+              type="button"
+              className="af-lctx-confirm"
+              onClick={() => void saveLeagueType(leagueType, leagueType === 'pirate' ? pirateBase : null)}
+              disabled={leagueType === 'pirate' && !pirateBase}
+            >
+              Confirm {leagueConceptLabel(leagueType)}
+            </button>
+          ) : null}
           <small role="status" aria-live="polite">
             {typeStatus === 'saving'
               ? 'Saving…'
               : typeStatus === 'saved'
-                ? 'Saved to Sports OS'
+                ? `Saved — trades here are graded as ${leagueConceptLabel(leagueType)}`
                 : typeStatus === 'error'
                   ? 'Could not load or save'
                   : pirateDraft
                     ? 'Pick dynasty or redraft to save'
-                    : ''}
+                    : typeStatus === 'ready' && !confirmed
+                      ? `Not confirmed — ${LEAGUE_TYPE_DECIDES_GRADES.charAt(0).toLowerCase()}${LEAGUE_TYPE_DECIDES_GRADES.slice(1)}`
+                      : ''}
           </small>
         </div>
       </div>

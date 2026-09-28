@@ -26,10 +26,23 @@
  * email path sends whenever it is called. The pre-dispatch check on the in-app row's sourceKey
  * is what keeps a five-minute sweep from emailing the same fact twelve times an hour.
  *
+ * TWO WEEKLY JOBS, SAME SWEEP: CHIMMY'S LINEUP AND WAIVER CHECKS (2026-09-24). Before the week's
+ * main slate, Chimmy checks every claimed NFL lineup and messages the manager once when something
+ * is still fixable (lib/chimmy-alerts/lineupCheck.ts); on Tuesday, once last week is played, it
+ * names the best pickup on each wire when one is worth a claim (lib/chimmy-alerts/waiverCheck.ts).
+ * They ride this route rather than new ones because they share the audience, the cadence and the
+ * auth; outside their windows each costs two small reads. They report under `lineupCheck` and
+ * `waiverCheck`, and record `cron-chimmy-lineup-check` / `cron-chimmy-waiver-check` rows only on a
+ * run that actually ran for users, so a quiet day writes nothing.
+ *
  * Query params:
- *   dryRun=1     evaluate and report without sending
+ *   dryRun=1     evaluate and report without sending (both jobs)
  *   limit=N      cap users processed this run (default 200)
- *   userId=...   evaluate a single user, for verification
+ *   userId=...   evaluate a single user, for verification (both jobs)
+ *   lineupCheck=force   run the lineup check outside its window (the weekly claim still holds)
+ *   lineupCheck=off     skip the lineup check this run
+ *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
+ *   waiverCheck=off     skip the waiver check this run
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
  * zero alerts are found — on a Tuesday in the off-season that is the correct outcome, and a
@@ -49,10 +62,14 @@ import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarte
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
 import { decidePushForUser } from '@/lib/notifications/pushGate'
-import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
+import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
+import { loadChimmyAlertPreferences } from '@/lib/chimmy-alerts/ChimmyAlertPreferencesService'
+import { preferenceMuteReason } from '@/lib/chimmy-alerts/ChimmyAlertSuppressionEngine'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -71,6 +88,96 @@ export const maxDuration = 300
  * delivering injured-starter alerts entirely and no monitor would have said a word.
  */
 const JOB = 'cron-alert-sweep'
+
+/** Recorded only when a weekly check actually ran for users — see the header. */
+const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
+const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
+
+/**
+ * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
+ * route exists; a check stops starting new users past this and resumes on the next run. Only one
+ * check is ever inside its window at a time (Sunday morning, Tuesday), so they do not compete.
+ *
+ * ⚠ AND NEVER PAST `SWEEP_CEILING_MS` OF THE WHOLE RUN. The fast-tier runner gives this route
+ * 330s. Measured over three days (2026-09-21..24): the sweep alone ran p50 24s, p95 40s — and once
+ * 288s. After a run like that a check gets nothing and starts no one; they are picked up
+ * 15 minutes later rather than pushing the request past its client's timeout.
+ */
+const WEEKLY_CHECK_BUDGET_MS = 90_000
+const SWEEP_CEILING_MS = 240_000
+
+type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
+type LineupCheckReport = LineupCheckRun | PhaseRefusal
+type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
+
+type PhaseArgs = {
+  mode: string
+  dryRun: boolean
+  singleUser: string | null
+  /** When the whole sweep started, so the check's budget shrinks with what the sweep used. */
+  sweepStartedAt: number
+}
+
+/**
+ * One weekly check, run so that it can never fail the sweep it rides on, and recorded only when it
+ * actually ran for users on a scheduled fire — hand-run verifications record nothing, for the
+ * reason the sweep's own heartbeat gives below.
+ */
+async function weeklyCheckPhase<R extends { ran: boolean }>(
+  name: string,
+  args: PhaseArgs,
+  run: (opts: { dryRun: boolean; force: boolean; userId: string | null; budgetMs: number }) => Promise<R>,
+  heartbeat: (result: Extract<R, { ran: true }>) => { jobName: string; outcome: Parameters<typeof recordSyncJobRun>[1] },
+): Promise<R | PhaseRefusal> {
+  if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
+  const force = args.mode === 'force'
+  const started = Date.now()
+  try {
+    const result = await run({
+      dryRun: args.dryRun,
+      force,
+      userId: args.singleUser,
+      budgetMs: Math.max(0, Math.min(WEEKLY_CHECK_BUDGET_MS, SWEEP_CEILING_MS - (Date.now() - args.sweepStartedAt))),
+    })
+    if (result.ran && !args.dryRun && !args.singleUser && !force) {
+      const hb = heartbeat(result as Extract<R, { ran: true }>)
+      await recordSyncJobRun({ jobName: hb.jobName, sport: 'NFL', trigger: 'cron' }, hb.outcome, Date.now() - started)
+    }
+    return result
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error(`[cron/alert-sweep] ${name} failed:`, message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
+
+function lineupCheckPhase(args: PhaseArgs): Promise<LineupCheckReport> {
+  return weeklyCheckPhase('lineup check', args, runLineupCheck, (r) => ({
+    jobName: LINEUP_CHECK_JOB,
+    outcome: {
+      rowsRead: r.leaguesChecked,
+      rowsWritten: r.outcomes.sent ?? 0,
+      rowsSkipped: r.notReached,
+      errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      metadata: { week: r.week, mainSlate: r.mainSlate, users: r.users, outcomes: r.outcomes },
+    },
+  }))
+}
+
+function waiverCheckPhase(args: PhaseArgs): Promise<WaiverCheckReport> {
+  return weeklyCheckPhase('waiver check', args, runWaiverCheck, (r) => ({
+    jobName: WAIVER_CHECK_JOB,
+    outcome: {
+      rowsRead: r.users,
+      rowsWritten: r.outcomes.sent ?? 0,
+      rowsSkipped: r.notReached,
+      errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      metadata: { week: r.week, firstKickoff: r.firstKickoff, users: r.users, picks: r.picks, outcomes: r.outcomes },
+    },
+  }))
+}
 
 /**
  * Game-window Sleeper status fold.
@@ -200,6 +307,8 @@ interface SweepUserResult {
    * error: a muted league or quiet hours is the setting working.
    */
   pushSkipped?: string
+  /** Every detected alert was muted in Chimmy's alert controls (class, type or league). */
+  mutedByChimmyPrefs?: boolean
   errors: string[]
 }
 
@@ -265,6 +374,7 @@ async function handle(req: NextRequest) {
     let totalAlerts = 0
     let totalDeduped = 0
     let totalPushSkipped = 0
+    let totalMutedByChimmy = 0
 
     for (const sub of subscribers) {
       const result: SweepUserResult = { userId: sub.userId, injuredStarters: 0, alerts: 0, pushed: 0, deduped: false, errors: [] }
@@ -285,11 +395,32 @@ async function handle(req: NextRequest) {
           signalBundle: { injuredStarters: signal.injuredStarters },
         } as unknown as ChimmyAlertContext
 
-        const alerts = detectInjuredStarterAlerts(context)
-        result.alerts = alerts.length
-        totalAlerts += alerts.length
+        const detected = detectInjuredStarterAlerts(context)
+        result.alerts = detected.length
+        totalAlerts += detected.length
+        if (detected.length === 0) {
+          results.push(result)
+          continue
+        }
 
-        if (dryRun || alerts.length === 0) {
+        /*
+         * 🛑 CHIMMY'S OWN MUTE SWITCHES APPLY HERE TOO. These alerts are class `lineup`, and the
+         * Settings panel's "Lineup" mute (or a muted type or league) was read only by the alert
+         * ENGINE — which this sweep does not run. So a manager who muted Chimmy's lineup alerts
+         * still got these. Filtered before `top` is chosen, so a muted league cannot silence an
+         * alert about another one. A preferences read that fails mutes nothing: the category
+         * switch in the dispatcher still applies.
+         */
+        const chimmyPrefs = await loadChimmyAlertPreferences(sub.userId).catch(() => null)
+        const alerts = detected.filter((a) => !preferenceMuteReason(a, chimmyPrefs))
+        if (alerts.length === 0) {
+          result.mutedByChimmyPrefs = true
+          totalMutedByChimmy += 1
+          results.push(result)
+          continue
+        }
+
+        if (dryRun) {
           results.push(result)
           continue
         }
@@ -411,6 +542,19 @@ async function handle(req: NextRequest) {
 
     const withErrors = results.filter((r) => r.errors.length > 0)
 
+    const lineupCheck = await lineupCheckPhase({
+      mode: (url.searchParams.get('lineupCheck') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
+    const waiverCheck = await waiverCheckPhase({
+      mode: (url.searchParams.get('waiverCheck') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
+
     return {
       // Zero alerts is a legitimate outcome (off-season, healthy rosters) and must not fail.
       ok: true as const,
@@ -425,8 +569,14 @@ async function handle(req: NextRequest) {
       pushesSent: totalPushed,
       /** Pushes the user's own settings withheld (alert type off, push off, league muted, quiet hours). */
       pushesSkippedBySettings: totalPushSkipped,
+      /** Users whose every detected alert was switched off in Chimmy's alert controls. */
+      usersMutedByChimmy: totalMutedByChimmy,
       usersWithErrors: withErrors.length,
       errors: withErrors.slice(0, 10).map((r) => ({ userId: r.userId, errors: r.errors })),
+      /** Chimmy's lineup check — see the header. Mostly `{ ran: false, reason: 'early' }`. */
+      lineupCheck,
+      /** Chimmy's Tuesday waiver check — the same shape, the same rules. */
+      waiverCheck,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     }

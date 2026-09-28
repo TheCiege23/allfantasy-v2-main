@@ -106,6 +106,14 @@ describe('BUG-1 — the deterministic value path must read the league, not the q
   it('still refuses questions that are not about value at all', async () => {
     expect(await buildFantasyCalcValueAnswer('Who won last night?', 'L1')).toBeNull()
   })
+
+  it('uses an explicitly requested generic dynasty superflex market without claiming league settings', async () => {
+    const out = await buildFantasyCalcValueAnswer('What is Jeremiyah Love dynasty trade value in superflex?', null)
+    expect(getFantasyCalcValuesDbFirst).toHaveBeenCalledWith(expect.objectContaining({ isDynasty: true, numQbs: 2 }))
+    expect(out).toContain('standard superflex dynasty market')
+    expect(out).not.toContain('Settings read from your league')
+    expect(loadRules).not.toHaveBeenCalled()
+  })
 })
 
 /**

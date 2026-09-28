@@ -24,6 +24,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 
@@ -67,8 +68,9 @@ async function main() {
   const prisma = new PrismaClient()
 
   try {
-    const session = await prisma.draftSession.findUnique({
+    const session = await prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },
     })
     if (!session) {

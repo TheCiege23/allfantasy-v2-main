@@ -78,7 +78,8 @@ describe('the Fantrax tile', () => {
     const label = await screen.findByText(/Fantrax league ID/i)
     expect(label).toBeTruthy()
 
-    const input = document.querySelector('input[placeholder*="fantrax.com"], input[placeholder*="v2kzedypmm8jp61b"]')
+    /* The placeholder is an obviously invented id now — a real league's id sent people to a stranger's league. */
+    const input = document.querySelector('input[placeholder*="fantrax.com"], input[placeholder*="abcd1234efgh5678"]')
     expect(input).toBeTruthy()
     expect(screen.queryByText(/snapshot id/i)).toBeNull()
   })
@@ -128,7 +129,7 @@ describe('the Fantrax tile', () => {
   it('promises never to ask for the Secret ID', async () => {
     render(<ImportV4 />)
     fireEvent.click(fantraxTile())
-    const help = await screen.findByText(/Never your Fantrax password or Secret ID/i)
+    const help = await screen.findByText(/This box never needs your Fantrax password or Secret ID/i)
     expect(help).toBeTruthy()
   })
 })

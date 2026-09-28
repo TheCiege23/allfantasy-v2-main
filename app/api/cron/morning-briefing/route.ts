@@ -6,7 +6,9 @@ import { sendTemplatedEmail } from '@/lib/resend-client'
 import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { getCommandCenter, type CommandCenterPayload } from '@/lib/dashboard-intel/commandCenterService'
-import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runActivationReminder, type ActivationReminderRun } from '@/lib/onboarding-retention/runActivationReminder'
+import { runConfirmEmailReminder } from '@/lib/onboarding-retention/runConfirmEmailReminder'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -21,6 +23,59 @@ export const maxDuration = 300
  * MANUAL mode (signed-in GET) always works, so you can send yourself today's
  * briefing to test the format before enabling the fleet.
  */
+
+/*
+ * SECOND JOB, SAME DAILY FIRE: THE "CONNECT YOUR LEAGUE" REMINDER (2026-09-25).
+ * lib/onboarding-retention/runActivationReminder.ts — at most two emails, ever, to a verified user
+ * with no team. It rides this route because the cron registry is at its ceiling and both are daily
+ * emails. Same rollout rule as the briefing: nothing is sent until the deployment sets
+ * ACTIVATION_REMINDER_ENABLED=1. `?activationReminder=dry` (with the cron secret) reports who is due
+ * without sending, whatever the flag; `=off` skips it. Its own `cron-activation-reminder` heartbeat
+ * is written only on a real run.
+ *
+ * THIRD, SAME FLAG: THE "CONFIRM YOUR EMAIL" REMINDER (2026-09-25).
+ * lib/onboarding-retention/runConfirmEmailReminder.ts — at most two emails, ever, to an account that
+ * never confirmed its address, each with a fresh link. It is the step before the one above (the
+ * import refuses an unconfirmed account), so it shares ACTIVATION_REMINDER_ENABLED and the same
+ * `?activationReminder=dry|off` switch, and writes its own `cron-confirm-email-reminder` heartbeat.
+ * The two never write to one person on one morning: one needs a confirmed address, the other an
+ * unconfirmed one.
+ */
+type ActivationReport = ActivationReminderRun | { ran: false; reason: 'disabled' | 'off' | 'error'; error?: string }
+
+async function reminderPhase(
+  mode: string,
+  jobName: 'cron-activation-reminder' | 'cron-confirm-email-reminder',
+  runReminder: (opts: { dryRun: boolean }) => Promise<ActivationReminderRun>,
+): Promise<ActivationReport> {
+  if (mode === 'off') return { ran: false, reason: 'off' }
+  const dryRun = mode === 'dry'
+  if (!dryRun && process.env.ACTIVATION_REMINDER_ENABLED !== '1') return { ran: false, reason: 'disabled' }
+  const started = Date.now()
+  try {
+    const run = await runReminder({ dryRun })
+    if (!dryRun) {
+      await recordSyncJobRun(
+        { jobName, trigger: 'cron' },
+        {
+          rowsRead: run.candidates,
+          rowsWritten: run.sent,
+          rowsSkipped: run.notReached,
+          errors: run.errors,
+          status: run.failed > 0 ? 'partial' : 'success',
+          metadata: { due: run.due, skipped: run.skipped },
+        },
+        Date.now() - started,
+      )
+    }
+    return run
+  } catch (err) {
+    // Never allowed to fail the briefing it rides on.
+    const message = err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)
+    console.error(`[cron/morning-briefing] ${jobName} failed:`, message)
+    return { ran: false, reason: 'error', error: message }
+  }
+}
 
 const SEEN_PREFIX = 'briefing-sent:v1:'
 const SEEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -192,9 +247,26 @@ export async function GET(req: NextRequest) {
             { status: 'success' as const, metadata: { disabled: true, reason: 'MORNING_BRIEFING_ENABLED is not 1' } },
     )
 
+    // `req.url`, not `req.nextUrl`: this handler is also called with a plain Request.
+    const reminderMode = (new URL(req.url).searchParams.get('activationReminder') ?? '').trim().toLowerCase()
+    const activationReminder = await reminderPhase(reminderMode, 'cron-activation-reminder', runActivationReminder)
+    const confirmEmailReminder = await reminderPhase(reminderMode, 'cron-confirm-email-reminder', runConfirmEmailReminder)
+
     // Response bodies are unchanged from before the wrap moved — callers see exactly what they did.
+    // A reminder's report is added only once it does something: while they are disabled (the
+    // default) the body is byte-for-byte what it was.
+    const isDisabled = (r: ActivationReport) => 'reason' in r && r.reason === 'disabled'
+    const reminderReport = {
+      ...(isDisabled(activationReminder) ? {} : { activationReminder }),
+      ...(isDisabled(confirmEmailReminder) ? {} : { confirmEmailReminder }),
+    }
     if (!outcome.enabled) {
-      return NextResponse.json({ mode: 'cron' as const, enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
+      return NextResponse.json({
+        mode: 'cron' as const,
+        enabled: false,
+        note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.',
+        ...reminderReport,
+      })
     }
     return NextResponse.json({
       mode: 'cron' as const,
@@ -202,6 +274,7 @@ export async function GET(req: NextRequest) {
       candidates: outcome.candidates,
       sent: outcome.sent,
       failed: outcome.failed,
+      ...reminderReport,
     })
   }
 

@@ -1,6 +1,8 @@
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { ClientOnlyAuthPage } from "@/components/auth/ClientOnlyAuthPage";
 import { AuthV4 } from "@/components/core-app/screens/AuthV4";
+import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
+import { buildLaunchOfferView, foundingOfferBeforeLaunch } from "@/lib/monetization/foundingMember";
 
 
 
@@ -29,9 +31,24 @@ export const dynamic = "force-dynamic";
  * block in braces; keeping it out here avoids the question entirely.
  */
 export default function SignupPage() {
+  /*
+   * The launch bar across the top: "Everything's free until Oct 15" with the countdown, and —
+   * while founding pricing is switched on — that signing up now locks it in. The page is for people
+   * without an account, so no session read: before launch, anyone who signs up here IS a founding
+   * member. After launch the bar has no countdown and no founding line, so it renders nothing.
+   */
+  const prelaunchOffer = buildLaunchOfferView({ founding: null });
+  const launchOffer = prelaunchOffer.prelaunch
+    ? { ...prelaunchOffer, founding: foundingOfferBeforeLaunch({ signedIn: false }) }
+    : null;
   return (
     <ClientOnlyAuthPage>
       <AuthPageShell>
+        {launchOffer ? (
+          <div className="af-core af-launch-signup-wrap">
+            <LaunchOfferStrip offer={launchOffer} surface="signup" />
+          </div>
+        ) : null}
         <AuthV4 mode="signup" />
       </AuthPageShell>
     </ClientOnlyAuthPage>

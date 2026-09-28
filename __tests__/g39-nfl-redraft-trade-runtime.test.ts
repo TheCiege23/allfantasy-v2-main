@@ -261,17 +261,18 @@ describe('G39 canonical NFL redraft trade runtime', () => {
     expect(validation).toMatchObject({ ok: false, code: 'ROSTER_LIMIT' })
   })
 
-  it('records enabled redraft draft picks as reference-only when no pick inventory is available', () => {
+  it('🛑 refuses an enabled redraft draft pick: with no pick inventory it would change hands on paper only', () => {
+    // It was accepted as "reference-only" — recorded, never moved — so a pick-for-player offer moved the
+    // player and kept the pick. Refused now, with a message pointing at where picks really trade.
     const validation = validateNflRedraftTradeProposal({
       state: state(),
       proposerRosterId: 'alpha',
       receiverRosterId: 'beta',
       assets: [{ fromRosterId: 'alpha', toRosterId: 'beta', assetType: 'draft_pick', pickSeason: 2027, pickRound: 2 }],
     })
-    expect(validation.ok).toBe(true)
-    if (validation.ok) {
-      expect(validation.warnings).toContain('Draft pick asset recorded as reference-only; no redraft pick inventory was available to mutate.')
-    }
+    expect(validation).toMatchObject({ ok: false, code: 'DRAFT_PICK_NOT_SETTLED' })
+    if (!validation.ok) expect(validation.message).toContain('Trade Center')
+    expect(state().settings.pickExecutionStatus).toBe('unavailable')
 
     const disabledRules = {
       ...rules,

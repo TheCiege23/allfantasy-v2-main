@@ -67,10 +67,23 @@ describe('G30 simple universal create helpers', () => {
   it('extracts only enabled premium advanced settings', () => {
     expect(
       getEnabledPremiumAdvancedSettings({
-        superflex: true,
-        tePremium: false,
+        aiCommissionerTools: true,
+        tradeApprovalAutomation: false,
         leagueHealthMonitoring: true,
       }),
-    ).toEqual(['superflex', 'leagueHealthMonitoring'])
+    ).toEqual(['aiCommissionerTools', 'leagueHealthMonitoring'])
+  })
+
+  it('never treats a league format as premium — a stale superflex/IDP flag is not sent', () => {
+    // Formats are free (scoring preset, IDP concept). A flag restored from sessionStorage by an
+    // older client must drop out rather than reach the create route as "premium setup".
+    expect(
+      getEnabledPremiumAdvancedSettings({
+        superflex: true,
+        idp: true,
+        tePremium: true,
+        customScoring: true,
+      } as Record<string, boolean>),
+    ).toEqual([])
   })
 })

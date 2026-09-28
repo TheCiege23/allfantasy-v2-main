@@ -382,13 +382,17 @@ test.describe('@monetization checkout click audit', () => {
       })
     })
 
+    /*
+     * ⚠ NO af_war_room_* HERE ANY MORE. AF Legacy left the launch /pricing page
+     * (owner's decision 2026-09-24; PricingV4 LANE_ORDER). Its SKUs are NOT retired —
+     * they still sell from /upgrade?plan=war_room — so do not delete them from the
+     * catalog or the mocked plan list above on the strength of this list.
+     */
     const subscriptionSkus = [
       'af_pro_monthly',
       'af_pro_yearly',
       'af_commissioner_monthly',
       'af_commissioner_yearly',
-      'af_war_room_monthly',
-      'af_war_room_yearly',
       'af_supreme_monthly',
       'af_supreme_yearly',
     ]
@@ -399,12 +403,11 @@ test.describe('@monetization checkout click audit', () => {
     await expect(page.getByRole('heading', { name: 'AF Pro' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'AF Commissioner' })).toBeVisible()
     /*
-     * ⚠ "AF Legacy" IS THE af_war_room_* PLAN. The display name was rebranded and
-     * the SKU was not, so the catalog still says `af_war_room_monthly` while the
-     * card says AF Legacy. This asserted the old label and could never match.
-     * Do not "correct" the SKUs below to af_legacy_* — they are the real ones.
+     * ⚠ "AF Legacy" IS THE af_war_room_* PLAN, and it is deliberately NOT on /pricing
+     * at launch (owner's decision 2026-09-24). Asserting its absence, not just dropping
+     * the old visibility check, so a regression that re-adds it to LANE_ORDER is caught.
      */
-    await expect(page.getByRole('heading', { name: 'AF Legacy' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'AF Legacy' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'AF Supreme' })).toBeVisible()
     /*
      * ⚠ REWRITTEN FOR THE SHIPPED /pricing, WHICH IS A TOGGLE, NOT A MATRIX.

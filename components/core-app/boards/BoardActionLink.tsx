@@ -14,7 +14,7 @@ import { useTransition, type ReactNode } from 'react'
  * taps again.
  *
  * ⚠ AND `loading.tsx` DOES NOT COVER THIS NAVIGATION, WHICH IS THE PART THAT
- * MAKES IT SPECIFIC RATHER THAN GENERAL SLOWNESS. `app/core/[[...screen]]/loading.tsx`
+ * MAKES IT SPECIFIC RATHER THAN GENERAL SLOWNESS. `app/core/loading.tsx`
  * exists precisely to stop this route "looking dead", and its own header says so
  * — it even names /core/trades at p90 7.0s. But a Suspense fallback fires when
  * React re-suspends on a changed SEGMENT KEY, and these buttons navigate

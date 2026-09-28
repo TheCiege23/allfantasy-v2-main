@@ -11,19 +11,34 @@ describe('trade visibility contract', () => {
     expect(route).not.toMatch(/getTradeGrades\(league\.platformLeagueId\)/)
   })
 
-  it('bypasses client caches and reloads pending plus completed after decisions', () => {
+  it('bypasses client caches and reloads the panel after decisions', () => {
     const tab = read('app/league/[leagueId]/tabs/TradesTab.tsx')
-    expect(tab.match(/cache: 'no-store'/g)?.length).toBeGreaterThanOrEqual(2)
-    expect(tab.match(/Promise\.all\(\[load\(\), loadLedger\(\)\]\)/g)?.length).toBeGreaterThanOrEqual(2)
-    expect(tab).toContain("window.addEventListener('focus', refresh)")
-    expect(tab).toContain("document.addEventListener('visibilitychange', onVisibility)")
+    expect(tab.match(/cache: 'no-store'/g)?.length).toBeGreaterThanOrEqual(1)
+    /*
+     * 🛑 ONE READ SINCE 2026-09-25. The tab also read `/api/league/trade-grades` (the realized-points
+     * ledger), which listed an imported league's completed trades a second time beside the panel's
+     * one-grade copies. Completed provider trades arrive on the panel read; the ledger is not read.
+     */
+    expect(tab).not.toMatch(/fetch\(`\/api\/league\/trade-grades/)
+    expect(tab.match(/^\s*await load\(\)$/gm)?.length).toBeGreaterThanOrEqual(2)
+    /*
+     * Focus / visibility / interval refresh lives in `useVisibleRefresh`, which the hook's own suite
+     * tests by behaviour. Pinned here: the tab re-reads the panel, and the hook listens for both events.
+     */
+    expect(tab).toContain('useVisibleRefresh(() => load({ background: true }))')
+    const hook = read('hooks/useVisibleRefresh.ts')
+    expect(hook).toContain("window.addEventListener('focus', onFocus)")
+    expect(hook).toContain("document.addEventListener('visibilitychange', onVisibility)")
   })
 
-  it('reconciles the core latest-trades feed and requests league-specific reasons', () => {
-    const page = read('app/core/[[...screen]]/page.tsx')
+  it('reads durable events on Home, reconciles league detail, and requests league-specific reasons', () => {
+    const page = read('app/core/(shell)/[[...screen]]/page.tsx')
     const leagueHome = read('lib/core-app/leagueHome.ts')
+    // Home uses the durable feed without an 18-week provider fan-out on every refresh.
+    expect(page).toContain('reconcileLive: false')
+    expect(leagueHome).toContain('reconcileLive: true')
+    expect(read('lib/core-app/recentTrades.ts')).toContain('persistedRecentTrades(leagues, new Date(cutoff))')
     for (const source of [page, leagueHome]) {
-      expect(source).toContain('reconcileLive: true')
       expect(source).toContain('enrichLeagueContext: true')
     }
   })

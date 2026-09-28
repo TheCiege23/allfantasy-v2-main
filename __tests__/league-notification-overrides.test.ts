@@ -166,8 +166,8 @@ describe('where the surface lives', () => {
   })
 
   it('passes the section\'s visible categories in rather than recomputing them', () => {
-    // A toggle must govern an event something actually fires; `lineup_reminders` is hidden
-    // because no sender exists. Deriving that rule twice is how the two copies drift.
+    // A toggle must govern an event something actually fires; a category with no sender is
+    // hidden. Deriving that rule twice is how the two copies drift.
     const section = read('app/settings/components/sections/NotificationsSettingsSection.tsx')
     expect(section).toMatch(/categoryIds=\{VISIBLE_CATEGORY_IDS\}/)
   })

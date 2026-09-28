@@ -18,10 +18,14 @@
  * the nav gating, so the sentence a user reads and the tabs they are given can never
  * disagree — two copies of this rule would drift within a release.
  *
- * ⚠ THE LIMIT IS THE PLATFORM'S, AND THE COPY MUST SAY SO. "We couldn't get your trade
- * history" reads as our failure; naming the specific provider limitation is the truth
- * and is the only version a user can do anything with (switch platform, or stop looking).
- * Every sentence built here names the provider.
+ * 🛑 THE SENTENCE USED TO BLAME THE PLATFORM, AND IT WAS NOT TRUE IN EVERY CASE. It read
+ * "Fleaflicker doesn't publish schedule and past seasons" and "ESPN doesn't publish trade
+ * history" — but a `missing` bucket means only that THIS import did not bring it across. The
+ * causes include our own adapter not reading an endpoint the platform does have, a call that
+ * failed this time, and a league that genuinely has none. "Doesn't publish" asserts the one
+ * cause we cannot know from here, about someone else's product. The sentence now says what is
+ * true in every case — it did not come across — and still names the platform it came from.
+ * The per-bucket `note` on the coverage block keeps the specific reason where an adapter knows it.
  */
 
 import type { ImportCoverage, ImportCoverageKey, ImportCoverageState, ImportProvider } from './types'
@@ -172,7 +176,7 @@ export function summarizeImportCoverage(
 
   if (missing.length > 0) {
     const missingProse = toProse(missing.map((key) => IMPORT_COVERAGE_LABELS[key]))
-    sentence = `${label} doesn't publish ${missingProse}, so those aren't available for this league.`
+    sentence = `We couldn't bring across ${missingProse} from ${label} for this league yet.`
     if (partial.length > 0) {
       const partialProse = toProse(partial.map((key) => IMPORT_COVERAGE_LABELS[key]))
       sentence += ` ${partialProse.charAt(0).toUpperCase()}${partialProse.slice(1)} came across incomplete.`

@@ -271,7 +271,7 @@ async function getMflAuthForUser(userId: string): Promise<MflApiContext> {
   const auth = await getDecryptedAuth(userId, 'mfl')
   if (!auth?.apiKey) {
     throw new MflImportConnectionError(
-      'Save your MFL API key in League Sync before importing from MyFantasyLeague.'
+      'Save your MFL API key under Settings → Connected Accounts before importing from MyFantasyLeague.'
     )
   }
   return { apiKey: auth.apiKey }

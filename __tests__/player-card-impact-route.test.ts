@@ -23,6 +23,15 @@ vi.mock('@/lib/core-app/playerCard', () => ({ getPlayerCard: (...a: unknown[]) =
 vi.mock('@/lib/core-app/playerLeagueImpact', () => ({
   getPlayerLeagueImpact: (...a: unknown[]) => getPlayerLeagueImpact(...a),
 }))
+/*
+ * The card's player-depth paywall has its own suite (core-depth-paywall-routes). Pinned OPEN here so
+ * this one does not change behaviour on launch day: unpinned, the real rule reads today's date, and
+ * from Oct 15 the stub card below would be run through the locked filter — measured by forcing
+ * AF_PAYWALL_STARTS_AT into the past, which turned "still serves the card" red.
+ */
+vi.mock('@/lib/core-app/corePaywall', () => ({
+  resolveCoreDepth: vi.fn(async () => ({ depth: 'player_depth', unlocked: true, hasPlan: true, preLaunchFree: false })),
+}))
 
 import { GET } from '@/app/api/core/player-card/route'
 

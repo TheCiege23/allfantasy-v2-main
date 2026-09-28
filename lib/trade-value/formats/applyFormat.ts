@@ -12,6 +12,13 @@
  *
  * So `applyFormatFit` returns the adjustment as data. Nothing here mutates a price.
  *
+ * 🛑 OVERTURNED FOR THE TRADE VERDICT — Guap, 2026-09-24: "the values have to be crisp and honest
+ * and based on the league, scoring, roster need … waiver availability." The Trade Center now GRADES
+ * on the league-adjusted value (`lib/trade-value/leagueTradeValue.ts`). V5's reason is what that
+ * module is built on: every line still carries its market base and each adjustment as a factor with
+ * a sentence, so the grade moves but never invisibly. This function is unchanged — it still returns
+ * data — but "never folded into the grade" no longer describes the verdict. Do not re-apply V5 there.
+ *
  * ── AND WHY LEGALITY IS SEPARATE FROM VALUE ─────────────────────────────────────────────────
  * "This is worth less to you" and "you cannot trade this right now" are different answers, and a
  * manager needs both. Folding a closed trade window into a discount would produce a player worth

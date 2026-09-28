@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getPlatformChatThreads: vi.fn(),
   resolveConversationSafetyForUser: vi.fn(),
   appUserFindMany: vi.fn(),
+  hasBlockBetween: vi.fn(),
 }))
 
 vi.mock('@/lib/platform/current-user', () => ({ resolvePlatformUser: mocks.resolvePlatformUser }))
@@ -15,6 +16,8 @@ vi.mock('@/lib/platform/chat-service', () => ({
 }))
 vi.mock('@/lib/moderation', () => ({
   resolveConversationSafetyForUser: mocks.resolveConversationSafetyForUser,
+  // The route now refuses a conversation across a block; nobody here has blocked anybody.
+  hasBlockBetween: mocks.hasBlockBetween,
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: { appUser: { findMany: mocks.appUserFindMany } } }))
 
@@ -28,6 +31,7 @@ describe('POST /api/shared/chat/threads — direct messages', () => {
     mocks.resolvePlatformUser.mockResolvedValue({ appUserId: 'me' })
     mocks.createPlatformThread.mockResolvedValue({ id: 't1', threadType: 'dm' })
     mocks.appUserFindMany.mockResolvedValue([{ id: 'them' }])
+    mocks.hasBlockBetween.mockResolvedValue(false)
   })
 
   /*

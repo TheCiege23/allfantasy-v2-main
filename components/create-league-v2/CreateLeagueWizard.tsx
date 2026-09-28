@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -15,21 +16,23 @@ import {
   type SupportedSport,
   type WizardDraftType,
 } from '@/lib/create-league-v2/state'
-import { getDraftTypeOptions } from '@/lib/create-league-v2/rules-engine'
+import {
+  getDraftTypeOptions,
+  getDefaultTeamCount,
+  getTeamCountOptions,
+  getScoringPresetOptionsForSelection,
+  isSportAllowedForType,
+  resolveValidScoringPresetIdForSelection,
+} from '@/lib/create-league-v2/rules-engine'
 import {
   CREATE_LEAGUE_TIMEZONES,
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
   PREMIUM_ADVANCED_CREATE_LABELS,
-  UNIVERSAL_CREATE_TEAM_COUNTS,
   getEnabledPremiumAdvancedSettings,
   type ImportProviderOption,
   type PremiumAdvancedCreateKey,
 } from '@/lib/create-league-v2/simple-create'
-import {
-  getDefaultScoringPresetId,
-  listScoringPresetOptions,
-} from '@/lib/league-creation-preset/scoring-presets'
 import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
@@ -47,7 +50,16 @@ type WizardProps = {
   onCancel: () => void
 }
 
-const SIMPLE_LEAGUE_TYPES: readonly LeagueTypeId[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
+/**
+ * The concepts the Create button offers.
+ *
+ * Guillotine returned 2026-09-25. The G30 simplification (July) cut the list to four when a native
+ * guillotine league could not play a season; it can now — score-sync chops the lowest team each
+ * sealed week (`nativeGuillotineWeek`), announces it in league chat and drops the roster — and the
+ * create API, team-count rules and scoring presets already handled it, so the only thing missing
+ * was the tile.
+ */
+const SIMPLE_LEAGUE_TYPES: readonly LeagueTypeId[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine']
 
 const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'summary', 'review']
 
@@ -76,8 +88,11 @@ function getPremiumLabel(t: (key: string) => string, key: PremiumAdvancedCreateK
 }
 
 function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): Partial<CreateLeagueV2State> {
-  const leagueType = getEffectiveLeagueType(state) ?? 'redraft'
-  const scoringPresetId = getDefaultScoringPresetId({
+  // A concept the new sport does not support (guillotine is not offered for NCAAB or soccer)
+  // falls back to redraft, or the wizard would submit a pairing the server refuses.
+  const chosen = getEffectiveLeagueType(state) ?? 'redraft'
+  const leagueType = isSportAllowedForType(sport, chosen) ? chosen : 'redraft'
+  const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
     leagueType,
     sport,
     idpSelected: state.idpSelected,
@@ -85,12 +100,29 @@ function nextStateForSport(state: CreateLeagueV2State, sport: SupportedSport): P
 
   return {
     sport,
+    ...(leagueType !== chosen ? { leagueType } : {}),
+    // The server refuses a soccer league without a pipeline, and the wizard had no control for
+    // it, so soccer could never be submitted. The player pool is European whichever is chosen
+    // (the pipeline is stored, not read by the pool), so default to it rather than offer a
+    // choice that changes nothing.
+    soccerPipeline: sport === 'SOCCER' ? (state.soccerPipeline ?? 'euro') : null,
     scoringPresetId,
-    teamCount: UNIVERSAL_CREATE_TEAM_COUNTS.includes(state.teamCount) ? state.teamCount : 12,
-    dynasty: getDefaultDynastySetup(sport, state.draftType),
+    teamCount: getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+      ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline),
+    dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(sport, state.draftType), getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
-    bestBall: getDefaultBestBallSetup(sport, 'standard', state.draftType),
+    bestBall: bestBallSetupForTeamCount(sport, state.draftType, getTeamCountOptions(sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(sport, leagueType, state.soccerPipeline)),
   }
+}
+
+function fitDynastySetupToTeamCount(setup: CreateLeagueV2State['dynasty'], teamCount: number) {
+  const playoffTeamCount = Math.min(setup.playoffTeamCount, Math.max(2, teamCount))
+  return { ...setup, playoffTeamCount, playoffByeCount: 2 ** Math.ceil(Math.log2(playoffTeamCount)) - playoffTeamCount }
+}
+
+function bestBallSetupForTeamCount(sport: CreateLeagueV2State['sport'], draftType: WizardDraftType, teamCount: number) {
+  const setup = getDefaultBestBallSetup(sport, 'standard', draftType)
+  return { ...setup, playoffTeams: Math.min(setup.playoffTeams, teamCount) }
 }
 
 function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTypeId): Partial<CreateLeagueV2State> {
@@ -98,7 +130,7 @@ function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTy
   const draftType = draftTypeOptions.some((option) => option.id === state.draftType)
     ? state.draftType
     : (draftTypeOptions[0]?.id ?? 'snake') as WizardDraftType
-  const scoringPresetId = getDefaultScoringPresetId({
+  const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
     leagueType,
     sport: state.sport,
     idpSelected: false,
@@ -109,10 +141,11 @@ function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTy
     idpSelected: false,
     scoringPresetId,
     draftType,
-    teamCount: UNIVERSAL_CREATE_TEAM_COUNTS.includes(state.teamCount) ? state.teamCount : 12,
-    dynasty: getDefaultDynastySetup(state.sport, draftType),
+    teamCount: getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
+      ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
+    dynasty: fitDynastySetupToTeamCount(getDefaultDynastySetup(state.sport, draftType), getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
     keeper: getDefaultKeeperSetup(),
-    bestBall: getDefaultBestBallSetup(state.sport, 'standard', draftType),
+    bestBall: bestBallSetupForTeamCount(state.sport, draftType, getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount) ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)),
   }
 }
 
@@ -122,19 +155,19 @@ function useEnsureSimpleDefaults(state: CreateLeagueV2State, onChange: WizardPro
     const leagueType = state.leagueType ?? 'redraft'
     onChange({
       leagueType,
-      scoringPresetId:
-        state.scoringPresetId ||
-        getDefaultScoringPresetId({
-          leagueType,
-          sport: state.sport,
-          idpSelected: state.idpSelected,
-        }),
+      scoringPresetId: resolveValidScoringPresetIdForSelection(state.scoringPresetId, {
+        leagueType,
+        sport: state.sport,
+        idpSelected: state.idpSelected,
+      }),
     })
   }, [onChange, state.idpSelected, state.leagueType, state.scoringPresetId, state.sport])
 }
 
 export function CreateLeagueWizard(props: WizardProps) {
   const { t, language } = useLanguage()
+  const [interactive, setInteractive] = useState(false)
+  useEffect(() => setInteractive(true), [])
   const [activeStep, setActiveStep] = useState<WizardStep>('sport')
   const [importOpen, setImportOpen] = useState(false)
   const entitlements = useEntitlements()
@@ -143,13 +176,24 @@ export function CreateLeagueWizard(props: WizardProps) {
   useEnsureSimpleDefaults(props.state, props.onChange)
 
   const enabledPremium = getEnabledPremiumAdvancedSettings(props.state.advancedSetup)
+
+  // A premium toggle restored from sessionStorage (or left on after a plan lapsed) is still sent
+  // on submit, and the server answers 403 — while the checkbox is disabled, so it cannot be
+  // cleared. Drop them once we know the manager is not entitled.
+  const { onChange } = props
+  const hasStalePremium = !entitlements.loading && !isCommissioner && enabledPremium.length > 0
+  useEffect(() => {
+    if (hasStalePremium) onChange({ advancedSetup: {} })
+  }, [hasStalePremium, onChange])
   const canCreate = props.completionIssues.length === 0
 
   return (
     <div className="min-h-screen bg-[color:var(--surface-app)] text-[color:var(--text-primary)]" data-testid="g30-create-league-wizard">
+      <fieldset disabled={!interactive || props.submitting} aria-busy={!interactive || props.submitting} className="m-0 min-w-0 border-0 p-0">
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-10">
         <section className="space-y-5">
           <header className="space-y-3">
+            <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-44 max-w-full sm:w-52" />
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
               {t('createLeague.g30.eyebrow')}
             </p>
@@ -278,6 +322,7 @@ export function CreateLeagueWizard(props: WizardProps) {
           />
         </aside>
       </main>
+      </fieldset>
 
       {importOpen ? <ImportLeagueModal onClose={() => setImportOpen(false)} /> : null}
     </div>
@@ -295,11 +340,12 @@ export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onCh
           const selected = state.sport === sport
           const media = SPORT_MEDIA[sport]
           /*
-           * ⚠ SAY WHAT WILL NOT WORK, AT THE MOMENT OF CHOOSING. Only NFL can
-           * run a season end to end — every other sport throws on weekly stat
-           * sync, so its matchups never finalize and the league sits at week 1
+           * ⚠ SAY WHAT WILL NOT WORK, AT THE MOMENT OF CHOOSING. A sport outside
+           * `SEASON_CAPABLE_SPORTS` (lib/sport-scope.ts) cannot run a season end
+           * to end: its matchups never finalize and the league sits at week 1
            * forever with nothing red anywhere. Choosing the sport is the last
-           * point where that is cheap to know.
+           * point where that is cheap to know. That list is the authority — this
+           * comment once said "only NFL" long after it stopped being true.
            *
            * ⚠ LABELLED, NOT BLOCKED, AND THAT IS A DELIBERATE CHOICE. The tile
            * supports `disabled`, and using it would also remove draft-only and
@@ -335,7 +381,10 @@ export function LeagueBasicsStep({
   fieldErrors,
 }: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors'>) {
   const { t } = useLanguage()
-  const typeOptions = SIMPLE_LEAGUE_TYPES
+  // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
+  const teamCountOptions = getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline)
+  const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
+  const typeOptions = SIMPLE_LEAGUE_TYPES.filter((leagueType) => isSportAllowedForType(state.sport, leagueType))
 
   return (
     <section className="space-y-5" data-testid="g30-basics-step">
@@ -378,13 +427,21 @@ export function LeagueBasicsStep({
           </span>
           <input
             type="number"
-            min={2}
-            max={32}
+            min={teamCountOptions[0] ?? 2}
+            max={teamCountOptions.at(-1) ?? 32}
+            step={teamCountStep}
+            aria-describedby="g30-team-count-options"
             value={state.teamCount}
-            onChange={(event) => onChange({ teamCount: Number(event.target.value) })}
+            onChange={(event) => {
+              const teamCount = Number(event.target.value)
+              onChange({ teamCount, ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}), ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
+            }}
             className={fieldClass(Boolean(fieldErrors?.teamCount))}
             data-testid="g30-team-count"
           />
+          <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
+            {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
+          </span>
         </label>
       </div>
 
@@ -406,6 +463,28 @@ export function LeagueBasicsStep({
           </button>
         ))}
       </div>
+
+      {/* A guillotine week has no opponent — every team plays the chop line — so there is no
+          head-to-head game for a median game to double. */}
+      {getEffectiveLeagueType(state) === 'guillotine' ? null : (
+      <label
+        className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] px-4 py-3 text-sm"
+        data-testid="g30-median-game"
+      >
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={state.medianGame === true}
+          onChange={(event) => onChange({ medianGame: event.target.checked })}
+        />
+        <span>
+          <span className="block font-bold">{t('createLeague.g30.medianGame.label')}</span>
+          <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.medianGame.body')}
+          </span>
+        </span>
+      </label>
+      )}
     </section>
   )
 }
@@ -418,7 +497,10 @@ export function DraftStep({
   const { t } = useLanguage()
   const leagueType = getEffectiveLeagueType(state) ?? 'redraft'
   const draftTypes = getDraftTypeOptions(leagueType, state.sport)
-  const scoringPresets = listScoringPresetOptions({
+  // Only presets the server accepts for this concept and sport. The unfiltered list offered
+  // duplicate "Standard"/"Full PPR" rows, TE Premium/Superflex/2QB and NBA 9-cat/8-cat — every
+  // one of them rejected at submit.
+  const scoringPresets = getScoringPresetOptionsForSelection({
     leagueType,
     sport: state.sport,
     idpSelected: state.idpSelected,
@@ -527,6 +609,78 @@ export function DraftStep({
               </select>
             </label>
           ) : null}
+        </div>
+      ) : null}
+
+      {leagueType === 'keeper' ? (
+        <div
+          className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-4"
+          data-testid="g30-keeper-panel"
+        >
+          <p className="text-sm font-bold">{t('createLeague.g30.keeper.title')}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.keeper.body')}
+          </p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <label className="space-y-2">
+              <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+                {t('createLeague.g30.keeper.maxKeepers')}
+              </span>
+              <select
+                value={state.keeper.keeperMaxKeepers}
+                onChange={(event) =>
+                  onChange({ keeper: { ...state.keeper, keeperMaxKeepers: Number(event.target.value) } })
+                }
+                className={fieldClass()}
+                data-testid="g30-keeper-max-keepers"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+                {t('createLeague.g30.keeper.roundPenalty')}
+              </span>
+              <select
+                value={state.keeper.keeperRoundPenalty}
+                onChange={(event) =>
+                  onChange({ keeper: { ...state.keeper, keeperRoundPenalty: Number(event.target.value) } })
+                }
+                className={fieldClass()}
+                data-testid="g30-keeper-round-penalty"
+              >
+                {[0, 1, 2, 3].map((rounds) => (
+                  <option key={rounds} value={rounds}>
+                    {rounds === 0 ? t('createLeague.g30.keeper.roundPenaltyNone') : rounds}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+                {t('createLeague.g30.keeper.maxYears')}
+              </span>
+              <select
+                value={state.keeper.keeperMaxYears}
+                onChange={(event) =>
+                  onChange({ keeper: { ...state.keeper, keeperMaxYears: Number(event.target.value) } })
+                }
+                className={fieldClass()}
+                data-testid="g30-keeper-max-years"
+              >
+                {/* 0 is "no limit" to the keeper eligibility engine (`maxY > 0 && …`). */}
+                {[1, 2, 3, 4, 5, 0].map((years) => (
+                  <option key={years} value={years}>
+                    {years === 0 ? t('createLeague.g30.keeper.maxYearsUnlimited') : years}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       ) : null}
 
@@ -663,7 +817,7 @@ export function LeaguePreviewCard({
 }) {
   const { t } = useLanguage()
   const leagueType = getEffectiveLeagueType(state) ?? 'redraft'
-  const scoring = listScoringPresetOptions({
+  const scoring = getScoringPresetOptionsForSelection({
     leagueType,
     sport: state.sport,
     idpSelected: state.idpSelected,

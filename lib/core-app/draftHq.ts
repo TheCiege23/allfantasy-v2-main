@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -625,7 +626,7 @@ export async function getDraftHqData(
     lottery: {
       available: false as const,
       reason:
-        'there is no lottery data in this system — no ball counts, no odds, nothing recorded. Odds derived from standings would be our invention, not this league’s rules',
+        'This league has no draft lottery on file — no ball counts or odds were imported, and we won’t make them up from the standings.',
     },
     queue: {
       available: false as const,
@@ -639,6 +640,7 @@ export async function getDraftHqData(
 
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, status: true, draftType: true, rounds: true, teamCount: true, slotOrder: true },
   })
 

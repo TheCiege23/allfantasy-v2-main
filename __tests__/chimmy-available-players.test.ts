@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   rosterFindMany: vi.fn(),
   valueFindMany: vi.fn(),
   fantasyCalc: vi.fn(),
+  otherSport: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -18,6 +19,9 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/fantasycalc-db', () => ({
   getFantasyCalcValuesDbFirst: h.fantasyCalc,
+}))
+vi.mock('@/lib/chimmy/tools/availablePlayersOtherSports', () => ({
+  buildOtherSportAvailableContext: h.otherSport,
 }))
 
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
@@ -122,12 +126,18 @@ describe('an empty result is not an empty answer', () => {
     expect(out).toMatch(/cannot rank/i)
   })
 
-  /* Values are NFL-only; another sport would subtract NFL rosters from NFL values. */
-  it('declines for a non-NFL league', async () => {
+  /*
+   * Values are NFL-only; another sport would subtract NFL rosters from NFL values. Since 2026-09-25 a
+   * non-NFL league is handed to the sport-pool ranking (availablePlayersOtherSports.ts) with this
+   * league's rostered ids — and the NFL value table is still never read for it.
+   */
+  it('hands a non-NFL league to the sport-pool ranking and never reads NFL values', async () => {
     h.leagueFind.mockResolvedValue({ name: 'Hoops', sport: 'NBA' })
+    h.otherSport.mockResolvedValue('Player VALUES are only published for NFL, so "Hoops" (NBA) is ranked a different way below.')
 
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
     expect(out).toMatch(/only published for NFL/i)
+    expect(h.otherSport).toHaveBeenCalledWith({ leagueName: 'Hoops', sport: 'NBA', leagueId: LEAGUE, rostered: new Set(['9488', '9226']) })
     expect(h.valueFindMany).not.toHaveBeenCalled()
   })
 

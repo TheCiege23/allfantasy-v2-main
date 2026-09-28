@@ -1,9 +1,12 @@
 import { prisma } from '@/lib/prisma'
+import { readLeagueWeekMetadata } from '@/lib/core-app/leagueWeekMetadata'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 
 /**
  * The weeks whose per-player scores are worth fetching for one Sleeper league.
  *
- * Derived from the `WeeklyMatchup` rows the league sync keeps: the frontier (the
+ * Prefer the saved provider period and previous week for current scoring and corrections.
+ * Without a provider period, derive from the `WeeklyMatchup` rows: the frontier (the
  * earliest week whose matchups carry zero points — the week being played or
  * about to be) and the week before it (in progress on a Sunday, stat corrections
  * after). With no zero-point week, the newest week.
@@ -16,6 +19,12 @@ import { prisma } from '@/lib/prisma'
  * and `LeaguePlayerWeeklyScore.leagueId` both use.
  */
 export async function sleeperScoreTargetWeeks(externalLeagueId: string, season: number): Promise<number[]> {
+  const metadata = await readLeagueWeekMetadata([externalLeagueId], 'platform')
+  const league = metadata.find((row) => row.season === season)
+  const currentWeek = leagueWeekFromSettings(league?.settings)
+  if (currentWeek != null && !['complete', 'completed', 'finished'].includes(String(league?.status ?? '').toLowerCase())) {
+    return currentWeek > 1 ? [currentWeek, currentWeek - 1] : [currentWeek]
+  }
   const weekRows = await prisma.weeklyMatchup.groupBy({
     by: ['week'],
     where: { leagueId: externalLeagueId, seasonYear: season },

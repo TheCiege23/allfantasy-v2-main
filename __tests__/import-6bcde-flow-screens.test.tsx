@@ -113,6 +113,21 @@ describe('6d — stats are real counts, or they are absent', () => {
     expect(zero?.getAttribute('data-tone')).not.toBe('bad')
   })
 
+  /*
+   * 🛑 THE IMPORT NEVER ASKED WHAT KIND OF LEAGUE THIS IS (2026-09-25), and every trade in it is
+   * graded on the answer. The finished import is the first moment we can ask about a league we can
+   * name; ImportV4 hands the LeagueTypeConfirm card in through this slot.
+   */
+  it('shows the league-type check it is handed, and nothing when it is not', () => {
+    const { unmount } = render(
+      <ImportDone {...base} stats={[]} leagueTypeCheck={<p>What kind of league is this?</p>} />,
+    )
+    expect(screen.getByTestId('import-done-league-type')).toHaveTextContent('What kind of league is this?')
+    unmount()
+    render(<ImportDone {...base} stats={[]} />)
+    expect(screen.queryByTestId('import-done-league-type')).toBeNull()
+  })
+
   it('paints a real outstanding count as bad', () => {
     const stats: ImportDoneStat[] = [
       { key: 'needs', value: 2, label: 'things need you', tone: 'bad' },

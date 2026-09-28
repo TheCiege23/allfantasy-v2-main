@@ -31,6 +31,10 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findFirst: mocks.leagueFindFirst },
+    // The gate is `canManageDiscordBridge` → `getLeagueRole`, which looks for a co-commissioner's
+    // claimed team (and a roster) once the caller is not the owner. Nobody here has either.
+    leagueTeam: { findFirst: async () => null },
+    roster: { findFirst: async () => null },
     discordLeagueChannel: { updateMany: mocks.channelUpdateMany },
   },
 }))
@@ -98,6 +102,18 @@ describe('scopes the write to one surface', () => {
     expect(sentWhere()).toEqual({ leagueId: LEAGUE_ID, surface: 'league_chat' })
   })
 
+  it('clears the inbound cursor on opt-out so a later opt-in cannot backfill the off period', async () => {
+    const res = await patch({ leagueId: LEAGUE_ID, syncInbound: false })
+    expect(res.status).toBe(200)
+    expect(mocks.channelUpdateMany.mock.calls[0][0].data).toMatchObject({ syncInbound: false, lastSyncedMessageId: null })
+  })
+
+  it('refuses inbound on a non-league surface', async () => {
+    const res = await patch({ leagueId: LEAGUE_ID, surface: 'commissioner_notes', syncInbound: true })
+    expect(res.status).toBe(400)
+    expect(mocks.channelUpdateMany).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['an unknown surface', 'not_a_surface'],
     ['a SQL-ish string', "league_chat' OR '1'='1"],
@@ -153,7 +169,7 @@ describe('reports a write that changed nothing', () => {
   })
 })
 
-describe('the authorization gate is unchanged', () => {
+describe('the authorization gate (head or co-commissioner; co-commissioners are covered in discord-join-routes)', () => {
   it('401s an anonymous caller before reading anything', async () => {
     mocks.getServerSession.mockResolvedValue(null)
     const res = await patch({ leagueId: LEAGUE_ID, syncEnabled: true })
@@ -162,7 +178,7 @@ describe('the authorization gate is unchanged', () => {
     expect(mocks.channelUpdateMany).not.toHaveBeenCalled()
   })
 
-  it('403s a non-owner and writes nothing', async () => {
+  it('403s a non-commissioner and writes nothing', async () => {
     mocks.leagueFindFirst.mockResolvedValue({ userId: 'someone-else' })
     const res = await patch({ leagueId: LEAGUE_ID, syncEnabled: true })
     expect(res.status).toBe(403)

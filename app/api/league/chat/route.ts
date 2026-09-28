@@ -8,8 +8,14 @@ import {
   getLeagueChatMessages,
 } from '@/lib/league-chat/LeagueChatMessageService'
 import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
-import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
-import { getAccessibleBbChannels, type BigBrotherChannelKey } from '@/lib/big-brother/BigBrotherChatChannels'
+import type { BigBrotherChannelKey } from '@/lib/big-brother/BigBrotherChatChannels'
+import {
+  bbChannelOfMessage,
+  getBbChatAccess,
+  isBbChannelKey,
+  resolveBbWriteChannel,
+} from '@/lib/big-brother/bbChatChannelAccess'
+import { sanitizeClientMessageMetadata } from '@/lib/chat-core/clientMessageInput'
 import { processBigBrotherLeagueChatInput } from '@/lib/big-brother/chimmyCommandHandler'
 import { processIdpLeagueChatInput } from '@/lib/idp/idpChimmyLeagueChat'
 import { processDevyLeagueChatInput } from '@/lib/devy/devyChimmyLeagueChat'
@@ -19,8 +25,16 @@ import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
 import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
+import { decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { resolveLeagueMentionIds } from '@/lib/chat-core/resolveMentionTargets'
+import { markLeagueChatRead } from '@/lib/chat-core/leagueChatRead'
+import { queueLeagueChatNotifications } from '@/lib/chat-notifications/chatMessageNotifier'
+import { readLeagueDraftLink } from '@/lib/league-chat/readLeagueDraftLink'
+import { DRAFT_ROOM_ONLY_TYPES, resolveIncludeDraft } from '@/lib/league-chat/draftChatLink'
+import { getBlockedUserIdsForRead } from '@/lib/moderation/BlockUserService'
+import { filterMessagesByBlocked } from '@/lib/moderation/SafetyVisibilityResolver'
 
 function toStringValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
@@ -30,14 +44,6 @@ function gifUrlFromMetadata(meta: Record<string, unknown> | undefined): string |
   if (!meta) return null
   const g = meta.gifUrl ?? meta.previewUrl ?? meta.imageUrl
   return typeof g === 'string' ? g : null
-}
-
-function readBbChannelKeyFromMetadata(metadata: Record<string, unknown> | undefined): BigBrotherChannelKey | null {
-  const raw = metadata?.bbChannel
-  if (raw === 'main' || raw === 'hoh_room' || raw === 'have_nots' || raw === 'jury' || raw === 'nominees') {
-    return raw
-  }
-  return null
 }
 
 /*
@@ -67,6 +73,8 @@ function toClientMessage(message: {
   createdAt: string
   messageType?: string | null
   metadata?: Record<string, unknown> | null
+  /** `'draft'` when the row was posted in the draft room; null for league chat. */
+  channelSource?: string | null
 }) {
   const authorName = message.senderName ?? 'Manager'
   const authorAvatarUrl = message.senderAvatarUrl ?? null
@@ -86,6 +94,11 @@ function toClientMessage(message: {
     created: createdMs,
     messageType: message.messageType ?? 'text',
     metadata: message.metadata ?? null,
+    /*
+     * Where the row was posted. League chat labels a draft-room message as one, instead of
+     * leaving the reader to wonder why somebody is talking about ADP in the middle of week 3.
+     */
+    source: message.channelSource ?? null,
   }
 }
 
@@ -109,37 +122,69 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const bigBrotherLeague = await isBigBrotherLeague(leagueId)
-  let selectedBbChannel: BigBrotherChannelKey | null = null
-  if (bigBrotherLeague) {
-    const requested = req.nextUrl.searchParams?.get('channel')?.trim()
-    selectedBbChannel =
-      requested === 'main' ||
-      requested === 'hoh_room' ||
-      requested === 'have_nots' ||
-      requested === 'jury' ||
-      requested === 'nominees'
-        ? requested
-        : 'main'
+  /*
+   * 🛑 BLOCKS WERE NOT APPLIED HERE AT ALL (found 2026-09-25). The shared-thread view of this same
+   * league (`/api/shared/chat/threads/league:<id>/messages`) hides the messages of people the viewer
+   * has blocked; this route — the one the comms drawer reads — showed them. Same fail-closed lookup
+   * as that route: one retry, then a 503 rather than an unfiltered transcript. The viewer's own
+   * messages always stay (nobody can block themselves, and this does not depend on that).
+   */
+  let blockSet: Set<string>
+  try {
+    blockSet = new Set(await getBlockedUserIdsForRead(userId))
+  } catch {
+    console.warn('[league/chat] block list unavailable; refusing to serve an unfiltered read')
+    return NextResponse.json(
+      { error: 'Messages are temporarily unavailable. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
+  blockSet.delete(userId)
 
-    const access = await getAccessibleBbChannels(leagueId, userId)
-    const readable = new Set(access.filter((c) => c.canRead).map((c) => c.key))
-    if (!readable.has(selectedBbChannel)) {
+  /*
+   * `markRead=1` means the person is looking at this chat right now, so the chat bubble stops
+   * counting its messages (lib/chat-core/leagueChatRead.ts). Opt-in per request on purpose: a
+   * background poll of the same route must never mark anything read.
+   */
+  if (req.nextUrl.searchParams?.get('markRead') === '1') {
+    void markLeagueChatRead(userId, leagueId)
+  }
+
+  /* The room rule lives in lib/big-brother/bbChatChannelAccess.ts — shared with every other reader. */
+  const bbAccess = await getBbChatAccess(leagueId, userId)
+  let selectedBbChannel: BigBrotherChannelKey | null = null
+  if (bbAccess) {
+    const requested = req.nextUrl.searchParams?.get('channel')?.trim()
+    selectedBbChannel = isBbChannelKey(requested) ? requested : 'main'
+    if (!bbAccess.readable.has(selectedBbChannel)) {
       return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
     }
   }
 
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '50'), 100)
   /*
+   * Is a draft running, and where is its room? League chat shows a way in while it is.
+   * Never throws — see readLeagueDraftLink.
+   */
+  const draftLink = await readLeagueDraftLink(leagueId)
+  /*
    * A VIEW preference, not a stored setting. The draft room already mirrors its
    * messages here; this decides whether the reader sees them, and it is a query
    * parameter precisely so it needs no per-league storage and no migration.
+   *
+   * `includeDraft=1` / `=0` is the reader's explicit choice. With none, the draft room is
+   * folded in while a draft is live — the one time the two chats are about the same thing.
+   * Pick announcements stay in the draft room either way (DRAFT_ROOM_ONLY_TYPES).
    */
-  const includeDraftRoom = req.nextUrl.searchParams?.get('includeDraft') === '1'
+  const includeDraftRoom = resolveIncludeDraft(
+    req.nextUrl.searchParams?.get('includeDraft'),
+    Boolean(draftLink?.live),
+  )
   const messages = await getLeagueChatMessages(leagueId, {
     limit,
     requestingUserId: userId,
     includeDraftRoom,
+    ...(includeDraftRoom ? { excludeMessageTypes: [...DRAFT_ROOM_ONLY_TYPES] } : {}),
   })
   /*
    * ⚠ A PIN IS STORED AS A CHAT ROW WHOSE BODY IS JSON. `/pin` writes a
@@ -152,17 +197,10 @@ export async function GET(req: NextRequest) {
    */
   const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
 
-  const filteredMessages =
-    bigBrotherLeague && selectedBbChannel
-      ? withoutPins.filter((message) => {
-          const metadata =
-            message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata)
-              ? (message.metadata as Record<string, unknown>)
-              : undefined
-          const channel = readBbChannelKeyFromMetadata(metadata) ?? 'main'
-          return channel === selectedBbChannel
-        })
-      : withoutPins
+  const inRoom = selectedBbChannel
+    ? withoutPins.filter((message) => bbChannelOfMessage(message) === selectedBbChannel)
+    : withoutPins
+  const filteredMessages = filterMessagesByBlocked(inRoom, blockSet)
 
   /*
    * Presence beacon. Folded into the poll the drawer already makes rather than
@@ -203,6 +241,10 @@ export async function GET(req: NextRequest) {
      */
     viewerUserId: userId,
     presence,
+    /** Whether draft-room messages are in this transcript, so the toggle can say so. */
+    includeDraft: includeDraftRoom,
+    /** The league's current draft, or null when it has none. */
+    draft: draftLink,
     messages: filteredMessages.map((message) =>
       toClientMessage({
         id: message.id,
@@ -213,6 +255,7 @@ export async function GET(req: NextRequest) {
         body: message.body,
         createdAt: message.createdAt,
         messageType: message.messageType ?? 'text',
+        channelSource: message.channelSource ?? null,
         /*
          * Anonymous polls are redacted HERE, on the way out. The ids stay in
          * the database because refusing a second vote means knowing who has
@@ -238,22 +281,34 @@ export async function POST(req: NextRequest) {
   const leagueId = toStringValue(body?.leagueId).trim()
   const message = toStringValue(body?.message).trim()
   const metadataRaw = body?.metadata
-  const metadata =
+  const rawMetadata =
     metadataRaw && typeof metadataRaw === 'object' && !Array.isArray(metadataRaw)
       ? (metadataRaw as Record<string, unknown>)
       : undefined
+  /*
+   * 🛑 NEVER STORE THE CLIENT'S METADATA AS SENT. Only the keys a composer legitimately writes
+   * survive (lib/chat-core/clientMessageInput.ts); `discordAuthorName`, reactions, votes, trade
+   * cards and the rest are server-owned, and the read path trusts them.
+   */
+  const metadata = sanitizeClientMessageMetadata(rawMetadata)
 
   if (!leagueId) {
     return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   }
 
-  const metaStr = metadata ? JSON.stringify(metadata) : ''
+  const metaStr = rawMetadata ? JSON.stringify(rawMetadata) : ''
   if (metaStr.length > 120_000) {
     return NextResponse.json({ error: 'Metadata too large' }, { status: 400 })
   }
 
+  /*
+   * `bbChannel` is not rich content, but the dashboard panel sends it on every Big Brother message and
+   * this test has always counted it — which is what keeps that panel's plain text out of the Chimmy
+   * command handlers below. Counting it still preserves that; changing it is a product decision.
+   */
   const hasRich =
-    Boolean(metadata && Object.keys(metadata).length > 0) ||
+    Boolean(metadata) ||
+    Boolean(rawMetadata && Object.prototype.hasOwnProperty.call(rawMetadata, 'bbChannel')) ||
     Boolean(toStringValue(body?.gifId)) ||
     Boolean(body?.poll) ||
     (Array.isArray(body?.attachments) && body.attachments.length > 0)
@@ -270,24 +325,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const bigBrotherLeague = await isBigBrotherLeague(leagueId)
-  let selectedBbChannel: BigBrotherChannelKey | null = null
-  if (bigBrotherLeague) {
-    selectedBbChannel = readBbChannelKeyFromMetadata(metadata) ?? 'main'
-    const access = await getAccessibleBbChannels(leagueId, userId)
-    const writeable = new Set(access.filter((c) => c.canWrite).map((c) => c.key))
-    if (!writeable.has(selectedBbChannel)) {
-      return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
-    }
+  const bbWrite = await resolveBbWriteChannel(leagueId, userId, rawMetadata)
+  if (!bbWrite.ok) {
+    return NextResponse.json({ error: 'Forbidden channel' }, { status: 403 })
   }
+  /* Non-null exactly when this is a Big Brother league: the room the sender may post in. */
+  const selectedBbChannel: BigBrotherChannelKey | null = bbWrite.channel
+  const bigBrotherLeague = selectedBbChannel !== null
 
-  const persistedMetadata: Record<string, unknown> | undefined =
-    metadata && Object.keys(metadata).length > 0 ? { ...metadata } : undefined
-
-  const finalMetadata =
-    bigBrotherLeague && selectedBbChannel
-      ? { ...(persistedMetadata ?? {}), bbChannel: selectedBbChannel }
-      : persistedMetadata
+  const finalMetadata = selectedBbChannel ? { ...(metadata ?? {}), bbChannel: selectedBbChannel } : metadata
 
   let bbProcessed: Awaited<ReturnType<typeof processBigBrotherLeagueChatInput>> | null = null
   if (!hasRich && message.trim() && bigBrotherLeague) {
@@ -347,12 +393,13 @@ export async function POST(req: NextRequest) {
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      mentionedUserIds: mentionParsed.userMentions,
+      mentionedUserIds: await resolveLeagueMentionIds(leagueId, userId, mentionParsed.userMentions),
     })
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
-    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId })
+    let decision: ReturnType<typeof decisionAnswerMeta> | undefined
+    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId, onDecision: result => { decision = decisionAnswerMeta(result) } })
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },
@@ -363,7 +410,7 @@ export async function POST(req: NextRequest) {
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      metadata: { isSystem: true, chimmyPrivateReply: true },
+      metadata: { isSystem: true, chimmyPrivateReply: true, ...(decision ? { decision } : {}) },
     })
 
     return NextResponse.json({
@@ -415,7 +462,7 @@ export async function POST(req: NextRequest) {
   const created = await createLeagueChatMessage(leagueId, userId, bodyText, {
     metadata: finalMetadata,
     messageSubtype: mentionInfo.hasAll ? 'at_all' : null,
-    mentionedUserIds: mentionInfo.userMentions,
+    mentionedUserIds: await resolveLeagueMentionIds(leagueId, userId, mentionInfo.userMentions),
     parentMessageId,
   })
   if (!created) {
@@ -482,12 +529,28 @@ export async function POST(req: NextRequest) {
     gifUrl: gifUrlFromMetadata(metadata),
   }).catch(() => {})
 
+  /*
+   * "New message in your league chat" — bell/push/email/text for members who turned the League chat
+   * messages category on (it is OFF by default on every channel). Fire-and-forget, after the save.
+   * A Big Brother side room is narrower than the league, so only its main room is announced.
+   */
+  queueLeagueChatNotifications({
+    leagueId,
+    messageId: created.id,
+    senderUserId: userId,
+    messageType: created.messageType ?? 'text',
+    body: message,
+    metadata: finalMetadata ?? null,
+    source: bigBrotherLeague && selectedBbChannel && selectedBbChannel !== 'main' ? `big_brother:${selectedBbChannel}` : 'league',
+  })
+
   if (mentionInfo.hasAll) {
     const sender = await prisma.appUser.findUnique({
       where: { id: userId },
-      select: { displayName: true, username: true, email: true },
+      select: { displayName: true, username: true },
     })
-    const senderName = sender?.displayName || sender?.username || sender?.email || 'Someone'
+    // Never the sender's email: this text goes into every member's bell, push and inbox.
+    const senderName = sender?.displayName || sender?.username || 'Someone'
     void getLeagueMemberUserIds(leagueId).then((ids) => {
       const targets = ids.filter((id) => id !== userId)
       if (targets.length === 0) return
@@ -502,6 +565,7 @@ export async function POST(req: NextRequest) {
         actionHref: `/league/${encodeURIComponent(leagueId)}`,
         actionLabel: 'Open chat',
         meta: { leagueId, messageId: created.id },
+        dedupePrefix: `at_all:${created.id}`,
       })
     })
   }

@@ -63,3 +63,21 @@ export async function getAllowedPositionsAndRosterSize(leagueId: string): Promis
     totalRosterSize: payload.totalRosterSlots,
   }
 }
+
+/**
+ * Refuse a round count the league's rosters cannot hold.
+ *
+ * Every pick past a roster's slot count is rejected by `validateRosterFitForDraftPick`, and a draft
+ * completes only on a FULL board (`rounds × teams`), so saving more rounds than roster slots made
+ * the draft impossible to finish: the last rounds could never be picked. Returns an error message,
+ * or `null` when the count fits (or the league has no roster template to judge it against).
+ */
+export async function validateDraftRoundsFitRoster(leagueId: string, rounds: number): Promise<string | null> {
+  const payload = await getLeagueDraftTemplatePayload(leagueId).catch(() => null)
+  const totalSlots = payload?.totalRosterSlots
+  if (!totalSlots || !Number.isFinite(totalSlots) || totalSlots <= 0) return null
+  if (rounds > totalSlots) {
+    return `A ${rounds}-round draft cannot finish: rosters hold ${totalSlots} players. Use ${totalSlots} rounds or fewer, or add roster slots first.`
+  }
+  return null
+}

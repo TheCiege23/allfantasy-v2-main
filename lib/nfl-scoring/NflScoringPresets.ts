@@ -4,7 +4,7 @@
  * Covers Offense, Kicking, DST, and optional IDP.
  */
 
-export type NflScoringPresetKey = 'af_default' | 'sleeper_default' | 'espn_standard' | 'espn_ppr' | 'yahoo_default' | 'custom'
+export type NflScoringPresetKey = 'af_default' | 'af_ppr' | 'af_standard' | 'sleeper_default' | 'espn_standard' | 'espn_ppr' | 'yahoo_default' | 'custom'
 export type NflScoringSource = 'AF_DEFAULT' | 'PLATFORM_PRESET' | 'IMPORTED_EXACT' | 'IMPORTED_MAPPED' | 'CUSTOM'
 
 export interface NflScoringPreset {
@@ -121,6 +121,24 @@ const AF_DEFAULT: NflScoringPreset = {
   },
 }
 
+/**
+ * AllFantasy's rules at the two other reception values, so a league created as Full PPR or
+ * Standard is scored that way. Before these existed every NFL league was seeded with
+ * `af_default` (0.5 PPR) whatever the manager picked, and that seed is what the live scorer
+ * reads — so "Full PPR" and "Standard" leagues both scored half-PPR.
+ */
+const AF_PPR: NflScoringPreset = {
+  key: 'af_ppr', label: 'AllFantasy PPR', source: 'AF_DEFAULT',
+  description: 'AllFantasy scoring with 1 point per reception.',
+  rules: { ...AF_DEFAULT.rules, reception: 1 },
+}
+
+const AF_STANDARD: NflScoringPreset = {
+  key: 'af_standard', label: 'AllFantasy Standard', source: 'AF_DEFAULT',
+  description: 'AllFantasy scoring with no points per reception.',
+  rules: { ...AF_DEFAULT.rules, reception: 0 },
+}
+
 const SLEEPER_DEFAULT: NflScoringPreset = {
   key: 'sleeper_default', label: 'Sleeper Default', source: 'PLATFORM_PRESET',
   description: 'Sleeper standard PPR scoring: 1 PPR, 0.04/pass yd, 4 pass TD, 0.1/rush-rec yd, 6 rush/rec TD.',
@@ -171,7 +189,7 @@ const YAHOO_DEFAULT: NflScoringPreset = {
 }
 
 const PRESET_REGISTRY: Record<NflScoringPresetKey, NflScoringPreset> = {
-  af_default: AF_DEFAULT, sleeper_default: SLEEPER_DEFAULT,
+  af_default: AF_DEFAULT, af_ppr: AF_PPR, af_standard: AF_STANDARD, sleeper_default: SLEEPER_DEFAULT,
   espn_standard: ESPN_STANDARD, espn_ppr: ESPN_PPR, yahoo_default: YAHOO_DEFAULT,
   custom: { key: 'custom', label: 'Custom', source: 'CUSTOM', description: 'Custom scoring values.', rules: { ...AF_DEFAULT.rules } },
 }
@@ -180,13 +198,25 @@ export function getNflScoringPresets(): NflScoringPreset[] { return Object.value
 export function getNflScoringPreset(key: NflScoringPresetKey): NflScoringPreset { return PRESET_REGISTRY[key] ?? PRESET_REGISTRY.af_default }
 
 export function detectNflPresetMatch(rules: Record<string, number>): NflScoringPresetKey | null {
-  for (const preset of [AF_DEFAULT, SLEEPER_DEFAULT, ESPN_STANDARD, ESPN_PPR, YAHOO_DEFAULT]) {
+  for (const preset of [AF_DEFAULT, AF_PPR, AF_STANDARD, SLEEPER_DEFAULT, ESPN_STANDARD, ESPN_PPR, YAHOO_DEFAULT]) {
     const keys = Object.keys(preset.rules)
     const nonZero = Object.entries(rules).filter(([, v]) => v !== 0)
-    if (nonZero.length !== keys.length) continue
+    // A preset that itself scores a key at 0 (AF Standard's reception) still lists it.
+    const presetNonZero = keys.filter((k) => preset.rules[k] !== 0)
+    if (nonZero.length !== presetNonZero.length) continue
     if (keys.every((k) => Math.abs((rules[k] ?? 0) - (preset.rules[k] ?? 0)) < 0.001)) return preset.key
   }
   return null
+}
+
+/**
+ * The AllFantasy preset for a league's points-per-reception, as chosen at create.
+ * `null` (not a football preset, or unknown) keeps the half-PPR default.
+ */
+export function nflScoringPresetKeyForReceptionPoints(receptionPoints: number | null | undefined): NflScoringPresetKey {
+  if (receptionPoints === 1) return 'af_ppr'
+  if (receptionPoints === 0) return 'af_standard'
+  return 'af_default'
 }
 
 export function buildFullNflScoringConfig(presetKey: NflScoringPresetKey): Record<string, number> {

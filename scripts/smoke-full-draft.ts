@@ -26,6 +26,7 @@ import {
   type FullDraftSmokeInput,
   type SmokeChatPickEventRow,
 } from '../lib/draft-room/fullDraftSmokeAudit'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 const prisma = new PrismaClient()
 
@@ -58,8 +59,9 @@ function parseSlotOrder(raw: unknown): SlotOrderEntry[] {
 }
 
 async function loadInput(leagueId: string): Promise<FullDraftSmokeInput | null> {
-  const session = await prisma.draftSession.findUnique({
+  const session = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: {
       id: true,
       leagueId: true,

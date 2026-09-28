@@ -43,6 +43,9 @@ const h = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
 
+const rank = vi.hoisted(() => ({ calculateAndSaveRank: vi.fn(async () => null) }))
+vi.mock('@/lib/rank/calculateRank', () => rank)
+
 import { claimExistingLeagueForMember } from '@/lib/league-import/ImportedLeagueCommitService'
 
 const ARGS = {
@@ -230,7 +233,8 @@ describe('persistImportedLeagueFromNormalization — wired to the join path end 
   /*
    * The public entry point, not the extracted helper: proves the early return actually
    * happens where it needs to, before any of the heavy bootstrap machinery
-   * (bootstrapLeagueFromImport, rank calculation, historical backfill) ever runs. If the
+   * (bootstrapLeagueFromImport, historical backfill) ever runs — only the rank calculation
+   * (mocked above) runs on the join path, so the joiner is ranked. If the
    * wiring were missing or the early return did not fire, this test would fail loudly —
    * the unmocked bootstrap path reaches real dynamic imports and real prisma calls this
    * mock does not provide, rather than silently succeeding.
@@ -262,6 +266,52 @@ describe('persistImportedLeagueFromNormalization — wired to the join path end 
     // No League row was created — league.create is never called on this mock at all, and if
     // the code path had fallen through to normal creation it would have thrown reaching
     // unmocked prisma calls (leagueTeam.create, roster writes, …) long before returning.
+  })
+
+  it('ranks the joiner before returning — the join skips the ordinary path\'s rank call', async () => {
+    const { persistImportedLeagueFromNormalization } = await import(
+      '@/lib/league-import/ImportedLeagueCommitService'
+    )
+    h.prisma.league.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(OTHER_LEAGUE)
+    h.prisma.leagueTeam.findFirst.mockResolvedValue(UNCLAIMED_TEAM)
+
+    const result = await persistImportedLeagueFromNormalization({
+      userId: 'af-user-bob',
+      provider: 'sleeper',
+      normalized: {
+        source: { source_league_id: '1359284500814647296', source_provider: 'sleeper' },
+        league: { season: 2026 },
+      } as never,
+      importerSourceManagerId: 'sleeper-user-bob',
+    })
+
+    expect(result.joinedExisting).toBe(true)
+    expect(rank.calculateAndSaveRank).toHaveBeenCalledTimes(1)
+    expect(rank.calculateAndSaveRank).toHaveBeenCalledWith('af-user-bob')
+  })
+
+  it('a failing rank calculation does not undo a successful join', async () => {
+    const { persistImportedLeagueFromNormalization } = await import(
+      '@/lib/league-import/ImportedLeagueCommitService'
+    )
+    h.prisma.league.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(OTHER_LEAGUE)
+    h.prisma.leagueTeam.findFirst.mockResolvedValue(UNCLAIMED_TEAM)
+    rank.calculateAndSaveRank.mockRejectedValueOnce(new Error('rank write failed'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const result = await persistImportedLeagueFromNormalization({
+      userId: 'af-user-bob',
+      provider: 'sleeper',
+      normalized: {
+        source: { source_league_id: '1359284500814647296', source_provider: 'sleeper' },
+        league: { season: 2026 },
+      } as never,
+      importerSourceManagerId: 'sleeper-user-bob',
+    })
+
+    expect(result.joinedExisting).toBe(true)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('a first-time import (no other account has this league) is unaffected — falls through normally', async () => {

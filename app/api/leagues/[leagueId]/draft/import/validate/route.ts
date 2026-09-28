@@ -13,6 +13,7 @@ import {
   runDraftImportDryRun,
   buildLeagueImportContext,
 } from '@/lib/draft-import'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,8 +52,9 @@ export async function POST(
       where: { id: leagueId },
       select: { leagueSize: true },
     }),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: {
         rounds: true,
         teamCount: true,

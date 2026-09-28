@@ -36,6 +36,7 @@ import {
 } from "@/lib/live-draft-engine/npcDraftPersonality"
 import type { NpcDraftPersonalityId } from "@/lib/live-draft-engine/npcDraftPersonalityTypes"
 import { logAction } from "@/lib/orphan-ai-manager/OrphanAIManagerService"
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 function mapDraftType(dt: string): DraftFormatHint {
   const u = String(dt || "").toLowerCase()
@@ -266,8 +267,9 @@ export async function tryAiOpponentAutopickForExpiredTimer(
     }
   }
 
-  const dsAiRow = await prisma.draftSession.findUnique({
+  const dsAiRow = await prisma.draftSession.findFirst({
     where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { commissionerAiManagers: true },
   })
   let workingBlob = parseCommissionerAiManagers(dsAiRow?.commissionerAiManagers)

@@ -26,6 +26,7 @@ vi.mock('next/link', () => ({
 }))
 
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
+import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
 
 function impact(
   over: Partial<LeagueImpact> & Pick<LeagueImpact, 'leagueId' | 'leagueName' | 'platform' | 'slot'>,
@@ -793,5 +794,71 @@ describe('Player Finder — IDP value', () => {
   it('[control] a non-defender never carries one', () => {
     renderCore()
     expect(screen.queryByText('IDP value')).toBeNull()
+  })
+})
+
+/*
+ * The player-depth paywall (AF Pro, from Oct 15). The PAGE withholds the data — no compare, trade
+ * visual, windows or pickups are loaded for a locked viewer — so these render what the page would
+ * hand over: the detail with its pickups withheld, and no presence or windows.
+ */
+describe('Player Finder — player depth paywall', () => {
+  const START = new Date('2026-10-15T04:00:00.000Z')
+  const LOCKED = decideCoreDepth('player_depth', { live: true, startsAt: START, hasPlan: false })
+  const PRELAUNCH = decideCoreDepth('player_depth', { live: false, startsAt: START, hasPlan: false })
+  const PAID = decideCoreDepth('player_depth', { live: true, startsAt: START, hasPlan: true })
+  const WITHHELD: PlayerDetail = {
+    ...DETAIL,
+    recommendedMoves: { available: false, reason: 'pickup options are part of AF Pro' },
+  }
+
+  it('locked: the moves and the decision column become locks that go to AF Pro', () => {
+    renderCore({ detail: WITHHELD, depthAccess: LOCKED })
+    expect(screen.queryByRole('region', { name: 'Recommended moves' })).toBeNull()
+    const moves = screen.getByRole('region', { name: 'Recommended moves — AF Pro' })
+    expect(within(moves).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro')
+
+    const side = screen.getByRole('complementary', { name: 'What to do' })
+    expect(within(side).queryByRole('region', { name: 'Chimmy verdict' })).toBeNull()
+    expect(within(side).getByRole('region', { name: 'The verdict, bench swaps and trade windows — AF Pro' })).toBeInTheDocument()
+  })
+
+  it('locked: the free "in your leagues" table stays — every row, and the fix link for a benched starter', () => {
+    renderCore({ detail: WITHHELD, depthAccess: LOCKED })
+    const rows = screen.getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(4)
+    const dragons = rows.find((r) => within(r).queryByText('Dynasty Dragons'))!
+    expect(within(dragons).getByRole('link', { name: /Where to fix it/ })).toHaveAttribute(
+      'href',
+      'https://sleeper.com/leagues/123456/team',
+    )
+  })
+
+  it('locked, in a league where someone else has him: the trade view is a lock, the ownership card is not', () => {
+    renderCore({ detail: WITHHELD, depthAccess: LOCKED, selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
+    expect(screen.getByRole('region', { name: /Gridiron Gang/ })).toHaveAttribute('data-kind', 'other')
+    expect(screen.getByRole('region', { name: 'Trading for Dalton Kincaid — AF Pro' })).toBeInTheDocument()
+  })
+
+  it('locked: a requested comparison says why it did not appear', () => {
+    renderCore({ detail: WITHHELD, depthAccess: LOCKED, compareRequested: true })
+    expect(screen.getByRole('region', { name: 'Side-by-side compare — AF Pro' })).toBeInTheDocument()
+  })
+
+  it('before launch it all renders, marked "Free until Oct 15 — then AF Pro"', () => {
+    renderCore({ depthAccess: PRELAUNCH })
+    expect(screen.getByRole('region', { name: 'Recommended moves' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Chimmy verdict' })).toBeInTheDocument()
+    const notes = screen.getAllByTestId('core-free-until-player_depth')
+    expect(notes.length).toBeGreaterThan(0)
+    expect(notes[0]).toHaveTextContent('Free until Oct 15 — then AF Pro')
+    expect(screen.queryByTestId('core-lock-player_depth')).toBeNull()
+  })
+
+  it('a plan holder sees it all, with no lock and no note', () => {
+    renderCore({ depthAccess: PAID, compareRequested: true })
+    expect(screen.getByRole('region', { name: 'Recommended moves' })).toBeInTheDocument()
+    expect(screen.queryByTestId('core-lock-player_depth')).toBeNull()
+    expect(screen.queryByTestId('core-free-until-player_depth')).toBeNull()
   })
 })

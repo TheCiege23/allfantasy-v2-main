@@ -17,7 +17,12 @@ function isMatchupStatusComplete(status: string | null | undefined): boolean {
 }
 
 /**
- * True when every regular matchup for the week is complete and has two rosters.
+ * True when every real matchup for the week is complete.
+ *
+ * ⚠ A BYE IS NOT AN UNFINISHED MATCHUP. An odd-sized league gets one row a week with no away
+ * roster, and that row is never scored — so requiring `awayRosterId` on EVERY row meant an odd
+ * league's week could never be complete and its zombie week never resolved. Byes are skipped; at
+ * least one real matchup must exist.
  */
 export async function checkAllMatchupsComplete(
   fantasyLeagueId: string,
@@ -32,7 +37,8 @@ export async function checkAllMatchupsComplete(
   const mm = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week },
   })
-  if (mm.length === 0) return false
+  const real = mm.filter((m) => m.awayRosterId != null)
+  if (real.length === 0) return false
 
-  return mm.every((m) => m.awayRosterId != null && isMatchupStatusComplete(m.status))
+  return real.every((m) => isMatchupStatusComplete(m.status))
 }

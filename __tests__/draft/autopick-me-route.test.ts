@@ -46,7 +46,7 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    draftSession: { findUnique: (...a: unknown[]) => draftSessionFindUniqueMock(...a) },
+    draftSession: { findFirst: (...a: unknown[]) => draftSessionFindUniqueMock(...a), findUnique: (...a: unknown[]) => draftSessionFindUniqueMock(...a) },
     // Confirm legacy table accessor is never called
     draftAutopickSetting: { upsert: (...a: unknown[]) => draftAutopickSettingUpsertMock(...a) },
   },

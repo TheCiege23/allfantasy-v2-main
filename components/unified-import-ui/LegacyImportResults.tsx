@@ -129,7 +129,7 @@ export function LegacyImportResults({
      *
      * `/dashboard` is retired — app/dashboard/page.tsx redirects to `/core`
      * preserving the query — and `/core` reads `sp.league`
-     * (app/core/[[...screen]]/page.tsx:366). Nothing reads `leagueId` from the URL:
+     * (app/core/(shell)/[[...screen]]/page.tsx:366). Nothing reads `leagueId` from the URL:
      * lib/dashboard/dashboard-league-selection.ts is written for it but has ZERO
      * callers. B7 was authored when /dashboard owned its own selection.
      *

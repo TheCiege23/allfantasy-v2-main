@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getOpenAIConfigFromEnv } from '@/lib/provider-config'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 
 const MAX_TTS_CHARS = 500
 const OPENAI_TTS_MODEL = 'tts-1'
@@ -113,6 +114,10 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // ElevenLabs / OpenAI text-to-speech on every call, previously with no limit at all.
+  const gated = await aiCostGate(req, 'chimmy_voice', session.user.id)
+  if (gated) return gated
 
   let text = ''
   try {

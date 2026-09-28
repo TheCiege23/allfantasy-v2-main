@@ -3,8 +3,9 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getSalaryCapConfig } from './SalaryCapLeagueConfig'
 import type { SalaryCapConfig } from './types'
+import { requireOwnedSalaryContract, ownedContractVersion, ContractMutationRefused,
+  type ContractMutationResult } from './ContractMutationGuard'
 
 /**
  * Compute dead money for cutting a player: remaining salary × (percent/100) per remaining year.
@@ -32,44 +33,40 @@ export function computeDeadMoney(
 export async function applyCut(
   leagueId: string,
   contractId: string,
-  capYear: number
-): Promise<{ ok: boolean; error?: string }> {
-  const config = await getSalaryCapConfig(leagueId)
-  if (!config) return { ok: false, error: 'Not a salary cap league' }
-  const contract = await prisma.playerContract.findFirst({
-    where: { id: contractId, leagueId, configId: config.configId },
-  })
-  if (!contract) return { ok: false, error: 'Contract not found' }
-  if (contract.status !== 'active' && contract.status !== 'tagged' && contract.status !== 'option_exercised') {
-    return { ok: false, error: 'Contract not in cuttable state' }
+  capYear: number,
+  actorUserId: string,
+): Promise<ContractMutationResult> {
+  try {
+    return await prisma.$transaction(async tx => {
+      const { config, contract } = await requireOwnedSalaryContract(tx, leagueId, contractId, actorUserId)
+      if (!Number.isInteger(capYear) || capYear !== (config.season ?? new Date().getFullYear())) {
+        throw new ContractMutationRefused('Cut year must match the current league season')
+      }
+      if (contract.status !== 'active' && contract.status !== 'tagged' && contract.status !== 'option_exercised') {
+        throw new ContractMutationRefused('Contract not in cuttable state')
+      }
+      const yearsRemaining = contract.yearsTotal - contract.contractYear
+      const deadMoney = computeDeadMoney(config, contract.salary, yearsRemaining, capYear)
+      const changed = await tx.playerContract.updateMany({
+        where: ownedContractVersion(contract),
+        data: {
+          status: 'cut',
+          cutAt: new Date(),
+          deadMoneyRemaining: deadMoney as object,
+        },
+      })
+      if (changed.count !== 1) throw new ContractMutationRefused('Contract changed; refresh and try again', 409)
+      await tx.salaryCapEventLog.create({ data: { leagueId, configId: config.configId, eventType: 'contract_cut', metadata: {
+        contractId,
+        rosterId: contract.rosterId,
+        playerId: contract.playerId,
+        capYear,
+        deadMoney,
+      } } })
+      return { ok: true }
+    }, { isolationLevel: 'Serializable', timeout: 20_000 })
+  } catch (error) {
+    if (error instanceof ContractMutationRefused) return { ok: false, error: error.message, status: error.status }
+    throw error
   }
-  const yearsRemaining = contract.yearsTotal - contract.contractYear
-  const deadMoney = computeDeadMoney(config, contract.salary, yearsRemaining, capYear)
-  await prisma.playerContract.update({
-    where: { id: contractId },
-    data: {
-      status: 'cut',
-      cutAt: new Date(),
-      deadMoneyRemaining: deadMoney as object,
-    },
-  })
-  await appendEvent(leagueId, config.configId, 'contract_cut', {
-    contractId,
-    rosterId: contract.rosterId,
-    playerId: contract.playerId,
-    capYear,
-    deadMoney,
-  })
-  return { ok: true }
-}
-
-async function appendEvent(
-  leagueId: string,
-  configId: string,
-  eventType: string,
-  metadata: object
-): Promise<void> {
-  await prisma.salaryCapEventLog.create({
-    data: { leagueId, configId, eventType, metadata: metadata as object },
-  })
 }

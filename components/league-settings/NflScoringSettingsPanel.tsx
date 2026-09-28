@@ -22,7 +22,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type PresetKey = 'af_default' | 'sleeper_default' | 'espn_standard' | 'espn_ppr' | 'yahoo_default' | 'custom'
+type PresetKey = 'af_default' | 'af_ppr' | 'af_standard' | 'sleeper_default' | 'espn_standard' | 'espn_ppr' | 'yahoo_default' | 'custom'
 
 interface NflScoringPreset {
   key: PresetKey
@@ -59,7 +59,9 @@ const TAB_COLORS: Record<string, string> = {
 }
 
 const PRESET_LABELS: Record<string, string> = {
-  af_default: 'AllFantasy',
+  af_default: 'AllFantasy Half PPR',
+  af_ppr: 'AllFantasy PPR',
+  af_standard: 'AllFantasy Standard',
   sleeper_default: 'Sleeper',
   espn_standard: 'ESPN Std',
   espn_ppr: 'ESPN PPR',
@@ -163,7 +165,13 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nfl-scoring`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ presetKey: selectedPreset, rules: editedRules }),
+        // Rules only for a custom table. The route treats any `rules` in the body as a premium
+        // edit, so sending them with a plain preset switch refused every free commissioner.
+        body: JSON.stringify(
+          selectedPreset === 'custom'
+            ? { presetKey: selectedPreset, rules: editedRules }
+            : { presetKey: selectedPreset },
+        ),
       })
       const data = await res.json()
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
@@ -208,7 +216,7 @@ export function NflScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       <div className="space-y-2">
         <label className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Scoring Preset</label>
         <div className="flex flex-wrap gap-2">
-          {(['af_default', 'sleeper_default', 'espn_standard', 'espn_ppr', 'yahoo_default', 'custom'] as PresetKey[]).map(
+          {(['af_default', 'af_ppr', 'af_standard', 'sleeper_default', 'espn_standard', 'espn_ppr', 'yahoo_default', 'custom'] as PresetKey[]).map(
             (key) => {
               const isCustomLocked = key === 'custom' && !isPremium && isCommissioner
               const active = selectedPreset === key

@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
-import { republishCanonicalSettingsForRefresh } from '@/lib/league-import/ImportedLeagueCommitService'
+import { buildImportedLeagueSettings, republishCanonicalSettingsForRefresh } from '@/lib/league-import/ImportedLeagueCommitService'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 
 function normalized(scoringFormat: string): NormalizedImportResult {
@@ -55,6 +55,16 @@ function normalized(scoringFormat: string): NormalizedImportResult {
 }
 
 describe('IMP-02 — refresh republishes canonical settings', () => {
+  it('persists the current period and preserves it when a subsequent payload omits it', () => {
+    const source = normalized('standard non-ppr')
+    source.league.current_week = 3
+    const settings = buildImportedLeagueSettings(source)
+    expect(settings.current_week).toBe(3)
+    const bundle = buildCanonicalImportBundle(source)
+    expect(republishCanonicalSettingsForRefresh({ current_week: 2 }, settings, bundle).current_week).toBe(3)
+    delete source.league.current_week
+    expect(republishCanonicalSettingsForRefresh(settings, buildImportedLeagueSettings(source), bundle).current_week).toBe(3)
+  })
   it('updates the canonical scoring slice when the source scoring changed', () => {
     /* Imported as standard; the league has since switched to full PPR. */
     const atImport = buildCanonicalImportBundle(normalized('standard non-ppr'))

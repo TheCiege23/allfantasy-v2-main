@@ -27,6 +27,11 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "trade_accept_reject",
   // A player you follow (2026-09-14): the whole point of following is being told.
   "followed_players",
+  // Someone messaged you (2026-09-25). Without these the dispatcher drops the push before the
+  // category's own push switch is ever read, however the rest of the path is built.
+  "direct_messages",
+  // Opt-in and off by default; push only fires for someone who switched it on.
+  "league_chat",
 ] as const
 
 export type PushNotificationCategory = (typeof PUSH_NOTIFICATION_CATEGORIES)[number]

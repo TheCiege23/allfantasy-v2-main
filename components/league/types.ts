@@ -1,5 +1,6 @@
 import type { LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { PublicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
@@ -172,6 +173,11 @@ export type LeagueTradeAsset = {
 
 export type LeagueTradeHistoryItem = {
   id: string
+  /**
+   * The saved `evaluateTrade()` receipt for the letter this row shows NOW (Trade OS, design step 5). Null
+   * until the receipts migration is applied, and whenever a save fails — the letter is still shown.
+   */
+  receiptId?: string | null
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
   partnerAvatarUrl?: string | null
@@ -231,6 +237,14 @@ export type LeagueTradeHistoryItem = {
      * row. `null`: asked for and could not be produced. Render with `lineupImpactLine`.
      */
     rosterImpact?: LineupImpactSummary | null
+    /**
+     * THE grade for an OPEN offer — the one every trade surface shows for this deal
+     * (`lib/decision-os/trade/tradeGrade.ts`). Seen from the viewer's side when they are a party
+     * (`leagueGradeSide: 'viewer'`, roster need included), otherwise from the proposer's, without
+     * need. Absent on completed rows, whose letters are a different question.
+     */
+    leagueGrade?: TradeGradeView | null
+    leagueGradeSide?: 'viewer' | 'proposer'
   }
 
 export type LeagueTradeBlockItem = {

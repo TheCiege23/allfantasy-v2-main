@@ -63,7 +63,15 @@ const LEAGUE_ROW = {
   leagueVariant: 'Dynasty',
   leagueSize: null,
   settings: { draft: { type: 'snake' } },
-  draftSessions: { draftType: 'linear', teamCount: 10 },
+  /*
+   * An ARRAY since 2026-09-24: `League.draftSessions` went one-to-one → one-to-many when a league
+   * became able to run more than one draft, and the reader now takes `[0]` of an
+   * `orderBy: CURRENT_DRAFT_SESSION_ORDER, take: 1` select. Left as the old object, this fixture
+   * made the reader see no session at all and hash `da745ac…` against the writer's `a308687…`.
+   * One element = a league with one draft, which is the case where the writer's per-pick session
+   * and the reader's current session are the same row.
+   */
+  draftSessions: [{ draftType: 'linear', teamCount: 10 }],
 }
 
 const PICK_ROW = {
@@ -159,11 +167,11 @@ describe('each field that historically diverged', () => {
   it('normalizes leagueVariant casing in the hash itself', () => {
     const upper = buildDraftContext({
       league: { ...LEAGUE_ROW, leagueVariant: 'Dynasty' },
-      session: LEAGUE_ROW.draftSessions,
+      session: LEAGUE_ROW.draftSessions[0],
     })
     const lower = buildDraftContext({
       league: { ...LEAGUE_ROW, leagueVariant: 'dynasty' },
-      session: LEAGUE_ROW.draftSessions,
+      session: LEAGUE_ROW.draftSessions[0],
     })
     expect(upper.leagueType).toBe('dynasty')
     expect(buildContextHash(upper)).toBe(buildContextHash(lower))

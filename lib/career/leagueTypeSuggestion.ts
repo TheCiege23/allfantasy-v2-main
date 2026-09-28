@@ -57,6 +57,8 @@ function buyInFromName(name: string): number | null {
 export function suggestLeagueType(input: {
   name: string | null | undefined
   isDynasty?: boolean | null
+  /** The provider's keeper fact (`readProviderKeeperFact`). */
+  isKeeper?: boolean | null
   /** Sleeper's own flag — the ONE format the platform models natively. */
   guillotineMode?: boolean | null
   currentType?: string | null
@@ -122,6 +124,21 @@ export function suggestLeagueType(input: {
         `name matches more than one format (${matches.map((m) => m.type).join(', ')})`,
         ...reasons,
       ],
+      detectedBuyIn,
+      looksNonCompetitive,
+    }
+  }
+
+  /*
+   * Sleeper's keeper flag (`settings.type: 1`) is platform evidence too — and until 2026-09-25 it was
+   * dropped here, so a keeper league was offered "redraft" and confirming the suggestion put it on
+   * the wrong chart. Checked before dynasty: Sleeper's type is one value, so both cannot be true.
+   */
+  if (input.isKeeper) {
+    return {
+      suggested: 'keeper',
+      confidence: 'high',
+      reasons: ['Sleeper reports this as a keeper league', ...reasons],
       detectedBuyIn,
       looksNonCompetitive,
     }

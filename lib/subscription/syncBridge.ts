@@ -1,27 +1,22 @@
 import { prisma } from "@/lib/prisma"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
-import {
-  expandPlansWithBundle,
-  isActiveOrGraceStatus,
-} from "@/lib/subscription/feature-access"
-import type { SubscriptionPlanId } from "@/lib/subscription/types"
+import { planFlagsFromSnapshot } from "@/lib/subscription/livePlanFlags"
 
 /**
- * Single place that updates UserProfile boolean flags from canonical subscription state (System B)
- * so legacy gates (e.g. requireAfSub → afCommissionerSub) stay aligned with userSubscription rows.
+ * Single place that updates UserProfile boolean flags from canonical subscription state (System B).
+ *
+ * ⚠ THE FLAGS ARE A SNAPSHOT, NOT AN ACCESS CHECK. This runs only on a Stripe webhook or a
+ * post-purchase sync, so a flag misses admin grants and plans that lapse by date. Gate on
+ * `resolveLivePlanFlags` (lib/subscription/livePlanFlags.ts), which computes the same
+ * answer live — this function uses it too, so the two cannot disagree on what a plan means.
  */
 export async function syncUserProfileFromSubscriptions(userId: string): Promise<void> {
   const resolver = new EntitlementResolver()
   const snapshot = await resolver.resolveSnapshot(userId)
-
-  const expanded = expandPlansWithBundle(snapshot.plans as SubscriptionPlanId[])
-  const active = isActiveOrGraceStatus(snapshot.status)
-
-  const hasCommissioner =
-    active && (expanded.includes("commissioner") || expanded.includes("supreme"))
-  const hasPro = active && (expanded.includes("pro") || expanded.includes("supreme"))
-  const hasWarRoom =
-    active && (expanded.includes("war_room") || expanded.includes("supreme"))
+  const flags = planFlagsFromSnapshot(snapshot)
+  const hasCommissioner = flags.commissioner
+  const hasPro = flags.pro
+  const hasWarRoom = flags.warRoom
 
   await prisma.userProfile.upsert({
     where: { userId },

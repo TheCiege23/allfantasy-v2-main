@@ -106,11 +106,11 @@
     },
     {
       "path": "/api/cron/import-schedules?riProfiles=1",
-      "schedule": "10 9 * * *"
+      "schedule": "10 3,9 * * *"
     },
     {
       "path": "/api/cron/import-schedules?odds=1",
-      "schedule": "25 */6 * * *"
+      "schedule": "25 * * * *"
     },
     {
       "path": "/api/cron/adp-refresh",
@@ -210,7 +210,7 @@
     },
     {
       "path": "/api/cron/trade-grade-notify",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/weekly-awards",

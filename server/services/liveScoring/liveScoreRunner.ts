@@ -13,12 +13,12 @@
  */
 
 import type { PrismaClient } from '@prisma/client'
-import { recalculateMatchupsForSeasonWeek, isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
+import { recalculateMatchupsForSeasonWeek, countsTowardScore, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
 import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
 import { runLiveScoringTick, type LiveBroadcastEvent, type LiveTickResult } from '@/lib/live-scoring/orchestrator'
-import { gamesToSnapshots, type LiveSeasonType, type LiveStatsProvider } from '@/lib/live-scoring/provider'
+import { gamesToSnapshots, liveProviderServesSport, liveProviderSports, type LiveSeasonType, type LiveStatsProvider } from '@/lib/live-scoring/provider'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
 import { NflLiveStatsProvider } from '@/lib/live-scoring/nflLiveStatsProvider'
 import type { RescoreRosterInput, RescoreMatchupInput } from '@/lib/live-scoring/rescorePlan'
@@ -191,7 +191,8 @@ export type SeasonTickSummary = {
   /** Slate actually polled. 'pre' means nothing was persisted — see persistChangedStats. */
   seasonType: LiveSeasonType
   /** Whether the slate came from the schedule or the calendar fallback. */
-  slateSource: ResolvedSlate['source']
+  /** `not-live-scored`: the season's sport is outside the provider's (see liveProviderServesSport). */
+  slateSource: ResolvedSlate['source'] | 'not-live-scored'
 }
 
 function asNumberStats(value: unknown): Record<string, number> {
@@ -219,8 +220,28 @@ export async function runLiveScoringTickForSeason(
   deps: LiveScoreRunnerDeps = {},
 ): Promise<LiveTickResult & { slate: ResolvedSlate & { weekUsed: number } }> {
   const provider = deps.provider ?? new NflLiveStatsProvider(prisma)
+  // Belt and braces for any direct caller: runLiveScoringForActiveSeasons already skips these.
+  if (!liveProviderServesSport(provider, season.sport)) {
+    throw new Error(`live provider does not serve ${season.sport}; refusing to score season ${season.id} with it`)
+  }
   const broadcast = deps.broadcast ?? publishToSse
   const now = deps.now ?? new Date()
+
+  /*
+   * In best ball the bench scores too (the matchup starts each team's best lineup), so the live
+   * fetch and the rescore topology must cover every eligible player, not the starter slots.
+   * Read once, only when a tick actually has live games. A failed read narrows this tick to the
+   * starters; matchup scoring reads the league itself, so the scores stay right.
+   */
+  let bestBallRead: Promise<boolean> | null = null
+  const isBestBall = () =>
+    (bestBallRead ??= prisma.league
+      .findFirst({
+        where: { id: season.leagueId },
+        select: { bestBallMode: true, leagueVariant: true, leagueType: true },
+      })
+      .then((league) => leagueIsBestBall(league))
+      .catch(() => false))
 
   const slate = await resolveSlate(prisma, season.sport, season.season, now)
   const seasonType = deps.seasonType ?? slate.seasonType
@@ -258,9 +279,10 @@ export async function runLiveScoringTickForSeason(
        * 3,840/hour against a 1,000/hour cap. The cap is per provider, so the damage landed
        * on `stats/nfl/week`, and the week finalizer then refused on coverage it could not fix.
        */
+      const bestBall = await isBestBall()
       const defenseTeams = new Set<string>()
       for (const s of starters) {
-        if (!isScoringStarterSlot(s.slotType)) continue
+        if (!countsTowardScore(s.slotType, bestBall)) continue
         const abbr = /^nfl:def:(.+)$/i.exec(String(s.playerId))?.[1]
         if (abbr) defenseTeams.add(abbr.trim().toUpperCase())
         else offensiveIds.push(s.playerId)
@@ -301,11 +323,12 @@ export async function runLiveScoringTickForSeason(
         matchupByRoster.set(m.homeRosterId, m.id)
         if (m.awayRosterId) matchupByRoster.set(m.awayRosterId, m.id)
       }
+      const bestBall = await isBestBall()
       const rosterInputs: RescoreRosterInput[] = rosters.map(
         (r: { id: string; players: Array<{ playerId: string; slotType: string }> }) => ({
           rosterId: r.id,
           matchupId: matchupByRoster.get(r.id) ?? null,
-          scoringPlayerIds: r.players.filter((p) => isScoringStarterSlot(p.slotType)).map((p) => p.playerId),
+          scoringPlayerIds: r.players.filter((p) => countsTowardScore(p.slotType, bestBall)).map((p) => p.playerId),
         }),
       )
       return { rosters: rosterInputs, matchups: matchupInputs }
@@ -373,9 +396,34 @@ export async function runLiveScoringForActiveSeasons(
 
   const summaries: SeasonTickSummary[] = []
   let polled = 0
+  const provider = deps.provider ?? new NflLiveStatsProvider(prisma)
+  let skipped = 0
   for (const season of seasons) {
+    /*
+     * 🛑 ONLY SEASONS THE PROVIDER CAN SCORE. This loop used to hand every active season — NHL
+     * included — to the NFL provider, which looks NHL roster ids up in Sleeper's NFL stats; 64% of
+     * NHL pool ids collide with an NFL player's id. See liveProviderServesSport. Recorded, not
+     * dropped silently: a skipped season must be visible in the run's telemetry.
+     */
+    if (!liveProviderServesSport(provider, season.sport)) {
+      skipped += 1
+      summaries.push({
+        seasonId: season.id,
+        leagueId: season.leagueId,
+        week: Math.max(1, season.currentWeek || 1),
+        polled: false,
+        changedPlayers: 0,
+        affectedMatchups: 0,
+        broadcastEvents: 0,
+        nextPollDelayMs: 0,
+        reason: `sport_not_live_scored: ${season.sport} (the live provider serves ${liveProviderSports(provider).join(', ')}; daily sports score through the weekly sync)`,
+        seasonType: 'regular',
+        slateSource: 'not-live-scored',
+      })
+      continue
+    }
     try {
-      const res = await runLiveScoringTickForSeason(prisma, season, deps)
+      const res = await runLiveScoringTickForSeason(prisma, season, { ...deps, provider })
       if (res.polled) polled += 1
       summaries.push({
         seasonId: season.id,
@@ -413,5 +461,5 @@ export async function runLiveScoringForActiveSeasons(
   // across seasons (30s if any game is live), or 0 when nothing is active.
   const positive = summaries.map((s) => s.nextPollDelayMs).filter((ms) => ms > 0)
   const nextPollDelayMs = positive.length > 0 ? Math.min(...positive) : 0
-  return { ticked: seasons.length, polled, nextPollDelayMs, summaries }
+  return { ticked: seasons.length - skipped, polled, nextPollDelayMs, summaries }
 }

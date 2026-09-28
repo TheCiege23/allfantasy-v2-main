@@ -192,10 +192,31 @@ export async function runWeeklyResolution(
     },
   })
 
+  /*
+   * 🛑 THIS WROTE `currentWeek: week` — THE WEEK JUST RESOLVED — SO THE LEAGUE NEVER MOVED ON.
+   * The scheduled resolver asks for `currentWeek`, found it already resolved, and returned every
+   * tick after week 1. A resolved week points the league at the NEXT one; forward only, so a
+   * forced replay of an older week (stat correction) cannot drag it back; and the season ends after
+   * its last week.
+   */
+  const nextWeek = Math.max(z.currentWeek ?? 0, week + 1)
+  const lastWeek = z.totalWeeks ?? null
+  const finished = lastWeek != null && week >= lastWeek
   await prisma.zombieLeague.update({
     where: { id: zombieLeagueId },
-    data: { currentWeek: week },
+    data: {
+      currentWeek: lastWeek != null ? Math.min(nextWeek, lastWeek) : nextWeek,
+      ...(finished ? { status: 'complete' } : {}),
+    },
   })
+  // The season's own pointer (live scoring and the league pages read it). The hourly roll leaves
+  // zombie alone on purpose — its weeks move when the zombie week resolves, which is here.
+  await prisma.redraftSeason
+    .updateMany({
+      where: { leagueId: z.leagueId, season: z.season, currentWeek: { lt: nextWeek } },
+      data: { currentWeek: lastWeek != null ? Math.min(nextWeek, lastWeek) : nextWeek },
+    })
+    .catch(() => null)
 
   await prisma.zombieAnnouncement.create({
     data: {

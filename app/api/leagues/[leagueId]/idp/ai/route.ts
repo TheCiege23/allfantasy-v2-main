@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import {
   buildIdpDraftAssistantContext,
   buildIdpWaiverAssistantContext,
@@ -42,6 +43,10 @@ export async function POST(
 
   const isIdp = await isIdpLeague(leagueId)
   if (!isIdp) return NextResponse.json({ error: 'Not an IDP league' }, { status: 404 })
+
+  // OpenAI per call. The sibling /api/idp/ai requires commissioner_ai_tools; this matched nothing.
+  const gated = await aiCostGate(req, 'league_format_ai', userId)
+  if (gated) return gated
 
   const body = await req.json().catch(() => ({}))
   const type = (body.type as IdpAIType) ?? 'league_educator'

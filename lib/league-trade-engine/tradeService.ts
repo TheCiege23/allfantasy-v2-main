@@ -9,6 +9,7 @@ import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
+import { loadNativeFuturePicks, parseInventoryPickId } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
   captureGenericRosterState,
   genericTradeActorRole,
@@ -31,6 +32,9 @@ import {
 } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
+import { receiptColumns, receiptColumnsReady } from '@/lib/decision-os/trade/receiptStore'
+import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
+import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -100,16 +104,143 @@ async function notifyProposerOfDecision(input: {
   body?: string
 }) {
   const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+  // The letter the proposer SENT it at — the frozen receipt, not a regrade (see `frozenProposerGrade`).
+  const line = gradeNoticeLine(await frozenProposerGrade(input.tradeId), 'sent')
   await ingest(
     tradeEvent({
       userIds: [input.proposerUserId],
       leagueId: input.leagueId,
       type: input.type,
       tradeId: input.tradeId,
-      title: input.title,
-      body: input.body,
+      title: line ? `${input.title}${line.titleSuffix}` : input.title,
+      body: line ? [input.body, line.bodyLine].filter(Boolean).join(' ') : input.body,
     }),
   ).catch(() => {})
+}
+
+/** The part of a trade decision a notice can state for one side. */
+export type NoticeGrade = { grade: string | null; valueGiven: number | null; valueReceived: number | null }
+
+/**
+ * THE grade, in a trade notice's words (2026-09-27). PURE.
+ *
+ * 🛑 A NATIVE TRADE'S EMAIL, PUSH AND IN-APP NOTICE CARRIED NO GRADE. "Someone in your league sent
+ * you a trade offer" — while the one grade for that exact offer had been computed seconds earlier
+ * (`evaluateServerTradeDecision`) and frozen into its receipt. The Sleeper offer and completed-trade
+ * emails already carried it (`lib/trade-intel/tradeGradeEmail.ts`); these did not. Title and body
+ * are what every channel renders, so the line goes there.
+ *
+ * Null — and the notice reads exactly as before — when the side has no letter. A withheld grade is
+ * never replaced by a neutral one.
+ */
+export function gradeNoticeLine(
+  d: NoticeGrade | null | undefined,
+  when: 'offer' | 'sent',
+): { titleSuffix: string; bodyLine: string } | null {
+  if (!d?.grade || !['A', 'B', 'C', 'D', 'F'].includes(d.grade)) return null
+  const values =
+    d.valueGiven != null && d.valueReceived != null
+      ? ` — you get ${Math.round(d.valueReceived).toLocaleString('en-US')} for ${Math.round(d.valueGiven).toLocaleString('en-US')}`
+      : ''
+  return {
+    titleSuffix: ` — ${d.grade} for you`,
+    bodyLine:
+      when === 'offer'
+        ? `AllFantasy grades it ${d.grade} for you on this league’s values${values}.`
+        : `You sent it graded ${d.grade} for you on this league’s values${values}.`,
+  }
+}
+
+/**
+ * The proposer's side of a trade's FROZEN receipt — the letter shown at proposal. Never throws: a
+ * receipt table that is missing or unreadable, or a test double without it, means "no grade line",
+ * never a failed notice.
+ */
+export async function frozenProposerGrade(tradeId: string): Promise<NoticeGrade | null> {
+  try {
+    const [trade, snapshot] = await Promise.all([
+      prisma.afLeagueTrade.findUnique({ where: { id: tradeId }, select: { proposerRosterId: true } }),
+      prisma.tradeDecisionSnapshot ? prisma.tradeDecisionSnapshot.findFirst({ where: { tradeId }, select: PUBLIC_RECEIPT_SELECT }) : Promise.resolve(null),
+    ])
+    if (!trade || !snapshot) return null
+    return publicTradeDecisionReceipt(snapshot).participantDecisions.find((p) => p.rosterId === trade.proposerRosterId) ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The offer, and every answer to it, in the DM between the two managers — so it sits in the
+ * conversation they already have instead of only in a Trades tab they have to go looking for.
+ * lib/chat-notifications/tradeOfferDm.ts owns the rules (two-team only, both on AllFantasy, no
+ * blocked pair, idempotent per offer and per status).
+ *
+ * Fire-and-forget through a dynamic import, like `fanout`: the trade is committed before this
+ * runs, and nothing in the DM path may fail, slow or roll back a trade action. Each step has its
+ * own catch so a failed status line cannot stop the offer card that follows it.
+ */
+type TradeDmModules = [
+  typeof import('@/lib/chat-notifications/tradeOfferDm'),
+  typeof import('@/lib/chat-notifications/tradeOfferSources'),
+]
+
+function syncTradeDm(label: string, run: (modules: TradeDmModules) => Promise<unknown>): void {
+  try {
+    void Promise.all([
+      import('@/lib/chat-notifications/tradeOfferDm'),
+      import('@/lib/chat-notifications/tradeOfferSources'),
+    ])
+      .then((modules) => run(modules))
+      .catch((e: unknown) => {
+        console.warn('[tradeService] trade DM step failed', {
+          label,
+          name: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+        })
+      })
+  } catch {
+    /* never let the DM path reach the trade action */
+  }
+}
+
+function announceTradeStatusInDm(input: {
+  tradeId: string
+  status: 'accepted' | 'rejected' | 'cancelled' | 'countered'
+  actorUserId?: string | null
+  actorName?: string | null
+  detail?: string | null
+}): void {
+  syncTradeDm(`status:${input.status}`, ([dm]) =>
+    dm.postTradeStatusToDm({
+      source: 'native',
+      tradeId: input.tradeId,
+      status: input.status,
+      actorUserId: input.actorUserId ?? null,
+      actorName: input.actorName ?? null,
+      detail: input.detail ?? null,
+    }),
+  )
+}
+
+/**
+ * Chimmy's trade card in LEAGUE chat — the trade, and who won it on paper with the market numbers,
+ * as ONE message (lib/league-chat/chimmyTradeMoment.ts). Posted once the last manager accepts, with a
+ * line saying where the trade stands when it still has a review or a veto window ahead.
+ *
+ * Fire-and-forget through a dynamic import, like the DM path above: the trade is committed before this
+ * runs, the moment never throws, and it reads market values from the database only — never a vendor.
+ */
+function announceTradeInLeagueChat(tradeId: string, note: string | null = null): void {
+  try {
+    void import('@/lib/league-chat/chimmyTradeMoment')
+      .then(({ postNativeTradeMoment }) => postNativeTradeMoment({ tradeId, note }))
+      .catch((e: unknown) => {
+        console.warn('[tradeService] league chat trade card failed', {
+          name: e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : typeof e,
+        })
+      })
+  } catch {
+    /* never let the chat path reach the trade action */
+  }
 }
 
 type PlannedTradeNotice = {
@@ -158,23 +289,28 @@ async function notifyOnTradeCreated(input: {
   actorUserId: string
   receiverUserIds: string[]
   counteredProposerUserId: string | null
+  /** Each recipient's side of THE grade for the NEW offer, keyed by user id. Absent: no grade line. */
+  gradeByUserId?: ReadonlyMap<string, NoticeGrade>
 }) {
   const planned: PlannedTradeNotice[] = []
+  // The recipient's letter for the new offer, appended to the title and body every channel renders.
+  const withGrade = (userId: string, title: string, body: string) => {
+    const line = gradeNoticeLine(input.gradeByUserId?.get(userId), 'offer')
+    return line ? { title: `${title}${line.titleSuffix}`, body: `${body} ${line.bodyLine}` } : { title, body }
+  }
 
   if (input.counteredProposerUserId) {
     planned.push({
       userId: input.counteredProposerUserId,
       type: 'trade_countered',
-      title: 'Your trade offer was countered',
-      body: 'They sent one back — open it to accept, counter again, or decline.',
+      ...withGrade(input.counteredProposerUserId, 'Your trade offer was countered', 'They sent one back — open it to accept, counter again, or decline.'),
     })
   }
   for (const receiverUserId of input.receiverUserIds) {
     planned.push({
       userId: receiverUserId,
       type: 'trade_proposed',
-      title: 'New trade offer',
-      body: 'Someone in your league sent you a trade offer.',
+      ...withGrade(receiverUserId, 'New trade offer', 'Someone in your league sent you a trade offer.'),
     })
   }
 
@@ -210,6 +346,78 @@ async function notifyOnTradeCreated(input: {
       }),
     ).catch(() => {})
   }
+}
+
+/**
+ * Why a counter to `parent` must be refused, or null when it may go ahead. PURE.
+ *
+ * 🛑 THE LOOPHOLE (audit 2026-09-24). A counter looked the parent up by id and league and nothing
+ * else, then set it to 'countered' unconditionally. So ANY league member — anyone who owns a roster,
+ * which the proposer check below proves and nothing more — could "counter" a trade between two other
+ * managers and kill it, and could do it to a trade that was already accepted, awaiting review, or
+ * processed. The counter route takes both roster ids from the request body, so no UI was needed.
+ *
+ * A counter is an answer to an offer, so it takes the rules an answer takes (accept and reject):
+ *   - the offer is still PENDING and has not expired;
+ *   - it comes from a roster the offer was made TO — not the roster that proposed it, which
+ *     withdraws its offer rather than countering it, and not a roster outside the trade.
+ * Ownership of that roster is proven by the caller's own proposer check on `proposerRosterId`.
+ *
+ * ⚠ WHERE THE COUNTER GOES IS DELIBERATELY NOT RESTRICTED. A counter aimed at a third roster is
+ * reachable and has tested notification semantics (`counter-notification-dispatch.test.ts`); it is
+ * no loophole, because the counterer was offered the parent and could reject it anyway.
+ */
+export function counterRefusal(
+  parent: {
+    status: string
+    expiresAt?: Date | null
+    proposerRosterId: string
+    receiverRosterId: string
+    items?: Array<{ fromRosterId: string; toRosterId: string }> | null
+  },
+  counterProposerRosterId: string,
+  now: Date = new Date(),
+): string | null {
+  if (parent.status !== 'pending') return 'Only a pending trade can be countered'
+  if (parent.expiresAt && parent.expiresAt < now) return 'Trade expired'
+  const offeredTo = new Set([
+    parent.receiverRosterId,
+    ...(parent.items ?? []).flatMap((i) => [i.fromRosterId, i.toRosterId]),
+  ])
+  offeredTo.delete(parent.proposerRosterId)
+  if (!offeredTo.has(counterProposerRosterId)) {
+    return 'Only a manager this trade was offered to can counter it'
+  }
+  return null
+}
+
+type TradeWriter = Pick<typeof prisma, 'afLeagueTrade'>
+
+/**
+ * Close the parent as 'countered' — but only if it is STILL pending when the counter is written.
+ *
+ * ⚠ A CONDITIONAL CLAIM, NOT A READ-THEN-WRITE. The status was checked when the parent was read, and
+ * accept runs concurrently: an unconditional update here would overwrite a trade accepted between
+ * that read and this write. Cancel and settlement claim the same way. On the production path this
+ * runs in the counter's own transaction, so losing the race rolls the counter back with it.
+ */
+async function claimParentForCounter(db: TradeWriter, parentId: string): Promise<void> {
+  const claimed = await db.afLeagueTrade.updateMany({
+    where: { id: parentId, status: 'pending' },
+    data: { status: 'countered' },
+  })
+  if (claimed.count === 0) throw new Error('This trade changed before your counter was sent — reload it and try again')
+}
+
+async function linkCounterToParent(
+  db: TradeWriter,
+  parent: { id: string; metadata: Prisma.JsonValue | null },
+  counterTradeId: string,
+): Promise<void> {
+  await db.afLeagueTrade.update({
+    where: { id: parent.id },
+    data: { metadata: { ...((parent.metadata as object | null) ?? {}), counterTradeId } as Prisma.InputJsonValue },
+  })
 }
 
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
@@ -255,6 +463,9 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  // A native dynasty league's future picks are checked against its inventory, not `playerData`.
+  const offersNativePick = input.assets.some((a) => parseInventoryPickId(String(a.itemReference ?? '')) != null)
+  const nativePicks = offersNativePick ? await loadNativeFuturePicks(input.leagueId).catch(() => null) : null
   const v = validateTradeAssets({
     league,
     settings,
@@ -263,6 +474,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     participants,
     assets: input.assets,
     currentWeek: input.currentWeek ?? null,
+    nativeFuturePickOwners: nativePicks?.ownerByPickId ?? null,
   })
   if (!v.ok) throw new Error(v.message)
 
@@ -273,9 +485,14 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   const parent = input.parentTradeId
     ? await prisma.afLeagueTrade.findFirst({
         where: { id: input.parentTradeId, leagueId: input.leagueId },
+        include: { items: true },
       })
     : null
   if (input.parentTradeId && !parent) throw new Error('Parent trade not found')
+  if (parent) {
+    const refusal = counterRefusal(parent, input.proposerRosterId)
+    if (refusal) throw new Error(refusal)
+  }
 
   const rootId = parent?.rootTradeId ?? parent?.id ?? null
 
@@ -289,6 +506,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     participantRosterIds,
     assets: input.assets,
     season: league.season,
+    proposedByUserId: input.proposedByUserId,
   })
 
   const createData = {
@@ -310,14 +528,26 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         multiTeam: participantRosterIds.length > 2,
       } as Prisma.InputJsonValue,
       items: {
-        create: input.assets.map((a) => ({
-          itemType: a.itemType,
-          itemReference: a.itemReference ?? null,
-          fromRosterId: a.fromRosterId,
-          toRosterId: a.toRosterId,
-          faabAmount: a.faabAmount ?? null,
-          metadata: (a.metadata ?? {}) as Prisma.InputJsonValue,
-        })),
+        create: input.assets.map((a) => {
+          // A native future pick's item carries its own season and round, read from its id, so
+          // every reader of the item (grades, history, notices) can price it without the id format.
+          const nativePick = parseInventoryPickId(String(a.itemReference ?? ''))
+          return {
+            itemType: a.itemType,
+            itemReference: a.itemReference ?? null,
+            fromRosterId: a.fromRosterId,
+            toRosterId: a.toRosterId,
+            faabAmount: a.faabAmount ?? null,
+            metadata: (nativePick
+              ? {
+                  ...(a.metadata ?? {}),
+                  pickSeason: nativePick.season,
+                  pickRound: nativePick.round,
+                  originalRosterId: nativePick.originalRosterId,
+                }
+              : (a.metadata ?? {})) as Prisma.InputJsonValue,
+          }
+        }),
       },
     } satisfies Prisma.AfLeagueTradeUncheckedCreateInput
 
@@ -329,12 +559,22 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
   }).tradeManagerStrategy
 
+  // The engine's receipt rides in this trade's own snapshot row — asked BEFORE the transaction,
+  // because writing a column an unmigrated database lacks would abort the trade with it.
+  const engineReceipt =
+    serverDecisionResult?.evaluationReceipt && decisionStore && (await receiptColumnsReady())
+      ? receiptColumns(serverDecisionResult.evaluationReceipt)
+      : null
+
   // Production uses one transaction so a trade can never exist without its
   // proposal-time receipt. Reduced test clients without the new delegate keep
   // exercising the legacy creation path until their generated client updates.
   const trade = decisionStore
     ? await prisma.$transaction(async (tx) => {
+        // The claim comes first, so a lost race rolls the counter back rather than orphaning it.
+        if (parent) await claimParentForCounter(tx, parent.id)
         const created = await tx.afLeagueTrade.create({ data: createData })
+        if (parent) await linkCounterToParent(tx, parent, created.id)
         const managerStrategy = managerStore
           ? await getTradeManagerStrategy(input.leagueId, input.proposedByUserId, {
               tradeManagerStrategy: tx.tradeManagerStrategy,
@@ -363,10 +603,16 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
           leagueId: input.leagueId,
           proposedByUserId: input.proposedByUserId,
           snapshot,
+          receipt: engineReceipt,
         })
         return created
       })
-    : await prisma.afLeagueTrade.create({ data: createData })
+    : await (async () => {
+        if (parent) await claimParentForCounter(prisma, parent.id)
+        const created = await prisma.afLeagueTrade.create({ data: createData })
+        if (parent) await linkCounterToParent(prisma, parent, created.id)
+        return created
+      })()
 
   await appendAfTradeStatusHistory({
     tradeId: trade.id,
@@ -394,13 +640,12 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     receiverRosterId: input.receiverRosterId,
     items: input.assets,
     league,
+    // The learning record carries the same letter as the receipt — the one grade, not a fourth rule.
+    oneGradeLetter: serverDecisionResult?.participants?.find((p) => p.rosterId === input.proposerRosterId)?.grade ?? null,
   })
 
   if (input.parentTradeId && parent) {
-    await prisma.afLeagueTrade.update({
-      where: { id: parent.id },
-      data: { status: 'countered', metadata: { ...(parent.metadata as object), counterTradeId: trade.id } as Prisma.InputJsonValue },
-    })
+    // The status and the counter link were written with the counter itself — see claimParentForCounter.
     await appendAfTradeStatusHistory({
       tradeId: parent.id,
       fromStatus: parent.status,
@@ -437,6 +682,39 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
       .map((r) => r.platformUserId)
       .filter((id): id is string => Boolean(id)),
     counteredProposerUserId: parent?.proposedByUserId ?? null,
+    /*
+     * Each participant's side of THE grade, from the decision computed above and frozen into this
+     * offer's receipt — the same letter the offer card shows. Keyed the way the recipients are.
+     */
+    gradeByUserId: new Map(
+      (serverDecisionResult?.participants ?? []).flatMap((d) => {
+        const uid = participants.find((r) => r.id === d.rosterId)?.platformUserId
+        return uid ? [[uid, d] as const] : []
+      }),
+    ),
+  })
+
+  /*
+   * The offer card in the two managers' DM. A counter first closes the parent's card there
+   * ("countered — the new offer is below"), then posts the new one, in that order.
+   */
+  const counteredParentId = parent?.id ?? null
+  syncTradeDm('offer', async ([dm, sources]) => {
+    if (counteredParentId) {
+      await dm
+        .postTradeStatusToDm({
+          source: 'native',
+          tradeId: counteredParentId,
+          status: 'countered',
+          actorUserId: input.proposedByUserId,
+        })
+        .catch(() => null)
+    }
+    await dm.postTradeOfferToDm({
+      source: 'native',
+      tradeId: trade.id,
+      load: () => sources.loadNativeTradeOffer(trade.id),
+    })
   })
 
   return { id: trade.id }
@@ -523,6 +801,8 @@ export async function acceptAfLeagueTrade(input: {
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
     })
+    announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
+    announceTradeInLeagueChat(trade.id)
     return { status: 'processed' }
   }
 
@@ -553,6 +833,13 @@ export async function acceptAfLeagueTrade(input: {
       title: 'Your trade offer was accepted',
       body: 'It now goes to commissioner review before processing.',
     })
+    announceTradeStatusInDm({
+      tradeId: trade.id,
+      status: 'accepted',
+      actorUserId: input.userId,
+      detail: 'It goes to commissioner review before it processes.',
+    })
+    announceTradeInLeagueChat(trade.id, 'Accepted. It goes to commissioner review before it processes.')
     return { status: 'awaiting_commissioner' }
   }
 
@@ -583,6 +870,13 @@ export async function acceptAfLeagueTrade(input: {
       title: 'Your trade offer was accepted',
       body: 'It now enters the league veto window before processing.',
     })
+    announceTradeStatusInDm({
+      tradeId: trade.id,
+      status: 'accepted',
+      actorUserId: input.userId,
+      detail: 'The league veto window is open before it processes.',
+    })
+    announceTradeInLeagueChat(trade.id, 'Accepted. The league veto window is open before it processes.')
     return { status: 'awaiting_votes' }
   }
 
@@ -594,10 +888,17 @@ export async function acceptAfLeagueTrade(input: {
     type: 'trade_accepted',
     title: 'Your trade offer was accepted',
   })
+  announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
+  announceTradeInLeagueChat(trade.id)
   return { status: 'processed' }
 }
 
-export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; actorUserId: string }): Promise<void> {
+export async function finalizeAfLeagueTradeProcessing(input: {
+  tradeId: string
+  actorUserId: string
+  /** Recorded on this processing's status-history rows — e.g. the commissioner review that was shown. */
+  auditMetadata?: Record<string, unknown>
+}): Promise<void> {
   const trade = await prisma.afLeagueTrade.findUniqueOrThrow({
     where: { id: input.tradeId },
     include: { items: true },
@@ -648,6 +949,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       toStatus: 'scheduled',
       actorUserId: input.actorUserId,
       reason: 'delayed_processing',
+      ...(input.auditMetadata ? { metadata: input.auditMetadata } : {}),
     })
     await appendAfTradeProcessingEvent({
       tradeId: trade.id,
@@ -689,12 +991,13 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
     // `playerData` and `faabRemaining` on both rosters, so inside this transaction these rows stop
     // being "before" the moment it runs. After the claim, so only the race winner captures.
     const beforeState = await captureGenericRosterState(tx, participantRosterIds)
-    await applyTradeAssetsInTransaction(tx, {
+    const salaryEvidence = await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
       proposerRosterId: trade.proposerRosterId,
       receiverRosterId: trade.receiverRosterId,
       participantRosterIds,
       assets,
+      tradeId: trade.id,
     })
 
     // IMMUTABLE EVIDENCE FOR THE GENERIC PATH. The native redraft route got this first; this side
@@ -718,6 +1021,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       validations: { rosterTransactionGate: 'ok' },
       assetSummary: { items: assets.length, assets },
       beforeState,
+      salaryEvidence,
       afterState: await captureGenericRosterState(tx, participantRosterIds),
       executedAt: new Date(),
     })
@@ -727,6 +1031,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       toStatus: 'processed',
       actorUserId: input.actorUserId,
       reason: 'processed',
+      ...(input.auditMetadata ? { metadata: input.auditMetadata } : {}),
     })
     await appendAfTradeProcessingEvent({ tradeId: trade.id, eventType: 'trade_processed', payload: {} })
     await logAfTradeAudit({
@@ -736,12 +1041,19 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       tradeId: trade.id,
       afterState: { status: 'processed' },
     })
-  })
+  }, { isolationLevel: 'Serializable', timeout: 20_000 })
 
   // Trade Learning Phase 8 live capture — outside the transaction per the
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+
+  // The integrity scan: the trade review, run once the trade has settled. Native trades were never
+  // scanned before the scan read real trades (2026-09-27). Fire-and-forget; the worker checks entitlement.
+  // Wrapped so neither a sync throw nor a rejection can reach a trade that has already settled.
+  void Promise.resolve()
+    .then(() => enqueueCollusionScan(trade.leagueId, { kind: 'af', tradeId: trade.id }, [trade.proposerRosterId, trade.receiverRosterId]))
+    .catch((e) => console.error('[af-trade] enqueueCollusionScan failed', e))
 
   recordProductEvent(ENGAGEMENT.TRADE_PROCESSED, {
     userId: input.actorUserId,
@@ -763,7 +1075,13 @@ export async function commissionerAfTradeDecision(input: {
   leagueId: string
   userId: string
   decision: 'approve' | 'reject'
+  /**
+   * The commissioner review they were shown (`GET …/trades/{id}/review` → `reviewId`), logged with the
+   * decision (design step 6: "decision logged"). Null when there was none, or it was not saved yet.
+   */
+  reviewId?: string | null
 }): Promise<void> {
+  const auditMetadata = { commissionerDecision: input.decision, reviewId: input.reviewId ?? null }
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
   if (!elevated) throw new Error('Commissioner only')
 
@@ -784,6 +1102,7 @@ export async function commissionerAfTradeDecision(input: {
       toStatus: 'rejected',
       actorUserId: input.userId,
       reason: 'commissioner_reject',
+      metadata: auditMetadata,
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
     await notifyProposerOfDecision({
@@ -794,10 +1113,11 @@ export async function commissionerAfTradeDecision(input: {
       title: 'Your trade offer was rejected',
       body: 'The commissioner rejected this trade.',
     })
+    announceTradeStatusInDm({ tradeId: trade.id, status: 'rejected', actorName: 'The commissioner' })
     return
   }
 
-  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId })
+  await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata })
 }
 
 export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
@@ -848,6 +1168,12 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
     type: 'trade_rejected',
     title: 'Your trade offer was rejected',
   })
+  // A commissioner who is not a party is named by role, not by account.
+  announceTradeStatusInDm(
+    isRecv
+      ? { tradeId: trade.id, status: 'rejected', actorUserId: input.userId }
+      : { tradeId: trade.id, status: 'rejected', actorName: 'The commissioner' },
+  )
 }
 
 export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
@@ -893,6 +1219,11 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     actorUserId: input.userId,
   })
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'cancelled' })
+  announceTradeStatusInDm(
+    isProp
+      ? { tradeId: trade.id, status: 'cancelled', actorUserId: input.userId }
+      : { tradeId: trade.id, status: 'cancelled', actorName: 'The commissioner' },
+  )
 }
 
 export async function castAfTradeVetoVote(input: {

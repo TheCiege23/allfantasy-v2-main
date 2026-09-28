@@ -13,6 +13,7 @@ import { getBaseUrl } from '@/lib/get-base-url'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { getCommissionerWaiverOversight, type WaiverOversight } from './commissionerWaivers'
 import type { CoreIssue } from './outstandingIssues'
+import type { CoreDepthAccess } from './coreDepthAccess'
 import { isScored } from './currentWeek'
 import { platformLabel, verifiedHandoff } from './platformLinks'
 import { leagueWeekFromSettings, playoffStartWeek, regularSeasonWeeks, tradeDeadlineWeek } from './seasonTimeline'
@@ -41,6 +42,7 @@ import {
 } from './commissioner/areas'
 import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
 import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
+import { readChimmySpeaksUp } from '@/lib/league-chat/chimmyIdentity'
 import {
   memberActivityFromReads,
   quietManagerNames,
@@ -122,6 +124,52 @@ export type CommissionerAccessRow = {
   isYou: boolean
 }
 
+type AccessTeam = {
+  isCommissioner?: boolean | null
+  isCoCommissioner?: boolean | null
+  ownerName?: string | null
+  teamName?: string | null
+  claimedByUserId?: string | null
+}
+
+/**
+ * "Who can run this league", for the hub's access panel.
+ *
+ * 🛑 THE PANEL WAS EMPTY FOR EVERY MFL, FLEAFLICKER AND FANTRAX LEAGUE. It lists teams whose
+ * `LeagueTeam.isCommissioner`/`isCoCommissioner` flag is set, and only the Sleeper, ESPN and Yahoo
+ * adapters ever set one — those three providers publish commissioners, the others do not. So the
+ * commissioner looking at the panel was told nobody runs their league.
+ *
+ * When no team carries a flag, the viewer is listed with the role `getLeagueRole` already proved
+ * for them — the same answer that let them onto this screen. Display only: it grants nothing and
+ * reads no new predicate (see the note above on why this module does not add a fifth one). Where
+ * any flag exists the flags stay the whole answer, exactly as before.
+ */
+export function buildCommissionerAccessRows(
+  teams: readonly AccessTeam[],
+  userId: string,
+  viewerRole: LeagueRole,
+): CommissionerAccessRow[] {
+  const flagged: CommissionerAccessRow[] = teams
+    .filter((t) => t.isCommissioner || t.isCoCommissioner)
+    .map((t) => {
+      const handle = t.ownerName?.trim() || t.teamName?.trim() || 'Unknown manager'
+      return {
+        handle,
+        initials: initialsOf(handle),
+        role: t.isCommissioner ? ('commissioner' as const) : ('co_commissioner' as const),
+        isYou: t.claimedByUserId === userId,
+      }
+    })
+    .sort((a, b) => (a.role === b.role ? 0 : a.role === 'commissioner' ? -1 : 1))
+  if (flagged.length > 0) return flagged
+  if (viewerRole !== 'commissioner' && viewerRole !== 'co_commissioner') return []
+
+  const mine = teams.find((t) => t.claimedByUserId === userId)
+  const handle = mine?.ownerName?.trim() || mine?.teamName?.trim() || 'You'
+  return [{ handle, initials: initialsOf(handle), role: viewerRole, isYou: true }]
+}
+
 /**
  * Proof that the commissioner gate passed for one league and one viewer.
  *
@@ -181,6 +229,11 @@ export type CommissionerHubData = {
     /** False until the platform toggle is set — saved switches do not send yet. */
     sendEnabled: boolean
     catalog: Array<{ key: RecipeKey; label: string; description: string; cadence: string; unavailable: string | null }>
+    /**
+     * "Chimmy speaks up in league chat" — `League.settings.chimmySpeaksUp`, default ON. Off silences
+     * every Chimmy moment (weekly awards, trade takes …); see lib/league-chat/chimmyMoments.ts.
+     */
+    chimmySpeaksUp: boolean
   }
   /** The charts whose rows this loader already holds; the rest stream in. */
   charts: { scoring: HubChart | null; balance: HubChart | null; engagement: HubChart | null }
@@ -216,16 +269,22 @@ export type CommissionerHubData = {
   unclaimedTeams: number
   /** Managers with no move in the window, by name — people, never empty seats. */
   quietManagers: string[]
+  /**
+   * Commissioner depth (AF Commissioner, ./coreDepthAccess.ts). Locked, the waiver oversight read
+   * and the calendar export were skipped here and the screen draws locks over member activity,
+   * the charts, automations, waivers and the audit log. Absent renders everything, as before.
+   */
+  depth?: CoreDepthAccess | null
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
 
 /**
  * ⚠ COLLUSION AND TANKING DO NOT RUN ON IMPORTED LEAGUES, SO THE DESIGN'S
- * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` reads
- * `RedraftLeagueTrade` and `TankingDetectionEngine` reads `RedraftMatchup` —
- * both AF-native-only tables — so an imported Sleeper league has zero rows and
- * the scan always finds nothing. Tanking has no enqueuer at all.
+ * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` scans
+ * settled `AfLeagueTrade` / `RedraftTradeProposal` trades and
+ * `TankingDetectionEngine` reads `RedraftMatchup` — all AF-native-only tables —
+ * so an imported Sleeper league is never scanned. Tanking has no enqueuer at all.
  *
  * A tile reading "0 open disputes" off a scan that structurally cannot find one
  * is the most confident wrong number this screen could show a commissioner, so
@@ -278,6 +337,7 @@ function readSetting(settings: unknown, keys: string[]): number | null {
 const WAIVER_TYPE_LABEL: Record<string, string> = {
   faab: 'FAAB blind bidding',
   rolling: 'Rolling waiver priority',
+  reverse_standings: 'Reverse standings priority',
   fcfs: 'First come, first served',
   standard: 'Standard waiver priority',
   off: 'No waivers — free agents are instant',
@@ -352,9 +412,12 @@ export async function getCommissionerHub(input: {
   /** Already derived for the shell; filtered to this league by the caller. */
   issues: CoreIssue[]
   now?: Date
+  /** The viewer's commissioner depth; null or absent loads everything. */
+  depth?: CoreDepthAccess | null
 }): Promise<CommissionerHubResult> {
   const { leagueId, userId, issues } = input
   const now = input.now ?? new Date()
+  const depthOpen = input.depth?.unlocked !== false
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -464,12 +527,15 @@ export async function getCommissionerHub(input: {
     prisma.roster
       .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
       .catch(() => []),
-    getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
-      (): WaiverOversight => ({
-        available: false,
-        reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
-      }),
-    ),
+    // Seven queries (commissionerWaivers.ts), for a panel a locked viewer is not shown.
+    depthOpen
+      ? getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
+          (): WaiverOversight => ({
+            available: false,
+            reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
+          }),
+        )
+      : Promise.resolve<WaiverOversight>({ available: false, reason: 'Waiver oversight is part of AF Commissioner.' }),
     getCommissionerHubHealthForUser(userId, [
       {
         id: leagueId,
@@ -552,9 +618,12 @@ export async function getCommissionerHub(input: {
   }
 
   // ── Season position ─────────────────────────────────────────────────────
-  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m)).map((m) => m.week)
+  const statedWeek = leagueWeekFromSettings(settingsJson)
+  const seasonComplete = ['complete', 'completed', 'finished'].includes(seasonStatus)
+  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m) &&
+    (seasonComplete || statedWeek == null || m.week < statedWeek)).map((m) => m.week)
   const lastPlayedWeek = scoredWeeks.length > 0 ? Math.max(...scoredWeeks) : null
-  const currentWeek = leagueWeekFromSettings(settingsJson) ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
+  const currentWeek = statedWeek ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
   const inSeason = seasonStatus === 'in_season' || (native && lastPlayedWeek != null && seasonStatus !== 'complete')
 
   /*
@@ -677,8 +746,10 @@ export async function getCommissionerHub(input: {
     waivers: waiverSettings
       ? {
           type: waiverSettings.waiverType ?? null,
-          dayOfWeek: waiverSettings.processingDayOfWeek ?? null,
-          timeUtc: waiverSettings.processingTimeUtc ?? null,
+          // Sleeper's daily schedule is not mapped; mirror defaults are not a
+          // provider deadline and must not create a calendar reminder.
+          dayOfWeek: platform === 'sleeper' ? null : waiverSettings.processingDayOfWeek ?? null,
+          timeUtc: platform === 'sleeper' ? null : waiverSettings.processingTimeUtc ?? null,
         }
       : null,
     tradeDeadlineWeek: noTradeDeadline ? null : tradeDeadline,
@@ -695,13 +766,16 @@ export async function getCommissionerHub(input: {
       : null,
     polls: open.map((p) => ({ id: p.id, question: p.question, closesAt: p.closesAt })),
   })
-  const ics = buildIcs({
-    leagueId,
-    leagueName,
-    events: calendar.events,
-    now,
-    appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
-  })
+  // The calendar is free to read; exporting it to a calendar app is AF Commissioner. Null hides both export buttons.
+  const ics = depthOpen
+    ? buildIcs({
+        leagueId,
+        leagueName,
+        events: calendar.events,
+        now,
+        appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
+      })
+    : null
   const upcoming = nextDeadline(calendar)
 
   // ── Canonical health score ─────────────────────────────────────────────
@@ -871,7 +945,7 @@ export async function getCommissionerHub(input: {
             data: (() => {
               const kind = String(waiverSettings.waiverType).toLowerCase()
               const label = WAIVER_TYPE_LABEL[kind] ?? kind
-              return waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
+              return kind === 'faab' && waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
             })(),
           }
         : {
@@ -881,18 +955,7 @@ export async function getCommissionerHub(input: {
     },
   ]
 
-  const access: CommissionerAccessRow[] = teams
-    .filter((t) => t.isCommissioner || t.isCoCommissioner)
-    .map((t) => {
-      const handle = t.ownerName?.trim() || t.teamName?.trim() || 'Unknown manager'
-      return {
-        handle,
-        initials: initialsOf(handle),
-        role: t.isCommissioner ? ('commissioner' as const) : ('co_commissioner' as const),
-        isYou: t.claimedByUserId === userId,
-      }
-    })
-    .sort((a, b) => (a.role === b.role ? 0 : a.role === 'commissioner' ? -1 : 1))
+  const access = buildCommissionerAccessRows(teams, userId, role)
 
   const recipeSettings = readRecipeSettings(settingsJson, platform)
   const viewerIsOwner = league.userId === userId
@@ -954,9 +1017,10 @@ export async function getCommissionerHub(input: {
         cadence: r.cadence,
         unavailable: r.unavailableReason({ platform, sport }),
       })),
+      chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {
-      scoring: matchups ? scoringChart(matchups) : null,
+      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }) : null,
       balance: balanceChart(
         teams.map((t) => ({ name: teamLabel(t), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
       ),
@@ -983,6 +1047,7 @@ export async function getCommissionerHub(input: {
     // Ingested teams only: a league with no team rows has nothing to invite anyone to yet.
     unclaimedTeams: teams.length > 0 ? teams.length - claimed : 0,
     quietManagers,
+    depth: input.depth ?? null,
   }
 }
 

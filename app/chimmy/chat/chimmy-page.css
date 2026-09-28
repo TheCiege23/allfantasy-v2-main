@@ -1,0 +1,79 @@
+/*
+ * /chimmy/chat — the chat drawer's Chimmy tab, full screen.
+ *
+ * `.af-cm` (components/core-app/af-comms.css) supplies everything that makes it look like the
+ * drawer: the scoped tokens, the fonts, the dark theme and every panel rule. This file only turns
+ * the drawer's `position: fixed` dialog into a page — a centred column on a desktop, the full width
+ * on a phone — and puts a "Back" link in the drawer's own header row.
+ *
+ * ⚠ `data-mode='page'` IS MATCHED BY NO DRAWER RULE. The overlay and docked rules key on their own
+ * values, so nothing here can change how the drawer looks, and nothing there reaches this page
+ * except the mode-less `.af-cm` rules it is meant to share.
+ */
+
+.af-cm[data-mode='page'] {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  width: 100%;
+  /* The keyboard does not shrink `dvh`; the page writes the visible height inline while one is open. */
+  height: 100vh;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* With the keyboard up, the home-indicator inset sits under the keys, not under the composer. */
+.af-cm[data-mode='page'][data-keyboard-inset='open'] {
+  padding-bottom: 0;
+}
+
+.af-chimmy-page-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* On a desktop the column is edged, so it reads as the drawer's card rather than a stray strip. */
+@media (min-width: 761px) {
+  .af-chimmy-page-col {
+    border-inline: 1px solid var(--line);
+  }
+}
+
+.af-chimmy-page-head .af-cm-headtop {
+  gap: 6px;
+}
+
+.af-chimmy-page-back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  margin-left: -8px;
+  padding: 0 12px 0 6px;
+  border-radius: 999px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.af-chimmy-page-back:hover {
+  color: var(--text);
+  background: var(--chip);
+}
+
+.af-chimmy-page-back > svg {
+  flex: none;
+  color: var(--accent);
+}

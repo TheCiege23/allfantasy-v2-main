@@ -575,14 +575,21 @@ function mapSituation(drive: Obj | null, home: GameDetailTeam, away: GameDetailT
   const end = obj(last?.end)
   if (!end) return null
   const down = num(end.down)
+  const distance = num(end.distance)
+  // Provider snapshots can contain penalty-transition sentinels such as -13 yards.
+  // Keep possession and field position, but do not present an impossible next snap.
+  const validSnap = down != null && down >= 1 && down <= 4 &&
+    (distance == null || distance >= 0) &&
+    !/&\s*[-−]\d/.test(str(end.downDistanceText) ?? '') &&
+    !/&\s*[-−]\d/.test(str(end.shortDownDistanceText) ?? '')
   const possessionText = str(end.possessionText)
   const offenseId = str(pick(end, 'team', 'id'))
   return {
-    downDistance: down != null && down > 0 ? str(end.downDistanceText) : null,
-    shortDownDistance: down != null && down > 0 ? str(end.shortDownDistanceText) : null,
+    downDistance: validSnap ? str(end.downDistanceText) : null,
+    shortDownDistance: validSnap ? str(end.shortDownDistanceText) : null,
     possessionText,
     ballOn: ballOnFromAwayGoal(possessionText, home.abbrev, away.abbrev),
-    distance: down != null && down > 0 ? num(end.distance) : null,
+    distance: validSnap ? distance : null,
     offense: offenseId == null ? null : offenseId === home.id ? 'home' : offenseId === away.id ? 'away' : null,
   }
 }

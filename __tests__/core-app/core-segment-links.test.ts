@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
  */
 
 const ROOT = path.resolve(__dirname, '..', '..')
-const PAGE = path.join(ROOT, 'app', 'core', '[[...screen]]', 'page.tsx')
+const PAGE = path.join(ROOT, 'app', 'core', '(shell)', '[[...screen]]', 'page.tsx')
 const SCAN_DIRS = ['app', 'lib', 'components', 'hooks']
 const SOURCE = /\.(tsx?|jsx?|mjs)$/
 
@@ -67,7 +67,7 @@ describe('/core segment links', () => {
   const pageSource = fs.readFileSync(PAGE, 'utf8')
   const siblings = fs
     .readdirSync(path.join(ROOT, 'app', 'core'), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && !e.name.startsWith('['))
+    .filter((e) => e.isDirectory() && !e.name.startsWith('[') && !e.name.startsWith('(')) // a (group) is not a URL segment
     .map((e) => e.name)
   const known = knownSegments(pageSource, siblings)
 

@@ -1,12 +1,21 @@
 /**
  * Dynamic Survivor + Exile FAQ for league chat (broadcast + pin).
+ *
+ * 🛑 IT COULD NOT POST ANYWHERE (found 2026-09-25). It needed `settings.leagueChatThreadId`, which
+ * nothing in the app sets (0 of 390 leagues in production), and posted into that platform thread —
+ * so every "Post FAQ & pin" answered "link a league chat thread", pointing at a control that does
+ * not exist. It now posts into the league's OWN chat, the same store and `broadcast` type as
+ * `POST /api/commissioner/broadcast`, and pins it the way league chat pins (a `pin` row carrying
+ * `{ messageId, snippet }`, as `/api/shared/chat/threads/league:<id>/pin` writes).
  */
 
 import { prisma } from '@/lib/prisma'
-import { getLeagueChatThreadId } from '@/lib/commissioner-settings/CommissionerAnnouncementService'
-import { createPlatformThreadTypedMessage } from '@/lib/platform/chat-service'
+import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getExileLeagueId } from '@/lib/survivor/SurvivorExileEngine'
 import { seasonWeekBoundsForSport } from '@/lib/survivor/survivorSeasonCalendar'
+
+/** The pin's preview length — the same cut the league pin route makes. */
+const FAQ_PIN_SNIPPET_MAX = 120
 
 export function buildSurvivorFaqMarkdown(args: {
   leagueName: string
@@ -65,14 +74,6 @@ export async function seedSurvivorFaqToLeagueChat(args: {
 
   const league = row.league
 
-  const threadId = await getLeagueChatThreadId(leagueId)
-  if (!threadId) {
-    return {
-      ok: false,
-      error: 'Link a league chat thread in league settings (leagueChatThreadId) before posting the FAQ.',
-    }
-  }
-
   const exileId = await getExileLeagueId(leagueId).catch(() => null)
   const bounds = seasonWeekBoundsForSport(league.sport, row.regularSeasonEndWeek ?? null)
 
@@ -91,18 +92,18 @@ export async function seedSurvivorFaqToLeagueChat(args: {
     exileConfigured: Boolean(exileId),
   })
 
-  const created = await createPlatformThreadTypedMessage(
-    commissionerUserId,
-    threadId,
-    'broadcast',
-    { announcement: text },
-    { survivorFaq: true, leagueId },
-  )
+  const created = await createLeagueChatMessage(leagueId, commissionerUserId, text, {
+    type: 'broadcast',
+    metadata: { survivorFaq: true },
+  })
   if (!created?.id) {
-    return { ok: false, error: 'Unable to post FAQ broadcast' }
+    return { ok: false, error: "The FAQ didn't post to league chat. Give it another shot in a moment." }
   }
 
-  await createPlatformThreadTypedMessage(commissionerUserId, threadId, 'pin', { messageId: created.id })
+  const snippet = text.length > FAQ_PIN_SNIPPET_MAX ? `${text.slice(0, FAQ_PIN_SNIPPET_MAX).trim()}…` : text
+  await createLeagueChatMessage(leagueId, commissionerUserId, JSON.stringify({ messageId: created.id, snippet }), {
+    type: 'pin',
+  })
 
   await prisma.survivorLeagueConfig.update({
     where: { leagueId },

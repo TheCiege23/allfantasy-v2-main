@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const contestId = body.contestId?.trim()
   const leagueId = body.leagueId?.trim()
   const roundNumber = body.roundNumber ?? 1
-  if (!contestId || !leagueId) {
+  if (!contestId || !leagueId || !Number.isInteger(roundNumber) || roundNumber < 1) {
     return NextResponse.json({ error: 'contestId and leagueId required' }, { status: 400 })
   }
 
@@ -34,9 +34,16 @@ export async function POST(req: NextRequest) {
     throw err
   }
 
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { bbContestId: true, bbTiebreaker: true } })
+  if (league?.bbContestId !== contestId) return NextResponse.json({ error: 'Contest is not linked to this league' }, { status: 403 })
   const contest = await prisma.bestBallContest.findFirst({ where: { id: contestId } })
   if (!contest) return NextResponse.json({ error: 'Contest not found' }, { status: 404 })
 
-  await advancePodWinners(contestId, roundNumber)
+  const tieRule = league.bbTiebreaker === 'max_week' || league.bbTiebreaker === 'points_for' ? league.bbTiebreaker : 'advance_all'
+  try {
+    await advancePodWinners(contestId, roundNumber, tieRule)
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Advancement failed' }, { status: 409 })
+  }
   return NextResponse.json({ ok: true })
 }

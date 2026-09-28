@@ -26,6 +26,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: hm.leagueFindUnique },
     draftSession: {
       findUnique: hm.draftSessionFindUnique,
+      findFirst: hm.draftSessionFindUnique,
       update: hm.draftSessionUpdate,
     },
     roster: { findMany: hm.rosterFindMany, create: hm.rosterCreate },

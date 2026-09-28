@@ -9,8 +9,31 @@ import { runNewsImporter } from '@/lib/workers/news-importer'
 import { runSportsDataImporter } from '@/lib/workers/sports-data-importer'
 import { requestPlayerImportRefresh } from '@/lib/workers/sports-data-import-coordinator'
 
-export async function getPlayer(playerId: string) {
-  let row = await prisma.sportsPlayerRecord.findUnique({ where: { id: playerId } })
+/**
+ * One player record by id.
+ *
+ * `sport` is the caller's league sport, when it knows it — used only to read a BARE provider id
+ * (see below). Omit it and a bare id is read as given and never guessed into a sport.
+ */
+export async function getPlayer(playerId: string, opts: { sport?: string | null } = {}) {
+  const id = playerId.trim()
+  let row = await prisma.sportsPlayerRecord.findUnique({ where: { id } })
+  /*
+   * 🛑 A BARE PROVIDER ID IS A KEY IN ANOTHER SPACE, NOT A MISSING PLAYER (2026-09-25).
+   * Records are keyed `<SPORT>:<sleeperId>` (SleeperPlayerSeedService writes `${sport}:${player.playerId}`),
+   * but roster screens carry the BARE Sleeper id — the Trade Center sends `4984`, never `NFL:4984`.
+   * Every such lookup missed, and every miss queued a whole-sport importer run: one per Trade Center
+   * analysis in a Sleeper league (throttled to one per five minutes), measured on the test DB as
+   * `get_player_miss` in the dev log. The prefixed key is tried before a miss is declared.
+   *
+   * ⚠ ONLY UNDER A SPORT THE CALLER NAMED. Each sport's provider ids are their own namespace, so a
+   * bare `1308` guessed as `NFL:1308` can be a DIFFERENT player from an NBA roster's `1308` — a
+   * confident wrong row where a miss used to be. No sport, no guess.
+   */
+  const sport = normalizeToSupportedSport(opts.sport ?? (id.includes(':') ? id.split(':')[0] : undefined))
+  if (!row && id && !id.includes(':') && opts.sport) {
+    row = await prisma.sportsPlayerRecord.findUnique({ where: { id: `${sport}:${id}` } })
+  }
   if (!row) {
     /*
      * ── 🛑 A CACHE MISS USED TO RUN THE ENTIRE IMPORTER ON THE CUSTOMER'S REQUEST ────────────
@@ -35,15 +58,19 @@ export async function getPlayer(playerId: string) {
      * by the correct answer three minutes later. `runTradeConsoleAnalysis` already treats a null
      * row as unresolved and reports the gap rather than inventing a price.
      */
-    const sport = normalizeToSupportedSport(playerId.split(':')[0] || undefined)
     requestPlayerImportRefresh(sport, 'get_player_miss')
     return null
   }
 
-  if (!isFreshDate(row.lastUpdated, DATA_TTLS.players)) {
-    triggerBackgroundRefresh(`players:${row.sport}`, () => runSportsDataImporter({ sports: [row!.sport] }))
-  }
-
+  /*
+   * ⚠ A STALE HIT NO LONGER IMPORTS FROM THE REQUEST PATH (2026-09-25). This ran
+   * `runSportsDataImporter` in-process whenever the row was older than `DATA_TTLS.players` (6 h),
+   * single-flighted only while it ran — no suppression window. Freshness belongs to the scheduled
+   * `/api/cron/import-players`; and a record from a source the importer no longer writes stays stale
+   * forever, so every hit on it re-ran the whole importer. Measured on the test DB 2026-09-25: 0 of
+   * 21,668 NFL records were inside the 6 h window, so once bare ids started resolving, every Trade
+   * Center analysis would have traded one throttled import for an unthrottled one.
+   */
   return row
 }
 

@@ -68,7 +68,7 @@ const BASE: Record<LeagueSport, GuillotineSportProfile> = {
     scoringPeriod: 'weekly',
     regularSeasonWeeks: 18,
     defaultTeamCount: 17,     // 18 weeks - 1 = 17 teams
-    minTeams: 8,
+    minTeams: 4,
     maxTeams: 17,
     scoringWindowStartDay: 4, // Thursday (TNF)
     scoringWindowEndDay: 1,   // Monday (MNF)

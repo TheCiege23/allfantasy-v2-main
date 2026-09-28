@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId },
-    orderBy: [{ wins: 'desc' }, { losses: 'asc' }, { pointsFor: 'desc' }, { pointsAgainst: 'asc' }],
+    orderBy: [{ playoffSeed: 'asc' }, { wins: 'desc' }, { losses: 'asc' }, { pointsFor: 'desc' }, { pointsAgainst: 'asc' }],
   })
 
   const countedMatchups = await prisma.redraftMatchup.count({

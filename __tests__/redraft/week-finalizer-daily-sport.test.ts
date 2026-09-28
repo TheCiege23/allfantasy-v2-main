@@ -14,7 +14,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { DATE_WINDOWED_SPORTS, WEEK_KEYED_SPORTS, finalizeRedraftWeek } from '@/lib/redraft/weekFinalizer'
+import {
+  DATE_WINDOWED_SPORTS,
+  RI_SCHEDULE_SLATE_SPORTS,
+  WEEK_KEYED_SPORTS,
+  finalizeCompletedWeeksForSeason,
+  finalizeRedraftWeek,
+} from '@/lib/redraft/weekFinalizer'
 
 type AnyArgs = Record<string, any>
 
@@ -40,6 +46,7 @@ function makePrisma(games: ReturnType<typeof game>[], scored: string[] = ['p1', 
   return {
     calls,
     prisma: {
+      league: { findFirst: vi.fn(async () => null) },
       redraftSeason: { findFirst: vi.fn(async () => NHL_SEASON) },
       redraftMatchup: {
         findMany: vi.fn(async () => [{ id: 'm1', status: 'active' }]),
@@ -51,6 +58,9 @@ function makePrisma(games: ReturnType<typeof game>[], scored: string[] = ['p1', 
         }),
       },
       redraftRoster: { findMany: vi.fn(async () => [{ id: 'r1' }]) },
+      // No linked AF roster, so no week lineup: starters come from `slotType`, as these cases assume.
+      roster: { findMany: vi.fn(async () => []) },
+      afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
       redraftRosterPlayer: {
         findMany: vi.fn(async () => [
           { playerId: 'p1', sport: 'NHL', slotType: 'C' },
@@ -84,6 +94,7 @@ function makeNcaabPrisma(schedule: Record<string, unknown> | null, scored: strin
     ...base,
     prisma: {
       ...base.prisma,
+      league: { findFirst: vi.fn(async () => null) },
       redraftSeason: { findFirst: vi.fn(async () => NCAAB_SEASON) },
       redraftRosterPlayer: {
         findMany: vi.fn(async () => [
@@ -297,5 +308,152 @@ describe('finalizeRedraftWeek — a daily sport', () => {
     )
 
     expect(result.refusal).toBe('sport_not_week_keyed')
+  })
+})
+
+/*
+ * 🛑 NO NBA WEEK COULD EVER CLOSE. NBA was missing from DATE_WINDOWED_SPORTS, so every NBA week
+ * refused `sport_not_week_keyed` — the league scored points into PlayerWeeklyScore and its matchups
+ * but never sealed a week, so `advance_week` refused forever and it sat on week 1.
+ *
+ * NBA's schedule is TheSportsDB rows in SportsGame, exactly as NHL's is (NOT the Rolling Insights
+ * season schedule NCAAB needs). NBA 2026 opens Tuesday 2026-10-20, so week 1 is Tue Oct 20 – Mon
+ * Oct 26 in Eastern days.
+ */
+const NBA_SEASON = { id: 'season-nba', leagueId: 'league-nba', sport: 'NBA', season: 2026 }
+
+function makeNbaPrisma(games: ReturnType<typeof game>[], scored: string[] = ['p1', 'p2'], players = ['p1', 'p2']) {
+  const base = makePrisma(games, scored)
+  base.prisma.redraftSeason.findFirst = vi.fn(async () => NBA_SEASON)
+  base.prisma.redraftRosterPlayer.findMany = vi.fn(async () => players.map((playerId) => ({ playerId, sport: 'NBA', slotType: 'PG' })))
+  base.prisma.playerWeeklyScore.findMany = vi.fn(async () => scored.map((playerId) => ({ playerId, sport: 'NBA' })))
+  return base
+}
+
+const NBA_GAMES = [
+  // Preseason, Friday Oct 16 — before the opener, so it belongs to no week.
+  game('FT', '2026-10-16T23:30:00.000Z', 0),
+  // Opening night, Tuesday Oct 20: 7:30pm ET, and a 10pm ET tip whose UTC instant is Oct 21.
+  game('FT', '2026-10-20T23:30:00.000Z', 0),
+  game('AOT', '2026-10-21T02:00:00.000Z', 0),
+  // Monday Oct 26, 10:30pm ET — the window's last Eastern evening, already Oct 27 in UTC.
+  game('FT', '2026-10-27T02:30:00.000Z', 0),
+  // Tuesday Oct 27 — week 2, not yet played. It must not hold week 1 open.
+  game('NS', '2026-10-27T23:30:00.000Z', 0),
+]
+/** 15.5h after the Monday-night tip: past the 12h grace. */
+const NBA_AFTER_GRACE = new Date('2026-10-27T18:00:00.000Z')
+
+describe('finalizeRedraftWeek — NBA', () => {
+  it('lists NBA as date-windowed, read from SportsGame rather than the RI schedule', () => {
+    expect(DATE_WINDOWED_SPORTS).toContain('NBA')
+    expect(WEEK_KEYED_SPORTS).not.toContain('NBA')
+    expect(RI_SCHEDULE_SLATE_SPORTS).not.toContain('NBA')
+  })
+
+  it('closes week 1 on the Eastern-day window from the 2026-10-20 opener — preseason and week 2 excluded', async () => {
+    const { prisma, calls } = makeNbaPrisma(NBA_GAMES)
+
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-nba', week: 1, dryRun: true },
+      { prisma, now: () => NBA_AFTER_GRACE, recalculateMatchups: vi.fn() as any },
+    )
+
+    expect(result.refusal).toBeNull()
+    expect(result.sport).toBe('NBA')
+    expect(result.slate).toMatchObject({ games: 3, final: 3, unfinished: 0, source: 'thesportsdb' })
+    expect(result.slate?.lastStartTime).toBe('2026-10-27T02:30:00.000Z')
+
+    const where = calls.find((c) => c.key === 'sportsGame.findMany')?.args.where
+    expect(where.week).toBeUndefined()
+    expect(where.sport).toBe('NBA')
+    expect(where.startTime.gte.toISOString()).toBe('2026-10-20T00:00:00.000Z')
+  })
+
+  it('still holds the week open for an unfinished NBA game', async () => {
+    const { prisma } = makeNbaPrisma([game('FT', '2026-10-20T23:30:00.000Z', 0), game('Q4', '2026-10-27T02:30:00.000Z', 0)])
+
+    const result = await finalizeRedraftWeek(
+      { seasonId: 'season-nba', week: 1, dryRun: true },
+      { prisma, now: () => NBA_AFTER_GRACE, recalculateMatchups: vi.fn() as any },
+    )
+
+    expect(result.refusal).toBe('games_not_final')
+  })
+
+  it('a ready NBA week is refreshed once before it seals, so the Monday starter is scored, not zeroed', async () => {
+    const scored = ['p1', 'p2', 'p3', 'p4']
+    const { prisma } = makeNbaPrisma(NBA_GAMES, scored, ['p1', 'p2', 'p3', 'p4', 'p5'])
+    prisma.redraftMatchup.findMany = vi.fn(async (args: AnyArgs) =>
+      args.where?.status?.not === 'final' ? [{ week: 1 }] : [{ id: 'm1', status: 'active' }],
+    )
+    const syncWeekStats = vi.fn(async () => {
+      scored.push('p5')
+    })
+
+    const out = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-nba', throughWeek: 2 },
+      { prisma, now: () => NBA_AFTER_GRACE, recalculateMatchups: vi.fn(async () => ({ updated: 1 })) as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 'season-nba', week: 1 })
+    expect(out.finalized).toBe(1)
+    expect(out.refusals).toEqual({})
+    expect(out.results[0]?.zeroedPlayerIds).toEqual([])
+  })
+})
+
+/*
+ * 🛑 A DAILY-SPORT WEEK WAS SEALED WITHOUT ITS LAST DAY. Monday's box scores arrive with the Tuesday
+ * 07:00 UTC ingest, after the calendar has moved on, and score-sync only refreshes the current week — so
+ * a week already above the coverage floor sealed with its Monday-only starters at zero.
+ */
+describe('finalizeCompletedWeeksForSeason — a daily-sport week is refreshed once before it seals', () => {
+  function sweepPrisma(scored: string[]) {
+    const { prisma } = makePrisma([game('FT', '2026-09-29T23:00:00.000Z', 1), game('FT', LAST_PUCK, 1)], scored)
+    // The sweep asks for weeks that are NOT final; the per-week calls ask for the matchups.
+    prisma.redraftMatchup.findMany = vi.fn(async (args: AnyArgs) =>
+      args.where?.status?.not === 'final' ? [{ week: 1 }] : [{ id: 'm1', status: 'active' }],
+    )
+    prisma.redraftRosterPlayer.findMany = vi.fn(async () =>
+      ['p1', 'p2', 'p3', 'p4', 'p5'].map((playerId) => ({ playerId, sport: 'NHL', slotType: 'C' })),
+    )
+    prisma.playerWeeklyScore.findMany = vi.fn(async () => scored.map((playerId) => ({ playerId, sport: 'NHL' })))
+    return prisma
+  }
+
+  it('pulls in the late stats first, so the Monday starter is scored, not sealed at zero', async () => {
+    // 4 of 5 starters scored = 0.8, already at the floor: the old sweep sealed here and zeroed p5.
+    const scored = ['p1', 'p2', 'p3', 'p4']
+    const prisma = sweepPrisma(scored)
+    const syncWeekStats = vi.fn(async () => {
+      scored.push('p5') // Monday's box score, which the Tuesday ingest brought in
+    })
+
+    const out = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-nhl', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn(async () => ({ updated: 1 })) as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).toHaveBeenCalledTimes(1)
+    expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 'season-nhl', week: 1 })
+    expect(out.finalized).toBe(1)
+    expect(out.results[0]?.zeroedPlayerIds).toEqual([])
+    expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
+  })
+
+  it('does not fetch for a week that is not ready to seal (the dry run is the answer)', async () => {
+    const prisma = sweepPrisma(['p1', 'p2', 'p3', 'p4', 'p5'])
+    prisma.sportsGame.findMany = vi.fn(async () => [game('NS', LAST_PUCK, 1)])
+    const syncWeekStats = vi.fn(async () => {})
+
+    const out = await finalizeCompletedWeeksForSeason(
+      { seasonId: 'season-nhl', throughWeek: 2 },
+      { prisma, now: () => AFTER_GRACE, recalculateMatchups: vi.fn() as any, syncWeekStats },
+    )
+
+    expect(syncWeekStats).not.toHaveBeenCalled()
+    expect(out.finalized).toBe(0)
+    expect(out.refusals.games_not_final).toBe(1)
   })
 })

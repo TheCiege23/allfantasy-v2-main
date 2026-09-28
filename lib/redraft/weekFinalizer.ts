@@ -1,13 +1,14 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { prisma as defaultPrisma } from '@/lib/prisma'
-import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
-import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
-import { isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from './scoringEngine'
+import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
+import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
+import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
+import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -75,30 +76,8 @@ export const WEEK_FINALIZE_LOOKBACK_WEEKS = 3
  */
 export const WEEK_KEYED_SPORTS: readonly string[] = ['NFL', 'NCAAF']
 
-/**
- * Sports whose week is a DATE WINDOW, closed by the same seven days the stat sync aggregates.
- *
- * 🛑 THE WINDOW COMES FROM A RECORDED SEASON OPENER, NEVER A GUESS. `resolveDailySportSeasonStart`
- * returns null for a season nobody has written down, and this refuses with
- * `season_start_unknown` rather than anchoring on January 1 — a guessed anchor does not fail
- * loudly, it assigns every game to the wrong week and seals confidently wrong scores.
- *
- * ⚠ NBA IS ABSENT ON PURPOSE AND IS ONE LINE AWAY. The mechanism below is sport-agnostic and
- * NBA's opener is already recorded (2026-10-20), but its season has not started, so no NBA
- * slate or stat row has been checked against this path. Adding it is a measurement, not an
- * edit — the same standard `SEASON_CAPABLE_SPORTS` sets.
- */
-export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NCAAB']
-
-/**
- * Date-windowed sports whose slate comes from the Rolling Insights season schedule
- * (lib/sports-data/riSeasonSchedule.ts), because every schedule in `SportsGame` is INCOMPLETE for
- * them. NCAAB, measured 2026-09-24: thesportsdb 2025-26 stops at a 3,000-game cap on 02-04, and
- * week 1 lists 243 games against 310 in our game logs; RI's schedule matches the logs exactly.
- * A slate short a game can seal a week whose stats miss that game — so for these sports an
- * unsynced schedule is an EMPTY slate, which refuses, never a fallback to the partial feeds.
- */
-export const RI_SCHEDULE_SLATE_SPORTS: readonly string[] = ['NCAAB']
+// Defined in weekGames.ts (the lineup lock reads them too, without importing the scoring engine).
+export { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS }
 
 export type WeekFinalizeRefusal =
   | 'finalizer_disabled'
@@ -194,6 +173,15 @@ export type FinalizeRedraftWeekParams = {
   coverageFloor?: number
   /** Measure and report without writing. */
   dryRun?: boolean
+  /**
+   * Seal only these rosters' players, and measure coverage over them alone.
+   *
+   * ⚠ FOR A WEEK THAT ONLY SOME TEAMS PLAY. A playoff week is scored for the teams still alive,
+   * and an eliminated team's abandoned lineup — injured starters nobody benched — would otherwise
+   * count toward the coverage floor and hold the bracket open. Omitted, every roster in the season
+   * is sealed, exactly as before.
+   */
+  rosterIds?: string[]
 }
 
 function emptyResult(
@@ -301,67 +289,9 @@ export async function readWeekSlate(
     }
     return { games: slateGames.length, final, unfinished, cancelled, lastStartTime: lastStart, source: 'rolling_insights_schedule' }
   }
-  /*
-   * 🛑 THE WINDOW IS EASTERN DAYS, AND `startTime` IS A UTC INSTANT — SELECTING ON THE INSTANT
-   * PUTS A THIRD OF THE SEASON IN THE WRONG WEEK.
-   *
-   * `player_game_stats.game_date` stores the EASTERN calendar day a game was played (#1194),
-   * and the stat sync buckets by it. A slate that filtered `startTime` against the same bounds
-   * would bucket by UTC instead, and the two halves would disagree about which games belong to
-   * the week. Measured on production 2026-09-24: 957 of 1,415 NHL 2026 games — 67.6% — start
-   * after UTC midnight, because a 7-10pm Eastern puck drop is the NEXT UTC day. Week 1 holds
-   * 42 games by UTC instant against 43 by Eastern day.
-   *
-   * ⚠ THE UTC WINDOW MISSES GAMES RATHER THAN OVER-COUNTING THEM, WHICH IS THE WORSE
-   * DIRECTION: a slate short one game can report itself complete and SEAL a week whose stats
-   * include a game it never checked. (An earlier note here said 39, from a SQL check that
-   * converted the wrong way — `startTime` is `timestamp without time zone`, so
-   * `AT TIME ZONE 'America/New_York'` INTERPRETS it as Eastern and shifts it TO UTC. Declare
-   * the column UTC first: `(x AT TIME ZONE 'UTC') AT TIME ZONE 'America/New_York'`.)
-   *
-   * So the query over-selects by six hours and the exact membership test happens below, on
-   * `easternCalendarDay` — the same helper, and therefore the same DST handling, that wrote
-   * those `game_date` values.
-   */
-  const EASTERN_OVERSELECT_MS = 6 * 60 * 60 * 1000
-  const rawRows = await prisma.sportsGame.findMany({
-    where: {
-      sport: args.sport,
-      season: args.season,
-      ...(windowed
-        ? { startTime: { gte: windowed.start, lt: new Date(windowed.end.getTime() + EASTERN_OVERSELECT_MS) } }
-        : { week: args.week }),
-      // Only ranked feeds may answer: an unranked one (cfbd donates kickoff times and has no
-      // live status at all) would contribute permanent "unfinished" rows.
-      source: { in: [...LIVE_SCORE_SOURCES] },
-      /*
-       * Same discriminator the live provider uses: preseason week 1 and regular week 1
-       * share a number, and rows predating the column are overwhelmingly regular season,
-       * so NULL joins the regular slate and never the postseason one.
-       */
-      ...(args.seasonType === 'regular'
-        ? { OR: [{ seasonType: 'regular' }, { seasonType: null }] }
-        : { seasonType: args.seasonType }),
-    },
-    select: { status: true, startTime: true, source: true, fetchedAt: true, season: true, week: true },
-  })
-
-  /*
-   * ⚠ A WINDOWED READ MUST DROP `week` BEFORE SELECTION, OR THE NOISE BECOMES THE GROUPING.
-   * `pickFreshestSourceRows` slices on `season:week` and picks one source PER SLICE. NHL rows
-   * inside one seven-day window carry several of those junk week values, so the selection
-   * would split the window into arbitrary groups. Rows with a null week share a single slice —
-   * which that module documents as the original whole-call behaviour, and is exactly right for
-   * a caller that did not group by week in the first place.
-   */
-  const inWindow = windowed
-    ? rawRows.filter((row) => {
-        const day = easternCalendarDay(row.startTime)
-        return day != null && day >= windowed.start && day < windowed.end
-      })
-    : rawRows
-  const selectable = windowed ? inWindow.map((row) => ({ ...row, week: null })) : inWindow
-  const rows = pickFreshestSourceRows(selectable, (args.now ?? new Date()).getTime())
+  // The games themselves: freshest feed, Eastern-day window for a daily sport. See weekGames.ts,
+  // which the lineup lock reads too, so a lock and a seal never disagree about the slate.
+  const rows = await readWeekGames(prisma, args)
 
   let final = 0
   let cancelled = 0
@@ -412,7 +342,9 @@ export async function finalizeRedraftWeek(
     )
   }
 
-  const sport = String(season.sport ?? 'NFL').toUpperCase()
+  // `RedraftSeason.sport` holds config keys ("NCAAFB"), while the slate lists and `SportsGame.sport`
+  // speak LeagueSport ("NCAAF") — a college football season was refused as not week-keyed.
+  const sport = seasonSportToLeagueSport(season.sport ?? 'NFL') || 'NFL'
   const base = {
     seasonId: season.id,
     leagueId: season.leagueId,
@@ -472,16 +404,38 @@ export async function finalizeRedraftWeek(
   }
 
   const rosters = await prisma.redraftRoster.findMany({
-    where: { seasonId: season.id },
+    where: { seasonId: season.id, ...(params.rosterIds ? { id: { in: params.rosterIds } } : {}) },
     select: { id: true },
   })
   const rosterIds = rosters.map((r) => r.id)
   const rosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
-        select: { playerId: true, sport: true, slotType: true },
+        select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true },
       })
     : []
+  /*
+   * ⚠ SEAL THE LINEUP THAT WAS SET FOR THIS WEEK. `slotType` is current state, and this runs
+   * twelve hours after the last kickoff — long enough for a manager to have set NEXT week's lineup.
+   * `weekLineupSlots.ts` reads the week's own saved lineup and falls back to `slotType`.
+   */
+  const weekLineups = await loadWeekLineups(prisma, {
+    redraftRosterIds: rosterIds,
+    season: season.season,
+    week: params.week,
+  })
+
+  /*
+   * ⚠ IN BEST BALL THE BENCH SCORES TOO. The matchup starts each team's best lineup from every
+   * active player, so every one of them needs a sealed row — sealing starters only left bench
+   * players without a row and the matchup could never go final.
+   */
+  const bestBall = leagueIsBestBall(
+    await prisma.league.findFirst({
+      where: { id: season.leagueId },
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true },
+    }),
+  )
 
   /*
    * One row per (playerId, sport): the score table is keyed that way, and two managers
@@ -489,7 +443,7 @@ export async function finalizeRedraftWeek(
    */
   const starters = new Map<string, { playerId: string; sport: string }>()
   for (const p of rosterPlayers) {
-    if (!isScoringStarterSlot(p.slotType)) continue
+    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
     starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
   }
   if (starters.size === 0) {
@@ -624,6 +578,87 @@ export type FinalizeCompletedWeeksParams = {
 }
 
 /**
+ * Seal one week, the way the sweep does it: refresh a ready date-windowed week's stats once before
+ * sealing, and retry once after a backfill when coverage is the only thing short.
+ *
+ * Extracted from `finalizeCompletedWeeksForSeason` so the playoff scorer seals its weeks by the
+ * same rules. A playoff week has no `RedraftMatchup` rows, so the sweep — which finds its weeks
+ * from open matchups — never reached one, and a second copy of this logic would drift.
+ */
+export async function finalizeWeekWithRefresh(
+  params: FinalizeRedraftWeekParams,
+  deps: WeekFinalizerDeps = {},
+): Promise<WeekFinalizeResult> {
+  const attempt = (dryRun = params.dryRun) => finalizeRedraftWeek({ ...params, dryRun }, deps)
+
+  /*
+   * 🛑 A DAILY-SPORT WEEK WAS SEALED WITHOUT ITS LAST DAY. Its stats arrive only from the daily
+   * ingest (07:00 UTC, "yesterday and the day before"), and score-sync refreshes only the week the
+   * calendar calls current. A Monday puck at or after 00:00 UTC moves the calendar on, so the
+   * Tuesday ingest that brings Monday's box scores never reached that week — and coverage was
+   * already above the floor from Tuesday–Sunday, so it sealed with Monday's players at zero.
+   * Every week from November, when an 8pm ET puck is past midnight UTC.
+   *
+   * So a date-windowed week that is READY to seal is refreshed once, first. The seal waits out a
+   * grace period after its last game, which is past that morning's ingest. A dry run answers
+   * "ready?" with the same checks a real attempt makes; on a refusal it IS the answer, so a week
+   * that is not ready costs no extra reads. NFL is untouched: its last game is scored live.
+   */
+  let result: WeekFinalizeResult
+  if (deps.syncWeekStats && !params.dryRun) {
+    const probe = await attempt(true)
+    const readyToSeal = probe.refusal === null && !probe.alreadyFinal
+    if (readyToSeal && DATE_WINDOWED_SPORTS.includes(probe.sport)) {
+      try {
+        await deps.syncWeekStats({ seasonId: params.seasonId, week: params.week })
+      } catch {
+        // A failed refresh seals on the stats already held, as it did before this pass existed.
+      }
+    }
+    result = readyToSeal ? await attempt() : probe
+  } else {
+    result = await attempt()
+  }
+
+  /*
+   * 🛑 ONE RETRY, AND ONLY FOR THE ONE REFUSAL A BACKFILL CAN ANSWER.
+   *
+   * `stat_coverage_below_floor` on a PAST week is the signature of stats nobody has
+   * fetched, not of a week that should stay open — score-sync only ever reconciles the
+   * current week, so an older one keeps whatever coverage it had when it was current.
+   * Measured in production 2026-09-24 on the one native league that has played: week 2
+   * sat at 86/90 (95.6%) while week 1 sat at 62/90 (69%), and because the roller advances
+   * from `currentWeek`, that week 1 held the whole season on week 1.
+   *
+   * ⚠ FETCHING FIRST AND ASKING AFTERWARDS WOULD BE THE EXPENSIVE VERSION. The other
+   * refusals — unfinished slate, inside the grace period, no starters — are not about
+   * missing rows, and a week that seals on the first attempt costs nothing extra. A week
+   * that can never reach the floor costs one backfill per tick until it falls out of the
+   * lookback window, which is what bounds this.
+   */
+  if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
+    try {
+      const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week: params.week })
+      result = await attempt()
+      /*
+       * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
+       * payload, so the retry's coverage is the same number for a completely different
+       * reason — and `stat_coverage_below_floor` sends the next reader to the roster. Only
+       * relabel when the week is still refusing for coverage: a week that sealed anyway, or
+       * one blocked on its slate, is not a quota story.
+       */
+      if (backfill?.rateLimited && result.refusal === 'stat_coverage_below_floor') {
+        result = { ...result, refusal: 'provider_rate_limited' }
+      }
+    } catch {
+      // A provider gap leaves the original refusal standing rather than inventing coverage.
+    }
+  }
+
+  return result
+}
+
+/**
  * Sweep the weeks that should already be closed.
  *
  * ⚠ IT LOOKS BACKWARD ON PURPOSE. Score-sync only ever reconciles the week the schedule
@@ -655,55 +690,17 @@ export async function finalizeCompletedWeeksForSeason(
   let finalized = 0
 
   for (const week of weeks) {
-    const attempt = () =>
-      finalizeRedraftWeek(
-        {
-          seasonId: params.seasonId,
-          week,
-          seasonType: params.seasonType,
-          graceMs: params.graceMs,
-          coverageFloor: params.coverageFloor,
-          dryRun: params.dryRun,
-        },
-        deps,
-      )
-
-    let result = await attempt()
-
-    /*
-     * 🛑 ONE RETRY, AND ONLY FOR THE ONE REFUSAL A BACKFILL CAN ANSWER.
-     *
-     * `stat_coverage_below_floor` on a PAST week is the signature of stats nobody has
-     * fetched, not of a week that should stay open — score-sync only ever reconciles the
-     * current week, so an older one keeps whatever coverage it had when it was current.
-     * Measured in production 2026-09-24 on the one native league that has played: week 2
-     * sat at 86/90 (95.6%) while week 1 sat at 62/90 (69%), and because the roller advances
-     * from `currentWeek`, that week 1 held the whole season on week 1.
-     *
-     * ⚠ FETCHING FIRST AND ASKING AFTERWARDS WOULD BE THE EXPENSIVE VERSION. The other
-     * refusals — unfinished slate, inside the grace period, no starters — are not about
-     * missing rows, and a week that seals on the first attempt costs nothing extra. A week
-     * that can never reach the floor costs one backfill per tick until it falls out of the
-     * lookback window, which is what bounds this.
-     */
-    if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
-      try {
-        const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week })
-        result = await attempt()
-        /*
-         * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
-         * payload, so the retry's coverage is the same number for a completely different
-         * reason — and `stat_coverage_below_floor` sends the next reader to the roster. Only
-         * relabel when the week is still refusing for coverage: a week that sealed anyway, or
-         * one blocked on its slate, is not a quota story.
-         */
-        if (backfill?.rateLimited && result.refusal === 'stat_coverage_below_floor') {
-          result = { ...result, refusal: 'provider_rate_limited' }
-        }
-      } catch {
-        // A provider gap leaves the original refusal standing rather than inventing coverage.
-      }
-    }
+    const result = await finalizeWeekWithRefresh(
+      {
+        seasonId: params.seasonId,
+        week,
+        seasonType: params.seasonType,
+        graceMs: params.graceMs,
+        coverageFloor: params.coverageFloor,
+        dryRun: params.dryRun,
+      },
+      deps,
+    )
 
     results.push(result)
     if (result.finalized) finalized += 1

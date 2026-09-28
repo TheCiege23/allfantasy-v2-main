@@ -1,9 +1,12 @@
+import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 /**
  * Single-transaction canonical league creation (concept-first preset pipeline).
  * Mirrors redraft shell: League + settings + commissioner + draft + homepage + slots + draft session.
  */
 
+import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { randomUUID } from 'crypto'
+import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
 import { Prisma } from '@prisma/client'
 import type { LeagueSport } from '@prisma/client'
@@ -62,8 +65,14 @@ async function uniqueJoinCode(tx: Tx): Promise<string> {
 }
 
 function leagueModeColumns(formatId: LeagueFormatId): Partial<Prisma.LeagueUncheckedCreateInput> {
+  const isDynasty = formatId === 'dynasty' || formatId === 'devy' || formatId === 'c2c' || formatId === 'salary_cap'
   return {
-    isDynasty: formatId === 'dynasty' || formatId === 'devy' || formatId === 'c2c' || formatId === 'salary_cap',
+    isDynasty,
+    // 🛑 `draftPickTrading` defaults to false, and nothing at create set it — so every native dynasty
+    // league refused future-pick trades (PICK_TRADING_BLOCKED) until a commissioner found the toggle.
+    // A league that holds a rookie draft every year trades its picks by default; the commissioner can
+    // still switch it off.
+    draftPickTrading: isDynasty,
     bestBallMode: formatId === 'best_ball',
     guillotineMode: formatId === 'guillotine',
     survivorMode: formatId === 'survivor',
@@ -158,6 +167,7 @@ export async function createCanonicalLeagueInTransaction(
   const bestBallSettings =
     formatId === 'best_ball'
       ? normalizeBestBallSettings({
+          teamCount: body.teamCount,
           sport,
           conceptSetup: (body.conceptSetup ?? null) as Record<string, unknown> | null,
           draftType: body.draftType,
@@ -174,16 +184,45 @@ export async function createCanonicalLeagueInTransaction(
   })
   const managerCount = foundationDefaults.managerCount
   const draftSettings = foundationDefaults.draftSettings
-  const draftRounds = readNumber(draftSettings, 'rounds', draftDefaults.rounds_default)
+  const dynastySetup = formatId === 'dynasty' ? body.conceptSetup ?? {} : {}
+  const draftRounds = readNumber(dynastySetup, 'startupRosterDepth', readNumber(draftSettings, 'rounds', draftDefaults.rounds_default))
+  if (formatId === 'dynasty') {
+    const roster = resolveDynastyCreationRoster(sport, dynastySetup)
+    Object.assign(foundationDefaults.rosterSettings, {
+      starter_slots: roster.starters, starterSlots: roster.starters,
+      rosterSlots: Object.values(roster.starters).reduce((sum, count) => sum + count, 0),
+      benchSlots: roster.benchSlots, irSlots: roster.irSlots, taxiSlots: roster.taxiSlots,
+      totalRosterSlots: roster.totalRosterSlots,
+    })
+    if (typeof dynastySetup.regularSeasonWeeks === 'number') {
+      foundationDefaults.playoffSettings.playoffStartWeek = dynastySetup.regularSeasonWeeks + 1
+      foundationDefaults.playoffSettings.playoff_start_week = dynastySetup.regularSeasonWeeks + 1
+    }
+    if (typeof dynastySetup.playoffTeamCount === 'number') {
+      foundationDefaults.playoffSettings.playoffTeams = dynastySetup.playoffTeamCount
+      foundationDefaults.playoffSettings.playoff_team_count = dynastySetup.playoffTeamCount
+    }
+    foundationDefaults.draftSettings.rounds = draftRounds
+    foundationDefaults.waiverSettings.waiverType = dynastySetup.waiverTypeRecommended ?? foundationDefaults.waiverSettings.waiverType
+    foundationDefaults.waiverSettings.waiver_type = foundationDefaults.waiverSettings.waiverType
+    if (typeof dynastySetup.faabBudget === 'number') {
+      foundationDefaults.waiverSettings.faabBudget = dynastySetup.faabBudget
+      foundationDefaults.waiverSettings.FAAB_budget_default = dynastySetup.faabBudget
+    }
+    if (typeof dynastySetup.waiverTypeRecommended === 'string') waiverDefaults.waiver_type = dynastySetup.waiverTypeRecommended
+    if (typeof dynastySetup.faabBudget === 'number') waiverDefaults.FAAB_budget_default = dynastySetup.faabBudget
+  }
   const timerSeconds = readNumber(draftSettings, 'timerSeconds', draftDefaults.timer_seconds_default ?? 90)
   const pickTimerPreset = secondsToPickTimerPreset(timerSeconds)
+  const thirdRoundReversal = coreDraft === 'snake' &&
+    (bestBallSettings?.thirdRoundReversal ?? body.conceptSetup?.thirdRoundReversal === true)
 
   const tradeReview =
     bestBallSettings && !bestBallSettings.tradesEnabled
       ? 'none'
-      : body.tradeReviewMode === 'none' || body.tradeReviewMode == null
-      ? 'commissioner'
-      : body.tradeReviewMode
+      : body.tradeReviewMode === 'none'
+        ? 'instant'
+        : body.tradeReviewMode ?? 'commissioner'
 
   log?.('canonical_transaction_start', { appUserId, sport, formatId })
 
@@ -216,6 +255,20 @@ export async function createCanonicalLeagueInTransaction(
     trade_review_mode: tradeReview,
     requested_draft_type: body.draftType,
     canonical_draft_mode: body.draftType,
+    third_round_reversal: thirdRoundReversal,
+    draft_third_round_reversal: thirdRoundReversal,
+    draftSettings: { ...engine.settingsSnapshot.draftSettings, rounds: draftRounds, thirdRoundReversal },
+    ...(formatId === 'dynasty' ? {
+      starter_slots: foundationDefaults.rosterSettings.starter_slots,
+      bench_slots: foundationDefaults.rosterSettings.benchSlots,
+      ir_slots: foundationDefaults.rosterSettings.irSlots,
+      taxi_slots: foundationDefaults.rosterSettings.taxiSlots,
+      regular_season_weeks: dynastySetup.regularSeasonWeeks,
+      playoff_team_count: dynastySetup.playoffTeamCount,
+      rosterSettings: foundationDefaults.rosterSettings,
+      waiverSettings: foundationDefaults.waiverSettings,
+      playoffSettings: foundationDefaults.playoffSettings,
+    } : {}),
     language: body.language ?? 'en',
     default_team_count: managerCount,
     foundation_defaults: {
@@ -255,6 +308,20 @@ export async function createCanonicalLeagueInTransaction(
     },
   }
 
+  if (bestBallSettings?.contestStructure === 'tournament') {
+    const end = tournamentRoundEnds(bestBallSettings).at(-1)!
+    mergedSettings.playoff_team_count = 0
+    mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoff_team_count: 0, playoff_start_week: end + 1 }
+  }
+
+  // The concept choice must replace the preset's inherited standings mode before bootstrap.
+  if (bestBallSettings && (bestBallSettings.matchupFormat === 'cumulative' || bestBallSettings.playoffFormat === 'advancement')) {
+    const structure = mergedSettings.playoff_structure
+    mergedSettings.playoff_structure = {
+      ...(structure && typeof structure === 'object' && !Array.isArray(structure) ? structure : {}),
+      seeding_rules: 'points_only',
+    }
+  }
   const keeperBootstrap =
     formatId === 'keeper'
       ? mapKeeperCreationFromWizard({
@@ -271,12 +338,33 @@ export async function createCanonicalLeagueInTransaction(
     }
   }
 
+  /**
+   * Privacy and the invite code are written onto the league row itself, because that is where
+   * everything that reads them looks. Before, the choice lived only in `conceptSetup` and the
+   * finder listing — so discovery and the privacy resolver saw every league as private — and
+   * `settings.inviteCode` was left unset, so the `/join?code=` link the league page shows right
+   * after creation (built from this invite's token) matched no league: "invalid code" until the
+   * commissioner happened to open the invite panel, which minted a different code.
+   */
+  const conceptSetupForPrivacy = (body.conceptSetup ?? {}) as Record<string, unknown>
+  const leagueVisibility: 'public' | 'private' =
+    bestBallSettings?.visibility === 'public' ||
+    conceptSetupForPrivacy.visibility === 'public' ||
+    conceptSetupForPrivacy.isPublic === true
+      ? 'public'
+      : 'private'
+  const inviteToken = randomUUID()
+  mergedSettings.league_privacy_visibility = leagueVisibility
+  mergedSettings.inviteCode = inviteToken
+
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
   /** Calendar season year for list badges / filters (must not rely on Prisma's static default). */
   const seasonYear = new Date().getFullYear()
 
   const isGuillotine = formatId === 'guillotine'
+  const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
+  if (isGuillotine) mergedSettings.guillotineEndgame = guillotineEndgame.format
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings
@@ -370,7 +458,9 @@ export async function createCanonicalLeagueInTransaction(
       bbMatchupFormat: bestBallSettings?.matchupFormat,
       bbTiebreaker: bestBallSettings?.tieRule,
       bbOptimizerTiming: 'period_end',
-      playoffTeams: clampPlayoffTeams(bestBallSettings?.playoffTeams ?? playoffTeamsDefault),
+      playoffTeams: typeof dynastySetup.playoffTeamCount === 'number'
+        ? dynastySetup.playoffTeamCount
+        : clampPlayoffTeams(bestBallSettings?.playoffTeams ?? playoffTeamsDefault),
       playoffSeedingRule:
         bestBallSettings?.matchupFormat === 'cumulative'
           ? 'points_only'
@@ -386,7 +476,12 @@ export async function createCanonicalLeagueInTransaction(
           ? 1
           : playoffWeeksPerRoundDefault,
       playoffLowerBracket: playoffLowerBracketDefault,
-      ...(keeperBootstrap ? keeperBootstrap.league : {}),
+      // `keeperCount` defaults to 3 in the schema, so a league that says nothing reads as a
+      // three-keeper league to every consumer that trusts the column. A league created here
+      // without keepers has decided: none.
+      ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
+      // League-median game — the standings engine plays it when this is on.
+      medianGame: conceptSetupForPrivacy.medianGame === true,
       ...(isGuillotine
         ? {
             playoffStartWeek: null,
@@ -394,8 +489,8 @@ export async function createCanonicalLeagueInTransaction(
             playoffWeeksPerRound: null,
             playoffSeedingRule: null,
             playoffLowerBracket: null,
-            guillotineEndgame: 'final_two',
-            guillotineEndgameThreshold: 2,
+            guillotineEndgame: guillotineEndgame.format,
+            guillotineEndgameThreshold: guillotineEndgame.threshold,
             guillotineEliminationsPerPeriod: 1,
             guillotineProtectedWeek1: false,
             guillotineTiebreaker: 'lowest_bench_points',
@@ -686,7 +781,7 @@ export async function createCanonicalLeagueInTransaction(
       rosterPresetKey: `default-${sport}-${formatId}`,
       playoffPresetKey: 'default',
       draftTimerSecondsDefault: timerSeconds,
-      isPublic: bestBallSettings?.visibility === 'public',
+      isPublic: leagueVisibility === 'public',
       allowInviteLinks: true,
       allowMemberInviteRankBypass: false,
       settingsJson: {
@@ -905,6 +1000,7 @@ export async function createCanonicalLeagueInTransaction(
       auctionBudgetPerTeam: auctionBudget,
       sportType: sport,
       sessionKind: 'live',
+      thirdRoundReversal,
       cpuAutoPick: true,
       aiAutoPick: isAuto,
       ...(sessionDevyConfig ? { devyConfig: sessionDevyConfig as Prisma.InputJsonValue } : {}),
@@ -978,6 +1074,7 @@ export async function createCanonicalLeagueInTransaction(
 
   const invite = await tx.leagueInvite.create({
     data: {
+      token: inviteToken,
       leagueId: league.id,
       createdBy: appUserId,
       createdByRole: 'COMMISSIONER',
@@ -988,13 +1085,7 @@ export async function createCanonicalLeagueInTransaction(
   })
   const inviteUrl = `/join/${invite.token}`
 
-  const conceptSetup = (body.conceptSetup ?? {}) as Record<string, unknown>
-  const visibility =
-    bestBallSettings?.visibility === 'public' ||
-    conceptSetup.visibility === 'public' ||
-    conceptSetup.isPublic === true
-      ? 'public'
-      : 'private'
+  const visibility = leagueVisibility
   const isFinderListingActive = visibility === 'public'
   const finderListingHeadline = `${body.leagueName.trim()} | Rank ${minRankLevel}-${maxRankLevel}`
   const finderListingBody = JSON.stringify({
@@ -1056,6 +1147,19 @@ export async function createCanonicalLeagueInTransaction(
     allowInviteLink: true,
     zombieUniverseTier: zombieTier,
   })
+
+  if (bestBallSettings?.contestStructure === 'tournament') {
+    const ends = tournamentRoundEnds(bestBallSettings)
+    const contest = await tx.bestBallContest.create({ data: {
+      name: league.name ?? 'Best Ball Tournament', sport, variant: 'tournament',
+      podSize: bestBallSettings.podSize, rosterSize: draftRounds,
+      rounds: ends.length, advancersPerPod: bestBallSettings.advancersPerPod ?? 1,
+      cumulativeScoring: bestBallSettings.cumulativeScoring,
+      resetBetweenRounds: bestBallSettings.resetBetweenRounds,
+      scoringPeriod: bestBallSettings.scoringPeriod, draftType: coreDraft,
+    } })
+    await tx.league.update({ where: { id: league.id }, data: { bbContestId: contest.id, playoffTeams: 0, playoffStartWeek: ends.at(-1)! + 1 } })
+  }
 
   log?.('canonical_transaction_success', { leagueId: league.id })
 

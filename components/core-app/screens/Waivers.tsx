@@ -7,6 +7,9 @@ import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
 import type { WaiversData } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { platformLabel } from '@/lib/core-app/platformLinks'
+import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 
 /**
  * Screen 7 — Waivers.
@@ -22,6 +25,9 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
 
 export type WaiversProps = {
   data: WaiversData
+  /** Competitive Edge — loaded by the page only when the viewer's plan includes it. */
+  edge?: WaiverEdgeState | null
+  edgeAccess?: CoreDepthAccess | null
 }
 
 function Tile({
@@ -54,9 +60,10 @@ function Tile({
   )
 }
 
-export function Waivers({ data }: WaiversProps) {
+export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
   return (
     <div className="af-wv">
+      <h1 className="af-display">Waivers</h1>
       {/* ── Pricing context ─────────────────────────────────────────── */}
       <div className="af-wv-context">
         <span className="af-label">Priced for this league</span>
@@ -206,7 +213,18 @@ export function Waivers({ data }: WaiversProps) {
         null or an explicit empty rather than a fabricated bid, so mounting it
         does not weaken the honesty rule the withheld panel was protecting.
       */}
-      <WaiverIntel leagueId={data.league.id} />
+      {data.waiverType.available && data.waiverType.data.kind === 'faab' ? (
+        <WaiverIntel leagueId={data.league.id} surface="core" />
+      ) : null}
+
+      {/*
+        ── Competitive Edge ─────────────────────────────────────────────
+
+        After the bid pricing, because it answers the next question: who can outbid you. Every
+        other manager's FAAB left and what they have actually won this season — counts, never a
+        label (lib/competitive-edge/waiverEdge.ts).
+      */}
+      <WaiverCompetitiveEdge access={edgeAccess} edge={edge} />
 
       {/*
         ── Chimmy's recommendations ─────────────────────────────────────
@@ -235,9 +253,13 @@ export function Waivers({ data }: WaiversProps) {
         Browse every available player
       </Link>
 
+      {/* A league AllFantasy runs takes its claims here; an imported one is only read. */}
       <p className="af-wv-footnote">
-        Claims are made on {data.league.platform === 'manual' ? 'your platform' : data.league.platform}.
-        AllFantasy only reads your league.
+        {data.league.platform === 'manual'
+          ? 'Claims are made on your platform. AllFantasy only reads your league.'
+          : platformLabel(data.league.platform) === 'AllFantasy'
+            ? 'Claims for this league are made here, on AllFantasy.'
+            : `Claims are made on ${platformLabel(data.league.platform)}. AllFantasy only reads your league.`}
       </p>
     </div>
   )

@@ -8,7 +8,7 @@
  * only on the page because /core happens to bundle the notifications screen; af-league-home.css
  * records the same trap. Scoped here so these labels stay hidden wherever the home renders.
  */
-.af-fresh .af-sr-only,
+.af-cardfresh .af-sr-only,
 .af-decisions .af-sr-only {
   position: absolute;
   width: 1px;
@@ -19,7 +19,14 @@
 }
 
 /* ── Freshness line ─────────────────────────────────────────────────────── */
-.af-fresh {
+/*
+ * ⚠ `af-cardfresh`, NOT `af-fresh` (renamed 2026-09-25). `.af-fresh` is ALSO the
+ * Sports OS freshness chip (components/sports-os/af-freshness.css): inline-flex,
+ * nowrap, pill border. Both stylesheets land on /core, so the chip's rule leaked
+ * into this line — it rendered as one unwrappable pill and pushed the phone home
+ * to 436px on a 390px screen.
+ */
+.af-cardfresh {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 0;
@@ -28,8 +35,8 @@
   font: 500 11px/1.4 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.02em;
 }
-.af-fresh[data-stale='true'] { color: var(--warn); }
-.af-fresh time { color: inherit; }
+.af-cardfresh[data-stale='true'] { color: var(--warn); }
+.af-cardfresh time { color: inherit; }
 
 /* ── Decision queue ─────────────────────────────────────────────────────── */
 .af-decisions { margin-bottom: 18px; }

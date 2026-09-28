@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { leagueChatThreadLinkRefusal } from '@/lib/league/leagueChatThreadLink'
 
 const ALLOWED_KEYS = ['name', 'scoring', 'status', 'avatarUrl', 'rosterSize', 'leagueSize', 'starters', 'sport', 'season'] as const
 const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'benchSize', 'rosterPositions'] as const
@@ -25,6 +26,9 @@ export async function PATCH(
   }
 
   const body = await req.json().catch(() => ({}))
+  // Only this league's own chat may be linked (lib/league/leagueChatThreadLink.ts).
+  const chatLinkRefusal = leagueChatThreadLinkRefusal(leagueId, body?.leagueChatThreadId)
+  if (chatLinkRefusal) return NextResponse.json({ error: chatLinkRefusal }, { status: 400 })
   const updates: Record<string, unknown> = {}
   for (const key of ALLOWED_KEYS) {
     if (body[key] !== undefined) updates[key] = body[key]

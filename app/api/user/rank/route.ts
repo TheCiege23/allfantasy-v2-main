@@ -5,6 +5,7 @@ import { computeCompositeProfile, type LeagueRecord } from '@/lib/legacy/overvie
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { getLevelFromXp } from '@/lib/rank/levels'
 import { prisma } from '@/lib/prisma'
+import { dedupeImportedLeagueRows } from '@/lib/career/dedupeImportedLeagueRows'
 
 function logFullError(context: string, err: unknown) {
   const payload =
@@ -552,8 +553,17 @@ export async function GET(request: Request) {
     }> = []
 
     try {
+      /*
+       * ⚠ EVERY PLATFORM, NOT JUST SLEEPER. This said `AND platform = 'sleeper'`, so a manager whose
+       * leagues came from ESPN/Yahoo/MFL/Fleaflicker/Fantrax saw an empty career on the dashboard
+       * while /core's career page (lib/core-app/career.ts, which reads the same `import_*` columns
+       * with no platform filter) showed their record. Same source, same rule, now.
+       */
       const importedRows = await prisma.$queryRaw<
         Array<{
+          id: string
+          platform: string | null
+          platformLeagueId: string | null
           season: number
           import_wins: number | null
           import_losses: number | null
@@ -562,14 +572,14 @@ export async function GET(request: Request) {
           import_won_championship: boolean | null
         }>
       >`
-        SELECT season, import_wins, import_losses, import_ties, import_made_playoffs, import_won_championship
+        SELECT id, platform, "platformLeagueId", season,
+               import_wins, import_losses, import_ties, import_made_playoffs, import_won_championship
         FROM leagues
         WHERE "userId" = ${userId}
-          AND platform = 'sleeper'
           AND import_wins IS NOT NULL
       `
 
-      importedLeagueRows = importedRows.map((row) => ({
+      importedLeagueRows = dedupeImportedLeagueRows(importedRows).map((row) => ({
         season: row.season,
         importWins: row.import_wins,
         importLosses: row.import_losses,

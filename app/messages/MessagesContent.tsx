@@ -42,10 +42,7 @@ import {
 import {
   EMOJI_LIST,
   appendEmoji,
-  isGifSearchConfigured,
-  getGifProviderName,
   isValidGifOrImageUrl,
-  searchGifs,
   validateImageFile,
   validateAttachmentFile,
   getMessagePayloadForImage,
@@ -57,6 +54,7 @@ import {
   resolveMediaViewerUrl,
 } from "@/lib/rich-message"
 import type { AttachmentPreview, GifSearchResult } from "@/lib/rich-message"
+import { fetchGifs, gifSearchPlaceholder, loadGifSearchProvider, type GifProvider } from "@/lib/rich-message/gifSearchClient"
 import {
   parseMentions,
   notifyMentions,
@@ -150,6 +148,22 @@ export default function MessagesContent() {
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null)
   const [gifUrlInput, setGifUrlInput] = useState("")
   const [gifUrlOpen, setGifUrlOpen] = useState(false)
+  /*
+   * Which service GIF search asks — read from our server when the picker first opens. Search runs
+   * through /api/chat/gifs (lib/rich-message/gifSearchClient.ts), never from the browser: this
+   * used to try the dead Tenor API with a key inlined into the page before every result.
+   */
+  const [gifSearchProvider, setGifSearchProvider] = useState<GifProvider | null>(null)
+  useEffect(() => {
+    if (!gifUrlOpen || gifSearchProvider) return
+    let cancelled = false
+    void loadGifSearchProvider().then((p) => {
+      if (!cancelled) setGifSearchProvider(p)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [gifUrlOpen, gifSearchProvider])
   const [gifSearchQuery, setGifSearchQuery] = useState("")
   const [gifSearchLoading, setGifSearchLoading] = useState(false)
   const [gifSearchResults, setGifSearchResults] = useState<GifSearchResult[]>([])
@@ -422,6 +436,16 @@ export default function MessagesContent() {
     }
   }, [selectedThreadId, loadMessages, loadPinned, loadThreadMembers])
 
+  /*
+   * An uploaded attachment belongs to the conversation it was uploaded into: it is stored
+   * privately under that thread and served only to its members. Carrying it over to another
+   * conversation would post a photo that conversation's members cannot open, so switching
+   * conversations drops the pending attachment.
+   */
+  useEffect(() => {
+    clearAttachmentState(setAttachmentPreview, setUploadError)
+  }, [selectedThreadId])
+
   useEffect(() => {
     if (!focusedMessageId) return
     const target = document.getElementById(`message-row-${focusedMessageId}`)
@@ -523,11 +547,18 @@ export default function MessagesContent() {
         setUploadError(result.error ?? "Invalid image")
         return
       }
+      if (!selectedThreadId) {
+        setUploadError("Open a conversation first")
+        return
+      }
       setUploadError(null)
       setUploading(true)
       try {
         const formData = new FormData()
         formData.append("file", file)
+        // Photos are private to this conversation: the server stores them only after proving
+        // you are in it, and serves them back only to its members.
+        formData.append("threadId", selectedThreadId)
         const res = await fetch("/api/shared/chat/upload", { method: "POST", body: formData })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -540,7 +571,7 @@ export default function MessagesContent() {
         setUploading(false)
       }
     },
-    []
+    [selectedThreadId]
   )
 
   const handleFileSelect = useCallback(
@@ -553,11 +584,16 @@ export default function MessagesContent() {
         setUploadError(validation.error ?? "Invalid file")
         return
       }
+      if (!selectedThreadId) {
+        setUploadError("Open a conversation first")
+        return
+      }
       setUploadError(null)
       setUploading(true)
       try {
         const formData = new FormData()
         formData.append("file", file)
+        formData.append("threadId", selectedThreadId)
         const res = await fetch("/api/shared/chat/upload", { method: "POST", body: formData })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -570,7 +606,7 @@ export default function MessagesContent() {
         setUploading(false)
       }
     },
-    []
+    [selectedThreadId]
   )
 
   const handleGifUrlSubmit = useCallback(() => {
@@ -587,15 +623,15 @@ export default function MessagesContent() {
 
   const handleGifSearch = useCallback(async () => {
     const query = gifSearchQuery.trim()
-    if (!query || !isGifSearchConfigured()) return
+    if (!query || !gifSearchProvider) return
     setGifSearchLoading(true)
     try {
-      const results = await searchGifs(query, 16)
-      setGifSearchResults(results)
+      const { gifs } = await fetchGifs(query, 16)
+      setGifSearchResults(gifs)
     } finally {
       setGifSearchLoading(false)
     }
-  }, [gifSearchQuery])
+  }, [gifSearchQuery, gifSearchProvider])
 
   const canSend =
     canSendComposerMessage(input, attachmentPreview, sending) &&
@@ -1421,12 +1457,12 @@ export default function MessagesContent() {
                       className="absolute bottom-full left-3 mb-1 rounded-xl border p-3 shadow-lg z-10 w-80"
                       style={{ background: "var(--panel)", borderColor: "var(--border)" }}
                     >
-                      {isGifSearchConfigured() ? (
+                      {gifSearchProvider != null ? (
                         <p className="text-xs mode-muted mb-2">Search GIFs or paste a GIF/image URL.</p>
                       ) : (
                         <p className="text-xs mode-muted mb-2">Paste a GIF or image URL to send.</p>
                       )}
-                      {isGifSearchConfigured() && (
+                      {gifSearchProvider != null && (
                         <div className="mb-2">
                           <div className="flex gap-2 mb-2">
                             <div className="relative flex-1">
@@ -1441,7 +1477,7 @@ export default function MessagesContent() {
                                     void handleGifSearch()
                                   }
                                 }}
-                                placeholder={`Search ${getGifProviderName() || "GIF"}...`}
+                                placeholder={gifSearchPlaceholder(gifSearchProvider)}
                                 className="w-full rounded-lg border pl-7 pr-2 py-1.5 text-sm"
                                 style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
                               />

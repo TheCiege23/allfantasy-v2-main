@@ -7,7 +7,10 @@ import {
   getLeagueRosters,
   getLeagueTransactions,
   getLeagueUsers,
+  getSleeperState,
+  type SleeperSportState,
 } from '@/lib/api-cache/SleeperCacheLayer'
+import { triggerAlertFromScreenRead } from '@/lib/trade-intel/screenTradeAlerts'
 
 /**
  * Pending Sleeper trades, scanned for ONE league.
@@ -103,6 +106,47 @@ export function isPendingTradeStatus(status: string | undefined | null): boolean
   return s === 'pending' || s === 'proposed' || s === 'waiting' || s === 'requested'
 }
 
+/**
+ * How old the CURRENT weeks' transaction lists may be when a scan reads them.
+ *
+ * 🛑 A NEW TRADE OFFER IS FILED UNDER THE WEEK IT IS SENT IN, and every week shared one five-minute
+ * cache window — so an offer sent a minute after the last read stayed invisible on every trade
+ * screen for up to five more (longer, before the layer stopped stacking Next's stale-while-revalidate
+ * cache on top). Past weeks keep the long window: they change only when an old offer is answered.
+ * Sized under the trade screens' 60 s refresh, so each refresh can actually see something new.
+ */
+export const RECENT_WEEK_MAX_AGE_MS = 45_000
+
+/**
+ * The weeks a new transaction can be filed under right now — Sleeper's current `leg` and its
+ * neighbours (a week can turn over between two reads). PURE; exported for tests.
+ *
+ * ⚠ A GUESS HERE ONLY COSTS FRESHNESS, NEVER DATA: every week is still read, a week outside this set
+ * just keeps the five-minute window. An empty set is the answer when the clock is unknown.
+ */
+export function recentWeeksFromState(state: SleeperSportState | null, maxWeek = 18): Set<number> {
+  const leg = Number(state?.leg ?? state?.week)
+  if (!Number.isFinite(leg)) return new Set()
+  const current = Math.min(maxWeek, Math.max(1, Math.trunc(leg)))
+  return new Set([current - 1, current, current + 1].filter((w) => w >= 1 && w <= maxWeek))
+}
+
+async function recentTransactionWeeks(sport: string | null | undefined): Promise<Set<number>> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    // Bounded: the clock only sharpens freshness, so a slow answer must never hold up the scan.
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), 2_500)
+    })
+    return recentWeeksFromState(await Promise.race([getSleeperState(sport), timeout]))
+  } catch {
+    // No clock is not a failed scan — every week is still read, just on the long window.
+    return new Set()
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function ordinal(round: number): string {
   return round === 1 ? 'st' : round === 2 ? 'nd' : round === 3 ? 'rd' : 'th'
 }
@@ -148,35 +192,29 @@ export function buildTradeAssetsForRoster(args: {
 
   for (const pick of tx.draft_picks ?? []) {
     const label = `${pick.season} ${pick.round}${ordinal(pick.round)}`
-    // `roster_id` on a Sleeper draft pick is the roster RECEIVING it;
-    // `previous_owner_id` is the roster giving it up.
-    if (pick.roster_id === userRosterId) {
-      assetsReceived.push({
-        playerId: null,
-        playerName: `${label} round pick`,
-        position: 'PICK',
-        team: '—',
-        isPick: true,
-        pickRound: label,
-        pickYear: Number(pick.season),
-        pickRoundNumber: pick.round,
-        pickOriginalRosterExternalId: String((pick as { owner_id?: number }).owner_id ?? ''),
-      })
-    } else if (
-      (pick as { previous_owner_id?: number }).previous_owner_id === userRosterId
-    ) {
-      assetsGiven.push({
-        playerId: null,
-        playerName: `${label} round pick`,
-        position: 'PICK',
-        team: '—',
-        isPick: true,
-        pickRound: label,
-        pickYear: Number(pick.season),
-        pickRoundNumber: pick.round,
-        pickOriginalRosterExternalId: String((pick as { owner_id?: number }).owner_id ?? ''),
-      })
+    /*
+     * 🛑 ON A SLEEPER DRAFT PICK, `roster_id` IS THE ORIGINAL OWNER — NOT THE RECEIVER
+     * (2026-09-25). `owner_id` is the roster RECEIVING it and `previous_owner_id` the roster giving
+     * it up; `SleeperTradedPicksMapper.ts` documents the same shape. This loop read `roster_id` as
+     * the receiver, so a pick you received from its original owner matched neither branch ("You
+     * receive: Nothing"), and a pick someone else originally owned was credited to the wrong side
+     * of the grade. `roster_id` only coincides with the receiver when a pick comes HOME.
+     */
+    const receiver = Number((pick as { owner_id?: number }).owner_id)
+    const sender = Number((pick as { previous_owner_id?: number }).previous_owner_id)
+    const asset: PendingTradeAsset = {
+      playerId: null,
+      playerName: `${label} round pick`,
+      position: 'PICK',
+      team: '—',
+      isPick: true,
+      pickRound: label,
+      pickYear: Number(pick.season),
+      pickRoundNumber: pick.round,
+      pickOriginalRosterExternalId: pick.roster_id == null ? '' : String(pick.roster_id),
     }
+    if (receiver === userRosterId) assetsReceived.push(asset)
+    else if (sender === userRosterId) assetsGiven.push({ ...asset })
   }
 
   /*
@@ -268,6 +306,12 @@ export async function scanPendingSleeperTrades(args: {
   sport?: string | null
   /** Sleeper stores transactions per week; 1–18 covers a full NFL season. */
   weeks?: number[]
+  /**
+   * A SCREEN's read: when it finds a pending offer, raise the league's trade alerts now rather than
+   * at the next sweep (`screenTradeAlerts.ts`). Throttled per league per minute across everyone;
+   * never awaited, so the page never waits on it. Off for every non-screen caller.
+   */
+  alertOnNewOffers?: boolean
 }): Promise<PendingTradeScan> {
   const { platformLeagueId, ownerSleeperId } = args
   if (!platformLeagueId?.trim() || !ownerSleeperId?.trim()) {
@@ -365,12 +409,15 @@ export async function scanPendingSleeperTrades(args: {
      */
     const WEEK_FETCH_CONCURRENCY = 6
     const fetched = new Array<SleeperTransaction[] | null>(weeks.length)
+    const recent = await recentTransactionWeeks(args.sport)
     for (let start = 0; start < weeks.length; start += WEEK_FETCH_CONCURRENCY) {
       const slice = weeks.slice(start, start + WEEK_FETCH_CONCURRENCY)
       await Promise.all(
         slice.map(async (week, offset) => {
           try {
-            const raw = await getLeagueTransactions(platformLeagueId, week)
+            const raw = recent.has(week)
+              ? await getLeagueTransactions(platformLeagueId, week, { maxAgeMs: RECENT_WEEK_MAX_AGE_MS })
+              : await getLeagueTransactions(platformLeagueId, week)
             fetched[start + offset] = Array.isArray(raw) ? (raw as unknown as SleeperTransaction[]) : []
           } catch {
             /*
@@ -455,6 +502,9 @@ export async function scanPendingSleeperTrades(args: {
     }
 
     completed.sort((a, b) => Date.parse(b.proposedAt ?? '') - Date.parse(a.proposedAt ?? ''))
+    if (args.alertOnNewOffers && out.length > 0) {
+      void triggerAlertFromScreenRead(platformLeagueId, [...recent])
+    }
     return {
       trades: out,
       completedTrades: completed.slice(0, 50),

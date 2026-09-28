@@ -111,6 +111,7 @@ const baseRow = {
 describe('getLivePageData — basketball', () => {
   const getLiveScoresForSport = vi.fn()
   const getCachedLiveScoresForSport = vi.fn()
+  const estimate = vi.fn(() => ({ home: 55, away: 45, isEstimate: true }))
 
   beforeEach(() => {
     vi.resetModules()
@@ -126,7 +127,8 @@ describe('getLivePageData — basketball', () => {
     }))
     vi.doMock('@/lib/prisma', () => ({ prisma: {} }))
     vi.doMock('@/lib/live/playFeedPresentation', () => ({ getPlayFeed: vi.fn(async () => []) }))
-    vi.doMock('@/lib/live/winProbability', () => ({ estimateWinProbability: () => null }))
+    estimate.mockClear()
+    vi.doMock('@/lib/live/winProbability', () => ({ estimateWinProbability: estimate }))
   })
 
   afterEach(() => {
@@ -150,6 +152,21 @@ describe('getLivePageData — basketball', () => {
     const data = await getLivePageData({ userId: null, sport, scope: 'all' })
     return data.games[0]!
   }
+
+  it('does not apply an NFL estimate to baseball, basketball, scheduled games or final results', async () => {
+    for (const sport of ['MLB', 'NBA', 'NCAAF']) {
+      expect((await gameFor(sport, { ...baseRow, period: 1, clock: '15:00' })).winProbability).toBeNull()
+    }
+    expect((await gameFor('NFL', { ...baseRow, status: 'STATUS_SCHEDULED' })).winProbability).toBeNull()
+    expect((await gameFor('NFL', { ...baseRow, completed: true })).winProbability).toBeNull()
+    expect(estimate).not.toHaveBeenCalled()
+    expect((await gameFor('NFL', { ...baseRow, period: 2, clock: '5:00' })).winProbability).toMatchObject({ home: 55 })
+    expect(estimate).toHaveBeenCalledOnce()
+  })
+
+  it('preserves the Cardinals abbreviation in baseball cards', async () => {
+    expect((await gameFor('MLB', { ...baseRow, homeTeam: 'STL' })).home.abbrev).toBe('STL')
+  })
 
   it.each([
     ['NBA', 3, '5:42', 'Q3 · 5:42'],

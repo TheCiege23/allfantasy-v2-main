@@ -18,6 +18,8 @@ import {
   getWebPageSchema,
 } from '@/lib/seo'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
+import { getPaywallStartsAt, isPaywallLive } from '@/lib/monetization/paywallLaunch'
+import { foundingOfferBeforeLaunch } from '@/lib/monetization/foundingMember'
 
 /**
  * Landing page (Nocturne "1a" design). Replaces the legacy scrollytelling
@@ -170,6 +172,18 @@ export default async function HomePage({
   const copy = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
   const faqSchema = getFAQPageSchema(copy.faq.items)
 
+  /*
+   * The launch banner ("Everything's free until Oct 15" + countdown), only while the paywall has
+   * not started. After launch this is null and the page is exactly what it was before the banner
+   * existed. The banner also hides itself client-side when its own clock runs out.
+   */
+  const launch = isPaywallLive()
+    ? null
+    : {
+        startsAt: getPaywallStartsAt().toISOString(),
+        founding: foundingOfferBeforeLaunch({ signedIn }),
+      }
+
   return (
     <>
       <PageJsonLd schemas={[HOME_WEBPAGE_SCHEMA, HOME_SOFTWARE_APP_SCHEMA, faqSchema]} />
@@ -193,7 +207,7 @@ export default async function HomePage({
         and the acquisition attribution; swapping the visual must not cost them.
         One-line rollback: restore the LandingNocturne import and this element.
       */}
-      <LandingV4 lang={lang} signedIn={signedIn} />
+      <LandingV4 lang={lang} signedIn={signedIn} launch={launch} />
     </>
   )
 }

@@ -83,7 +83,8 @@ describe('⚠ FAAB was being dropped on the floor', () => {
     // A consumer that rebuilds the pick as an asset must not have to parse
     // "2027 1st" back out of prose.
     const out = buildTradeAssetsForRoster({
-      tx: { adds: {}, drops: {}, draft_picks: [{ season: '2027', round: 2, roster_id: 1 }] } as never,
+      // Sleeper: `owner_id` receives the pick, `roster_id` is its ORIGINAL owner (2026-09-25).
+      tx: { adds: {}, drops: {}, draft_picks: [{ season: '2027', round: 2, roster_id: 3, owner_id: 1, previous_owner_id: 3 }] } as never,
       userRosterId: 1,
       players,
     })
@@ -141,7 +142,7 @@ describe('⚠ the route reports the scan, not just its result', () => {
      */
     expect(ROUTE.split('pending: {').length - 1).toBe(3)
     expect(ROUTE).toContain('scanned: pendingScan.scanned')
-    expect(ROUTE).toContain('pendingOffers: builderOffers(providerPending, providerEvaluations)')
+    expect(ROUTE).toContain('pendingOffers: builderOffers(providerPending, providerEvaluations, providerGrades)')
   })
 
   it('says which platform it could not read, and which two it can', () => {
@@ -339,7 +340,8 @@ describe('⚠ loading an offer into the builder analyses THAT offer', () => {
      * make one request. Correct on load; wrong straight after a write, because the
      * cached response is exactly the state the write just changed.
      */
-    expect(INBOX).toContain('reloadToken > 0 ? { force: true } : undefined')
+    // A background refresh (useVisibleRefresh) forces too: it exists to see what changed.
+    expect(INBOX).toContain('reloadToken > 0 || background ? { force: true } : undefined')
   })
 })
 

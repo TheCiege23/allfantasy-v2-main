@@ -7,8 +7,8 @@
  * Rebuilding every team's own picks for an ESPN, Yahoo or Fantrax league would list a pick with its
  * original team even where it has been traded, because nothing records the trade.
  *
- * ⚠ NOT FOR NATIVE LEAGUES. Their picks live in `Roster.playerData` and are what a proposal
- * references; these picks carry no such id and are for display and valuation only.
+ * ⚠ NOT FOR NATIVE LEAGUES. A native dynasty league's picks come from `nativeFuturePicks.ts`,
+ * which the trade engine can settle; these are for display and valuation only.
  *
  * DB-first: two indexed reads on a request path, no provider call. Failures cost the picks and
  * nothing else.

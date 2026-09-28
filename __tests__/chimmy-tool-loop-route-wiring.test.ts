@@ -284,6 +284,38 @@ describe('the specialist agent is chosen from the orchestration intent', () => {
 
 describe('tool loop system prompt', () => {
   /*
+   * Owner's call 2026-09-24: smart, fun and informational. One voice for both paths — the tool loop
+   * and the orchestration fallback read the same block — and the user's saved preferences, which
+   * only the fallback used to see, now reach the path that answers first.
+   */
+  it('speaks in the shared Chimmy voice and hands the loop the user\'s saved style', () => {
+    const start = idx('const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT')
+    expect(ROUTE.slice(start, start + 80)).toMatch(/const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = \[\s*\n\s*CHIMMY_IDENTITY,/)
+    expect(ROUTE).toMatch(/\]\.join\(' '\) \+[\s\S]{0,900}?'\\n\\n' \+\s*\n\s*getChimmyPromptStyleBlock\(\)/)
+    expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
+    expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,[\s\S]{0,1200}?clockLine: userTemporalContext\.promptLine,[\s\S]{0,900}?styleLine: \[\s*\n\s*personalizationDirectives,/)
+    expect(ROUTE).toContain('groundingLine: decisionOsGrounding && leagueSnapshot')
+  })
+
+  /*
+   * Chimmy's track record (2026-09-24): its record reaches the loop per user, so "how good are your
+   * picks?" is answered from graded calls — and the start/sit calls the loop makes are collected and
+   * recorded, so the record grows from chat and not only from the comparison screen.
+   */
+  it('hands the loop its graded track record, and records the start/sit calls the answer made', () => {
+    expect(ROUTE).toMatch(
+      /styleLine: \[\s*\n\s*personalizationDirectives,\s*\n\s*renderTrackRecordPromptLine\(chimmyTrackRecordFor\(await readAdviceLearningSnapshot\(\), userId \?\? null\)\),/,
+    )
+    /* `actionCards` (2026-09-25) collects the confirm cards the propose tools build; see below. */
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\] \}/)
+    const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
+    expect(record).toBeGreaterThan(-1)
+    /* Recorded before the answer is returned, against the text the user is about to see. */
+    const answered = ROUTE.indexOf("source: 'chimmy_tool_loop'")
+    expect(answered).toBeGreaterThan(record)
+  })
+
+  /*
    * When the model fetches its own context, nothing upstream can guarantee the
    * context is there — so the do-not-invent rule has to travel with the tools.
    */

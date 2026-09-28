@@ -82,14 +82,21 @@ export function HubBroadcast({
           onKeyDown={(e) => {
             if (e.key === 'Enter') void send()
           }}
-          placeholder={`Message ${leagueIds.length === 1 ? 'your league' : `all ${leagueIds.length} leagues you commission`}…`}
+          /*
+           * "AllFantasy" is load-bearing: only leagues AllFantasy hosts have a chat
+           * to post into, so an account running 40 leagues (33 of them Sleeper)
+           * reads "Message all 7" beside "Across the 40 leagues you run" — which
+           * looked like a lost 33 until the platform was named (2026-09-25).
+           */
+          placeholder={`Message ${leagueIds.length === 1 ? 'your AllFantasy league' : `all ${leagueIds.length} AllFantasy leagues you commission`}…`}
         />
         <button type="button" className="afh-btn afh-btn--sm" onClick={() => void send()} disabled={sending || !text.trim()}>
           {sending ? 'Sending' : 'Send'}
         </button>
       </div>
       <p className="afh-compose-note" data-tone={state.tone ?? undefined} aria-live="polite">
-        {state.note || 'Posts as @everyone in each league chat and notifies its members.'}
+        {state.note ||
+          'Posts as @everyone in each AllFantasy league chat and notifies its members. Imported leagues chat on their own platform.'}
       </p>
     </div>
   )

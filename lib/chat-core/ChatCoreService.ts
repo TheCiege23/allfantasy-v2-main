@@ -30,7 +30,7 @@ export function bracketMessageToPlatformShape(
     id: msg.id,
     threadId,
     senderUserId: msg.user?.id ?? null,
-    senderName: msg.user?.displayName || msg.user?.email || "User",
+    senderName: msg.user?.displayName || msg.user?.username || "Manager",
     senderUsername: msg.user?.username ?? null,
     messageType: msg.type || "text",
     body: msg.message || "",

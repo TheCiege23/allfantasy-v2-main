@@ -3,7 +3,7 @@ import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
 import { prisma } from '@/lib/prisma'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
-import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
+import { SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import {
   expireDueRedraftTradeProposals,
@@ -44,9 +44,16 @@ async function processDueWaiverWindows() {
   // processing has only ever run for natively drafted leagues. That is a
   // defensible rule; it just was not one anybody had written. `engineSeasonScope`
   // states it: both spellings, native leagues only, shadow behind an argument.
+  // Playoff seasons too: waivers keep running in the postseason, as on every host platform, and
+  // the playoff teams are the ones who most need them. See SCORING_SEASON_STATUSES.
+  //
+  // ⚠ ORDERED AND UNCAPPED. This read `take: 20` with no `orderBy`, so once more than twenty
+  // seasons were running, the same twenty (by Postgres' physical order) were processed every
+  // hour and the rest never ran a waiver. `processWaiverWindow` is a no-op read for a season
+  // with no pending claims, so every season is visited instead.
   const seasons = await prisma.redraftSeason.findMany({
-    where: engineSeasonScope(),
-    take: 20,
+    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
+    orderBy: { id: 'asc' },
   })
   const results: { seasonId: string; processed: unknown[] }[] = []
   for (const s of seasons) {

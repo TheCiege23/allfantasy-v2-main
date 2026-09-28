@@ -14,13 +14,20 @@ export interface CheckPhoneCodeResult {
   error?: "INVALID_CODE" | "RATE_LIMITED" | string
 }
 
-export async function startPhoneVerification(phone: string): Promise<StartPhoneVerificationResult> {
+export async function startPhoneVerification(
+  phone: string,
+  opts?: { smsConsent?: boolean; consentSource?: string }
+): Promise<StartPhoneVerificationResult> {
   const normalized = phone.replace(/[\s()-]/g, "").trim()
   const withCountry = normalized.startsWith("+") ? normalized : `+1${normalized}`
   const res = await fetch("/api/verify/phone/start", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ phone: withCountry }),
+    body: JSON.stringify({
+      phone: withCountry,
+      smsConsent: opts?.smsConsent === true,
+      consentSource: opts?.consentSource,
+    }),
   })
   const data = await res.json().catch(() => ({}))
   if (res.status === 429) return { ok: false, rateLimited: true, error: data.message ?? "Too many attempts" }

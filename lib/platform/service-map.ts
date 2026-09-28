@@ -39,7 +39,7 @@ const sharedServices: PlatformServiceDefinition[] = [
     name: 'Wallet/Payments Service',
     product: 'shared',
     responsibility: 'Subscriptions, token purchases, and checkout/webhook links (league dues/payouts are external).',
-    endpoints: ['/api/stripe/create-checkout-session', '/api/stripe/webhook', '/api/bracket/stripe/checkout'],
+    endpoints: ['/api/stripe/create-checkout-session', '/api/stripe/webhook'],
   },
   {
     key: 'notifications',

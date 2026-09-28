@@ -495,10 +495,11 @@ html[data-mode="legacy"] .nocturne {
 }
 .nocturne .nocturne-price-grid {
   display: grid;
-  /* auto-fit keeps every card ≥180px and wraps gracefully: 5-across on desktop
-     (the afwrap max-width caps content, so it never over-stretches), degrading to
-     3/2/1 as the viewport narrows — no fixed column count to fight the 5 tiers. */
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* FOUR tiers (Free, Pro, Commissioner, Supreme — AF Legacy left the launch pricing
+     2026-09-24): 4-across, then 2x2 at ≤960px, then one column at ≤640px. Fixed
+     counts on purpose — the old auto-fit(180px) rule suited five cards but, with four,
+     lands on 3 + 1 between roughly 690px and 880px and strands one card on its own row. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -534,7 +535,7 @@ html[data-mode="legacy"] .nocturne {
 @media (max-width: 960px) {
   .nocturne .nocturne-hero-grid { grid-template-columns: 1fr; gap: 44px; }
   .nocturne .nocturne-comm-grid { grid-template-columns: 1fr; gap: 40px; }
-  /* .nocturne-price-grid intentionally omitted: its auto-fit rule self-collapses. */
+  .nocturne .nocturne-price-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nocturne .n-import-grid { grid-template-columns: 1fr; gap: 40px; }
 }
 @media (max-width: 820px) {
@@ -554,6 +555,7 @@ html[data-mode="legacy"] .nocturne {
 @media (max-width: 640px) {
   .nocturne .afwrap { padding: 0 22px; }
   .nocturne .nocturne-comm-cards { grid-template-columns: 1fr; }
+  .nocturne .nocturne-price-grid { grid-template-columns: 1fr; }
   .nocturne .n-hero-title { font-size: 44px !important; }
   .nocturne .n-hero-cta { width: 100%; }
   .nocturne .n-hero-cta .btn { width: 100%; }

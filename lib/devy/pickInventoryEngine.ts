@@ -115,6 +115,12 @@ function summarizePick(p: DevyDraftPick): PickSummary {
   }
 }
 
+/**
+ * Move a devy pick's ownership. ⚠ AUTHORIZES NOTHING: it checks only that `fromRosterId` currently
+ * owns the pick — not who is asking, and not that the receiving team agreed. Its one caller,
+ * `PATCH /api/devy/picks`, was removed on 2026-09-25 for exactly that reason. Call it only from a path
+ * that has already established consent and authority (the trade engine), never from a request body.
+ */
 export async function processPickTrade(
   leagueId: string,
   fromRosterId: string,

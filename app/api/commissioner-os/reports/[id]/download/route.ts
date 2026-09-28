@@ -4,6 +4,7 @@ import { findTemplate } from '@/lib/commissioner-reports/reportCatalog'
 import { readReportContent } from '@/lib/commissioner-reports/reportStore'
 import { isLiveReady } from '@/lib/commissioner-ui/liveReadiness'
 import { resolveActiveLeagueId } from '@/lib/commissioner-ui/resolveActiveLeagueId'
+import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -29,6 +30,19 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const leagueId = await resolveActiveLeagueId()
   if (!leagueId) {
     return NextResponse.json({ error: 'No commissioned league for this session.' }, { status: 403 })
+  }
+  // Reports are AF Commissioner (lib/commissioner-ui/commissionerOsDepth.ts) — after the commissioner check.
+  const depth = await resolveCommissionerOsDepth()
+  if (!depth.unlocked) {
+    return NextResponse.json(
+      {
+        error: 'Premium feature',
+        code: 'feature_not_entitled',
+        message: `Reports are part of ${depth.planName}.`,
+        upgradePath: depth.upgradePath,
+      },
+      { status: 403 },
+    )
   }
   if (!(await isLiveReady('reports'))) {
     return NextResponse.json({ error: 'Reports are not enabled in this environment.' }, { status: 409 })

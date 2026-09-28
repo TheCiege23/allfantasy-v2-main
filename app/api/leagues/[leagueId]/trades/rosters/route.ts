@@ -8,19 +8,29 @@ import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationSe
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
-import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
-import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
+import { marketContextFor } from '@/lib/trade-intel/marketContext'
+import { priceLeagueTradePick } from '@/lib/trade-value-console/leagueTradePricing'
+import { pickPreviewKey, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
+import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
+import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
+import { gradePartnerSuggestions } from '@/lib/trade-intel/partnerSuggestionGrades'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import {
   pickUnpricedReason,
   playerUnpricedReason,
   type UnpricedReason,
 } from '@/lib/trade-value/unpricedReason'
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
-import { inventoryPickId, roundOrdinal } from '@/lib/league-trade-engine/futurePickInventory'
+import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
+import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
+import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
 import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -38,6 +48,9 @@ import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
 
 export const dynamic = 'force-dynamic'
+
+/** How many ranked partners' suggested deals are graded — the cards the Trade Center shows, plus headroom. */
+const GRADED_PARTNER_SUGGESTIONS = 5
 
 /**
  * A player the picker can offer.
@@ -185,6 +198,47 @@ export type TradeableRoster = {
 }
 
 /**
+ * The latest stored season simulation's playoff odds, keyed by team id (0–100), or null when the
+ * league mode has none to show (guillotine, survivor) or the season is unknown.
+ *
+ * Two reads, in series because the second needs the first's week. Some deployments and isolated
+ * route tests run with a reduced Prisma surface; missing simulation storage must reduce proposal
+ * confidence, never take down the roster and partner picker — so every failure is an empty map.
+ */
+async function loadPlayoffProbabilities(
+  leagueId: string,
+  currentSeason: number | null,
+  proposalMode: ProposalLeagueMode,
+): Promise<Map<string, number> | null> {
+  if (proposalMode === 'guillotine' || proposalMode === 'survivor' || !currentSeason) return null
+  const simulationStore = (prisma as typeof prisma & {
+    seasonSimulationResult?: typeof prisma.seasonSimulationResult
+  }).seasonSimulationResult
+  const latestSimulation = simulationStore
+    ? await simulationStore.findFirst({
+      where: { leagueId, season: currentSeason },
+      orderBy: [{ weekOrPeriod: 'desc' }, { createdAt: 'desc' }],
+      select: { weekOrPeriod: true, createdAt: true },
+    })
+      .catch(() => null)
+    : null
+  const simulationIsFresh = latestSimulation
+    ? Date.now() - latestSimulation.createdAt.getTime() <= 10 * 24 * 60 * 60 * 1000
+    : false
+  const simulations = latestSimulation && simulationIsFresh && simulationStore
+    ? await simulationStore.findMany({
+          where: { leagueId, season: currentSeason, weekOrPeriod: latestSimulation.weekOrPeriod },
+          select: { teamId: true, playoffProbability: true },
+        })
+        .catch(() => [])
+    : []
+  return new Map(simulations.map((row) => {
+    const raw = Number(row.playoffProbability)
+    return [String(row.teamId), raw <= 1 ? raw * 100 : raw] as const
+  }))
+}
+
+/**
  * Every roster's tradeable player list, for the native trade-proposal UI. Gated by league
  * membership (not the narrower owner-only check on `/api/league/roster?userId=`) since roster
  * composition is not sensitive within a league — every member can already see opponents' lineups
@@ -194,7 +248,9 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> },
 ) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null }
+  } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -202,54 +258,123 @@ export async function GET(
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  const rosters = await prisma.roster.findMany({
-    where: { leagueId },
-    select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
-  })
+  // Reduced Prisma doubles used by isolated route tests may not expose these newer
+  // delegates yet. That means "not confirmed" / "no history", never a request failure.
+  const strategyStore = (prisma as typeof prisma & {
+    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
+  }).tradeManagerStrategy
+  const tradeStore = (prisma as typeof prisma & {
+    afLeagueTrade?: typeof prisma.afLeagueTrade
+  }).afLeagueTrade
 
   /*
-   * The league's own season decides rookie-vs-future on every pick below.
+   * ── WAVE ONE: EVERY READ THAT NEEDS ONLY THE LEAGUE ID AND THE VIEWER ─────────────────────────
    *
-   * ⚠ `sport` IS SELECTED TOO, AND IT IS LOAD-BEARING. `SportsPlayer.externalId` is unique only
-   * WITHIN a sport, and a bare Sleeper id collides across them — one measured id resolved to an NFL
-   * receiver, an NBA guard and an NCAAB player. The resolver is scoped by this value.
+   * ⚠ THESE WERE AWAITED ONE AFTER ANOTHER, AND NONE OF THEM READS ANOTHER'S ANSWER. The web
+   * service and the database sit in different regions, so every serial round trip is paid in full;
+   * on a 32-team league the route spent its first second queuing reads that could all be in flight
+   * together. Each read keeps exactly the failure handling it had in series — a `.catch` where it had
+   * one, a request failure where it had none — so the only thing that changed is when they start.
    */
-  const league = await prisma.league
-    // `starters` is the league's own lineup, read by the partner ranking below.
-    // `isDynasty` and `settings` (the provider's status) size and date the imported pick inventory.
-    .findUnique({
-      where: { id: leagueId },
-      select: {
-        season: true,
-        sport: true,
-        platform: true,
-        starters: true,
-        isDynasty: true,
-        leagueSize: true,
-        settings: true,
-        leagueType: true,
-        leagueVariant: true,
-        bestBallMode: true,
-        guillotineMode: true,
-        waiverBudget: true,
-        playoffTeams: true,
-        playoffStartWeek: true,
-      },
-    })
-    .catch(() => null)
+  const [rosters, league, savedStrategy, teams, identityIds, projectionWeek, historicalTrades, tradeDepth] =
+    await Promise.all([
+      prisma.roster.findMany({
+        where: { leagueId },
+        select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+      }),
+      /*
+       * The league's own season decides rookie-vs-future on every pick below.
+       *
+       * ⚠ `sport` IS SELECTED TOO, AND IT IS LOAD-BEARING. `SportsPlayer.externalId` is unique only
+       * WITHIN a sport, and a bare Sleeper id collides across them — one measured id resolved to an
+       * NFL receiver, an NBA guard and an NCAAB player. The resolver is scoped by this value.
+       */
+      prisma.league
+        // `starters` is the league's own lineup, read by the partner ranking below.
+        // `isDynasty` and `settings` (the provider's status) size and date the imported pick inventory.
+        .findUnique({
+          where: { id: leagueId },
+          select: {
+            season: true,
+            platformLeagueId: true,
+            sport: true,
+            platform: true,
+            starters: true,
+            isDynasty: true,
+            leagueSize: true,
+            settings: true,
+            leagueType: true,
+            leagueVariant: true,
+            bestBallMode: true,
+            guillotineMode: true,
+            waiverBudget: true,
+            playoffTeams: true,
+            playoffStartWeek: true,
+            // Native future picks are offered only where the validator would accept them.
+            draftPickTrading: true,
+          },
+        })
+        .catch(() => null),
+      strategyStore
+        ? getTradeManagerStrategy(leagueId, userId, { tradeManagerStrategy: strategyStore }).catch(() => null)
+        : Promise.resolve(null),
+      prisma.leagueTeam
+        .findMany({
+          where: { leagueId },
+          select: {
+            platformUserId: true, teamName: true, externalId: true,
+            // Already one query; these ride along rather than costing another.
+            avatarUrl: true, wins: true, losses: true, ties: true,
+            // The roster↔team join the imported pick inventory needs.
+            id: true, claimedByUserId: true,
+          },
+        })
+        .catch(() => []),
+      // Which rosters are the viewer's own; see `viewerTeamRosterId` below.
+      (async () => {
+        const ids = new Set<string>([userId])
+        const [claimed, profile] = await Promise.all([
+          prisma.leagueTeam
+            .findFirst({
+              where: { leagueId, claimedByUserId: userId },
+              select: { platformUserId: true },
+            })
+            .catch(() => null),
+          prisma.userProfile
+            .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+            .catch(() => null),
+        ])
+        if (claimed?.platformUserId) ids.add(claimed.platformUserId)
+        if (profile?.sleeperUserId) ids.add(profile.sleeperUserId)
+        return ids
+      })(),
+      latestProjectionWeek().catch(() => null),
+      tradeStore
+        ? tradeStore.findMany({
+          where: { leagueId },
+          orderBy: { createdAt: 'desc' },
+          take: 250,
+          select: {
+            proposerRosterId: true,
+            receiverRosterId: true,
+            status: true,
+            metadata: true,
+            items: { select: { itemType: true, fromRosterId: true, toRosterId: true } },
+          },
+        })
+          .catch(() => [])
+        : Promise.resolve([]),
+      /*
+       * Trade depth (AF Pro, lib/core-app/coreDepthAccess.ts). Read-only and fail-closed inside, so
+       * starting it here rather than last changes nothing but the wait. See where it is applied.
+       */
+      resolveCoreDepth(userId, 'trade_depth', { email: session?.user?.email ?? null }),
+    ])
   const currentSeason = Number(league?.season) || null
   const valueBook = valueBookFor(
     league?.settings,
     league?.leagueType ?? (league?.isDynasty ? 'dynasty' : null),
   )
-  // Reduced Prisma doubles used by isolated route tests may not expose this new
-  // delegate yet. That means "not confirmed", never a request failure.
-  const strategyStore = (prisma as typeof prisma & {
-    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
-  }).tradeManagerStrategy
-  const savedStrategy = strategyStore
-    ? await getTradeManagerStrategy(leagueId, userId, { tradeManagerStrategy: strategyStore }).catch(() => null)
-    : null
   const managerStrategy: ProposalManagerStrategy = savedStrategy?.active ?? 'balanced'
   const proposalMode: ProposalLeagueMode = (() => {
     const type = `${league?.leagueType ?? ''} ${league?.leagueVariant ?? ''}`.toLowerCase()
@@ -275,8 +400,14 @@ export async function GET(
   const scoring = settingsBag.scoring_settings && typeof settingsBag.scoring_settings === 'object'
     ? settingsBag.scoring_settings as Record<string, unknown>
     : {}
-  const rawPpr = Number(scoring.rec ?? nestedSettings.rec ?? 1)
-  const ppr: 0 | 0.5 | 1 = rawPpr >= 0.75 ? 1 : rawPpr >= 0.25 ? 0.5 : 0
+  const chartTeams = Number(league?.leagueSize) || 12
+  const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
+  const chartSettings = {
+    isDynasty: marketContext.variant.dynasty || marketContext.variant.keeper,
+    numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
+    numTeams: chartTeams,
+    ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,
+  }
 
   /*
    * Who among these rosters is an actual AllFantasy account, and what to call
@@ -285,25 +416,82 @@ export async function GET(
    * name where it has one.
    */
   const platformIds = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
-  const [accounts, teams] = await Promise.all([
+  /*
+   * ── WAVE TWO: READS THAT NEED THE ROSTERS OR THE LEAGUE, AND NOTHING ELSE ──────────────────────
+   *
+   * Same rule as wave one: independent, so in flight together, each with its own failure handling
+   * unchanged. The imported pick inventory also needs the team list, which wave one already holds.
+   */
+  const settingsStatus = (() => {
+    const s = league?.settings
+    const v = s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>).status : null
+    return typeof v === 'string' ? v : null
+  })()
+  /*
+   * 🛑 ONE RESOLVE FOR THE WHOLE LEAGUE, NOT ONE PER ROSTER. This call used to sit INSIDE the
+   * per-roster map below, so a twelve-team league fired TWELVE concurrent `sportsPlayer`
+   * findMany queries — each an IN-list of ~15 ids against a ~42,000-row table — to answer one
+   * question. The resolver has always taken an array; nothing in it had to change.
+   *
+   * ⚠ DEDUPED ACROSS ROSTERS. The same id cannot appear on two rosters in a healthy league, but
+   * a mid-trade snapshot can show one on both, and asking twice for the same player is the
+   * habit this commit exists to remove.
+   *
+   * ⚠ THE MAP IS SHARED AND READ-ONLY. Every roster looks up its own ids and writes nothing
+   * back, which is what makes one map safe for all of them.
+   */
+  const allRosterPlayerIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
+  const platform = String(league?.platform ?? 'sleeper').trim().toLowerCase()
+  const [accounts, byeByTeam, importedPicks, nativePicks, resolvedForLeague, probabilityByTeam] = await Promise.all([
     prisma.appUser
       .findMany({
         where: { id: { in: platformIds } },
         select: { id: true, displayName: true, username: true },
       })
       .catch(() => []),
-    prisma.leagueTeam
-      .findMany({
-        where: { leagueId },
-        select: {
-          platformUserId: true, teamName: true, externalId: true,
-          // Already one query; these ride along rather than costing another.
-          avatarUrl: true, wins: true, losses: true, ties: true,
-          // The roster↔team join the imported pick inventory needs.
-          id: true, claimedByUserId: true,
-        },
-      })
-      .catch(() => []),
+    /*
+     * One derivation for the whole request. The bye is a property of the TEAM, so 32 rows answer
+     * it for every player on every roster; doing it per player would be the same query 241 times.
+     */
+    resolveTeamByeWeeks(String(league?.sport ?? 'NFL'), league?.season),
+    /*
+     * 🛑 AN IMPORTED LEAGUE'S PICKS WERE NEVER LISTED. They live in `future_draft_picks`, not in
+     * `Roster.playerData`, and on staging 2026-09-17 no league yielded a single pick from the JSON.
+     * The loader reads them only for the providers whose pick trades are synced (Sleeper, MFL) — so
+     * never for a native league, whose picks come from `loadNativeFuturePicks` below.
+     */
+    loadImportedFuturePicks({
+      leagueId,
+      platform: league?.platform,
+      isDynasty: Boolean(league?.isDynasty),
+      leagueSeason: currentSeason,
+      status: settingsStatus,
+      teams: teams.map((t) => ({
+        id: t.id,
+        externalId: String(t.externalId ?? ''),
+        platformUserId: t.platformUserId ?? null,
+        claimedByUserId: t.claimedByUserId ?? null,
+        teamName: t.teamName ?? null,
+      })),
+      rosters,
+    }).catch(() => ({ picksByRosterId: new Map<string, RosterFuturePick[]>(), coverage: 'none' as const })),
+    /*
+     * 🛑 A NATIVE DYNASTY LEAGUE HAD NO PICK TO OFFER. Its `playerData.draftPicks` holds the players
+     * each team drafted, not pick objects, so `listProposablePicks` found nothing and a native team
+     * could never trade a future pick. These are every team's own picks in the next three rookie
+     * drafts, moved where a trade moved them — and unlike an import's, they ARE proposable: the
+     * trade engine settles them (`transferNativeFuturePick`) and the next rookie draft honours them.
+     */
+    league &&
+    isNativeFuturePickLeague({ platform: league.platform, leagueType: league.leagueType, isDynasty: league.isDynasty }) &&
+    // A pick the validator would refuse (`PICK_TRADING_BLOCKED`) is not one to offer.
+    isDraftPickTradingAllowed(league)
+      ? loadNativeFuturePicks(leagueId).catch(() => null)
+      : Promise.resolve(null),
+    platform === 'sleeper'
+      ? resolveSleeperRosterPlayers(allRosterPlayerIds, String(league?.sport ?? 'NFL'))
+      : resolveProviderRosterPlayers(platform, allRosterPlayerIds, String(league?.sport ?? 'NFL')),
+    loadPlayoffProbabilities(leagueId, currentSeason, proposalMode),
   ])
   const accountById = new Map(accounts.map((a) => [a.id, a]))
   const namedTeams = teams.filter(
@@ -323,78 +511,21 @@ export async function GET(
     ]),
   )
 
-  /*
-   * One derivation for the whole request. The bye is a property of the TEAM, so 32 rows answer
-   * it for every player on every roster; doing it per player would be the same query 241 times.
-   */
-  const byeByTeam = await resolveTeamByeWeeks(String(league?.sport ?? 'NFL'), league?.season)
+  const nativePicksByRoster = new Map<string, InventoryPick[]>()
+  for (const p of nativePicks?.picks ?? []) {
+    const list = nativePicksByRoster.get(p.ownerTeamId) ?? []
+    list.push(p)
+    nativePicksByRoster.set(p.ownerTeamId, list)
+  }
+  const teamNameByRosterId = new Map(
+    rosters.map((r) => [r.id, teamNameByPlatformId.get(String(r.platformUserId)) ?? null]),
+  )
 
-  /*
-   * 🛑 AN IMPORTED LEAGUE'S PICKS WERE NEVER LISTED. They live in `future_draft_picks`, not in
-   * `Roster.playerData`, and on staging 2026-09-17 no league yielded a single pick from the JSON.
-   * The loader reads them only for the providers whose pick trades are synced (Sleeper, MFL) — so
-   * never for a native league, whose picks are the proposable `playerData` ones below.
-   */
-  const settingsStatus = (() => {
-    const s = league?.settings
-    const v = s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>).status : null
-    return typeof v === 'string' ? v : null
-  })()
-  const importedPicks = await loadImportedFuturePicks({
-    leagueId,
-    platform: league?.platform,
-    isDynasty: Boolean(league?.isDynasty),
-    leagueSeason: currentSeason,
-    status: settingsStatus,
-    teams: teams.map((t) => ({
-      id: t.id,
-      externalId: String(t.externalId ?? ''),
-      platformUserId: t.platformUserId ?? null,
-      claimedByUserId: t.claimedByUserId ?? null,
-      teamName: t.teamName ?? null,
-    })),
-    rosters,
-  }).catch(() => ({ picksByRosterId: new Map<string, RosterFuturePick[]>(), coverage: 'none' as const }))
-
-  /*
-   * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS ANYTHING.
-   * Player values on this route come from `getPlayerValuesForNamesDbFirst`, i.e. FantasyCalc
-   * dynasty units, and `FIRST_ROUND_IN_MARKET_UNITS` is the first-round anchor SOLVED in those same
-   * units across 771 real trades. Anchoring to any other number would put picks and players on two
-   * scales inside one sum.
-   *
-   * ⚠ AND THE SLOT IS DELIBERATELY OMITTED. A future pick has no draft position yet, so
-   * `pickValueByOverall` defaults it to the middle of the round rather than assuming a favourable
-   * one. A 2027 1st prices as a MID first, not an early one — the honest read when the order is
-   * unknown.
-   */
-  const pickValue = (round: number | null): number | null =>
-    round != null && Number.isFinite(round)
-      ? pickValueByOverall({ round, teams: rosters.length || null, firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS })
-      : null
+  // Picks are priced below, from the same chart read that supplies the players.
   const itemTypeFor = (season: number | null) =>
     currentSeason != null && season != null && season > currentSeason
       ? ('future_pick' as const)
       : ('rookie_pick' as const)
-
-  /*
-   * 🛑 ONE RESOLVE FOR THE WHOLE LEAGUE, NOT ONE PER ROSTER. This call used to sit INSIDE the
-   * per-roster map below, so a twelve-team league fired TWELVE concurrent `sportsPlayer`
-   * findMany queries — each an IN-list of ~15 ids against a ~42,000-row table — to answer one
-   * question. The resolver has always taken an array; nothing in it had to change.
-   *
-   * ⚠ DEDUPED ACROSS ROSTERS. The same id cannot appear on two rosters in a healthy league, but
-   * a mid-trade snapshot can show one on both, and asking twice for the same player is the
-   * habit this commit exists to remove.
-   *
-   * ⚠ THE MAP IS SHARED AND READ-ONLY. Every roster looks up its own ids and writes nothing
-   * back, which is what makes one map safe for all of them.
-   */
-  const allRosterPlayerIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
-  const platform = String(league?.platform ?? 'sleeper').trim().toLowerCase()
-  const resolvedForLeague = platform === 'sleeper'
-    ? await resolveSleeperRosterPlayers(allRosterPlayerIds, String(league?.sport ?? 'NFL'))
-    : await resolveProviderRosterPlayers(platform, allRosterPlayerIds, String(league?.sport ?? 'NFL'))
 
   const result: TradeableRoster[] = await Promise.all(
     rosters.map(async (r) => {
@@ -456,15 +587,8 @@ export async function GET(
           ...listProposablePicks(r.playerData).map((p): TradeableRosterPick => ({
             ...p,
             itemType: itemTypeFor(p.season),
-            // The one way a pick goes unpriced here; see `pickValue` above.
             unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
-            /*
-             * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
-             * "1 unpriced" on a side whose total then understated it by a first-round pick. The
-             * curve to price it has existed in `lib/pick-curve.ts` the whole time — it was simply
-             * never called from here.
-             */
-            value: pickValue(p.round),
+            value: null,
           })),
           ...(importedPicks.picksByRosterId.get(r.id) ?? []).map(
             (p: RosterFuturePick): TradeableRosterPick => ({
@@ -473,12 +597,27 @@ export async function GET(
               round: p.round,
               label: `${p.season} ${roundOrdinal(p.round)}${p.fromTeamName ? ` (${p.fromTeamName})` : ''}`,
               itemType: itemTypeFor(p.season),
-              value: pickValue(p.round),
+              value: null,
               unpricedReason: null,
               proposable: false,
               fromTeam: p.fromTeamName,
             }),
           ),
+          ...(nativePicksByRoster.get(r.id) ?? []).map((p): TradeableRosterPick => {
+            const fromTeam =
+              p.originalTeamId === r.id ? null : teamNameByRosterId.get(p.originalTeamId) ?? 'another team'
+            return {
+              pickId: inventoryPickId(p),
+              season: p.season,
+              round: p.round,
+              label: `${p.season} ${roundOrdinal(p.round)}${fromTeam ? ` (${fromTeam})` : ''}`,
+              itemType: itemTypeFor(p.season),
+              value: null,
+              unpricedReason: null,
+              proposable: true,
+              fromTeam,
+            }
+          }),
         ],
         teamExternalId: externalIdByPlatformId.get(r.platformUserId) ?? null,
         ownerName:
@@ -511,24 +650,32 @@ export async function GET(
    */
   const viewerRosterId = rosters.find((r) => r.platformUserId === userId) ?? null
 
-  const identityIds = await (async () => {
-    const ids = new Set<string>([userId])
-    const claimed = await prisma.leagueTeam
-      .findFirst({
-        where: { leagueId, claimedByUserId: userId },
-        select: { platformUserId: true },
-      })
-      .catch(() => null)
-    if (claimed?.platformUserId) ids.add(claimed.platformUserId)
-    const profile = await prisma.userProfile
-      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
-      .catch(() => null)
-    if (profile?.sleeperUserId) ids.add(profile.sleeperUserId)
-    return ids
-  })()
-
+  // `identityIds` (claimed team + linked Sleeper id) was read in wave one.
   const viewerTeamRosterId =
     viewerRosterId?.id ?? rosters.find((r) => identityIds.has(r.platformUserId))?.id ?? null
+
+  /*
+   * The league's trade history, for the partner ranking below. Needs only the viewer and the team
+   * ids, both in hand now, so it runs WHILE the value pass is in flight rather than after it.
+   *
+   * ⚠ THE FAILURE SEMANTICS ARE THE ONES IT HAD INSIDE THE RANKING'S `try`, ON PURPOSE. A rejected
+   * read is `null` history (its own `.catch`), but anything that throws around the call — the loader
+   * not returning a promise at all — rejects `historyRead`, and awaiting it inside that `try` costs
+   * the ranking exactly as it always did. The no-op handler only stops Node reporting the rejection
+   * as unhandled while the value pass runs; the `await` below still sees it.
+   */
+  const historyRead = viewerTeamRosterId
+    ? (async () =>
+        loadLeagueTradeHistory({
+          leagueId,
+          viewerRosterId: viewerTeamRosterId,
+          isNative: resolveWriteAuthority(league?.platform) === 'NATIVE',
+          teams: result.flatMap((r) =>
+            r.teamExternalId ? [{ externalId: r.teamExternalId, rosterId: r.rosterId }] : [],
+          ),
+        }).catch(() => null))()
+    : Promise.resolve(null)
+  historyRead.catch(() => undefined)
 
   /*
    * ── MARKET VALUE, IN ONE BATCH FOR THE WHOLE LEAGUE ────────────────────────────────────────
@@ -540,12 +687,11 @@ export async function GET(
    * ⚠ THE SETTINGS MATCH `/api/trade-value/player-search` EXACTLY, and that is not incidental. The
    * picker shows search results beside roster rows; if the two resolved value under different
    * settings the SAME player would carry two different numbers on one screen, and a manager would
-   * have no way to tell which the engine used. `getPlayerValuesForNamesDbFirst` defaults to
+   * have no way to tell which the engine used. `getFantasyCalcValuesDbFirst` defaults to
    * `numQbs: 2`, so the settings are passed explicitly rather than defaulted.
    *
    * DB-first by construction — this is a request path, and `getFantasyCalcValuesDbFirst` reads
-   * `sportsDataCache` rather than the vendor. It returns an empty map on failure, so an outage
-   * costs values and nothing else.
+   * `sportsDataCache` rather than the vendor. A failed chart read withholds prices while preserving the roster list.
    */
   /*
    * ── THIRTY-DAY STOCK, ONE QUERY FOR THE WHOLE LEAGUE ───────────────────────────────────────
@@ -563,9 +709,8 @@ export async function GET(
    * request was simply waiting twice. Both still degrade to an empty map on their own, which is
    * what keeps a missing snapshot table from costing the rosters.
    */
-  const projectionWeek = await latestProjectionWeek().catch(() => null)
   const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, values] = await Promise.all([
+  const [stock, projections, loadedMarketRows, leagueValues] = await Promise.all([
     stockIds.length > 0
       ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
@@ -574,15 +719,59 @@ export async function GET(
     stockIds.length > 0
       ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
       : Promise.resolve(new Map()),
-    allNames.length > 0
-      ? getPlayerValuesForNamesDbFirst(allNames, {
-          isDynasty: valueBook.format === 'DYNASTY',
-          numQbs: valueBook.qbFormat === 'SUPERFLEX' ? 2 : 1,
-          numTeams: Number(league?.leagueSize) || rosters.length || 12,
-          ppr,
-        }).catch(() => new Map())
-      : Promise.resolve(new Map()),
+    // One chart read supplies both players and picks, using the evaluator's profile and freshness.
+    league ? getFantasyCalcValuesDbFirst(chartSettings, { maxStaleMs: 1000 * 60 * 60 * 2 }).catch(() => null)
+      : Promise.resolve(null),
+    loadLeagueTradeValues({
+      prisma,
+      platformLeagueId: league?.platform === 'sleeper' ? league.platformLeagueId : null,
+      isDynasty: valueBook.format === 'DYNASTY',
+      prefetched: {
+        rosterPositions: rosterPositions.length ? rosterPositions : null,
+        numTeams: Number(league?.leagueSize) || rosters.length || null,
+      },
+    }).catch(() => null),
   ])
+
+  const marketRows = loadedMarketRows ?? []
+  const values = buildPlayerValuesForNames(marketRows, allNames)
+  const pickPreviewBook: TradePickPreviewBook = { leagueId, values: {} }
+  const requestedPicks = new Map<string, { year: number; round: number }>()
+  const rememberPick = (year: number, round: number) => {
+    if (Number.isInteger(year) && Number.isInteger(round) && round > 0) {
+      requestedPicks.set(pickPreviewKey(year, round), { year, round })
+    }
+  }
+  const calendarYear = new Date().getFullYear()
+  // Cover the manual pick fields as well as the league's owned pick inventory.
+  for (let year = calendarYear; year <= calendarYear + 5; year++) {
+    for (let round = 1; round <= 10; round++) rememberPick(year, round)
+  }
+  for (const roster of result) {
+    for (const pick of roster.picks) {
+      if (pick.round != null) rememberPick(pick.season ?? calendarYear, pick.round)
+    }
+  }
+  const pickPricing = {
+    fcPlayers: marketRows,
+    nflCtx: { asOfDate: new Date().toISOString().slice(0, 10),
+      isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows },
+  }
+  await Promise.all([...requestedPicks].map(async ([key, pick]) => {
+    const resolved = loadedMarketRows == null ? null
+      : await priceLeagueTradePick(pick, pickPricing).catch(() => null)
+    pickPreviewBook.values[key] = resolved && !resolved.priced.unpriced
+      ? resolved.priced.assetValue.marketValue : null
+  }))
+  for (const roster of result) {
+    for (const pick of roster.picks) {
+      pick.value = pick.round != null
+        ? pickPreviewBook.values[pickPreviewKey(pick.season ?? calendarYear, pick.round)] ?? null : null
+      if (pick.value == null && !pick.unpricedReason) {
+        pick.unpricedReason = { code: 'priced_on_analysis', label: 'Pick values could not be loaded. Analyze to retry.' }
+      }
+    }
+  }
 
   /*
    * ⚠ WHETHER THE FEED LOADED IS INFERRED, BECAUSE THE LOOKUP HIDES IT. Both of its failure paths
@@ -603,7 +792,15 @@ export async function GET(
       }
       // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
       // which the picker renders differently from a low value.
-      p.value = values.get(p.name.toLowerCase())?.value ?? null
+      const identified = resolvedForLeague.has(p.id)
+      const leagueValue = identified ? leagueValueForPlayer({ name: p.name,
+        identity: { sleeperId: p.id, position: p.position },
+        bySleeperId: leagueValues?.bySleeperId, byNameLower: leagueValues?.byNameLower,
+      }) : null
+      const market = values.get(p.name.toLowerCase())
+      const marketMatches = identified && market && valuePositionsAgree(p.position, market.position)
+        && (!(String(league?.platform).toLowerCase() === 'sleeper' && market.sleeperId) || market.sleeperId === p.id)
+      p.value = leagueValue?.value ?? (marketMatches ? market.value : null)
       const projection = projections.get(p.id)
       const leagueProjection = projection?.componentStats
         ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
@@ -611,45 +808,22 @@ export async function GET(
       p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
       p.unpricedReason =
         p.value == null
-          ? playerUnpricedReason({
+          ? (resolvedForLeague.has(p.id)
+              ? leagueValues?.unpricedReasonBySleeperId?.get(p.id)
+                ?? leagueValues?.unpricedReasonByNameLower?.get(p.name.trim().toLowerCase())
+              : null) ?? playerUnpricedReason({
               identified: resolvedForLeague.has(p.id),
               position: p.position,
               sport,
               marketLoaded,
+              leagueDerived: true,
             })
           : null
     }
   }
 
-  if (proposalMode !== 'guillotine' && proposalMode !== 'survivor' && currentSeason) {
-    // Some deployments and isolated route tests run with a reduced Prisma
-    // surface. Missing simulation storage must reduce proposal confidence,
-    // never take down the roster and partner picker.
-    const simulationStore = (prisma as typeof prisma & {
-      seasonSimulationResult?: typeof prisma.seasonSimulationResult
-    }).seasonSimulationResult
-    const latestSimulation = simulationStore
-      ? await simulationStore.findFirst({
-        where: { leagueId, season: currentSeason },
-        orderBy: [{ weekOrPeriod: 'desc' }, { createdAt: 'desc' }],
-        select: { weekOrPeriod: true, createdAt: true },
-      })
-        .catch(() => null)
-      : null
-    const simulationIsFresh = latestSimulation
-      ? Date.now() - latestSimulation.createdAt.getTime() <= 10 * 24 * 60 * 60 * 1000
-      : false
-    const simulations = latestSimulation && simulationIsFresh && simulationStore
-      ? await simulationStore.findMany({
-            where: { leagueId, season: currentSeason, weekOrPeriod: latestSimulation.weekOrPeriod },
-            select: { teamId: true, playoffProbability: true },
-          })
-          .catch(() => [])
-      : []
-    const probabilityByTeam = new Map(simulations.map((row) => {
-      const raw = Number(row.playoffProbability)
-      return [String(row.teamId), raw <= 1 ? raw * 100 : raw] as const
-    }))
+  // Read in wave two; null where the league mode has no playoff odds to show.
+  if (probabilityByTeam) {
     for (const roster of result) {
       const probability = probabilityByTeam.get(String(roster.teamExternalId ?? ''))
         ?? probabilityByTeam.get(roster.rosterId)
@@ -673,15 +847,8 @@ export async function GET(
   let partnerRanking: PartnerRanking | null = null
   if (viewerTeamRosterId) {
     try {
-      const teams = result.flatMap((r) =>
-        r.teamExternalId ? [{ externalId: r.teamExternalId, rosterId: r.rosterId }] : [],
-      )
-      const history = await loadLeagueTradeHistory({
-        leagueId,
-        viewerRosterId: viewerTeamRosterId,
-        isNative: resolveWriteAuthority(league?.platform) === 'NATIVE',
-        teams,
-      }).catch(() => null)
+      // Started beside the value pass above; see `historyRead`.
+      const history = await historyRead
       partnerRanking = rankTradePartners({
         viewerRosterId: viewerTeamRosterId,
         rosters: result.map((r) => ({
@@ -698,24 +865,33 @@ export async function GET(
     }
   }
 
-  const tradeStore = (prisma as typeof prisma & {
-    afLeagueTrade?: typeof prisma.afLeagueTrade
-  }).afLeagueTrade
-  const historicalTrades = tradeStore
-    ? await tradeStore.findMany({
-      where: { leagueId },
-      orderBy: { createdAt: 'desc' },
-      take: 250,
-      select: {
-        proposerRosterId: true,
-        receiverRosterId: true,
-        status: true,
-        metadata: true,
-        items: { select: { itemType: true, fromRosterId: true, toRosterId: true } },
-      },
+  /*
+   * 🛑 THE GRADE ON A SUGGESTED DEAL (2026-09-27). The finder called a package "fair" on its own
+   * roster-value gap (`percentApart`) — and the same deal, loaded into the builder, could grade
+   * "Major overpay" (2026-09-25 field test: picks 515 vs 4,818). Each shown suggestion is now graded
+   * HERE by the one grader, with exactly the inputs the builder sends for it (`toInput` in
+   * TradeCenter.tsx: `{ playerId, name }`, `{ year, round, label }`), on the viewer's side — so the
+   * card and the builder read one letter.
+   *
+   * ⚠ BOUNDED to the cards the screen shows, and FAILURE-CONTAINED like the ranking: a grader that
+   * cannot load costs the letter, never the rosters.
+   */
+  if (partnerRanking) {
+    try {
+      const grader = await createLeagueTradeGrader({ leagueId, userId }).catch(() => null)
+      await gradePartnerSuggestions({
+        ranking: partnerRanking,
+        picks: new Map(result.flatMap((r) => r.picks.map((p) => [p.pickId, p] as const))),
+        // The viewer's side, roster need included — the same call the builder's verdict makes.
+        grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
+        limit: GRADED_PARTNER_SUGGESTIONS,
       })
-        .catch(() => [])
-    : []
+    } catch {
+      /* The ranking stands without letters. */
+    }
+  }
+
+  // `historicalTrades` was read in wave one.
   const partnerBehavior = derivePartnerBehaviorProfiles(historicalTrades, result.map((roster) => roster.rosterId))
   const rawSuggestions = generateTradePartnerSuggestions({
     viewerRosterId: viewerTeamRosterId,
@@ -831,13 +1007,23 @@ export async function GET(
     savedStrategy && hasPairedOutcomeSimulation && hasLeagueRosterContext && hasPricedSuggestion && hasProjectedSuggestion,
   )
 
+  /*
+   * Trade depth (AF Pro, lib/core-app/coreDepthAccess.ts): who to trade with and the suggested
+   * packages. The rosters are the builder and stay free. Withheld at the response, not skipped
+   * upstream, because `tradeContext` below is derived from the suggestions and the propose
+   * panel reads it — skipping them would change what that context says, not just what is sent.
+   * (`tradeDepth` itself was resolved in wave one.)
+   */
+  const depthOpen = tradeDepth.unlocked
+
   return NextResponse.json({
     rosters: result,
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,
-    partnerRanking,
-    suggestions,
-    multiTeamSuggestions,
+    partnerRanking: depthOpen ? partnerRanking : null,
+    suggestions: depthOpen ? suggestions : [],
+    multiTeamSuggestions: depthOpen ? multiTeamSuggestions : [],
+    depth: tradeDepth,
     tradeContext: {
       valueBook: describeValueBook(valueBook),
       proposalModel: proposalMode.replace(/_/g, ' '),
@@ -859,6 +1045,7 @@ export async function GET(
      * size is unknown, so only picks that changed hands are listed) or `none`. The picker says so
      * rather than letting a short list read as a team with no picks.
      */
-    pickCoverage: importedPicks.coverage,
+    pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
+    pickPreviewBook,
   })
 }

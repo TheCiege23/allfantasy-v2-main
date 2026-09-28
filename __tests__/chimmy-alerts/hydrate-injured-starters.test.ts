@@ -112,6 +112,16 @@ describe('buildInjuredStarterSignals', () => {
     expect(r.injuredStarters[0]!.replacement).toBeNull()
   })
 
+  it('does not suggest a higher projected quarterback to replace an injured tight end', () => {
+    const appearance = { canonicalLeagueId: 'lg-1', leagueName: 'IDP Dynasty', provider: 'sleeper', rosterStatus: 'bench' }
+    const r = buildInjuredStarterSignals({ items: [
+      item({ position: 'TE' }),
+      { displayName: 'Quarterback', position: 'QB', injury: null, projection: { projectedPoints: 25 }, leagueAppearances: [appearance] },
+      { displayName: 'Tight end', position: 'TE', injury: null, projection: { projectedPoints: 8 }, leagueAppearances: [appearance] },
+    ] } as never)
+    expect(r.injuredStarters[0]!.replacement?.playerName).toBe('Tight end')
+  })
+
   it('keeps an unprojected bench player as a candidate rather than dropping him', () => {
     // "We have no number for him" is not "he is a bad option" — he sorts last, not out.
     const r = buildInjuredStarterSignals({

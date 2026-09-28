@@ -85,6 +85,8 @@ const ctx = vi.hoisted(() => {
 
   const prisma = {
     draftSession: {
+      // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
+      findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
       findUnique: vi.fn(async () => ({
         ...store.session,
         // Return picks sorted desc (highest overall first), take 1 — mirrors the real query.
@@ -161,6 +163,15 @@ describe('undoLastPick', () => {
   it('deletes the last pick', async () => {
     await undoLastPick('league-1')
     expect(ctx.getCapture().deletedPickId).toBe('pick-1')
+  })
+
+  // A completed draft has written its rosters and season; taking its last pick off the board
+  // would leave that player on a roster with no pick behind him.
+  it('refuses to undo a completed draft', async () => {
+    ctx.store.session.status = 'completed'
+    expect(await undoLastPick('league-1')).toBe(false)
+    expect(ctx.getCapture().deletedPickId).toBeNull()
+    expect(ctx.prisma.$transaction).not.toHaveBeenCalled()
   })
 
   describe('in_progress + timerSeconds set (standard case)', () => {

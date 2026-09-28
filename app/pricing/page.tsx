@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { PricingV4, type PricingPlan, type PricingPack } from "@/components/core-app/screens/PricingV4";
 import { getMonetizationCatalog } from "@/lib/monetization/catalog";
 import { getPlanPresentations, describeYearlySavings } from "@/lib/monetization/planPresentation";
 import { buildSeoMeta } from "@/lib/seo";
+import { pricingIntentRedirect } from "@/lib/monetization/upgradeDestination";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -17,12 +19,16 @@ import { buildSeoMeta } from "@/lib/seo";
  * this file a reader cannot see updating, so a number here would rot silently
  * while the visible page stayed correct — the same failure in a place nobody
  * checks.
+ *
+ * ⚠ AND IT NAMES ONLY THE PLANS THIS PAGE SELLS. It listed AF Legacy, which has
+ * been off this grid since 2026-09-24 (see LANE_ORDER in PricingV4) — a search
+ * result promising a plan the page does not show.
  */
 
 export const metadata: Metadata = buildSeoMeta({
   title: "Pricing & Plans — AllFantasy.ai | Fantasy Tools & Subscriptions",
   description:
-    "Compare AF Pro, AF Legacy, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
+    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
   canonicalPath: "/pricing",
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:
@@ -39,7 +45,21 @@ export const metadata: Metadata = buildSeoMeta({
 
 export const dynamic = "force-dynamic";
 
-export default function PricingPage() {
+export default function PricingPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  /*
+   * ⚠ A LINK THAT NAMES A PLAN IS SENT TO THAT PLAN'S CHECKOUT. This grid ignores
+   * `?plan=` and `?highlight=`, and does not sell AF Legacy at all, yet locks and
+   * World Cup CTAs link here with exactly those — `?plan=af-commissioner`,
+   * `?highlight=af-pro`. They landed on a grid with nothing picked out. A bare
+   * /pricing, or one carrying only `?from=` / `?msg=`, still renders the grid.
+   */
+  const intent = pricingIntentRedirect(searchParams);
+  if (intent) redirect(intent);
+
   const presentations = getPlanPresentations();
 
   const plans: PricingPlan[] = presentations.map((p) => ({

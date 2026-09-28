@@ -10,6 +10,7 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
+import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
 import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
@@ -23,6 +24,7 @@ import { getProviderStatus } from '@/lib/provider-config'
 import { notifyOrphanAiManagerAssigned } from '@/lib/draft-notifications'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,8 +95,9 @@ export async function GET(
       const [orphanRosterIds, recentLogs, dsAi] = await Promise.all([
         getOrphanRosterIdsForLeague(leagueId),
         getRecentAuditEntries(leagueId, { limit: 10 }),
-        prisma.draftSession.findUnique({
+        prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           select: { commissionerAiManagers: true, slotOrder: true },
         }),
       ])
@@ -185,7 +188,11 @@ export async function PATCH(
       configPatch.draft_type = normalizedDraftType
     }
   }
-  if (typeof body.rounds === 'number') configPatch.rounds = body.rounds
+  if (typeof body.rounds === 'number') {
+    const roundsError = await validateDraftRoundsFitRoster(leagueId, Math.round(body.rounds))
+    if (roundsError) return NextResponse.json({ error: roundsError }, { status: 400 })
+    configPatch.rounds = body.rounds
+  }
   if (body.timer_seconds !== undefined) configPatch.timer_seconds = body.timer_seconds
   if (body.slow_timer_seconds !== undefined) configPatch.slow_timer_seconds = body.slow_timer_seconds
   if (typeof body.pick_order_rules === 'string') configPatch.pick_order_rules = body.pick_order_rules
@@ -279,8 +286,9 @@ export async function PATCH(
           where: { leagueId, ...CURRENT_TEAMS },
           select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, id: true, avatarUrl: true },
         }),
-        prisma.draftSession.findUnique({
+        prisma.draftSession.findFirst({
           where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
           select: { teamCount: true },
         }),
       ])
@@ -317,9 +325,10 @@ export async function PATCH(
   const hasSessionFlags = Object.keys(sessionFlagsPatch).length > 0
 
   /** Live snake/linear drafts: never accept structural/config/order/sessionVariant mutations from settings PATCH while actively drafting (in_progress). Allow changes when paused. Room modal only sends UI prefs. */
-  const draftSessionRow = await prisma.draftSession.findUnique({
+  const draftSessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
-    select: { status: true },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, status: true },
   })
   const isActiveDraft =
     draftSessionRow &&
@@ -390,9 +399,12 @@ export async function PATCH(
 
     // Update draft session with randomized slot order if needed
     if (randomizedSlotOrder && randomizedSlotOrder.length > 0) {
+      // Keyed on the row read above rather than on `leagueId`, which is no longer unique.
+      // Absent session still throws, as the previous `update({ where: { leagueId } })` did.
+      if (!draftSessionRow) throw new Error('No draft session for this league to order')
       await Promise.all([
         prisma.draftSession.update({
-          where: { leagueId },
+          where: { id: draftSessionRow.id },
           data: { slotOrder: randomizedSlotOrder as unknown as Prisma.InputJsonValue },
         }),
         // Also save to league settings so it persists in the UI

@@ -28,6 +28,7 @@ function makeContext(): BestBallWarRoomContext {
   return {
     leagueId: 'lg1',
     leagueType: 'best_ball',
+    ruleConfigurationVerified: true,
     sport: 'NFL',
     season: 2026,
     teamCount: 12,
@@ -118,5 +119,16 @@ describe('buildBestBallContextForChimmy', () => {
     expect(text.toLowerCase()).toMatch(/never give a start\/sit/)
     expect(text).toMatch(/ROSTER CONSTRUCTION/)
     expect(text).toMatch(/STACKS \/ CORRELATION/)
+  })
+
+  it('withholds default transaction and scoring rules when an imported league did not verify them', async () => {
+    mocks.buildContext.mockResolvedValue({ ok: true, context: { ...makeContext(), ruleConfigurationVerified: false } })
+    const out = await buildBestBallContextForChimmy('lg1', 'u1')
+    expect(out).toContain('UNVERIFIED')
+    expect(out).toContain('automatic')
+    expect(out).not.toContain('waivers=OFF')
+    expect(out).not.toContain('Waivers are disabled')
+    expect(out).not.toContain('Scoring:')
+    expect(out).not.toContain('ROSTER CONSTRUCTION')
   })
 })

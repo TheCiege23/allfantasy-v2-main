@@ -17,6 +17,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export interface MaterializeDraftSlotsResult {
   createdCount: number
@@ -48,8 +49,9 @@ export async function materializeDraftSlots(
 
   const [league, session, existingRosters] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { id: true } }),
-    prisma.draftSession.findUnique({
+    prisma.draftSession.findFirst({
       where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true, teamCount: true },
     }),
     prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),

@@ -24,6 +24,7 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { getPausedSyncKeys } from './syncPreferences'
 
 /** The subset of a dashboard league row these tests read. */
 export type ResyncLeagueRow = {
@@ -48,7 +49,7 @@ export type ResyncCandidate = {
  * rather than paying for a second read just to decide whether a button is
  * clickable. `getDashboardLeagueListForUser` types `leagues` as `unknown[]`.
  */
-export function selectResyncCandidates(leagues: readonly unknown[]): ResyncCandidate[] {
+export function selectResyncCandidates(leagues: readonly unknown[], pausedKeys: ReadonlySet<string> = new Set()): ResyncCandidate[] {
   /*
    * Deduplicated by provider+sourceId: one external league can appear on the
    * dashboard list under more than one row, and re-syncing it twice is a wasted
@@ -64,6 +65,7 @@ export function selectResyncCandidates(leagues: readonly unknown[]): ResyncCandi
     const provider = resolveProvider(String(raw.platform ?? ''))
     if (!provider || !isImportProviderAvailable(provider)) continue
     const key = `${provider}:${sourceId}`
+    if (pausedKeys.has(key)) continue
     if (seen.has(key)) continue
     seen.add(key)
     out.push({ key, row: raw, provider, sourceId })
@@ -81,7 +83,10 @@ export function selectResyncCandidates(leagues: readonly unknown[]): ResyncCandi
  * fact we simply failed to look.
  */
 export async function collectResyncCandidates(userId: string): Promise<ResyncCandidate[] | null> {
-  const payload = await getDashboardLeagueListForUser(userId).catch(() => null)
-  if (!payload || !Array.isArray(payload.leagues)) return null
-  return selectResyncCandidates(payload.leagues)
+  const reads = await Promise.all([
+    getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }),
+    getPausedSyncKeys(userId),
+  ]).catch(() => null)
+  if (!reads || !Array.isArray(reads[0].leagues)) return null
+  return selectResyncCandidates(reads[0].leagues, reads[1])
 }
