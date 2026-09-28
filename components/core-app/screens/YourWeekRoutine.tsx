@@ -73,7 +73,7 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
               </li>
             ) : null}
           </ul>
-          <p className="af3a-receipt-note">Monday night games may still change these.</p>
+          {recap.pending ? <p className="af3a-receipt-note">Monday night games may still change these.</p> : null}
         </div>
       ) : null}
       {/*

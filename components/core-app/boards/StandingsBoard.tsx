@@ -208,9 +208,10 @@ export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoar
           <p className="af-bd-note af-bd-note--plain">
             Playoff odds are simulated over each league&apos;s real remaining schedule —{' '}
             {outlook.basis}
+            {/* `basis` is whole sentences ending in a period; appending one read "…how uncertain they are..". */}
             {anyUnmodelled
-              ? '. A percentage marked * comes from too few completed weeks to model that team, so read the seed beside it rather than the number.'
-              : '.'}
+              ? ' A percentage marked * comes from too few completed weeks to model that team, so read the seed beside it rather than the number.'
+              : null}
           </p>
         </>
       ) : (

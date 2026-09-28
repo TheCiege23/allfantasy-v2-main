@@ -107,7 +107,9 @@ export function DashScheduleBand({
         <span className="af-sched-when af-num">
           {[
             matchups.length === 1 ? '1 matchup' : `${matchups.length} matchups`,
-            kickoff ? `first kickoff ${kickoff}` : null,
+            /* "next", not "first": only a FUTURE kickoff is shown, and on a Monday that is the
+               Monday-night game, not the week's first (it read "first kickoff Sep 28" for week 3). */
+            kickoff ? `next kickoff ${kickoff}` : null,
           ]
             .filter(Boolean)
             .join(' · ')}

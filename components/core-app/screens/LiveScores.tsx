@@ -435,7 +435,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               same defect as the hidden toggle, wearing different clothes. */}
           {leagueFilterId
             ? 'Only games affecting starters in this league, scored with this league’s rules.'
-            : `Every live matchup across your ${data.counts.length} sports, scored against your rosters in real time.`}
+            : /* `counts` is every sport the screen HAS A TAB for, not the sports you play — "your 9
+                 sports" to a manager in NFL leagues only. */
+              'Every live matchup across your leagues, scored against your rosters in real time.'}
         </p>
       </header>
 
