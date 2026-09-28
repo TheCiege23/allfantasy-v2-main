@@ -27,6 +27,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   /* 2026-09-28: the live draft's pick-trade builder, rookie drafts (see lib/live-draft-engine/draftPickTradeGrade.ts). */
   { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /gradeDeal\(/, what: 'the live draft pick-trade builder' },
+  /* 2026-09-28: "Propose a Trade" — the deal as composed, before it is sent (packages: the rosters route above). */
+  { file: 'app/api/leagues/[leagueId]/trades/grade-preview/route.ts', entry: /gradeDeal\(/, what: 'the trade proposal composer' },
   { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade between rostered players (the evaluate_trade tool and the push path) — through the one engine, with a receipt' },
   { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade described in prose — through the one engine, with a receipt' },
   /* Completed trades and receipts (2026-09-25). */
