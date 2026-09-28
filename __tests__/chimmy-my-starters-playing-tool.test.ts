@@ -270,3 +270,63 @@ describe('buildMyStartersPlayingContext', () => {
     expect(out).toContain('ANSWER: 0 of 0 readable NFL league(s)')
   })
 })
+
+/*
+ * The 40-league cap, replaced by a time budget (same change as get_my_injuries, #1471). The
+ * answer IS a count, so a partial scan changes the headline: coverage must sit above ANSWER,
+ * with every unchecked league named.
+ */
+describe('buildMyStartersPlayingContext coverage', () => {
+  const leagues = (n: number) => Array.from({ length: n }, (_, i) => league(`l${i + 1}`, `League ${String(i + 1).padStart(2, '0')}`))
+  const never = () => new Promise<never>(() => {})
+
+  it('🛑 reads all 65 in-season leagues — the old cap stopped at 40 — and says coverage is complete', async () => {
+    h.listLeagues.mockResolvedValue(leagues(65))
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight' })
+    expect(h.resolveTeam).toHaveBeenCalledTimes(65)
+    expect(out).toContain('SCAN COVERAGE: all 65 2026 NFL league(s) were reached.')
+    expect(out).toContain('ANSWER: 65 of 65 readable NFL league(s)')
+    expect(out).not.toContain('PARTIAL SCAN')
+  })
+
+  it('names the leagues the budget did not reach, directly above the ANSWER line', async () => {
+    h.listLeagues.mockResolvedValue(leagues(5))
+    let clock = 0
+    h.resolveTeam.mockImplementation(async () => {
+      clock += 60
+      return teamCtx([player('James Cook', 'BUF', 'RB')])
+    })
+    const out = await buildMyStartersPlayingContext({
+      userId: 'u1', window: 'tonight', scan: { concurrency: 1, budgetMs: 100, now: () => clock },
+    })
+    const lines = out.split('\n')
+    const partial = lines.findIndex((l) => l.startsWith('⚠ PARTIAL SCAN'))
+    const answer = lines.findIndex((l) => l.startsWith('ANSWER:'))
+    expect(partial).toBeGreaterThan(-1)
+    expect(answer).toBe(partial + 1)
+    expect(lines[partial]).toContain('2 of 5 2026 NFL leagues were checked; 3 were NOT.')
+    expect(lines[partial]).toContain('not reached in the time available (3): League 03, League 04, League 05')
+    expect(lines[partial]).toContain('The count below is a FLOOR')
+    expect(lines[answer]).toContain('ANSWER: 2 of 2 readable NFL league(s)')
+    expect(out).toContain('3 NFL league(s) were not checked at all (named under PARTIAL SCAN above)')
+  })
+
+  it('names a league whose roster read hung, separately from ones never reached', async () => {
+    h.listLeagues.mockResolvedValue(leagues(3))
+    h.resolveTeam.mockImplementation(async ({ leagueId }: { leagueId: string }) =>
+      leagueId === 'l2' ? never() : teamCtx([player('James Cook', 'BUF', 'RB')]),
+    )
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight', scan: { perItemTimeoutMs: 30 } })
+    expect(out).toContain('⚠ PARTIAL SCAN — 2 of 3 2026 NFL leagues were checked; 1 were NOT.')
+    expect(out).toContain('started but did not finish (1): League 02')
+    expect(out).not.toContain('not reached in the time available')
+  })
+
+  it('names all 8 unreadable leagues — the old list stopped at 6', async () => {
+    h.listLeagues.mockResolvedValue(leagues(8))
+    h.resolveTeam.mockResolvedValue(null)
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight' })
+    expect(out).toContain('8 league(s) have no claimed or synced team of theirs')
+    expect(out).toContain('League 07, League 08')
+  })
+})
