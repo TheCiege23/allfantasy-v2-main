@@ -3631,3 +3631,77 @@
     max-width: 100%;
   }
 }
+
+/* ── Available in your leagues (freeAgentBids.ts): claim links + the AF Pro FAAB bid ─────────── */
+.af-core .af-pf-fa {
+  margin-top: 12px;
+}
+.af-core .af-pf-fa-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-fa-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-fa-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.af-core .af-pf-fa-league {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-pf-fa-bid {
+  color: var(--accent);
+  font-weight: 800;
+}
+.af-core .af-pf-fa-of {
+  color: var(--muted);
+  font-weight: 500;
+}
+.af-core .af-pf-fa-note,
+.af-core .af-pf-fa-room,
+.af-core .af-pf-fa-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-fa-foot {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.af-core .af-pf-fa-claim {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-top: 2px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-fa-claim:hover,
+.af-core .af-pf-fa-claim:focus-visible {
+  border-color: var(--accent);
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-fa-claim {
+    min-height: 44px;
+  }
+}

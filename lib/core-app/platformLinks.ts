@@ -196,6 +196,19 @@ export function lineupFixLink(league: LinkLeague): PlatformLink | null {
   return own && !own.external ? own : null
 }
 
+/**
+ * Where to CLAIM a free agent, for a surface that promises exactly that (the Player Finder's
+ * "available in your leagues" list): the platform's verified waiver/add screen, else a native
+ * league's in-app wire, else nothing. Same rule as `lineupFixLink` — never `claimLink`'s
+ * league-page fallback under a "Claim" button.
+ */
+export function waiverClaimLink(league: LinkLeague): PlatformLink | null {
+  const verified = verifiedHandoff(league, 'waivers')
+  if (verified) return verified
+  const own = claimLink(league)
+  return own && !own.external ? own : null
+}
+
 /** The verified screen for the job, else that league's verified page (labelled "League"), else nothing. */
 export function handoffFor(league: LinkLeague, screen: SourceScreen): PlatformLink | null {
   return verifiedHandoff(league, screen) ?? (screen === 'league' ? null : verifiedHandoff(league, 'league'))

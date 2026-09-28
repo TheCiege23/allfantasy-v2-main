@@ -67,6 +67,8 @@ import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { getPlayerDepth } from '@/lib/core-app/playerDepth'
+import { loadFreeAgentBids } from '@/lib/core-app/freeAgentBids'
+import { freeLeagueIds } from '@/lib/core-app/leagueStrip'
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
@@ -2099,6 +2101,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : Promise.resolve(null)
 
   /*
+   * "Available in your leagues": where he is a free agent — the strip's own rule (freeLeagueIds), over
+   * the same leagues the card read — with a claim link each and, for AF Pro, a suggested FAAB bid.
+   * Started here beside the depth read; a locked viewer's bids are never computed.
+   */
+  const freeAgentBidsRead =
+    activeKey === 'players' && playerDetail && userId && playerDetail.leagues.available
+      ? loadFreeAgentBids({
+          userId,
+          sleeperId: playerDetail.player.sleeperId ?? null,
+          freeLeagueIds: freeLeagueIds(
+            selectedLeagueId ? [selectedLeagueId] : finderLeagueIds,
+            playerDetail.leagues.data,
+            playerDetail.rosterCoverage.unmatched,
+          ),
+          includeBids: playerDepthOpen,
+        }).catch(() => null)
+      : Promise.resolve(null)
+
+  /*
    * Compare (2026-09-06): a second player held beside the first, the same
    * loader over the same leagues, so the two columns are priced the same way.
    * Only when the first resolved — a `vs` with no `player` is nothing to
@@ -2110,6 +2131,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getPlayerDetail(vsRef, selectedLeagueId ? [selectedLeagueId] : finderLeagueIds, userId).catch(() => null)
       : null
   const playerDepth = await playerDepthRead
+  const freeAgentBids = await freeAgentBidsRead
 
   /*
    * "Recently searched", per account. The write is fire-and-forget by design
@@ -4207,6 +4229,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueShares={playerLeagueShares}
           pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
           savedPicks={finderScope.picked ? finderLeagueIds : null}
+          freeAgentBids={freeAgentBids}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}

@@ -218,6 +218,28 @@ describe('Player Finder — core view', () => {
     expect(links[0]).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&league=L-warriors')
   })
 
+  it('shows "Available in your leagues" with a claim link when the page passes free-agent rows', () => {
+    renderCore({
+      signedIn: true,
+      freeAgentBids: {
+        bidsLocked: false,
+        rows: [
+          {
+            leagueId: 'L-open',
+            leagueName: 'Open League',
+            platform: 'sleeper',
+            claim: { href: 'https://sleeper.com/leagues/9/players', label: 'Open in Sleeper', platformLabel: 'Sleeper', screen: 'Waivers', external: true },
+            bid: { amount: 12, budget: 100, remaining: 64 },
+            room: { claims: 30, median: 4, p75: 8 },
+            note: null,
+          },
+        ],
+      },
+    })
+    expect(screen.getByRole('heading', { name: 'Available in 1 of your leagues' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Claim Kincaid in Sleeper' })).toHaveAttribute('href', 'https://sleeper.com/leagues/9/players')
+  })
+
   it('no league strip with a league in context — the card is already that league', () => {
     renderCore({ signedIn: true, selectedLeagueId: 'L-dragons', pickLeagues: [{ id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' }] })
     expect(screen.queryByLabelText('Where he is in each of your leagues')).toBeNull()
