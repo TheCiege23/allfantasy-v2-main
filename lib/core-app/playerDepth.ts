@@ -208,18 +208,22 @@ function seasonView(rows: SeasonRow[] | null, season: number | null, scoring: Re
   }
 }
 
-async function loadLeagueValues(sleeperId: string, leagueIds: string[]): Promise<Record<string, LeagueValue>> {
-  if (leagueIds.length === 0) return {}
+/**
+ * League id → (Sleeper id → value) for several players across several leagues: one league read,
+ * and one value-set read per distinct (variant, scoring, teams) format — leagues share formats.
+ * The card uses it for one player; the league-mode shares board for twenty.
+ */
+export async function loadLeagueValueMap(sleeperIds: readonly string[], leagueIds: readonly string[]): Promise<Map<string, Map<string, LeagueValue>>> {
+  const out = new Map<string, Map<string, LeagueValue>>()
+  if (leagueIds.length === 0 || sleeperIds.length === 0) return out
   const leagues = await prisma.league
-    .findMany({ where: { id: { in: leagueIds } }, select: { id: true, settings: true, leagueType: true } })
+    .findMany({ where: { id: { in: [...leagueIds] } }, select: { id: true, settings: true, leagueType: true } })
     .catch(() => [] as Array<{ id: string; settings: unknown; leagueType: string | null }>)
   const [{ marketContextFor }, { getMarketValues, playerValueForLeague }] = await Promise.all([
     import('@/lib/trade-intel/marketContext'),
     import('@/lib/trade-intel/marketValueService'),
   ])
-  // Leagues share formats; one value set per distinct (variant, scoring, teams) context.
   const byContext = new Map<string, Promise<Awaited<ReturnType<typeof getMarketValues>>>>()
-  const out: Record<string, LeagueValue> = {}
   await Promise.all(
     leagues.map(async (l) => {
       const s = asRecord(l.settings) ?? {}
@@ -230,17 +234,25 @@ async function loadLeagueValues(sleeperId: string, leagueIds: string[]): Promise
       const values = await byContext.get(key)!
       if (!values) return
       const scoring = asRecord(s.scoring_settings ?? s.scoringSettings)
-      const v = playerValueForLeague(values, sleeperId, scoring)
-      if (!v) return
-      out[l.id] = {
-        value: v.adjusted,
-        base: v.base,
-        fitNote: v.fit?.reason ?? null,
-        mode: values.mode,
-        numQbs: values.numQbs,
+      const perPlayer = new Map<string, LeagueValue>()
+      for (const id of sleeperIds) {
+        const v = playerValueForLeague(values, id, scoring)
+        if (!v) continue
+        perPlayer.set(id, { value: v.adjusted, base: v.base, fitNote: v.fit?.reason ?? null, mode: values.mode, numQbs: values.numQbs })
       }
+      out.set(l.id, perPlayer)
     }),
   )
+  return out
+}
+
+async function loadLeagueValues(sleeperId: string, leagueIds: string[]): Promise<Record<string, LeagueValue>> {
+  const map = await loadLeagueValueMap([sleeperId], leagueIds)
+  const out: Record<string, LeagueValue> = {}
+  for (const [leagueId, perPlayer] of map) {
+    const v = perPlayer.get(sleeperId)
+    if (v) out[leagueId] = v
+  }
   return out
 }
 

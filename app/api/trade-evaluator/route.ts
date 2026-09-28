@@ -49,6 +49,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
 import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
+import { priceEvaluatorDevy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { receiptGradeFields, structuredEvaluationFromExplanation } from '@/lib/decision-os/trade/receiptViews'
 import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -679,12 +680,43 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       leagueUnpricedReasonByNameLower: leagueValues?.unpricedReasonByNameLower,
     }
 
-    const [senderPlayerPrices, receiverPlayerPrices, senderPickPrices, receiverPickPrices] = await Promise.all([
+    /*
+     * The league this trade is graded in — membership-checked (owner or claimed team) — resolved ONCE
+     * and shared by the devy pass below and the one grade further down, so both read the same league.
+     */
+    const evaluationLeagueIdPromise = resolveEvaluationLeagueId({ suppliedLeagueId: data.league_id, userId })
+    evaluationLeagueIdPromise.catch(() => undefined)
+
+    const [rawSenderPlayerPrices, rawReceiverPlayerPrices, senderPickPrices, receiverPickPrices] = await Promise.all([
       Promise.all(senderPlayerNames.map(name => pricePlayer(name, labelCtx))),
       Promise.all(receiverPlayerNames.map(name => pricePlayer(name, labelCtx))),
       Promise.all(senderPicksData.map(p => pricePick({ year: p.year, round: p.round, tier: p.tier || null }, labelCtx))),
       Promise.all(receiverPicksData.map(p => pricePick({ year: p.year, round: p.round, tier: p.tier || null }, labelCtx))),
     ])
+
+    /*
+     * 🛑 A COLLEGE PLAYER THIS LEAGUE HOLDS IS PRICED, NOT REFUSED (2026-09-28).
+     *
+     * The market board prices no college player, so this pass used to leave every prospect unpriced
+     * and the refusal below answered DEVY_SCALE — before the one grade, which prices prospects the
+     * league holds devy rights on (`leagueAssetPolicy.priceDevy`), ever ran. A devy league's trade was
+     * therefore always refused on this page. Now the same rule prices them here first
+     * (`priceEvaluatorDevy` → `priceHeldDevyAssets`, the matcher and `devyOptionValue` the grade uses),
+     * so this pass and the letter agree. A prospect the league does not hold, or cannot measure, stays
+     * unpriced and DEVY_SCALE answers for him exactly as before.
+     */
+    const devyLeagueId =
+      data.league_id && [...rawSenderPlayerPrices, ...rawReceiverPlayerPrices].some((p) => p.unpriced)
+        ? await evaluationLeagueIdPromise.catch(() => null)
+        : null
+    const [senderDevyPass, receiverDevyPass] = devyLeagueId
+      ? await Promise.all([
+          priceEvaluatorDevy({ leagueId: devyLeagueId, prices: rawSenderPlayerPrices }),
+          priceEvaluatorDevy({ leagueId: devyLeagueId, prices: rawReceiverPlayerPrices }),
+        ])
+      : [null, null]
+    const senderPlayerPrices = senderDevyPass?.prices ?? rawSenderPlayerPrices
+    const receiverPlayerPrices = receiverDevyPass?.prices ?? rawReceiverPlayerPrices
 
     /*
      * 🛑 REFUSE BEFORE GRADING. An asset nothing could price is not worth zero.
@@ -853,7 +885,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       unpriceable: names.filter((n) => !n.trim()).map(() => 'a player with no name'),
     })
     const evaluationReceiptPromise: Promise<TradeEvaluationReceipt> = (async () => {
-      const evaluationLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: data.league_id, userId })
+      const evaluationLeagueId = await evaluationLeagueIdPromise
       const notYourLeague: Partial<EvaluateTradeDeps> =
         data.league_id && !evaluationLeagueId
           ? { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) }
