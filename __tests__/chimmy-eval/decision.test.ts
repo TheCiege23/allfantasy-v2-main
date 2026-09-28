@@ -43,8 +43,15 @@ const MODEL_REPLY = 'MODEL_PATH_REPLY'
 
 type Observed = Record<DecisionDimension, string>
 
+/*
+ * Every message any scenario engine was handed, in call order. Recording only the trade engine's
+ * message is how the eval missed that a compound question reached it whole.
+ */
+let engineCalls: string[] = []
+
 function arrange(c: DecisionCase) {
   vi.resetAllMocks()
+  engineCalls = []
   const snap = snapshot(c.format)
   h.access.mockImplementation(async (userId: string, leagueId: string) => {
     if (c.engine.access === 'throws') throw new Error('prisma: connection refused at 10.0.0.4')
@@ -53,11 +60,12 @@ function arrange(c: DecisionCase) {
     return { ok: true, snapshot: snap }
   })
   h.trade.mockImplementation(async ({ message }: { message: string }) => {
+    engineCalls.push(message)
     if (c.engine.tradeThrows) throw new Error('prisma: relation "League" timed out')
     return c.engine.trade?.[message] ?? null
   })
-  h.start.mockResolvedValue(c.engine.start ?? null)
-  h.waiver.mockResolvedValue(c.engine.waiver ?? null)
+  h.start.mockImplementation(async ({ message }: { message: string }) => (engineCalls.push(message), c.engine.start ?? null))
+  h.waiver.mockImplementation(async ({ message }: { message: string }) => (engineCalls.push(message), c.engine.waiver ?? null))
   h.lineup.mockResolvedValue(c.engine.lineup ?? { status: 'unresolved', reason: 'no_league_world', detail: 'Fixture has no lineup.' })
   h.target.mockResolvedValue({ status: 'unresolved', reason: 'not_rostered', detail: 'Fixture has no trade target.' })
   h.finder.mockResolvedValue({ status: 'unavailable', reason: 'Fixture has no trade finder.' })
@@ -108,7 +116,7 @@ async function observe(c: DecisionCase): Promise<Observed> {
   arrange(c)
   const leagueId = c.league === false ? null : REQUESTED_LEAGUE
   const chat = await prepareChimmyDecisionAnswer({ question: c.question, leagueId, userId: USER, screenshotEvidence: c.screenshot ?? null })
-  const firstTradeMessage = (h.trade.mock.calls[0]?.[0] as { message?: string } | undefined)?.message ?? 'none'
+  const firstEngineMessage = engineCalls[0] ?? 'none'
 
   /* The private @chimmy surface cannot carry a screenshot, so it is only compared on text cases. */
   let consistency = 'n/a'
@@ -122,12 +130,13 @@ async function observe(c: DecisionCase): Promise<Observed> {
   const broken = chat ? INVARIANTS.filter(([, ok]) => !ok(chat, c)).map(([name]) => name) : []
 
   return {
-    kind: String(chimmyDecisionKind(c.question) ?? (c.screenshot ? 'trade' : 'null')),
+    // The kind ANSWERED, which for a compound question is its first clause's, not the whole message's.
+    kind: chat ? chat.kind : String(chimmyDecisionKind(c.question) ?? 'null'),
     status: chat?.status ?? 'null',
     gap: chat?.gap?.code ?? 'none',
     verdict: readVerdict(chat),
     billing: readBilling(chat),
-    extraction: firstTradeMessage,
+    extraction: firstEngineMessage,
     evidence: missing.length ? `missing: ${missing.join(' | ')}` : 'ok',
     consistency,
     invariants: broken.length ? broken.join(' | ') : 'ok',

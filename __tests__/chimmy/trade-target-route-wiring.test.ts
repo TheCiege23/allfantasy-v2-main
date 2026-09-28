@@ -38,8 +38,13 @@ describe('the trade-target verdict in the chat route', () => {
     expect(call).not.toMatch(/leagueId:\s*leagueId\b/)
   })
 
-  it('only parses the question when a proven league is in scope, and that league allows trades', () => {
-    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot && !leagueForbidsTrades\(leagueSnapshot\) \? parseTradeTargetQuestion\(message\) : null/)
+  it('only parses the question for a proven league that allows trades, on a single-decision message', () => {
+    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot && !leagueForbidsTrades\(leagueSnapshot\) && !compoundDecision\(message\)\s*\?\s*parseTradeTargetQuestion\(message\)\s*:\s*null/)
+  })
+
+  /* It reads the whole message; a compound one is split by the shared service, never read whole. */
+  it('takes its compound test from the shared clause splitter, not a copy of it', () => {
+    expect(ROUTE).toMatch(/import \{ compoundDecision \} from '@\/lib\/chimmy\/decisionClauses'/)
   })
 
   /*
