@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
-import { analysisUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { analysisUnpricedReason, noPickMarketUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import type { LoadedTradeLeague } from './league-loader'
 import { sportsRecordToPricedAsset } from './sports-db-valuation'
@@ -291,16 +291,34 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
   }
 }
 
-/** The same pick price for roster previews and the full evaluator. */
+/**
+ * The same pick price for roster previews and the full evaluator.
+ *
+ * 🛑 NO MARKET, NO PRICE (2026-09-28). When the league's chart carries no row for the pick — the
+ * redraft chart used by guillotine, survivor and zombie leagues has none at all, and a dynasty chart
+ * can lack a far season — this used to fall back to `pricePick`: the February historical file, else a
+ * formula curve. The trade price coverage audit measured that curve at 7,360 for a 2027 1st where
+ * FantasyCalc says 2,850–3,043, and 72 of the sampled picks were GRADED on it. A pick with no market
+ * row is now unpriced with a reason, so any deal containing it is withheld — the rule players already
+ * follow when no evidenced value exists. Nothing is priced as zero: `unpriced` is the signal.
+ */
 export async function priceLeagueTradePick(
   pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null },
   args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[] },
 ): Promise<{ priced: PricedAsset; dataSource: string }> {
-  const curve = await pricePick({ ...pick, tier: pick.tier ?? null }, args.nflCtx)
   const live = livePickValue(args.fcPlayers, pick.year, pick.round, pick.tier ?? null)
+  const curve = await pricePick({ ...pick, tier: pick.tier ?? null }, args.nflCtx)
+  if (live != null) return { priced: repricedAsset(curve, live, 'fantasycalc'), dataSource: 'fantasycalc_pick' }
   return {
-    priced: live != null ? repricedAsset(curve, live, 'fantasycalc') : curve,
-    dataSource: live != null ? 'fantasycalc_pick' : 'historical_pick_curve',
+    priced: {
+      ...curve,
+      value: 0,
+      assetValue: { marketValue: 0, impactValue: 0, vorpValue: 0, volatility: curve.assetValue.volatility },
+      source: 'unknown',
+      unpriced: true,
+      unpricedReason: noPickMarketUnpricedReason(pick.year, pick.round),
+    },
+    dataSource: 'no_pick_market',
   }
 }
 

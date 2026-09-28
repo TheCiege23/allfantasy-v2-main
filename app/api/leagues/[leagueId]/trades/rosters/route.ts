@@ -757,18 +757,23 @@ export async function GET(
     nflCtx: { asOfDate: new Date().toISOString().slice(0, 10),
       isSuperFlex: chartSettings.numQbs === 2, numTeams: chartTeams, fantasyCalcPlayers: marketRows },
   }
+  // The pricer's own reason for a pick it refuses (no market in this format), so the preview does not
+  // call a pick with no market "could not be loaded".
+  const pickRefusals = new Map<string, UnpricedReason>()
   await Promise.all([...requestedPicks].map(async ([key, pick]) => {
     const resolved = loadedMarketRows == null ? null
       : await priceLeagueTradePick(pick, pickPricing).catch(() => null)
     pickPreviewBook.values[key] = resolved && !resolved.priced.unpriced
       ? resolved.priced.assetValue.marketValue : null
+    if (resolved?.priced.unpriced && resolved.priced.unpricedReason) pickRefusals.set(key, resolved.priced.unpricedReason)
   }))
   for (const roster of result) {
     for (const pick of roster.picks) {
-      pick.value = pick.round != null
-        ? pickPreviewBook.values[pickPreviewKey(pick.season ?? calendarYear, pick.round)] ?? null : null
+      const key = pickPreviewKey(pick.season ?? calendarYear, pick.round ?? 0)
+      pick.value = pick.round != null ? pickPreviewBook.values[key] ?? null : null
       if (pick.value == null && !pick.unpricedReason) {
-        pick.unpricedReason = { code: 'priced_on_analysis', label: 'Pick values could not be loaded. Analyze to retry.' }
+        pick.unpricedReason = (pick.round != null ? pickRefusals.get(key) : undefined)
+          ?? { code: 'priced_on_analysis', label: 'Pick values could not be loaded. Analyze to retry.' }
       }
     }
   }

@@ -43,6 +43,7 @@ export type UnpricedReasonCode =
   | 'idp_replacement_unavailable'
   | 'idp_scoring_unavailable'
   | 'ambiguous_identity'
+  | 'no_pick_market'
 
 export type UnpricedReason = { code: UnpricedReasonCode; label: string }
 
@@ -59,6 +60,16 @@ export function idpProjectionUnpricedReason(
 
 export function idpReplacementUnpricedReason(): UnpricedReason {
   return reason('idp_replacement_unavailable', 'League starting slots or projected defender coverage cannot establish replacement value')
+}
+
+/**
+ * A pick the league's value chart carries no market price for. The chart for guillotine, survivor
+ * and zombie leagues is the redraft one, which has no pick rows; a dynasty chart can lack a far
+ * season. Before 2026-09-28 those fell to a formula curve that priced a 2027 1st at 7,360 against
+ * FantasyCalc's ~2,900, and letters were issued on it (trade price coverage audit).
+ */
+export function noPickMarketUnpricedReason(year: number, round: number): UnpricedReason {
+  return reason('no_pick_market', `No market value for a ${year} round ${round} pick in this league's format`)
 }
 
 const TEAM_DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
