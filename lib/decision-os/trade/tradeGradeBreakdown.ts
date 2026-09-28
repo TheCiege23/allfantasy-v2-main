@@ -1,4 +1,5 @@
 import type { TradeGradeView } from './tradeGrade'
+import { gradeMoment } from './gradeMoment'
 
 type Graded = Extract<TradeGradeView, { graded: true }>
 
@@ -54,6 +55,6 @@ export function oneGradeBreakdown(args: { grade: Graded; receiverLabel: string; 
   for (const m of g.moves) {
     out.push(`${m.name} is worth ${m.leagueValue.toLocaleString()} in this league against ${m.base.toLocaleString()} on the chart — ${m.reasons.join('; ')}.`)
   }
-  out.push(`Graded on this league's values today (${g.basis}).`)
+  out.push(`Graded on this league's values ${gradeMoment(g)} (${g.basis}).`)
   return out
 }

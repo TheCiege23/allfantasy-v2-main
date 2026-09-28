@@ -117,6 +117,27 @@ function stringifyRosterMap(
 }
 
 /**
+ * When the trade HAPPENED — Sleeper's `status_updated` on a completed trade, else `created`.
+ *
+ * 🛑 THIS USED TO BE `created` ALONE, AND `created` IS WHEN THE TRADE WAS PROPOSED. The live sync
+ * (`persistLiveTrades`, via `SleeperHistoryMapper`) writes the completion time, and both writers
+ * upsert the same `LeagueTrade` row on `historyId_transactionId`, updating `tradeDate` — so every
+ * 4-hourly backfill pass dragged a trade accepted today back to the day it was offered. A trade
+ * proposed Thursday and accepted Sunday read "3d ago" on Core the moment the backfill reached its
+ * league. Same rule as the mapper, so the two writers can no longer disagree about the date.
+ */
+export function sleeperTradeCompletedAt(t: {
+  status?: unknown;
+  status_updated?: unknown;
+  created?: unknown;
+}): number {
+  if (t.status === "complete" && typeof t.status_updated === "number" && t.status_updated > 0) {
+    return t.status_updated;
+  }
+  return typeof t.created === "number" ? t.created : 0;
+}
+
+/**
  * Fetch all trades for one Sleeper league (one season), normalized (with week).
  */
 export async function fetchSleeperTradesForSeason(
@@ -127,7 +148,16 @@ export async function fetchSleeperTradesForSeason(
   const facts: NormalizedTradeFact[] = [];
   for (let week = 1; week <= totalWeeks; week++) {
     const txList = await getLeagueTransactions(platformLeagueId, week);
-    const trades = (txList ?? []).filter((t: any) => t.type === "trade");
+    /*
+     * ⚠ A STATUS OTHER THAN `complete` IS A TRADE THAT DID NOT HAPPEN. This backfill runs on the
+     * CURRENT season too (sleeper-historical-refresh), where a failed trade can still be in the
+     * feed; the live path already refuses those via `isCompletedTrade`. A row with NO status is
+     * kept, as before — old seasons are the reason this filter was `type` alone, and dropping an
+     * unlabelled finalized trade would lose history.
+     */
+    const trades = (txList ?? []).filter(
+      (t: any) => t.type === "trade" && (t.status == null || t.status === "complete")
+    );
     for (const t of trades) {
       facts.push({
         transactionId: t.transaction_id,
@@ -143,7 +173,7 @@ export async function fetchSleeperTradesForSeason(
           previousOwnerId: rosterKey(p.previous_owner_id),
           ownerId: rosterKey(p.owner_id),
         })),
-        created: t.created ?? 0,
+        created: sleeperTradeCompletedAt(t),
         creator: t.creator ?? "",
       });
     }

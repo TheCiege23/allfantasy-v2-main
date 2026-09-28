@@ -32,7 +32,7 @@ export function clearActivityTradeGradeMemo(): void {
 }
 
 /**
- * A completed two-team Sleeper trade, graded from its own transaction: players by name, picks by
+ * A completed two-team Sleeper trade, graded from its own transaction: players by Sleeper id, picks by
  * season and round keyed on `owner_id` — the RECEIVER. (`roster_id` on a Sleeper pick is its
  * ORIGINAL owner; reading it as the receiver hands the pick to the wrong side.)
  *
@@ -66,7 +66,8 @@ export async function gradeSleeperActivityTrade(args: {
       return name || null
     }
     const playersTo = (rid: number) =>
-      Object.entries(tx.adds ?? {}).filter(([, to]) => to === rid).map(([pid]) => nameOf(pid))
+      // By Sleeper id, as every other trade surface prices him — see `sleeperPlayerInput`.
+      Object.entries(tx.adds ?? {}).filter(([, to]) => to === rid).map(([pid]) => ({ name: nameOf(pid), sleeperId: pid }))
     const picksTo = (rid: number) =>
       (tx.draft_picks ?? [])
         .filter((p) => p.owner_id === rid)
@@ -77,11 +78,13 @@ export async function gradeSleeperActivityTrade(args: {
       picksIn: picksTo(a),
       picksOut: picksTo(b),
       currentSeason: new Date(now).getUTCFullYear(),
+      // The trade's frozen original — the same letter its email and history show (`frozenCompletedGrade.ts`).
+      original: { afLeagueId: args.afLeagueId, tradeId: tx.transaction_id, now: new Date(now) },
     })
     if (!g.graded) return { graded: false, reason: g.reason }
     return {
       graded: true,
-      basis: 'today',
+      basis: g.frozenAt ? 'first-graded' : 'today',
       sides: [
         { name: args.rosterNames.get(a) ?? `Team ${a}`, letter: g.letter },
         { name: args.rosterNames.get(b) ?? `Team ${b}`, letter: g.partnerLetter },

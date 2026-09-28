@@ -355,6 +355,12 @@ const nextConfig = {
           },
         ],
       },
+      {
+        source: "/vpn-blocked",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+        ],
+      },
       // Do not add `/api/:path*` here: Next/Vercel expands it to one header rule per API route
       // (~1600+) and exceeds the 2048 rewrite/redirect/header route cap. API routes get the same
       // headers from `middleware.ts` (`applyApiSecurityHeaders`).

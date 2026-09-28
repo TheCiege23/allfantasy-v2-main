@@ -512,3 +512,42 @@
   outline-offset: 3px;
   box-shadow: 0 0 0 6px var(--accent-soft);
 }
+
+/* Nightly trade ideas (design step 9). Top level on purpose — never inside a media query. */
+.af-tr-ideas {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-tr-ideas-why {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-tr-ideas-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-tr-idea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.af-tr-idea-deal {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-tr-idea-grade {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text2);
+}

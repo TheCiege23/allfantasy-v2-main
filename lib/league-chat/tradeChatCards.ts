@@ -4,6 +4,8 @@ import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'
 import { readChimmySpeaksUp } from '@/lib/league-chat/chimmyIdentity'
 import { buildChimmyTradeTake, type TradeTakeAsset } from '@/lib/league-chat/chimmyTradeTake'
 import { readTradeMarketValues, type ChimmyTradeCard } from '@/lib/league-chat/chimmyTradeMoment'
+import { gradeImportedTradeCard } from '@/lib/league-chat/tradeCardGrade'
+import { cardValues, gradedTradeTakeText } from '@/lib/league-chat/tradeCardGradeView'
 import { safeDisplayName } from '@/lib/chat-notifications/displayName'
 
 /**
@@ -294,9 +296,27 @@ export async function syncTradeCardsForLeague(leagueId: string): Promise<TradeCa
       const partner = nameOfManager(partnerRow?.history?.sleeperUsername) || row.partnerName || null
 
       const summary = `${manager} traded ${describeSide(gave, row.picksGiven, nameOf)} for ${describeSide(got, row.picksReceived, nameOf)}`
+      /*
+       * THE grade, from this row's side — what `manager` received against what they gave, on the
+       * league's values today (the League Buzz read). Bounded by MAX_CARDS_PER_RUN per scan, and the
+       * grader is memoised per league. Graded: the message is worded from the letters and the market
+       * take below is skipped. Withheld: the card says why, and the text stays what it was.
+       */
+      const grade = await gradeImportedTradeCard({
+        leagueId,
+        received: got.map((id) => nameOf.get(id) ?? null),
+        gave: gave.map((id) => nameOf.get(id) ?? null),
+        picksReceived: row.picksReceived,
+        picksGiven: row.picksGiven,
+        teams: sides.length,
+        now: new Date(now),
+      })
+      const gradedText = grade
+        ? gradedTradeTakeText({ manager, partner, grade, seed: row.transactionId })
+        : null
       /* Two sides only: a three-team trade has no single "other side" to weigh against. */
       const take =
-        values && sides.length <= 2
+        !gradedText && values && sides.length <= 2
           ? buildChimmyTradeTake({
               sides: [
                 { manager, receives: [...playerAssets(got), ...pickAssets(row.picksReceived)] },
@@ -319,8 +339,7 @@ export async function syncTradeCardsForLeague(leagueId: string): Promise<TradeCa
         got: got.map((id) => ({ id, name: nameOf.get(id) ?? null, ...(metaOf.get(id) ?? {}) })),
         picksGave: Array.isArray(row.picksGiven) ? row.picksGiven.length : 0,
         picksGot: Array.isArray(row.picksReceived) ? row.picksReceived.length : 0,
-        valueGave: take ? take.sides[0].sent : null,
-        valueGot: take ? take.sides[0].received : null,
+        ...cardValues(grade, take),
         tradedAt: row.tradeDate ? row.tradeDate.toISOString() : null,
       }
 
@@ -328,7 +347,7 @@ export async function syncTradeCardsForLeague(leagueId: string): Promise<TradeCa
         leagueId,
         kind: 'trade',
         dedupeKey: `sleeper:${row.transactionId}`,
-        text: take?.text ?? summary,
+        text: gradedText ?? take?.text ?? summary,
         messageType: 'trade',
         card: {
           tradeCard,

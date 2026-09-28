@@ -111,7 +111,9 @@ export async function syncOutboundLeagueChat(input: OutboundSyncInput): Promise<
   return prisma.$transaction(async tx => {
   // Serialize retries from separate application instances before checking saved delivery.
   const deliveryKey = `${row.channelId}:${input.messageId}`
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${deliveryKey}, 0))`
+  // pg_advisory_xact_lock returns PostgreSQL void. Prisma cannot deserialize
+  // that result through $queryRaw (P2010); execute it without a result set.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${deliveryKey}, 0))`
   const previous = await tx.discordMessageLink.findFirst({
     where: { leagueMessageId: input.messageId, channelId: row.channelId, direction: 'to_discord' },
     select: { discordMessageId: true },

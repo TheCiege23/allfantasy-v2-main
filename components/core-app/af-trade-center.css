@@ -729,6 +729,8 @@
   line-height: 1.45;
 }
 .af-tc-scan-receipt b { color: var(--accent); }
+/* The Sleeper note carries a sentence, two actions and a freshness line: stacked, not one wrapping row. */
+.af-tc-scan-receipt.af-tc-sleeper-offers { flex-direction: column; align-items: flex-start; gap: 6px; }
 
 /*
  * Open AllFantasy offers, each with its counter control. Spans the inbox grid the

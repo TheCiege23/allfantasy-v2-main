@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   post: vi.fn(async () => ({ posted: true, messageId: 'm1' })),
   tradeFindUnique: vi.fn(),
   leagueFindUnique: vi.fn(),
+  /* THE grade's frozen receipt (2026-09-27). Default: none, so the market take below is what runs. */
+  receiptFindFirst: vi.fn(async () => null as unknown),
 }))
 
 vi.mock('@/lib/fantasycalc-db', () => ({ readFantasyCalcValuesFromDb: h.readValues }))
@@ -26,6 +28,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     afLeagueTrade: { findUnique: h.tradeFindUnique },
     league: { findUnique: h.leagueFindUnique },
+    tradeDecisionSnapshot: { findFirst: h.receiptFindFirst },
     roster: {
       findMany: async () => [
         { id: 'rA', platformUserId: 'uA' },
@@ -279,6 +282,37 @@ describe('an accepted AllFantasy trade becomes one Chimmy trade card with the ta
       valueGave: 3560,
       valueGot: 8800,
       note: 'Accepted. It goes to commissioner review before it processes.',
+    })
+  })
+
+  it('🛑 with a frozen receipt, the grade is the verdict: letters in the message and on the card, no market read', async () => {
+    h.receiptFindFirst.mockResolvedValueOnce({
+      tradeId: 't1',
+      completeness: 'complete',
+      policyVersion: 'v1',
+      format: 'dynasty',
+      capturedAt: NOW,
+      evidence: {},
+      readiness: {},
+      outcomeSimulation: {},
+      assetContext: {},
+      decisionResult: {
+        participants: [
+          { rosterId: 'rA', grade: 'D', reason: 'overpays', valueGiven: 6100, valueReceived: 5200 },
+          { rosterId: 'rB', grade: 'B', reason: 'wins it', valueGiven: 5200, valueReceived: 6100 },
+        ],
+      },
+    })
+    await postNativeTradeMoment({ tradeId: 't1', now: NOW })
+    const input = h.post.mock.calls[0][0] as Record<string, any>
+    // The market would crown Casey (8,800 in, 3,560 out). The receipt graded Casey a D.
+    expect(input.text).toMatch(/^League grade: Casey D, jordan B — jordan comes out ahead, graded when it was proposed\. /)
+    expect(h.readValues).not.toHaveBeenCalled()
+    expect(input.card.tradeCard).toMatchObject({
+      grade: { graded: true, letter: 'D', partnerLetter: 'B', basis: 'at-proposal', valueGave: 6100, valueGot: 5200 },
+      valueGave: 6100,
+      valueGot: 5200,
+      valueBasis: 'league',
     })
   })
 

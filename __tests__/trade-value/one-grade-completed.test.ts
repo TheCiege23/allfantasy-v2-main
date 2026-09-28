@@ -162,19 +162,23 @@ describe('completedTradeInputs — used picks become the drafted player', () => 
       ],
     }) as unknown as GradedTrade
 
+  // The drafted player carries his Sleeper id and position (see `sleeperPlayerInput`); these fixture
+  // players carry none, so they stay name-only.
+  const drafted = (name: string) => ({ kind: 'player', name, providerIdentity: { provider: 'sleeper', id: 'p', position: 'RB' } })
+
   it('a current-season pick that has been drafted is priced as the rookie, not as a pick', () => {
     const inputs = completedTradeInputs(trade([pick('2026', 1, 'Rookie Runner')]), 2026)!
-    expect(inputs.get).toEqual({ assets: [{ kind: 'player', name: 'Alpha Back' }, { kind: 'player', name: 'Rookie Runner' }], unpriceable: [] })
+    expect(inputs.get).toEqual({ assets: [{ kind: 'player', name: 'Alpha Back' }, drafted('Rookie Runner')], unpriceable: [] })
   })
 
   it('an older used pick is graded as its player instead of withholding the letter', () => {
     const inputs = completedTradeInputs(trade([], [pick('2024', 2, 'Old Rookie')]), 2026)!
-    expect(inputs.give).toEqual({ assets: [{ kind: 'player', name: 'Beta Wide' }, { kind: 'player', name: 'Old Rookie' }], unpriceable: [] })
+    expect(inputs.give).toEqual({ assets: [{ kind: 'player', name: 'Beta Wide' }, drafted('Old Rookie')], unpriceable: [] })
   })
 
   it('a pick that moved again before the draft is still what it became', () => {
     const inputs = completedTradeInputs(trade([pick('2025', 1, 'Moved Rookie', true)]), 2026)!
-    expect(inputs.get.assets).toContainEqual({ kind: 'player', name: 'Moved Rookie' })
+    expect(inputs.get.assets).toContainEqual(drafted('Moved Rookie'))
   })
 
   it('a future pick stays a pick; an old pick the draft cannot resolve still withholds, named', () => {
