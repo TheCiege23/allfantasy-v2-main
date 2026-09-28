@@ -75,9 +75,10 @@ describe('daily-sport weekly score sync', () => {
   })
 
   it('still refuses a sport with no normalizer', async () => {
-    prismaMock.league.findFirst.mockResolvedValue({ sport: 'SOCCER', settings: {} })
-    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('SOCCER'))
-    await expect(runSync({ seasonStartUtc: SEASON_START })).rejects.toThrow(/SOCCER is not available yet/)
+    // SOCCER until it gained a normalizer (2026-09-28); the control is now a sport no league can be.
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'CRICKET', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('CRICKET'))
+    await expect(runSync({ seasonStartUtc: SEASON_START })).rejects.toThrow(/CRICKET is not available yet/)
   })
 
   describe('week selection', () => {

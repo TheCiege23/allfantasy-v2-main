@@ -137,9 +137,40 @@ function sourceRank(source: string | null | undefined): number {
  * never advances. The tie-break below gave TheSportsDB rows (+60, and +100 for a photo) the win
  * over Rolling Insights rows (+30) for the same name, position and team.
  */
-export function isScorablePoolId(sport: string, row: { sleeperId?: string | null; externalId?: string | null }): boolean {
+export function isScorablePoolId(
+  sport: string,
+  row: { sleeperId?: string | null; externalId?: string | null; source?: string | null },
+): boolean {
   if (!isDailyStatSport(sport)) return true
+  // 🛑 SOCCER: NUMERIC IS NOT ENOUGH. api_football ids are numeric too, in a DIFFERENT id space, and
+  // the bridge reads any numeric id as a Rolling Insights one — measured on production 2026-09-28,
+  // 110 of 737 api_football ids equal a DIFFERENT player's Rolling Insights id, so drafting one would
+  // score someone else. Only a Rolling Insights row is scorable.
+  if (String(sport).trim().toUpperCase() === 'SOCCER' && String(row.source ?? '').trim().toLowerCase() !== 'rolling_insights') {
+    return false
+  }
   return /^\d+$/.test(String(row.sleeperId ?? row.externalId ?? '').trim())
+}
+
+/**
+ * 🛑 A SOCCER POOL IS ITS SCORABLE ROWS ONLY. No other sport's sources are this far apart: team,
+ * position and name spellings differ across all three soccer sources, so the (name, position, team)
+ * dedupe below never merges them and the tie-break above never fires. Measured on production
+ * 2026-09-28, the SOCCER pool held 4,267 Rolling Insights players (all mapped to their game logs) plus
+ * 677 TheSportsDB rows (unscorable, and including coaches, owners, a CEO and a chairman) and 736
+ * api_football rows (unscorable or, for 110, scoring a different player) — 524 and 92 of them second
+ * copies of a Rolling Insights player. So for soccer the unscorable rows are dropped, not out-ranked.
+ *
+ * Falls back to every row if no scorable row exists at all, so a missing Rolling Insights sync leaves a
+ * draftable room rather than an empty one; that room could not score, which is today's state.
+ */
+export function scorableSoccerRowsOnly<T extends { sleeperId?: string | null; externalId?: string | null; source?: string | null }>(
+  sport: string,
+  rows: T[],
+): T[] {
+  if (String(sport).trim().toUpperCase() !== 'SOCCER') return rows
+  const scorable = rows.filter((row) => isScorablePoolId(sport, row))
+  return scorable.length > 0 ? scorable : rows
 }
 
 function sportsPlayerQuality(row: {
@@ -356,9 +387,11 @@ async function buildPlayerPoolForSport(
   // A scorable id wins before any quality signal (see `isScorablePoolId`), and the photo is not
   // lost with the row it came on: the best image among a player's duplicates is carried to the
   // row that won.
+  // Filtered here, after the cache, so the cached row set stays the whole table for every caller.
+  const poolRows = scorableSoccerRowsOnly(sport, rows)
   const bestByKey = new Map<string, (typeof rows)[number]>()
   const bestImageByKey = new Map<string, { url: string; quality: number }>()
-  for (const row of rows) {
+  for (const row of poolRows) {
     const key = `${String(row.name ?? '').trim().toLowerCase()}|${String(row.position ?? '').trim().toUpperCase()}|${String(row.team ?? '').trim().toUpperCase()}`
     const quality = sportsPlayerQuality(row)
     if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {

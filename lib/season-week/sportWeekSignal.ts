@@ -202,6 +202,11 @@ function stateFor(slate: SportWeekSlate, now: Date): SportWeekState {
 export function relabelDailySportWeeks(
   rows: readonly ScheduleRow[],
   seasonStartUtc: Date,
+  /**
+   * The week a kickoff belongs to, when it is not seven-day arithmetic from the opener — soccer's
+   * gameweeks skip international breaks (`dailySportWeekForInstant`). `null` drops the row.
+   */
+  weekOf?: (kickoff: Date) => number | null,
 ): ScheduleRow[] {
   const DAY_MS = 86_400_000
   const anchor = seasonStartUtc.getTime()
@@ -212,7 +217,8 @@ export function relabelDailySportWeeks(
     if (Number.isNaN(kickoff.getTime())) continue
     // Before the opener == preseason. Dropped, never scored.
     if (kickoff.getTime() < anchor) continue
-    const week = Math.floor((kickoff.getTime() - anchor) / (7 * DAY_MS)) + 1
+    const week = weekOf ? weekOf(kickoff) : Math.floor((kickoff.getTime() - anchor) / (7 * DAY_MS)) + 1
+    if (week == null) continue
     out.push({ ...row, week, seasonType: 'regular' })
   }
   return out

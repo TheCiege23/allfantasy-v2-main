@@ -2,6 +2,7 @@ import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
 import { classifyRiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
 import { isoDay, scheduleKeyPrefix, type ScheduleCacheDb, type ScheduleGame } from '@/lib/sports-data/riScheduleCache'
+import { RI_SOCCER_LEAGUES } from '@/lib/sports-data/rollingInsightsSupport'
 
 // The stored shape and the reader live in the pure leaf so client-reachable code (the lineup lock)
 // can read the schedule without pulling in this module's server-only RI client.
@@ -98,18 +99,35 @@ export async function syncRiSeasonSchedule(opts: {
     error: null, games: 0, days: 0, staleDaysRemoved: 0, statusCounts: {},
   }
 
-  const { rows, notModified, unsupported, error } = await riFetchRows('schedule_season', {
-    sport,
-    season: opts.season,
-    fetchImpl: opts.fetchImpl,
-  })
-  if (notModified || unsupported || error) {
-    result.notModified = notModified
-    result.unsupported = unsupported
-    result.error = error
-    return result // never write an emptiness
+  /*
+   * 🛑 SOCCER IS THREE SCHEDULES, AND A PARTIAL ONE IS WORSE THAN NONE. One soccer pool spans EPL,
+   * La Liga and Serie A, and the vendor wants one call per league (`?league=`, keyed `data.<LEAGUE>`).
+   * Writing after two of three would store days that lack a league's games — a slate that reads
+   * complete and SEALS a gameweek whose stats miss them. So every league must come back 200 before
+   * anything is written; any other outcome writes nothing, as a single 304 does.
+   */
+  const leagues: Array<string | undefined> = sport === 'SOCCER' ? [...RI_SOCCER_LEAGUES] : [undefined]
+  const games: ScheduleGame[] = []
+  for (const league of leagues) {
+    const { rows, notModified, unsupported, error } = await riFetchRows('schedule_season', {
+      sport,
+      season: opts.season,
+      league,
+      fetchImpl: opts.fetchImpl,
+    })
+    if (notModified || unsupported || error) {
+      result.notModified = notModified
+      result.unsupported = unsupported
+      result.error = league && error ? `${league}: ${error}` : error
+      return result // never write an emptiness, nor a partial soccer schedule
+    }
+    const parsed = parseRiScheduleSeason(rows)
+    if (league && parsed.length === 0) {
+      result.error = `schedule-season ${league} returned 200 with no parseable games — refusing to write the other leagues without it`
+      return result
+    }
+    games.push(...parsed)
   }
-  const games = parseRiScheduleSeason(rows)
   if (games.length === 0) {
     result.error = 'schedule-season returned 200 with no parseable games — refusing to replace a stored schedule with nothing'
     return result

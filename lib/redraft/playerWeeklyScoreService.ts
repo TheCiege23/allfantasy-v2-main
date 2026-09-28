@@ -25,7 +25,7 @@ import {
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import {
   knownDailySportSeasons,
-  resolveDailySportSeasonStart,
+  resolveDailySportWeekWindow,
 } from '@/lib/season-week/dailySportSeasonStarts'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
@@ -285,8 +285,11 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     // recorded regular-season openers. Anchoring on the OPENER rather than the
     // first game is what keeps preseason out: NHL preseason ran 19-27 Sep 2026
     // and those games are ingested like any other.
-    const seasonStartUtc = params.seasonStartUtc ?? resolveDailySportSeasonStart(sport, seasonYear)
-    const window = weekWindowFromSeasonStart(seasonStartUtc, week)
+    // Without an explicit anchor, the shared resolver — which is where a gameweek sport (soccer)
+    // differs from seven-day arithmetic. The finalizer reads the same function.
+    const window = params.seasonStartUtc
+      ? weekWindowFromSeasonStart(params.seasonStartUtc, week)
+      : resolveDailySportWeekWindow(sport, seasonYear, week)
     if (!window) {
       // Decline rather than run a query that cannot be right. Inventing a start
       // date would silently mis-assign every game to the wrong week, which is

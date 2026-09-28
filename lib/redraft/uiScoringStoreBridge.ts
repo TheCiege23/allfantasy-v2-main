@@ -36,8 +36,14 @@
  *
  * ⚠ DELIBERATELY ABSENT:
  *   - Soccer `penalty_scored`: the engine's `goals` already counts a penalty goal.
+ *   - Soccer rows the box score cannot supply (lib/scoring-runtime/soccerStatNormalization.ts): a
+ *     fielder's `goal_conceded` (only keepers carry goals conceded), key passes, tackles, interceptions,
+ *     clearances, dribbles, crosses, aerials, offsides, sub on/off, ratings, man of the match, the
+ *     hat-trick bonus. And `clean_sheet` scores DEFENDERS only — the feed gives midfielders no
+ *     clean-sheet flag, so the panel's "DEF/MID" label over-promises for MID.
  */
 import { buildFullMlbScoringConfig } from '@/lib/mlb-scoring/MlbScoringPresets'
+import { buildFullSoccerScoringConfig } from '@/lib/soccer-scoring/SoccerScoringPresets'
 
 type Store = {
   settingsKey: string
@@ -97,7 +103,17 @@ export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
   },
   SOCCER: {
     settingsKey: 'soccer_scoring_config',
+    // The panel shows the AF default for a league nobody saved (getLeagueSoccerScoringConfig), so that
+    // is what an unsaved league scores — not the engine's own defaults.
+    defaultRules: () => buildFullSoccerScoringConfig('af_default'),
     keyMap: {
+      shot_on_target: 'shots_on_target',
+      shot: 'shots',
+      minutes_played: 'minutes_played',
+      appearance: 'appearance',
+      gk_goals_against: 'gk_goals_against',
+      foul_committed: 'fouls_committed',
+      foul_drawn: 'fouls_drawn',
       goal: 'goals',
       assist: 'assists',
       clean_sheet: 'clean_sheet_def',
