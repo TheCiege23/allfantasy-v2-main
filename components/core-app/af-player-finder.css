@@ -3494,6 +3494,26 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+/* The move itself: fix the lineup where the league lives — the primary action on a call that needs one. */
+.af-core .af-pf-call-fix {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-call-fix:hover,
+.af-core .af-pf-call-fix:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
 .af-core .af-pf-calls-foot {
   margin: 0;
   font-size: 11px;

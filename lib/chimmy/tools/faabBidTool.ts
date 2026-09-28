@@ -4,7 +4,14 @@ import { allocateFaabAcrossPool } from '@/lib/trade-intel/faabBid'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
-import { scheduleForLeague, survivorHorizon, type SurvivorHorizon } from '@/lib/trade-intel/survivorSchedule'
+import {
+  assumedOneChopHorizon,
+  scheduleForLeague,
+  survivorHorizon,
+  type SurvivorHorizon,
+} from '@/lib/trade-intel/survivorSchedule'
+import { describeSeats } from '@/lib/trade-intel/faabLineupGain'
+import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { leagueContextFor } from '@/lib/core-app/leagueContext'
 import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
@@ -24,8 +31,17 @@ import {
  * tool reached it.
  *
  * THE POOL IS EVERY VALUED PLAYER ON NOBODY'S ROSTER. Each is priced under the league's scoring and
- * set against the starter he would displace in the user's lineup, by `faabPoolFor`, the same code
- * as the Player Finder, so the two cannot disagree about a player.
+ * measured by what he adds to the user's best legal lineup under the league's REAL starting slots,
+ * by `faabPoolFor`, the same code as the Player Finder, so the two cannot disagree about a player.
+ *
+ * 🛑 THE FIRST VERSION ASSUMED 1 QB / 2 RB / 2 WR / 1 TE, and in a FLEX ×4 + SUPER_FLEX guillotine
+ * (2026-09-28) it told a user with one receiver to bid $31 on Brian Thomas Jr.: the phantom second WR
+ * seat made every free-agent receiver worth his FULL value. See `faabLineupGain.ts`. The fixed table
+ * is now only a fallback for a league with no slots on file, and the block says when it was used.
+ *
+ * ⚠ A PLAIN GUILLOTINE WITH NO PUBLISHED SCHEDULE IS PACED at one chop a week from the teams still
+ * alive (`assumedOneChopHorizon`). Unpaced, the same answer's ceilings summed to the user's whole
+ * $200 in week 3 of a 16-team field.
  *
  * ⚠ DOLLARS ONLY IN AN ELIMINATION LEAGUE. The allocator's premise, stated in `faabBid.ts`, is that
  * released rosters are the ONLY supply and that future weeks' pools resemble this one; it was
@@ -68,7 +84,9 @@ export async function buildFaabBidContext(leagueId: string, userId: string): Pro
   const byId = await readTradePlayerRows([...new Set([...myIds, ...candidateIds])])
   const leagueScoring = marketContext.scoring.settings
   const myPlayers = toDiscoveryPlayers(myRoster, byId, values, leagueScoring)
-  const pool = faabPoolFor({ candidateIds, byId, values, leagueScoring, myPlayers })
+  const pool = faabPoolFor({ candidateIds, byId, values, leagueScoring, myPlayers, leagueSettings: league.settings })
+  const seats = lineupSeatsFromSettings(league.settings)
+  const displacedById = new Map(pool.map((c) => [c.id, c.displacedName ?? null]))
 
   const concept = readFormatRules({ leagueType: league.leagueType, isDynasty: marketContext.variant.dynasty, settings: league.settings }).concept
   const elimination = concept === 'guillotine' || concept === 'survivor'
@@ -81,6 +99,9 @@ export async function buildFaabBidContext(leagueId: string, userId: string): Pro
     remaining != null
       ? `The user has ${money(remaining)} FAAB left${Number.isFinite(seasonBudget) && seasonBudget > 0 ? ` of a ${money(seasonBudget)} season budget` : ''}.`
       : 'The user\'s remaining FAAB is NOT on file for this league. Give shares of the budget, never dollar amounts.',
+    seats
+      ? `Upgrades are measured against the user's best legal starting lineup under this league's slots (${describeSeats(seats)}).`
+      : 'This league\'s starting slots are NOT on file, so a standard 1 QB / 2 RB / 2 WR / 1 TE lineup is ASSUMED. Say so: in a FLEX or SUPER_FLEX league the real upgrades can be very different.',
   ]
 
   if (pool.length === 0) {
@@ -91,14 +112,21 @@ export async function buildFaabBidContext(leagueId: string, userId: string): Pro
   }
 
   /*
-   * Paced only against a PUBLISHED elimination schedule. Without one the allocator prices this week
-   * against the whole remaining budget and labels that the aggressive read in its own reason.
+   * Paced against a PUBLISHED elimination schedule where one exists. A plain guillotine without one
+   * is paced at one chop a week from the teams still alive (a chopped roster holds no players). A
+   * survivor league without one stays unpaced — its elimination pattern is not one-a-week — and the
+   * allocator labels that the aggressive read in its own reason.
    */
   let horizon: SurvivorHorizon | null = null
   if (elimination) {
     const schedule = scheduleForLeague(league.platformLeagueId)
     const week = schedule ? await resolveCurrentWeekForLeague(league.platformLeagueId ?? '').catch(() => null) : null
     horizon = schedule && week ? survivorHorizon(schedule, week.week) : null
+    if (!horizon && !schedule && concept === 'guillotine') {
+      const alive = rows.rosters.filter((r) => tradeRosterPlayerIds(r).length > 0).length
+      horizon = assumedOneChopHorizon(alive)
+      if (horizon) lines.push(horizon.basis)
+    }
   }
 
   const alloc = allocateFaabAcrossPool({ pool, budgetRemaining: remaining ?? 0, horizon })
@@ -114,24 +142,33 @@ export async function buildFaabBidContext(leagueId: string, userId: string): Pro
     return lines.join('\n')
   }
 
+  /* What he does to the lineup, in words the model cannot turn into "his value over a WR". */
+  const effect = (b: { id: string; position: string | null; marginalValue: number }) => {
+    if (!seats) return `adds ${b.marginalValue} value over the user's weakest ${b.position} starter (assumed lineup)`
+    const out = displacedById.get(b.id)
+    return out
+      ? `would start in place of ${out}, raising the best lineup's value by ${b.marginalValue}`
+      : `fills an empty starting seat, raising the best lineup's value by ${b.marginalValue}`
+  }
+
   if (elimination) {
     lines.push(alloc.reason)
     for (const b of upgrades.slice(0, MAX_BIDS)) {
       const dollars = remaining != null ? `bid up to ${money(b.ceiling)}` : `${Math.round(b.shareOfSupply * 100)}% of this week's share`
-      lines.push(`- ${b.name} (${b.position}): ${dollars}; adds ${b.marginalValue} value over the user's weakest ${b.position} starter, ${Math.round(b.shareOfSupply * 100)}% of the upgrade value on offer.`)
+      lines.push(`- ${b.name} (${b.position}): ${dollars}; ${effect(b)}, ${Math.round(b.shareOfSupply * 100)}% of the upgrade value on offer.`)
     }
   } else {
     lines.push(
       `This is not an elimination league, so NO dollar amounts: the bid sizing assumes released rosters are the only supply, which is false in an ordinary waiver league with a deep, refilling pool. Rank these upgrades for the user and let them set bids from their league's usual prices.`,
     )
     for (const b of upgrades.slice(0, MAX_BIDS)) {
-      lines.push(`- ${b.name} (${b.position}): adds ${b.marginalValue} value over the user's weakest ${b.position} starter.`)
+      lines.push(`- ${b.name} (${b.position}): ${effect(b)}.`)
     }
   }
   if (upgrades.length > MAX_BIDS) lines.push(`(${upgrades.length - MAX_BIDS} smaller upgrades not listed.)`)
   if (nonUpgrades > 0) lines.push(`${nonUpgrades} other valued unrostered players would not improve the lineup: bid nothing on them.`)
   lines.push(
-    'Unrostered is not the same as claimable: we cannot see waiver periods or pending claims, so confirm on the platform. Values are long-term market value under this league\'s scoring, not this week\'s projection.',
+    'Unrostered is not the same as claimable: we cannot see waiver periods or pending claims, so confirm on the platform. Values are long-term market-value units under this league\'s scoring — not fantasy points and not this week\'s projection; never call them points.',
   )
   return lines.join('\n')
 }

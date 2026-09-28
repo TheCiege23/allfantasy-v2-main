@@ -40,6 +40,20 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
               </div>
               <p className="af-pf-call-why">{c.why}</p>
               <div className="af-pf-call-actions">
+                {/*
+                  Fix it where the league lives — only on a call that asks for a change (sit, start, or a
+                  questionable hold with a plan), and only to a VERIFIED lineup screen or the in-app editor
+                  (lineupFixLink). A locked or settled call has nothing to fix.
+                */}
+                {c.fix && (c.kind === 'sit' || c.kind === 'start' || (c.kind === 'hold' && c.tone === 'warn')) ? (
+                  <a
+                    className="af-pf-call-fix"
+                    href={c.fix.href}
+                    {...(c.fix.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  >
+                    Fix lineup in {c.fix.platformLabel}
+                  </a>
+                ) : null}
                 <button
                   type="button"
                   className="af-pf-call-ask"
@@ -54,7 +68,7 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
       </ul>
       <p className="af-pf-calls-foot">
         Each call compares projections under that league&apos;s own scoring, his injury designation and the week&apos;s kickoffs — nothing
-        else. Make the change where the league lives — its &ldquo;Open lineup&rdquo; button in the table above.
+        else. Make the change where the league lives — &ldquo;Fix lineup&rdquo; on the call, or the table&apos;s &ldquo;Open lineup&rdquo; above.
       </p>
     </section>
   )

@@ -59,6 +59,11 @@ export interface FaabCandidate {
    * all, which is the only case where his full value is marginal.
    */
   replacedValue: number
+  /**
+   * Who leaves your starting lineup to make room for him, when the league's real slots were
+   * readable (`faabLineupGain.ts`). Null when he fills an empty seat or the slots were not on file.
+   */
+  displacedName?: string | null
 }
 
 export interface FaabBid {

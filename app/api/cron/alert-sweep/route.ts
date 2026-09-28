@@ -66,6 +66,8 @@ import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJo
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
+import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
+import { fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
 import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 import { loadChimmyAlertPreferences } from '@/lib/chimmy-alerts/ChimmyAlertPreferencesService'
@@ -425,34 +427,66 @@ async function handle(req: NextRequest) {
           continue
         }
 
-        // Send only the most urgent alert per sweep. A burst of six notifications for six
-        // leagues is how someone turns notifications off permanently.
-        const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
-        const dedupePrefix = injuredStarterDedupeKey(top, new Date())
-        const href = injuredStarterHref(top, await alertPlayerRef(top))
-        // Today's message about this player and designation already went out: say nothing again.
-        const already = await prisma.platformNotification
-          .findFirst({ where: { sourceKey: `${dedupePrefix}:${sub.userId}` }, select: { id: true } })
-          .catch(() => null)
-        if (already) {
+        /*
+         * ONE message per sweep, about ONE player — but covering EVERY league he starts in (the
+         * injury fan-out, injuryFanOutCopy.ts). A burst of six notifications for six leagues is how
+         * someone turns notifications off permanently; one notification about one league, when he
+         * starts in three, is how the other two get missed.
+         *
+         * 🛑 THE FIRST PLAYER NOT YET SENT TODAY, NOT THE MOST URGENT ONE. This took the single most
+         * urgent alert and, when that one was already sent, skipped the user for the sweep — so a
+         * second ruled-out starter waited until he happened to rank first, which on a Sunday can be
+         * never. Players are walked in urgency order and the first unsent one goes.
+         */
+        const now = new Date()
+        const groups = groupAlertsByPlayer(alerts)
+        let group: (typeof alerts)[number][] | null = null
+        let dedupePrefix = ''
+        for (const g of groups) {
+          const key = injuredStarterDedupeKey(g[0]!, now)
+          // Today's message about this player and designation already went out: say nothing again.
+          const already = await prisma.platformNotification
+            .findFirst({ where: { sourceKey: `${key}:${sub.userId}` }, select: { id: true } })
+            .catch(() => null)
+          if (!already) {
+            group = g
+            dedupePrefix = key
+            break
+          }
+        }
+        if (!group) {
           result.deduped = true
           totalDeduped += 1
           results.push(result)
           continue
         }
+        const top = group[0]!
+        const href = injuredStarterHref(top, await alertPlayerRef(top))
+        // The backup to start in each league (the finder's league-scored picker) and where to fix it.
+        const fanOutLeagues = await buildFanOutLeagues(sub.userId, group, now).catch(() => [])
+        const copy = fanOutCopy(group, fanOutLeagues)
 
         /*
-         * The email lists EVERY flagged starter, not just `top`. A phone
-         * banner has room for one sentence; an email does not have that
-         * constraint, and a manager with three starters out is badly served by
-         * an email about one of them — the other two are the ones he misses.
+         * The email lists EVERY flagged player, not just the one this sweep sends about. A phone
+         * banner has room for one sentence; an email does not, and a manager with three starters
+         * out is badly served by an email about one of them. The sent player carries his per-league
+         * fix links; the others say what the detector said and how many leagues they touch.
          */
         const injuryEmail = renderInjuryEmail({
-          alerts: alerts.map((a) => ({
-            title: a.title,
-            message: a.message,
-            leagueId: a.leagueId ?? null,
-          })),
+          alerts: groups.map((g) => {
+            if (g === group) {
+              return {
+                title: copy.title,
+                message: copy.body,
+                leagueId: top.leagueId ?? null,
+                fixLinks: fanOutLeagues
+                  .filter((l) => l.fixHref)
+                  .map((l) => ({ leagueName: l.leagueName, href: l.fixHref! })),
+              }
+            }
+            const other = fanOutCopy(g, [])
+            return { title: other.title, message: other.body, leagueId: g[0]!.leagueId ?? null }
+          }),
           baseUrl: getBaseUrl(),
         })
 
@@ -481,8 +515,8 @@ async function handle(req: NextRequest) {
           category: 'injury_alerts',
           productType: 'app',
           type: 'chimmy_alert',
-          title: top.title,
-          body: top.message,
+          title: copy.title,
+          body: copy.body,
           // The Player Finder card: it leads with the game-day banner and the verified lineup buttons.
           actionHref: href,
           actionLabel: 'Open his card',
@@ -521,8 +555,8 @@ async function handle(req: NextRequest) {
         }
 
         const sent = await sendPushToUser(sub.userId, {
-          title: top.title,
-          body: top.message,
+          title: copy.title,
+          body: copy.body,
           href,
           tag: dedupePrefix,
           type: 'lineup',
