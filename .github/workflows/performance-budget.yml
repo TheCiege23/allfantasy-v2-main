@@ -8,6 +8,21 @@ on:
   push:
     branches: [main, master]
 
+# Cancel this PR's previous run when the branch is updated; never touch a run on main.
+#
+# Nine small guard workflows fire on every PR push, each taking its own runner slot, and the repo's
+# concurrent-job ceiling is the bottleneck (see unit-tests.yml). A PR pushed three times ran these
+# guards three times, with the two superseded runs holding slots other PRs were queued for. Only
+# the newest head's result is ever read.
+#
+# ⚠ PUSH RUNS GET A GROUP OF THEIR OWN (`github.run_id`), SO NOTHING ON MAIN CHANGES. A shared
+# group on main would let a newer push evict the queued one, which is how playwright.yml's main lane
+# ends up `cancelled` most of the day. Keyed by run id, every main push still runs to completion,
+# exactly as before this block existed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   landing-performance-budget-strict:
     name: Landing Perf Budget (strict)
