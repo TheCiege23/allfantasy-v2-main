@@ -60,8 +60,9 @@ describe('gradeSleeperActivityTrade', () => {
     const g = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx(), rosterNames: NAMES, players: PLAYERS, now: 0 })
     expect(graderFor).toHaveBeenCalledWith('af-1')
     expect(gradeArchived).toHaveBeenCalledWith({ grader: true }, {
-      received: ['Woody Marks'],
-      gave: ['Rachaad White'],
+      // By Sleeper id, as every other trade surface prices a player — see `sleeperPlayerInput`.
+      received: [{ name: 'Woody Marks', sleeperId: 'p1' }],
+      gave: [{ name: 'Rachaad White', sleeperId: 'p2' }],
       picksIn: [{ season: 2027, round: 2, label: '2027 round 2' }],
       picksOut: [],
       currentSeason: 1970,
@@ -69,9 +70,11 @@ describe('gradeSleeperActivityTrade', () => {
     expect(g).toEqual({ graded: true, basis: 'today', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }] })
   })
 
-  it('an unnamed player reaches the grader as null, so it withholds rather than prices a raw id', async () => {
+  it('an unnamed player reaches the grader with a null name, so it withholds rather than prices a raw id', async () => {
     await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx({ adds: { p1: 1, zzz: 2 } }), rosterNames: NAMES, players: PLAYERS, now: 0 })
-    expect(gradeArchived.mock.calls[0]![1].gave).toEqual([null])
+    // The id rides along, but a null name still withholds — pinned against the real grader input in
+    // __tests__/trade-value/completed-trade-parity.test.ts.
+    expect(gradeArchived.mock.calls[0]![1].gave).toEqual([{ name: null, sleeperId: 'zzz' }])
   })
 
   it('withholds FAAB trades and three-team trades without asking the grader', async () => {

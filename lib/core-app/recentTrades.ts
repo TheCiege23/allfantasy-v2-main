@@ -8,7 +8,7 @@ import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
-import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade, type ArchivedPlayer } from '@/lib/decision-os/trade/completedTradeGrade'
 import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
@@ -504,12 +504,13 @@ function applyOneGrade(
  */
 async function gradeFromAssets(leagueId: string, a: RecentTradeSide, b: RecentTradeSide, currentSeason: number): Promise<TradeGradeView> {
   const split = (side: RecentTradeSide) => {
-    const players: Array<string | null> = []
+    const players: ArchivedPlayer[] = []
     const picks: Array<{ season: number | null; round: number | null; label: string }> = []
     for (const asset of side.received) {
       const g = asset.gradeAs
       if (g?.kind === 'pick') picks.push({ season: g.season, round: g.round, label: asset.name })
-      else if (g?.kind === 'player') players.push(g.name)
+      // `playerId` is a Sleeper id (set only for NFL Sleeper assets): priced by it, as the live paths are.
+      else if (g?.kind === 'player') players.push({ name: g.name, sleeperId: asset.playerId, position: asset.position })
       else if (asset.kind === 'pick') picks.push({ season: null, round: null, label: asset.name })
       else players.push(null)
     }

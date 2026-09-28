@@ -4,6 +4,7 @@ import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from './leagueTradeGrader'
 import type { TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
+import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 
 /**
  * THE grade for a COMPLETED provider trade — the grade email, the /core history and the dashboard
@@ -37,17 +38,40 @@ export function completedTradeGraderFor(leagueId: string): Promise<LeagueTradeGr
 
 type Side = GradedTrade['sides'][number]
 
+/**
+ * A traded player in the grader's terms, carrying his Sleeper id when the caller has one.
+ *
+ * 🛑 BY ID, NOT BY NAME — THE SAME WAY THE LIVE AND PENDING PATHS HAVE ALWAYS SENT HIM. Until
+ * 2026-09-28 every completed-trade surface (grade email, Trade Center timeline, dashboard band, /core
+ * history, player card, activity feed, trades board) sent the name alone, while the pending inbox,
+ * the /core inbox and the Trade Center panel (`gradeInputsFromPending`) sent the Sleeper id and
+ * position. A name-only player is priced through `findPlayerByName` and a lower-cased name map; an id
+ * is priced exactly, with a position check. This repo carries 178 NFL duplicate-name groups, so one
+ * deal could be priced as two different people depending on which screen read it. Every Sleeper
+ * league in production is NFL (345 of 345, measured 2026-09-28), and the NFL branch of the pricer
+ * always honours a Sleeper id — it never turns a priceable player into an unresolved one.
+ */
+export function sleeperPlayerInput(name: string, sleeperId?: string | null, position?: string | null): TradeAssetInput {
+  const id = sleeperId?.trim()
+  const pos = position?.trim()
+  return {
+    kind: 'player',
+    name,
+    ...(id ? { providerIdentity: { provider: 'sleeper' as const, id, ...(pos ? { position: pos } : {}) } } : {}),
+  }
+}
+
 /** What side one sent and received, in the one grader's terms. */
 export function completedTradeInputs(trade: GradedTrade, currentSeason: number): { give: GradeInputs; get: GradeInputs } | null {
   const [a] = trade.sides
   if (!a) return null
   const side = (players: Side['playersIn'], picks: Side['picksIn']): GradeInputs => {
-    const out: GradeInputs = { assets: players.map((p) => ({ kind: 'player' as const, name: p.name })), unpriceable: [] }
+    const out: GradeInputs = { assets: players.map((p) => sleeperPlayerInput(p.name, p.playerId, p.position)), unpriceable: [] }
     for (const pick of picks) {
       const year = Number(pick.season)
       // Used: the draft resolved it to a player. Checked FIRST — a current-season pick is used too.
       const drafted = pick.resolved?.name?.trim()
-      if (drafted) out.assets.push({ kind: 'player', name: drafted })
+      if (drafted) out.assets.push(sleeperPlayerInput(drafted, pick.resolved?.playerId, pick.resolved?.position))
       else if (Number.isFinite(year) && year >= currentSeason && pick.round > 0) out.assets.push({ kind: 'pick', year, round: pick.round })
       else out.unpriceable.push(pick.label)
     }
@@ -79,6 +103,8 @@ type ArchivedPick = {
    * (`lib/core-app/archivedPickOutcomes.ts`). Absent means unknown, not unused.
    */
   drafted?: string | null
+  /** That player's Sleeper id, when the ledger has it — priced by id, as `completedTradeInputs` prices him. */
+  draftedId?: string | null
 }
 
 /**
@@ -90,16 +116,25 @@ type ArchivedPick = {
  * has been held counts as the player and not as a still-to-come pick. It keeps its place in the
  * list (players, then picks), which is the order the board prints values in.
  */
-function archivedSide(players: ReadonlyArray<string | null>, picks: ReadonlyArray<ArchivedPick>, currentSeason: number): GradeInputs {
+/**
+ * An archived row's player: a bare name, or the name with the Sleeper id the row keys him by (see
+ * `sleeperPlayerInput` for why the id matters). The name stays REQUIRED: the pricer skips an unnamed
+ * NFL player it cannot look up, which would grade a lighter side instead of withholding the letter.
+ */
+export type ArchivedPlayer = string | null | { name: string | null; sleeperId?: string | null; position?: string | null }
+
+function archivedSide(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArray<ArchivedPick>, currentSeason: number): GradeInputs {
   const out: GradeInputs = { assets: [], unpriceable: [] }
-  for (const name of players) {
-    if (name && name.trim()) out.assets.push({ kind: 'player', name: name.trim() })
+  for (const player of players) {
+    const p = typeof player === 'string' || player == null ? { name: player } : player
+    const name = p.name?.trim()
+    if (name) out.assets.push(sleeperPlayerInput(name, 'sleeperId' in p ? p.sleeperId : null, 'position' in p ? p.position : null))
     else out.unpriceable.push('a player with no name on file')
   }
   for (const p of picks) {
     const year = Number(p.season)
     const drafted = p.drafted?.trim()
-    if (drafted) out.assets.push({ kind: 'player', name: drafted })
+    if (drafted) out.assets.push(sleeperPlayerInput(drafted, p.draftedId))
     else if (Number.isFinite(year) && year >= currentSeason && p.round != null && p.round > 0) out.assets.push({ kind: 'pick', year, round: p.round })
     else out.unpriceable.push(p.label)
   }
@@ -114,8 +149,8 @@ function archivedSide(players: ReadonlyArray<string | null>, picks: ReadonlyArra
 export async function gradeArchivedTrade(
   grader: LeagueTradeGrader | null,
   args: {
-    received: ReadonlyArray<string | null>
-    gave: ReadonlyArray<string | null>
+    received: ReadonlyArray<ArchivedPlayer>
+    gave: ReadonlyArray<ArchivedPlayer>
     picksIn: ReadonlyArray<ArchivedPick>
     picksOut: ReadonlyArray<ArchivedPick>
     currentSeason: number

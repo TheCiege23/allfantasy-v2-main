@@ -280,8 +280,9 @@ describe('getRecentTrades', () => {
       gradeArchivedTrade.mockResolvedValue(grade(1000, 1600))
       const out = await run()
       expect(gradeArchivedTrade).toHaveBeenCalledWith(null, {
-        received: ['New Player'],
-        gave: ['Sent Player'],
+        // Priced by Sleeper id and position, as the live paths price a player — see `sleeperPlayerInput`.
+        received: [{ name: 'New Player', sleeperId: '2', position: 'RB' }],
+        gave: [{ name: 'Sent Player', sleeperId: '1', position: 'WR' }],
         picksIn: [{ season: 2027, round: 1, label: '2027 1st' }],
         picksOut: [],
         currentSeason: 2026,

@@ -785,8 +785,8 @@ export async function getTradesBoard(
       },
       ledgerSides.get(ledgerKey(t.sleeperLeagueId, t.transactionId)),
     )
-    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut)
-    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn)
+    const sentPicks = withDraftedNames(pickAssets(t.picksGiven, pickPrice), drafted?.picksOut, drafted?.idsOut)
+    const recvPicks = withDraftedNames(pickAssets(t.picksReceived, pickPrice), drafted?.picksIn, drafted?.idsIn)
 
     const defenders = defendersFor(t.leagueId, leagueBook)
 
@@ -796,12 +796,14 @@ export async function getTradesBoard(
      * league value. Same deal, same letter, same numbers: `gradeArchivedTrade`, on this league's
      * chart today, from this row's point of view.
      */
-    const nameOfId = (id: string) => playerById.get(id)?.name?.trim() || null
-    const pickRef = (p: TradeAsset & { drafted?: string | null }) => ({
+    // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
+    const nameOfId = (id: string) => ({ name: playerById.get(id)?.name?.trim() || null, sleeperId: id })
+    const pickRef = (p: TradeAsset & { drafted?: string | null; draftedId?: string | null }) => ({
       season: p.pickSeason ?? null,
       round: p.pickRound ?? null,
       label: p.name,
       drafted: p.drafted ?? null,
+      draftedId: p.draftedId ?? null,
     })
     const g = await gradeArchivedTrade(await completedTradeGraderFor(t.leagueId), {
       received: recvIds.map(nameOfId),
