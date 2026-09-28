@@ -4,8 +4,8 @@
 # WebView over allfantasy.ai, so a web deploy needs no new binary — rebuild only
 # when ios-app/ itself changes. See docs/app-store/RUNBOOK.md.
 #
-# Signing is automatic, driven by an App Store Connect API key (Admin or App
-# Manager role). Required repository secrets:
+# Signing is automatic, driven by an App Store Connect API key with the Admin
+# role (it creates the distribution certificate). Required repository secrets:
 #   APPLE_TEAM_ID                     10-character Team ID (BROWN PIG LLC)
 #   APP_STORE_CONNECT_KEY_ID          the key's Key ID
 #   APP_STORE_CONNECT_ISSUER_ID       the Issuer ID shown above the key list
