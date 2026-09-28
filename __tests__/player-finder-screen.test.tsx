@@ -882,3 +882,32 @@ describe('Player Finder — player depth paywall', () => {
     expect(screen.queryByTestId('core-free-until-player_depth')).toBeNull()
   })
 })
+
+describe('Player Finder — the deeper card (Phase 1)', () => {
+  const DEPTH = {
+    season: { available: false as const, reason: 'none in fixture' },
+    nextGame: { available: true as const, data: { opponent: 'MIA', home: true, kickoff: '2026-10-25T17:00:00.000Z', market: { impliedTeamTotal: 27.5, spread: -6.5, gameTotal: 48.5, winProbability: 0.71, isStale: false } } },
+    upcoming: { available: false as const, reason: 'none in fixture' },
+    news: { available: true as const, data: [{ title: 'Kincaid limited Thursday', source: 'espn', url: null, publishedAt: null }] },
+    leagueValues: { 'L-warriors': { value: 4210, base: 4210, fitNote: null, mode: 'redraft' as const, numQbs: 1 as const } },
+  }
+
+  it('adds next game, news and a per-league Value column', () => {
+    const { container } = renderCore({ depth: DEPTH })
+    expect(screen.getByRole('region', { name: 'Next game' })).toHaveTextContent('his team implied for 27.5 pts')
+    expect(screen.getByRole('region', { name: 'News' })).toHaveTextContent('Kincaid limited Thursday')
+    expect(screen.getByRole('columnheader', { name: 'Value' })).toBeInTheDocument()
+    expect(container.querySelector('td.af-pf-col-value .af-pf-value')).toHaveTextContent('4,210')
+  })
+
+  it('has no Value column at all for a viewer without AF Pro (leagueValues null)', () => {
+    renderCore({ depth: { ...DEPTH, leagueValues: null } })
+    expect(screen.queryByRole('columnheader', { name: 'Value' })).toBeNull()
+  })
+
+  it('renders exactly as before with no depth', () => {
+    renderCore()
+    expect(screen.queryByRole('region', { name: 'Next game' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Value' })).toBeNull()
+  })
+})

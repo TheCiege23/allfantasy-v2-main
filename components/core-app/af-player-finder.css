@@ -2885,3 +2885,203 @@
     text-align: center;
   }
 }
+
+/* ── Phase 1, the deeper card: season, next game, news, per-league value (2026-09-27) ── */
+/* ⚠ A top-level block with its own media query at the end — never inserted inside another query. */
+.af-core .af-pf-season-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.af-core .af-pf-season-scoring {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-season-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.af-core .af-pf-season-stats-row div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-core .af-pf-season-stats-row dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-season-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  margin-top: 6px;
+}
+.af-core .af-pf-season-axis {
+  stroke: var(--line2);
+  stroke-width: 1;
+}
+.af-core .af-pf-season-bar {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+.af-core [data-beat='true'] .af-pf-season-bar {
+  fill: var(--good);
+}
+.af-core [data-beat='false'] .af-pf-season-bar {
+  fill: var(--warn);
+}
+.af-core .af-pf-season-proj {
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
+.af-core .af-pf-season-wk {
+  fill: var(--muted);
+  font-size: 9px;
+}
+.af-core .af-pf-season-legend {
+  margin: 4px 0 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.af-core .af-pf-season-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin: 0 4px 0 8px;
+  vertical-align: -1px;
+  border-radius: 2px;
+}
+.af-core .af-pf-season-key:first-child {
+  margin-left: 0;
+}
+.af-core .af-pf-season-key--bar {
+  background: var(--good);
+}
+.af-core .af-pf-season-key--proj {
+  height: 0;
+  border-top: 2px dashed var(--text);
+  border-radius: 0;
+}
+.af-core .af-pf-season-headline {
+  color: var(--text2);
+}
+.af-core .af-pf-season-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.af-core .af-pf-season-table th,
+.af-core .af-pf-season-table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-top: 1px solid var(--line);
+  color: var(--text2);
+}
+.af-core .af-pf-season-table tr[data-beat='true'] td:last-child {
+  color: var(--good);
+  font-weight: 700;
+}
+.af-core .af-pf-season-table tr[data-beat='false'] td:last-child {
+  color: var(--warn);
+  font-weight: 700;
+}
+.af-core .af-pf-next-game {
+  margin: 6px 0 8px;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.af-core .af-pf-next-market {
+  color: var(--text2);
+  font-size: 12.5px;
+}
+.af-core .af-pf-next-weeks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.af-core .af-pf-next-week {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text);
+  min-width: 0;
+}
+.af-core .af-pf-next-week[data-bye='true'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-news-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.af-core .af-pf-news-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-news-item:first-child {
+  border-top: 0;
+}
+.af-core .af-pf-news-title {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-core a.af-pf-news-title:hover {
+  text-decoration: underline;
+}
+.af-core .af-pf-news-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-value {
+  font-weight: 700;
+  color: var(--text);
+}
+.af-core .af-pf-value-fit {
+  margin-left: 2px;
+  color: var(--accent);
+}
+.af-core .af-pf-value-inline {
+  display: none;
+  color: var(--text2);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-season-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .af-core .af-pf-next-weeks {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  /* The phone table restacks every row; the value rides in the league cell instead of its own column. */
+  .af-core .af-pf-table th.af-pf-col-value,
+  .af-core .af-pf-table td.af-pf-col-value {
+    display: none;
+  }
+  .af-core .af-pf-value-inline {
+    display: inline;
+  }
+}

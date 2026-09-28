@@ -66,6 +66,7 @@ import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
+import { getPlayerDepth } from '@/lib/core-app/playerDepth'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
@@ -2075,6 +2076,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * Phase 1, the deeper card (2026-09-27): this season against the projection, next games with the
+   * market's read, news, and per-league value. Started here, awaited before render, so it runs
+   * beside the compare and presence reads. Per-league value is AF Pro — skipped for a locked viewer.
+   */
+  const playerDepthRead =
+    activeKey === 'players' && playerDetail
+      ? getPlayerDepth(playerDetail, { heldLeagueId: selectedLeagueId, includeValues: playerDepthOpen }).catch(() => null)
+      : Promise.resolve(null)
+
+  /*
    * Compare (2026-09-06): a second player held beside the first, the same
    * loader over the same leagues, so the two columns are priced the same way.
    * Only when the first resolved — a `vs` with no `player` is nothing to
@@ -2085,6 +2096,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'players' && playerDepthOpen && playerDetail && vsRef
       ? await getPlayerDetail(vsRef, selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id), userId).catch(() => null)
       : null
+  const playerDepth = await playerDepthRead
 
   /*
    * "Recently searched", per account. The write is fire-and-forget by design
@@ -4172,6 +4184,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           compare={playerCompare}
           compareRequested={Boolean(vsRef)}
           depthAccess={corePaywall?.player_depth ?? null}
+          depth={playerDepth}
           triage={gameDayTriage}
           nowIso={new Date().toISOString()}
         />
