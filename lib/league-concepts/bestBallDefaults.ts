@@ -100,7 +100,8 @@ const NCAAF_BEST_BALL_ROSTER_CONFIG = {
   lineupTemplateId: 'best_ball_ncaaf_default',
   rosterTemplateId: 'ncaaf-best_ball',
   draftablePlayerPositions: ['QB', 'RB', 'WR', 'TE', 'K'],
-  regularSeasonLength: 12,
+  // 4 teams play weeks 12-13 — NCAAF brackets end on week 13 (ncaafPlayoffWindow.ts).
+  regularSeasonLength: 11,
   playoffTeams: 4,
 }
 

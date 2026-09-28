@@ -24,8 +24,23 @@ import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
+import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 
 type Tx = Prisma.TransactionClient
+
+/**
+ * A bracket cannot seat more teams than the league has managers, and an odd bracket leaves a seed
+ * the generator cannot pair. Values under 2 are opt-outs (guillotine 1, survivor 0), kept as set.
+ */
+function fitPlayoffTeamsToLeague(value: number | null | undefined, managerCount: number): number | null {
+  if (value == null) return null
+  const requested = Number(value)
+  if (!Number.isFinite(requested)) return null
+  if (requested < 2) return Math.floor(requested)
+  const seats = Math.max(2, Math.floor(managerCount) || 2)
+  const fitted = Math.min(Math.floor(requested), seats)
+  return fitted % 2 === 0 ? fitted : fitted - 1
+}
 
 function secondsToPickTimerPreset(sec: number): string {
   const presets: [string, number][] = [
@@ -247,6 +262,41 @@ export async function createCanonicalLeagueInTransaction(
   const minRankLevel = Math.max(1, creatorRankLevel - 3)
   const maxRankLevel = creatorRankLevel + 3
 
+  /*
+   * 🛑 NCAAF PLAYOFFS END ON WEEK 13 — see lib/league-defaults/ncaafPlayoffWindow.ts. Every NCAAF
+   * format started its bracket at week 13, so finals landed on conference-championship week (14) or
+   * Army-Navy week (15), where nearly nobody plays. Decided here, once the bracket size is final,
+   * because the start depends on it (4 teams -> 12, 6 -> 11), and applied to every copy the league
+   * stores: the playoff settings (-> League.playoffStartWeek), best ball's regular-season length,
+   * and dynasty's regular-season weeks. A dynasty commissioner's explicit season length still wins,
+   * and guillotine and tournaments have no bracket to place.
+   */
+  let ncaafRegularSeasonEndWeek: number | null = null
+  if (
+    sport === 'NCAAF' &&
+    formatId !== 'guillotine' &&
+    bestBallSettings?.contestStructure !== 'tournament' &&
+    typeof dynastySetup.regularSeasonWeeks !== 'number'
+  ) {
+    const bracketTeams = fitPlayoffTeamsToLeague(
+      typeof dynastySetup.playoffTeamCount === 'number'
+        ? dynastySetup.playoffTeamCount
+        : bestBallSettings?.playoffTeams ?? readNumber(foundationDefaults.playoffSettings, 'playoffTeams', 6),
+      managerCount,
+    )
+    const window = ncaafPlayoffWindow(bracketTeams ?? 0, readNumber(foundationDefaults.playoffSettings, 'playoffWeeksPerRound', 1))
+    if (window) {
+      Object.assign(foundationDefaults.playoffSettings, {
+        playoffStartWeek: window.playoffStartWeek,
+        playoff_start_week: window.playoffStartWeek,
+        regularSeasonEndWeek: window.regularSeasonEndWeek,
+        championshipWeek: window.championshipWeek,
+      })
+      if (bestBallSettings && bestBallSettings.playoffTeams > 0) bestBallSettings.regularSeasonLength = window.regularSeasonEndWeek
+      ncaafRegularSeasonEndWeek = window.regularSeasonEndWeek
+    }
+  }
+
   const mergedSettings: Record<string, unknown> = {
     ...engine.settingsSnapshot,
     league_type: formatId,
@@ -388,18 +438,7 @@ export async function createCanonicalLeagueInTransaction(
    * them one at a time is how this rule ended up with two implementations in
    * the first place.
    */
-  const clampPlayoffTeams = (value: number | null | undefined): number | null => {
-    if (value == null) return null
-    const requested = Number(value)
-    if (!Number.isFinite(requested)) return null
-    // Concepts that deliberately opt out of a bracket (guillotine 1, survivor 0)
-    // are not bracket sizes — leave them exactly as the concept set them.
-    if (requested < 2) return Math.floor(requested)
-    const seats = Math.max(2, Math.floor(managerCount) || 2)
-    const fitted = Math.min(Math.floor(requested), seats)
-    // An odd bracket leaves a seed with no opponent the generator can pair.
-    return fitted % 2 === 0 ? fitted : fitted - 1
-  }
+  const clampPlayoffTeams = (value: number | null | undefined): number | null => fitPlayoffTeamsToLeague(value, managerCount)
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
   const playoffStartWeekDefault =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null
@@ -687,7 +726,7 @@ export async function createCanonicalLeagueInTransaction(
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         useMaxPfForNonPlayoff: true,
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
@@ -704,7 +743,7 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
       update: {
-        regularSeasonWeeks: num(ds.regularSeasonWeeks, 14),
+        regularSeasonWeeks: num(ds.regularSeasonWeeks, ncaafRegularSeasonEndWeek ?? 14),
         rookiePickOrderMethod: str(ds.rookieDraftOrderMethod, 'max_pf'),
         rookieDraftRounds: num(ds.rookieDraftRounds, dynastyFallbackRookieRounds),
         rookieDraftType: str(ds.rookieDraftType, dynastyFallbackRookieDraftType),
