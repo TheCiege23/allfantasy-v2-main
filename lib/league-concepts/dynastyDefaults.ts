@@ -92,7 +92,8 @@ export interface DynastyDefaultContract {
 // ── Roster configs ─────────────────────────────────────────────────────────────
 
 const NFL_DYNASTY_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 } as const
-const NCAAF_DYNASTY_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 } as const
+// No DEF: no college team defense exists to draft and none is scored (see redraftTeamDefenseEnabled).
+const NCAAF_DYNASTY_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1 } as const
 
 const NFL_DYNASTY_ROSTER_CONFIG = {
   starterSlots: NFL_DYNASTY_STARTERS as Record<string, number>,
@@ -109,7 +110,7 @@ const NCAAF_DYNASTY_ROSTER_CONFIG = {
   irSlots: 2,
   taxiSlots: 4,
   defensePosition: 'DEF' as const,
-  draftablePlayerPositions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'],
+  draftablePlayerPositions: ['QB', 'RB', 'WR', 'TE', 'K'],
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
