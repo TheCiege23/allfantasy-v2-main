@@ -12,6 +12,7 @@ import { estimateWinProbability, type WinProbability } from '@/lib/live/winProba
 import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { myRosterCandidates, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
@@ -370,7 +371,7 @@ async function loadRosteredPlayers(
       leagueId: true,
       externalId: true,
       platformUserId: true,
-      league: { select: { id: true, name: true, platformLeagueId: true, sport: true, season: true, settings: true } },
+      league: { select: { id: true, name: true, platform: true, platformLeagueId: true, sport: true, season: true, settings: true } },
     },
   })
   if (teams.length === 0) return { players, hasRosterData: false }
@@ -402,8 +403,10 @@ async function loadRosteredPlayers(
     for (const team of claimed) {
       const roster = team.externalId ? resolved.get(team.externalId) : pool.find((r) => myRosterCandidates(team, userId).includes(r.platformUserId))
       if (!roster) { incomplete = true; continue }
-      for (const id of rosterPlayerIds(roster.playerData)) owned.add(id)
-      const data = roster.playerData as { starters?: unknown } | null
+      // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster ties in nobody.
+      const readable = sleeperReadablePlayerData(league.platform, roster.playerData)
+      for (const id of rosterPlayerIds(readable)) owned.add(id)
+      const data = readable as { starters?: unknown } | null
       for (const id of rosterPlayerIds({ starters: data?.starters })) started.add(id)
     }
     ownedByLeague.set(league.platformLeagueId, owned)

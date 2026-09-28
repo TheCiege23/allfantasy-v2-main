@@ -10,6 +10,7 @@ import { leagueDisplayName } from './leagueHome'
 import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueWeekFromSettings } from './seasonTimeline'
 
 /**
@@ -536,8 +537,12 @@ export async function getMatchupPulse(
         .catch(() => [])
     : []
   const startersBy = new Map<string, string[]>()
+  const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
   for (const r of rosters) {
-    startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(r.playerData))
+    // A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id and would be
+    // priced as a stranger; such a lineup reads empty and the league lands in `unpriceable`.
+    const pd = sleeperReadablePlayerData(platformByLeague.get(r.leagueId), r.playerData)
+    startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(pd))
   }
 
   /** First candidate that actually names a roster in this league. */

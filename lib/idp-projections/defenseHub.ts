@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { idpPositionGroup, isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShares, type SnapShareOutcome } from '@/lib/core-app/snapShare'
@@ -216,14 +217,14 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     (await args.prisma.league
       .findUnique({
         where: { id: args.leagueId },
-        select: { id: true, settings: true, leagueType: true },
+        select: { id: true, settings: true, leagueType: true, platform: true },
       })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true, leagueType: true },
+        select: { id: true, settings: true, leagueType: true, platform: true },
       })
       .catch(() => null))
 
@@ -239,8 +240,11 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
   if (!mine.found) return EMPTY(mine.reason)
 
-  const myIds = rosterPlayerIds(mine.playerData)
-  if (myIds.length === 0) return EMPTY('no_roster')
+  const rosteredIds = rosterPlayerIds(mine.playerData)
+  if (rosteredIds.length === 0) return EMPTY('no_roster')
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids, so it is never looked
+  // up (or priced) as one; it is counted as unresolvable below instead of naming a stranger.
+  const myIds = rosterPlayerIds(sleeperReadablePlayerData(league.platform, mine.playerData))
 
   /*
    * ⚠ REPLACEMENT LEVEL IS A PROPERTY OF THE LEAGUE, NOT OF YOUR TEAM. VORP asks what a
@@ -256,7 +260,9 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     .catch(() => [] as Array<{ playerData: unknown }>)
 
   const leagueIds = new Set<string>()
-  for (const r of leagueRosters) for (const id of rosterPlayerIds(r.playerData)) leagueIds.add(id)
+  for (const r of leagueRosters) {
+    for (const id of rosterPlayerIds(sleeperReadablePlayerData(league.platform, r.playerData))) leagueIds.add(id)
+  }
   for (const id of myIds) leagueIds.add(id)
 
   const numTeams = Math.max(leagueRosters.length, 1)
@@ -302,7 +308,7 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
    * cannot be shown — but dropping them without saying so is how a manager comes to believe we
    * lost half his roster, so they are counted and reported.
    */
-  const unresolved = myIds.filter((id) => !best.has(id)).length
+  const unresolved = rosteredIds.filter((id) => !best.has(id)).length
 
   const myDefenders = myIds
     .map((id) => ({ sleeperId: id, ...(best.get(id) ?? { name: id, team: null, position: null }) }))

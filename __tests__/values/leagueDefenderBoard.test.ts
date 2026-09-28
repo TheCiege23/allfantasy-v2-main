@@ -257,3 +257,32 @@ describe('refusals', () => {
     expect(board.rows.every((r) => r.ownedBy.isMine === false)).toBe(true)
   })
 })
+
+/*
+ * A Fleaflicker/MFL/Fantrax/Yahoo roster id is a short number in Sleeper's range, and the player
+ * table here answers every id as a Sleeper id — exactly the collision: read raw, 'lb_target' on a
+ * Fleaflicker roster would be listed, priced and owned as Sleeper's 'lb_target'.
+ */
+describe('foreign roster ids', () => {
+  const leagueOn = (platform: string) =>
+    (prisma as any).league.findUnique.mockResolvedValueOnce({
+      id: 'L1',
+      settings: { roster_positions: ['QB', 'LB', 'LB', 'DL', 'DB', 'K'] },
+      leagueType: 'dynasty',
+      platform,
+    })
+
+  it('does not list, price or assign an owner to the Sleeper player who shares a Fleaflicker id', async () => {
+    leagueOn('fleaflicker')
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.rows.map((r) => r.name)).not.toContain('Target Backer')
+    expect(board.rows).toEqual([])
+    expect(JSON.stringify(loadLeagueIdpVorp.mock.calls)).not.toContain('lb_target')
+  })
+
+  it('CONTROL: the same ids in a Sleeper league ARE listed', async () => {
+    leagueOn('sleeper')
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.rows.map((r) => r.name)).toContain('Target Backer')
+  })
+})

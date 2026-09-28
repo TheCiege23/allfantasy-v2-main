@@ -5,6 +5,7 @@ import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterSe
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import { isSleeperPlayerLegalInSlot } from '@/lib/lineup-actions/sleeperSlotUtils'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 
 function toStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return []
@@ -122,7 +123,12 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
     }
   }
 
-  const ids = starters.slice(0, starterSlots.length).filter(Boolean)
+  /*
+   * A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, and imported
+   * `lineup_sections` hold bare ids, so a DB row here would name a stranger and flag HIS slot or
+   * injury. Not looked up: the starters still count toward the slot gap above, unnamed.
+   */
+  const ids = isForeignIdSpace(platform) ? [] : starters.slice(0, starterSlots.length).filter(Boolean)
   const rows = await prisma.sportsPlayer.findMany({
     where: {
       sport,

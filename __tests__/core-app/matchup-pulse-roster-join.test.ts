@@ -138,6 +138,29 @@ describe('getMatchupPulse roster join', () => {
     expect(pulse.leading[0]?.margin).toBe(8)
   })
 
+  /*
+   * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the provider's ids, short numbers in Sleeper's
+   * range. Here they ARE priced ids in the fake projection feed — the collision shape. Pricing them
+   * ranks a margin computed from strangers' projections.
+   */
+  it('🛑 never prices a foreign-id lineup as Sleeper ids — the league is unpriceable, not ranked', async () => {
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, platform: 'fleaflicker' } }]
+    db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
+    db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(0)
+    expect(pulse.leading).toHaveLength(0)
+    expect(pulse.notRanked.unpriceable).toBe(1)
+  })
+
+  it('CONTROL: the same lineups in a Sleeper league are priced', async () => {
+    db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
+    db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(1)
+    expect(pulse.leading[0]?.margin).toBe(8)
+  })
+
   it('reports a pairing it cannot price rather than inventing one', async () => {
     db.rosters = [db.rosters[0]]
     const pulse = await getMatchupPulse(USER, NOW)

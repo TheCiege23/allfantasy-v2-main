@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { replaceableThreshold } from './leagueScale'
 import type { Scarcity } from './rosterNeed'
 
@@ -46,9 +47,14 @@ export async function getPositionScarcity(args: {
   if (wanted.size === 0) return out
 
   const rosters = await prisma.roster
-    .findMany({ where: { leagueId }, select: { playerData: true } })
+    .findMany({ where: { leagueId }, select: { playerData: true, league: { select: { platform: true } } } })
     .catch(() => [])
   if (rosters.length === 0) return out
+  /*
+   * A foreign league's roster ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, so nobody
+   * here can be subtracted from the wire. Empty — "we did not look" — rather than a full wire.
+   */
+  if (rosters.some((r) => isForeignIdSpace(r.league?.platform))) return out
 
   const rostered = new Set<string>()
   for (const r of rosters) {

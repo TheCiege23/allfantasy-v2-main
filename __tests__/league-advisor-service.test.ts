@@ -24,6 +24,11 @@ vi.mock('@/lib/openai-client', () => ({
   parseJsonContentFromChatCompletion: parseJsonContentFromChatCompletionMock,
 }))
 
+/* Sleeper's player dictionary, keyed by Sleeper id: '6038' is a real Sleeper player. */
+vi.mock('@/lib/sleeper-client', () => ({
+  getAllPlayers: vi.fn(async () => ({ '6038': { full_name: 'Wrong Player' } })),
+}))
+
 describe('LeagueAdvisorService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -124,5 +129,46 @@ describe('LeagueAdvisorService', () => {
     expect(advice?.lineup.length).toBeGreaterThan(0)
     expect(advice?.trade.length).toBeGreaterThan(0)
     expect(advice?.waiver.length).toBeGreaterThan(0)
+  })
+})
+
+/*
+ * A Fleaflicker roster id is a short number in Sleeper's range. '6038' on a Fleaflicker roster is
+ * NOT Sleeper's '6038', so the advisor must not name (or pull injuries for) Sleeper's player.
+ */
+describe('LeagueAdvisorService — foreign roster ids', () => {
+  const userContentFor = async (platform: string) => {
+    vi.clearAllMocks()
+    leagueFindFirstMock.mockResolvedValue({ id: 'lg-ff', name: 'Imported', sport: 'NFL', platform })
+    rosterFindFirstMock.mockResolvedValue({
+      playerData: { players: ['6038'], starters: ['6038'] },
+      faabRemaining: null,
+      waiverPriority: null,
+    })
+    playerIdentityMapFindManyMock.mockResolvedValue([])
+    sportsInjuryFindManyMock.mockResolvedValue([
+      { playerName: 'Wrong Player', team: 'KC', status: 'Out', type: 'knee' },
+    ])
+    playerMetaTrendFindManyMock.mockResolvedValue([{ playerId: '6038', trendScore: 90, trendingDirection: 'Hot' }])
+    openaiChatJsonMock.mockResolvedValue({ ok: false, status: 500 })
+    const { getLeagueAdvisorAdvice } = await import('@/lib/league-advisor/LeagueAdvisorService')
+    const advice = await getLeagueAdvisorAdvice({ leagueId: 'lg-ff', userId: 'u-1' })
+    const messages = openaiChatJsonMock.mock.calls[0]?.[0]?.messages ?? []
+    return { advice, userContent: String(messages[1]?.content ?? '') }
+  }
+
+  it('does not name the Sleeper player who shares a Fleaflicker roster id', async () => {
+    const { advice, userContent } = await userContentFor('fleaflicker')
+    expect(userContent).not.toContain('Wrong Player')
+    expect(userContent).toContain('cannot be resolved')
+    expect(advice?.injury.map((i) => i.playerName)).not.toContain('Wrong Player')
+    expect(sportsInjuryFindManyMock).not.toHaveBeenCalled()
+    // The trend read must not be handed the foreign id either.
+    expect(advice?.trade.map((t) => t.targetPlayer)).not.toContain('Wrong Player')
+  })
+
+  it('CONTROL: the same id in a Sleeper league IS named', async () => {
+    const { userContent } = await userContentFor('sleeper')
+    expect(userContent).toContain('Starters: Wrong Player')
   })
 })

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -163,14 +164,14 @@ export async function loadLeagueDefenderBoard(
     (await args.prisma.league
       .findUnique({
         where: { id: args.leagueId },
-        select: { id: true, settings: true, leagueType: true },
+        select: { id: true, settings: true, leagueType: true, platform: true },
       })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true, leagueType: true },
+        select: { id: true, settings: true, leagueType: true, platform: true },
       })
       .catch(() => null))
 
@@ -231,15 +232,17 @@ export async function loadLeagueDefenderBoard(
    * error here: the board is still worth reading, every row simply reports `isMine: false`.
    */
   const mine = await findMyRoster(args.prisma, league.id, args.userId).catch(() => null)
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one, the
+  // board would list, price and assign an owner to a stranger. Such rosters contribute no ids.
   const myIdSet = new Set<string>(
-    mine && mine.found ? rosterPlayerIds(mine.playerData) : [],
+    mine && mine.found ? rosterPlayerIds(sleeperReadablePlayerData(league.platform, mine.playerData)) : [],
   )
 
   /* Every rostered player in the league, and who holds each one. */
   const ownerByPlayerId = new Map<string, string>()
   const leagueIds = new Set<string>()
   for (const r of rosters) {
-    for (const id of rosterPlayerIds(r.playerData)) {
+    for (const id of rosterPlayerIds(sleeperReadablePlayerData(league.platform, r.playerData))) {
       leagueIds.add(id)
       if (!ownerByPlayerId.has(id)) ownerByPlayerId.set(id, r.platformUserId)
     }

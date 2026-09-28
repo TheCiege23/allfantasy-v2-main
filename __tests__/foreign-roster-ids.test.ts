@@ -24,6 +24,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import {
   isForeignIdSpace,
+  sleeperReadablePlayerData,
   stripForeignIds,
   translateRostersByLeague,
   translateRostersToSleeperIds,
@@ -37,6 +38,7 @@ const FLEA_PD = {
   taxi: [],
   ir: ['777'],
   devy: ['x'],
+  bench: ['6038'],
   lineup_sections: { starters: [{ id: '4034', position: 'RB' }], bench: [{ id: '6794' }], note: 'kept' },
   settings: { keep: true },
 }
@@ -44,7 +46,7 @@ const FLEA_PD = {
 describe('isForeignIdSpace', () => {
   it('is the platforms whose ids are the provider’s own', () => {
     for (const p of ['fleaflicker', 'mfl', 'fantrax', 'yahoo', 'Fleaflicker']) expect(isForeignIdSpace(p)).toBe(true)
-    for (const p of ['sleeper', 'manual', 'allfantasy', '', null, undefined, 'espn']) expect(isForeignIdSpace(p)).toBe(false)
+    for (const p of ['sleeper', 'manual', 'allfantasy', 'af', 'native', 'Native', '', null, undefined, 'espn']) expect(isForeignIdSpace(p)).toBe(false)
   })
 })
 
@@ -57,9 +59,18 @@ describe('stripForeignIds', () => {
       taxi: [],
       ir: [],
       devy: [],
+      bench: [],
       lineup_sections: { starters: [], bench: [], note: 'kept' },
       settings: { keep: true },
     })
+  })
+})
+
+describe('sleeperReadablePlayerData', () => {
+  it('strips a foreign roster, returns any other league’s playerData as the same object', () => {
+    expect(sleeperReadablePlayerData('fleaflicker', FLEA_PD)).toEqual(stripForeignIds(FLEA_PD))
+    expect(sleeperReadablePlayerData('mfl', ['6038', '4034'])).toEqual([])
+    for (const p of ['sleeper', 'manual', '', null, 'espn']) expect(sleeperReadablePlayerData(p, FLEA_PD)).toBe(FLEA_PD)
   })
 })
 
