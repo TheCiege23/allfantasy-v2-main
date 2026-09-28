@@ -94,6 +94,8 @@ export async function POST(req: NextRequest) {
     accountIdentifier?: string
     season?: string
     sport?: string
+    /** Sleeper only: replace the profile's linked Sleeper account with the one discovered. */
+    relinkSleeper?: boolean
   }
   try {
     body = await req.json()
@@ -449,7 +451,7 @@ export async function POST(req: NextRequest) {
    * modern pipeline ever wrote one — a direct signup discovered their leagues
    * here and then failed the very next step with "Link your Sleeper account",
    * with no surface to do the linking. First-write-wins: an already-linked
-   * profile is never overwritten, and a handle claimed by ANOTHER account is
+   * profile is only overwritten on `relinkSleeper`, and a handle claimed by ANOTHER account is
    * left alone (unique constraint) — discovery still works, the gate then
    * refuses with its own message.
    */
@@ -460,6 +462,18 @@ export async function POST(req: NextRequest) {
    * preview — refuses with "Link your Sleeper account". Linking is impossible from this login, so
    * that advice is a loop. Reported to the screen instead, which says what actually fixes it.
    */
+  /*
+   * ⚠ FIRST-WRITE-WINS ALSO MEANS THE GATE CAN CHECK A DIFFERENT ACCOUNT THAN THE ONE LISTED HERE.
+   * The gate reads the STORED Sleeper id, so when the profile holds another (or a stale) account,
+   * every league below fails with "You are not a member of that Sleeper league." The response names
+   * the linked account (`sleeperAccountMismatch`) so the screen can say so before Import, and
+   * `relinkSleeper` switches the link on request. That is no new power: settings can already clear
+   * the link, and the next discovery stamps the typed account. The unique key still refuses a Sleeper
+   * id held by another login, which reports as `handleLinkedElsewhere` like the first write.
+   */
+  const discoveredSleeperId = sleeperUser.user.user_id
+  let linkedSleeperId: string | null = null
+  let linkedSleeperUsername: string | null = null
   let handleLinkedElsewhere = false
   try {
     const profile = await prisma.userProfile.upsert({
@@ -467,15 +481,22 @@ export async function POST(req: NextRequest) {
       update: {},
       create: { userId: auth.userId },
     })
-    if (!profile.sleeperUserId) {
+    linkedSleeperId = profile.sleeperUserId ?? null
+    linkedSleeperUsername = profile.sleeperUsername ?? null
+    const relink =
+      body.relinkSleeper === true && linkedSleeperId !== null && linkedSleeperId !== discoveredSleeperId
+    if (!linkedSleeperId || relink) {
       await prisma.userProfile.update({
         where: { userId: auth.userId },
         data: {
-          sleeperUserId: sleeperUser.user.user_id,
+          sleeperUserId: discoveredSleeperId,
           sleeperUsername: sleeperUser.user.username ?? accountIdentifier,
           sleeperLinkedAt: new Date(),
+          // The old verification was for the old account.
+          ...(relink ? { sleeperVerifiedAt: null } : {}),
         },
       })
+      linkedSleeperId = discoveredSleeperId
     }
   } catch (error) {
     /* unique-violation (handle owned by another account), a partial prisma in
@@ -487,13 +508,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const leagues = await getUserLeagues(sleeperUser.user.user_id, sport, season)
+    const leagues = await getUserLeagues(discoveredSleeperId, sport, season)
     return NextResponse.json({
       provider,
       sport,
       season,
       account: {
-        providerUserId: sleeperUser.user.user_id,
+        providerUserId: discoveredSleeperId,
         accountIdentifier: sleeperUser.user.username ?? accountIdentifier,
         displayName:
           sleeperUser.user.display_name?.trim() ||
@@ -502,6 +523,9 @@ export async function POST(req: NextRequest) {
       },
       /* Present only when true, so every existing consumer of this shape reads it unchanged. */
       ...(handleLinkedElsewhere ? { handleLinkedElsewhere: true } : {}),
+      ...(linkedSleeperId && linkedSleeperId !== discoveredSleeperId
+        ? { sleeperAccountMismatch: { linkedUsername: linkedSleeperUsername } }
+        : {}),
       leagues: await markPreviouslyDeleted(
         auth.userId,
         'sleeper',

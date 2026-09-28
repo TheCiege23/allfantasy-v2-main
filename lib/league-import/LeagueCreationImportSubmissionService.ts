@@ -330,7 +330,7 @@ export async function submitImportCreation(
 export async function discoverProviderLeagues(
   provider: ImportProvider,
   accountIdentifier: string,
-  options?: { season?: string; sport?: string }
+  options?: { season?: string; sport?: string; relinkSleeper?: boolean }
 ): Promise<DiscoverProviderLeaguesResult> {
   if (!isImportProviderAvailable(provider)) {
     return { ok: false, error: `Import from ${provider} is not yet available.` };
@@ -353,6 +353,7 @@ export async function discoverProviderLeagues(
         ...(trimmed ? { accountIdentifier: trimmed } : {}),
         ...(options?.season ? { season: options.season } : {}),
         ...(options?.sport ? { sport: options.sport } : {}),
+        ...(options?.relinkSleeper ? { relinkSleeper: true } : {}),
       }),
     });
     const data = await readImportResponseBody(res);
