@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   pricePickCalls: 0,
   leagueType: 'dynasty',
   needFactor: 1,
+  rosterNeedCalls: [] as unknown[],
 }))
 
 vi.mock('server-only', () => ({}))
@@ -44,6 +45,10 @@ vi.mock('@/lib/trade-value/viewerNeedFactors', () => ({
       give: a.give.map(() => h.needFactor === 1 ? null : { kind: 'need', factor: h.needFactor, reason: 'after this trade you have surplus WR depth' }),
       get: a.get.map(() => null), gap: null,
     }
+  },
+  loadRosterNeedFactors: async (a: { give: unknown[]; get: unknown[]; playerData: unknown }) => {
+    h.rosterNeedCalls.push(a.playerData)
+    return { give: a.give.map(() => null), get: a.get.map(() => ({ kind: 'need', factor: 1.2, reason: 'fills a starting hole' })), gap: null }
   },
 }))
 vi.mock('@/lib/hybrid-valuation', () => {
@@ -90,6 +95,7 @@ beforeEach(() => {
   h.needCalls = 0
   h.pricePickCalls = 0
   h.needFactor = 1
+  h.rosterNeedCalls = []
 })
 
 const graded = <T extends { graded: boolean }>(v: T) => {
@@ -172,6 +178,19 @@ describe('createLeagueTradeGrader', () => {
       ['give', 'Drake London', 4000],
       ['get', 'Puka Nacua', 6000],
     ])
+  })
+
+  it('a named roster prices roster fit for THAT roster — the partner’s side, with no user to look up', async () => {
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1' }))!
+    const view = graded(await grader.grade({
+      give: [{ kind: 'player', name: 'Drake London' }],
+      get: [{ kind: 'player', name: 'Jaxon Smith-Njigba' }],
+      viewerSide: true,
+      needRoster: { playerData: { players: ['p1'] } },
+    }))
+    expect(h.rosterNeedCalls).toEqual([{ players: ['p1'] }])
+    expect(h.needCalls).toBe(0)
+    expect(view.rosterFit?.percentDiff).toBeGreaterThan(0)
   })
 
   it('roster need is priced only when the graded side is the viewer', async () => {

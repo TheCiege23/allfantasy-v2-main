@@ -5,6 +5,7 @@ import { requireCronAuth } from '../_auth'
 import { purgeExpiredCache } from '@/lib/enrichment-cache'
 import { prisma } from '@/lib/prisma'
 import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
 
 /**
  * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
@@ -24,7 +25,14 @@ const JOB = 'cron-reap-sync-runs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+/*
+ * 300, not 30, only for the nightly trade-agent pass below: the reap and the purge are unchanged and
+ * still finish in seconds. Outside 03:00–10:59 UTC the pass returns at once and so does the route.
+ */
+export const maxDuration = 300
+
+/** The trade-agent pass stops by here, leaving the platform's 300s kill well clear. */
+const ROUTE_BUDGET_MS = 240_000
 
 /**
  * GET /api/cron/reap-sync-runs
@@ -94,5 +102,15 @@ export async function GET(request: NextRequest) {
     Date.now() - startedAt,
   )
 
-  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge })
+  /*
+   * The nightly trade agent rides here (design step 9, 2026-09-27) because `cron-schedule.json` is at
+   * its 60-job ceiling and docs/crons.md says to extend an existing handler first. It runs AFTER the
+   * heartbeat above, so it can never delay or fail the reap, and a failure is reported beside the
+   * reap's result, never as one. It records its own telemetry row (`cron-trade-agent`).
+   */
+  const tradeAgent: TradeAgentPassResult | { ran: false; reason: string } = await runTradeAgentPass({
+    budgetMs: ROUTE_BUDGET_MS - (Date.now() - startedAt),
+  }).catch((error) => ({ ran: false as const, reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed' }))
+
+  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, tradeAgent })
 }
