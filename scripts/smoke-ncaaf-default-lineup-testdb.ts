@@ -56,6 +56,7 @@ async function main() {
   try {
     users.push((await prisma.appUser.create({ data: { username: marker, email: `${marker}@example.invalid` } })).id)
     let controlSettings: Record<string, unknown> | null = null
+    const mismatches: string[] = []
 
     for (const concept of ['redraft', 'dynasty', 'keeper', 'best_ball']) {
       const v = validateCreatePayload({ concept, sport: 'NCAAF', teamCount: 4, draftType: 'snake', scoringPreset: 'ncaaf_ppr', leagueName: `${marker}-${concept}`, timezone: 'America/Chicago', conceptSetup: {} })
@@ -70,12 +71,42 @@ async function main() {
       const { players, unfillable } = lineupFor(config.starterCapacities)
       const result = validateRedraftLineup({ sport: 'NCAAFB', week: 3, players, rosterConfig: config })
       const errors = result.issues.filter((i) => i.severity === 'error').map((i) => `${i.code}:${i.slotType ?? ''}`)
-      report[concept] = { starters: Object.fromEntries(config.starterCapacities), unfillable, lineupOk: result.ok, errors }
+
+      /*
+       * The league must agree with itself. `roster.config` (written by the roster engine) is what the
+       * lineup runs on; `starter_slots` / `bench_slots` (the concept contract) is what settings screens
+       * show and what the draft's round count was computed from. Before 2026-09-28 the NCAAF keeper
+       * league stored 2 WR + K + 8 bench in one and 3 WR + 10 bench (no K) in the other, and drafted
+       * 16 rounds into 18 draftable spots.
+       */
+      const contract = resolveRedraftRosterConfig('NCAAFB', { starter_slots: settings.starter_slots })
+      const draft = await prisma.draftSession.findFirst({ where: { leagueId }, select: { rounds: true } })
+      const runtimeStarters = [...config.starterCapacities.values()].reduce((a, b) => a + b, 0)
+      // A startup draft fills starters and bench; taxi is filled later (rookie drafts), not in it.
+      const draftable = runtimeStarters + config.benchSlots
+      const sameStarters = JSON.stringify([...config.starterCapacities].sort()) === JSON.stringify([...contract.starterCapacities].sort())
+      const storedBench = Number(settings.bench_slots ?? NaN)
+      report[concept] = {
+        starters: Object.fromEntries(config.starterCapacities), unfillable, lineupOk: result.ok, errors,
+        contractStarters: Object.fromEntries(contract.starterCapacities), sameStarters,
+        bench: { runtime: config.benchSlots, stored: storedBench }, taxi: config.taxiSlots,
+        draftRounds: draft?.rounds ?? null, draftableSpots: draftable,
+      }
       check(unfillable.length === 0, `${concept.toUpperCase()}_HAS_UNFILLABLE_STARTER:${unfillable.join(',')}`)
       check(result.ok, `${concept.toUpperCase()}_DEFAULT_LINEUP_REFUSED:${errors.join(',')}`)
       if (concept === 'redraft') controlSettings = settings
+      // Best ball's agreement is recorded, not enforced: its contract (bestBallDefaults) has no TE and no
+      // superflex while its roster template has both, and which one is intended is an open question.
+      if (concept === 'best_ball') { report.bestBallKnownGap = true; continue }
+      mismatches.push(...[
+        !sameStarters ? `${concept}:starters` : '',
+        Number.isFinite(storedBench) && storedBench !== config.benchSlots ? `${concept}:bench` : '',
+        draft?.rounds != null && draft.rounds !== draftable ? `${concept}:rounds(${draft.rounds} vs ${draftable})` : '',
+      ].filter(Boolean))
     }
     check(controlSettings, 'REDRAFT_LEAGUE_NOT_CREATED')
+    report.mismatches = mismatches
+    check(mismatches.length === 0, 'LEAGUE_DISAGREES_WITH_ITSELF:' + mismatches.join(','))
 
     // Control: the pre-fix default — a required DEF starter — must still be refused by the validator.
     // Added to the RESOLVED config (what the validator reads), since that is the layer under test.
