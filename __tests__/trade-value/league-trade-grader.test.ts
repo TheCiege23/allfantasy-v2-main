@@ -227,12 +227,17 @@ describe('createLeagueTradeGrader', () => {
     expect(h.pricePickCalls).toBe(1) // still asked, for the pick's shape; its price is replaced
   })
 
-  it('a pick the chart does not carry falls back to the old pricer, as before', async () => {
+  it('🛑 a pick the chart does not carry WITHHOLDS the letter — never the old pricer (2026-09-28)', async () => {
+    // The old pricer's fallback (the historical file, else the formula curve) priced a 2027 1st at
+    // 7,360 against FantasyCalc's ~2,900 in guillotine/survivor/zombie leagues (price coverage audit).
     const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
-    const v = graded(
-      await g.grade({ give: [{ kind: 'pick', year: 2029, round: 3 }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false }),
+    const v = await g.grade({ give: [{ kind: 'pick', year: 2029, round: 3 }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false })
+    expect(v).toMatchObject({ graded: false, reason: expect.stringMatching(/no value on this league's chart/) })
+    // [control] a pick the chart DOES carry still grades, from the chart.
+    const charted = graded(
+      await g.grade({ give: [{ kind: 'pick', year: 2027, round: 2 }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false }),
     )
-    expect(v.giveValue).toBe(999)
+    expect(charted.giveValue).toBe(700)
   })
 
   it('an unpriced player withholds the letter rather than grading him as worthless', async () => {
