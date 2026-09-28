@@ -175,8 +175,9 @@ export function PlayerVerdict({
         that this is a promise rather than a footnote.
       */}
       <p className="af-pf-verdict-readonly">
-        AllFantasy is read-only. Every change happens on Sleeper, ESPN or Yahoo —
-        we show you which league and which screen.
+        We never change your Sleeper, ESPN or Yahoo lineups — those changes happen on
+        their site, and we show you which league and which screen. In an AllFantasy
+        league you can swap here, and only after you confirm.
       </p>
 
       {/*

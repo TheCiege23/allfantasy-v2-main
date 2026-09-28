@@ -205,10 +205,88 @@ export async function proposeLineupChange(args: {
     ...bench.map((n) => ({ playerId: resolved.ids.get(n)!, to: 'bench' as const })),
   ]
 
-  const checked = await checkMoves({ league, userId: args.userId, rosterId: roster.id, playerData: roster.playerData, season, week, moves, info, now })
-  if (!checked.ok) {
-    return { ok: false, text: `NO CARD WAS MADE. ${checked.text} Tell the user this plainly; nothing was changed.` }
+  const built = await buildLineupCard({ league, week, season, roster, info, moves, userId: args.userId, now })
+  if (!built.ok) {
+    return {
+      ok: false,
+      text:
+        built.code === 'rejected'
+          ? `NO CARD WAS MADE. ${built.message} Tell the user this plainly; nothing was changed.`
+          : 'Chimmy cannot prepare a confirm card right now (signing is not configured). Say so; nothing was changed.',
+    }
   }
+  const { card, plan, player, warnings } = built
+  const text = [
+    `CONFIRMATION CARD READY — NOTHING HAS CHANGED YET. Week ${week} lineup change in "${league.name ?? 'this league'}":`,
+    plan.moveIn.length ? `START ${plan.moveIn.map((m) => `${player(m.playerId).name}${m.slot ? ` (into ${m.slot})` : ''}`).join(', ')}.` : null,
+    plan.moveOut.length ? `BENCH ${plan.moveOut.map((id) => player(id).name).join(', ')}.` : null,
+    warnings.length ? `Warnings on the card: ${warnings.join(' ')}` : null,
+    'A card with a Confirm button appears under your answer. The change happens ONLY if the user taps Confirm, and the card expires in 10 minutes.',
+    'Say what the card will do and that it needs their tap. Never say the lineup was set or saved.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  return { ok: true, text, card }
+}
+
+/**
+ * The Player Finder's "Swap now" (2026-09-27): the same confirm card as Chimmy's, built from player
+ * IDS the finder already holds rather than names an LLM wrote. Everything after the ids is shared —
+ * native-only scope, the chopped-roster and lock checks, per-slot eligibility with re-seating
+ * (`planLineupMoves`), started-game checks, the full validator — and the card executes ONLY through
+ * POST /api/chimmy/actions/confirm, which re-checks all of it and claims the action id once.
+ *
+ * Messages here are for a person, not an LLM: no "tell the user" framing.
+ */
+export async function proposeLineupSwapByIds(args: {
+  leagueId: string
+  userId: string
+  startIds: readonly string[]
+  benchIds: readonly string[]
+  now?: Date
+}): Promise<{ ok: true; card: ChimmyActionCard } | { ok: false; message: string }> {
+  const now = args.now ?? new Date()
+  const clean = (ids: readonly string[]) => [...new Set(ids.map((x) => String(x ?? '').trim()).filter((x) => x && x.length <= 64))].slice(0, 8)
+  const startIds = clean(args.startIds)
+  const benchIds = clean(args.benchIds)
+  if (startIds.length === 0 && benchIds.length === 0) return { ok: false, message: 'Choose who to start and who to bench.' }
+
+  const scope = await loadActionScope(args.leagueId, args.userId, 'lineup')
+  if (!scope.ok) return { ok: false, message: scope.message }
+  const { league, week, season } = scope
+
+  const roster = await loadOwnRoster(league.id, args.userId)
+  if (!roster) return { ok: false, message: "You don't have a team in this league, so there is no lineup to set." }
+
+  const info = await describeRosterPlayers(String(league.sport), roster.playerData)
+  const missing = [...startIds, ...benchIds].filter((id) => !info.has(id))
+  if (missing.length > 0) return { ok: false, message: 'That player is not on your roster in this league anymore — refresh and try again.' }
+  const moves: LineupMoveSpec[] = [
+    ...startIds.map((playerId) => ({ playerId, to: 'starters' as const })),
+    ...benchIds.map((playerId) => ({ playerId, to: 'bench' as const })),
+  ]
+  const built = await buildLineupCard({ league, week, season, roster, info, moves, userId: args.userId, now })
+  return built.ok ? { ok: true, card: built.card } : { ok: false, message: built.message }
+}
+
+type LeagueScope = Extract<Awaited<ReturnType<typeof loadActionScope>>, { ok: true }>
+type RosterInfo = Awaited<ReturnType<typeof describeRosterPlayers>>
+
+/** Check the moves and, when they pass, sign the confirm card. Shared by both entry points above. */
+async function buildLineupCard(args: {
+  league: LeagueScope['league']
+  week: number
+  season: number
+  roster: NonNullable<Awaited<ReturnType<typeof loadOwnRoster>>>
+  info: RosterInfo
+  moves: LineupMoveSpec[]
+  userId: string
+  now: Date
+}) {
+  const { league, week, season, roster, info, moves, now } = args
+
+  const checked = await checkMoves({ league, userId: args.userId, rosterId: roster.id, playerData: roster.playerData, season, week, moves, info, now })
+  if (!checked.ok) return { ok: false as const, code: 'rejected' as const, message: checked.text }
 
   const { plan } = checked
   const effective: LineupMoveSpec[] = [
@@ -221,7 +299,7 @@ export async function proposeLineupChange(args: {
     spec: { kind: 'lineup', rosterId: roster.id, week, season, moves: effective, baseFingerprint: lineupFingerprint(roster.playerData) },
     now,
   })
-  if (!signed) return { ok: false, text: 'Chimmy cannot prepare a confirm card right now (signing is not configured). Say so; nothing was changed.' }
+  if (!signed) return { ok: false as const, code: 'unsigned' as const, message: 'A confirm card cannot be prepared right now (signing is not configured). Nothing was changed.' }
 
   const player = (id: string) => {
     const p = info.get(id)
@@ -250,18 +328,7 @@ export async function proposeLineupChange(args: {
     },
     warnings,
   }
-
-  const text = [
-    `CONFIRMATION CARD READY — NOTHING HAS CHANGED YET. Week ${week} lineup change in "${league.name ?? 'this league'}":`,
-    plan.moveIn.length ? `START ${plan.moveIn.map((m) => `${player(m.playerId).name}${m.slot ? ` (into ${m.slot})` : ''}`).join(', ')}.` : null,
-    plan.moveOut.length ? `BENCH ${plan.moveOut.map((id) => player(id).name).join(', ')}.` : null,
-    warnings.length ? `Warnings on the card: ${warnings.join(' ')}` : null,
-    'A card with a Confirm button appears under your answer. The change happens ONLY if the user taps Confirm, and the card expires in 10 minutes.',
-    'Say what the card will do and that it needs their tap. Never say the lineup was set or saved.',
-  ]
-    .filter(Boolean)
-    .join(' ')
-  return { ok: true, text, card }
+  return { ok: true as const, card, plan, player, warnings }
 }
 
 export type ExecuteResult = { ok: true; message: string; before: string[]; after: string[]; rosterId: string } | { ok: false; message: string }

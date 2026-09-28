@@ -47,7 +47,7 @@ vi.mock('@/lib/sports/teamRef', () => ({ sameNflTeam: (a: string, b: string) => 
 vi.mock('@/lib/trade-engine/caching', () => ({ handleInvalidationTrigger: vi.fn() }))
 vi.mock('@/lib/league-notifications/realtimeHint', () => ({ publishLeagueRealtimeHint: vi.fn() }))
 
-import { executeLineupAction, proposeLineupChange } from '@/lib/chimmy/actions/lineupAction'
+import { executeLineupAction, proposeLineupChange, proposeLineupSwapByIds } from '@/lib/chimmy/actions/lineupAction'
 import { verifyChimmyActionToken } from '@/lib/chimmy/actions/actionToken'
 
 const NOW = new Date('2026-09-25T15:00:00Z') // a Friday
@@ -177,6 +177,45 @@ describe('proposeLineupChange', () => {
   it('refuses a name that is not on the roster instead of guessing', async () => {
     const out = await proposeLineupChange({ leagueId: 'L1', userId: 'u1', start: ['Justin Jefferson'], bench: ['Tony Pollard'], now: NOW })
     expect(out).toMatchObject({ ok: false, text: expect.stringMatching(/"Justin Jefferson" is not on the user's roster/) })
+  })
+})
+
+/*
+ * The Player Finder's "Swap now" (2026-09-27): the SAME card from player ids, through the same
+ * checks. It must write nothing either, and its refusals are for a person — no LLM framing.
+ */
+describe('proposeLineupSwapByIds', () => {
+  it('builds the same signed card from ids, and writes NOTHING', async () => {
+    const out = await proposeLineupSwapByIds({ leagueId: 'L1', userId: 'u1', startIds: ['rb3'], benchIds: ['rb2'], now: NOW })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.card).toMatchObject({ kind: 'lineup', week: 4, lineup: { moveIn: [{ name: 'Kyren Williams', slot: 'RB2' }], moveOut: [{ name: 'Tony Pollard' }] } })
+    const v = verifyChimmyActionToken(out.card.token, NOW)
+    expect(v.ok && v.payload.spec).toMatchObject({ kind: 'lineup', rosterId: 'r1', moves: [{ playerId: 'rb3', to: 'starters' }, { playerId: 'rb2', to: 'bench' }] })
+    expect(h.persist).not.toHaveBeenCalled()
+    expect(h.anyWrite).not.toHaveBeenCalled()
+  })
+
+  it('refuses an id that is not on your roster', async () => {
+    const out = await proposeLineupSwapByIds({ leagueId: 'L1', userId: 'u1', startIds: ['someone-else'], benchIds: ['rb2'], now: NOW })
+    expect(out).toMatchObject({ ok: false, message: expect.stringMatching(/not on your roster/) })
+  })
+
+  it("refuses a started game in a person's words, not the model's", async () => {
+    currentPd.lineup_sections.starters[2] = row('rb2', 'Tony Pollard', 'RB', { gameTime: '2026-09-25T00:15:00Z' })
+    const out = await proposeLineupSwapByIds({ leagueId: 'L1', userId: 'u1', startIds: ['rb3'], benchIds: ['rb2'], now: NOW })
+    expect(out.ok).toBe(false)
+    if (out.ok) return
+    expect(out.message).toMatch(/Tony Pollard's game has already started/)
+    expect(out.message).not.toMatch(/NO CARD WAS MADE|Tell the user/)
+    expect(h.persist).not.toHaveBeenCalled()
+  })
+
+  it('refuses an imported league — those lineups change on their own platform', async () => {
+    h.leagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'espn' })
+    const out = await proposeLineupSwapByIds({ leagueId: 'L1', userId: 'u1', startIds: ['rb3'], benchIds: ['rb2'], now: NOW })
+    expect(out).toMatchObject({ ok: false, message: expect.stringMatching(/ESPN/) })
+    expect(h.persist).not.toHaveBeenCalled()
   })
 })
 
