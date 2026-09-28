@@ -19,6 +19,7 @@ import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 
 export const dynamic = 'force-dynamic'
@@ -165,6 +166,14 @@ async function runRedraftReconciliation() {
         OR: [
           { status: { in: [...SCORING_SEASON_STATUSES] } },
           { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },
+          /*
+           * A finished guillotine season still owed its champion and archive (see finishGuillotineSeason).
+           * ⚠ BOUNDED IN TIME, NOT ONLY BY LIFECYCLE: next year's draft puts the league back in
+           * `post_draft`, and without the window last year's season would be re-offered every tick
+           * forever, diluting the rotating batch. A season is marked complete once; the window is
+           * the retry budget.
+           */
+          { status: 'complete', updatedAt: { gte: new Date(Date.now() - GUILLOTINE_ARCHIVE_RETRY_MS) }, league: { lifecycleState: { in: [...GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES] }, OR: [{ leagueVariant: 'guillotine' }, { guillotineConfig: { isNot: null } }] } },
         ],
       }],
     },
@@ -196,6 +205,14 @@ async function runRedraftReconciliation() {
         const outcome = await runNativeTournamentWeek(season.id, 1)
         tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
       } catch { tournamentFailed += 1 }
+      continue
+    }
+    // Only an unarchived guillotine season reaches here complete: crown and archive it, nothing else.
+    if (season.status === 'complete') {
+      try {
+        const guillotine = await runNativeGuillotineWeek({ seasonId: season.id, currentFantasyWeek: 0 })
+        guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
+      } catch { guillotineFailed += 1 }
       continue
     }
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
