@@ -768,7 +768,10 @@ export async function executeChimmyTool(
           format: rules.context.flags, waiver: rules.context.waiver,
           lastSyncedAt: rules.context.importHealth.lastSyncedAt,
         }) : 'League rules could not be retrieved; do not substitute generic PPR or invented FAAB.'
-        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].join('\n\n')
+        const bestBallRuleGap = rules?.ok && rules.context.lineupBehavior.bestBallMode && !rules.context.lineupBehavior.bestBallSettings
+          ? 'BEST BALL RULE EVIDENCE GAP: Automatic scoring lineup is confirmed, but this import has no verified Best Ball transaction or substitution configuration. Waiver, trade, and substitution permissions are UNVERIFIED; do not say they are disabled or enabled. Prior chat answers and generic Best Ball defaults are not evidence of this league\'s rules.'
+          : null
+        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
       }
 
       case 'get_league_standings': {
