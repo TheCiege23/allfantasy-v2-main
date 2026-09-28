@@ -8,6 +8,7 @@ import { isBestBallLeagueRow } from './leagueBestBall'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { displayPosition } from './positionLabels'
 import { unresolvedClubNames, weekKickoffs } from './playerGame'
+import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import { resolveSportsWeek } from './sportsWeek'
 
@@ -129,15 +130,26 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
    *     word. They are translated now — and an id WITHOUT a link is dropped, not kept:
    *     looked up raw, ESPN 4046 would be read as whoever is Sleeper 4046, a different
    *     person, and his injury would flag your lineup.
-   *   - Yahoo / MFL / Fantrax / Fleaflicker ids have no link on PlayerIdentityMap yet. The
+   *   - Fleaflicker / MFL ids go through the identity bridge (bridgedRosterIds.ts), as the
+   *     finder does: a league is read only when most of its ids translate, and an id with no
+   *     bridge is DROPPED — kept raw, it is whichever Sleeper player shares the number.
+   *   - Yahoo / Fantrax, and a bridged league below the coverage bar, have no usable link. The
    *     same collision applies, so those leagues are counted, not read.
    */
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
-  const readable = rawRosters.filter((r) => !bestBall.has(r.leagueId) && rosterIdSpaceOf(platformOf.get(r.leagueId)) !== 'other')
+  const bridged = await loadBridgedLeagues(
+    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other'),
+  )
+  const bridgeReadable = (leagueId: string) => bridged.get(leagueId)?.readable === true
+  const readable = rawRosters
+    .filter((r) => !bestBall.has(r.leagueId) && (rosterIdSpaceOf(platformOf.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)))
+    .map((r) => (bridgeReadable(r.leagueId) ? { ...r, playerData: applyBridge(r.playerData, bridged.get(r.leagueId)!.map) } : r))
   const espnMap = await loadEspnToSleeperMap(
     collectRosterIds(readable.filter((r) => rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn').map((r) => r.playerData)),
   )
-  const otherLeagues = new Set(leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
+  const otherLeagues = new Set(
+    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
+  )
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
   const choppedTeams = new Set(chopped.map((row) => `${row.leagueId}:${row.rosterId}`))
 

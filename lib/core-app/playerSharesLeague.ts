@@ -5,6 +5,7 @@ import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/proj
 import { teamForRoster } from '@/lib/trade-block/importedTradeBlock'
 import { loadLeagueValueMap, type LeagueValue } from './playerDepth'
 import { componentStats } from './playerSeason'
+import { applyBridge, bridgeColumnFor, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import type { ShareRow } from './playerShares'
 
@@ -18,8 +19,9 @@ import type { ShareRow } from './playerShares'
  * shared rule is what every /core ownership read should use.
  *
  * ⚠ ESPN ROSTERS ARE TRANSLATED AND AN UNLINKED ID IS DROPPED, so an ESPN number can never be read
- * as a different Sleeper player "owned" by someone. A league on a platform with no id link at all
- * (Yahoo / MFL / Fantrax / Fleaflicker) answers `unknown` for every player rather than "free agent".
+ * as a different Sleeper player "owned" by someone. Fleaflicker / MFL go through the identity bridge
+ * when it covers most of the league; a league with no usable link (Yahoo / Fantrax, or a bridge below
+ * the coverage bar) answers `unknown` for every player rather than "free agent".
  *
  * ⚠ SEASON POINTS ARE RE-SCORED FROM STAT LINES under the league's `scoring_settings` (the same
  * ruler as the card's season view, playerDepth.ts) — every week he has a stat line, whichever
@@ -74,9 +76,24 @@ export async function loadLeagueShareView(
   if (!league) return null
   const sleeperIds = rows.map((r) => r.player.sleeperId)
   const idSpace = rosterIdSpaceOf(league.platform)
+  /*
+   * Fleaflicker / MFL: read through the identity bridge when most of the league translates
+   * (bridgedRosterIds.ts), an unbridged id dropped. A player with no bridge id of his own could be
+   * on a roster we cannot see, so for him a miss stays `unknown` — never "free agent".
+   */
+  const bridgeColumn = idSpace === 'other' ? bridgeColumnFor(league.platform) : null
+  const bridge = bridgeColumn ? (await loadBridgedLeagues([league])).get(league.id) ?? null : null
+  const bridgeReadable = bridge?.readable === true
+  const bridgedPlayers = new Set<string>()
+  if (bridgeReadable && bridgeColumn && sleeperIds.length > 0) {
+    const idRows = await prisma.playerIdentityMap
+      .findMany({ where: { sleeperId: { in: sleeperIds }, [bridgeColumn]: { not: null } }, select: { sleeperId: true } })
+      .catch(() => [] as Array<{ sleeperId: string | null }>)
+    for (const r of idRows) if (r.sleeperId) bridgedPlayers.add(r.sleeperId)
+  }
 
   const [rosters, teams, stats, values] = await Promise.all([
-    idSpace === 'other'
+    idSpace === 'other' && !bridgeReadable
       ? Promise.resolve([] as Array<{ platformUserId: string; playerData: unknown }>)
       : prisma.roster
           .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
@@ -94,6 +111,7 @@ export async function loadLeagueShareView(
   const espnMap = idSpace === 'espn' ? await loadEspnToSleeperMap(collectRosterIds(rosters.map((r) => r.playerData))) : null
   const translated = rosters.map((r) => {
     const pd = asRecord(r.playerData) ?? {}
+    if (bridgeReadable && bridge) return { ...r, pd: applyBridge(pd, bridge.map) }
     if (!espnMap) return { ...r, pd }
     const out: Record<string, unknown> = { ...pd }
     for (const key of ['players', 'starters', 'reserve', 'taxi']) {
@@ -134,8 +152,10 @@ export async function loadLeagueShareView(
   const cells: Record<string, LeagueShareCell> = {}
   for (const id of sleeperIds) {
     // No rosters on file is "we cannot tell", never "nobody has him".
-    const readable = idSpace !== 'other' && translated.length > 0
-    let holder: LeagueHolder = readable ? { kind: 'free' } : { kind: 'unknown' }
+    const readable = (idSpace !== 'other' || bridgeReadable) && translated.length > 0
+    // In a bridged league a miss is "free" only for a player the bridge can see at all.
+    const missIsFree = readable && (!bridgeReadable || bridgedPlayers.has(id))
+    let holder: LeagueHolder = missIsFree ? { kind: 'free' } : { kind: 'unknown' }
     if (readable) {
       for (const r of translated) {
         const slot = slotOf(r.pd, id)
