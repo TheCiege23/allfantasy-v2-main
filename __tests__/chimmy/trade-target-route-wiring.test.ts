@@ -38,8 +38,22 @@ describe('the trade-target verdict in the chat route', () => {
     expect(call).not.toMatch(/leagueId:\s*leagueId\b/)
   })
 
-  it('only parses the question when a proven league is in scope', () => {
-    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot \? parseTradeTargetQuestion\(message\) : null/)
+  it('only parses the question for a proven league that allows trades, on a single-decision message', () => {
+    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot && !leagueForbidsTrades\(leagueSnapshot\) && !compoundDecision\(message\)\s*\?\s*parseTradeTargetQuestion\(message\)\s*:\s*null/)
+  })
+
+  /* It reads the whole message; a compound one is split by the shared service, never read whole. */
+  it('takes its compound test from the shared clause splitter, not a copy of it', () => {
+    expect(ROUTE).toMatch(/import \{ compoundDecision \} from '@\/lib\/chimmy\/decisionClauses'/)
+  })
+
+  /*
+   * This read runs BEFORE the shared decision service and is charged when it decides, so without
+   * the skip a manager in a no-trade format (Survivor-Guillotine, Tournament) bought a trade
+   * verdict the service's format gate refuses free.
+   */
+  it('takes its "no trades" test from the shared format gate, not a copy of it', () => {
+    expect(ROUTE).toMatch(/import \{ leagueForbidsTrades \} from '@\/lib\/chimmy\/decisionFormatGate'/)
   })
 
   it('is computed AFTER the confirmation check — the drawer sends every paid question twice', () => {

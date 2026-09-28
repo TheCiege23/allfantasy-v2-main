@@ -192,6 +192,29 @@ describe('getSeasonOutlook', () => {
     expect(h.focus).toHaveBeenCalledTimes(1)
   })
 
+  /*
+   * Production 2026-09-28: a Fantrax league four weeks in read "Settled — the regular season is over"
+   * because its writer stores only played weeks — no placeholder rows for the weeks ahead.
+   */
+  it('withholds a league whose remaining schedule is simply not on file, instead of calling it over', async () => {
+    h.matchups = h.matchups.filter((r) => (r.week as number) <= 3)
+    const fantrax = { ...LEAGUE, platform: 'fantrax', settings: { playoff_teams: 4 } }
+    const out = await getSeasonOutlook('me', [fantrax])
+    expect(out.leagues).toEqual([])
+    expect(out.withheld[0].reason).toMatch(/rest of the schedule is not on file — Fantrax .*through week 3/)
+  })
+
+  it('still settles a league that states its last regular week and has played through it', async () => {
+    for (const r of h.matchups) {
+      if ((r.week as number) >= 4 && (r.week as number) <= 6) {
+        r.pointsFor = 100 + Number(r.rosterId); r.pointsAgainst = 90; r.win = 1
+      }
+    }
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.withheld.map((w) => w.reason).join(' ')).not.toMatch(/not on file/)
+    expect(out.leagues[0]?.weeksRemaining).toBe(0)
+  })
+
   it('withholds a league with too few modelled teams, and says why', async () => {
     h.matchups = h.matchups.filter((r) => (r.week as number) > 3)
     const out = await getSeasonOutlook('me', [LEAGUE])
