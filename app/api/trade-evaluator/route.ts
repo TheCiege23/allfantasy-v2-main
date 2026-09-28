@@ -50,6 +50,8 @@ import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTrade
 import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
 import { NOT_YOUR_LEAGUE_REASON, resolveEvaluationLeagueId } from '@/lib/decision-os/trade/evaluationLeague'
 import { priceEvaluatorDevy } from '@/lib/decision-os/trade/leagueAssetPolicy'
+import { loadTradeKeeperCosts, type TradeKeeperCosts } from '@/lib/keeper/tradeKeeperCosts'
+import { buildLeagueShape } from '@/lib/trade-value/leagueShape'
 import { receiptGradeFields, structuredEvaluationFromExplanation } from '@/lib/decision-os/trade/receiptViews'
 import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -823,7 +825,15 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         )
       }
 
-      if (allPlayerPrices.length > 0 && unpricedAssets.length === allPlayerPrices.length) {
+      /*
+       * ⚠ ONLY AN UNEXPLAINED MISS CAN MEAN AN OUTAGE. `pricePlayer` refuses with a reason when
+       * it knows why — a fringe veteran the market board dropped, a defender with no league
+       * board — and a trade made only of those is not our feed being down. Counting them here
+       * would answer a Mixon-for-Hunt trade with "this is on our side, try again shortly",
+       * which retrying can never fix.
+       */
+      const unexplained = unpricedAssets.filter((p) => !p.unpricedReason)
+      if (allPlayerPrices.length > 0 && unexplained.length === allPlayerPrices.length) {
         return NextResponse.json(
           {
             error: 'VALUATION_UNAVAILABLE',
@@ -833,14 +843,27 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           { status: 503 },
         )
       }
+      const reasonByName = new Map(
+        unpricedAssets.flatMap((p) => (p.unpricedReason ? [[p.name, p.unpricedReason.label] as const] : [])),
+      )
+      const explained = names.filter((n) => reasonByName.has(n))
+      const unknown = names.filter((n) => !reasonByName.has(n))
+      const sentences = [
+        ...explained.map((n) => `${n}: ${reasonByName.get(n)}.`),
+        ...(unknown.length === 1
+          ? [`No value on file for ${unknown[0]} — check the spelling, or the player may not be on the dynasty board.`]
+          : unknown.length > 1
+            ? [`No values on file for ${unknown.join(', ')} — check the spellings, or those players may not be on the dynasty board.`]
+            : []),
+      ]
       return NextResponse.json(
         {
           error: 'UNPRICED_ASSETS',
-          message:
-            names.length === 1
-              ? `No value on file for ${names[0]}, so this trade cannot be graded. Check the spelling, or the player may not be on the dynasty board.`
-              : `No values on file for ${names.join(', ')}, so this trade cannot be graded. Check the spellings, or those players may not be on the dynasty board.`,
+          message: `This trade cannot be graded. ${sentences.join(' ')}`,
           unpricedPlayers: names,
+          ...(explained.length > 0 && {
+            unpricedReasons: explained.map((n) => ({ name: n, reason: reasonByName.get(n)! })),
+          }),
         },
         { status: 422 },
       )
@@ -906,6 +929,46 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       const receipt = await evaluationReceiptPromise
       return { tradeGrade: receiptGradeFields(receipt), evaluationReceipt: receipt }
     }
+
+    /*
+     * 🛑 KEEPER COST, BESIDE THE LETTER — NEVER IN IT (2026-09-28, Guap's call).
+     *
+     * In a keeper league a receiver kept at a 2nd and the same receiver kept at a 12th graded
+     * identically: nothing on file said what either costs to keep. `loadTradeKeeperCosts` reads the
+     * league's own drafts (the Sleeper keeper flag the draft sync now keeps), prices the cost only
+     * where the league's rule is MEASURED, and words the surplus through the keeper model. It rides
+     * beside the grade, so the letter does not move until those costs are checked on real leagues.
+     *
+     * Started here, awaited at the response, in the same membership-checked league the grade uses.
+     */
+    const candidateIdsByNameLower = new Map<string, string[]>()
+    for (const [pid, p] of Object.entries(leaguePlayers)) {
+      const n = String(p?.full_name ?? '').toLowerCase().trim()
+      if (!n) continue
+      const ids = candidateIdsByNameLower.get(n)
+      if (ids) ids.push(pid)
+      else candidateIdsByNameLower.set(n, [pid])
+    }
+    const keeperShape = sleeperLeagueForConfig?.total_rosters
+      ? buildLeagueShape({ teams: sleeperLeagueForConfig.total_rosters, starterSlots: sleeperLeagueForConfig.roster_positions })
+      : null
+    const keeperCostsPromise: Promise<TradeKeeperCosts> = (async () => {
+      const leagueId = data.league_id ? await evaluationLeagueIdPromise.catch(() => null) : null
+      if (!leagueId) return { applies: false }
+      return loadTradeKeeperCosts({
+        leagueId,
+        shape: keeperShape,
+        players: allPlayerPrices
+          .filter((p) => !p.unpriced)
+          .map((p) => ({
+            name: p.name,
+            value: p.value,
+            position: p.position ?? null,
+            candidateIds: candidateIdsByNameLower.get(p.name.toLowerCase().trim()) ?? [],
+          })),
+      })
+    })()
+    keeperCostsPromise.catch(() => undefined)
     const teamBNetValue = senderGivenComposite - senderReceivedComposite
 
     const allPlayerNames = [...senderPlayerNames, ...receiverPlayerNames]
@@ -1979,6 +2042,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       evaluation: evalData,
       schemaValid: true,
       ...(await oneGradePayload()),
+      keeperCosts: await keeperCostsPromise.catch((): TradeKeeperCosts => ({ applies: false })),
       /*
        * The RESOLVED superflex answer and how it was reached.
        *

@@ -409,6 +409,48 @@ const OPENABLE: FairnessBand[] = ['balanced', 'slight edge you']
 const STARTS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 }
 
 /**
+ * The FAAB candidates among `candidateIds`, each priced under the league's scoring and set against
+ * the starter he would displace in YOUR lineup (the weakest starter at his position, or 0 for a slot
+ * you cannot fill).
+ *
+ * One implementation, shared by the Player Finder's bid card (`bidFor`, pool = one owner's roster)
+ * and Chimmy's `get_faab_bid_plan` tool (pool = every valued unrostered player), so the two surfaces
+ * cannot price the same player two ways. Pure. A candidate with no player row or no value is left
+ * out, never priced at zero.
+ */
+export function faabPoolFor(args: {
+  candidateIds: string[]
+  byId: Map<string, { sleeperId: string | null; name: string; position: string | null }>
+  values: MarketValuesPayload
+  leagueScoring: Record<string, number>
+  myPlayers: DiscoveryPlayer[]
+}): FaabCandidate[] {
+  /* Your weakest starter at each slot — what a new man would actually displace. */
+  const weakest: Record<string, number> = {}
+  for (const pos of Object.keys(STARTS)) {
+    const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+    const starters = atPos.slice(0, STARTS[pos])
+    weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
+  }
+
+  return args.candidateIds.flatMap((id) => {
+    const row = args.byId.get(id)
+    if (!row) return []
+    const priced = playerValueForLeague(args.values, id, args.leagueScoring)
+    const value = priced?.adjusted ?? playerValue(args.values, id)
+    if (value == null) return []
+    const position = row.position ? normalizePosition(row.position) : 'UNK'
+    return [{
+      id,
+      name: row.name,
+      position,
+      playerValue: value,
+      replacedValue: weakest[position] ?? 0,
+    }]
+  })
+}
+
+/**
  * What to bid for him, for a league where he cannot be traded for at any price.
  *
  * ⚠ THE POOL IS HIS OWNER'S WHOLE ROSTER, NOT HIM ALONE, AND THAT IS DELIBERATE. In a guillotine
@@ -431,28 +473,12 @@ function bidFor(args: {
   horizon: SurvivorHorizon | null
   myPlayers: DiscoveryPlayer[]
 }): PlayerBidInstead | null {
-  /* Your weakest starter at each slot — what a new man would actually displace. */
-  const weakest: Record<string, number> = {}
-  for (const pos of Object.keys(STARTS)) {
-    const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-    const starters = atPos.slice(0, STARTS[pos])
-    weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
-  }
-
-  const pool: FaabCandidate[] = allIds(args.holderPlayerData).flatMap((id) => {
-    const row = args.byId.get(id)
-    if (!row) return []
-    const priced = playerValueForLeague(args.values, id, args.leagueScoring)
-    const value = priced?.adjusted ?? playerValue(args.values, id)
-    if (value == null) return []
-    const position = row.position ? normalizePosition(row.position) : 'UNK'
-    return [{
-      id,
-      name: row.name,
-      position,
-      playerValue: value,
-      replacedValue: weakest[position] ?? 0,
-    }]
+  const pool = faabPoolFor({
+    candidateIds: allIds(args.holderPlayerData),
+    byId: args.byId,
+    values: args.values,
+    leagueScoring: args.leagueScoring,
+    myPlayers: args.myPlayers,
   })
   if (!pool.length) return null
 

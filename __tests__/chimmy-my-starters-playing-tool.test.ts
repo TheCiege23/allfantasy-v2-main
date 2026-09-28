@@ -24,6 +24,7 @@ vi.mock('@/lib/chimmy/tools/leagueByName', () => ({
 import { buildMyStartersPlayingContext } from '@/lib/chimmy/tools/myStartersPlayingTool'
 import { isPersonalRosterScoped } from '@/lib/ai/deterministic'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { NAME_EVERY_LEAGUE } from '@/lib/chimmy/tools/boundedScan'
 
 /**
  * THE PRODUCTION MESSAGE THIS WHOLE CHANGE EXISTS FOR, verbatim. Chimmy answered
@@ -445,5 +446,21 @@ describe('buildMyStartersPlayingContext Best Ball, not counted', () => {
     const notCounted = out.split('\n').find((l) => l.startsWith('NOT COUNTED'))!
     expect(notCounted).toContain('KBFL (James Cook RB BUF — Out')
     expect(notCounted).not.toContain('KBFL [Best Ball')
+  })
+})
+
+describe('buildMyStartersPlayingContext name-every-league rule', () => {
+  it('on KNOWN GAPS and PARTIAL SCAN, with no "(or count)" escape left', async () => {
+    h.listLeagues.mockResolvedValue([league('l1', 'A'), league('l2', 'B'), league('l3', 'C')])
+    h.resolveTeam.mockImplementation(async ({ leagueId }: { leagueId: string }) =>
+      leagueId === 'l2' ? new Promise<never>(() => {}) : leagueId === 'l3' ? null : teamCtx([player('James Cook', 'BUF', 'RB')]),
+    )
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight', scan: { perItemTimeoutMs: 30 } })
+    const partial = out.split('\n').find((l) => l.startsWith('⚠ PARTIAL SCAN'))!
+    const gaps = out.split('\n').find((l) => l.startsWith('⚠ KNOWN GAPS'))!
+    expect(partial).toContain(NAME_EVERY_LEAGUE)
+    expect(gaps).toContain('(C)')
+    expect(gaps).toContain(NAME_EVERY_LEAGUE)
+    expect(out).not.toContain('(or count)')
   })
 })

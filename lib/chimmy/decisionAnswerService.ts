@@ -208,7 +208,18 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
           ...(result.unverifiedLocks?.length ? [`Kickoff locks unverified: ${result.unverifiedLocks.map(p => p.name).join(', ')}.`] : []),
           'Confirm individual locks, AutoSubs and current injury news on your platform. This is a one-week projection, not a guarantee.'].join('\n') })
     }
-    return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', kind === 'trade' ? 'Name what you give and receive, or ask whether to trade for a named player.' : 'Name the player to add and the player to drop. FAAB bidding needs additional waiver-engine evidence.')
+    /*
+     * ⚠ A WAIVER QUESTION THAT NAMES NO MOVE IS A STRATEGY QUESTION, NOT A MISSING INPUT. "Looking at
+     * my roster, should I spend FAAB on a player this week?" (asked live in a guillotine league,
+     * 2026-09-28) got "Name the player to add and the player to drop": a free dead end, for a
+     * question the full answer path can take up with the roster, waiver-pool and FAAB tools. The
+     * engine lane exists to give an EXACT answer to a named move. When the waiver engine resolved
+     * none, it steps aside (null) and the question is answered like any other. A named move the
+     * engine could not resolve still gets its precise refusal above ("not found", "already
+     * rostered"), because that one is a real answer.
+     */
+    if (kind === 'waiver') return null
+    return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', 'Name what you give and receive, or ask whether to trade for a named player.')
   } catch {
     return gap('engine_unavailable', 'The decision engine could not complete this comparison.', 'Try again after syncing your league. No recommendation was computed.')
   }

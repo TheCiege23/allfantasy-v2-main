@@ -17,6 +17,7 @@
 
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
 import { resolveAnonymizerDetailByIp } from "./anonymizerCache"
+import { isAppleCorporateNetwork } from "./appleNetwork"
 import { isTorExit } from "./geoHeaders"
 import type { AnonymizerKind } from "./geoIpParse"
 import { decideRelay, lookupRelayState, type RelayRangeSet } from "./privateRelayRanges"
@@ -53,6 +54,12 @@ export async function vpnStatusFromHeaders(
   if (isTorExit(headers)) return { blocked: true, kind: "tor" }
   const ip = clientIpFromHeaders(headers)
   if (!ip) return { blocked: false, kind: null }
+  // App Store review's network (./appleNetwork) is not an anonymizer — unless
+  // Apple's own Relay feed lists the address, in which case the Relay rule below
+  // still decides it.
+  if (isAppleCorporateNetwork(ip) && !(await isListedRelay(ip, opts.relayRanges))) {
+    return { blocked: false, kind: null }
+  }
   const detail = await resolveAnonymizerDetailByIp(ip, { fresh: opts.fresh })
   if (detail.anonymized !== true) return { blocked: false, kind: null }
   if (!opts.relayRanges) return { blocked: true, kind: detail.kind }
@@ -73,4 +80,15 @@ export async function vpnStatusFromHeaders(
     return { blocked: false, kind: "privacy_relay", relayState: decision.state, paidBlocked: decision.paidBlocked }
   }
   return { blocked: true, kind: "privacy_relay", relayState: decision.state }
+}
+
+/** Whether Apple's Relay feed lists this address. No loader, or a failed load, reads as "not listed". */
+async function isListedRelay(ip: string, relayRanges: RelayRangesLoader | undefined): Promise<boolean> {
+  if (!relayRanges) return false
+  try {
+    const set = await relayRanges()
+    return Boolean(set && lookupRelayState(set, ip))
+  } catch {
+    return false
+  }
 }

@@ -10,6 +10,7 @@
  *   fantasycalc_pick   a pick row on that chart (rounds 5+ decayed)     dated by the chart's sync
  *   league_idp         this league's scoring over the defender's games  scoped to a projection week
  *   league_kicker      this league's flat kicker formula                computed at grading
+ *   league_defense     this league's flat team-defense formula          computed at grading
  *   faab_formula       FAAB scaled to this league's budget              computed at grading
  *   devy_option        a held college prospect's option value           static rate tables
  *   ncaaf_projection   college points over replacement                  computed at grading
@@ -24,6 +25,7 @@ export type TradeValueSource =
   | 'fantasycalc_pick'
   | 'league_idp'
   | 'league_kicker'
+  | 'league_defense'
   | 'faab_formula'
   | 'devy_option'
   | 'ncaaf_projection'
@@ -49,6 +51,7 @@ export function tradeValueSourceOf(priced: PricedLike | null | undefined, line: 
       return String(line.position ?? '').toUpperCase() === 'PICK' ? 'fantasycalc_pick' : 'fantasycalc'
     case 'idp-vorp': return 'league_idp'
     case 'kicker-flat': return 'league_kicker'
+    case 'dst-flat': return 'league_defense'
     case 'excel': return 'historical_file'
     case 'analytics-lifetime': return 'draft_analytics'
     case 'idp-flat-baseline': return 'position_baseline'

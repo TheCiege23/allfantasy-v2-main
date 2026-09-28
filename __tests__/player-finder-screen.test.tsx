@@ -911,3 +911,21 @@ describe('Player Finder — the deeper card (Phase 1)', () => {
     expect(screen.queryByRole('columnheader', { name: 'Value' })).toBeNull()
   })
 })
+
+describe('Player Finder — the start/sit call, league by league (Phase 3a)', () => {
+  const NOW = '2026-10-25T16:18:00.000Z'
+  it('gives each of your leagues a call on the card, and leaves a best-ball league out', () => {
+    const { unmount } = renderCore({ nowIso: NOW })
+    const panel = screen.getByRole('region', { name: 'Your call, league by league' })
+    const leagueNames = within(panel).getAllByRole('listitem').map((li) => li.querySelector('.af-pf-call-league')?.textContent)
+    expect(leagueNames).toContain('Waiver Warriors')
+    unmount()
+
+    const leagues = DETAIL.leagues.available ? DETAIL.leagues.data : []
+    const bestBall = { ...DETAIL, leagues: { available: true, data: leagues.map((l) => (l.leagueId === 'L-warriors' ? { ...l, bestBall: true } : l)) } } as PlayerDetail
+    renderCore({ detail: bestBall, nowIso: NOW })
+    const again = screen.queryByRole('region', { name: 'Your call, league by league' })
+    const names = again ? within(again).getAllByRole('listitem').map((li) => li.querySelector('.af-pf-call-league')?.textContent) : []
+    expect(names).not.toContain('Waiver Warriors')
+  })
+})

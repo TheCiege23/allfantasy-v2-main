@@ -12,9 +12,15 @@ const IDP_POSITION_MAP: Record<string, string> = {
   LB: 'LB',
   ILB: 'LB',
   OLB: 'LB',
+  MLB: 'LB',
   DL: 'DL',
   DE: 'DL',
   DT: 'DL',
+  // Nose tackles and edge rushers are defensive linemen. Without these a player labelled NT
+  // (Keeanu Benton, Landon Robinson in `SportsPlayer`) was not a defender to the IDP board at all
+  // and every trade including him was withheld (price coverage audit, 2026-09-28).
+  NT: 'DL',
+  EDGE: 'DL',
   DB: 'DB',
   CB: 'DB',
   SS: 'DB',

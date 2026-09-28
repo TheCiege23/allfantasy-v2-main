@@ -12,6 +12,7 @@ import {
 import type { ParsedIpGeo, ProxycheckVerdict } from "./geoIpParse"
 import { decideRelay, lookupRelayState } from "./privateRelayRanges"
 import { getRelayRangeSetNode } from "./privateRelayStore"
+import { isAppleCorporateNetwork } from "./appleNetwork"
 
 export { __resetIpApiShapeWarning } from "./geoIpParse"
 
@@ -119,8 +120,13 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
 
   // Tor is read from the edge header and costs nothing; everything else is the
   // same combined rule the middleware gate applies (./geoIpParse).
+  // Apple's own network (./appleNetwork — App Store review) is not asked about,
+  // the same as the middleware gate, unless Apple's Relay feed lists the address.
   let isVpnOrProxy = isTorExit(headers)
-  if (!isVpnOrProxy && rawIp) {
+  const appleNetwork = !isVpnOrProxy && rawIp !== null && isAppleCorporateNetwork(rawIp)
+  const skipAnonymizerCheck =
+    appleNetwork && !(await getRelayRangeSetNode().then((s) => Boolean(s && lookupRelayState(s, rawIp as string)), () => false))
+  if (!isVpnOrProxy && rawIp && !skipAnonymizerCheck) {
     const proxycheck = await proxycheckVerdict(rawIp)
     // Reuse the response already in hand rather than calling twice; only ask
     // again when the geo branch above never ran, and not at all once proxycheck
