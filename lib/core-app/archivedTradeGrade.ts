@@ -78,13 +78,15 @@ export async function gradeArchivedTradeRows(args: {
         },
         ledgerSides.get(ledgerKey(args.platformLeagueId, t.transactionId)),
       )
-      const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn)
-      const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut)
+      const picksIn = withDraftedNames(pickAssets(t.picksReceived), drafted?.picksIn, drafted?.idsIn)
+      const picksOut = withDraftedNames(pickAssets(t.picksGiven), drafted?.picksOut, drafted?.idsOut)
+      // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
+      const player = (sleeperId: string) => ({ name: args.nameOf(sleeperId), sleeperId })
       const { grade, give, get } = await gradeArchivedTradeWithInputs(grader, {
-        received: idsOf(t.playersReceived).map(args.nameOf),
-        gave: idsOf(t.playersGiven).map(args.nameOf),
-        picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
-        picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted })),
+        received: idsOf(t.playersReceived).map(player),
+        gave: idsOf(t.playersGiven).map(player),
+        picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
+        picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         currentSeason,
       })
       out.set(t.transactionId, { grade, picksIn, picksOut, give, get })

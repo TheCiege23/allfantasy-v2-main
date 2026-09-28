@@ -9,7 +9,8 @@
 import { describe, expect, it } from 'vitest'
 import { draftedPickNamesForRow, withDraftedNames, type LedgerTradeSide } from '@/lib/core-app/archivedPickMatch'
 
-const resolved = (name: string) => ({ playerId: 'x', name, position: null, creditedBySeason: {}, departed: null })
+// A distinct Sleeper id per drafted player, so the ids below prove WHICH player rode with which pick.
+const resolved = (name: string) => ({ playerId: `sl-${name}`, name, position: null, creditedBySeason: {}, departed: null })
 const pick = (season: string, round: number, name: string | null) => ({
   season,
   round,
@@ -32,19 +33,19 @@ describe('draftedPickNamesForRow', () => {
         { picksIn: [{ season: '2026', round: 6 }], picksOut: [{ season: '2026', round: 8 }], partnerRosterId: 10 },
         SWAP,
       ),
-    ).toEqual({ picksIn: ['Kyler Murray'], picksOut: ['Alec Pierce'] })
+    ).toEqual({ picksIn: ['Kyler Murray'], picksOut: ['Alec Pierce'], idsIn: ['sl-Kyler Murray'], idsOut: ['sl-Alec Pierce'] })
     expect(
       draftedPickNamesForRow(
         { picksIn: [{ season: '2026', round: 8 }], picksOut: [{ season: '2026', round: 6 }], partnerRosterId: 1 },
         SWAP,
       ),
-    ).toEqual({ picksIn: ['Alec Pierce'], picksOut: ['Kyler Murray'] })
+    ).toEqual({ picksIn: ['Alec Pierce'], picksOut: ['Kyler Murray'], idsIn: ['sl-Alec Pierce'], idsOut: ['sl-Kyler Murray'] })
   })
 
   it('without a partner roster, the picks alone pick the side when only one side matches', () => {
     expect(
       draftedPickNamesForRow({ picksIn: [{ season: 2026, round: 6 }], picksOut: [{ season: '2026', round: 8 }], partnerRosterId: null }, SWAP),
-    ).toEqual({ picksIn: ['Kyler Murray'], picksOut: ['Alec Pierce'] })
+    ).toEqual({ picksIn: ['Kyler Murray'], picksOut: ['Alec Pierce'], idsIn: ['sl-Kyler Murray'], idsOut: ['sl-Alec Pierce'] })
   })
 
   it('🛑 a mirror-image swap with no partner roster is ambiguous: null, never a guess', () => {
@@ -55,7 +56,7 @@ describe('draftedPickNamesForRow', () => {
     const row = { picksIn: [{ season: '2026', round: 6 }], picksOut: [{ season: '2026', round: 6 }] }
     expect(draftedPickNamesForRow({ ...row, partnerRosterId: null }, mirror)).toBeNull()
     // Naming the partner settles it.
-    expect(draftedPickNamesForRow({ ...row, partnerRosterId: 2 }, mirror)).toEqual({ picksIn: ['A'], picksOut: ['B'] })
+    expect(draftedPickNamesForRow({ ...row, partnerRosterId: 2 }, mirror)).toEqual({ picksIn: ['A'], picksOut: ['B'], idsIn: ['sl-A'], idsOut: ['sl-B'] })
   })
 
   it('picks that do not match the ledger’s side exactly return null — the row is not this trade as recorded', () => {
@@ -72,6 +73,8 @@ describe('draftedPickNamesForRow', () => {
     expect(draftedPickNamesForRow({ picksIn: [{ season: '2027', round: 1 }], picksOut: [], partnerRosterId: 2 }, sides)).toEqual({
       picksIn: [null],
       picksOut: [],
+      idsIn: [null],
+      idsOut: [],
     })
   })
 
@@ -99,15 +102,28 @@ describe('draftedPickNamesForRow', () => {
 describe('withDraftedNames', () => {
   it('carries the drafted player for the grader and into the label', () => {
     expect(withDraftedNames([{ name: '2026 8th' }, { name: '2027 1st' }], ['Alec Pierce', null])).toEqual([
-      { name: '2026 8th · Alec Pierce', drafted: 'Alec Pierce' },
-      { name: '2027 1st', drafted: null },
+      { name: '2026 8th · Alec Pierce', drafted: 'Alec Pierce', draftedId: null },
+      { name: '2027 1st', drafted: null, draftedId: null },
+    ])
+  })
+
+  it('carries the drafted player’s Sleeper id beside his name, so the grader prices him by id', () => {
+    expect(withDraftedNames([{ name: '2026 8th' }, { name: '2027 1st' }], ['Alec Pierce', null], ['sl-Alec Pierce', null])).toEqual([
+      { name: '2026 8th · Alec Pierce', drafted: 'Alec Pierce', draftedId: 'sl-Alec Pierce' },
+      { name: '2027 1st', drafted: null, draftedId: null },
     ])
   })
 
   it('a names list that does not line up is ignored rather than shifted onto the wrong pick', () => {
-    expect(withDraftedNames([{ name: '2026 8th' }, { name: '2027 1st' }], ['Alec Pierce'])).toEqual([
-      { name: '2026 8th', drafted: null },
-      { name: '2027 1st', drafted: null },
+    expect(withDraftedNames([{ name: '2026 8th' }, { name: '2027 1st' }], ['Alec Pierce'], ['sl-Alec Pierce'])).toEqual([
+      { name: '2026 8th', drafted: null, draftedId: null },
+      { name: '2027 1st', drafted: null, draftedId: null },
+    ])
+  })
+
+  it('an id with no name never reaches the grader on its own', () => {
+    expect(withDraftedNames([{ name: '2026 8th' }], [null], ['sl-orphan'])).toEqual([
+      { name: '2026 8th', drafted: null, draftedId: null },
     ])
   })
 })
