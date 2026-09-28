@@ -1,10 +1,11 @@
+import CoreTradeRefresh from '@/components/core-app/CoreTradeRefresh'
 import Link from 'next/link'
 import { Suspense, type ComponentProps, type ReactNode } from 'react'
 import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
 import { CardFreshness } from '@/components/core-app/home/CardFreshness'
 import { DecisionQueue } from '@/components/core-app/home/DecisionQueue'
 import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClientEffects'
-import { freshnessStamp, latestInstant, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
+import { freshnessStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
@@ -176,10 +177,9 @@ export type HomeScopeInfo = {
   total: number
 }
 
-/** The newest injury report behind the summary's book — the triage and decision stamps. */
+/** Collection success time, distinct from the report date on each player. */
 function injuriesAt(data: Dash34Result | null): string | null {
-  const latest = latestInstant((data?.book ?? []).map((row) => (row as { reportedAt?: string | null }).reportedAt ?? null))
-  return latest ? latest.toISOString() : null
+  return data?.injuryCheckedAt ?? null
 }
 
 /**
@@ -210,7 +210,7 @@ function leagueDataStamp(
   const excluded = input.paused ? ` · ${input.paused} paused ${input.paused === 1 ? 'connection' : 'connections'} excluded` : ''
   const source = `${unread}${input.syncable > 1 ? `Oldest ${scope}` : `${scope[0].toUpperCase()}${scope.slice(1)}`}${excluded}`
   const stamp = freshnessStamp(source, input.oldestAt, now, {
-    staleRule: 'roster',
+    staleRule: 'fantasy_league',
     missing: input.syncable === 0 ? 'none-yet' : 'never-read',
   })
   return unread ? { ...stamp, stale: true } : stamp
@@ -277,7 +277,7 @@ async function DecisionsCard({
         <Stamps
           stamps={[
             rostersStamp,
-            freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' }),
+            freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' }),
             ...(summaryStamp(data, now) ? [summaryStamp(data, now)!] : []),
           ]}
         />
@@ -339,13 +339,13 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
       valueBasis={data.valueBasis ?? null}
-      freshness={<Stamps stamps={[freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' })]} />}
+      freshness={<Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' })]} />}
     />
   )
 }
 
 async function TradeBandCard({ trades, now }: { trades: HomeLoads['trades']; now: Date }) {
-  return <DashTradeBand trades={await trades} now={now} />
+  return <><CoreTradeRefresh /><DashTradeBand trades={await trades} now={now} /></>
 }
 
 async function CarryoverCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {

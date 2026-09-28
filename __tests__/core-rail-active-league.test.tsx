@@ -74,6 +74,19 @@ function shell(props: Record<string, unknown> = {}) {
 const railTiles = (c: HTMLElement) =>
   Array.from(c.querySelectorAll('.af-rail-tile.af-platform'))
 
+it('labels the weekly baseline separately from the live score without inventing remaining points', () => {
+  const { container } = render(shell({ railMatchups: { l1: {
+    yourTeam: 'Mine', yourAvatarUrl: null, yourScore: 28.4,
+    yourProjection: { projected: 51.4, afProjected: 51.4, pricedFrom: 9, starterCount: 9 },
+    opponentTeam: 'Other', opponentAvatarUrl: null, opponentScore: 6.6, scored: true,
+  } } }))
+  if (!container.querySelector('.af-rail-row-side')) fireEvent.click(container.querySelector('.af-rail-toggle')!)
+  const title = container.querySelector('.af-rail-row-side')?.getAttribute('title')
+  expect(title).toContain('Weekly baseline projection')
+  expect(title).toContain('live score is shown separately')
+  expect(title).not.toContain('points still available')
+})
+
 describe('the rail marks the league you are in', () => {
   it('marks exactly the selected league, and only it', () => {
     const { container } = render(shell({ selectedLeagueId: 'l2' }))

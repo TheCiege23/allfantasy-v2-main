@@ -202,7 +202,7 @@ export function GamePlan({
          * which an unlabelled `<div>` would not be.
          */
         <h2 className="af-label af-gp-embedhead">
-          Every flagged starter, across every league · soonest deadline first
+          Flagged starters in active manual lineups · soonest deadline first
           {data.week ? ` · week ${data.week.week}` : ''}
         </h2>
       )}

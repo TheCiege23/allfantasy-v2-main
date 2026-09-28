@@ -2,10 +2,12 @@
 
 import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
+import { readScreenshotPreview } from '@/lib/chimmy-chat/screenshotPreview'
 import { useScopedConversation } from './useScopedConversation'
 import { ArrowUpRight, ImagePlus, PencilLine, RotateCcw, Send, Sparkles, X } from 'lucide-react'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyRichText } from './ChimmyRichText'
+import { ChimmyScreenshot } from './ChimmyScreenshot'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
@@ -91,10 +93,10 @@ export const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.
  */
 function platformHandoff(platform: string): string {
   const p = platform.toLowerCase()
-  if (p === 'sleeper') return 'Open Sleeper to set it'
-  if (p === 'espn') return 'Open ESPN to set it'
-  if (p === 'yahoo') return 'Open Yahoo to set it'
-  return 'Open your platform to set it'
+  if (p === 'sleeper') return 'Review roster in Sleeper'
+  if (p === 'espn') return 'Review roster in ESPN'
+  if (p === 'yahoo') return 'Review roster in Yahoo'
+  return 'Review roster on your platform'
 }
 
 /**
@@ -126,6 +128,8 @@ function platformHandoffHref(league: CommsLeague): string {
 type ChatTurn = {
   id: string
   role: 'you' | 'chimmy'
+  imagePreview?: string | null
+  imageName?: string
   text: string
   /** League-tab answers are public and must say so. */
   isPublic?: boolean
@@ -179,6 +183,12 @@ type ChatTurn = {
    * A card changes nothing until the user taps Confirm on it; see lib/chimmy/actions/confirmAction.ts.
    */
   actionCards?: ChimmyActionCardData[] | null
+}
+
+function scenarioFollowUps(scenario: ReadyChimmyScenario | null): string[] | null {
+  if (!scenario || scenario.kind === 'waiver' || scenario.kind === 'start_sit') return null
+  const offer = 'Should I trade ' + scenario.give.map(p => p.name).join(', ') + ' for ' + scenario.get.map(p => p.name).join(', ') + '?'
+  return [offer + ' Explain a counter that protects my starting lineup.', 'Should I accept my pending trade offers? Compare them against my roster and scoring.', offer + ' Explain future pick value and positional depth.']
 }
 
 /** How many earlier turns follow the user into another scope. */
@@ -377,6 +387,7 @@ type ChimmyEnvelope = {
     connectedFranchise?: Array<{ leagueId: string; leagueName: string; rosterStatus: 'available' | 'unavailable'; playerCount: number }>
     players?: ChimmyPlayerCard[]
     /** Validated by `readReadyScenario` before anything renders it. */
+    screenshotAttachment?: { url: string; name: string } | null
     scenario?: unknown
     /** Set only when the route recorded this answer's advice. */
     advice?: { key?: unknown; type?: unknown; playerName?: unknown }
@@ -470,6 +481,8 @@ export function ChimmyPanel({
   homeSignals,
   pageSurface,
   initialDraft,
+  initialDraftScopeId,
+  draftRequestKey = 0,
   userId,
   planAllowance = null,
   sport = null,
@@ -488,6 +501,9 @@ export function ChimmyPanel({
   pageSurface: CoreSurfaceKey | null
   /** A question a screen asked us to seed. Never auto-sent. */
   initialDraft?: string | null
+  /** Apply a screen's question only after its explicit league scope is selected. */
+  initialDraftScopeId?: string | null
+  draftRequestKey?: number
   /** Keys the saved conversation, so one account's chat never loads for another. */
   userId?: string
   /**
@@ -517,7 +533,7 @@ export function ChimmyPanel({
     (id: string | null) => `${publicMode ? 'public:' : ''}${id ?? 'global'}`,
     [publicMode],
   )
-  const { turns, draft, setTurns, setDraft, carryInto, historyFailed, retryHistory } = useScopedConversation<ChatTurn>(
+  const { turns, draft, setTurns, setDraft, carryInto, historyFailed, retryHistory, ready: conversationReady } = useScopedConversation<ChatTurn>(
     userId,
     threadKey(scopeId),
   )
@@ -573,6 +589,14 @@ export function ChimmyPanel({
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
+  const retryRequestRef = useRef<{key:string;file:File|null;form:FormData}|null>(null)
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setPendingImagePreview(null)
+    if (screenshot) void readScreenshotPreview(screenshot).then(preview => { if (!cancelled) setPendingImagePreview(preview) })
+    return () => { cancelled = true }
+  }, [screenshot])
   const activeScope = useRef(scopeId)
   activeScope.current = scopeId
 
@@ -604,25 +628,37 @@ export function ChimmyPanel({
    * something the user has already started typing — overwriting a half-written
    * message to insert our own is the one way this could cost someone anything.
    */
+  const appliedDraftRequest = useRef<string | null>(null)
   useEffect(() => {
-    if (initialDraft) setDraft((d) => (d.trim() ? d : initialDraft))
-  }, [initialDraft])
+    if (!initialDraft || !conversationReady) return
+    if (initialDraftScopeId !== undefined && initialDraftScopeId !== scopeId) return
+    const request = JSON.stringify([userId, draftRequestKey, initialDraftScopeId, initialDraft])
+    if (appliedDraftRequest.current === request) return
+    appliedDraftRequest.current = request
+    setDraft((d) => (d.trim() ? d : initialDraft))
+  }, [initialDraft, initialDraftScopeId, draftRequestKey, scopeId, userId, conversationReady, setDraft])
 
   const send = useCallback(
     async (text: string) => {
       const question = text.trim()
       /* Captured once: the retry after a consent prompt must send the same file. */
       const attached = screenshot
+      const requestKey = JSON.stringify([question,scopeId,answerMode,publicMode,source,sport])
+      const retained = retryRequestRef.current
+      const retryForm = retained?.key === requestKey && retained.file === attached ? retained.form : null
+      const requestId = String(retryForm?.get('requestId') ?? crypto.randomUUID())
       if ((!question && !attached) || busy) return
       setDraft('')
       setError(null)
       setOutOfAnswers(null)
       setBusy(true)
       setScreenshot(null)
+      const imagePreview = attached ? await readScreenshotPreview(attached) : null
+      if (activeScope.current !== scopeId) { setBusy(false); return }
       if (screenshotRef.current) screenshotRef.current.value = ''
       setTurns((t) => [
         ...t,
-        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}` },
+        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}`, imagePreview, imageName: attached?.name },
       ])
 
       try {
@@ -633,7 +669,9 @@ export function ChimmyPanel({
          * drawer is not worth one.
          */
         const buildForm = (confirmed: boolean) => {
+          if (retryForm) { if (confirmed) retryForm.set('confirmTokenSpend','true'); return retryForm }
           const form = new FormData()
+          form.append('requestId', requestId)
           form.append('message', question)
           if (confirmed) form.append('confirmTokenSpend', 'true')
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
@@ -663,12 +701,13 @@ export function ChimmyPanel({
               })),
             ),
           )
+          retryRequestRef.current = {key:requestKey,file:attached,form}
           return form
         }
 
         /* Only the request itself failing means the connection — a bug further down is not a network error. */
         const post = (confirmed: boolean) =>
-          fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(confirmed) }).catch(() => {
+          import('@/lib/chimmy/postRequest').then(({ postChimmyRequest }) => postChimmyRequest(buildForm(confirmed))).catch(() => {
             throw new ChimmyAskError(describeChimmyFailure(null, null))
           })
         let res = await post(false)
@@ -688,6 +727,7 @@ export function ChimmyPanel({
          * from what this drawer last knew.
          */
         const outOfTokens = (from: ChimmyEnvelope) => {
+          retryRequestRef.current = null
           setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
           setDraft(question)
           if (activeScope.current === scopeId) {
@@ -729,6 +769,8 @@ export function ChimmyPanel({
           outOfTokens(payload)
           return
         }
+
+        if (payload.code !== 'chimmy_request_recovery_pending') retryRequestRef.current = null
 
         if (!res.ok) {
           /*
@@ -781,6 +823,10 @@ export function ChimmyPanel({
             ? reported
             : null
 
+        if (payload.meta?.screenshotAttachment?.url.startsWith('/api/chat/chimmy?attachment=')) {
+          const stored = payload.meta.screenshotAttachment
+          setTurns(all => all.map((turn, index) => index === all.length - 1 && turn.role === 'you' ? { ...turn, imagePreview: stored.url, imageName: stored.name } : turn))
+        }
         const answer = payload.response ?? 'Chimmy did not return a message.'
 
         /*
@@ -837,7 +883,7 @@ export function ChimmyPanel({
             scenario: readReadyScenario(payload.meta?.scenario),
             advice: readAdvice(payload),
             mode: answeredMode(payload.meta),
-            followUps: readFollowUps(payload.meta?.followUps),
+            followUps: scenarioFollowUps(readReadyScenario(payload.meta?.scenario)) ?? readFollowUps(payload.meta?.followUps),
             plan: answeredPlan,
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
@@ -910,7 +956,8 @@ export function ChimmyPanel({
   const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
 
   return (
-    <div className="af-cm-panel">
+    <div className="af-cm-panel" data-chimmy="true">
+      {source !== 'messages_ai' ? <Link className="af-cm-expand" href={'/chimmy/chat' + (scopeId ? '?leagueId=' + encodeURIComponent(scopeId) : '')}>Open full-page analysis ↗</Link> : null}
       {/* Scope selector. The current scope is always visible, by contract. */}
       <div className="af-cm-scope">
         <span className="af-cm-scope-label">Scope</span>
@@ -1006,10 +1053,12 @@ export function ChimmyPanel({
                 {t.role === 'chimmy' ? 'Chimmy' : 'You'}
                 {t.carried ? ' · earlier' : ''}
               </span>
+
+              {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' ? (
                 <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
               ) : (
-                <p className="af-cm-turn-text">{t.text}</p>
+                <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <ChimmyScreenshot src={t.imagePreview} name={t.imageName} /> : null}</div>
               )}
 
               {t.role === 'chimmy' && t.choices?.length && t.retryQuestion ? (
@@ -1077,7 +1126,6 @@ export function ChimmyPanel({
                 <ChimmyEvidenceBlock evidence={t.evidence} />
               ) : null}
 
-              {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
 
               {t.role === 'chimmy' && t.actionCards?.length
                 ? t.actionCards.map((card) => <ChimmyActionCard key={card.actionId} card={card} />)
@@ -1172,7 +1220,7 @@ export function ChimmyPanel({
             </div>
           ))
         )}
-        {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">Chimmy is thinking…</p></div> : null}
+        {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">{turns[turns.length - 1]?.imageName ? 'Chimmy is reading your screenshot and checking available league evidence…' : 'Chimmy is checking your question and available evidence…'}</p></div> : null}
         {/*
           * ⚠ "Nothing was charged." USED TO BE APPENDED TO EVERY ERROR, and it is
           * not always true: route.ts:2848 returns a 500 AFTER the spend at 1883,
@@ -1227,7 +1275,7 @@ export function ChimmyPanel({
       {screenshot ? (
         <div className="af-cm-replybar">
           <span className="af-cm-replybar-label">Screenshot</span>
-          <span className="af-cm-replybar-text">{screenshot.name}</span>
+          <span className="af-cm-replybar-text">{pendingImagePreview ? <img src={pendingImagePreview} alt="Attached screenshot preview" style={{ maxWidth: 160, maxHeight: 120, objectFit: 'contain' }} /> : null}{screenshot.name}</span>
           <button
             type="button"
             className="af-cm-replybar-x"

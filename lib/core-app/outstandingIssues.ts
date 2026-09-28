@@ -112,7 +112,7 @@ export function isStaleLeague(
 ): boolean {
   const platform = String(league.platform ?? '').toLowerCase()
   if (NON_SYNCING_PLATFORMS.has(platform)) return false
-  return describeAge('roster', lastSync, now).stale
+  return describeAge('fantasy_league', lastSync, now).stale
 }
 
 export function staleLeagueIds(

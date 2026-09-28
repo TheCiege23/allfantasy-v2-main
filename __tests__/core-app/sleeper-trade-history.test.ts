@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GradedTrade, TradeGradesPayload, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
-const mocks = vi.hoisted(() => ({ grades: vi.fn(), feed: vi.fn(), expectation: vi.fn(), archive: vi.fn() }))
+const mocks = vi.hoisted(() => ({ grades: vi.fn(), feed: vi.fn(), expectation: vi.fn(), archive: vi.fn(), oneGrade: vi.fn() }))
 vi.mock('@/lib/trade-intel/sleeperTradeGradeService', () => ({ getTradeGrades: mocks.grades }))
 vi.mock('@/lib/trade-intel/sleeperTradeSync', () => ({ currentTradeIds: mocks.feed }))
 vi.mock('@/lib/import-os/collector/archiveFeedTrades', () => ({ archiveCompletedFeedTrades: mocks.archive }))
 vi.mock('@/lib/trade-intel/tradeExpectationLoader', () => ({ loadTradeExpectation: mocks.expectation }))
+vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({ oneGradeForCompletedTrade: mocks.oneGrade }))
 import { getReconciledTradeGrades, getSleeperTradeHistory, toTradeRecord } from '@/lib/core-app/sleeperTradeHistory'
 
 const player = { playerId: 'bateman', name: 'Rashod Bateman', position: 'WR', pointsBySeason: {}, creditedBySeason: {}, departed: null, gamesMissedBySeason: {} }
@@ -18,7 +19,7 @@ const trade = (): GradedTrade => ({ id: 'league:tx', season: '2026', week: 2, cr
 const payload = (trades: GradedTrade[]): TradeGradesPayload => ({ version: 2, fetchedAt: '2026-09-19T00:00:00Z', staleAsOf: null, sleeperLeagueId: 'league', seasonsScanned: ['2026'], currentSeasonPartial: true, gradeScale: { description: '', thresholds: [], tieBand: 0 }, contextNotes: [], trades, missing: [] })
 
 describe('Sleeper trades shown in the app', () => {
-  beforeEach(() => { vi.resetAllMocks(); mocks.expectation.mockResolvedValue(null); mocks.archive.mockResolvedValue({ written: 0, trades: 0 }); mocks.feed.mockResolvedValue([{ id: 'tx', status: 'complete' }]) })
+  beforeEach(() => { vi.resetAllMocks(); mocks.expectation.mockResolvedValue(null); mocks.oneGrade.mockResolvedValue(null);mocks.archive.mockResolvedValue({ written: 0, trades: 0 }); mocks.feed.mockResolvedValue([{ id: 'tx', status: 'complete' }]) })
   /*
    * 🛑 THE ARCHIVE WAITED HOURS FOR A SYNC LANE (2026-09-25). The moment this read notices a completed
    * trade the ledger lacks is the moment the archive lacks it too, so it is written from this feed.
@@ -91,6 +92,32 @@ describe('Sleeper trades shown in the app', () => {
     mocks.grades.mockResolvedValue(payload([trade()]))
     await getSleeperTradeHistory('league', 'owner-1', { afLeagueId: 'row-mine' })
     expect(mocks.expectation).toHaveBeenCalledWith('league', expect.objectContaining({ id: 'league:tx' }), { afLeagueId: 'row-mine' })
+  })
+  /*
+   * 🛑 THE ONE GRADE NEVER REACHED THIS HISTORY (2026-09-27), so every archived trade on the Trade
+   * Center timeline read "— → —". It is graded on the viewer's own row and carried on the record.
+   */
+  it('carries THE grade for each trade, graded on the viewer’s own row', async () => {
+    const view = { graded: true, letter: 'A', partnerLetter: 'F' }
+    mocks.oneGrade.mockResolvedValue(view)
+    mocks.grades.mockResolvedValue(payload([trade()]))
+    const result = await getSleeperTradeHistory('league', 'owner-1', { afLeagueId: 'row-mine' })
+    expect(mocks.oneGrade).toHaveBeenCalledWith('row-mine', expect.objectContaining({ id: 'league:tx' }), expect.any(Number))
+    expect(result?.history[0].leagueGrade).toBe(view)
+  })
+  it('grades nothing without an AF row, and a failed grade costs the history nothing', async () => {
+    mocks.grades.mockResolvedValue(payload([trade()]))
+    expect((await getSleeperTradeHistory('league', null))?.history[0].leagueGrade).toBeNull()
+    expect(mocks.oneGrade).not.toHaveBeenCalled()
+    mocks.oneGrade.mockRejectedValue(new Error('chart down'))
+    const result = await getSleeperTradeHistory('league', null, { afLeagueId: 'row-mine' })
+    expect(result?.history).toHaveLength(1)
+    expect(result?.history[0].leagueGrade).toBeNull()
+  })
+  it('names the player drafted with a used pick, beside the pick', () => {
+    const t = trade()
+    t.sides[0]!.picksIn = [{ ...pick, resolved: { name: 'Drafted Rookie' } } as never, pick]
+    expect(toTradeRecord(t, null, null).players[0].pickDrafted).toEqual(['Drafted Rookie', null])
   })
   it('uses the notified trade cache without requiring imported transaction facts', async () => {
     mocks.grades.mockResolvedValue(payload([trade()]))

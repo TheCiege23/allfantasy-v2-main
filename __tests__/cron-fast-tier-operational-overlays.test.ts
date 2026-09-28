@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   FAST_TIER_OPERATIONAL_OVERLAYS,
   withFastTierOperationalOverlays,
 } from '../scripts/cron-fast-tier-loop.mjs'
+import { PROBES } from '../scripts/cron-freshness-check.mjs'
 
 describe('fast-tier operational overlays', () => {
   it('schedules the active provider lane every five minutes without a Vercel cron entry', () => {
@@ -19,5 +21,13 @@ describe('fast-tier operational overlays', () => {
       schedule: '*/10 * * * *',
     }
     expect(withFastTierOperationalOverlays([native])).toEqual([native])
+  })
+
+  it('monitors both the active-sync heartbeat and certified per-league game-day coverage', () => {
+    expect(PROBES['/api/cron/fantasy-os-active-sync']).toEqual({ heartbeat: 'cron-fantasy-os-active-sync' })
+    const monitor = readFileSync('scripts/cron-freshness-check.mjs', 'utf8')
+    expect(monitor).toContain('withFastTierOperationalOverlays(readVercelCrons())')
+    expect(monitor).toContain("'/api/cron/fantasy-os-active-sync#league-coverage'")
+    expect(monitor).toContain('state."lastSuccessfulSyncAt" < now() - INTERVAL \'1 hour\'')
   })
 })

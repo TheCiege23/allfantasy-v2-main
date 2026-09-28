@@ -658,10 +658,7 @@ export default function MockDraftSleeperRoomClient({
         ),
       )
 
-      const response = await fetch('/api/chat/chimmy', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await (await import('@/lib/chimmy/postRequest')).postChimmyRequest(formData)
 
       const payload = (await response.json().catch(() => ({}))) as { response?: string; error?: string }
       if (!response.ok) {

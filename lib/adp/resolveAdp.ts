@@ -130,14 +130,23 @@ const group = (p: string | null | undefined) => {
  */
 const SENTINEL_SHARE = 0.05
 
-let sentinelCache: Promise<Map<string, Set<number>>> | null = null
+const SENTINEL_CACHE_TTL_MS = 5 * 60 * 1000
+type SentinelCacheEntry = { expiresAt: number; promise: Promise<Map<string, Set<number>>> }
+let sentinelCache = new WeakMap<LoadAdpArgs['prisma'], Map<string, SentinelCacheEntry>>()
 
 async function sentinelValues(
   prisma: LoadAdpArgs['prisma'],
   sport: string,
 ): Promise<Map<string, Set<number>>> {
-  if (!sentinelCache) {
-    sentinelCache = (async () => {
+  let bySport = sentinelCache.get(prisma)
+  if (!bySport) {
+    bySport = new Map()
+    sentinelCache.set(prisma, bySport)
+  }
+  const cached = bySport.get(sport)
+  if (cached && cached.expiresAt > Date.now()) return cached.promise
+  const entry: SentinelCacheEntry = { expiresAt: Date.now() + SENTINEL_CACHE_TTL_MS, promise: Promise.resolve(new Map()) }
+  entry.promise = (async () => {
       const out = new Map<string, Set<number>>()
       try {
         const groups = await prisma.adpDataRecord.groupBy({
@@ -158,17 +167,18 @@ async function sentinelValues(
           out.set(g.format, set)
         }
       } catch {
-        // A failure here must not invent a filter; an empty map filters nothing.
+        // Retry on the next read; a temporary failure must not disable filtering forever.
+        if (bySport.get(sport) === entry) bySport.delete(sport)
       }
       return out
     })()
-  }
-  return sentinelCache
+  bySport.set(sport, entry)
+  return entry.promise
 }
 
 /** Test seam — the cache is per process and ADP moves weekly, so nothing else needs to clear it. */
 export function __resetAdpSentinelCache(): void {
-  sentinelCache = null
+  sentinelCache = new WeakMap()
 }
 
 export interface LoadAdpArgs {
@@ -295,7 +305,7 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
   type Row = (typeof exact)[number]
   const take = (row: Row, sleeperId: string | null | undefined, via: ResolvedAdp['via']) => {
     if (!sleeperId) return
-    if (typeof row.adp !== 'number' || !Number.isFinite(row.adp)) return
+    if (typeof row.adp !== 'number' || !Number.isFinite(row.adp) || row.adp <= 0) return
     // A board-wide placeholder is an absence of ADP, so it must not occupy the player's slot.
     if (sentinels.get(row.format ?? '')?.has(row.adp)) return
     // Rows arrive freshest-first, and exact keys are consumed before name matches.

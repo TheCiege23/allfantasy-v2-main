@@ -16,6 +16,8 @@ const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
 const mockInjuryFindMany = vi.hoisted(() => vi.fn())
 const mockGameFindMany = vi.hoisted(() => vi.fn())
 const mockIdentityFindMany = vi.hoisted(() => vi.fn())
+const mockChoppedFindMany = vi.hoisted(() => vi.fn())
+const mockEliminationFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -26,6 +28,9 @@ vi.mock('@/lib/prisma', () => ({
     sportsInjury: { findMany: mockInjuryFindMany },
     sportsGame: { findMany: mockGameFindMany },
     playerIdentityMap: { findMany: mockIdentityFindMany },
+    // Guillotine state, read by the loader since 559c56580 to skip a team already chopped.
+    guillotineRosterState: { findMany: mockChoppedFindMany },
+    guillotineElimination: { findMany: mockEliminationFindMany },
   },
 }))
 vi.mock('@/lib/core-app/sportsWeek', () => ({
@@ -38,7 +43,19 @@ const USER = 'me'
 const NOW = '2026-09-27T15:40:00.000Z' // Sun 11:40a ET
 const KICKOFF = '2026-09-27T17:00:00.000Z'
 
-type LeagueFixture = { id: string; name: string; platform: string; settings?: unknown; bestBallMode?: boolean; teamExternalId?: string; starters: string[] }
+type LeagueFixture = {
+  id: string
+  name: string
+  platform: string
+  settings?: unknown
+  bestBallMode?: boolean
+  teamExternalId?: string
+  starters: string[]
+  status?: string | null
+  guillotine?: boolean
+  /** Extra keys on the roster's playerData (e.g. a roster-level `bestBall` flag). */
+  playerData?: Record<string, unknown>
+}
 
 function wire(leagues: LeagueFixture[]) {
   mockTeamFindMany.mockImplementation(async ({ where }: { where: { leagueId: { in: string[] } } }) =>
@@ -47,10 +64,25 @@ function wire(leagues: LeagueFixture[]) {
   mockLeagueFindMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
     leagues
       .filter((l) => where.id.in.includes(l.id))
-      .map((l) => ({ id: l.id, name: l.name, platform: l.platform, platformLeagueId: `p-${l.id}`, season: 2026, bestBallMode: l.bestBallMode ?? false, leagueVariant: null, leagueType: 'redraft', settings: l.settings ?? {} })),
+      .map((l) => ({
+        id: l.id,
+        name: l.name,
+        platform: l.platform,
+        platformLeagueId: `p-${l.id}`,
+        season: 2026,
+        status: l.status ?? 'in_season',
+        lifecycleState: null,
+        bestBallMode: l.bestBallMode ?? false,
+        leagueVariant: null,
+        guillotineMode: l.guillotine ?? false,
+        leagueType: l.guillotine ? 'guillotine' : 'redraft',
+        settings: l.settings ?? {},
+      })),
   )
   mockRosterFindMany.mockImplementation(async ({ where }: { where: { leagueId: { in: string[] } } }) =>
-    leagues.filter((l) => where.leagueId.in.includes(l.id)).map((l) => ({ leagueId: l.id, platformUserId: `pu-${l.id}`, playerData: { starters: l.starters, players: l.starters } })),
+    leagues
+      .filter((l) => where.leagueId.in.includes(l.id))
+      .map((l) => ({ id: `r-${l.id}`, leagueId: l.id, platformUserId: `pu-${l.id}`, playerData: { starters: l.starters, players: l.starters, ...(l.playerData ?? {}) } })),
   )
   mockSportsPlayerFindMany.mockImplementation(async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
     where.sleeperId.in.map((id) => ({ sleeperId: id, sport: 'NFL', externalId: `x-${id}`, name: `Player ${id}`, position: 'WR', team: 'NYG', imageUrl: null })),
@@ -65,6 +97,40 @@ function wire(leagues: LeagueFixture[]) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockIdentityFindMany.mockResolvedValue([])
+  mockChoppedFindMany.mockResolvedValue([])
+  mockEliminationFindMany.mockResolvedValue([])
+})
+
+/*
+ * The merge of #1373 with 559c56580 kept BOTH sides' skips. These pin the ones 559c56580 added —
+ * which it shipped without a loader test — so a later resolution cannot drop one silently.
+ */
+describe('loadGameDayTriage — leagues with no lineup to fix (559c56580, kept through the merge)', () => {
+  const one = (over: Partial<LeagueFixture>): LeagueFixture => ({ id: 'L1', name: 'League', platform: 'sleeper', starters: ['1001'], ...over })
+
+  it('skips a league that is pre-draft, drafting or complete', async () => {
+    wire([one({ id: 'A', status: 'pre_draft' }), one({ id: 'B', status: 'completed', starters: ['1002'] }), one({ id: 'C', starters: ['1003'] })])
+    const out = await loadGameDayTriage(USER, ['A', 'B', 'C'], NOW)
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.leaguesRead).toBe(1)
+    expect(out.data.rows.map((r) => r.player.sleeperId)).toEqual(['1003'])
+  })
+
+  it('skips a guillotine team already chopped', async () => {
+    wire([one({ id: 'G', guillotine: true }), one({ id: 'S', starters: ['1002'] })])
+    mockChoppedFindMany.mockResolvedValue([{ leagueId: 'G', rosterId: 'r-G' }])
+    const out = await loadGameDayTriage(USER, ['G', 'S'], NOW)
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.rows.map((r) => r.player.sleeperId)).toEqual(['1002'])
+  })
+
+  it('a roster-level best-ball flag leaves the league out AND counts it with the other best-ball leagues', async () => {
+    wire([one({ id: 'B', playerData: { bestBall: true } }), one({ id: 'S', starters: ['1002'] })])
+    const out = await loadGameDayTriage(USER, ['B', 'S'], NOW)
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.rows.map((r) => r.player.sleeperId)).toEqual(['1002'])
+    expect(out.data.bestBallLeagues).toBe(1)
+  })
 })
 
 describe('loadGameDayTriage', () => {

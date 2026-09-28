@@ -1135,6 +1135,11 @@
   line-height: 1.4;
 }
 
+/* A trade's grade, one chip per team — lib/activity/tradeGradeLabel.ts. */
+.af-cm-act-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 10.5px; color: var(--faint); }
+.af-cm-act-grade-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.af-cm-act-grade-chip b { font-weight: 800; }
+
 .af-cm-act > span:first-child { flex: 1; min-width: 0; }
 .af-cm-act-go { flex: none; font-size: 15px; color: var(--faint); }
 
@@ -3381,3 +3386,43 @@
   margin: 0;
   font-size: 10.5px;
 }
+
+/* Decision comparisons: readable in the drawer and full-page Chimmy. */
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-text { font-size: 15px; line-height: 1.7; color: var(--text); }
+.af-cm-turn[data-role='chimmy'] { padding-block: 12px; }
+.af-cm-scn { padding: 16px; border-radius: 14px; font-size: 13px; line-height: 1.6; color: var(--text); overflow-wrap: anywhere; }
+.af-cm-scn-title { font-size: 11px; margin-block: 14px 10px; }
+.af-cm-verdict { border-left: 4px solid var(--warn); padding-left: 14px; }
+.af-cm-verdict[data-verdict='YES'] { border-color: var(--good); }
+.af-cm-verdict[data-verdict='NO'] { border-color: var(--bad); }
+.af-cm-verdict-label { display: block; font-size: 12px; color: var(--muted); }
+.af-cm-verdict > strong { display: block; font-size: 26px; line-height: 1.3; color: var(--text); margin: 4px 0; }
+.af-cm-verdict p { margin: 6px 0 0; }
+.af-cm-scn[data-kind='trade'] .af-cm-scn-sides { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-bottom: 16px; }
+.af-cm-scn[data-kind='trade'] .af-cm-scn-side { padding: 12px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.af-cm-scn-label { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+.af-cm-trade-assets { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.af-cm-trade-assets li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-cm-trade-assets strong { display: block; font-size: 13px; }
+.af-cm-trade-assets small { display: block; color: var(--muted); }
+.af-cm-asset-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 9px; background: var(--surface2); font-size: 10px; font-weight: 700; }
+.af-cm-scn-table { table-layout: fixed; }
+.af-cm-scn-table th, .af-cm-scn-table td { padding: 10px 3px; white-space: normal; overflow-wrap: anywhere; }
+.af-cm-scn-table th:first-child { width: 38%; }
+.af-cm-scn-table thead th { font-size: 10px; color: var(--muted); }
+.af-cm-scn-table td.af-cm-scn-na, .af-cm-scn-unit { color: var(--muted); }
+.af-cm-scn-assumptions { margin-top: 12px; font-size: 12px; color: var(--muted); }
+.af-cm-scn-assumptions summary { cursor: pointer; min-height: 32px; padding-block: 6px; color: var(--text); }
+.af-cm-scn-assumptions summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 420px) { .af-cm-scn[data-kind='trade'] .af-cm-scn-sides { grid-template-columns: 1fr; } .af-cm-scn { padding: 12px; } }
+
+.af-cm-expand { display: block; padding: 10px 16px; font-size: 13px; color: var(--accent); text-align: right; }
+.af-cm-panel[data-chimmy] .af-cm-ev-toggle { font-size: 12px; min-height: 36px; }
+
+.af-cm-image-open { display: grid; gap: 6px; margin-top: 10px; padding: 0; background: transparent; color: var(--accent); border: 0; cursor: pointer; text-align: left; font-size: 12px; }
+.af-cm-image-open img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; }
+.af-cm-image-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.af-cm-image-dialog { max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface,#172126); color: var(--text); }
+.af-cm-image-dialog::backdrop { background: rgba(0,0,0,.75); }
+.af-cm-image-dialog img { display: block; max-width: 100%; max-height: calc(100dvh - 110px); object-fit: contain; margin-top: 12px; }
+.af-cm-image-dialog button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); color: var(--text); cursor: pointer; }

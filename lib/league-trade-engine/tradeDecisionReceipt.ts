@@ -44,6 +44,31 @@ type DecisionSnapshotRow = {
   decisionResult: unknown
 }
 
+/**
+ * The ONLY columns a `trade_decision_snapshots` reader may ask for: what `publicTradeDecisionReceipt`
+ * reads, plus `tradeId` to key it by.
+ *
+ * 🛑 A READER WITHOUT A `select` ASKS FOR EVERY COLUMN THE CLIENT KNOWS. The client is generated from
+ * the schema at build time; the database gets its columns when a migration is applied — a separate
+ * step. In between, a select-less `findMany` asks for `surface`/`inputHash`/`evaluationReceipt`, fails
+ * with P2022, and every reader here `.catch`es to "no receipts" — so trade cards silently lose their
+ * frozen grades. Naming the columns keeps the read inside what every database version has.
+ * `__tests__/decision-os/receipt-store.test.ts` fails if a column a migration adds is listed here, or
+ * if any reader drops this select.
+ */
+export const PUBLIC_RECEIPT_SELECT = {
+  tradeId: true,
+  completeness: true,
+  policyVersion: true,
+  format: true,
+  capturedAt: true,
+  evidence: true,
+  readiness: true,
+  outcomeSimulation: true,
+  assetContext: true,
+  decisionResult: true,
+} as const
+
 /** Remove private roster/user context while preserving the facts a trade card must explain. */
 export function publicTradeDecisionReceipt(row: DecisionSnapshotRow): PublicTradeDecisionReceipt {
   const evidence = row.evidence && typeof row.evidence === 'object' && !Array.isArray(row.evidence)

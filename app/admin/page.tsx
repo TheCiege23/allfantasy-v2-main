@@ -290,6 +290,7 @@ function AdminOverviewDeck({
             <span>Duplicate-manager verification</span>
             <span className="text-emerald-100/65">Open</span>
           </a>
+          <a href="/admin/adp-import" className="rounded-2xl border border-cyan-300/20 px-4 py-3 text-sm font-bold text-cyan-100">Licensed market ADP import</a>
           {/* Rose, not cyan/emerald: this one writes to a real league someone is playing in. */}
           <a
             href="/admin/league-recovery"

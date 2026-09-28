@@ -58,6 +58,9 @@ function makePrisma(games: ReturnType<typeof game>[], scored: string[] = ['p1', 
         }),
       },
       redraftRoster: { findMany: vi.fn(async () => [{ id: 'r1' }]) },
+      // No linked AF roster, so no week lineup: starters come from `slotType`, as these cases assume.
+      roster: { findMany: vi.fn(async () => []) },
+      afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
       redraftRosterPlayer: {
         findMany: vi.fn(async () => [
           { playerId: 'p1', sport: 'NHL', slotType: 'C' },

@@ -40,7 +40,7 @@ async function processIntegrityJob(job: Job<IntegrityJobPayload, IntegrityJobRes
       case "collusion_scan_trade": {
         const tid = job.data.tradeTransactionId
         if (!tid) throw new Error("Missing tradeTransactionId")
-        await scanTradeForCollusion(leagueId, tid)
+        await scanTradeForCollusion(leagueId, tid, job.data.tradeRef)
         return { ok: true, jobId: job.id }
       }
       case "collusion_scan_league": {

@@ -38,6 +38,15 @@ export type TradeScenarioLineup = {
 
 /** A literal `false`, so a renderer cannot mistake an absent number for a computed one. */
 export type PlayoffOddsNotComputed = { available: false; reason: string }
+export type TradePlayoffEstimate = {
+  available: true
+  reason: string
+  before: number
+  after: number
+  delta: number
+  iterations: number
+  computedAt: string
+}
 
 /**
  * The unit of every lineup number on every card — trade, waiver and start/sit: that week's
@@ -58,6 +67,11 @@ export type ReadyTradeScenario = {
   give: ScenarioPlayer[]
   get: ScenarioPlayer[]
   partnerTeamName: string
+  recommendation?: { action: string; explanation: string }
+  competitiveContext?: { wins: number; losses: number; ties: number; rank: number | null }
+  unpricedExcluded?: number
+  depthChanges?: Array<{ position: string; before: number; after: number }>
+  playerAges?: Array<{ name: string; age: number; side: 'give' | 'get' }>
   /**
    * How many draft picks the trade carried. Picks appear in `give` / `get` as entries named like
    * "2027 1st-round pick" with no position; this count lets a renderer add the pricing caveat.
@@ -83,7 +97,7 @@ export type ReadyTradeScenario = {
   lineupWeek?: number | null
   /** Why `lineup` is null — the evaluator's own blocked reason, verbatim when it gave one. */
   lineupUnavailable: string | null
-  playoffOdds: PlayoffOddsNotComputed
+  playoffOdds: PlayoffOddsNotComputed | TradePlayoffEstimate
 }
 
 export type TradeScenario =

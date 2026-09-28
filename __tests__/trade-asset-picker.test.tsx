@@ -322,3 +322,36 @@ describe('🛑 a draft pick shows a value like everything else', () => {
     expect(cell!.textContent).toBe('\u2014')
   })
 })
+
+
+describe('league pick preview parity', () => {
+  const leagueId = 'pick-preview-league'
+  const book = { leagueId, values: { '2027:2': 1585, '2028:2': 1200 } }
+  it('shows and selects the server quote instead of an older roster pick value', () => {
+    const onPick = vi.fn()
+    const view = open({ leagueId, pickPreviewBook: book, onPick,
+      rosterPicks: [{ pickId: 'pk', season: 2027, round: 2, label: '2027 second', itemType: 'future_pick', value: 456 }] })
+    fireEvent.click(within(view.container).getByText('Pick'))
+    const row = within(view.container).getByText('2027 second').closest('button')!
+    expect(row.textContent).toContain('1,585')
+    expect(row.textContent).not.toContain('456')
+    fireEvent.click(row)
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pick', value: 1585 }))
+  })
+  it('uses the selected season and round for a manual pick', () => {
+    const onPick = vi.fn()
+    const view = open({ leagueId, pickPreviewBook: book, onPick })
+    fireEvent.click(within(view.container).getByText('Pick'))
+    fireEvent.change(within(view.container).getByLabelText('Year'), { target: { value: '2028' } })
+    fireEvent.change(within(view.container).getByLabelText('Round'), { target: { value: '2' } })
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Add pick' }))
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ year: 2028, round: 2, value: 1200 }))
+  })
+  it('does not revive the generic curve when the league quote is unavailable', () => {
+    const onPick = vi.fn()
+    const view = open({ leagueId, pickPreviewBook: null, onPick })
+    fireEvent.click(within(view.container).getByText('Pick'))
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Add pick' }))
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pick', value: null }))
+  })
+})

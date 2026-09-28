@@ -81,4 +81,16 @@ describe('Chimmy drawer — plan allowance', () => {
     expect(screen.getByText('Included with AF Pro: 63 of 100 Chimmy answers left today. After that, answers cost 10 tokens.')).toBeTruthy()
     expect(consent.confirmTokenSpend).not.toHaveBeenCalled()
   })
-})
+  it('shows the screenshot before sending and retains its preview in the sent turn', async () => {
+    open(ALLOWANCE)
+    const file = new File(['image-content'], 'offer.png', { type: 'image/png' })
+    const input = document.querySelector('input[type="file"][accept*="image/png"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(await screen.findByAltText('Attached screenshot preview')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Send to Chimmy'))
+    expect(await screen.findByAltText('Screenshot: offer.png')).toBeTruthy()
+    await screen.findByText('Start Jayden Reed.')
+    const request = vi.mocked(fetch).mock.calls.find(c => c[0] === '/api/chat/chimmy')
+    const posted = (request?.[1] as RequestInit).body as FormData
+    expect(posted.get('image')).toBe(file)
+  })})

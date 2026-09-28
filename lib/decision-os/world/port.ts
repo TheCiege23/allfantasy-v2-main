@@ -871,6 +871,7 @@ export async function loadIdpValueRows(args: {
       args.numTeams,
       (args.starterSlots ?? []).join(','),
       JSON.stringify(resolved.scoring),
+      JSON.stringify(resolved.projectionWindow ?? null),
       offRoster.join(','),
     ].join('|')
     const scoring = resolved.scoring
@@ -882,6 +883,7 @@ export async function loadIdpValueRows(args: {
         rosterSlots: args.starterSlots,
         numTeams: args.numTeams,
         isDynasty: args.isDynasty,
+        projectionWindow: resolved.projectionWindow,
       }),
     )
     const out: RawIdpValueRow[] = []

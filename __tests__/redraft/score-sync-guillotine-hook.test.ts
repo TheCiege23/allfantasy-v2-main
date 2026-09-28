@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   guillotine: vi.fn(),
+  tournament: vi.fn(),
   seasons: vi.fn(),
   housekeeping: vi.fn(),
   playoff: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
   finalizeCompletedWeeksForSeason: vi.fn(async () => ({ results: [], finalized: 0, refusals: {} })),
 }))
 vi.mock('@/lib/redraft/scoreSyncBatch', () => ({ rotatingBatch: <T,>(xs: T[]) => xs, SCORE_SYNC_BATCH: 50 }))
+vi.mock('@/lib/bestball/nativeTournament', () => ({ runNativeTournamentWeek: m.tournament }))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
 vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 vi.mock('@/lib/playoff-runtime/playoffRoundScoring', () => ({ scoreActivePlayoffRound: m.playoff }))
@@ -139,7 +141,7 @@ describe('score-sync — a season in its playoffs', () => {
 
   it('includes playoff seasons in the sweep', async () => {
     await GET(new Request('http://localhost/api/redraft/score-sync'))
-    expect(m.seasons.mock.calls[0][0].where.status.in).toContain('playoffs')
+    expect(m.seasons.mock.calls[0][0].where.AND[0].status.in).toContain('playoffs')
   })
 
   it('scores the bracket with the calendar week, and skips the regular-season steps for that season', async () => {
@@ -160,6 +162,52 @@ describe('score-sync — a season in its playoffs', () => {
     const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
     const body = (await res.json()) as { result: { redraft: Record<string, unknown> }; summary: { status: string } }
     expect(body.result.redraft).toMatchObject({ playoffFailed: 1 })
+    expect(body.summary.status).toBe('partial')
+  })
+})
+
+describe('score-sync tournament integration', () => {
+  beforeEach(() => {
+    m.seasons.mockResolvedValue([{ id:'s-contest',leagueId:'L',sport:'NFL',status:'active',league:{bbContestId:'c',bestBallMode:true,settings:{best_ball_settings:{contestStructure:'tournament'}}} }])
+    m.guillotine.mockResolvedValue({outcome:'not_guillotine'})
+    m.tournament.mockResolvedValue('advanced')
+  })
+  it('runs linked tournament advancement with the resolved calendar period', async () => {
+    const body=await (await GET(new Request('http://localhost/api/redraft/score-sync'))).json()
+    expect(m.tournament).toHaveBeenCalledWith('s-contest',4)
+    expect(body.result.redraft.tournamentOutcomes).toEqual({advanced:1})
+  })
+  it('reports a tournament failure as partial without aborting the sweep', async () => {
+    m.tournament.mockRejectedValue(new Error('round scoring unavailable'))
+    const body=await (await GET(new Request('http://localhost/api/redraft/score-sync'))).json()
+    expect(body.result.redraft.tournamentFailed).toBe(1)
+    expect(body.summary.status).toBe('partial')
+    expect(m.guillotine).toHaveBeenCalled()
+  })
+})
+
+
+describe('score-sync � completed tournament recovery', () => {
+  it('repairs archival before resolving a calendar or syncing player stats', async () => {
+    m.seasons.mockResolvedValue([{ id: 'finished', leagueId: 'L', status: 'complete', sport: 'NFL', league: { bestBallMode: true, bbContestId: 'c', settings: { best_ball_settings: { contestStructure: 'tournament' } } } }])
+    m.tournament.mockResolvedValue('complete')
+    const { resolveSeasonWeekForRedraftSeason } = await import('@/lib/season-week')
+    const { syncPlayerWeeklyScoresForRedraftSeason } = await import('@/lib/redraft/playerWeeklyScoreService')
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = await res.json()
+    expect(m.tournament).toHaveBeenCalledWith('finished', 1)
+    expect(resolveSeasonWeekForRedraftSeason).not.toHaveBeenCalled()
+    expect(syncPlayerWeeklyScoresForRedraftSeason).not.toHaveBeenCalled()
+    expect(body.result.redraft.tournamentOutcomes).toEqual({ complete: 1 })
+    const scope = m.seasons.mock.calls[0][0].where
+    expect(JSON.stringify(scope)).toContain('contestStructure')
+    expect(JSON.stringify(scope)).toContain('completed')
+  })
+  it('reports an archive failure as partial so the next tick can retry', async () => {
+    m.seasons.mockResolvedValue([{ id: 'finished', leagueId: 'L', status: 'complete', league: { bestBallMode: true, bbContestId: 'c', settings: { best_ball_settings: { contestStructure: 'tournament' } } } }])
+    m.tournament.mockRejectedValue(new Error('archive transient'))
+    const body = await (await GET(new Request('http://localhost/api/redraft/score-sync'))).json()
+    expect(body.result.redraft.tournamentFailed).toBe(1)
     expect(body.summary.status).toBe('partial')
   })
 })

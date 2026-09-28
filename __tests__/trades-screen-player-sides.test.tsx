@@ -77,6 +77,52 @@ describe('trades screen — directional player sides', () => {
     expect(container.textContent).not.toContain('Counts only')
     expect(container.textContent).not.toContain('Trade grades')
   })
+  /*
+   * 🛑 THE ONE GRADE, ON THIS SCREEN TOO (2026-09-27). Each side reads its own letter — `players[1]`
+   * the mirror of `players[0]` — every asset its league value, and the card says why.
+   */
+  it('gives each side its league letter, each asset its value, and the reasons', () => {
+    const t = record({
+      leagueGrade: {
+        graded: true, letter: 'D', partnerLetter: 'B', percentDiff: -20, label: 'Slightly favors opponent', sideAdvantage: 'opponent',
+        action: 'counter', recommendation: 'x', giveValue: 9000, getValue: 7200, giveMarket: 9000, getMarket: 7200,
+        basis: 'Dynasty · 12 teams', scoringApplied: true, needApplied: false, needGap: null, moves: [],
+        lines: [
+          { side: 'get', name: 'Jahmyr Gibbs', marketValue: 7200, leagueValue: 7200 },
+          { side: 'give', name: 'Bijan Robinson', marketValue: 7000, leagueValue: 7000 },
+          { side: 'give', name: 'Christian McCaffrey', marketValue: 2000, leagueValue: 2000 },
+        ],
+      },
+    })
+    const { container } = render(<Trades data={data([t])} />)
+    const letters = [...container.querySelectorAll('.af-tr-leaguegrade-letter')].map((n) => n.textContent)
+    expect(letters).toEqual(['D', 'B'])
+    const values = [...container.querySelectorAll('.af-tr-asset-value')].map((n) => n.textContent)
+    expect(values).toEqual(['7,200', '7,000', '2,000'])
+    expect(container.querySelector('.af-tr-leaguegrade-why')!.textContent).toContain('Gridiron Vultures got the better end — You got 7,200 in league value for 9,000.')
+    // A league grade is a grade: the "n/a — counts only" placeholder must not sit beside it.
+    expect(container.textContent).not.toContain('Counts only')
+  })
+  it('hides a competing Market letter beside the league grade, and keeps a Realized one', () => {
+    const t = record({
+      leagueGrade: {
+        graded: true, letter: 'C', partnerLetter: 'C', percentDiff: 0, label: 'Even', sideAdvantage: 'even',
+        action: 'review', recommendation: 'x', giveValue: 100, getValue: 100, giveMarket: 100, getMarket: 100,
+        basis: 'b', scoringApplied: true, needApplied: false, needGap: null, moves: [], lines: [],
+      },
+    })
+    t.players[0] = { ...t.players[0], grade: 'A', gradeBasis: 'Market', gradeNote: 'Market value edge 41%' }
+    t.players[1] = { ...t.players[1], grade: 'D', gradeBasis: 'Realized', gradeNote: 'net -30 points' }
+    const { container } = render(<Trades data={data([t])} />)
+    expect(container.textContent).not.toContain('Market value edge 41%')
+    expect(container.textContent).toContain('Realized · net -30 points')
+  })
+  it('a withheld league grade says why and draws no letter', () => {
+    const t = record({ leagueGrade: { graded: false, reason: '2 assets have no value on this league\'s chart', basis: null } })
+    const { container } = render(<Trades data={data([t])} />)
+    expect(container.querySelectorAll('.af-tr-leaguegrade-letter')).toHaveLength(0)
+    expect(screen.getByText(/League grade withheld: 2 assets have no value/)).toBeTruthy()
+  })
   it('names BOTH sides by the manager who received', () => {
     render(<Trades data={data([record()])} />)
     expect(screen.getByText('You got')).toBeTruthy()

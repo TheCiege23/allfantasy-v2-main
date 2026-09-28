@@ -134,7 +134,11 @@ export function triageRows(args: {
   const byPlayer = new Map<string, TriageRow>()
 
   for (const s of starters) {
-    const inj = injuries.get(s.name.trim().toLowerCase()) ?? null
+    const reported = injuries.get(s.name.trim().toLowerCase()) ?? null
+    // An injury item explicitly about a later week is not a warning for this week's
+    // lineup. The feed often publishes Week 4 status while Week 3 is still live.
+    const reportWeek = reported?.description?.match(/\bWeek\s+(\d{1,2})\b/i)
+    const inj = week != null && reportWeek && Number(reportWeek[1]) > week ? null : reported
     const readyBase = readiness(inj?.status ?? null, Boolean(inj))
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null

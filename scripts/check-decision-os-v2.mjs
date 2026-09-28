@@ -25,7 +25,6 @@ const seams = [
   'components/MockDraftSimulatorClient.tsx',
   'components/decision-os/ManagerDnaCard.tsx',
   'app/api/ai/chat/route.ts',
-  'app/api/ai/trade-eval/route.ts',
   'app/api/ai/waiver/route.ts',
   '__tests__/decision-os/manager-intelligence-route-contract.test.ts',
   '__tests__/manager-dna-decision-os.test.tsx',
