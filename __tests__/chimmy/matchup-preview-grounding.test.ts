@@ -113,6 +113,39 @@ describe('buildMatchupPreviewContext — one league', () => {
     expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/CURRENTLY THE LOWEST SCORE/)
   })
 
+  /*
+   * 2026-09-28: 41.2 clear of the cut line with every relevant game finished, and the answer said
+   * "you'd need a collapse". The block now carries whether the week is DECIDED.
+   */
+  const chopWeek = {
+    leagueId: 'L1', platformLeagueId: 'p-L1', yourRosterId: '4', leagueName: 'Chop Shop', platform: 'sleeper', leagueImageUrl: null,
+    season: 2026, week: 3, yourScore: 87.74, cutLine: 46.54, rank: 4, fieldSize: 16, margin: 41.2, onTheBlock: false, labelled: true, href: '/core',
+  }
+
+  it('says a decided guillotine week is SAFE, from whose games have finished', async () => {
+    getBoard.mockResolvedValue(board({ leagueBoard: null, eliminationWeeks: [chopWeek] }))
+    const loadSettle = vi.fn().mockResolvedValue({ verdict: 'safe', finishedBelow: 7, chops: 1 })
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadSettle })
+    expect(out).toMatch(/41\.2 points clear of the cut line \(46\.5\)\. SAFE THIS WEEK — IT IS DECIDED/)
+    expect(loadSettle).toHaveBeenCalledWith(expect.objectContaining({ platformLeagueId: 'p-L1', yourRosterId: '4', week: 3, season: 2026 }))
+  })
+
+  it('says an undecided week is not decided, and a failed read changes nothing', async () => {
+    getBoard.mockResolvedValue(board({ leagueBoard: null, eliminationWeeks: [chopWeek] }))
+    const open = { verdict: 'open', yourUpcoming: 0, yourLive: 0, yourUnknown: 0, finishedBelow: 0, chops: 1, cutLinePending: 2 }
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadSettle: vi.fn().mockResolvedValue(open) })
+    expect(out).toMatch(/NOT YET DECIDED\. All their starters have finished\. The team currently lowest still has 2 starters to finish\./)
+    const failed = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, { ...deps, loadSettle: vi.fn().mockRejectedValue(new Error('x')) })
+    expect(failed).toMatch(/41\.2 points clear of the cut line \(46\.5\)\.$/m)
+  })
+
+  it('carries the verdict into the all-leagues view too', async () => {
+    getBoard.mockResolvedValue(board({ eliminationWeeks: [chopWeek] }))
+    const loadSettle = vi.fn().mockResolvedValue({ verdict: 'safe', finishedBelow: 1, chops: 1 })
+    const out = await buildMatchupPreviewContext({ leagueId: null, userId: 'u1' }, { ...deps, loadSettle })
+    expect(out).toMatch(/- Chop Shop \(elimination format\), week 3: .*SAFE THIS WEEK — IT IS DECIDED/)
+  })
+
   it('refuses to preview a league with no schedule', async () => {
     getBoard.mockResolvedValue(board({ week: null }))
     expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/do not invent an opponent/)

@@ -862,6 +862,10 @@ export function pairRows(rows: MatchupRow[]): Pairing[] {
  */
 export type EliminationWeek = {
   leagueId: string
+  /** The platform's league id — what `WeeklyMatchup` and the per-player scores are keyed on. */
+  platformLeagueId: string
+  /** Your roster id in the platform's space, as `WeeklyMatchup.rosterId` carries it. */
+  yourRosterId: string
   leagueName: string
   platform: string
   leagueImageUrl: string | null
@@ -958,6 +962,8 @@ export function buildEliminationWeeks(args: {
 
     out.push({
       leagueId: meta.id,
+      platformLeagueId: pid,
+      yourRosterId: yours.rosterId,
       leagueName: meta.name,
       platform: meta.platform,
       leagueImageUrl: meta.imageUrl,

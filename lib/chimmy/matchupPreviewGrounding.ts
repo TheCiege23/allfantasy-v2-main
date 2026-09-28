@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { getWeekBoard, type WeekBoard, type WeekMatchup, type EliminationWeek } from '@/lib/core-app/weekBoard'
 import { COIN_FLIP_POINTS } from '@/lib/core-app/weekBoardRules'
 import { listMemberLeagues } from './tools/leagueByName'
+import { settleSentence, type EliminationSettle } from '@/lib/core-app/eliminationSettle'
+import { loadEliminationSettle } from '@/lib/core-app/eliminationSettleLoader'
 
 /**
  * "How does my matchup look this week?" — from the same Week board the /core matchup screens render.
@@ -27,7 +29,15 @@ export interface MatchupPreviewDeps {
   loadLeagues: (ids: string[]) => Promise<Parameters<typeof getWeekBoard>[1]>
   listLeagueIds: (userId: string) => Promise<string[]>
   getBoard: typeof getWeekBoard
+  /**
+   * Whether an elimination week is already DECIDED for the user, from whose games have finished
+   * (`eliminationSettle.ts`). Optional: without it the line is the score and margin alone, as before.
+   */
+  loadSettle?: (e: EliminationWeek) => Promise<EliminationSettle | null>
 }
+
+/** How many elimination leagues get a settle read in the all-leagues view. Four queries each. */
+const MAX_SETTLE_READS = 10
 
 const defaultDeps: MatchupPreviewDeps = {
   loadLeagues: async (ids) => {
@@ -49,6 +59,10 @@ const defaultDeps: MatchupPreviewDeps = {
     return leagues.filter((l) => Number(l.season) === latest).map((l) => l.id)
   },
   getBoard: getWeekBoard,
+  loadSettle: (e) =>
+    e.yourScore == null
+      ? Promise.resolve(null)
+      : loadEliminationSettle({ platformLeagueId: e.platformLeagueId, season: e.season, week: e.week, yourRosterId: e.yourRosterId }),
 }
 
 const pts = (n: number) => n.toFixed(1)
@@ -79,7 +93,7 @@ function matchupLine(m: WeekMatchup): string {
   return `${m.leagueName}, week ${m.week} vs ${vs}: neither side has a scored week yet, so nothing is projected. Say so.`
 }
 
-function eliminationLine(e: EliminationWeek): string {
+function eliminationLine(e: EliminationWeek, settle?: EliminationSettle | null): string {
   if (e.yourScore == null) {
     return `${e.leagueName} (elimination format), week ${e.week}: they have not scored yet this week; the lowest score is eliminated.`
   }
@@ -87,15 +101,25 @@ function eliminationLine(e: EliminationWeek): string {
     `${e.leagueName} (elimination format), week ${e.week}: ${pts(e.yourScore)} points, ranked ${e.rank ?? '?'} of ${e.fieldSize}, ` +
     (e.onTheBlock
       ? '🚨 CURRENTLY THE LOWEST SCORE — on the chopping block.'
-      : `${e.margin != null ? pts(e.margin) : '?'} points clear of the cut line (${e.cutLine != null ? pts(e.cutLine) : '?'}).`)
+      : `${e.margin != null ? pts(e.margin) : '?'} points clear of the cut line (${e.cutLine != null ? pts(e.cutLine) : '?'}).`) +
+    /*
+     * 🛑 WITHOUT THIS, A DECIDED WEEK READ AS A CLOSE ONE. On 2026-09-28 every starter of the user
+     * and of the team in last had finished, and the answer still said "you'd need a collapse".
+     */
+    (settle ? ` ${settleSentence(settle)}` : '')
   )
 }
 
-function leagueBlock(board: WeekBoard, leagueId: string): string | null {
+async function settleFor(e: EliminationWeek, deps: MatchupPreviewDeps): Promise<EliminationSettle | null> {
+  if (!deps.loadSettle) return null
+  return deps.loadSettle(e).catch(() => null)
+}
+
+function leagueBlock(board: WeekBoard, leagueId: string, settle: EliminationSettle | null = null): string | null {
   const lb = board.leagueBoard
   const elimination = board.eliminationWeeks.find((e) => e.leagueId === leagueId)
   if (elimination) {
-    return ['THIS WEEK (computed by AllFantasy from real scores — repeat, do not estimate):', `- ${eliminationLine(elimination)}`].join('\n')
+    return ['THIS WEEK (computed by AllFantasy from real scores — repeat, do not estimate):', `- ${eliminationLine(elimination, settle)}`].join('\n')
   }
   if (!lb || lb.leagueId !== leagueId) return null
 
@@ -135,7 +159,7 @@ function leagueBlock(board: WeekBoard, leagueId: string): string | null {
   return lines.join('\n')
 }
 
-function crossLeagueBlock(board: WeekBoard): string {
+function crossLeagueBlock(board: WeekBoard, settles: ReadonlyMap<string, EliminationSettle | null> = new Map()): string {
   const all = [...board.coinFlips, ...board.leaning, ...board.unprojected]
   const lines: string[] = [
     `THIS WEEK ACROSS THEIR LEAGUES (week ${board.week ?? '?'}), from AllFantasy's week model — repeat these numbers:`,
@@ -158,7 +182,7 @@ function crossLeagueBlock(board: WeekBoard): string {
     lines.push('- Not projected yet:')
     for (const m of board.unprojected) lines.push(`  • ${matchupLine(m)}`)
   }
-  for (const e of board.eliminationWeeks) lines.push(`- ${eliminationLine(e)}`)
+  for (const e of board.eliminationWeeks) lines.push(`- ${eliminationLine(e, settles.get(e.leagueId))}`)
   if (all.length === 0 && board.eliminationWeeks.length === 0) {
     lines.push('- No matchups are scheduled for them this week in any synced league. Say so.')
   }
@@ -182,12 +206,17 @@ export async function buildMatchupPreviewContext(
       return 'No completed or scheduled weeks are on file for their league(s) yet, so there is no matchup to preview. Say so; do not invent an opponent.'
     }
     if (args.leagueId) {
+      const elimination = board.eliminationWeeks.find((e) => e.leagueId === args.leagueId)
+      const settle = elimination ? await settleFor(elimination, deps) : null
       return (
-        leagueBlock(board, args.leagueId) ??
+        leagueBlock(board, args.leagueId, settle) ??
         'This league has no matchup on file for the current week (not synced, or the season has not started). Say so; do not invent an opponent.'
       )
     }
-    return crossLeagueBlock(board)
+    const settled = await Promise.all(
+      board.eliminationWeeks.slice(0, MAX_SETTLE_READS).map(async (e) => [e.leagueId, await settleFor(e, deps)] as const),
+    )
+    return crossLeagueBlock(board, new Map(settled))
   } catch {
     return 'The matchup preview failed to load. Say that you could not read it rather than answering as though you had.'
   }
