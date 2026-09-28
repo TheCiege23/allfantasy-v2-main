@@ -90,6 +90,10 @@ function finalizerPrisma() {
       ],
     },
     redraftRoster: { findMany: async () => [{ id: 'rr-1' }] },
+    // No week lineup rows (the assignment writer is mocked above), so the seal reads `slotType` —
+    // the column this suite proves the save keeps current. Per-week reads: week-finalizer.test.ts.
+    roster: { findMany: async () => [] },
+    afRosterLineupAssignment: { findMany: async () => [] },
     redraftRosterPlayer: {
       findMany: async (args: AnyArgs) =>
         h.state.rows

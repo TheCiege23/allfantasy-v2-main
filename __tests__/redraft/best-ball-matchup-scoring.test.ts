@@ -14,6 +14,8 @@ const db = vi.hoisted(() => ({
   redraftSeason: { findFirst: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn() },
   playerWeeklyScore: { findUnique: vi.fn() },
+  roster: { findMany: vi.fn() },
+  afRosterLineupAssignment: { findMany: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({
@@ -50,8 +52,30 @@ const HOME: P[] = [
 ]
 const AWAY: P[] = [{ playerId: 'a1', position: 'WR', slotType: 'WR', yards: 30 }]
 
-function arrange(league: Record<string, unknown>, opts: { missing?: string[] } = {}) {
+type Assignment = { week: number; section: string; playerId: string }
+
+function arrange(
+  league: Record<string, unknown>,
+  opts: {
+    missing?: string[]
+    /** The home team's saved lineups by week (`af_roster_lineup_assignments`), via a NATIVE AF roster. */
+    homeLineups?: Assignment[]
+  } = {},
+) {
   const all = [...HOME, ...AWAY]
+  db.roster.findMany.mockImplementation(async ({ where }: { where: { redraftRosterId: { in: string[] } } }) =>
+    opts.homeLineups && where.redraftRosterId.in.includes('home')
+      ? [{ id: 'af-home', redraftRosterId: 'home', league: { platform: 'manual' } }]
+      : [],
+  )
+  db.afRosterLineupAssignment.findMany.mockImplementation(
+    async ({ where }: { where: { rosterId: { in: string[] }; season: number; week: number } }) =>
+      where.rosterId.in.includes('af-home') && where.season === 2026
+        ? (opts.homeLineups ?? [])
+            .filter((a) => a.week === where.week)
+            .map((a) => ({ rosterId: 'af-home', section: a.section, playerId: a.playerId }))
+        : [],
+  )
   db.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: SUPERFLEX_SETTINGS, ...league })
   db.redraftMatchup.findFirst.mockResolvedValue({
     id: 'm1',
@@ -66,7 +90,13 @@ function arrange(league: Record<string, unknown>, opts: { missing?: string[] } =
   })
   db.redraftSeason.findFirst.mockResolvedValue({ id: 's1', season: 2026, sport: 'NFL' })
   db.redraftRosterPlayer.findMany.mockImplementation(async ({ where }: { where: { rosterId: string } }) =>
-    (where.rosterId === 'home' ? HOME : AWAY).map((p) => ({ ...p, sport: 'NFL', playerName: p.playerId, droppedAt: null })),
+    (where.rosterId === 'home' ? HOME : AWAY).map((p) => ({
+      ...p,
+      rosterId: where.rosterId,
+      sport: 'NFL',
+      playerName: p.playerId,
+      droppedAt: null,
+    })),
   )
   db.playerWeeklyScore.findUnique.mockImplementation(async ({ where }: { where: { playerId_week_season_sport: { playerId: string } } }) => {
     const id = where.playerId_week_season_sport.playerId
@@ -120,6 +150,57 @@ describe('best-ball matchup scoring', () => {
     expect(summary?.isComplete).toBe(false)
     expect(summary?.missingPlayerIds).toEqual(['r2'])
     expect(db.redraftMatchup.update.mock.calls[0]![0].data.status).toBe('active')
+  })
+})
+
+/*
+ * 🛑 LIVE SCORING READS THE LINEUP SET FOR THE MATCHUP'S WEEK. `slotType` is current state; the
+ * matchup is week 3, and HOME's slots above are what a later (week 4) save would leave. Week 3's
+ * own saved lineup started the two bench backs instead.
+ */
+describe('live scoring uses the week\'s own saved lineup', () => {
+  const WEEK3: Assignment[] = [
+    { week: 3, section: 'starters', playerId: 'q2' },
+    { week: 3, section: 'starters', playerId: 'r2' },
+    { week: 3, section: 'starters', playerId: 'w1' },
+    { week: 3, section: 'bench', playerId: 'q1' },
+    { week: 3, section: 'bench', playerId: 'r1' },
+    { week: 3, section: 'ir', playerId: 'ir' },
+  ]
+  const WEEK4: Assignment[] = [
+    { week: 4, section: 'starters', playerId: 'q1' },
+    { week: 4, section: 'starters', playerId: 'r1' },
+    { week: 4, section: 'starters', playerId: 'w1' },
+  ]
+
+  it('a lineup league scores week 3 on week 3\'s lineup, not on a later save', async () => {
+    arrange({ bestBallMode: false, leagueType: 'redraft', leagueVariant: null }, { homeLineups: [...WEEK3, ...WEEK4] })
+    const expected = Math.round(((await pts('q2')) + (await pts('r2')) + (await pts('w1'))) * 100) / 100
+
+    const summary = await updateMatchupScores('m1')
+
+    expect(summary?.homeScore).toBe(expected)
+    expect(db.afRosterLineupAssignment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { rosterId: { in: ['af-home'] }, season: 2026, week: 3 } }),
+    )
+  })
+
+  it('falls back to slotType when week 3 was never saved', async () => {
+    arrange({ bestBallMode: false, leagueType: 'redraft', leagueVariant: null }, { homeLineups: WEEK4 })
+    const expected = Math.round(((await pts('q1')) + (await pts('r1')) + (await pts('w1'))) * 100) / 100
+    expect((await updateMatchupScores('m1'))?.homeScore).toBe(expected)
+  })
+
+  it('best ball leaves out whoever sat on IR in that week\'s lineup', async () => {
+    arrange(
+      { bestBallMode: true, leagueType: 'best_ball', leagueVariant: null },
+      { homeLineups: [...WEEK3.filter((a) => a.playerId !== 'q2'), { week: 3, section: 'ir', playerId: 'q2' }] },
+    )
+    await updateMatchupScores('m1')
+    const assignments = db.redraftMatchup.update.mock.calls[0]![0].data.lineupSnapshots.redraftScoring.home.bestBall
+      .assignments as { playerId: string }[]
+    expect(assignments.map((a) => a.playerId)).not.toContain('q2')
+    expect(assignments.map((a) => a.playerId)).not.toContain('ir')
   })
 })
 
