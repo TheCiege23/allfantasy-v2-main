@@ -10,6 +10,8 @@ import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
+import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -312,6 +314,29 @@ async function ensureRedraftRosterForGenericRoster(params: {
   return { redraftRoster, created: true, genericRoster }
 }
 
+/**
+ * The week a FRESH season (no matchups yet) starts on: its sport's next unplayed week for a
+ * standard weekly format, else 1. See lib/redraft/seasonStartWeek.ts.
+ */
+async function resolveStartWeekForFreshSeason(
+  leagueId: string,
+  season: { id: string; sport: string; season: number; totalWeeks: number; playoffStartWeek: number },
+): Promise<number> {
+  if ((await prisma.redraftMatchup.count({ where: { seasonId: season.id } })) > 0) return 1
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { leagueType: true, bbContestId: true, bestBallMode: true, settings: true },
+  })
+  const format = String(league?.leagueType ?? 'redraft').trim().toLowerCase() || 'redraft'
+  if (!STANDARD_WEEKLY_SEASON_FORMATS.has(format) || isNativeTournamentLeague(league)) return 1
+  const regularSeasonEnd = Math.min(season.totalWeeks, Math.max(1, season.playoffStartWeek - 1))
+  const start = await resolveSeasonStartWeek({ sport: season.sport, seasonYear: season.season, regularSeasonEnd })
+  if (start.startWeek > 1) {
+    console.info('[syncCompletedDraftToRedraftSeason] late start', { leagueId, seasonId: season.id, ...start })
+  }
+  return start.startWeek
+}
+
 export async function ensureScheduleForNewSeason(params: {
   seasonId: string
   leagueId: string
@@ -319,6 +344,8 @@ export async function ensureScheduleForNewSeason(params: {
   totalWeeks: number
   playoffStartWeek: number
   medianGame: boolean
+  /** The first regular-season week to schedule (a season drafted mid-season). Default 1. */
+  startWeek?: number
 }) {
   const existingScheduleCount = await prisma.redraftMatchup.count({
     where: { seasonId: params.seasonId },
@@ -343,13 +370,20 @@ export async function ensureScheduleForNewSeason(params: {
 
   if (rosters.length < 2) return
 
+  /*
+   * A late start schedules only the weeks left: a full round-robin generated for that many weeks and
+   * numbered from `startWeek`, so the rotation begins fresh rather than mid-cycle.
+   */
+  const regularEnd = Math.min(params.totalWeeks, Math.max(1, params.playoffStartWeek - 1))
+  const startWeek = Math.min(Math.max(1, Math.floor(params.startWeek ?? 1)), regularEnd)
+  const weeksLeft = regularEnd - startWeek + 1
   const slots = generateSchedule(
     rosters,
-    params.totalWeeks,
-    params.playoffStartWeek,
+    startWeek > 1 ? weeksLeft : params.totalWeeks,
+    startWeek > 1 ? weeksLeft + 1 : params.playoffStartWeek,
     params.sport,
     { medianGame: params.medianGame },
-  )
+  ).map((slot) => ({ ...slot, week: slot.week + startWeek - 1 }))
 
   const rows = slots
     .filter((slot) => slot.type !== 'median')
@@ -527,12 +561,28 @@ export async function syncCompletedDraftToRedraftSeason(
     redraftPlayersCreated += 1
   }
 
-  if (season.status === 'setup' || season.currentWeek === 0) {
+  /*
+   * A season drafted mid-season starts at its sport's next unplayed week (seasonStartWeek.ts) —
+   * decided once, on the first sync, while the season has no matchups; a re-sync never moves a
+   * running season. Standard weekly formats only: guillotine, tournaments and the other engines keep
+   * their own calendars.
+   */
+  // A failure here must not fail draft completion: it falls back to week 1, the old behavior.
+  const scheduleStartWeek = await resolveStartWeekForFreshSeason(leagueId, season).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] start week unresolved; starting at week 1', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return 1
+  })
+
+  if (season.status === 'setup' || season.currentWeek === 0 || scheduleStartWeek > Math.max(1, season.currentWeek ?? 1)) {
     await prisma.redraftSeason.update({
       where: { id: season.id },
       data: {
         status: 'active',
-        currentWeek: Math.max(1, season.currentWeek ?? 1),
+        currentWeek: Math.max(1, season.currentWeek ?? 1, scheduleStartWeek),
       },
     })
   }
@@ -544,6 +594,7 @@ export async function syncCompletedDraftToRedraftSeason(
     totalWeeks: season.totalWeeks,
     playoffStartWeek: season.playoffStartWeek,
     medianGame: season.medianGame,
+    startWeek: scheduleStartWeek,
   }).catch((err) => {
     console.warn('[syncCompletedDraftToRedraftSeason] schedule sync skipped', {
       leagueId,
