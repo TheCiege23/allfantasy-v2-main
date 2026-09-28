@@ -54,8 +54,11 @@ export const NCAAF_ROSTER_TEMPLATES: NcaafRosterTemplate[] = [
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, BN: 8, IR: 1 } },
   { key: 'dynasty', label: 'Dynasty', leagueTypes: ['dynasty'], description: 'Deep dynasty with superflex and taxi.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 15, IR: 3, TAXI: 4 } },
-  { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Extended keeper roster.',
-    slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, BN: 10, IR: 1 } },
+  // Matches the keeper contract (lib/league-concepts/keeperDefaults.ts), which the settings screens show
+  // and the draft's round count is computed from. It was 3 WR, no K, 10 bench, 1 IR here, so a keeper
+  // league showed a kicker slot its lineup did not have, and drafted 16 rounds into 18 draftable spots.
+  { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Standard NCAAF keeper.',
+    slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, BN: 8, IR: 2 } },
   { key: 'best_ball', label: 'Best Ball', leagueTypes: ['best_ball'], description: 'Deep best ball with superflex.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 12 } },
   { key: 'superflex', label: 'Superflex', leagueTypes: ['redraft', 'dynasty'], description: 'Superflex variant.',
