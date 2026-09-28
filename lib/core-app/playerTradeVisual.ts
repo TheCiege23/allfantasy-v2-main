@@ -28,6 +28,7 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
+import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueVariantFor } from './valueBook'
 /*
  * Moved to `lib/trade-intel/marketContext.ts` (2026-09-24) so the trade analysis engine can use the
@@ -241,7 +242,20 @@ export async function readLeagueTradeRows(leagueId: string) {
       })
       .catch(() => []),
     prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
+      .findMany({
+        where: { leagueId },
+        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true } } },
+      })
+      /*
+       * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your
+       * roster" and every priced package name strangers. Stripped here, every trade surface sees none.
+       */
+      .then((rs) =>
+        rs.map(({ league, ...r }) => ({
+          ...r,
+          playerData: sleeperReadablePlayerData(league?.platform, r.playerData) as typeof r.playerData,
+        })),
+      )
       .catch(() => []),
   ])
   return { teams, rosters }
@@ -495,6 +509,11 @@ export async function getPlayerTradeVisual(
   const { yours, myRoster } = callerTradeSeat(tradeRows, userId)
   if (!myRoster) return { available: false, reason: 'you need a claimed team in this league to build a trade' }
 
+  // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
+  // read them — not that he is free to claim.
+  if (isForeignIdSpace(league.platform)) {
+    return { available: false, reason: "we can't match this league's player ids to ours yet, so we can't tell who holds him" }
+  }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null
   if (!holder) return { available: false, reason: 'he is not on any roster we can read here — claim him instead of trading for him' }
   if (holder.platformUserId === myRoster.platformUserId) {

@@ -11,6 +11,7 @@ import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { lineupDeadlines } from './lineupDeadlines'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
+import { sleeperReadablePlayerData } from './rosterIdSpace'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -388,7 +389,8 @@ export async function getMyTeamPulse(
 
     const pd = roster.playerData && typeof roster.playerData === 'object' ? roster.playerData as Record<string, unknown> : {}
     if (pd.eliminated === true || l.guillotineMode && Array.isArray(pd.players) && pd.players.length === 0) { notChecked.inactive++; continue }
-    const { ids, empty } = startersOf(roster.playerData)
+    /* A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id; that lineup is unread. */
+    const { ids, empty } = startersOf(sleeperReadablePlayerData(l.platform, roster.playerData))
     if (ids.length === 0 && empty === 0) {
       notChecked.noLineup++
       continue

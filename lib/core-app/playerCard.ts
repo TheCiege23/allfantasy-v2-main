@@ -10,6 +10,7 @@ import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSup
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
+import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
 import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
@@ -680,6 +681,8 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
       },
     })
     .catch(() => [])
+    // A foreign league's trade ids collide with real Sleeper ids — its "6038" is a different man.
+    .then((rs) => rs.filter((r) => !isForeignIdSpace(r.platform)))
 
   if (rows.length === 0) {
     return unavailable(
@@ -1199,6 +1202,11 @@ async function loadLeague(
   const [rosters, teams] = await Promise.all([
     prisma.roster
       .findMany({ where: { leagueId }, select: { id: true, playerData: true, platformUserId: true } })
+      // A foreign league's ids collide with real Sleeper ids: read raw, a stranger's holder, slot and
+      // position-mates would be named as his.
+      .then((rs) =>
+        rs.map((r) => ({ ...r, playerData: sleeperReadablePlayerData(league.platform, r.playerData) as typeof r.playerData })),
+      )
       .catch(() => []),
     prisma.leagueTeam
       .findMany({

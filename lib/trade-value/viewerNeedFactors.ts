@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
 import { normalizePosition } from '@/lib/core-app/positionNormalization'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 import {
   computeRosterNeed,
@@ -116,6 +117,15 @@ export async function loadViewerNeedFactors(args: {
 
     const viewer = await resolveViewerLeagueRoster(args.leagueId, args.userId)
     if (!viewer.ok) return none(give, get, viewer.gap)
+
+    /*
+     * A foreign league's roster ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, so the read
+     * below would price a stranger's roster. Named as a gap — the roster is not empty, it is unreadable.
+     */
+    const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platform: true } })
+    if (isForeignIdSpace(league?.platform)) {
+      return none(give, get, "your roster in this league, whose player ids are the platform's own and cannot be matched to ours yet")
+    }
 
     const pd = (viewer.roster.playerData ?? {}) as Record<string, unknown>
     const rosterIds = Array.isArray(pd.players) ? pd.players.map(String).filter((x) => x && x !== '0') : []

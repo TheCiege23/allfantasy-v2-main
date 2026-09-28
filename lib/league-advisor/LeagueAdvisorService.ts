@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import type { LeagueAdvisorAdvice, LeagueAdvisorContext } from './types'
@@ -30,7 +31,7 @@ export interface GetAdvisorInput {
 async function getLeagueAndRoster(leagueId: string, userId: string) {
   const league = await (prisma as any).league.findFirst({
     where: { id: leagueId, userId },
-    select: { id: true, name: true, sport: true },
+    select: { id: true, name: true, sport: true, platform: true },
   })
   if (!league) return null
 
@@ -338,20 +339,28 @@ export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<Le
 
   const { league, roster } = data
   const sport = normalizeToSupportedSport(league.sport)
-  const playerIds = getRosterPlayerIds(roster.playerData)
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids, so it is never named
+  // as one; and with no names, the injury reads below would return the whole sport's list as "yours".
+  const unreadable = isForeignIdSpace(league.platform)
+  const playerData = sleeperReadablePlayerData(league.platform, roster.playerData)
+  const playerIds = getRosterPlayerIds(playerData)
   const nameMap = await resolveRosterPlayerNames(playerIds, sport)
   const rosterNames = [...nameMap.values()]
   const [rosterTrends, injuries] = await Promise.all([
     getRosterTrendSummary(sport, playerIds, nameMap),
-    getRecentInjuries(sport, rosterNames),
+    unreadable ? [] : getRecentInjuries(sport, rosterNames),
   ])
-  const rosterSummary = buildRosterSummary(playerIds, nameMap, roster.playerData)
+  const rosterSummary = unreadable
+    ? "Roster: this platform's player ids cannot be resolved to players yet."
+    : buildRosterSummary(playerIds, nameMap, playerData)
   const injurySummary =
     injuries.length > 0
       ? injuries
           .map((i) => `${i.playerName} (${i.team ?? '?'}): ${i.status}${i.type ? ` — ${i.type}` : ''}`)
           .join('. ')
-      : await getInjurySummary(sport, rosterNames)
+      : unreadable
+        ? 'Injury status for this roster is unavailable.'
+        : await getInjurySummary(sport, rosterNames)
 
   const waiverHint =
     roster.waiverPriority != null

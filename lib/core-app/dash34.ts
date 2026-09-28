@@ -2,6 +2,7 @@ import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
+import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 import { lineupActionability } from './lineupActionability'
 import { getByeWeeks } from './byeWeeks'
 import { isRuledOut } from './injuryStatus'
@@ -655,8 +656,9 @@ export async function getDash34Data(
 
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
   const formatRows = await prisma.league.findMany({ where: { id: { in: activeIds } },
-    select: { id: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true } }).catch(() => [])
+    select: { id: true, platform: true, bestBallMode: true, guillotineMode: true, leagueVariant: true, settings: true } }).catch(() => [])
   const formatByLeague = new Map(formatRows.map(l => [l.id, l]))
+  const platformByLeague = new Map(active.map((l) => [l.id, formatByLeague.get(l.id)?.platform ?? l.platform]))
   const chopped = await prisma.guillotineRosterState.findMany({ where: { leagueId: { in: activeIds }, choppedAt: { not: null } },
     select: { leagueId: true, rosterId: true } }).catch(() => [])
   const choppedTeams = new Set(chopped.map(r => `${r.leagueId}:${r.rosterId}`))
@@ -737,7 +739,8 @@ export async function getDash34Data(
   >()
   const everyPlayerId = new Set<string>()
   for (const r of rosters) {
-    const pd = (r.playerData ?? {}) as Record<string, unknown>
+    // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster names nobody.
+    const pd = (sleeperReadablePlayerData(platformByLeague.get(r.leagueId), r.playerData) ?? {}) as Record<string, unknown>
     const starters = asIds(pd.starters)
     const reserve = asIds(pd.reserve)
     const taxi = asIds(pd.taxi)
@@ -1162,6 +1165,7 @@ export async function getDash34Data(
     const eliminated = roster?.eliminated || [team?.externalId, team?.id, storedRosterId].some(id => id && choppedTeams.has(`${row.id}:${id}`))
       || eliminatedRows.some(r => r.leagueId === row.id && r.season.season === Number(row.season))
     const eliminationRosterEmpty = (format?.guillotineMode === true || String(row.leagueType).toLowerCase() === 'guillotine' || format?.leagueVariant === 'guillotine') && roster != null && roster.all.length === 0
+      && !isForeignIdSpace(platformByLeague.get(row.id)) // a foreign roster reads empty because it was stripped, not chopped
     const eligibility = lineupActionability({
       stage: stage ?? 'unknown', eliminated: eliminated || eliminationRosterEmpty, bestBall,
       waiversEnabled: roster?.waiversEnabled, slots: roster?.verification?.slots,

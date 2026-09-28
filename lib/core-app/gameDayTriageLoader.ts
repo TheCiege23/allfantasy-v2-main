@@ -10,6 +10,7 @@ import { isBestBallSettings } from './lineupMode'
 import { displayPosition } from './positionLabels'
 import { unresolvedClubNames, weekKickoffs } from './playerGame'
 import { resolveSportsWeek } from './sportsWeek'
+import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
  * Your flagged starters across every league — the finder's game-day home.
@@ -74,6 +75,9 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     const pd = (r.playerData ?? {}) as Record<string, unknown>
     const league = leagueById.get(r.leagueId)
     if (!league) continue
+    // A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id. That lineup is
+    // not read at all — skipped, not counted, so "N of M lineups read" stays true.
+    if (isForeignIdSpace(league.platform)) continue
     const stage = String(pd.leagueStatus ?? league.status ?? league.lifecycleState ?? '').toLowerCase()
     if (['pre_draft', 'predraft', 'setup', 'drafting', 'draft', 'complete', 'completed', 'season_over', 'archived'].includes(stage)) continue
     if (pd.bestBall === true || league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)) continue

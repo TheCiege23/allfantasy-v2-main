@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import type { AiRosterPlayerRef, AiTeamContextPayload } from '@/lib/ai-payload/types'
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -178,6 +179,7 @@ export async function resolveAiTeamContext(args: {
       ties: true,
       pointsFor: true,
       currentRank: true,
+      league: { select: { platform: true } },
     },
   })
 
@@ -193,6 +195,7 @@ export async function resolveAiTeamContext(args: {
         ties: true,
         pointsFor: true,
         currentRank: true,
+        league: { select: { platform: true } },
       },
     })
     if (lt) leagueTeam = lt
@@ -242,10 +245,15 @@ export async function resolveAiTeamContext(args: {
     }
   }
 
-  const { starters, reserve, taxi, allIds } = bucketPlayerIds(roster.playerData)
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids — `resolveNames` would
+  // name a stranger — so such a roster contributes no ids, and says why.
+  const platform = leagueTeam.league?.platform
+  const { starters, reserve, taxi, allIds } = bucketPlayerIds(sleeperReadablePlayerData(platform, roster.playerData))
   const bench = benchIds(allIds, starters, reserve, taxi)
   const dataGaps: string[] = []
-  if (allIds.length === 0) dataGaps.push('Roster playerData has no player IDs yet.')
+  if (isForeignIdSpace(platform)) {
+    dataGaps.push("This platform's roster player ids cannot be resolved to players yet — player list unavailable.")
+  } else if (allIds.length === 0) dataGaps.push('Roster playerData has no player IDs yet.')
 
   const nameMap = await resolveNames(sport, [...starters, ...bench, ...reserve, ...taxi])
 

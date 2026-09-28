@@ -64,6 +64,7 @@ import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import { resolveViewerLeagueRoster } from './viewerLeagueRoster'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import {
   byeCollisionDelta,
   computeRosterNeed,
@@ -219,6 +220,7 @@ export async function buildTradeContextNotes(args: {
         keeperCount: true,
         keeperCostSystem: true,
         keeperRoundPenalty: true,
+        platform: true,
       },
     })
     .catch(() => null)
@@ -261,7 +263,12 @@ export async function buildTradeContextNotes(args: {
     }
   }
 
-  const pd = (roster.playerData ?? {}) as Record<string, unknown>
+  /*
+   * A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids and would read a
+   * stranger's position, injury and price; such a roster is empty here, so the notes stay blank.
+   * The same league's opponent roster (`buildLeverageNotes`) is never reached past this return.
+   */
+  const pd = (sleeperReadablePlayerData(league.platform, roster.playerData) ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []

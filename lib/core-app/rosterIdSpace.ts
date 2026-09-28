@@ -1,3 +1,4 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -46,7 +47,10 @@ export const ROSTER_KEYS = ['players', 'starters', 'reserve', 'taxi'] as const
 export function rosterIdSpaceOf(platform: string | null | undefined): RosterIdSpace {
   const p = (platform ?? '').trim().toLowerCase()
   if (p === 'espn') return 'espn'
-  if (p === '' || p === 'sleeper' || p === 'manual' || p === 'allfantasy') return 'sleeper'
+  // Native leagues speak Sleeper ids. `isNativePlatform` owns the native spellings (allfantasy, af,
+  // manual, native); a local copy of that list once omitted `af` and `native` and would have
+  // stripped a native league's roster as foreign.
+  if (p === '' || p === 'sleeper' || isNativePlatform(p)) return 'sleeper'
   return 'other'
 }
 
@@ -58,8 +62,12 @@ export function isForeignIdSpace(platform: string | null | undefined): boolean {
   return rosterIdSpaceOf(platform) === 'other'
 }
 
-/** Every roster-id-bearing key, including the two the ESPN translation never touched. */
-const STRIPPED_ARRAY_KEYS: readonly string[] = [...ROSTER_KEYS, 'ir', 'devy']
+/**
+ * Every roster-id-bearing key, including those the ESPN translation never touched. `bench` is here
+ * because `myRoster.rosterPlayerIds` reads a top-level `bench` array; no importer is known to write
+ * one, but a reader that looks for it must never find a foreign id there.
+ */
+const STRIPPED_ARRAY_KEYS: readonly string[] = [...ROSTER_KEYS, 'ir', 'devy', 'bench']
 
 /**
  * A foreign roster with every player id removed: the roster arrays, `ir`, `devy`, and each
@@ -78,6 +86,18 @@ export function stripForeignIds(playerData: unknown): Record<string, unknown> {
     )
   }
   return out
+}
+
+/**
+ * A roster's `playerData` as a Sleeper-id reader may see it: a foreign league's ids stripped, any
+ * other league's returned as is (same object, no copy). For readers that already hold the league's
+ * platform and read `playerData` directly rather than through a translator. It composes the rule
+ * above; it is not a second copy of it. An array-shaped `playerData` (the IDP parsers' form) from a
+ * foreign league becomes `[]`.
+ */
+export function sleeperReadablePlayerData(platform: string | null | undefined, playerData: unknown): unknown {
+  if (!isForeignIdSpace(platform)) return playerData
+  return Array.isArray(playerData) ? [] : stripForeignIds(playerData)
 }
 
 /** Every distinct id across the roster arrays, as strings. */

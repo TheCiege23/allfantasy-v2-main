@@ -21,6 +21,7 @@ import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
+import { sleeperReadablePlayerData } from "@/lib/core-app/rosterIdSpace"
 import { isBestBallSettings } from "@/lib/core-app/lineupMode"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
@@ -644,6 +645,7 @@ async function loadViewerRoster(
       select: {
         playerData: true,
         settings: true,
+        league: { select: { platform: true } },
       },
     }).catch(() => null)
     if (!roster) return null
@@ -685,8 +687,11 @@ async function loadViewerRoster(
 
     const named = new Set(allPlayers.map((p) => p.playerId))
     const idsNeedingNames = rosterPlayerIds(playerData).filter((id) => !named.has(id))
+    // A Fleaflicker/MFL/Fantrax/Yahoo id collides with real Sleeper ids, so it is never looked up as
+    // one: it stays on the roster, honestly unidentified, rather than named as a stranger.
+    const lookupable = new Set(rosterPlayerIds(sleeperReadablePlayerData(roster.league?.platform, playerData)))
     if (idsNeedingNames.length > 0) {
-      const identities = await resolveRosterPlayerNames(idsNeedingNames)
+      const identities = await resolveRosterPlayerNames(idsNeedingNames.filter((id) => lookupable.has(id)))
       for (const id of idsNeedingNames) allPlayers.push(identities.get(id) ?? unnamedRosterPlayer(id))
     }
 

@@ -425,3 +425,49 @@ describe('the target carries what a dynasty call needs', () => {
     expect(state.data.target.age).toBeNull()
   })
 })
+
+/*
+ * 🛑 A FOREIGN LEAGUE'S ROSTER IDS COLLIDE WITH REAL SLEEPER IDS. A Fleaflicker roster holding
+ * '10236' does not hold Sleeper's Dalton Kincaid — reading it raw named the wrong holder, told the
+ * caller "he is already on your roster", and priced packages out of strangers. The roster rows carry
+ * the league's platform (the relation `readLeagueTradeRows` selects).
+ */
+describe('foreign roster ids never reach a Sleeper-id read', () => {
+  const onPlatform = (platform: string, ...rows: Array<Record<string, unknown>>) =>
+    rows.map((r) => ({ ...r, league: { platform } }))
+
+  it('[control] the same rows in a Sleeper league find the holder and name the players', async () => {
+    mockRosterFindMany.mockResolvedValue(onPlatform('sleeper', MY_ROSTER, THEIR_ROSTER))
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.partner.teamName).toBe("Tasha's Titans")
+    expect(state.data.target.name).toBe('Dalton Kincaid')
+  })
+
+  it('a Fleaflicker league does not name a holder for a colliding id, nor price anyone', async () => {
+    mockRosterFindMany.mockResolvedValue(onPlatform('fleaflicker', MY_ROSTER, THEIR_ROSTER))
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state.available).toBe(false)
+    expect(JSON.stringify(state)).not.toContain('Tasha')
+    expect(mockSportsPlayerFindMany).not.toHaveBeenCalled()
+  })
+
+  it('a Fleaflicker roster holding a colliding id is not called "already on your roster"', async () => {
+    const mine = { ...MY_ROSTER, playerData: { players: [...MY_ROSTER.playerData.players, KINCAID], starters: [] } }
+    mockRosterFindMany.mockResolvedValue(onPlatform('fleaflicker', mine, THEIR_ROSTER))
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state.available).toBe(false)
+    if (state.available) return
+    expect(state.reason).not.toContain('already on your roster')
+  })
+
+  it('a Fleaflicker league says it cannot tell who holds him — never "claim him"', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'fleaflicker' })
+    mockRosterFindMany.mockResolvedValue(onPlatform('fleaflicker', MY_ROSTER, THEIR_ROSTER))
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state.available).toBe(false)
+    if (state.available) return
+    expect(state.reason).not.toMatch(/claim him/)
+    expect(state.reason).toMatch(/can't tell who holds him/)
+  })
+})

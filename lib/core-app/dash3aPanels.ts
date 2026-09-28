@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildRosterIdMap } from './rosterIdMatch'
+import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekProgress } from './leagueWeekProgress'
 
@@ -158,7 +159,7 @@ export async function getCrossLeagueExposure(
           platformUserId: { in: rosterCandidates(t, userId) },
         })),
       },
-      select: { leagueId: true, playerData: true },
+      select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
     })
     .catch(fellBack)
 
@@ -180,7 +181,9 @@ export async function getCrossLeagueExposure(
     seen.add(r.leagueId)
     rostersRead += 1
 
-    const pd = (r.playerData ?? {}) as Record<string, unknown>
+    // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id; such a roster
+    // still counts toward the denominator (so "every roster" stays honest) but names nobody.
+    const pd = (sleeperReadablePlayerData(r.league?.platform, r.playerData) ?? {}) as Record<string, unknown>
     const starters = new Set(asIds(pd.starters).filter(isResolvableId))
     const all = new Set(
       [...asIds(pd.players), ...starters, ...asIds(pd.reserve), ...asIds(pd.taxi)].filter(

@@ -220,3 +220,36 @@ describe('league grounding packet — viewer roster', () => {
     expect(packet.rosters).toBeNull()
   })
 })
+
+/*
+ * A Fleaflicker roster id is a short number in Sleeper's range: '4034' on a Fleaflicker roster is
+ * NOT Sleeper's '4034' (Patrick Mahomes in the fake player table). Chimmy must not be told he is
+ * on the user's team.
+ */
+describe('league grounding packet — foreign roster ids', () => {
+  const rosterFor = (platform: string) => ({
+    roster: {
+      findFirst: vi.fn(async () => ({ playerData: PLAYER_DATA, settings: {}, league: { platform } })),
+    },
+  })
+
+  it('does not name the Sleeper player who shares a Fleaflicker roster id', async () => {
+    const { prisma, sportsPlayerCalls } = basePrisma(rosterFor('fleaflicker'))
+    const packet = await buildPacket(prisma)
+    const roster = packet.rosters![0]
+    const names = [...roster.starters, ...roster.bench].map((p) => p.playerName)
+    expect(names).not.toContain('Patrick Mahomes')
+    expect(names).not.toContain('Justin Jefferson')
+    // Still on the roster, honestly unidentified — not dropped.
+    expect(names).toContain('Unidentified player (4034)')
+    expect([...roster.starters, ...roster.bench]).toHaveLength(4)
+    expect(JSON.stringify(sportsPlayerCalls)).not.toContain('4034')
+  })
+
+  it('CONTROL: the same ids in a Sleeper league ARE named', async () => {
+    const { prisma } = basePrisma(rosterFor('sleeper'))
+    const packet = await buildPacket(prisma)
+    const roster = packet.rosters![0]
+    expect(roster.starters.map((p) => p.playerName)).toContain('Patrick Mahomes')
+  })
+})

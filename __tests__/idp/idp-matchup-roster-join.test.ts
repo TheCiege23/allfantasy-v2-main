@@ -23,11 +23,11 @@ const SCORING = { idp_tkl_solo: 1, idp_sack: 4, idp_int: 6, pass_td: 4, rec: 1 }
 
 type Roster = { id: string; platformUserId: string | null; playerData: unknown }
 
-function fakePrisma(rosters: Roster[], teams: Array<Record<string, unknown>>) {
+function fakePrisma(rosters: Roster[], teams: Array<Record<string, unknown>>, platform = 'sleeper') {
   const ok = <T>(v: T) => Promise.resolve(v)
   return {
     league: {
-      findUnique: () => ok({ id: LEAGUE, settings: { scoring_settings: SCORING } }),
+      findUnique: () => ok({ id: LEAGUE, settings: { scoring_settings: SCORING }, platform }),
       findFirst: () => ok(null),
     },
     leagueTeam: {
@@ -66,8 +66,8 @@ const TEAMS = [
   { externalId: '2', teamName: 'Theirs', platformUserId: null, claimedByUserId: null },
 ]
 
-const run = (rosters: Roster[], teams = TEAMS) =>
-  loadIdpMatchup({ prisma: fakePrisma(rosters, teams), leagueId: LEAGUE, userId: USER, season: 2026, week: 2 })
+const run = (rosters: Roster[], teams = TEAMS, platform = 'sleeper') =>
+  loadIdpMatchup({ prisma: fakePrisma(rosters, teams, platform), leagueId: LEAGUE, userId: USER, season: 2026, week: 2 })
 
 describe('loadIdpMatchup roster join', () => {
   it('🛑 fields an opponent whose roster is under the orphan key', async () => {
@@ -103,5 +103,34 @@ describe('loadIdpMatchup roster join', () => {
     const out = await run([{ id: 'r1', platformUserId: 'someone-else', playerData: { players: [] } }])
     expect(out.state).toBe('no_matchup')
     expect(out.notes.join(' ')).toMatch(/no rosters imported/i)
+  })
+})
+
+/*
+ * A Fleaflicker/MFL/Fantrax/Yahoo roster id is a short number in Sleeper's range. The player table
+ * above answers ANY id as a Sleeper id — exactly the collision: read raw, '6038' on a Fleaflicker
+ * roster is scored and named as Sleeper's '6038'.
+ */
+describe('loadIdpMatchup — foreign roster ids', () => {
+  const ROSTERS: Roster[] = [
+    { id: 'r1', platformUserId: 'me-sleeper', playerData: { players: ['6038'] } },
+    { id: 'r2', platformUserId: 'orphan-fleaflicker-2', playerData: { source_team_id: '2', players: ['4034'] } },
+  ]
+
+  it('does not name or score the Sleeper players who share Fleaflicker roster ids', async () => {
+    const out = await run(ROSTERS, TEAMS, 'fleaflicker')
+    const names = [...(out.you?.players ?? []), ...(out.opponent?.players ?? [])].map((p) => p.name)
+    expect(names).not.toContain('Player 6038')
+    expect(names).not.toContain('Player 4034')
+    expect(out.state).toBe('no_matchup')
+    // And it does not claim the rosters were never imported.
+    expect(out.notes.join(' ')).not.toMatch(/no rosters imported/i)
+    expect(out.notes.join(' ')).toMatch(/cannot be matched/i)
+  })
+
+  it('CONTROL: the same ids in a Sleeper league ARE named', async () => {
+    const out = await run(ROSTERS, TEAMS, 'sleeper')
+    expect(out.you?.players.map((p) => p.name)).toEqual(['Player 6038'])
+    expect(out.opponent?.players.map((p) => p.name)).toEqual(['Player 4034'])
   })
 })
