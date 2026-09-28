@@ -1,0 +1,87 @@
+/**
+ * The native iOS app (Capacitor shell in `ios-app/`) is the website in a
+ * WKWebView. It identifies itself by appending this marker to the WebView's
+ * User-Agent (`ios.appendUserAgent` in ios-app/capacitor.config.json).
+ *
+ * WHY IT MATTERS — App Store Review Guideline 3.1.1: digital subscriptions,
+ * tokens and donations bought inside an iOS app must go through Apple's in-app
+ * purchase. We sell those through Stripe, so inside the app every purchase
+ * surface is closed: pages redirect to /ios-app/plans, checkout APIs refuse,
+ * and links to them are hidden (`html[data-ios-app]` rules in globals.css).
+ * Anything an account has already bought keeps working — only BUYING is off.
+ *
+ * Guideline 4.8 is the second reason: Sign in with Apple is not live, and an
+ * app that offers Google/Facebook/X/Discord/Spotify sign-in must also offer
+ * it. Inside the app those buttons are hidden, leaving email sign-in.
+ *
+ * ⚠ A User-Agent can be forged, and that is fine HERE because the gate only
+ * ever takes things AWAY. Spoofing the marker gets you a website you cannot
+ * pay on; removing it gets you the normal website. Never use this marker to
+ * GRANT anything — no gate exemption, no entitlement, no trust.
+ */
+
+export const IOS_APP_UA_MARKER = "AllFantasyiOS"
+
+export function isIosAppUserAgent(userAgent: string | null | undefined): boolean {
+  return typeof userAgent === "string" && userAgent.includes(IOS_APP_UA_MARKER)
+}
+
+/** Where a purchase page sends the iOS app. Must not itself be a purchase page. */
+export const IOS_APP_PLANS_PATH = "/ios-app/plans"
+
+/**
+ * Pages whose job is to take money. Prefix match on a path segment boundary.
+ * `/support` is the donation page (despite the name); `/contact` is support.
+ */
+export const IOS_APP_PURCHASE_PAGE_PREFIXES: readonly string[] = [
+  "/upgrade",
+  "/pricing",
+  "/commissioner-upgrade",
+  "/tokens",
+  "/donate",
+  "/support",
+]
+
+/** Survivor exile token shop — a page per league, so it needs a pattern. */
+const IOS_APP_PURCHASE_PAGE_PATTERNS: readonly RegExp[] = [/^\/survivor\/[^/]+\/exile\/tokens(?:\/|$)/]
+
+/**
+ * API routes that start a payment or hand the user to Stripe. Refused from the
+ * app so a purchase cannot start even from a button the CSS failed to hide.
+ */
+export const IOS_APP_PURCHASE_API_PREFIXES: readonly string[] = [
+  "/api/monetization/checkout",
+  "/api/stripe/create-checkout-session",
+  "/api/subscription/billing-portal",
+  "/api/donate",
+  "/api/bracket/donate",
+  "/api/marketplace/purchase",
+]
+
+const IOS_APP_PURCHASE_API_PATTERNS: readonly RegExp[] = [/^\/api\/leagues\/[^/]+\/finance\/entry-checkout(?:\/|$)/]
+
+function matchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`)
+}
+
+export function isIosAppPurchasePage(pathname: string): boolean {
+  return (
+    IOS_APP_PURCHASE_PAGE_PREFIXES.some((p) => matchesPrefix(pathname, p)) ||
+    IOS_APP_PURCHASE_PAGE_PATTERNS.some((r) => r.test(pathname))
+  )
+}
+
+export function isIosAppPurchaseApi(pathname: string): boolean {
+  return (
+    IOS_APP_PURCHASE_API_PREFIXES.some((p) => matchesPrefix(pathname, p)) ||
+    IOS_APP_PURCHASE_API_PATTERNS.some((r) => r.test(pathname))
+  )
+}
+
+/**
+ * Runs before first paint (inline in the root layout) so hidden purchase links
+ * never flash. Kept here so the marker is spelled once.
+ */
+export const IOS_APP_HTML_FLAG_SCRIPT = `try{if(navigator.userAgent.indexOf(${JSON.stringify(
+  IOS_APP_UA_MARKER,
+)})!==-1)document.documentElement.setAttribute("data-ios-app","1")}catch(e){}`

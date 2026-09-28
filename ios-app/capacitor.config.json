@@ -1,0 +1,31 @@
+{
+  "appId": "ai.allfantasy.app",
+  "appName": "AllFantasy",
+  "webDir": "www",
+  "server": {
+    "url": "https://allfantasy.ai/core",
+    "allowNavigation": [
+      "allfantasy.ai",
+      "www.allfantasy.ai"
+    ],
+    "errorPath": "offline.html"
+  },
+  "ios": {
+    "appendUserAgent": "AllFantasyiOS/1.0",
+    "contentInset": "never",
+    "backgroundColor": "#020617",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "backgroundColor": "#000000",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#020617",
+      "overlaysWebView": false
+    }
+  }
+}
