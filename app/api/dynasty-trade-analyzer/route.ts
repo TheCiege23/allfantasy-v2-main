@@ -34,9 +34,9 @@ function labelAssets(raw: unknown, fallbackSide: string): LabelAsset[] {
   if (Array.isArray(raw)) {
     return raw
       .filter((a): a is { name: unknown; type?: unknown } => Boolean(a) && typeof a === 'object')
-      .map((a) => ({
+      .map((a): LabelAsset => ({
         name: String(a.name ?? ''),
-        type: a.type === 'player' || a.type === 'pick' ? a.type : null,
+        type: a.type === 'player' ? 'player' : a.type === 'pick' ? 'pick' : null,
       }))
       .filter((a) => a.name.trim().length > 0)
   }
