@@ -21,18 +21,35 @@ describe('decisionFormatBlock', () => {
     expect(decisionFormatBlock(row({ bestBallMode: true }), kind)).toBeNull()
   })
 
+  /* The catalog says "no trades" for exactly these. Production: 1 survivor-guillotine, 18 tournament. */
+  it.each([
+    ['survivor guillotine, confirmed on a guillotine chassis', row({ leagueType: 'guillotine', settings: { leagueTypeConfirmation: { type: 'survivor_guillotine' } } }), 'no trades'],
+    ['tournament, confirmed', row({ leagueType: 'tournament', settings: { leagueTypeConfirmation: { type: 'tournament' } } }), 'not rosters that trade'],
+    ['tournament by stored type', row({ leagueType: 'tournament' }), 'not rosters that trade'],
+  ])('refuses a trade in %s, with the catalog\'s reason', (_name, league, reason) => {
+    expect(leagueForbidsTrades(league)).toBe(true)
+    const block = decisionFormatBlock(league, 'trade')
+    expect(block?.code).toBe('trades_not_allowed')
+    expect(block?.detail).toContain(reason)
+  })
+
+  /*
+   * 🛑 THE FIRST VERSION REFUSED ALL FOUR OF THESE, copying the Player Finder's guillotine/survivor test.
+   * The catalog says trading is legal in both formats (16 production leagues).
+   */
   it.each([
     ['guillotine by stored type', row({ leagueType: 'guillotine' })],
     ['guillotine confirmed in settings', row({ leagueType: 'guillotine', settings: { leagueTypeConfirmation: { type: 'guillotine' } } })],
-    ['survivor guillotine, confirmed', row({ leagueType: 'guillotine', settings: { leagueTypeConfirmation: { type: 'survivor_guillotine' } } })],
     ['survivor', row({ leagueType: 'survivor' })],
-  ])('refuses a trade in %s', (_name, league) => {
-    expect(leagueForbidsTrades(league)).toBe(true)
-    expect(decisionFormatBlock(league, 'trade')?.code).toBe('trades_not_allowed')
+    // The catalog's best-ball entry says "typically draft-and-hold"; best-ball permissions are unverified.
+    ['best ball by stored type', row({ leagueType: 'best_ball' })],
+  ])('answers a trade in %s: legal per the catalog, or (best ball) unverified', (_name, league) => {
+    expect(leagueForbidsTrades(league)).toBe(false)
+    expect(decisionFormatBlock(league, 'trade')).toBeNull()
   })
 
-  it.each(['waiver', 'lineup'] as const)('leaves a guillotine %s alone', (kind) => {
-    expect(decisionFormatBlock(row({ leagueType: 'guillotine' }), kind)).toBeNull()
+  it.each(['waiver', 'lineup'] as const)('leaves a survivor-guillotine %s alone', (kind) => {
+    expect(decisionFormatBlock(row({ leagueType: 'guillotine', settings: { leagueTypeConfirmation: { type: 'survivor_guillotine' } } }), kind)).toBeNull()
   })
 
   it.each([

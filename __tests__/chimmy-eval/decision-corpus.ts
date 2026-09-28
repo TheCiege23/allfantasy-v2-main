@@ -49,7 +49,7 @@ import type { LineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
  * input changed. `synthetic` cases are written to cover a rule, and say which.
  */
 
-export type LeagueFormat = 'redraft' | 'dynasty' | 'best_ball' | 'best_ball_dynasty' | 'idp' | 'guillotine' | 'survivor_guillotine' | 'survivor'
+export type LeagueFormat = 'redraft' | 'dynasty' | 'best_ball' | 'best_ball_dynasty' | 'idp' | 'guillotine' | 'survivor_guillotine' | 'survivor' | 'tournament'
 export type CaseSource = 'owner' | 'counterfactual' | 'synthetic'
 
 /** What a verdict looks like once parsed from the answer text. */
@@ -142,7 +142,8 @@ export function snapshot(format: LeagueFormat): LeagueSnapshotFixture {
   const leagueType =
     format === 'guillotine' || format === 'survivor_guillotine' ? 'guillotine'
       : format === 'survivor' ? 'survivor'
-        : dynasty ? 'dynasty' : 'redraft'
+        : format === 'tournament' ? 'tournament'
+          : dynasty ? 'dynasty' : 'redraft'
   return {
     id: 'proven-league',
     sport: 'NFL',
@@ -153,7 +154,8 @@ export function snapshot(format: LeagueFormat): LeagueSnapshotFixture {
     settings:
       format === 'guillotine' ? { leagueTypeConfirmation: { type: 'guillotine' } }
         : format === 'survivor_guillotine' ? { leagueTypeConfirmation: { type: 'survivor_guillotine' } }
-          : {},
+          : format === 'tournament' ? { leagueTypeConfirmation: { type: 'tournament' } }
+            : {},
     bestBallMode: format === 'best_ball' || format === 'best_ball_dynasty',
   }
 }
@@ -490,8 +492,31 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     engine: {
       trade: { 'Should I trade Kyren Williams for Garrett Wilson in my guillotine league?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) },
     },
-    // Was READY, YES and CHARGED until `decisionFormatGate` (2026-09-28).
-    expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none', says: ['does not allow trades', 'not charged'] },
+    /*
+     * 🛑 A PLAIN GUILLOTINE LEAGUE TRADES. The catalog marks trading legal and `trade-intel/guillotine.ts`
+     * prices it by weeks left. The first version of the format gate refused this case: it copied the
+     * Player Finder's guillotine/survivor test, and this expectation encoded that mistake. It was caught
+     * against the catalog before merge. Only survivor-guillotine and tournament forbid trades (below).
+     */
+    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge', extraction: 'Should I trade Kyren Williams for Garrett Wilson in my guillotine league?' },
+  },
+  {
+    id: 'survivor-guillotine-trade',
+    format: 'survivor_guillotine',
+    source: 'synthetic',
+    question: 'Should I trade Kyren Williams for Garrett Wilson?',
+    engine: { trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) } },
+    // Was READY, YES and CHARGED until `decisionFormatGate` (2026-09-28). The reason is the catalog's own.
+    expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none', says: ['does not allow trades', 'FAAB is the only way', 'not charged'] },
+  },
+  {
+    id: 'tournament-trade',
+    format: 'tournament',
+    source: 'synthetic',
+    // 18 production leagues. The first gate missed every one of them.
+    question: 'Should I trade Kyren Williams for Garrett Wilson?',
+    engine: { trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) } },
+    expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none', says: ['not rosters that trade'] },
   },
   {
     id: 'survivor-guillotine-trade-target',
@@ -503,13 +528,22 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none' },
   },
   {
-    id: 'survivor-trade-screenshot',
-    format: 'survivor',
+    id: 'survivor-guillotine-trade-screenshot',
+    format: 'survivor_guillotine',
     source: 'synthetic',
     question: 'Should I accept this trade?',
     screenshot: 'Trade gives: Kyren Williams\nTrade receives: Garrett Wilson',
     engine: { trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) } },
     expect: { kind: 'trade', status: 'needs_data', gap: 'trades_not_allowed', verdict: 'none', billing: 'free', extraction: 'none' },
+  },
+  {
+    id: 'survivor-trade-answered',
+    format: 'survivor',
+    source: 'synthetic',
+    // The catalog recommends tribemate deals before the merge. A survivor trade question gets a verdict.
+    question: 'Should I trade Kyren Williams for Garrett Wilson?',
+    engine: { trade: { 'Should I trade Kyren Williams for Garrett Wilson?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) } },
+    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge', extraction: 'Should I trade Kyren Williams for Garrett Wilson?' },
   },
   {
     id: 'guillotine-waiver-still-answered',
@@ -777,8 +811,8 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     },
   },
   {
-    id: 'compound-in-guillotine',
-    format: 'guillotine',
+    id: 'compound-in-survivor-guillotine',
+    format: 'survivor_guillotine',
     source: 'synthetic',
     // The format gate applies to the clause answered, and the unanswered waiver clause is still named.
     question: 'Should I trade Kyren Williams for Garrett Wilson, and should I add Jaylen Warren and drop Tyjae Spears?',

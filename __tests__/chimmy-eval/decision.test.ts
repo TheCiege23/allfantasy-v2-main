@@ -202,7 +202,7 @@ describe('the decision corpus is honest about itself', () => {
 
   /* The handoff names these families. Pinned so a trim cannot quietly drop one. */
   it.each([
-    ['redraft', 10], ['dynasty', 2], ['idp', 6], ['best_ball', 4], ['best_ball_dynasty', 1], ['guillotine', 2], ['survivor_guillotine', 1], ['survivor', 1],
+    ['redraft', 10], ['dynasty', 2], ['idp', 6], ['best_ball', 4], ['best_ball_dynasty', 1], ['guillotine', 2], ['survivor_guillotine', 4], ['survivor', 1], ['tournament', 1],
   ] as const)('covers %s with at least %i cases', (format, min) => {
     expect(DECISION_CORPUS.filter((c) => c.format === format).length).toBeGreaterThanOrEqual(min)
   })
