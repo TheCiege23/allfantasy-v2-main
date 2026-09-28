@@ -95,9 +95,25 @@ describe('shared consequential-answer contract', () => {
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'engine_unavailable' } })
     expect(out?.answer).not.toContain('private database')
   })
-  it('does not guess an add or FAAB bid when no move was resolved', async () => {
+  /*
+   * It never guessed a bid, and still does not. But it used to REFUSE ("name the player to add and
+   * drop"), a free dead end for a strategy question. It now steps aside (null), so the full answer
+   * path takes the question with the roster, waiver-pool and FAAB tools (2026-09-28).
+   */
+  it('hands a FAAB question that names no move to the full answer, instead of refusing it', async () => {
     const out = await prepareChimmyDecisionAnswer({ question: 'How much FAAB should I bid?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toBeNull()
+    expect(h.waiver).toHaveBeenCalled()
+  })
+  it('still answers a NAMED waiver move the engine could not resolve, precisely and free', async () => {
+    h.waiver.mockResolvedValue({ kind: 'waiver', status: 'unresolved', reason: 'add_rostered', detail: 'Jaylen Warren is already on a roster.' })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I pick up Jaylen Warren?', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'add_rostered' } })
+  })
+  it('still asks a trade question to name its sides', async () => {
+    const out = await prepareChimmyDecisionAnswer({ question: 'Should I make a trade?', leagueId: 'l1', userId: 'u1' })
     expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'decision_inputs_required' } })
+    expect(out?.answer).toContain('Name what you give and receive')
   })
   it('keeps trade discovery available with engine-generated offers and explicit limits', async () => {
     h.finder.mockResolvedValue({ status: 'ready', you: { teamName: 'My team' }, ideas: [{ partnerTeam: 'Partner', give: [{ name: 'Chase' }], get: [{ name: 'Jefferson' }], giveTotal: 100, getTotal: 101, fairness: 'balanced', why: ['Fits a WR need.'], sendable: true }] })
