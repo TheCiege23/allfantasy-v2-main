@@ -24,3 +24,25 @@ it('merges full-name and abbreviation fixtures and retains their provider odds',
   expect(rows[0].game?.awayLogo).toMatch(/hou\.png$/)
   expect(rows[0].game?.odds).toContain('O/U 45')
 })
+
+/*
+ * The odds slot fires 20-27 minutes late (measured 2026-09-28), so a strict one-hour read blanked
+ * the line between fires. A line up to three hours old is shown, and says its age past one hour.
+ */
+it('shows a line older than an hour, marked with when it was quoted', async () => {
+  h.games.mockResolvedValue([{ sport: 'NFL', source: 'espn', externalId: '9', startTime: new Date('2026-09-29T00:15:00Z'), week: 3, awayTeam: 'PHI', homeTeam: 'CHI' }])
+  h.odds.mockResolvedValue([{ sport: 'NFL', source: 'espn', gameExternalId: '9', spreadHome: 3.5, totalPoints: 42.5, fetchedAt: new Date('2026-09-28T11:33:00Z') }])
+  const now = new Date('2026-09-28T12:36:00Z')
+  const row = (await getTodayStrip('u', [{ id: 'l', sport: 'NFL' }], now)).next24[0]
+  expect(row.game?.odds).toBe('PHI favored by 3.5 · O/U 42.5 · line as of 7:33 AM ET')
+  const where = h.odds.mock.calls.at(-1)?.[0]?.where
+  expect(where.expiresAt).toBeUndefined()
+  expect(where.fetchedAt.gte.toISOString()).toBe('2026-09-28T09:36:00.000Z')
+})
+
+it('does not mark a line inside the hour', async () => {
+  h.games.mockResolvedValue([{ sport: 'NFL', source: 'espn', externalId: '9', startTime: new Date('2026-09-29T00:15:00Z'), week: 3, awayTeam: 'PHI', homeTeam: 'CHI' }])
+  h.odds.mockResolvedValue([{ sport: 'NFL', source: 'espn', gameExternalId: '9', spreadHome: 3.5, totalPoints: 42.5, fetchedAt: new Date('2026-09-28T12:00:00Z') }])
+  const row = (await getTodayStrip('u', [{ id: 'l', sport: 'NFL' }], new Date('2026-09-28T12:36:00Z'))).next24[0]
+  expect(row.game?.odds).toBe('PHI favored by 3.5 · O/U 42.5')
+})
