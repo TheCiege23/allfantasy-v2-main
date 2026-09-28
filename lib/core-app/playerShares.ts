@@ -6,6 +6,7 @@ import type { SectionState } from './leagueHome'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { readiness, type MoveTone } from './playerMoves'
 import { countShares, type RosterForShares } from './playerSharesRank'
+import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 
 /**
@@ -81,14 +82,19 @@ export async function loadPlayerShares(
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
   ])
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
-  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other').map((l) => l.id))
+  // Fleaflicker / MFL read through the identity bridge when most of the league translates (bridgedRosterIds.ts);
+  // an unbridged id is dropped, never read raw. Everything else in another id space stays unsupported.
+  const bridged = await loadBridgedLeagues(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other'))
+  const bridgeMap = (leagueId: string) => (bridged.get(leagueId)?.readable ? bridged.get(leagueId)!.map : null)
+  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
 
   // Yours only: the roster whose platformUserId is one of THIS league's candidate ids, one per league.
   const mine = new Map<string, Record<string, unknown>>()
   for (const r of rawRosters) {
     if (mine.has(r.leagueId) || unsupported.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
-    mine.set(r.leagueId, (r.playerData ?? {}) as Record<string, unknown>)
+    const map = bridgeMap(r.leagueId)
+    mine.set(r.leagueId, map ? applyBridge(r.playerData, map) : ((r.playerData ?? {}) as Record<string, unknown>))
   }
   const espnLeagues = [...mine.keys()].filter((id) => rosterIdSpaceOf(platformOf.get(id)) === 'espn')
   const espnMap = await loadEspnToSleeperMap(collectRosterIds(espnLeagues.map((id) => mine.get(id))))

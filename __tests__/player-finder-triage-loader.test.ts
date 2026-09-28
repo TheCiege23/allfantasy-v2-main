@@ -206,3 +206,38 @@ describe('loadGameDayTriage', () => {
     expect(out.data.leaguesNotRead).toBe(10)
   })
 })
+
+/*
+ * Fleaflicker / MFL leagues read through the identity bridge (bridgedRosterIds.ts), exactly as the
+ * finder does. Their raw ids collide with Sleeper's — '6038' here is a real Sleeper id AND a
+ * Fleaflicker id — so a league is read only when most of its ids bridge, and an unbridged id is
+ * dropped rather than read raw.
+ */
+describe('loadGameDayTriage — bridged Fleaflicker leagues', () => {
+  const bridge = (pairs: Record<string, string>) =>
+    mockIdentityFindMany.mockImplementation(async ({ where }: { where: Record<string, { in?: string[] }> }) =>
+      (where.fleaflickerId?.in ?? []).filter((id) => pairs[id]).map((id) => ({ fleaflickerId: id, sleeperId: pairs[id] })),
+    )
+
+  it('a league the bridge covers is read — in Sleeper ids, never the colliding raw id', async () => {
+    wire([{ id: 'F1', name: 'Flea League', platform: 'fleaflicker', starters: ['6038', '777'] }])
+    bridge({ '6038': 'S-JAMARR', '777': 'S-MOSS' })
+    const out = await loadGameDayTriage(USER, ['F1'], NOW)
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.unsupportedLeagues).toBe(0)
+    expect(out.data.leaguesRead).toBe(1)
+    const ids = out.data.rows.map((r) => r.player.sleeperId).sort()
+    expect(ids).toEqual(['S-JAMARR', 'S-MOSS'])
+    expect(ids).not.toContain('6038')
+  })
+
+  it('a league below the coverage bar stays unsupported, and nothing in it is read', async () => {
+    wire([{ id: 'F2', name: 'Flea League', platform: 'fleaflicker', starters: ['6038', '777'] }])
+    bridge({ '6038': 'S-JAMARR' }) // 1 of 2 = 50% < 80%
+    const out = await loadGameDayTriage(USER, ['F2'], NOW)
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.unsupportedLeagues).toBe(1)
+    expect(out.data.leaguesRead).toBe(0)
+    expect(out.data.rows).toEqual([])
+  })
+})

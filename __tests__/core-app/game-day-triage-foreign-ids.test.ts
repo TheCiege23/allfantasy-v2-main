@@ -48,6 +48,9 @@ vi.mock('@/lib/prisma', () => ({
       ]),
     },
     sportsGame: { findMany: vi.fn(async () => []) },
+    // The identity bridge (bridgedRosterIds.ts): no Fleaflicker id bridges here, so the league
+    // stays unreadable — the collision this file guards must never be read raw.
+    playerIdentityMap: { findMany: vi.fn(async () => []) },
   },
 }))
 vi.mock('@/lib/core-app/sportsWeek', () => ({ resolveSportsWeek: vi.fn(async () => null) }))

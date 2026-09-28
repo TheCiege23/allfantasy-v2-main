@@ -147,3 +147,71 @@ describe('loadLeagueShareView', () => {
     expect(empty?.cells['400'].holder).toEqual({ kind: 'unknown' })
   })
 })
+
+/*
+ * Fleaflicker / MFL through the identity bridge (bridgedRosterIds.ts). '6038' is BOTH a Fleaflicker
+ * id and a real Sleeper id in the catalog — read raw it is a stranger. A league is read only when
+ * most of its ids bridge; an unbridged id is dropped.
+ */
+describe('shares — bridged Fleaflicker leagues', () => {
+  // Fleaflicker 6038 → Sleeper 100, 7000 → 300. Players with any fleaflicker id: 100, 300, 400.
+  const routeIdentity = () =>
+    db.identityFindMany.mockImplementation(async ({ where }: { where: Record<string, { in?: string[]; not?: null }> }) => {
+      if (where.fleaflickerId?.in) {
+        const pairs: Record<string, string> = { '6038': '100', '7000': '300' }
+        return where.fleaflickerId.in.filter((id) => pairs[id]).map((id) => ({ fleaflickerId: id, sleeperId: pairs[id] }))
+      }
+      if (where.sleeperId?.in && where.fleaflickerId) return where.sleeperId.in.filter((id) => ['100', '300', '400'].includes(id)).map((sleeperId) => ({ sleeperId }))
+      return []
+    })
+
+  it('the all-leagues board reads a bridged league in Sleeper ids, never the colliding raw id', async () => {
+    routeIdentity()
+    db.teamFindMany.mockResolvedValue([{ leagueId: 'F1', platformUserId: 'me-f1', externalId: '4' }])
+    db.leagueFindMany.mockResolvedValue([{ id: 'F1', platform: 'fleaflicker' }])
+    db.rosterFindMany.mockResolvedValue([{ leagueId: 'F1', platformUserId: 'me-f1', playerData: { starters: ['6038'], players: ['6038', '7000'] } }])
+    db.playerFindMany.mockImplementation(async ({ where }: { where: { sleeperId: { in: string[] } } }) => where.sleeperId.in.map((id) => catalog(id, `Player ${id}`)))
+    const out = await loadPlayerShares('me', ['F1'])
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.leaguesRead).toBe(1)
+    expect(out.data.unsupportedLeagues).toBe(0)
+    const ids = out.data.rows.map((r) => r.player.sleeperId).sort()
+    expect(ids).toEqual(['100', '300'])
+    expect(ids).not.toContain('6038')
+  })
+
+  it('one league: holders through the bridge; a miss is "free" only for a player the bridge can see', async () => {
+    routeIdentity()
+    db.leagueFindUnique.mockResolvedValue({ id: 'F1', name: 'Flea', platform: 'fleaflicker', settings: {} })
+    db.rosterFindMany.mockResolvedValue([
+      { leagueId: 'F1', platformUserId: 'me-f1', playerData: { starters: ['6038'], players: ['6038'] } },
+      { leagueId: 'F1', platformUserId: 'rival', playerData: { players: ['7000'] } },
+    ])
+    db.teamFindMany.mockResolvedValue([
+      { id: 't1', externalId: '4', platformUserId: 'me-f1', claimedByUserId: 'me', ownerName: 'guap', teamName: 'Cafe' },
+      { id: 't2', externalId: '5', platformUserId: 'rival', claimedByUserId: null, ownerName: 'tasha', teamName: 'Titans' },
+    ])
+    db.statFindMany.mockResolvedValue([])
+    mockValueMap.mockResolvedValue(new Map())
+    const rows = ['100', '300', '400', '500'].map((id) => ({ player: { sport: 'NFL', externalId: `x-${id}`, sleeperId: id, name: `P${id}`, position: 'WR', team: 'NYG', imageUrl: null }, leagues: 1, starts: 1, ir: 0, leagueIds: [], status: null, description: null }))
+    const v = await loadLeagueShareView('me', 'F1', rows, { season: 2026 })
+    expect(v?.cells['100'].holder).toEqual({ kind: 'you', slot: 'STARTER' })
+    expect(v?.cells['300'].holder).toMatchObject({ kind: 'other' })
+    expect(v?.cells['400'].holder).toEqual({ kind: 'free' }) // bridged, and on no roster
+    expect(v?.cells['500'].holder).toEqual({ kind: 'unknown' }) // no bridge id: we could not see him
+  })
+
+  it('CONTROL: a bridged league below the coverage bar is not read — every answer "unknown"', async () => {
+    db.identityFindMany.mockImplementation(async ({ where }: { where: Record<string, { in?: string[] }> }) =>
+      where.fleaflickerId?.in ? [{ fleaflickerId: '6038', sleeperId: '100' }] : [],
+    ) // 1 of 3 ids
+    db.leagueFindUnique.mockResolvedValue({ id: 'F1', name: 'Flea', platform: 'fleaflicker', settings: {} })
+    db.rosterFindMany.mockResolvedValue([{ leagueId: 'F1', platformUserId: 'me-f1', playerData: { players: ['6038', '7000', '8000'] } }])
+    db.teamFindMany.mockResolvedValue([])
+    db.statFindMany.mockResolvedValue([])
+    mockValueMap.mockResolvedValue(new Map())
+    const rows = ['100'].map((id) => ({ player: { sport: 'NFL', externalId: `x-${id}`, sleeperId: id, name: `P${id}`, position: 'WR', team: 'NYG', imageUrl: null }, leagues: 1, starts: 1, ir: 0, leagueIds: [], status: null, description: null }))
+    const v = await loadLeagueShareView('me', 'F1', rows, { season: 2026 })
+    expect(v?.cells['100'].holder).toEqual({ kind: 'unknown' })
+  })
+})
