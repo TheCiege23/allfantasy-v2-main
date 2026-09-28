@@ -1304,6 +1304,13 @@ describe('managerLabel', () => {
     expect(managerLabel('123456')).toBe('a manager')
   })
 
+  /* Production 2026-09-28: "UNKNOWN SENT" on the Trades board — an importer's placeholder word. */
+  it('treats a stored "Unknown" as no name, from either source', () => {
+    expect(managerLabel('Unknown')).toBe('a manager')
+    expect(managerLabel('Skullfuck', 'Unknown')).toBe('Skullfuck')
+    expect(managerLabel(null, ' unknown ')).toBe('a manager')
+  })
+
   it('prefers a resolved name over anything else', () => {
     expect(managerLabel('596439279961588352', 'TheCiege24')).toBe('TheCiege24')
     expect(managerLabel(null, 'Jordan')).toBe('Jordan')

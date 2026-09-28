@@ -134,8 +134,10 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                         </li>
                       ) : null}
                       {s.received.length === 0 ? (
-                        /* Never an empty column with an arrow pointing into it. */
-                        <li className="af-trade-more">nothing we can name</li>
+                        /* Never an empty column with an arrow pointing into it. "Nothing we can name" read
+                           as a defect under a real trade; the Trades board's wording says what it is —
+                           a FAAB-only side, or one the import did not capture. */
+                        <li className="af-trade-more">No players or picks on record — FAAB only, or not captured</li>
                       ) : null}
                     </ul>
                     {s.gradeBasis || s.gradeReason ? (
