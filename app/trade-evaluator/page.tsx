@@ -9,6 +9,12 @@ import { useSearchParams } from "next/navigation"
 import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
 import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
 import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
+import {
+  GradeLeaguePicker,
+  gradeLeagueOptions,
+  noLeagueGradeHint,
+  type GradeLeagueListRow,
+} from "@/components/trade-evaluator/GradeLeaguePicker"
 import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui"
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
 import type { NegotiationToolkit } from "@/lib/trade-engine/types"
@@ -124,6 +130,8 @@ interface TradeResult {
   negotiationSteps: string[]
   betterAlternatives: Array<{ teamId: string; whyBetter: string; tradeFramework: string; fitScore: number }>
   rawPayload: ApiTradeResponse
+  /** The league this evaluation was graded in, as sent — null means none was chosen. */
+  gradedLeagueId: string | null
 }
 
 interface ApiDriver {
@@ -345,7 +353,7 @@ function emptySide(name: string, firstPlayerName = ""): TradeSide {
   }
 }
 
-type LinkedLeague = {
+type LinkedLeague = GradeLeagueListRow & {
   id: string
   sleeperLeagueId?: string | null
   platformLeagueId?: string | null
@@ -442,7 +450,7 @@ function historicalNoteFor(payload: ApiTradeResponse, asOfDate: string): string 
   return `${base} On ${asOfDate}'s values the sender ${then > 0 ? "received" : "gave up"} about ${pct}% more value — a value comparison, not a grade.`
 }
 
-function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: string): TradeResult {
+function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: string): Omit<TradeResult, "gradedLeagueId"> {
   /*
    * 🛑 THE LETTER IS THE SERVER'S ONE GRADE, NOT ONE MADE HERE. This used to be
    * `gradeFromPercentDiff` over the route's composite totals — a third scale, computed in the
@@ -802,6 +810,7 @@ function TradeHubInner() {
   const [scoring, setScoring] = useState<ScoringFormat>("PPR")
   const [asOfDate, setAsOfDate] = useState("")
   const [linkedLeagueId, setLinkedLeagueId] = useState("")
+  const [leagueRows, setLeagueRows] = useState<LinkedLeague[]>([])
   const [phase, setPhase] = useState<PhaseKey>("plan")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TradeResult | null>(null)
@@ -830,21 +839,29 @@ function TradeHubInner() {
     }
   }, [result])
 
+  /*
+   * One read of the viewer's leagues serves both the `?leagueId=` link and the league picker the
+   * grade needs (`GradeLeaguePicker`). `summary=1` drops `settings`/`rosters` — ~94% of the payload
+   * — which nothing here reads.
+   */
   useEffect(() => {
-    if (!linkedLeagueIdParam) return
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch("/api/league/list")
+        const res = await fetch("/api/league/list?summary=1")
         if (!res.ok) return
         const data = (await res.json()) as { leagues?: LinkedLeague[] }
-        const league = (data.leagues ?? []).find(
+        if (cancelled) return
+        const rows = data.leagues ?? []
+        setLeagueRows(rows)
+        if (!linkedLeagueIdParam) return
+        const league = rows.find(
           (l) =>
             l.id === linkedLeagueIdParam ||
             l.sleeperLeagueId === linkedLeagueIdParam ||
             l.platformLeagueId === linkedLeagueIdParam
         )
-        if (!league || cancelled) return
+        if (!league) return
         // Only a unified (native League.id) row passes the API's membership
         // gate — a legacy/Sleeper-space id would 403 the whole evaluation.
         if (league.hasUnifiedRecord) {
@@ -861,6 +878,22 @@ function TradeHubInner() {
       cancelled = true
     }
   }, [linkedLeagueIdParam])
+
+  const gradeLeagues = useMemo(() => gradeLeagueOptions(leagueRows), [leagueRows])
+
+  /** Choosing a league re-labels format and scoring to its own, and drops a grade taken elsewhere. */
+  const chooseGradeLeague = useCallback(
+    (leagueId: string) => {
+      setLinkedLeagueId(leagueId)
+      setResult(null)
+      const league = leagueRows.find((l) => l.hasUnifiedRecord && String(l.unifiedLeagueId ?? l.id) === leagueId)
+      if (!league) return
+      setFormat(formatFromLinkedLeague(league))
+      const leagueScoring = scoringFromLinkedLeague(league)
+      if (leagueScoring) setScoring(leagueScoring)
+    },
+    [leagueRows]
+  )
 
   const resetTrade = useCallback(() => {
     setSender(emptySide("Sender Team"))
@@ -968,7 +1001,7 @@ function TradeHubInner() {
         throw new Error(data.message ?? data.error ?? `Trade evaluator returned ${response.status}`)
       }
 
-      setResult(mapApiResponse(data, response.headers, asOfDate))
+      setResult({ ...mapApiResponse(data, response.headers, asOfDate), gradedLeagueId: linkedLeagueId || null })
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : "Trade analysis failed.")
     } finally {
@@ -1086,6 +1119,9 @@ function TradeHubInner() {
 
         <div className="mt-6 rounded-3xl border border-white/8 bg-[#0c0c1e] p-5 sm:p-6">
           <div className="mb-4 text-xs font-bold uppercase tracking-[0.28em] text-white/45">League Settings</div>
+          <div className="mb-4 max-w-xl">
+            <GradeLeaguePicker options={gradeLeagues} value={linkedLeagueId} onChange={chooseGradeLeague} />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <label className="block">
               <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">Format</span>
@@ -1318,6 +1354,11 @@ function TradeHubInner() {
                   {result.gradeWithheld && (
                     <div data-testid="trade-grade-withheld" className="mt-3 text-xs text-amber-200/90">
                       Not graded. {result.gradeWithheld}
+                      {!result.gradedLeagueId ? (
+                        <span data-testid="trade-grade-no-league-hint" className="mt-1 block text-white/60">
+                          {noLeagueGradeHint(gradeLeagues.length)}
+                        </span>
+                      ) : null}
                     </div>
                   )}
                 </div>
