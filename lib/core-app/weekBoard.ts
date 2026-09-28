@@ -143,6 +143,23 @@ export type WeekMatchup = {
   } | null
   /** Completed weeks behind YOUR side of the projection. */
   yourSampleWeeks: number
+  /**
+   * THIS week's actual points, once either side has put one up. Null before kickoff.
+   *
+   * 🛑 WITHOUT THIS THE BOARD RANKED A MONDAY ON A SUNDAY-MORNING GUESS. Measured on production
+   * 2026-09-28: Cream Bowl showed "+29.6 · 78% to win" (the mean of prior weeks) while /core/matchup
+   * had its actual week-3 margin at +68.0. Once points exist the surfaces rank on them, the same as
+   * the Matchup screen, and the pre-week probability is no longer shown — it describes a game that
+   * has since been played.
+   */
+  live: {
+    you: number
+    them: number
+    /** Signed: positive means you are ahead on the scoreboard. */
+    margin: number
+    /** Both sides' week is settled (`finalized`). False while any game is still to play. */
+    final: boolean
+  } | null
   href: string
 }
 
@@ -1062,6 +1079,14 @@ export async function getWeekBoard(
       projection: null,
       form: null,
       yourSampleWeeks: mineProfile?.n ?? 0,
+      live: isScored(you)
+        ? {
+            you: you.pointsFor,
+            them: them.pointsFor,
+            margin: you.pointsFor - them.pointsFor,
+            final: you.finalized === true && them.finalized === true,
+          }
+        : null,
       href: `/core/matchup?league=${encodeURIComponent(meta.id)}`,
     }
 

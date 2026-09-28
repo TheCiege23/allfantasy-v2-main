@@ -261,6 +261,75 @@ function weekData(over: Partial<WeekBoardData> = {}): WeekBoardData {
 
 describe('WeekBoard', () => {
   /*
+   * Production 2026-09-28, Monday of week 3: Cream Bowl read "+29.6 · 78% to win" off prior-week
+   * means while /core/matchup had its week-3 score at +68.0. Once a week has points, rank on them.
+   */
+  it('ranks a scored week by the scoreboard, not the pre-week projection, and drops the stale %', () => {
+    const scored = weekMatchup({
+      leagueId: 'cb',
+      leagueName: 'Cream Bowl',
+      projection: { you: 110, them: 80.4, margin: 29.6, winProbability: 0.78 },
+      live: { you: 168, them: 100, margin: 68, final: false },
+    })
+    const { container } = render(
+      <WeekBoard
+        board={weekData({ leaning: [scored] })}
+        outlook={null}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('+68.0')
+    expect(text).toContain('so far')
+    expect(text).not.toContain('+29.6')
+    expect(text).not.toContain('78% to win')
+  })
+
+  it('says won/lost once both sides are final', () => {
+    const lost = weekMatchup({
+      leagueId: 'td',
+      leagueName: 'The Deep!',
+      projection: { you: 100, them: 95, margin: 5, winProbability: 0.6 },
+      live: { you: 90, them: 200.3, margin: -110.3, final: true },
+    })
+    const { container } = render(
+      <WeekBoard
+        board={weekData({ leaning: [lost] })}
+        outlook={null}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('−110.3')
+    expect(text).toContain('lost')
+  })
+
+  it('moves a scored league with too little history out of "not enough history" and into the columns', () => {
+    const young = weekMatchup({
+      leagueId: 'y',
+      leagueName: 'Its gonna be Maye 26',
+      projection: null,
+      live: { you: 120, them: 98.6, margin: 21.4, final: false },
+    })
+    const { container } = render(
+      <WeekBoard
+        board={weekData({ leaning: [], unprojected: [young] })}
+        outlook={null}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('+21.4')
+    expect(text).not.toMatch(/not enough history to call/i)
+  })
+
+  /*
    * The trailing column's whole purpose. Being 20 points down in a league you
    * cannot reach the playoffs in is not something to spend a Sunday on, and a
    * board that lists it anyway is back to being the 47-tile grid this replaced.
@@ -574,6 +643,29 @@ function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
 }
 
 describe('WaiversBoard', () => {
+  /*
+   * Production 2026-09-28, Monday: week-3 projections ranked with 13 of 14 week-3 games played, for
+   * claims that process for week 4. The feed holds one week, so the board says which one it prices.
+   */
+  it('says when the projection week is mostly played, and which week a claim is for', () => {
+    const { container } = render(
+      <WaiversBoard data={waiversData({ weekPlayed: { played: 13, total: 14 } })} allHref="/core/waivers?all=1" totalLeagues={65} />,
+    )
+    const note = container.querySelector('[data-testid="waivers-spent-week"]')?.textContent ?? ''
+    expect(note).toContain('Most of week 3 has been played (13 of 14')
+    expect(note).toContain('a claim that processes now is for week 4')
+  })
+
+  it('says nothing about a spent week early in the week, or with no schedule read', () => {
+    for (const weekPlayed of [{ played: 2, total: 14 }, null]) {
+      const { container, unmount } = render(
+        <WaiversBoard data={waiversData({ weekPlayed })} allHref="/core/waivers?all=1" totalLeagues={65} />,
+      )
+      expect(container.querySelector('[data-testid="waivers-spent-week"]')).toBeNull()
+      unmount()
+    }
+  })
+
   /*
    * ⚠ A 0% OWN RATE COMPUTED OVER FOUR LEAGUES WOULD CALL A WIDELY-ROSTERED
    * PLAYER A FREE AGENT. Below the denominator gate the loader carries null, and
