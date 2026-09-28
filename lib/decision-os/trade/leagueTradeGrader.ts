@@ -17,6 +17,7 @@ import {
 import { snapshotFromLoaded } from '@/lib/trade-value-console/quick-badges'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
+import { tradeValueAsOf, tradeValueSourceOf } from './valueSource'
 import { loadRosterNeedFactors, loadViewerNeedFactors, type NeedFactors } from '@/lib/trade-value/viewerNeedFactors'
 import { unpriceableReason, type GradeInputs } from './tradeGradeInputs'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
@@ -72,14 +73,30 @@ function movesOf(leagueGrade: LeagueGrade): TradeGradeMove[] {
   return out
 }
 
-function linesOf(leagueGrade: LeagueGrade): TradeGradeLine[] {
-  const one = (side: 'give' | 'get') => (l: TradeConsolePlayerLine): TradeGradeLine => ({
-    side,
-    name: l.name,
-    marketValue: l.unpriced ? null : l.marketValue,
-    leagueValue: l.leagueValue ?? null,
-    source: l.dataSource ?? null,
-  })
+/**
+ * The grade's lines, each with the evidence that priced it and when that evidence was captured
+ * (`./valueSource.ts`). `priced` is index-aligned with the lines — `gradeOnLeagueValue` maps its input
+ * lines in order — so each line reads the `PricedAsset` it came from. Exported for tests.
+ */
+export function linesOf(
+  leagueGrade: Pick<LeagueGrade, 'giveLines' | 'getLines'>,
+  priced: { give: ReadonlyArray<PricedAsset>; get: ReadonlyArray<PricedAsset> } = { give: [], get: [] },
+  chartSyncedAt: string | null = null,
+): TradeGradeLine[] {
+  const one = (side: 'give' | 'get') => (l: TradeConsolePlayerLine, i: number): TradeGradeLine => {
+    const valueSource = tradeValueSourceOf(priced[side][i], l)
+    const scope = l.projectionScope
+    return {
+      side,
+      name: l.name,
+      marketValue: l.unpriced ? null : l.marketValue,
+      leagueValue: l.leagueValue ?? null,
+      source: l.dataSource ?? null,
+      valueSource,
+      valueAsOf: tradeValueAsOf(valueSource, chartSyncedAt),
+      valueScope: valueSource === 'league_idp' && scope?.season && scope?.week ? `${scope.season} week ${scope.week}` : null,
+    }
+  }
   return [...leagueGrade.giveLines.map(one('give')), ...leagueGrade.getLines.map(one('get'))]
 }
 
@@ -170,7 +187,7 @@ export async function gradePricedSides(args: {
     scoringApplied: leagueGrade.valueBasis.scoringAdjusted,
     needApplied: leagueGrade.valueBasis.needAdjusted,
     needGap: args.need ? needFactors?.gap ?? null : null,
-    lines: linesOf(leagueGrade),
+    lines: linesOf(leagueGrade, { give: args.givePriced, get: args.getPriced }, chart.fcSyncedAt ?? null),
     moves: movesOf(leagueGrade),
     withheld,
   })

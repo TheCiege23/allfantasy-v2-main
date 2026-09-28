@@ -38,6 +38,7 @@ import {
   type GradeLetter,
 } from '@/lib/trade-intel/gradeScale'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import type { TradeValueSource } from './valueSource'
 
 export type TradeGradeAction = 'accept' | 'review' | 'counter' | 'decline'
 
@@ -49,8 +50,17 @@ export type TradeGradeLine = {
   name: string
   marketValue: number | null
   leagueValue: number | null
-  /** Where the price came from (`fantasycalc`, `idp_league`, …). Absent on views built before 2026-09-26. */
+  /**
+   * The PLAYER RECORD's origin (`sleeper`, `fantasycalc+rolling`, `fantasycalc_pick`, …) — not the
+   * value's. Kept for compatibility; read `valueSource` for where the price came from.
+   */
   source?: string | null
+  /** WHICH evidence priced this asset (`./valueSource.ts`). Null when unpriced; absent before 2026-09-28. */
+  valueSource?: TradeValueSource | null
+  /** When that evidence was captured (ISO). Only a market chart has one; null for league math or undated sources. */
+  valueAsOf?: string | null
+  /** The period a league-computed value projects over, e.g. "2026 week 3" for a defender. */
+  valueScope?: string | null
 }
 
 /** One asset whose league value differs from its market value, and why. */

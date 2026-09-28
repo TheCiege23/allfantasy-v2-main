@@ -69,8 +69,9 @@ describe('gradeNcaafRedraftDeal — points over the best free agent, for the wee
     expect(view.giveValue).toBe(80)
     expect(view.getValue).toBe(100)
     expect(view.lines).toEqual([
-      { side: 'give', name: 'Arch Manning', marketValue: 80, leagueValue: 80, source: 'ncaaf-redraft-vorp' },
-      { side: 'get', name: 'Jeremiah Smith', marketValue: 100, leagueValue: 100, source: 'ncaaf-redraft-vorp' },
+      // Every line names its evidence; college projections are computed at grading, so they carry no date.
+      { side: 'give', name: 'Arch Manning', marketValue: 80, leagueValue: 80, source: 'ncaaf-redraft-vorp', valueSource: 'ncaaf_projection', valueAsOf: null },
+      { side: 'get', name: 'Jeremiah Smith', marketValue: 100, leagueValue: 100, source: 'ncaaf-redraft-vorp', valueSource: 'ncaaf_projection', valueAsOf: null },
     ])
     expect(view.percentDiff).toBe(20)
     expect(view.basis).toMatch(/weeks 6–15 of the 2026 college season/)
