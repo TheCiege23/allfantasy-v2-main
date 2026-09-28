@@ -309,4 +309,30 @@ describe('🛑 Sleeper historical draft sync — each pick records who owned the
     expect(rows[0]!.metadata).toEqual({ ownerSleeperId: 'sl-a' })
     expect(rows[1]).not.toHaveProperty('metadata')
   })
+
+  /*
+   * 🛑 THE KEEPER FLAG WAS FETCHED AND THROWN AWAY (2026-09-28). Sleeper slots a kept player into
+   * the draft with `is_keeper: true`, so his round IS what keeping him cost. Every keeper league we
+   * grade is a Sleeper import, and without this flag none of them had a keeper cost on file.
+   */
+  it('keeps Sleeper’s keeper flag on a kept pick — and only on a kept pick', async () => {
+    vi.mocked(getLeagueRosters).mockResolvedValueOnce([
+      { roster_id: 1, owner_id: 'sl-a' },
+      { roster_id: 2, owner_id: null },
+    ] as never)
+    vi.mocked(getLeagueDrafts).mockResolvedValueOnce([{ draft_id: 'd-2024' }] as never)
+    vi.mocked(getDraftPicks).mockResolvedValueOnce([
+      { player_id: 'p1', round: 5, pick_no: 49, roster_id: 1, is_keeper: true },
+      { player_id: 'p2', round: 5, pick_no: 50, roster_id: 1, is_keeper: null },
+      // A keeper on an orphaned team: the flag survives without an owner.
+      { player_id: 'p3', round: 9, pick_no: 98, roster_id: 2, is_keeper: true },
+    ] as never)
+
+    await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+
+    const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
+    expect(rows[0]!.metadata).toEqual({ ownerSleeperId: 'sl-a', isKeeper: true })
+    expect(rows[1]!.metadata).toEqual({ ownerSleeperId: 'sl-a' })
+    expect(rows[2]!.metadata).toEqual({ isKeeper: true })
+  })
 })
