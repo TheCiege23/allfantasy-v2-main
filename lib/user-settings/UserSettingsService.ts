@@ -1,3 +1,4 @@
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import type {
@@ -46,7 +47,7 @@ function isProviderConfigured(providerId: SignInProviderId): boolean {
         process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       )
     case "apple":
-      return !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+      return hasAppleSignInCredentials()
     case "facebook":
     case "spotify":
     case "instagram":

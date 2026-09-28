@@ -1,3 +1,4 @@
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -98,7 +99,7 @@ export async function DELETE(
           : id === "spotify"
             ? !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET)
           : id === "apple"
-            ? !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+            ? hasAppleSignInCredentials()
             : false,
         linked,
         disconnectable,
@@ -142,7 +143,7 @@ export async function DELETE(
         : id === "spotify"
           ? !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET)
         : id === "apple"
-          ? !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+          ? hasAppleSignInCredentials()
           : false,
       linked,
       disconnectable,
