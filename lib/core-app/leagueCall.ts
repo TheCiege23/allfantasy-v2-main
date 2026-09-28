@@ -1,4 +1,5 @@
 import { kickoffClock } from './lineupLock'
+import { lineupFixLink, type PlatformLink } from './platformLinks'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import { playerLock, type Kickoffs } from './swapLegality'
 import type { MoveTone } from './playerMoves'
@@ -33,6 +34,11 @@ export type LeagueCall = {
   why: string
   /** The swap that makes the call, when one exists: who comes in and who goes out (Sleeper ids). */
   swap: { startId: string; startName: string; benchId: string; benchName: string } | null
+  /**
+   * Where to make the change: the platform's VERIFIED lineup screen, or a native league's in-app
+   * editor (platformLinks.lineupFixLink) — null when neither exists (MFL / Fantrax / Fleaflicker).
+   */
+  fix?: PlatformLink | null
 }
 
 function fmt(n: number): string {
@@ -67,7 +73,19 @@ export function leagueCall(args: {
   nowIso: string
 }): LeagueCall {
   const { impact, player, readinessTone, kickoffs, nowIso } = args
-  const base = { leagueId: impact.leagueId, leagueName: impact.leagueName, platform: impact.platform }
+  const base = {
+    leagueId: impact.leagueId,
+    leagueName: impact.leagueName,
+    platform: impact.platform,
+    fix: lineupFixLink({
+      id: impact.leagueId,
+      platform: impact.platform,
+      platformLeagueId: impact.platformLeagueId,
+      season: impact.season,
+      name: impact.leagueName,
+      teamId: impact.teamExternalId,
+    }),
+  }
   const lock = playerLock(player.team, kickoffs, nowIso)
   if (lock.locked) {
     return { ...base, kind: 'locked', tone: 'none', headline: 'Locked', why: `His game ${lock.label} — nothing can move now.`, swap: null }

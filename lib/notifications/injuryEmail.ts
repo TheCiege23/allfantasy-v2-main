@@ -17,10 +17,11 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
  * email about one of them: the other two are exactly the ones he will miss.
  *
  * ⚠ NOTHING IS INVENTED HERE. Every line is a sentence the alert engine
- * already produced. There is no projected points delta, no "expected to miss
- * N weeks" — no injury table in this database holds a return date — and no
- * replacement suggestion, because naming a free agent needs that league's
- * whole pool and this is a cron with sixty-one leagues to get through.
+ * already produced. There is no projected points delta and no "expected to
+ * miss N weeks" — no injury table in this database holds a return date. The
+ * one replacement named is a BENCH player (the injury fan-out,
+ * chimmy-alerts/injuryFanOut.ts, using the Player Finder's league-scored
+ * picker) — never a free agent, which needs that league's whole pool.
  */
 
 export type InjuryEmailAlert = {
@@ -28,6 +29,17 @@ export type InjuryEmailAlert = {
   message: string
   leagueName?: string | null
   leagueId?: string | null
+  /**
+   * The injury fan-out's per-league fix links (chimmy-alerts/injuryFanOut.ts): one "Fix your lineup"
+   * link per league that has a verified destination. A league without one is named in the message
+   * and gets no link — never a homepage dressed up as the lineup screen.
+   */
+  fixLinks?: Array<{ leagueName: string; href: string }>
+}
+
+/** A relative in-app link made absolute for an email client; platform links pass through. */
+function absolute(href: string, baseUrl: string | null | undefined): string {
+  return href.startsWith('/') ? `${baseUrl ?? ''}${href}` : href
 }
 
 /** Minimal escaping — renderDigestEmail is explicit that the caller owns it. */
@@ -54,9 +66,12 @@ export function renderInjuryEmail(params: {
   const rows = alerts
     .map((a) => {
       const where = a.leagueName ? `<span style="color:#8b8fa3"> · ${esc(a.leagueName)}</span>` : ''
+      const links = (a.fixLinks ?? [])
+        .map((l) => `<br><a href="${esc(absolute(l.href, params.baseUrl))}" style="color:#7dd3fc">Fix your lineup in ${esc(l.leagueName)} →</a>`)
+        .join('')
       return `<p style="margin:0 0 12px 0;font-size:15px;line-height:1.5">
   <strong style="color:#ffffff">${esc(a.title)}</strong>${where}<br>
-  <span style="color:#c7cad8">${esc(a.message)}</span>
+  <span style="color:#c7cad8">${esc(a.message)}</span>${links}
 </p>`
     })
     .join('\n')
