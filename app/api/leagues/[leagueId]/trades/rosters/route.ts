@@ -32,7 +32,7 @@ import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-tra
 import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
-import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
+import { valueBookFor, describeValueBook, pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import {
@@ -406,7 +406,7 @@ export async function GET(
   const chartTeams = Number(league?.leagueSize) || 12
   const marketContext = marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)
   const chartSettings = {
-    isDynasty: marketContext.variant.dynasty || marketContext.variant.keeper,
+    isDynasty: pricesOnDynastyChart(marketContext.variant),
     numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2,
     numTeams: chartTeams,
     ppr: (marketContext.scoring.format === 'ppr' ? 1 : marketContext.scoring.format === 'half_ppr' ? 0.5 : 0) as 0 | 0.5 | 1,

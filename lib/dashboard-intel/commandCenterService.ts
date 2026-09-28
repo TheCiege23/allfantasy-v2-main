@@ -30,6 +30,7 @@ import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { listLeagueDrafts } from '@/lib/draft-intel/sleeperDraftIntelService'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { getNflInjuries, injuryForName } from '@/lib/sports-data/playerAssetsService'
+import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 const CACHE_PREFIX = 'command-center:v3:'
@@ -496,7 +497,7 @@ async function buildCommandCenter(userId: string): Promise<CommandCenterPayload>
 
     // ── Portfolio: roster market value + movers ──
     if (myRoster) {
-      const vKey = `${context.variant.dynasty || context.variant.keeper}:${context.variant.superflex}:${context.teams}:${context.scoring.format}`
+      const vKey = `${pricesOnDynastyChart(context.variant)}:${context.variant.superflex}:${context.teams}:${context.scoring.format}`
       let values = valuesByKey.get(vKey) ?? null
       if (!values) {
         values = await withTimeout(getMarketValues(context), 4000)

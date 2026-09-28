@@ -41,6 +41,7 @@ export function marketContextFor(
       superflex: variant.superflex,
       dynasty: variant.dynasty,
       keeper: variant.keeper,
+      keeperShare: variant.keeperShare,
       bestBall: type.includes('best ball') || type.includes('bestball'),
     },
     scoring: {

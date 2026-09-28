@@ -14,6 +14,7 @@ import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import { analysisUnpricedReason, noPickMarketUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
+import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 import type { LoadedTradeLeague } from './league-loader'
 import { sportsRecordToPricedAsset } from './sports-db-valuation'
 import { tradeFormatCoverage } from './formatCoverage'
@@ -576,7 +577,7 @@ export async function resolveLeagueTradeChart(args: {
    * those surfaces show. Global mode (no league) keeps the old dynasty default, and says so.
    */
   const marketCtx = leagueRow ? marketContextFor(leagueRow.settings, leagueRow.leagueType, leagueSize) : null
-  const chartIsDynasty = marketCtx ? marketCtx.variant.dynasty || marketCtx.variant.keeper : true
+  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : true
   const tePremium =
     input.tePremium ??
     leagueSnapshot?.tePremiumHint ??

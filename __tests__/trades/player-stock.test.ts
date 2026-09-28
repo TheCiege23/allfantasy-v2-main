@@ -205,7 +205,8 @@ describe('🛑 one mark, one rule, in both places it is drawn', () => {
   it('⚠ stock keeps its league value book while pick previews use the evaluator market context', () => {
     expect(ROUTE).toContain('resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat })')
     expect(ROUTE).toContain('marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)')
-    expect(ROUTE).toContain('isDynasty: marketContext.variant.dynasty || marketContext.variant.keeper')
+    // The chart rule is `pricesOnDynastyChart` since 2026-09-28 (a light keeper league is redraft).
+    expect(ROUTE).toContain('isDynasty: pricesOnDynastyChart(marketContext.variant)')
     expect(ROUTE).toContain('numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2')
   })
 
