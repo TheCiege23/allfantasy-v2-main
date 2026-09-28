@@ -46,6 +46,20 @@ export function injuryStatusTag(headline: string): InjuryStatusTag | null {
   return null
 }
 
+/**
+ * The tags that mean the player will not play — the repo's own reading of "ruled out"
+ * (lib/core-app/injuryStatus.ts: OUT and IR are absences; "doubtful" and "questionable" are
+ * uncertainty, and treating them as absence tells a manager to bench someone who probably plays).
+ * Chimmy's starter-injury post in league chat speaks up for these two and nothing else.
+ */
+export const RULED_OUT_TAGS: ReadonlySet<InjuryStatusTag> = new Set<InjuryStatusTag>(['out', 'ir'])
+
+/** 'out' | 'ir' when the headline rules the player out; null for anything short of that. */
+export function ruledOutTag(headline: string): 'out' | 'ir' | null {
+  const tag = injuryStatusTag(headline)
+  return tag === 'out' || tag === 'ir' ? tag : null
+}
+
 function norm(s: string): string {
   return s
     .toLowerCase()
@@ -65,9 +79,25 @@ export function storyKey(userId: string, n: PlayerNewsIdentity): string {
   return `${PREFIX}story:${userId}:${hash(`${n.sport}|${norm(n.playerName)}|${norm(n.headline)}`)}`
 }
 
-export function topicKey(userId: string, n: PlayerNewsIdentity): string {
+/**
+ * WHICH NEWS THIS IS, independent of who hears it: the same player, the same kind of news and the
+ * same injury status. Five outlets repeating "ruled out" are one topic; "questionable" → "ruled out"
+ * is a new one. The per-person repeat guard (`topicKey`) and Chimmy's per-league starter-injury post
+ * (lib/league-chat/starterInjuryMoment.ts) both key on it, so the two can never disagree about what
+ * counts as "the same news".
+ */
+export function newsTopicId(n: PlayerNewsIdentity): string {
   const status = n.category === 'injury' ? (injuryStatusTag(n.headline) ?? 'update') : 'any'
-  return `${PREFIX}topic:${userId}:${hash(`${n.sport}|${norm(n.playerName)}|${n.category}|${status}`)}`
+  return hash(`${n.sport}|${norm(n.playerName)}|${n.category}|${status}`)
+}
+
+/** The same normalisation the guard compares player names with — case, quotes and punctuation fold. */
+export function normalizeNewsName(s: string): string {
+  return norm(s)
+}
+
+export function topicKey(userId: string, n: PlayerNewsIdentity): string {
+  return `${PREFIX}topic:${userId}:${newsTopicId(n)}`
 }
 
 /** Of `userIds`, who has already been told this story or this topic. Empty on any read failure. */

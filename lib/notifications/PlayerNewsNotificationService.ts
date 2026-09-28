@@ -328,6 +328,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   deferred: number
   /** People not alerted because they were already told this story, or this status, recently. */
   repeatsSuppressed: number
+  /** League chats Chimmy told that a STARTER there was ruled out before kickoff. */
+  chimmyStarterPosts: number
 }> {
   const limit = input?.limit ?? 40
   const lookbackHours = input?.lookbackHours ?? 24
@@ -357,6 +359,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let noRoster = 0
   let deferred = 0
   let repeatsSuppressed = 0
+  let chimmyStarterPosts = 0
   const stamped: string[] = []
 
   for (let i = 0; i < rows.length; i += 1) {
@@ -387,10 +390,42 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const rosterPlayers = await prisma.redraftRosterPlayer
       .findMany({
         where: { playerName: { contains: row.playerName, mode: 'insensitive' }, droppedAt: null },
-        select: { roster: { select: { ownerId: true, leagueId: true } } },
+        select: {
+          // The lineup facts are for Chimmy's starter-injury post below; the owner and league are
+          // who gets told.
+          playerName: true,
+          position: true,
+          team: true,
+          slotType: true,
+          sport: true,
+          roster: {
+            select: { ownerId: true, leagueId: true, id: true, seasonId: true, teamName: true, ownerName: true },
+          },
+        },
         take: 500,
       })
       .catch(() => [])
+
+    /*
+     * CHIMMY IN LEAGUE CHAT, FROM THIS SAME ROW. A ruled-out player (the repeat guard's OUT / IR
+     * reading of this headline) who sits in a STARTING lineup before his kickoff gets one post in
+     * that league's chat, naming the team it hits — deduped per league, player, status and week on
+     * the repeat guard's own topic identity (lib/league-chat/starterInjuryMoment.ts). It runs before
+     * the per-person repeat filter below on purpose: that filter is about who has been PUSHED this
+     * news, and a league chat is not a person. It never fails the dispatch.
+     */
+    if (isInjury && rosterPlayers.length > 0) {
+      try {
+        const { postStarterInjuryMoments } = await import('@/lib/league-chat/starterInjuryMoment')
+        const chat = await postStarterInjuryMoments({
+          news: { sport: row.sport, playerName: row.playerName, team: row.team, headline: row.headline },
+          rosterPlayers,
+        })
+        chimmyStarterPosts += chat.posted
+      } catch {
+        /* a chat post is never worth a missed injury alert */
+      }
+    }
 
     // dispatchNotification takes ONE leagueId, so group recipients by league rather than
     // calling it per user — one call per league instead of one per manager.
@@ -488,5 +523,14 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   // `scanned` counts rows actually considered, not rows fetched — otherwise a truncated run
   // reports the same number as a complete one and the deferral is invisible in the response.
-  return { scanned: stamped.length, notified, recipients, followerRecipients, noRoster, deferred, repeatsSuppressed }
+  return {
+    scanned: stamped.length,
+    notified,
+    recipients,
+    followerRecipients,
+    noRoster,
+    deferred,
+    repeatsSuppressed,
+    chimmyStarterPosts,
+  }
 }

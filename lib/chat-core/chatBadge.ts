@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { CHIMMY_AUTHOR_FLAG_KEYS } from '@/lib/league-chat/chimmyIdentity'
 import { getLeagueChatReadMarks } from './leagueChatRead'
 import { getChatUnread } from './unreadCounts'
 
@@ -12,7 +13,8 @@ import { getChatUnread } from './unreadCounts'
  *   dm      unread DMs and huddles (getChatUnread — muted threads excluded, never your own)
  *   league  league chat messages since you last opened that league's chat (leagueChatRead.ts); a
  *           league you have never opened counts only its last LEAGUE_WINDOW_MS, so a first visit
- *           does not greet you with a season of backlog
+ *           does not greet you with a season of backlog. Chimmy's posts count for EVERYONE,
+ *           the commissioner included — see `notMineOrChimmy`
  *   chimmy  Chimmy's weekly lineup / waiver checks you haven't opened (unread bell rows, 7 days)
  *   mentions  messages that name you, DMs and league chat — a subset of total, badged differently
  *
@@ -28,6 +30,28 @@ const MAX_LEAGUES = 60
 const MAX_LEAGUE_ROWS = 500
 
 const ZERO: ChatBadge = { total: 0, mentions: 0, dm: 0, league: 0, chimmy: 0 }
+
+/**
+ * "Not your own message" — EXCEPT that a Chimmy post is never your own.
+ *
+ * 🛑 A CHIMMY ROW IS STORED UNDER THE LEAGUE OWNER. `LeagueChatMessage.userId` is a required FK and
+ * there is no bot user, so every Chimmy post (weekly awards, trade takes, close finishes, starter
+ * injuries, commissioner notices) carries the commissioner as its technical author
+ * (lib/league-chat/chimmyIdentity.ts). A bare `userId: { not: me }` therefore dropped every one of
+ * them from the COMMISSIONER's count only — the one person who most needs to see a governance notice
+ * went unbadged. The marker is server-owned (a member cannot set it through the client allowlist), so
+ * letting it through here cannot make a member's own message count as unread for them.
+ *
+ * Set-based on purpose: one `OR` over the JSON flags inside the same `findMany`, no per-row read.
+ */
+function notMineOrChimmy(userId: string) {
+  return {
+    OR: [
+      { userId: { not: userId } },
+      ...CHIMMY_AUTHOR_FLAG_KEYS.map((key) => ({ metadata: { path: [key], equals: true } })),
+    ],
+  }
+}
 
 export async function getChatBadge(userId: string | null | undefined, now: Date = new Date()): Promise<ChatBadge> {
   if (!userId) return ZERO
@@ -69,11 +93,14 @@ async function leagueUnread(userId: string, now: Date): Promise<{ count: number;
       where: {
         leagueId: { in: leagueIds },
         createdAt: { gt: floor },
-        // Never your own; league chat only (draft-only rows are the draft room's); never a private
-        // @chimmy row addressed to somebody else.
-        userId: { not: userId },
+        // League chat only (draft-only rows are the draft room's).
         source: null,
-        OR: [{ isPrivate: false }, { visibleToUserId: userId }],
+        AND: [
+          // Never your own — but a Chimmy post is nobody's own, the commissioner's included.
+          notMineOrChimmy(userId),
+          // Never a private @chimmy row addressed to somebody else.
+          { OR: [{ isPrivate: false }, { visibleToUserId: userId }] },
+        ],
       },
       select: { leagueId: true, createdAt: true, mentionedUserIds: true },
       orderBy: { createdAt: 'desc' },
