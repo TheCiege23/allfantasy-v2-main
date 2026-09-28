@@ -89,6 +89,7 @@ const NOTIFIABLE_STATUSES = new Set(['complete', 'pending'])
 
 type WireTrade = Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks' | 'waiver_budget'>> & {
   transaction_id: string
+  status_updated?: number
   type: string
   status: string
   roster_ids?: number[] | null
@@ -130,7 +131,7 @@ export async function currentTradeIds(
       out.push({ id: t.transaction_id, status: t.status as FeedTrade['status'],
         rosterIds: Array.isArray(t.roster_ids) ? t.roster_ids.map(Number).filter(Number.isFinite) : [],
         creator: typeof t.creator === 'string' && t.creator ? t.creator : null,
-        createdMs: typeof t.created === 'number' ? t.created : null,
+        createdMs: t.status === 'complete' && typeof t.status_updated === 'number' && t.status_updated > 0 ? t.status_updated : typeof t.created === 'number' ? t.created : null,
         week: weekNumbers[index],
         tx: { adds: t.adds, drops: t.drops, draft_picks: t.draft_picks, waiver_budget: t.waiver_budget },
         raw: t as unknown as Record<string, unknown>,

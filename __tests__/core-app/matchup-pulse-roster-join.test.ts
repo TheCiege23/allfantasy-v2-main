@@ -42,7 +42,7 @@ vi.mock('@/lib/prisma', () => ({
           _max: { pointsFor: r.pointsFor, pointsAgainst: r.pointsAgainst },
         })),
       ),
-      findMany: vi.fn(async () => db.weekRows),
+      findMany: vi.fn(async ({ where }: { where: { OR: Array<{ leagueId: string; seasonYear: number; week: number }> } }) => db.weekRows.filter((row) => where.OR.some((period) => row.leagueId === period.leagueId && row.seasonYear === period.seasonYear && row.week === period.week))),
     },
     roster: {
       findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
@@ -102,6 +102,16 @@ beforeEach(() => {
 })
 
 describe('getMatchupPulse roster join', () => {
+  it('keeps the provider’s current week while it is live instead of advancing to the next unscored week', async () => {
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, settings: { ...LEAGUE.settings, leg: 2 } } }]
+    db.weekRows[0].pointsFor = 30
+    db.weekRows[0].pointsAgainst = 20
+    db.weekRows[1].pointsFor = 20
+    db.weekRows[1].pointsAgainst = 30
+    db.weekRows.push(...db.weekRows.map((row) => ({ ...row, week: 3, pointsFor: 0, pointsAgainst: 0 })))
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.leading[0]).toMatchObject({ week: 2, basis: 'scored', margin: 10 })
+  })
   it('🛑 prices a matchup whose opponent is an orphan team', async () => {
     const pulse = await getMatchupPulse(USER, NOW)
     expect(pulse.notRanked.unpriceable).toBe(0)
@@ -121,6 +131,29 @@ describe('getMatchupPulse roster join', () => {
   })
 
   it('still prices a normally-keyed opponent', async () => {
+    db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
+    db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(1)
+    expect(pulse.leading[0]?.margin).toBe(8)
+  })
+
+  /*
+   * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the provider's ids, short numbers in Sleeper's
+   * range. Here they ARE priced ids in the fake projection feed — the collision shape. Pricing them
+   * ranks a margin computed from strangers' projections.
+   */
+  it('🛑 never prices a foreign-id lineup as Sleeper ids — the league is unpriceable, not ranked', async () => {
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, platform: 'fleaflicker' } }]
+    db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
+    db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(0)
+    expect(pulse.leading).toHaveLength(0)
+    expect(pulse.notRanked.unpriceable).toBe(1)
+  })
+
+  it('CONTROL: the same lineups in a Sleeper league are priced', async () => {
     db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
     db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
     const pulse = await getMatchupPulse(USER, NOW)

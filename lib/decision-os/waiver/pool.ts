@@ -38,6 +38,7 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
 import type { WaiverRosterPlayer } from '@/lib/waiver-engine/waiver-scoring'
 
@@ -144,7 +145,7 @@ function slotsOf(playerData: unknown): Map<string, WaiverRosterPlayer['slot']> {
 export async function loadWaiverPool(leagueId: string, sport: string, rosterId?: string | null): Promise<WaiverPool> {
   const [league, rosterRows, pool, projectionWeek] = await Promise.all([
     prisma.league
-      .findUnique({ where: { id: leagueId }, select: { settings: true, leagueType: true, leagueSize: true, season: true } })
+      .findUnique({ where: { id: leagueId }, select: { settings: true, leagueType: true, leagueSize: true, season: true, platform: true } })
       .catch(() => null),
     prisma.roster
       .findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } })
@@ -154,7 +155,11 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
       .then((m) => m.latestProjectionWeek())
       .catch(() => null),
   ])
-  const leagueRosters = rosterRows as RosterRow[]
+  /* A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids; strip them before any lookup. */
+  const leagueRosters = (rosterRows as RosterRow[]).map((r) => ({
+    ...r,
+    playerData: sleeperReadablePlayerData(league?.platform, r.playerData),
+  }))
 
   /*
    * The season's byes. The league's own season decides, falling back to the projection feed's — the

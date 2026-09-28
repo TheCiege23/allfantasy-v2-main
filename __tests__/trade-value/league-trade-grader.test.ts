@@ -8,6 +8,9 @@ const h = vi.hoisted(() => ({
   chart: [] as Array<{ player: { name: string; position: string }; value: number }>,
   needCalls: 0,
   pricePickCalls: 0,
+  leagueType: 'dynasty',
+  needFactor: 1,
+  rosterNeedCalls: [] as unknown[],
 }))
 
 vi.mock('server-only', () => ({}))
@@ -20,7 +23,7 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
     sport: 'NFL',
     leagueSize: 12,
     isDynasty: true,
-    leagueType: 'dynasty',
+    leagueType: h.leagueType,
     scoring: 'ppr',
     settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'] },
     waiverBudget: 100,
@@ -31,14 +34,25 @@ vi.mock('@/lib/trade-value-console/league-loader', () => ({
   }),
 }))
 vi.mock('@/lib/league-context-engine', () => ({ resolveNormalizedLeagueContext: async () => ({ ok: false }) }))
-vi.mock('@/lib/fantasycalc-db', () => ({ getFantasyCalcValuesDbFirst: async () => h.chart }))
+vi.mock('@/lib/fantasycalc-db', () => ({
+  getFantasyCalcValuesDbFirst: async () => h.chart,
+  // The chart now carries its sync time, so every grade line can date its market value.
+  getFantasyCalcChartDbFirst: async () => ({ players: h.chart, syncedAt: '2026-09-28T14:27:28.097Z' }),
+}))
 vi.mock('@/lib/league-values/leagueTradeValues', () => ({ loadLeagueTradeValues: async () => null }))
 vi.mock('@/lib/data/players', () => ({ getPlayer: async () => null, searchPlayers: async () => [] }))
 vi.mock('@/lib/shared-services/player-identity/PlayerIdentityResolver', () => ({ resolvePlayer: async () => ({ confidence: 'none' }) }))
 vi.mock('@/lib/trade-value/viewerNeedFactors', () => ({
   loadViewerNeedFactors: async (a: { give: unknown[]; get: unknown[] }) => {
     h.needCalls += 1
-    return { give: a.give.map(() => null), get: a.get.map(() => null), gap: null }
+    return {
+      give: a.give.map(() => h.needFactor === 1 ? null : { kind: 'need', factor: h.needFactor, reason: 'after this trade you have surplus WR depth' }),
+      get: a.get.map(() => null), gap: null,
+    }
+  },
+  loadRosterNeedFactors: async (a: { give: unknown[]; get: unknown[]; playerData: unknown }) => {
+    h.rosterNeedCalls.push(a.playerData)
+    return { give: a.give.map(() => null), get: a.get.map(() => ({ kind: 'need', factor: 1.2, reason: 'fills a starting hole' })), gap: null }
   },
 }))
 vi.mock('@/lib/hybrid-valuation', () => {
@@ -66,8 +80,12 @@ vi.mock('@/lib/hybrid-valuation', () => {
 })
 
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
+import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 
 beforeEach(() => {
+  h.leagueType = 'dynasty'
   h.prices = new Map([
     ['Puka Nacua', 6000],
     ['Drake London', 4000],
@@ -80,6 +98,8 @@ beforeEach(() => {
   ]
   h.needCalls = 0
   h.pricePickCalls = 0
+  h.needFactor = 1
+  h.rosterNeedCalls = []
 })
 
 const graded = <T extends { graded: boolean }>(v: T) => {
@@ -88,6 +108,68 @@ const graded = <T extends { graded: boolean }>(v: T) => {
 }
 
 describe('createLeagueTradeGrader', () => {
+  it('reproduces the earlier chart’s minus-eight-percent roster utility without using it as the letter', async () => {
+    h.prices.set('DK Metcalf', 1774)
+    h.chart = [{ player: { name: '2027 2nd', position: 'PICK' }, value: 1574 }]
+    h.needFactor = 0.96
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const deal = { give: [{ kind: 'player' as const, name: 'DK Metcalf' }],
+      get: [{ kind: 'pick' as const, year: 2027, round: 2 }] }
+    const proposal = graded(await grader.grade({ ...deal, viewerSide: true }))
+    const completion = graded(await grader.grade({ ...deal, viewerSide: false }))
+    expect(proposal.rosterFit).toMatchObject({ giveValue: 1703, getValue: 1574, percentDiff: -8 })
+    expect([proposal.letter, proposal.partnerLetter, proposal.percentDiff]).toEqual(['D', 'B', -11])
+    expect([completion.letter, completion.partnerLetter, completion.percentDiff]).toEqual(['D', 'B', -11])
+  })
+  it('keeps DK Metcalf for a 2027 second D/B across proposal, completion and email despite surplus WR utility', async () => {
+    h.prices.set('DK Metcalf', 1766)
+    h.chart = [{ player: { name: '2027 Round 2', position: 'PICK' }, value: 1584 }]
+    h.needFactor = 0.96
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const proposal = graded(await grader.grade({
+      give: [{ kind: 'player', name: 'DK Metcalf' }],
+      get: [{ kind: 'pick', year: 2027, round: 2 }], viewerSide: true,
+    }))
+    const trade = {
+      id: 'L:T', season: '2026', week: 3, multiTeam: false,
+      sides: [
+        { rosterId: 1, ownerId: 'you', managerName: 'TheCiege24', teamName: null,
+          playersIn: [], playersOut: [{ name: 'DK Metcalf', position: 'WR' }],
+          picksIn: [{ season: '2027', round: 2, label: '2027 second', resolved: null }], picksOut: [] },
+        { rosterId: 2, ownerId: 'other', managerName: 'sharpshoooter', teamName: null,
+          playersIn: [{ name: 'DK Metcalf', position: 'WR' }], playersOut: [], picksIn: [], picksOut: [] },
+      ],
+    } as unknown as GradedTrade
+    const completion = graded(await oneGradeForCompletedTrade('L1', trade, 2026, { graderFor: async () => grader }))
+    for (const read of [proposal, completion]) {
+      expect([read.letter, read.partnerLetter, read.percentDiff, read.giveValue, read.getValue]).toEqual(['D', 'B', -10, 1766, 1584])
+      expect(read.lines.map(line => line.leagueValue)).toEqual([1766, 1584])
+      expect(read.needApplied).toBe(false)
+      expect(read.moves).toEqual([])
+    }
+    expect(proposal.rosterFit).toMatchObject({ giveValue: 1695, getValue: 1584, percentDiff: -7 })
+    expect(proposal.rosterFit?.moves[0]?.reasons).toContain('after this trade you have surplus WR depth')
+    expect(completion.rosterFit).toBeNull()
+    const email = buildTradeGradeEmail({ leagueName: 'ForMySleeperFriends', trade,
+      grade: completion, viewerOwnerId: 'you', ledgerUrl: 'https://allfantasy.ai/core/trades' })
+    expect(email.subject).toContain('you D, sharpshoooter B')
+    expect(email.html).toContain('1,766')
+    expect(email.html).toContain('1,584')
+    expect(email.html).toContain('Personal roster fit is shown separately')
+    expect(email.html).not.toContain('a bad season by the team that owes one moves this grade')
+  })
+  it('shares specialty coverage limits and rejects a prohibited format through the real grade path', async () => {
+    const deal = { give: [{ kind: 'player' as const, name: 'Drake London' }], get: [{ kind: 'player' as const, name: 'Puka Nacua' }], viewerSide: false }
+    h.leagueType = 'keeper'
+    const keeper = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const read = graded(await keeper.grade(deal))
+    expect(read.basis).toContain('Keeper costs and future keeper surplus are not included')
+    h.leagueType = 'survivor_guillotine'
+    const prohibited = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const result = await prohibited.grade(deal)
+    expect(result.graded).toBe(false)
+    if (!result.graded) expect(result.reason).toContain('trades are not permitted')
+  })
   it('grades a 1.5x deal A for the receiver and F for the sender, on the league chart', async () => {
     const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
     const v = graded(
@@ -100,6 +182,30 @@ describe('createLeagueTradeGrader', () => {
       ['give', 'Drake London', 4000],
       ['get', 'Puka Nacua', 6000],
     ])
+  })
+
+  it('every line records WHICH evidence priced it and WHEN — through the real grader (2026-09-28)', async () => {
+    const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const v = graded(
+      await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: true }),
+    )
+    expect(v.lines.map((l) => [l.name, l.valueSource, l.valueAsOf])).toEqual([
+      ['Drake London', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
+      ['Puka Nacua', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
+    ])
+  })
+
+  it('a named roster prices roster fit for THAT roster — the partner’s side, with no user to look up', async () => {
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1' }))!
+    const view = graded(await grader.grade({
+      give: [{ kind: 'player', name: 'Drake London' }],
+      get: [{ kind: 'player', name: 'Jaxon Smith-Njigba' }],
+      viewerSide: true,
+      needRoster: { playerData: { players: ['p1'] } },
+    }))
+    expect(h.rosterNeedCalls).toEqual([{ players: ['p1'] }])
+    expect(h.needCalls).toBe(0)
+    expect(view.rosterFit?.percentDiff).toBeGreaterThan(0)
   })
 
   it('roster need is priced only when the graded side is the viewer', async () => {

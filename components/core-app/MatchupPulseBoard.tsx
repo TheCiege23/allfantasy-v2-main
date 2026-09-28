@@ -152,7 +152,10 @@ function basisNote(pulse: MatchupPulse): string | null {
 /** "we could not rank six of them, and here is why" — never a silent short list. */
 function gapNote(pulse: MatchupPulse): string | null {
   const { noSchedule, noOpponent, unpriceable, uncomparable, unidentifiedRoster } = pulse.notRanked
+  const notStarted = pulse.notRanked.notStarted ?? 0
   const parts: string[] = []
+  /* The league's own state, not ours: there is no schedule until it drafts. */
+  if (notStarted > 0) parts.push(`${notStarted} ${notStarted === 1 ? 'has' : 'have'} not started yet`)
   if (noSchedule > 0) parts.push(`${noSchedule} carry no schedule`)
   if (noOpponent > 0) parts.push(`${noOpponent} have no game this week`)
   if (unpriceable > 0) parts.push(`${unpriceable} could not be scored or priced`)
@@ -230,7 +233,7 @@ export function MatchupPulseBoard({
           </h2>
           <span className="af-mp-rule" aria-hidden />
           <span className="af-mp-count">
-            {pulse.leading.length} leading · {pulse.trailing.length} trailing
+            {pulse.leadingTotal ?? pulse.leading.length} leading · {pulse.trailingTotal ?? pulse.trailing.length} trailing
           </span>
           {/*
             Only when there is something to keep current. On a board with nothing
@@ -339,7 +342,9 @@ export function MatchupPulseBoard({
         hidden={hidden}
         total={totalLeagues}
         href={allHref}
-        quiet="have no game this week or could not be scored."
+        /* Most of the rest ARE scored — they sit between the top and bottom five. This said "have no
+           game this week or could not be scored", which was false for ~43 of 55 on the measured account. */
+        quiet="sit between the five shown on each side, have no game this week, or could not be scored."
       />
     </div>
   )

@@ -11,6 +11,7 @@ import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { lineupDeadlines } from './lineupDeadlines'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
+import { sleeperReadablePlayerData } from './rosterIdSpace'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -195,6 +196,8 @@ export type MyTeamPulse = {
     noRoster: number
     /** A roster on file that carries no `starters` array at all. */
     noLineup: number
+    automatic?: number
+    inactive?: number
   }
 }
 
@@ -290,6 +293,7 @@ export async function getMyTeamPulse(
             avatarUrl: true,
             platformLeagueId: true,
             season: true,
+            status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true,
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
@@ -333,6 +337,11 @@ export async function getMyTeamPulse(
       select: { leagueId: true, platformUserId: true, playerData: true },
     })
 
+  const eliminated = await prisma.guillotineElimination.findMany({
+    where: { leagueId: { in: leagueIds }, eliminatedOwnerId: { in: [userId, ...mine.map(c => c.platformUserId).filter((id): id is string => Boolean(id))] } },
+    select: { leagueId: true, season: { select: { season: true } } },
+  }).catch(() => [])
+
   const rostersByLeague = new Map<string, RosterRow[]>()
   for (const r of rosters) {
     const list = rostersByLeague.get(r.leagueId)
@@ -357,11 +366,14 @@ export async function getMyTeamPulse(
   }
 
   const pending: Pending[] = []
-  const notChecked = { noRoster: 0, noLineup: 0 }
+  const notChecked = { noRoster: 0, noLineup: 0, automatic: 0, inactive: 0 }
 
   for (const c of mine) {
     if (pausedLeagueIds?.has(c.leagueId)) continue
     const l = c.league!
+    const state = String(l.status ?? l.lifecycleState ?? '').toLowerCase()
+    if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || ['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(state)) { notChecked.inactive++; continue }
+    const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
     const candidates = myRosterCandidates(c, userId)
     const pool: RosterRow[] = rostersByLeague.get(c.leagueId) ?? []
     /* First candidate that matches wins — the order in `myRosterCandidates` is
@@ -375,7 +387,10 @@ export async function getMyTeamPulse(
       continue
     }
 
-    const { ids, empty } = startersOf(roster.playerData)
+    const pd = roster.playerData && typeof roster.playerData === 'object' ? roster.playerData as Record<string, unknown> : {}
+    if (pd.eliminated === true || l.guillotineMode && Array.isArray(pd.players) && pd.players.length === 0) { notChecked.inactive++; continue }
+    /* A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id; that lineup is unread. */
+    const { ids, empty } = startersOf(sleeperReadablePlayerData(l.platform, roster.playerData))
     if (ids.length === 0 && empty === 0) {
       notChecked.noLineup++
       continue
@@ -385,7 +400,7 @@ export async function getMyTeamPulse(
     const platform = String(l.platform ?? 'manual').toLowerCase()
 
     pending.push({
-      bestBall: isBestBallSettings(l.settings),
+      bestBall,
       leagueId: l.id,
       leagueName,
       platform,

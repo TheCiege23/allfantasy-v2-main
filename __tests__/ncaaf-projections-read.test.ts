@@ -2,20 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-/**
- * The college projection read — `AFProjectionSnapshot` → a `/core` lineup.
- *
- * 🛑 THE BUG THIS SUITE EXISTS FOR SHIPPED IN MY OWN FIRST CUT. College projections
- * are SEASON-LONG: every `AFProjectionSnapshot` row has `week = null`, in both sports,
- * because the writer gates week-scoped rows on Sleeper's season state — which is the
- * NFL's. The first version of this reader filtered on `week: { not: null }`, so it
- * would have returned an empty map on every college lineup in production while looking
- * perfectly wired: a real module, a real caller, real ids, and nothing on screen.
- *
- * It was caught by another session's production measurement, not by this code. Hence
- * the first test below, which pins the season-long read directly rather than trusting
- * that nobody re-introduces a week filter.
- */
+/** College baselines have no week; afProjection remains points per game. */
 
 const snapFindFirst = vi.fn()
 const snapFindMany = vi.fn()
@@ -50,7 +37,7 @@ beforeEach(() => {
   pimFindMany.mockReset().mockResolvedValue([])
 })
 
-describe('the season-long read', () => {
+describe('the per-game baseline read', () => {
   it('queries week: null — NOT a week — because college rows have no week', async () => {
     pimFindMany.mockResolvedValue([{ rollingInsightsId: 'ri-1', espnId: null, cfbdId: '111' }])
     snapFindMany.mockResolvedValue([snapshot('111', 'Gunner Stockton', 312.4)])
@@ -80,14 +67,16 @@ describe('the season-long read', () => {
     expect(out.get('ri-1')?.projectedPoints).toBe(312.4)
   })
 
-  it('marks the number season-long so a surface cannot show it as a weekly figure', async () => {
+  it('preserves the per-game unit even though the baseline row has no week', async () => {
     pimFindMany.mockResolvedValue([{ rollingInsightsId: 'ri-1', espnId: null, cfbdId: '111' }])
-    snapFindMany.mockResolvedValue([snapshot('111', 'Gunner Stockton', 312.4)])
+    snapFindMany.mockResolvedValue([snapshot('111', 'Gunner Stockton', 24.4)])
 
     const { lookupNcaafProjections } = await import('@/lib/core-app/ncaafProjections')
     const out = await lookupNcaafProjections(['ri-1'], { season: '2026' })
 
-    expect(out.get('ri-1')?.seasonLong, 'a season total would read as a weekly projection').toBe(true)
+    expect(out.get('ri-1')?.projectedPoints).toBe(24.4)
+    expect(out.get('ri-1')?.perGame).toBe(true)
+    expect(out.get('ri-1')?.seasonLong).toBeUndefined()
   })
 })
 

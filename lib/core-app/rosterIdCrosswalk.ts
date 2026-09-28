@@ -2,6 +2,26 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
+import { isForeignIdSpace } from './rosterIdSpace'
+
+/**
+ * The id to look a roster id up by on a Sleeper-keyed table — or null, when there is none.
+ *
+ * 🛑 THIS REPLACES `crosswalk.get(id) ?? id`, WHICH WAS WRONG FOR EVERY FOREIGN PLATFORM. The
+ * fallback exists because a Sleeper league's roster id IS its Sleeper id (and an unmatched ESPN
+ * id is long and collides with nothing). A Fleaflicker/MFL/Fantrax/Yahoo id is a short number in
+ * Sleeper's range — 44 of 248 on the one production Fleaflicker league ARE real Sleeper ids — so
+ * the fallback looked it up as a Sleeper id and My Team, the matchup board and its projections
+ * named and priced a stranger. For a foreign league an unmapped id resolves to NOTHING, and the
+ * caller's own honest fallback (provider name, "could not identify", unprojected) takes over.
+ */
+export function sleeperLookupId(
+  platform: string | null | undefined,
+  rosterId: string,
+  crosswalk: ReadonlyMap<string, string>,
+): string | null {
+  return crosswalk.get(rosterId) ?? (isForeignIdSpace(platform) ? null : rosterId)
+}
 
 /**
  * Translate a platform's own roster ids into Sleeper ids.
@@ -31,9 +51,17 @@ import { reduceCrosswalk } from './crosswalkRules'
  * no key separates.
  */
 
-/** Which `PlayerIdentityMap` column holds a given platform's own id. */
-const ID_COLUMN_BY_PLATFORM: Record<string, 'espnId'> = {
+/**
+ * Which `PlayerIdentityMap` column holds a given platform's own id.
+ *
+ * Fleaflicker and MFL joined 2026-09-27, once `fantasyCalcIdentityBridge.ts` began filling their
+ * columns (both held zero rows before). This returns a MAP; what a caller does with an id the map
+ * does not hold is that caller's rule and is unchanged here.
+ */
+const ID_COLUMN_BY_PLATFORM: Record<string, 'espnId' | 'fleaflickerId' | 'mflId'> = {
   espn: 'espnId',
+  fleaflicker: 'fleaflickerId',
+  mfl: 'mflId',
 }
 
 /**
@@ -56,9 +84,9 @@ export async function crosswalkToSleeperIds(
   const rows = await prisma.playerIdentityMap
     .findMany({
       where: { sport: sport.trim().toUpperCase(), [column]: { in: rosterIds } },
-      select: { espnId: true, sleeperId: true },
+      select: { espnId: true, fleaflickerId: true, mflId: true, sleeperId: true },
     })
-    .catch(() => [])
+    .catch(() => [] as Array<{ espnId: string | null; fleaflickerId: string | null; mflId: string | null; sleeperId: string | null }>)
 
   /*
    * The one-to-one guard lives in a pure module so it can be tested without

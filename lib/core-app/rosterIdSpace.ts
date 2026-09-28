@@ -1,3 +1,4 @@
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -21,8 +22,19 @@ import { prisma } from '@/lib/prisma'
  * with no mapping is KEPT AS IS — it then fails every Sleeper-id match honestly
  * and counts against the vocabulary guard, exactly as before. Sleeper and manual
  * leagues (AllFantasy's own id space IS Sleeper's) pass through untouched with no
- * query. Yahoo has no column on `PlayerIdentityMap` yet, so it passes through
- * untouched too and stays refused by the guard.
+ * query.
+ *
+ * 🛑 EVERY OTHER PLATFORM IS STRIPPED, NOT PASSED THROUGH (2026-09-27). This header
+ * used to say a Yahoo/Fleaflicker/MFL/Fantrax roster "passes through untouched and
+ * stays refused by the guard". It did not stay refused: those ids are NUMBERS in
+ * Sleeper's range — 44 of the 248 on the one production Fleaflicker league ARE real
+ * Sleeper ids — and every guard downstream only examines a MISS, while a collision
+ * is a HIT. So the Trades value cards, portfolio insights, Season Outlook and the
+ * finder's search chips named, priced and advised on the wrong players. A foreign
+ * roster now contributes NO ids (`stripForeignIds`): every reader sees it as
+ * unreadable and says so, which is true. The Player Finder, the one reader built
+ * to tell "not here" from "cannot see", reads such leagues through the identity
+ * bridge itself (bridgedRosterIds.ts) before it ever calls this.
  *
  * WHAT THIS DOES NOT DO: write anything, or guess. The identity chain is the
  * import pipeline's job; this only reads what it has already verified.
@@ -30,13 +42,62 @@ import { prisma } from '@/lib/prisma'
 
 export type RosterIdSpace = 'sleeper' | 'espn' | 'other'
 
-const ROSTER_KEYS = ['players', 'starters', 'reserve', 'taxi'] as const
+export const ROSTER_KEYS = ['players', 'starters', 'reserve', 'taxi'] as const
 
 export function rosterIdSpaceOf(platform: string | null | undefined): RosterIdSpace {
   const p = (platform ?? '').trim().toLowerCase()
   if (p === 'espn') return 'espn'
-  if (p === '' || p === 'sleeper' || p === 'manual' || p === 'allfantasy') return 'sleeper'
+  // Native leagues speak Sleeper ids. `isNativePlatform` owns the native spellings (allfantasy, af,
+  // manual, native); a local copy of that list once omitted `af` and `native` and would have
+  // stripped a native league's roster as foreign.
+  if (p === '' || p === 'sleeper' || isNativePlatform(p)) return 'sleeper'
   return 'other'
+}
+
+/**
+ * THE rule: this league's roster ids must never be read as Sleeper ids. One predicate so the
+ * translators, the crosswalk callers, the rail and the search counts cannot disagree about it.
+ */
+export function isForeignIdSpace(platform: string | null | undefined): boolean {
+  return rosterIdSpaceOf(platform) === 'other'
+}
+
+/**
+ * Every roster-id-bearing key, including those the ESPN translation never touched. `bench` is here
+ * because `myRoster.rosterPlayerIds` reads a top-level `bench` array; no importer is known to write
+ * one, but a reader that looks for it must never find a foreign id there.
+ */
+const STRIPPED_ARRAY_KEYS: readonly string[] = [...ROSTER_KEYS, 'ir', 'devy', 'bench']
+
+/**
+ * A foreign roster with every player id removed: the roster arrays, `ir`, `devy`, and each
+ * `lineup_sections` section emptied. Other keys are untouched. See the header for why a foreign id
+ * must never survive to a Sleeper-id read.
+ */
+export function stripForeignIds(playerData: unknown): Record<string, unknown> {
+  const pd = (playerData ?? {}) as Record<string, unknown>
+  const out: Record<string, unknown> = { ...pd }
+  for (const key of STRIPPED_ARRAY_KEYS) if (Array.isArray(pd[key])) out[key] = []
+  for (const sectionsKey of ['lineup_sections', 'lineupSections']) {
+    const sections = pd[sectionsKey]
+    if (!sections || typeof sections !== 'object' || Array.isArray(sections)) continue
+    out[sectionsKey] = Object.fromEntries(
+      Object.entries(sections as Record<string, unknown>).map(([k, v]) => [k, Array.isArray(v) ? [] : v]),
+    )
+  }
+  return out
+}
+
+/**
+ * A roster's `playerData` as a Sleeper-id reader may see it: a foreign league's ids stripped, any
+ * other league's returned as is (same object, no copy). For readers that already hold the league's
+ * platform and read `playerData` directly rather than through a translator. It composes the rule
+ * above; it is not a second copy of it. An array-shaped `playerData` (the IDP parsers' form) from a
+ * foreign league becomes `[]`.
+ */
+export function sleeperReadablePlayerData(platform: string | null | undefined, playerData: unknown): unknown {
+  if (!isForeignIdSpace(platform)) return playerData
+  return Array.isArray(playerData) ? [] : stripForeignIds(playerData)
 }
 
 /** Every distinct id across the roster arrays, as strings. */
@@ -110,6 +171,15 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
   rosters: readonly T[],
 ): Promise<TranslatedRosters<T>> {
   const idSpace = rosterIdSpaceOf(platform)
+  if (idSpace === 'other') {
+    // Counted, never read: a foreign id surviving to a Sleeper-id lookup IS the collision.
+    return {
+      rosters: rosters.map((r) => ({ ...r, playerData: stripForeignIds(r.playerData) })),
+      idSpace,
+      total: collectRosterIds(rosters.map((r) => r.playerData)).length,
+      translated: 0,
+    }
+  }
   if (idSpace !== 'espn' || rosters.length === 0) return { rosters: [...rosters], idSpace, total: 0, translated: 0 }
   const ids = collectRosterIds(rosters.map((r) => r.playerData))
   const map = await loadEspnToSleeperMap(ids)
@@ -125,18 +195,21 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
 
 /**
  * Rosters spanning many leagues, translated per league platform with ONE read for
- * every ESPN id across them. Rosters of leagues absent from `platformByLeague`
- * are treated as Sleeper-id rosters.
+ * every ESPN id across them, and every foreign-id roster stripped (see the header).
+ * Rosters of leagues absent from `platformByLeague` are treated as Sleeper-id rosters.
  */
 export async function translateRostersByLeague<T extends { leagueId: string; playerData: unknown }>(
   rosters: readonly T[],
   platformByLeague: ReadonlyMap<string, string | null | undefined>,
 ): Promise<T[]> {
-  const espn = rosters.filter((r) => rosterIdSpaceOf(platformByLeague.get(r.leagueId)) === 'espn')
-  if (espn.length === 0) return [...rosters]
+  const stripped = rosters.map((r) =>
+    isForeignIdSpace(platformByLeague.get(r.leagueId)) ? { ...r, playerData: stripForeignIds(r.playerData) } : r,
+  )
+  const espn = stripped.filter((r) => rosterIdSpaceOf(platformByLeague.get(r.leagueId)) === 'espn')
+  if (espn.length === 0) return stripped
   const map = await loadEspnToSleeperMap(collectRosterIds(espn.map((r) => r.playerData)))
-  if (map.size === 0) return [...rosters]
-  return rosters.map((r) =>
+  if (map.size === 0) return stripped
+  return stripped.map((r) =>
     rosterIdSpaceOf(platformByLeague.get(r.leagueId)) === 'espn'
       ? { ...r, playerData: translatePlayerData(r.playerData, map) }
       : r,

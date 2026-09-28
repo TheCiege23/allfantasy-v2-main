@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({
+ guillotineElimination: { findMany: vi.fn(async () => []) },
  leagueTeam: { findMany: vi.fn(async () => Array.from({length: 65}, (_, i) => ({leagueId: `L${i}`, externalId: '4', platformUserId: 'su', teamName: 'Mine', league: {id: `L${i}`, name: `League ${i}`, sport: 'NFL', platform: 'sleeper', platformLeagueId: `${1000+i}`, userId: 'user', season: 2026, updatedAt: new Date()}}))) },
  roster: { findMany: vi.fn(async () => Array.from({length:65}, (_,i) => ({leagueId:`L${i}`,platformUserId:'su',playerData:{players:['healthy','out'],starters:['healthy','out']}}))) },
  sportsPlayer: { findMany: vi.fn(async () => [{sleeperId:'healthy',name:'Healthy Player',team:'ATL'},{sleeperId:'out',name:'Omar Cooper',team:'NYJ'}]) },
@@ -37,4 +38,23 @@ it('treats explicit Best Ball rules as an automatic lineup, not a manual issue',
  expect(pulse.needsTotal).toBe(0)
  expect(pulse.set[0]).toMatchObject({bestBall:true,out:1,severity:0,actionableSeverity:0})
  expect(pulse.automatic).toBe(1)
+})
+/*
+ * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the provider's ids, short numbers in Sleeper's range.
+ * 'out' here IS a Sleeper id in the fake catalog, whose owner (Omar Cooper) is on IR — a stranger.
+ */
+const oneLeague = (platform: string) => [{leagueId:'L0',externalId:'4',platformUserId:'su',teamName:'Mine',league:{id:'L0',name:'Neutral name',sport:'NFL',platform,platformLeagueId:'1000',userId:'user',season:2026,updatedAt:new Date()}}] as any
+it('🛑 never flags a stranger as your OUT starter from a foreign-id lineup', async () => {
+ db.leagueTeam.findMany.mockResolvedValueOnce(oneLeague('fleaflicker'))
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ expect(pulse.needsTotal).toBe(0)
+ expect([...pulse.needs,...pulse.set].some(row=>row.out>0)).toBe(false)
+ expect(pulse.notChecked.noLineup).toBe(1)
+ expect(db.sportsPlayer.findMany).not.toHaveBeenCalled()
+})
+it('CONTROL: the same lineup in a Sleeper league IS read, and its OUT starter flagged', async () => {
+ db.leagueTeam.findMany.mockResolvedValueOnce(oneLeague('sleeper'))
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'))
+ expect(pulse.needsTotal).toBe(1)
+ expect(pulse.needs[0]).toMatchObject({leagueId:'L0',out:1})
 })

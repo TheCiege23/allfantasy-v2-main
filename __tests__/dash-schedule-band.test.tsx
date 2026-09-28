@@ -134,6 +134,6 @@ describe('DashScheduleBand', () => {
         syncLabel={null}
       />,
     )
-    expect(container.textContent).not.toContain('first kickoff')
+    expect(container.textContent).not.toMatch(/kickoff/i)
   })
 })

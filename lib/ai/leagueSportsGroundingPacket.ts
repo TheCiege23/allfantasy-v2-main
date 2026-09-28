@@ -21,6 +21,8 @@ import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
+import { sleeperReadablePlayerData } from "@/lib/core-app/rosterIdSpace"
+import { isBestBallSettings } from "@/lib/core-app/lineupMode"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -267,7 +269,7 @@ export function resolveSettings(league: Record<string, unknown>): LeagueGroundin
     isHalfPPR: scoring.includes("half_ppr") || scoring.includes("half-ppr"),
     isStandard: scoring.includes("std") || scoring.includes("standard"),
     isIDP: firstBoolean(league.idp, settings.idp, flags.isIDP) || scoring.includes("idp"),
-    isBestBall: String(league.leagueType ?? "").includes("best_ball"),
+    isBestBall: isBestBallSettings(league.settings) || String(league.leagueType ?? "").includes("best_ball"),
     isDynasty: firstBoolean(league.isDynasty, settings.isDynasty) || String(league.leagueType ?? "").includes("dynasty"),
     /*
      * 🛑 THIS READ WAS FALSE FOR 100% OF PRODUCTION LEAGUES. It used to test only
@@ -643,6 +645,7 @@ async function loadViewerRoster(
       select: {
         playerData: true,
         settings: true,
+        league: { select: { platform: true } },
       },
     }).catch(() => null)
     if (!roster) return null
@@ -684,8 +687,11 @@ async function loadViewerRoster(
 
     const named = new Set(allPlayers.map((p) => p.playerId))
     const idsNeedingNames = rosterPlayerIds(playerData).filter((id) => !named.has(id))
+    // A Fleaflicker/MFL/Fantrax/Yahoo id collides with real Sleeper ids, so it is never looked up as
+    // one: it stays on the roster, honestly unidentified, rather than named as a stranger.
+    const lookupable = new Set(rosterPlayerIds(sleeperReadablePlayerData(roster.league?.platform, playerData)))
     if (idsNeedingNames.length > 0) {
-      const identities = await resolveRosterPlayerNames(idsNeedingNames)
+      const identities = await resolveRosterPlayerNames(idsNeedingNames.filter((id) => lookupable.has(id)))
       for (const id of idsNeedingNames) allPlayers.push(identities.get(id) ?? unnamedRosterPlayer(id))
     }
 

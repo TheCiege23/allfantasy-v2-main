@@ -27,6 +27,7 @@ import type { PrismaClient } from '@prisma/client'
 import { getLeagueInfo, getLeagueRosters, getPlayersBySport } from '@/lib/sleeper-client'
 import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
 import { resolveLeagueKickerValue, type LeagueKickerValue } from '@/lib/kicker-values/leagueKickerValue'
+import { resolveLeagueDefenseValue, type LeagueDefenseValue } from '@/lib/defense-values/leagueDefenseValue'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /** Sleeper's kicker position vocabulary, which is NOT just `K`. */
@@ -42,7 +43,39 @@ export function isKickerPositionLoose(position: string | null | undefined): bool
   return KICKER_POSITIONS.has(String(position ?? '').trim().toUpperCase())
 }
 
-export type LeagueValueBasis = 'idp-vorp' | 'kicker-flat'
+export type LeagueValueBasis = 'idp-vorp' | 'kicker-flat' | 'dst-flat'
+
+/** Sleeper's team-defense position vocabulary. */
+const DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
+
+export function isDefensePositionLoose(position: string | null | undefined): boolean {
+  return DEFENSE_POSITIONS.has(String(position ?? '').trim().toUpperCase())
+}
+
+type DefenseInfo = { full_name?: string | null; first_name?: string | null; last_name?: string | null; team?: string | null } | undefined
+
+/** "Baltimore Ravens" — Sleeper's DEF entries carry first/last (city/nickname), not always full_name. */
+export function defenseDisplayName(pid: string, info: DefenseInfo): string {
+  const full = info?.full_name?.trim() || [info?.first_name, info?.last_name].filter((s) => s && s.trim()).join(' ').trim()
+  return full || `${(info?.team || pid).toUpperCase()} D/ST`
+}
+
+/**
+ * Every lowercased name a manager might type for one defense: "baltimore ravens", "ravens", "bal",
+ * and those with " dst" / " d/st" / " defense" appended. PURE — exported for the test.
+ */
+export function defenseNameAliases(pid: string, info: DefenseInfo): string[] {
+  const team = String(info?.team || pid).trim().toLowerCase()
+  const full = defenseDisplayName(pid, info).toLowerCase()
+  const nickname = info?.last_name?.trim().toLowerCase()
+  const bases = [...new Set([full, team, nickname].filter((s): s is string => Boolean(s)))]
+  const out = new Set<string>()
+  for (const b of bases) {
+    out.add(b)
+    for (const suffix of [' dst', ' d/st', ' defense', ' def']) out.add(`${b}${suffix}`)
+  }
+  return [...out]
+}
 
 export interface LeagueNamedValue {
   name?: string
@@ -51,6 +84,7 @@ export interface LeagueNamedValue {
   position: string
   /** Which of the two constructions produced this number. Never collapse these. */
   basis: LeagueValueBasis
+  projection?: { points: number; season: number; week: number }
 }
 
 export interface LeagueTradeValues {
@@ -65,6 +99,8 @@ export interface LeagueTradeValues {
     ambiguousNames: string[]
   }
   kicker: LeagueKickerValue & { named: number }
+  /** Team defenses, priced as a position (2026-09-28). `named` counts rostered defenses priced. */
+  defense: LeagueDefenseValue & { named: number }
 }
 
 const EMPTY: LeagueTradeValues = {
@@ -79,6 +115,7 @@ const EMPTY: LeagueTradeValues = {
     basis: 'No league context.',
     named: 0,
   },
+  defense: { value: null, replacementRank: 0, scarcity: 0, basis: 'No league context.', named: 0 },
 }
 
 export interface LoadLeagueTradeValuesArgs {
@@ -145,9 +182,20 @@ export async function loadLeagueTradeValues(
       numTeams: numTeams ?? 12,
       isDynasty: args.isDynasty,
     })
+    /*
+     * 🛑 TEAM DEFENSES (2026-09-28, lib/defense-values/leagueDefenseValue.ts). Nothing priced them, so a
+     * trade carrying one was never graded. Priced like the kicker — as a POSITION, one value per
+     * league — because defense rank barely carries over (measured, see that module's header).
+     */
+    const defenseValue = resolveLeagueDefenseValue({
+      rosterPositions,
+      numTeams: numTeams ?? 12,
+      isDynasty: args.isDynasty,
+    })
 
     let namedKickers = 0
-    if (kickerValue.value != null) {
+    let namedDefenses = 0
+    if (kickerValue.value != null || defenseValue.value != null) {
       const rosters = args.prefetched?.rosters ?? (await getLeagueRosters(leagueId).catch(() => []))
       const rosterPlayerIds = [
         ...new Set(
@@ -158,7 +206,10 @@ export async function loadLeagueTradeValues(
       ]
 
       if (rosterPlayerIds.length > 0) {
-        type PlayerIndex = Record<string, { full_name?: string | null; position?: string | null }>
+        type PlayerIndex = Record<
+          string,
+          { full_name?: string | null; first_name?: string | null; last_name?: string | null; position?: string | null; team?: string | null }
+        >
         const players: PlayerIndex =
           args.prefetched?.players ?? ((await getPlayersBySport('nfl').catch(() => ({}))) as PlayerIndex)
 
@@ -178,7 +229,26 @@ export async function loadLeagueTradeValues(
 
         for (const pid of rosterPlayerIds) {
           const info = players?.[pid]
-          if (!isKickerPositionLoose(info?.position)) continue
+          if (defenseValue.value != null && isDefensePositionLoose(info?.position)) {
+            /*
+             * A defense is looked up by its Sleeper id (e.g. "BAL") and by the names a manager
+             * types. Aliases are added only where nothing else in the league already holds the
+             * name — a team name is not a person's, but the guard costs nothing.
+             */
+            const name = defenseDisplayName(pid, info)
+            const entry: LeagueNamedValue = { value: defenseValue.value, name, position: 'DEF', basis: 'dst-flat', sleeperId: pid }
+            bySleeperId.set(pid, entry)
+            const ownFull = info?.full_name?.trim().toLowerCase()
+            for (const alias of defenseNameAliases(pid, info)) {
+              // The defense's own full name is already counted once in `nameCounts` — by itself.
+              const others = (nameCounts.get(alias) ?? 0) - (alias === ownFull ? 1 : 0)
+              if (merged.has(alias) || unpricedReasonByNameLower.has(alias) || others > 0) continue
+              merged.set(alias, entry)
+            }
+            namedDefenses++
+            continue
+          }
+          if (kickerValue.value == null || !isKickerPositionLoose(info?.position)) continue
           const entry: LeagueNamedValue = { value: kickerValue.value, name: info?.full_name?.trim(), position: 'K', basis: 'kicker-flat', sleeperId: pid }
           bySleeperId.set(pid, entry)
           const nm = info?.full_name?.trim().toLowerCase()
@@ -203,6 +273,7 @@ export async function loadLeagueTradeValues(
       unpricedReasonByNameLower,
       idp: { skipped: idp.skipped, coverage: idp.coverage, ambiguousNames: idp.ambiguousNames },
       kicker: { ...kickerValue, named: namedKickers },
+      defense: { ...defenseValue, named: namedDefenses },
     }
   } catch {
     return EMPTY

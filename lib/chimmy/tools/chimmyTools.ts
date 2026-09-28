@@ -14,7 +14,9 @@ import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
+import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -66,6 +68,11 @@ export type ChimmyToolContext = {
    * tools say so instead of promising one.
    */
   actionCards?: ChimmyActionCard[]
+  /**
+   * Every trade letter the one trade engine gave during this answer, collected so the route can check
+   * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
+   */
+  tradeGrades?: ChimmyTradeGrade[]
 }
 
 /** More cards than this in one answer is a model looping, not a user deciding. */
@@ -281,7 +288,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_my_injuries',
       description:
-        "Injury designations (Out, IR, Doubtful, Questionable…) for players on the user's OWN rosters across EVERY league they are in, current season, any platform. Use for 'who's out in my leagues', 'any injuries on my teams', 'is anyone on my roster hurt', 'injury updates for my players'. Needs NO league in scope. Each player comes with the date it was reported and which leagues/slots they are on, and STARTERS who are Out are flagged. Players not listed have no report on file — that is NOT a statement that they are healthy. It lists the leagues and players it could not check; never fill those gaps from general knowledge.",
+        "Injury designations (Out, IR, Doubtful, Questionable…) for players on the user's OWN roster in the selected league, current season, any platform. Use for roster reviews and injury updates. Defaults to the selected league; with no league selected it checks all current leagues. Pass scope=all only when the CURRENT request explicitly asks across leagues, such as 'who's out in all my leagues'. Each player comes with the report date and roster slot. Players not listed have no report on file — that is NOT a statement that they are healthy. Report coverage gaps; never fill them from general knowledge.",
       parameters: {
         type: 'object',
         properties: {
@@ -289,6 +296,11 @@ export const CHIMMY_TOOL_SPECS = [
             type: 'string',
             description:
               "Limit to one sport, e.g. 'NFL', 'NBA', 'MLB', 'NHL'. Omit to check every sport the user has a current league in.",
+          },
+          scope: {
+            type: 'string',
+            enum: ['selected', 'all'],
+            description: 'Default selected. Use all only when the current request explicitly asks across leagues.',
           },
         },
         required: [],
@@ -649,7 +661,10 @@ export async function executeChimmyTool(
         ])
         const results = await Promise.allSettled([
           buildTradeContextForChimmy(ctx.leagueId, ctx.userId),
-          buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
+          // The third argument only when grades are collected, so the scoped read stays exactly (league, user).
+          ctx.tradeGrades
+            ? buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId, { onGrade: (g) => ctx.tradeGrades!.push(g) })
+            : buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
           buildLeagueTradeHistoryContext(ctx.leagueId, ctx.userId),
           executeChimmyTool('get_my_roster', {}, ctx),
         ])
@@ -763,7 +778,15 @@ export async function executeChimmyTool(
           format: rules.context.flags, waiver: rules.context.waiver,
           lastSyncedAt: rules.context.importHealth.lastSyncedAt,
         }) : 'League rules could not be retrieved; do not substitute generic PPR or invented FAAB.'
-        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].join('\n\n')
+        const bestBallRuleGap = rules?.ok && rules.context.lineupBehavior.bestBallMode && !rules.context.lineupBehavior.bestBallSettings
+          ? 'BEST BALL RULE EVIDENCE GAP: Automatic scoring lineup is confirmed, but this import has no verified Best Ball transaction or substitution configuration. Waiver, trade, and substitution permissions are UNVERIFIED; do not say they are disabled or enabled. Prior chat answers and generic Best Ball defaults are not evidence of this league\'s rules.'
+          : null
+        const actionEvidence = lineupActionEvidence({
+          platform: rules?.ok ? rules.context.platform : null,
+          bestBallMode: rules?.ok ? rules.context.lineupBehavior.bestBallMode : false,
+          lastSyncedAt: rules?.ok ? rules.context.importHealth.lastSyncedAt : null,
+        })
+        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, actionEvidence, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')
       }
 
       case 'get_league_standings': {
@@ -835,13 +858,13 @@ export async function executeChimmyTool(
         return await buildMyStartersPlayingContext({ userId: ctx.userId, window })
       }
 
-      /* Session-scoped like get_my_starters_playing: leagues come only from listMemberLeagues. */
+      /* Selected by default; an explicit cross-league request can scan authorized memberships. */
       case 'get_my_injuries': {
         if (!ctx.userId) {
           return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name a player or a league.'
         }
         const sport = typeof args.sport === 'string' && args.sport.trim() ? args.sport.trim().toUpperCase() : null
-        return await buildMyRosterInjuriesContext({ userId: ctx.userId, sport })
+        return await buildMyRosterInjuriesContext({ userId: ctx.userId, sport, leagueId: args.scope === 'all' ? null : ctx.leagueId })
       }
 
       case 'get_upcoming_games': {
@@ -945,7 +968,13 @@ export async function executeChimmyTool(
       case 'evaluate_trade': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runTradeScenarioTool({ give: args.give, get: args.get, leagueId: ctx.leagueId, userId: ctx.userId })
+        return await runTradeScenarioTool({
+          give: args.give,
+          get: args.get,
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
       }
 
       case 'find_trade_ideas': {

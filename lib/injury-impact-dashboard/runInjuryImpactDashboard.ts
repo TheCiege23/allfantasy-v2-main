@@ -8,6 +8,7 @@ import { openaiChatText } from '@/lib/openai-client'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { enrichChimmyWithPlayerSportsNorm } from '@/lib/sports-data-normalization'
 import { buildWeatherAugmentFromCachedWeather } from '@/lib/weather/applyWeatherToFantasyProjection'
@@ -283,10 +284,16 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
 
     const picked = pickRosters()
 
+    // Foreign-platform roster ids (Fleaflicker/MFL/…) collide with real Sleeper ids — the lookup
+    // below would flag a stranger's injury as yours. Such a roster contributes no ids.
+    if (isForeignIdSpace(league.platform)) {
+      dataGaps.push("This platform's player ids cannot be matched to players yet — roster-aware injury flags are unavailable.")
+    }
     for (const r of picked) {
-      const ids = getRosterPlayerIds(r.playerData)
+      const playerData = sleeperReadablePlayerData(league.platform, r.playerData)
+      const ids = getRosterPlayerIds(playerData)
       rosterIds.push(...ids)
-      for (const sid of getStarterIds(r.playerData)) starterSet.add(sid)
+      for (const sid of getStarterIds(playerData)) starterSet.add(sid)
     }
     rosterIds = [...new Set(rosterIds)]
 

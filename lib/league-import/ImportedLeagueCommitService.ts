@@ -142,6 +142,8 @@ export function buildTier0LeagueColumnPatch(
     if (typeof v === 'string' && v.length > 0) out[key] = v
   }
 
+  setIfBool('bestBallMode', l.best_ball)
+
   // Waiver + trade window
   setIfStr('waiverType', l.waiver_type)
   setIfNum('waiverBudget', l.faab_budget ?? undefined)

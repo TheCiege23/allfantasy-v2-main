@@ -1,6 +1,35 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { bestLineup, type Scored } from '@/lib/waivers/waiverBoard'
+import { bestLineup, loadWaiverBoard, type Scored } from '@/lib/waivers/waiverBoard'
+
+/*
+ * Doubles for the loader tests at the bottom of this file. `bestLineup` above is pure and touches
+ * none of them. The projection feed is keyed by Sleeper id: '6038' IS Sleeper's "Wrong Player".
+ */
+vi.mock('@/lib/core-app/myRoster', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-app/myRoster')>()),
+  findMyRoster: vi.fn(async () => ({ found: true, playerData: { players: ['6038'] } })),
+}))
+vi.mock('@/lib/core-app/playerProjections', () => ({
+  lookupProjections: vi.fn(async (ids: readonly string[]) => {
+    const feed: Record<string, { name: string; line: number }> = {
+      '6038': { name: 'Wrong Player', line: 5 },
+      fa1: { name: 'Free Agent', line: 12 },
+    }
+    return new Map(
+      ids
+        .filter((id) => feed[id])
+        .map((id) => [
+          id,
+          { projectedPoints: feed[id].line, name: feed[id].name, position: 'TE', team: 'KC', componentStats: { rec: feed[id].line } },
+        ]),
+    )
+  }),
+}))
+vi.mock('@/lib/projections/leagueScoring', () => ({
+  computeLeagueProjectedPoints: (line: Record<string, number>) => ({ points: Number(line.rec) }),
+}))
+vi.mock('@/lib/waivers/recentFormProjection', () => ({ projectFromRecentForm: vi.fn(async () => new Map()) }))
 
 /**
  * The waiver board this replaces read nothing at all: `waiverRecommendationService` selects
@@ -96,5 +125,46 @@ describe('marginal gain — the reason this is not a "best available" list', () 
     const after = bestLineup([...roster, p('fa', 'TE', 13)], STANDARD)
     const dropped = roster.filter((x) => before.used.has(x.sleeperId) && !after.used.has(x.sleeperId))
     expect(dropped.map((d) => d.sleeperId)).toEqual(['te'])
+  })
+})
+
+/*
+ * A Fleaflicker/MFL/Fantrax/Yahoo roster id is a short number in Sleeper's range. Read as a Sleeper
+ * id, '6038' on a Fleaflicker roster was priced as Sleeper's player and named as the starter a free
+ * agent "displaces".
+ */
+describe('loadWaiverBoard — foreign roster ids', () => {
+  const prismaOn = (platform: string) =>
+    ({
+      league: {
+        findUnique: async () => ({
+          id: 'L1',
+          settings: { scoring_settings: { rec: 1 }, roster_positions: ['TE'] },
+          platform,
+        }),
+        findFirst: async () => null,
+      },
+      roster: { findMany: async () => [{ playerData: { players: ['6038'] } }] },
+      playerGameStat: {
+        aggregate: async (args: any) =>
+          args?.where?.season ? { _max: { weekOrRound: 3 } } : { _max: { season: 2026 } },
+        findMany: async () => [{ playerId: 'fa1' }],
+      },
+      sportsPlayer: {
+        findMany: async () => [{ sleeperId: 'fa1', name: 'Free Agent', team: 'KC', position: 'TE', updatedAt: new Date() }],
+      },
+    }) as never
+
+  it('does not price or name the Sleeper player who shares a Fleaflicker roster id', async () => {
+    const board = await loadWaiverBoard({ prisma: prismaOn('fleaflicker'), leagueId: 'L1', userId: 'u-1' })
+    expect(JSON.stringify(board)).not.toContain('Wrong Player')
+    expect(board.candidates).toEqual([])
+    expect(board.notes.join(' ')).toContain('cannot be matched')
+  })
+
+  it('CONTROL: the same id in a Sleeper league IS priced and named as displaced', async () => {
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(board.state).toBe('ok')
+    expect(board.candidates[0]?.displaces?.name).toBe('Wrong Player')
   })
 })

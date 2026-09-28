@@ -1,13 +1,17 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { runWithConcurrency } from '@/lib/async-utils'
+import { nameList, scanWithinBudget, type BoundedScanOptions } from '@/lib/chimmy/tools/boundedScan'
 import { resolveAiTeamContext } from '@/lib/ai-payload/resolveAiTeamContext'
 import { resolveRosterPlayerIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { resolveInjuryFacts, type InjuryFact, type InjuryLookup } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
+import { isBestBallSettings } from '@/lib/core-app/lineupMode'
+import { listedPositionCounts } from '@/lib/chimmy/rosterCounts'
+import { LINEUP_ACTION_RULES, kickoffLabel, type KickoffCheck } from '@/lib/chimmy/lineupActionEvidence'
+import { checkStartedGames } from '@/lib/chimmy/actions/gameLocks'
 
 /**
  * WHO IS HURT ON THE USER'S OWN ROSTERS, ACROSS EVERY LEAGUE THEY ARE IN.
@@ -31,13 +35,24 @@ import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
  * no injury source) is reported with the direction it moves the answer.
  */
 
-/** Same cap and reasoning as the starters tool: a roster read is several queries. */
-const MAX_LEAGUES_SCANNED = 40
+/*
+ * 🛑 A TIME BUDGET, NOT A LEAGUE CAP. This was `MAX_LEAGUES_SCANNED = 40`: the first 40 leagues in
+ * list order, the rest reported as a bare count. An account-wide NFL answer (2026-09-27) read 39
+ * rosters and said "24 further league(s) were not scanned" — naming none, so neither the model nor
+ * the user could tell WHICH rosters went unchecked. A Chimmy tool has no timeout of its own (only
+ * the loop's 75s, shared with the model turns), so the real constraint is time: every current
+ * league is attempted, and whatever the budget does not reach is named.
+ */
+const SCAN_BUDGET_MS = 20_000
+const PER_LEAGUE_TIMEOUT_MS = 8_000
 const ROSTER_CONCURRENCY = 6
+/** A backstop against a pathological account, far above any real one; overflow is named too. */
+const MAX_LEAGUES_SCANNED = 150
 
 type Slot = 'starter' | 'bench' | 'IR' | 'taxi'
 
 type RosterEntry = {
+  automatic?: boolean
   leagueName: string
   slot: Slot
   name: string | null
@@ -48,7 +63,7 @@ type RosterEntry = {
 }
 
 /** Statuses that carry no injury claim. A feed "Active" is the absence of news, not news. */
-const NON_INJURY_STATUS = /^(?:active|healthy|none|na|n\/a|probable|-)?$/i
+const NON_INJURY_STATUS = /^(?:act|inact|active|inactive|healthy|none|na|n\/a|probable|-)?$/i
 
 /** Most actionable first. Anything unlisted sorts after these. */
 const SEVERITY: Array<[RegExp, number]> = [
@@ -68,7 +83,7 @@ function isoDay(d: Date): string {
 }
 
 function refsWithSlot(refs: AiRosterPlayerRef[], slot: Slot, leagueName: string): Array<RosterEntry & { playerId: string }> {
-  return refs.map((r) => ({
+  return refs.filter((r) => r.playerId?.trim() !== '0').map((r) => ({
     playerId: r.playerId,
     leagueName,
     slot,
@@ -81,14 +96,22 @@ function refsWithSlot(refs: AiRosterPlayerRef[], slot: Slot, leagueName: string)
 
 export interface MyRosterInjuriesInput {
   userId: string
+  /** Filter to an authorized current-season league; omitted keeps the cross-league scan. */
+  leagueId?: string | null
   /** Limit to one sport (e.g. 'NFL'). Omitted: every sport the user has a current league in. */
   sport?: string | null
+  /**
+   * Scan bounds. The tool loop takes the defaults; a caller racing its own shorter deadline (the
+   * push path gives this report 4s) MUST pass a budget inside that deadline, or the race drops the
+   * whole report instead of returning a partial one that names what it missed.
+   */
+  scan?: Partial<BoundedScanOptions> & { maxLeagues?: number }
 }
 
 type LeagueRead =
   | { state: 'unreadable'; leagueName: string }
   | { state: 'empty'; leagueName: string }
-  | { state: 'read'; leagueName: string; sport: string; entries: RosterEntry[]; unnamed: number }
+  | { state: 'read'; leagueName: string; sport: string; entries: RosterEntry[]; unnamed: number; bestBall: boolean }
 
 type Finding = {
   name: string
@@ -99,7 +122,10 @@ type Finding = {
   /** Null when the only evidence is the undated Sleeper feed status. */
   reportedAt: Date | null
   stale: boolean
-  appearances: Array<{ leagueName: string; slot: Slot }>
+  appearances: Array<{ leagueName: string; slot: Slot; automatic: boolean }>
+  /** For the kickoff check: the finding's sport, and its dedup key as a stand-in player id. */
+  sport: string
+  key: string
 }
 
 /**
@@ -134,16 +160,24 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
     const s = String(l.sport).toUpperCase()
     newestBySport.set(s, Math.max(newestBySport.get(s) ?? l.season, l.season))
   }
-  const current = leagues.filter((l) => newestBySport.get(String(l.sport).toUpperCase()) === l.season)
-  const scanned = current.slice(0, MAX_LEAGUES_SCANNED)
-  const truncated = current.length - scanned.length
+  const current = leagues.filter((l) => newestBySport.get(String(l.sport).toUpperCase()) === l.season && (!input.leagueId || l.id === input.leagueId))
+  if (input.leagueId && current.length === 0) return 'No authorized current-season roster is available for the selected league. Do not describe that roster as healthy or invent its players.'
+  const maxLeagues = input.scan?.maxLeagues ?? MAX_LEAGUES_SCANNED
+  const scanned = current.slice(0, maxLeagues)
+  const overCap = current.slice(maxLeagues)
 
   const platformRows = await prisma.league
-    .findMany({ where: { id: { in: scanned.map((l) => l.id) } }, select: { id: true, platform: true } })
-    .catch(() => [] as Array<{ id: string; platform: string }>)
+    .findMany({ where: { id: { in: scanned.map((l) => l.id) } }, select: { id: true, platform: true, settings: true, leagueType: true } })
+    .catch(() => [] as Array<{ id: string; platform: string; settings?: unknown; leagueType?: string | null }>)
   const platformOf = new Map(platformRows.map((r) => [r.id, r.platform]))
+  const automaticOf = new Map(platformRows.map((r) => [r.id, isBestBallSettings(r.settings) || String(r.leagueType ?? '').includes('best_ball')]))
 
-  const reads: LeagueRead[] = await runWithConcurrency(scanned, ROSTER_CONCURRENCY, async (league) => {
+  const scan = await scanWithinBudget(scanned, {
+    concurrency: input.scan?.concurrency ?? ROSTER_CONCURRENCY,
+    budgetMs: input.scan?.budgetMs ?? SCAN_BUDGET_MS,
+    perItemTimeoutMs: input.scan?.perItemTimeoutMs ?? PER_LEAGUE_TIMEOUT_MS,
+    now: input.scan?.now,
+  }, async (league): Promise<LeagueRead> => {
     const sport = String(league.sport).toUpperCase()
     const team = await resolveAiTeamContext({
       userId,
@@ -186,12 +220,17 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
     return {
       state: 'read',
       leagueName: league.name,
+      bestBall: automaticOf.get(league.id) ?? false,
       sport,
-      entries: entries.map(({ playerId: _id, ...rest }) => rest),
+      entries: entries.map(({ playerId: _id, ...rest }) => ({ ...rest, automatic: automaticOf.get(league.id) ?? false })),
       unnamed: entries.filter((e) => !e.name).length,
     }
   })
 
+  const reads: LeagueRead[] = scan.done.map((d) => d.result)
+  /* Every league that was never read, by name — the part a bare count threw away. */
+  const notReached = [...scan.notStarted, ...overCap].map((l) => l.name)
+  const unfinished = [...scan.timedOut, ...scan.failed].map((l) => l.name)
   const readLeagues = reads.filter((r): r is Extract<LeagueRead, { state: 'read' }> => r.state === 'read')
   const unreadable = reads.filter((r) => r.state === 'unreadable').map((r) => r.leagueName)
   const empty = reads.filter((r) => r.state === 'empty').map((r) => r.leagueName)
@@ -250,6 +289,8 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
             reportedAt: fact?.reportedAt ?? null,
             stale: fact?.stale ?? false,
             appearances: [],
+            sport,
+            key,
           }
         } else if (!fact && e.feedStatus && !NON_INJURY_STATUS.test(e.feedStatus.trim())) {
           /*
@@ -265,11 +306,13 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
             reportedAt: null,
             stale: false,
             appearances: [],
+            sport,
+            key,
           }
         }
         if (finding) byKey.set(key, finding)
       }
-      finding?.appearances.push({ leagueName: e.leagueName, slot: e.slot })
+      finding?.appearances.push({ leagueName: e.leagueName, slot: e.slot, automatic: e.automatic ?? false })
     }
     findings.push(...byKey.values())
   }
@@ -279,14 +322,38 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
   const unnamedTotal = readLeagues.reduce((n, r) => n + r.unnamed, 0)
   const scope = sportFilter ? `${sportFilter} ` : ''
   const lines: string[] = [
-    `CROSS-LEAGUE INJURY CHECK of the user's OWN ${scope}rosters, current season, ${readLeagues.length} league(s) read, ${playersChecked} distinct player(s) checked.`,
+    `${input.leagueId ? 'SELECTED-LEAGUE' : 'CROSS-LEAGUE'} INJURY CHECK of the user's OWN ${scope}rosters, current season, ${readLeagues.length} league(s) read, ${playersChecked} distinct player(s) checked.`,
   ]
+
+  /*
+   * ⚠ COVERAGE GOES FIRST, NOT IN THE GAPS AT THE BOTTOM. A partial scan changes what every line
+   * below it means — "no reported injuries" over 39 of 64 leagues is not "no reported injuries" —
+   * so it is stated before the findings, with the leagues named, and with the sentence the answer
+   * must lead with.
+   */
+  const unchecked = notReached.length + unfinished.length
+  if (unchecked === 0) {
+    lines.push(
+      `SCAN COVERAGE: all ${current.length} current-season league(s) were reached. Leagues that were reached but could not be read are listed under KNOWN GAPS.`,
+    )
+  } else {
+    const parts = [
+      notReached.length ? `not reached in the time available (${notReached.length}): ${nameList(notReached)}` : null,
+      unfinished.length ? `started but did not finish (${unfinished.length}): ${nameList(unfinished)}` : null,
+    ].filter(Boolean)
+    lines.push(
+      `⚠ PARTIAL SCAN — ${current.length - unchecked} of ${current.length} current-season leagues were checked; ${unchecked} were NOT. ${parts.join('; ')}. ` +
+        `Open the answer by saying the check covered ${current.length - unchecked} of ${current.length} leagues and naming (or counting) the ones not checked. ` +
+        'Never say "all your leagues" or "across your leagues", and never describe a roster in an unchecked league as healthy — asking again usually reaches the rest.',
+    )
+  }
 
   if (findings.length === 0) {
     lines.push(
       'No player on those rosters has a current injury designation on file. Say "no reported injuries", NOT "everyone is healthy" — absence of a report is not a clean bill of health.',
     )
   } else {
+    lines.push(`CURRENT INJURY COUNTS: ${findings.length} distinct players with reported designations; by listed position: ${listedPositionCounts(findings)}. These count players, not league appearances. No report does not mean healthy or available; stale and undated designations remain flagged below.`)
     lines.push(`${findings.length} player(s) with an injury designation, most serious first:`)
     for (const f of findings) {
       const who = [f.name, f.position, f.team].filter(Boolean).join(' ')
@@ -294,31 +361,55 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
         ? `reported ${isoDay(f.reportedAt)}${f.stale ? ', MAY BE OUT OF DATE' : ''}`
         : 'Sleeper player feed, undated'
       const where = f.appearances
-        .map((a) => `${a.leagueName} (${a.slot === 'starter' ? 'STARTING' : a.slot})`)
+        .map((a) => `${a.leagueName} (${a.slot === 'starter' ? a.automatic ? 'AUTOMATIC BEST BALL LINEUP' : 'STARTING' : a.slot})`)
         .join('; ')
       lines.push(`- ${who}: ${f.status}${f.detail ? ` — ${f.detail}` : ''} [${when}] — on: ${where}`)
     }
     const startingHurt = findings.filter(
-      (f) => severityOf(f.status) <= 1 && f.appearances.some((a) => a.slot === 'starter'),
+      (f) => severityOf(f.status) <= 1 && f.appearances.some((a) => a.slot === 'starter' && !a.automatic),
     )
     if (startingHurt.length > 0) {
+      /*
+       * ⚠ KICKOFF IS CHECKED HERE, NOT ONLY DISCLAIMED. This is the line a 2026-09-28 KBFL answer
+       * built "swap a healthy TE into Johnson's slot" from, after Johnson's game had kicked off.
+       * One schedule read per sport; the dedup key stands in for the player id, and a failed read
+       * leaves every player KICKOFF UNVERIFIED rather than clear.
+       */
+      const now = new Date()
+      const kickoffBySport = new Map<string, KickoffCheck | null>()
+      for (const sport of new Set(startingHurt.map((f) => f.sport))) {
+        const players = startingHurt
+          .filter((f) => f.sport === sport)
+          .map((f) => ({ playerId: f.key, name: f.name, team: f.team, gameTime: null }))
+        kickoffBySport.set(
+          sport,
+          await checkStartedGames({ sport, season: now.getUTCFullYear(), week: 0, players, now }).catch(() => null),
+        )
+      }
       lines.push(
-        `⚠ ACTION: ${startingHurt.length} player(s) listed Out/IR are in a STARTING lineup: ${startingHurt
-          .map((f) => `${f.name} (${f.appearances.filter((a) => a.slot === 'starter').map((a) => a.leagueName).join(', ')})`)
-          .join('; ')}. Lead with these.`,
+        `ROSTER PLACEMENT: ${startingHurt.length} player(s) listed Out/IR are among stored STARTERS: ${startingHurt
+          .map((f) => {
+            const check = kickoffBySport.get(f.sport) ?? null
+            const reason = check?.started.get(f.key)
+            return `${f.name} (${f.appearances.filter((a) => a.slot === 'starter' && !a.automatic).map((a) => a.leagueName).join(', ')}) — ${kickoffLabel(f.key, check)}${reason ? `: ${reason}` : ''}`
+          })
+          .join('; ')}. Kickoff is from the AllFantasy game schedule (checked ${now.toISOString()}), not the platform's lock. This injury check does not verify provider lock timing, transaction rules or AutoSubs eligibility. Stored starter placement is not proof a replacement is still allowed; verify those before suggesting an actionable swap. ${LINEUP_ACTION_RULES}`,
       )
     }
   }
 
+  if (readLeagues.some((l) => l.bestBall)) lines.push('Best Ball scoring lineups are selected automatically by the provider. Treat injuries in those leagues as roster availability and depth concerns, not requests for manual starter swaps.')
+
   /* Each gap can only HIDE an injury, never invent one — so each says the true list can only be LONGER. */
   const gaps: string[] = []
-  if (truncated > 0) gaps.push(`${truncated} further league(s) were not scanned (cap ${MAX_LEAGUES_SCANNED})`)
+  if (unchecked > 0) gaps.push(`${unchecked} league(s) were not checked at all (named under PARTIAL SCAN above)`)
   if (unreadable.length > 0) {
     gaps.push(
-      `${unreadable.length} league(s) have no claimed or synced team for this user (${unreadable.slice(0, 6).join(', ')}) — NOT a finding that those rosters are healthy`,
+      `${unreadable.length} league(s) have no claimed or synced team for this user (${nameList(unreadable)}) — NOT a finding that those rosters are healthy`,
     )
   }
-  if (empty.length > 0) gaps.push(`${empty.length} league(s) have a team with no players synced (${empty.slice(0, 6).join(', ')})`)
+  /* nameList, not .slice(0, 6): a 2026-09-28 answer said "8 leagues" and could name only 6 of them. */
+  if (empty.length > 0) gaps.push(`${empty.length} league(s) have a team with no players synced (${nameList(empty)})`)
   if (unnamedTotal > 0) gaps.push(`${unnamedTotal} rostered player(s) could not be identified by name, so they were not checked`)
   if (ambiguous.size > 0) {
     gaps.push(

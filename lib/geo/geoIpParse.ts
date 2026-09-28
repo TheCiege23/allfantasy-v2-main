@@ -10,10 +10,20 @@
 
 import { normaliseCountry, normaliseRegion } from "./geoHeaders"
 
+/**
+ * WHAT hid the client, so the block page can name it. A person who has just
+ * switched a VPN off and is still refused needs to hear "iCloud Private Relay is
+ * still on", not the same generic page again — measured 2026-09-28 on the
+ * owner's own iPhone, where "try again" reloaded an identical page forever.
+ */
+export type AnonymizerKind = "tor" | "privacy_relay" | "vpn" | "proxy" | "hosting"
+
 export interface ParsedIpGeo {
   country: string | null
   regionCode: string | null
   vpnHint: boolean
+  /** Which signal set `vpnHint`. Absent or null when `vpnHint` is false. */
+  vpnKind?: AnonymizerKind | null
   /** The call returned a payload but carried no field we could read a country from. */
   shapeUnrecognised: boolean
 }
@@ -96,11 +106,18 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
   if (data.error) return UNREADABLE_IP_GEO
 
   const org = String(data.org ?? "").toLowerCase()
-  const vpnHint =
-    org.includes("vpn") ||
-    org.includes("proxy") ||
-    org.includes("hosting") ||
-    isPrivacyRelayNetwork(data.asn, data.org)
+  // Relay first: its instructions differ from a VPN's, and a relay network's
+  // name can also contain "hosting".
+  const vpnKind: AnonymizerKind | null = isPrivacyRelayNetwork(data.asn, data.org)
+    ? "privacy_relay"
+    : org.includes("vpn")
+      ? "vpn"
+      : org.includes("proxy")
+        ? "proxy"
+        : org.includes("hosting")
+          ? "hosting"
+          : null
+  const vpnHint = vpnKind !== null
 
   const country = asCountryCode(data.country_code) ?? asCountryCode(data.country)
   // `region` is the full name ("Washington") in most vendors' payloads and is
@@ -110,10 +127,10 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
 
   if (!country) {
     warnShapeOnce(Object.keys(data))
-    return { country: null, regionCode: null, vpnHint, shapeUnrecognised: true }
+    return { country: null, regionCode: null, vpnHint, vpnKind, shapeUnrecognised: true }
   }
 
-  return { country, regionCode, vpnHint, shapeUnrecognised: false }
+  return { country, regionCode, vpnHint, vpnKind, shapeUnrecognised: false }
 }
 
 /**
@@ -147,19 +164,13 @@ export interface ProxycheckVerdict {
   /** The vendor answered about this IP. False on a denial, an error or an unreadable payload. */
   answered: boolean
   anonymized: boolean
+  /** Which signal set `anonymized`. Absent or null when `anonymized` is false. */
+  kind?: AnonymizerKind | null
   /** Top-level `status: "denied"` — quota exhausted or key refused. Every answer is "unknown" while it holds. */
   denied: boolean
 }
 
 const PROXYCHECK_UNANSWERED: ProxycheckVerdict = { answered: false, anonymized: false, denied: false }
-
-/**
- * proxycheck.io `type` values that mean the address cannot place a person.
- * `HOSTING` is a data centre: a VPN the vendor has not catalogued yet usually
- * lands here, and a residence never does. The ipapi hint already counted
- * "hosting" before this existed, so this keeps the two vendors on one rule.
- */
-const ANONYMIZING_TYPES = ["VPN", "TOR", "HOSTING"]
 
 let warnedDenied = false
 
@@ -203,11 +214,23 @@ export function parseProxycheckPayload(data: Record<string, unknown> | null, ip:
 
   const proxy = String(entry.proxy ?? "").toLowerCase()
   const type = String(entry.type ?? "").toUpperCase()
-  const anonymized =
-    proxy === "yes" ||
-    ANONYMIZING_TYPES.some((t) => type.includes(t)) ||
-    isPrivacyRelayNetwork(entry.asn, entry.provider ?? entry.organisation)
-  return { answered: true, anonymized, denied: false }
+  // proxycheck.io `type` values VPN, TOR and HOSTING mean the address cannot
+  // place a person. HOSTING is a data centre: a VPN the vendor has not
+  // catalogued yet usually lands there, and a residence never does.
+  // Relay first: proxycheck may also type a relay egress "VPN", and a person
+  // told to disconnect a VPN they are not running gets stuck exactly here.
+  const kind: AnonymizerKind | null = isPrivacyRelayNetwork(entry.asn, entry.provider ?? entry.organisation)
+    ? "privacy_relay"
+    : type.includes("TOR")
+      ? "tor"
+      : type.includes("VPN")
+        ? "vpn"
+        : type.includes("HOSTING")
+          ? "hosting"
+          : proxy === "yes"
+            ? "proxy"
+            : null
+  return { answered: true, anonymized: kind !== null, kind, denied: false }
 }
 
 /**
@@ -219,15 +242,29 @@ export function parseProxycheckPayload(data: Record<string, unknown> | null, ip:
  * The gate fails open on it — deliberately, because a vendor outage must not
  * take the product down — but it is an absence of evidence, not evidence.
  */
-export function combineAnonymizerSignals(s: {
+export function combineAnonymizerSignals(s: AnonymizerSignals): boolean | null {
+  return combineAnonymizerDetail(s).anonymized
+}
+
+export interface AnonymizerSignals {
   tor: boolean
   proxycheck: ProxycheckVerdict | null
   ipapi: ParsedIpGeo | null
-}): boolean | null {
-  if (s.tor) return true
-  if (s.proxycheck?.anonymized) return true
-  if (s.ipapi?.vpnHint) return true
-  if (s.proxycheck?.answered) return false
-  if (s.ipapi && (s.ipapi.country !== null || s.ipapi.shapeUnrecognised)) return false
-  return null
+}
+
+export interface AnonymizerDetail {
+  /** Same meaning as `combineAnonymizerSignals`: true, false, or null for "nobody could tell". */
+  anonymized: boolean | null
+  /** Set only when `anonymized` is true. */
+  kind: AnonymizerKind | null
+}
+
+/** `combineAnonymizerSignals`, plus which signal decided it. One rule, two shapes. */
+export function combineAnonymizerDetail(s: AnonymizerSignals): AnonymizerDetail {
+  if (s.tor) return { anonymized: true, kind: "tor" }
+  if (s.proxycheck?.anonymized) return { anonymized: true, kind: s.proxycheck.kind ?? "proxy" }
+  if (s.ipapi?.vpnHint) return { anonymized: true, kind: s.ipapi.vpnKind ?? "vpn" }
+  if (s.proxycheck?.answered) return { anonymized: false, kind: null }
+  if (s.ipapi && (s.ipapi.country !== null || s.ipapi.shapeUnrecognised)) return { anonymized: false, kind: null }
+  return { anonymized: null, kind: null }
 }

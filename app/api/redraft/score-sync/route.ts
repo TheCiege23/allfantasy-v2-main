@@ -1,3 +1,5 @@
+import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
+import { runNativeTournamentWeek } from '@/lib/bestball/nativeTournament'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -158,8 +160,15 @@ async function runLegacyAutomationBridge() {
 async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
     // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
-    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
-    select: { id: true, leagueId: true, sport: true, status: true },
+    where: {
+      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }), {
+        OR: [
+          { status: { in: [...SCORING_SEASON_STATUSES] } },
+          { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },
+        ],
+      }],
+    },
+    select: { id: true, leagueId: true, sport: true, status: true, league: { select: { bbContestId: true, bestBallMode: true, settings: true } } },
     orderBy: { id: 'asc' },
   })
   const seasons = rotatingBatch(eligible, SCORE_SYNC_BATCH, Date.now())
@@ -171,6 +180,8 @@ async function runRedraftReconciliation() {
   let weeksFinalized = 0
   let finalizeFailed = 0
   const finalizeRefusals: Record<string, number> = {}
+  let tournamentFailed = 0
+  const tournamentOutcomes: Record<string, number> = {}
   let guillotineChops = 0
   let guillotineFailed = 0
   const guillotineOutcomes: Record<string, number> = {}
@@ -179,6 +190,14 @@ async function runRedraftReconciliation() {
   const playoffOutcomes: Record<string, number> = {}
 
   for (const season of seasons) {
+    // A finished contest needs no provider fetch or live-season calendar to repair its archive.
+    if (season.status === 'complete' && isNativeTournamentLeague(season.league)) {
+      try {
+        const outcome = await runNativeTournamentWeek(season.id, 1)
+        tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
+      } catch { tournamentFailed += 1 }
+      continue
+    }
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
     if (!resolved.ok || resolved.phase === 'preseason') {
       skippedUnresolvedWeek += 1
@@ -196,7 +215,7 @@ async function runRedraftReconciliation() {
      * The stat sync still runs first: the playoff teams' players need this week's rows, and
      * nothing else fetched them once the season left the running statuses.
      */
-    if (season.status === REDRAFT_SEASON_STATUS.PLAYOFFS) {
+    if (season.status === REDRAFT_SEASON_STATUS.PLAYOFFS && !isNativeTournamentLeague(season.league)) {
       try {
         await syncPlayerWeeklyScoresForRedraftSeason({
           seasonId: season.id,
@@ -300,6 +319,12 @@ async function runRedraftReconciliation() {
      * sweep for the same reason the sweep runs after the sync: an older week is still owed its chop
      * even when this tick's sync failed. One chop per week, guarded inside.
      */
+    if (isNativeTournamentLeague(season.league)) {
+      try {
+        const outcome = await runNativeTournamentWeek(season.id, resolved.fantasyWeek)
+        tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
+      } catch { tournamentFailed += 1 }
+    }
     try {
       const guillotine = await runNativeGuillotineWeek(
         { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek },
@@ -327,6 +352,8 @@ async function runRedraftReconciliation() {
     weeksFinalized,
     finalizeFailed,
     finalizeRefusals,
+    tournamentFailed,
+    tournamentOutcomes,
     guillotineChops,
     guillotineFailed,
     guillotineOutcomes,
@@ -434,6 +461,7 @@ export async function GET(request: Request) {
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
         r.redraft.guillotineFailed > 0 ||
+        r.redraft.tournamentFailed > 0 ||
         r.redraft.playoffFailed > 0
           ? 'partial'
           : 'success',

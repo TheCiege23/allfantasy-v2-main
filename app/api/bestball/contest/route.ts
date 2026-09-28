@@ -1,3 +1,4 @@
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -13,6 +14,15 @@ export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams?.get('status')?.trim()
 
   if (contestId) {
+    const leagues = await prisma.league.findMany({ where: { bbContestId: contestId }, select: { id: true }, take: 100 })
+    if (leagues.length) {
+      const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+      const userId = session?.user?.id
+      if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      let allowed = false
+      for (const league of leagues) if (await canAccessLeagueDraft(league.id, userId)) { allowed = true; break }
+      if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const contest = await prisma.bestBallContest.findFirst({
       where: { id: contestId },
       include: { pods: { include: { entries: true } }, entries: true },
@@ -29,7 +39,7 @@ export async function GET(req: NextRequest) {
         }
       : {}
   const list = await prisma.bestBallContest.findMany({
-    where,
+    where: { ...where, leagues: { none: {} } },
     orderBy: { createdAt: 'desc' },
     take: 50,
   })

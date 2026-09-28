@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { suggestCatalog, type PlayerMatch } from './playerFinder'
 import { normalizePosition } from './positionNormalization'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
-import { translateRostersByLeague } from './rosterIdSpace'
+import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
 
 /**
  * Suggestions as you type, ranked by what you meant and annotated with where
@@ -67,9 +67,17 @@ async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
   // ⚠ A failed read REJECTS. It used to resolve to `[]`, which made a refresh that failed
   // replace a good ten-minute count with an empty map — the suggestion ranking then lost its
   // "rostered globally" signal until the next refresh. The caller decides what a failure means.
-  const rosters: Array<{ playerData: unknown }> = await prisma.roster.findMany({ select: { playerData: true } })
+  const rosters: Array<{ playerData: unknown; league: { platform: string | null } | null }> = await prisma.roster.findMany({
+    select: { playerData: true, league: { select: { platform: true } } },
+  })
   const counts = new Map<string, number>()
   for (const r of rosters) {
+    /*
+     * A foreign-id roster (Fleaflicker/MFL/Fantrax/Yahoo) is not counted: its ids are the provider's
+     * own numbers in Sleeper's range, so counting them credited real Sleeper players with rosters they
+     * are not on and ranked them up the suggestions (isForeignIdSpace, rosterIdSpace.ts).
+     */
+    if (isForeignIdSpace(r.league?.platform)) continue
     for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) counts.set(id, (counts.get(id) ?? 0) + 1)
   }
   return counts

@@ -181,7 +181,13 @@ describe('Redraft trade proposals route contract', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.proposals).toEqual([{ id: 'p-1', status: 'pending' }])
+    // Trade OS: each proposal carries the one grade. A proposal with no assets on record is withheld,
+    // without building a grader; the receipt id is null until the receipts migration is applied.
+    expect(body.proposals).toEqual([{
+      id: 'p-1',
+      status: 'pending',
+      tradeGrade: { grade: null, partnerGrade: null, gradeWithheld: 'This proposal has no assets on record.', receiptId: null },
+    }])
   })
 
   it('creates a normalized proposal with assets', async () => {
@@ -425,6 +431,8 @@ describe('Redraft trade votes route contract', () => {
     expect(applyRedraftTradeCapTransfersInTransactionMock).toHaveBeenCalledTimes(1)
     expect(prismaMock.redraftLeagueTrade.create).toHaveBeenCalledTimes(1)
     expect(enqueueCollusionScanMock).toHaveBeenCalledTimes(1)
+    // The scan reviews the REAL proposal, never the legacy mirror row.
+    expect(enqueueCollusionScanMock).toHaveBeenCalledWith('l-1', { kind: 'redraft', proposalId: 'p-1' }, ['r-1', 'r-2'])
     // Execution evidence is written WITH the trade. `TradeExecutionSnapshot` had no writer at all
     // before this, so a settled trade left nothing for a reversal to restore to.
     expect(prismaMock.tradeExecutionSnapshot.create).toHaveBeenCalledTimes(1)

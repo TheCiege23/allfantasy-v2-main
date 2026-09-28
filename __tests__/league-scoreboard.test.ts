@@ -340,3 +340,43 @@ describe('getLeagueScoreboard', () => {
     expect(sb!.games[0].teams.find((t) => t.rosterId === '1')!.projected).not.toBeNull()
   })
 })
+
+/*
+ * 🛑 A Fleaflicker/MFL/Fantrax/Yahoo roster holds the PROVIDER's ids, short numbers in Sleeper's
+ * range. '6038' here is a real Sleeper id in the fake projection table, so pricing it would put
+ * a stranger's projection into the pre-kickoff total and the win probability.
+ */
+describe('getLeagueScoreboard — a foreign-id roster is never priced as Sleeper ids', () => {
+  function collidingBoard(platform: string) {
+    matchupFindMany.mockResolvedValue([
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
+    ])
+    teamFindMany.mockResolvedValue([
+      { externalId: '1', teamName: 'Yours', ownerName: 'you', avatarUrl: null, platformUserId: 'u1', claimedByUserId: null },
+      { externalId: '2', teamName: 'Them', ownerName: 'them', avatarUrl: null, platformUserId: 'u2', claimedByUserId: null },
+    ])
+    rosterFindMany.mockResolvedValue([
+      { platformUserId: 'u1', playerData: { starters: ['6038', '6039'] }, league: { platform } },
+      { platformUserId: 'u2', playerData: { starters: ['7001', '7002'] }, league: { platform } },
+    ])
+    pricedAll()
+  }
+
+  it('Fleaflicker: no stranger projections, no totals, no win probability', async () => {
+    collidingBoard('fleaflicker')
+    const sb = await getLeagueScoreboard(BASE)
+    const [a, b] = sb!.games[0].teams
+    expect([a.projected, b.projected]).toEqual([null, null])
+    expect(sb!.games[0].winProbability).toBeNull()
+    expect(projFindMany).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL: the same ids in a Sleeper league ARE priced', async () => {
+    collidingBoard('sleeper')
+    const sb = await getLeagueScoreboard(BASE)
+    const [a, b] = sb!.games[0].teams
+    expect([a.projected, b.projected]).toEqual([12, 12])
+    expect(projFindMany).toHaveBeenCalled()
+  })
+})

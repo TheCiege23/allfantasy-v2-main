@@ -9,6 +9,11 @@ import {
   type TradeOfferCard,
   type TradeOfferStatusNote,
 } from '@/lib/chat-notifications/tradeOfferCard'
+import {
+  tradeCardGradeBasisLabel,
+  tradeCardGradeLine,
+  type TradeCardGrade,
+} from '@/lib/league-chat/tradeCardGradeView'
 
 type TradeAsset = { id: string; name: string | null; position?: string | null; team?: string | null }
 
@@ -25,9 +30,13 @@ export type TradeCard = {
   /** FAAB, specialty assets — anything that is not a player or a draft pick — as labels. */
   extrasGave?: string[]
   extrasGot?: string[]
-  /** Market value of each side from `manager`'s point of view. Present only with Chimmy's take. */
+  /** Value of each side from `manager`'s point of view; `valueBasis` says league or market. */
   valueGave?: number | null
   valueGot?: number | null
+  /** Absent on cards written before 2026-09-27, whose numbers were always FantasyCalc market value. */
+  valueBasis?: 'league' | 'market' | null
+  /** THE grade — both teams' letters, or why there is none. Absent on older cards. */
+  grade?: TradeCardGrade | null
   /** Where the trade stands, e.g. "Accepted. It goes to commissioner review before it processes." */
   note?: string | null
 }
@@ -52,15 +61,15 @@ export type TradeCard = {
  * limitation of the data, and it says "unknown player" rather than printing a
  * raw Sleeper id at somebody.
  *
- * ⚠ NO GRADE HERE. This states what happened and stops. Attaching a winner to a
- * trade the moment it lands turns a card people can talk about into a verdict
- * they have to argue with, and this app already knows that a letter grade with
- * no data behind it is worse than no grade at all.
- *
- * The verdict, when there is one, is CHIMMY'S and it is the message text above
- * this card (lib/league-chat/chimmyTradeTake.ts) — made only when every asset on
- * both sides has a market value. The card then shows each side's number, so the
- * take can be checked against the facts it came from. No values, no numbers.
+ * THE GRADE, AND ONLY THE GRADE (2026-09-27). This card used to carry no letter,
+ * and the verdict was Chimmy's market take in the message above it — worded from a
+ * private letter no other screen uses, so the chat could crown a manager every
+ * other surface graded a D. Now, when the one grade can be read, the card shows
+ * both teams' letters and the league values they were taken on, and the message is
+ * worded from those letters (lib/league-chat/tradeCardGradeView.ts). A withheld
+ * grade says why, with no letter — a letter with no data behind it is still worse
+ * than none. A card with no grade at all (an older native trade with no receipt)
+ * keeps the market take's numbers, labelled as market value.
  */
 export function TradeCardView({
   card,
@@ -137,7 +146,23 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
         </div>
       </div>
 
-      {valued ? <p className="af-cm-trade-when af-cm-trade-valuenote">Market value, from FantasyCalc.</p> : null}
+      {card.grade ? (
+        <p
+          className="af-cm-trade-label af-cm-trade-grade"
+          data-testid={card.grade.graded ? 'trade-card-grade' : 'trade-card-grade-withheld'}
+        >
+          {card.grade.graded ? 'Grade: ' : ''}
+          {tradeCardGradeLine(card.manager, card.partner, card.grade)}
+          {card.grade.graded ? (
+            <span className="af-cm-trade-when"> · {tradeCardGradeBasisLabel(card.grade.basis)}</span>
+          ) : null}
+        </p>
+      ) : null}
+      {valued ? (
+        <p className="af-cm-trade-when af-cm-trade-valuenote">
+          {card.valueBasis === 'league' ? "League value, on this league's chart." : 'Market value, from FantasyCalc.'}
+        </p>
+      ) : null}
       {card.note ? <p className="af-cm-trade-when af-cm-trade-note">{card.note}</p> : null}
     </div>
   )

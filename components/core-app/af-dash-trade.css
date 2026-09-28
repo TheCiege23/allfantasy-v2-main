@@ -107,7 +107,7 @@
 .af-trade-got {
   display: block;
   margin: 2px 0 5px;
-  font-size: 8.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--muted);
@@ -159,7 +159,7 @@
   font-weight: 900;
 }
 .af-trade-pos {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted);
 }

@@ -4,8 +4,8 @@ import type { SportsPlayerRecord } from '@prisma/client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
-import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
+import { getFantasyCalcChartDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
@@ -16,6 +16,7 @@ import { analysisUnpricedReason, type UnpricedReason } from '@/lib/trade-value/u
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import type { LoadedTradeLeague } from './league-loader'
 import { sportsRecordToPricedAsset } from './sports-db-valuation'
+import { tradeFormatCoverage } from './formatCoverage'
 import type { TradeAssetInput, TradeConsoleLeagueSnapshot, TradeConsolePlayerLine } from './types'
 
 /**
@@ -139,6 +140,12 @@ export function lineFromPriced(
     composite: compositeScore(pa.assetValue),
     marketValue: pa.assetValue.marketValue,
     pricedSource: meta.pricedSource ?? 'unknown',
+    ...(meta.projectionSource ? {
+      effectiveProjection: meta.effectiveProjection,
+      projectionSource: meta.projectionSource,
+      projectionScope: meta.projectionScope,
+      projectionNotes: meta.projectionNotes,
+    } : {}),
     ...(pa.unpriced
       ? {
           unpriced: true,
@@ -284,6 +291,19 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
   }
 }
 
+/** The same pick price for roster previews and the full evaluator. */
+export async function priceLeagueTradePick(
+  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null },
+  args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[] },
+): Promise<{ priced: PricedAsset; dataSource: string }> {
+  const curve = await pricePick({ ...pick, tier: pick.tier ?? null }, args.nflCtx)
+  const live = livePickValue(args.fcPlayers, pick.year, pick.round, pick.tier ?? null)
+  return {
+    priced: live != null ? repricedAsset(curve, live, 'fantasycalc') : curve,
+    dataSource: live != null ? 'fantasycalc_pick' : 'historical_pick_curve',
+  }
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -302,12 +322,7 @@ export async function resolveAssets(
 
   for (const raw of items) {
     if (raw.kind === 'pick') {
-      const curve = await pricePick(
-        { year: raw.year, round: raw.round, tier: raw.tier ?? null },
-        args.nflCtx,
-      )
-      const live = livePickValue(args.fcPlayers, raw.year, raw.round, raw.tier ?? null)
-      const p = live != null ? repricedAsset(curve, live, 'fantasycalc') : curve
+      const { priced: p, dataSource } = await priceLeagueTradePick(raw, args)
       priced.push(p)
       lines.push(
         lineFromPriced(p, {
@@ -316,7 +331,7 @@ export async function resolveAssets(
           team: `${raw.year}`,
           pricedSource: 'pick',
           playerId: null,
-          dataSource: live != null ? 'fantasycalc_pick' : 'historical_pick_curve',
+          dataSource,
         }),
       )
       continue
@@ -390,12 +405,17 @@ export async function resolveAssets(
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
       const pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+      const defenderProjection = pa.source === 'idp-vorp' ? leagueValueForPlayer({
+        name: displayName, identity: { sleeperId: knownSleeperId, position },
+        bySleeperId: args.nflCtx.leagueValueBySleeperId,
+        byNameLower: args.nflCtx.leagueValueByNameLower,
+      })?.projection : null
       const unpricedReason = pa.unpriced
         ? pa.unpricedReason ?? (knownSleeperId ? args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId) : null)
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
-      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat') {
+      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
@@ -403,7 +423,7 @@ export async function resolveAssets(
       const src: TradeConsolePlayerLine['pricedSource'] =
         pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
-          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat'
+          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat' || pa.source === 'dst-flat'
             ? 'idp_league'
             : 'unknown'
       lines.push(
@@ -421,17 +441,21 @@ export async function resolveAssets(
           pricedSource: src,
           dataSource: row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
+          ...(defenderProjection ? {
+            effectiveProjection: defenderProjection.points,
+            projectionSource: 'league_idp_history' as const,
+            projectionScope: { season: defenderProjection.season, week: defenderProjection.week },
+            projectionNotes: [`${defenderProjection.season} week ${defenderProjection.week}: league-scored defensive history estimate. Live injury and weather adjustments are not included in this estimate.`],
+          } : {}),
         }, { reasonPosition: position ?? null, unpricedReason }),
       )
       continue
     }
 
-    if (!row && displayName.length >= 2) {
+    if (!row && !raw.playerId && !raw.providerIdentity && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
-      row = (found[0] ?? null) as SportsPlayerRecord | null
-    }
-    if (!row && raw.playerId) {
-      row = (await getPlayer(raw.playerId.trim(), { sport: args.effectiveSport })) as SportsPlayerRecord | null
+      const exact = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      row = (exact.length === 1 ? exact[0] : null) as SportsPlayerRecord | null
     }
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')
@@ -499,7 +523,10 @@ export type LeagueTradeChart = {
   /** The reception weight the chart was REQUESTED with — `scoringFit` measures against this. */
   pprNfl: 0 | 0.5 | 1
   fcPlayers: FantasyCalcPlayer[]
+  /** When `fcPlayers` was synced from FantasyCalc (ISO) — the age of every market value on the chart. */
+  fcSyncedAt?: string | null
   nflCtx: ValuationContext
+  valuationGaps?: string[]
 }
 
 /**
@@ -514,6 +541,7 @@ export async function resolveLeagueTradeChart(args: {
   mark?: (name: string) => void
 }): Promise<LeagueTradeChart> {
   const { leagueRow, leagueSnapshot, leagueNormCtx } = args
+  const coverage = leagueRow ? tradeFormatCoverage(leagueRow) : { gaps: [], prohibitedReason: null }
   const input = args.overrides ?? {}
   const leagueSize =
     input.leagueSize ??
@@ -571,7 +599,7 @@ export async function resolveLeagueTradeChart(args: {
    * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
    * retired, this number has to come back DOWN to 6 h or lower, not up.
    */
-  const fcPlayers = await getFantasyCalcValuesDbFirst(
+  const { players: fcPlayers, syncedAt: fcSyncedAt } = await getFantasyCalcChartDbFirst(
     {
       isDynasty: chartIsDynasty,
       numQbs: isSuperFlex ? 2 : 1,
@@ -612,6 +640,7 @@ export async function resolveLeagueTradeChart(args: {
     proposalRules: {
       tradesEnabled: leagueNormCtx?.lineupBehavior.bestBallSettings?.tradesEnabled ?? null,
       draftPickTrading: leagueNormCtx?.trade.draftPickTrading ?? null,
+      formatProhibition: coverage.prohibitedReason,
     },
     marketCtx,
     chartIsDynasty,
@@ -620,7 +649,9 @@ export async function resolveLeagueTradeChart(args: {
     waiverBudget,
     pprNfl,
     fcPlayers,
+    fcSyncedAt,
     nflCtx,
+    valuationGaps: coverage.gaps,
   }
 }
 

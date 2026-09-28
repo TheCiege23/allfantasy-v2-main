@@ -72,6 +72,23 @@ describe("buildCompressedSystemPrompt — REPLACEMENT OPTIONS section", () => {
     expect(prompt).toContain("No real projection data exists for this league yet")
   })
 
+  it("a league whose roster ids cannot be read says so — never 'no better options'", () => {
+    const prompt = buildCompressedSystemPrompt({
+      rawPrompt: "BASE PROMPT",
+      ctx,
+      structuredFantasyContext: {
+        replacementOptions: {
+          playerName: "Test Player",
+          limitation: "roster_ids_unreadable",
+          benchOptions: [],
+          freeAgentOptions: [],
+        },
+      },
+    })
+    expect(prompt).toContain("cannot be matched to ours yet")
+    expect(prompt).toContain("do not suggest alternatives")
+  })
+
   it("absent replacementOptions leaves the prompt untouched", () => {
     const without = buildCompressedSystemPrompt({ rawPrompt: "BASE PROMPT", ctx, structuredFantasyContext: {} })
     expect(without).not.toContain("REPLACEMENT OPTIONS")

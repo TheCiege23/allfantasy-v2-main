@@ -2440,7 +2440,10 @@ function AFLegacyContent() {
         setCanShareToday(false)
         
         const tweetText = encodeURIComponent(
-          `Just analyzed a trade on @AllFantasyAI and got a ${inlineTradeResult?.grade || 'A'} grade! 🏈\n\nVerdict: ${inlineTradeResult?.verdict || 'Fair Trade'}\n\n#FantasyFootball #Dynasty`
+          // Never a default letter or verdict: a withheld grade is shared as "analyzed", not as an A.
+          inlineTradeResult?.grade
+            ? `Just analyzed a trade on @AllFantasyAI and got a ${inlineTradeResult.grade} grade! 🏈${inlineTradeResult.verdict ? `\n\nVerdict: ${inlineTradeResult.verdict}` : ''}\n\n#FantasyFootball #Dynasty`
+            : `Just analyzed a trade on @AllFantasyAI! 🏈\n\n#FantasyFootball #Dynasty`
         )
         window.open(`https://twitter.com/intent/tweet?text=${tweetText}`, '_blank')
       } else {
@@ -8024,6 +8027,11 @@ function AFLegacyContent() {
                               }`}>
                                 {inlineTradeResult.grade || '—'}
                               </div>
+                              {!inlineTradeResult.grade && inlineTradeResult.gradeWithheld && (
+                                <div data-testid="trade-grade-withheld" className="mt-2 text-xs text-amber-200/90">
+                                  Not graded. {inlineTradeResult.gradeWithheld}
+                                </div>
+                              )}
                             </div>
 
                             {/* Fairness Score */}

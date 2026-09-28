@@ -14,6 +14,34 @@ export type EvaluatedCounterOffer = {
   balanced: boolean
 }
 
+/** The same identity exclusions apply to both the target list and counter search. */
+export function availableRosterTargets(input: {
+  targets: TradeConsoleOpponentRosterTarget[]
+  selected: TradeAssetInput[]
+  selectedProviderIds?: Array<{ provider: string; id: string } | null>
+}): TradeConsoleOpponentRosterTarget[] {
+  const identities = (a: { playerId?: string; providerIdentity?: { provider: string; id: string } }) => [
+    a.providerIdentity ? `${a.providerIdentity.provider}:${a.providerIdentity.id}` : null,
+    a.playerId ? `record:${a.playerId}` : null,
+  ].filter((key): key is string => key !== null)
+  const selectedKeys = input.selected.map((a, i) => {
+    const verified = input.selectedProviderIds?.[i]
+    return a.kind === 'player' ? [...identities(a), ...(verified ? [`${verified.provider}:${verified.id}`] : [])] : []
+  })
+  const ids = new Set(selectedKeys.flat())
+  const names = new Set(input.selected.flatMap((a, i) => a.kind === 'player' && selectedKeys[i].length === 0 && a.name ? [a.name.trim().toLowerCase()] : []))
+  const seen = new Set<string>()
+  return input.targets.filter(a => {
+    const keys = identities(a)
+    const dedupeKeys = keys.length ? keys : [a.id]
+    if (!a.id || keys.some(key => ids.has(key)) || names.has(a.name.trim().toLowerCase()) ||
+      (keys.length === 0 && input.selected.some(s => s.kind === 'player' && s.name?.trim().toLowerCase() === a.name.trim().toLowerCase())) ||
+      dedupeKeys.some(key => seen.has(key)) || !Number.isFinite(a.marketValue) || a.marketValue <= 0) return false
+    dedupeKeys.forEach(key => seen.add(key))
+    return true
+  })
+}
+
 /** Shortlist by market price, then re-evaluate the WHOLE package with the shared league grader.
  * A shortlist price is never presented as the resulting league value. */
 export async function evaluateCounterOffers(input: {
@@ -22,27 +50,18 @@ export async function evaluateCounterOffers(input: {
   get: TradeAssetInput[]
   yourTargets: TradeConsoleOpponentRosterTarget[]
   theirTargets: TradeConsoleOpponentRosterTarget[]
+  /** Canonical provider IDs resolved by the grader, in selection order. */
+  selectedProviderIds?: Array<{ provider: string; id: string } | null>
   evaluate: (give: TradeAssetInput[], get: TradeAssetInput[]) => Promise<TradeGradeView>
   canRecommend?: (give: TradeAssetInput[], get: TradeAssetInput[]) => Promise<boolean>
 }): Promise<EvaluatedCounterOffer[]> {
   if (!input.grade.graded || input.grade.sideAdvantage === 'even') return []
   const baseline = Math.abs(input.grade.getValue - input.grade.giveValue)
   const addTo = input.grade.getValue < input.grade.giveValue ? 'get' : 'give'
-  const selected = [...input.give, ...input.get]
-  const identity = (a: { playerId?: string; providerIdentity?: { provider: string; id: string } }) =>
-    a.providerIdentity ? `${a.providerIdentity.provider}:${a.providerIdentity.id}` : a.playerId ? `record:${a.playerId}` : null
-  const ids = new Set(selected.flatMap(a => a.kind === 'player' && identity(a) ? [identity(a)!] : []))
-  const names = new Set(selected.flatMap(a => a.kind === 'player' && !identity(a) && a.name ? [a.name.trim().toLowerCase()] : []))
-  const seen = new Set<string>()
-  const candidates = (addTo === 'get' ? input.theirTargets : input.yourTargets)
-    .filter(a => {
-      const key = identity(a)
-      if (!a.id || (key && ids.has(key)) || names.has(a.name.trim().toLowerCase()) ||
-        (!key && selected.some(s => s.kind === 'player' && s.name?.trim().toLowerCase() === a.name.trim().toLowerCase())) ||
-        seen.has(key ?? a.id) || !Number.isFinite(a.marketValue) || a.marketValue <= 0) return false
-      seen.add(key ?? a.id)
-      return true
-    })
+  const candidates = availableRosterTargets({
+    targets: addTo === 'get' ? input.theirTargets : input.yourTargets,
+    selected: [...input.give, ...input.get], selectedProviderIds: input.selectedProviderIds,
+  })
     .sort((a, b) => Math.abs(a.marketValue - baseline) - Math.abs(b.marketValue - baseline) || a.name.localeCompare(b.name))
     .slice(0, 4)
   const results = await Promise.all(candidates.map(async (candidate): Promise<EvaluatedCounterOffer | null> => {

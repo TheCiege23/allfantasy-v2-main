@@ -35,6 +35,7 @@ import { projectRosterSlots } from './derive'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 
 export interface CanonicalWorldPort {
   loadLeague(leagueId: string): Promise<RawLeagueRow | null>
@@ -171,6 +172,7 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
         faabRemaining: true,
         waiverPriority: true,
         settings: true,
+        league: { select: { platform: true } },
       },
     })
     const canonical: RawRosterRow[] = rows.map((row: {
@@ -180,10 +182,18 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
       faabRemaining: number | null
       waiverPriority: number | null
       settings: unknown
+      league: { platform: string | null } | null
     }) => ({
       id: row.id,
       platformUserId: row.platformUserId ?? '',
-      playerData: row.playerData ?? null,
+      /*
+       * ⚠ THE ONE PLACE THIS SUBSTRATE KNOWS THE PROVIDER, ON PURPOSE. A Fleaflicker/MFL/Fantrax/Yahoo
+       * roster holds that provider's own ids, short numbers that collide with real Sleeper ids, and every
+       * enrichment read below (`loadPlayerMetadataRows`, injuries, values, projections) asks the Sleeper
+       * space first — so a collision named, injured and priced a stranger. Such a roster contributes no
+       * ids; the facts downstream stay origin-blind because they never see one.
+       */
+      playerData: sleeperReadablePlayerData(row.league?.platform, row.playerData ?? null),
       faabRemaining: row.faabRemaining ?? null,
       waiverPriority: row.waiverPriority ?? null,
       settings: row.settings ?? null,
@@ -274,8 +284,10 @@ export async function loadPlayerMetadataRows(
    * row could claim a Sleeper id's key and lock the real row out of it.
    *
    * These ids are mixed by design — provider ids for imported leagues, native ids for AF leagues
-   * — so the answer is order rather than exclusion. The Sleeper space is asked first and can never
-   * be a coincidence; the provider read then runs only for ids nothing in the Sleeper space
+   * — so the answer is order rather than exclusion. The Sleeper space is asked first; a hit there
+   * is no coincidence ONLY because `loadRosters` strips the foreign-id leagues (Fleaflicker, MFL,
+   * Fantrax, Yahoo) whose short numeric ids ARE real Sleeper ids — an ESPN id is long and collides
+   * with nothing. The provider read then runs only for ids nothing in the Sleeper space
    * claimed. Both keep `fetchedAt desc`, and the authoritative rows lead the returned array so the
    * projector's first-write-wins resolves to them.
    */
@@ -871,6 +883,7 @@ export async function loadIdpValueRows(args: {
       args.numTeams,
       (args.starterSlots ?? []).join(','),
       JSON.stringify(resolved.scoring),
+      JSON.stringify(resolved.projectionWindow ?? null),
       offRoster.join(','),
     ].join('|')
     const scoring = resolved.scoring
@@ -882,6 +895,7 @@ export async function loadIdpValueRows(args: {
         rosterSlots: args.starterSlots,
         numTeams: args.numTeams,
         isDynasty: args.isDynasty,
+        projectionWindow: resolved.projectionWindow,
       }),
     )
     const out: RawIdpValueRow[] = []

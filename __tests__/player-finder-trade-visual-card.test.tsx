@@ -201,3 +201,28 @@ describe('TradeVisual', () => {
     expect(screen.queryByText(/of the upgrade value/)).not.toBeInTheDocument()
   })
 })
+
+/*
+ * A no-trade league with no bid (a tournament). It used to fall through to "No balanced package for
+ * Kincaid right now", which reads as "try again later" in a league that can never send one.
+ */
+describe('TradeVisual in a league that does not allow trades', () => {
+  it('🛑 says so, with the catalog\'s reason, and none of the trade furniture', () => {
+    render(
+      <TradeVisual
+        state={{ available: true, data: { ...VISUAL, packages: [], recommended: null, bidInstead: null, tradesAllowed: false, tradeBan: 'Tournament entries are not rosters that trade with one another.' } }}
+        playerName="Dalton Kincaid"
+      />,
+    )
+    expect(screen.getByRole('heading', { level: 3, name: 'This league does not allow trades' })).toBeInTheDocument()
+    expect(screen.getByText(/not rosters that trade/)).toBeInTheDocument()
+    expect(screen.queryByText(/No balanced package/)).not.toBeInTheDocument()
+    expect(screen.queryByText('You give')).not.toBeInTheDocument()
+  })
+
+  it('[control] a league that trades still gets the trade card', () => {
+    render(<TradeVisual state={{ available: true, data: { ...VISUAL, tradesAllowed: true } }} playerName="Dalton Kincaid" />)
+    expect(screen.queryByRole('heading', { level: 3, name: 'This league does not allow trades' })).not.toBeInTheDocument()
+    expect(screen.getByText('You give')).toBeInTheDocument()
+  })
+})

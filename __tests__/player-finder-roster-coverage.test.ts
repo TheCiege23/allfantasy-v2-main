@@ -54,6 +54,8 @@ describe('coverageReason', () => {
   it('names the platform the ids belong to', () => {
     expect(coverageReason('espn')).toMatch(/ESPN player ids/)
     expect(coverageReason('yahoo')).toMatch(/Yahoo player ids/)
+    expect(coverageReason('fleaflicker')).toMatch(/Fleaflicker player ids/)
+    expect(coverageReason('MFL')).toMatch(/MFL player ids/)
     expect(coverageReason(null)).toMatch(/this platform/)
   })
 })

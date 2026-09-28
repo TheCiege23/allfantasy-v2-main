@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
@@ -251,7 +252,7 @@ export const dynamic = 'force-dynamic'
  * How many recent trades the home loads. Shared by the trade band's loader and the
  * since-last-visit brief, which must know the list is capped to say "3+" honestly.
  */
-const HOME_RECENT_TRADES_LIMIT = 3
+const HOME_RECENT_TRADES_LIMIT = 20
 
 /**
  * AF Core — every screen from the design handoff, behind ONE route.
@@ -1219,14 +1220,14 @@ export default async function AfCorePage({
    * but it will the moment a sync runs, and the shell no longer lies about
    * whether it is looking.
    */
-  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
+  const lastSynced = playedLeagues.filter(l => !pausedSyncLeagueIds?.has(l.id)).reduce<Date | null>((latest, l) => {
     const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
     if (!raw) return latest
     const d = raw instanceof Date ? raw : new Date(raw)
     if (Number.isNaN(d.getTime())) return latest
-    return latest == null || d > latest ? d : latest
+    return latest == null || d < latest ? d : latest
   }, null)
-  const syncAge = describeAge('roster', lastSynced, now)
+  const syncAge = describeAge('fantasy_league', lastSynced, now)
 
   const plan = access
     ? {
@@ -1631,7 +1632,7 @@ export default async function AfCorePage({
           }
           recommendationSlot={
             <Suspense key={selectedLeagueId} fallback={null}>
-              <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} />
+              {activeKey === 'home' ? <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} /> : null}
             </Suspense>
           }
         />
@@ -3107,7 +3108,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 viewerUserId: userId,
                 ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
                 currentWeek,
-                reconcileLive: true,
+                reconcileLive: false,
                 enrichLeagueContext: true,
                 maxLeagues: 8,
                 /*
@@ -3845,7 +3846,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <>
-            {myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
+            {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
               leagueId: myTeam.league.id,
               leagueName: myTeam.league.name,
               starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
@@ -3871,7 +3872,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <PickALeague
             tabKey="my-team"
             title="My team"
-            blurb="Which lineups still need setting, and how long you have left. Pick one below for the full roster."
+            blurb="Choose a league for its full roster, lineup checks and Chimmy analysis."
+            showQueue={false}
+            above={<p><Link href="/core/my-team">Back to lineup priorities</Link></p>}
             issues={issues}
             leagues={rail}
           />
@@ -3912,6 +3915,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               works is lost while the new surface settles.
             */}
             <TradeCenter
+              viewerId={userId}
               league={{
                 id: trades.league.id,
                 name: trades.league.name,
@@ -3934,7 +3938,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagues={tradeStripLeagues.filter((league) => league.id === selectedLeagueId)}
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
-              history={<Trades data={trades} />}
+              history={<Trades data={trades} hidePending />}
+              completedHistory={trades.league.platform === 'sleeper' && trades.history.available ? trades.history.data : []}
               edgeAccess={corePaywall?.competitive_edge ?? null}
             />
           </>
@@ -4155,7 +4160,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             */
             blurb={
               gamePlan?.available
-                ? 'Every decision still open across all your leagues, soonest deadline first. Scouting a room is per-league — pick one below for that.'
+                ? 'Flagged starters in active manual lineups, soonest deadline first; locked players follow. Scouting a room is per-league — pick one below for that.'
                 : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
             }
             issues={issues}

@@ -11,6 +11,10 @@ import { getPlayFeed, type PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import { estimateWinProbability, type WinProbability } from '@/lib/live/winProbability'
 import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
+import { myRosterCandidates, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
@@ -357,14 +361,17 @@ function teamLeaders(leaders: LiveScoreRow['homeTeamLeaders'], abbrev: string): 
 async function loadRosteredPlayers(
   userId: string,
   sport: string,
-): Promise<{ players: Map<string, RosteredPlayer>; hasRosterData: boolean }> {
+  period?: { season: number; week: number } | null,
+): Promise<{ players: Map<string, RosteredPlayer>; hasRosterData: boolean; rosterFailed?: boolean }> {
   const players = new Map<string, RosteredPlayer>()
 
   const teams = await prisma.leagueTeam.findMany({
     where: { claimedByUserId: userId },
     select: {
       leagueId: true,
-      league: { select: { id: true, name: true, platformLeagueId: true, sport: true, season: true } },
+      externalId: true,
+      platformUserId: true,
+      league: { select: { id: true, name: true, platform: true, platformLeagueId: true, sport: true, season: true, settings: true } },
     },
   })
   if (teams.length === 0) return { players, hasRosterData: false }
@@ -374,30 +381,65 @@ async function loadRosteredPlayers(
     .filter((l): l is NonNullable<typeof l> => l != null && String(l.sport) === sport)
   if (leagues.length === 0) return { players, hasRosterData: false }
 
-  /*
-   * ⚠ THE WEEK IS READ FROM THE DATA, NOT ASSUMED. A hardcoded "current week" is
-   * how a live page silently shows last week's numbers all Sunday. Each league
-   * reports its own, so the newest week per league is the one in play.
-   */
-  const rows = await prisma.leaguePlayerWeeklyScore.findMany({
-    where: {
-      leagueId: { in: leagues.map((l) => l.platformLeagueId) },
-      seasonYear: { in: [...new Set(leagues.map((l) => l.season))] },
-    },
-    orderBy: [{ week: 'desc' }],
-    select: { leagueId: true, playerId: true, points: true, isStarter: true, week: true },
-    take: 5000,
+  // Weekly scores contain every manager's players. Ownership comes from the
+  // claimed roster, never from membership in a league the viewer plays in.
+  const rosters = await prisma.roster.findMany({
+    where: { OR: teams.filter((team) => leagues.some((league) => league.id === team.leagueId)).map((team) => ({ leagueId: team.leagueId, platformUserId: { in: myRosterCandidates(team, userId) } })) },
+    select: { id: true, leagueId: true, platformUserId: true, playerData: true },
   })
-  if (rows.length === 0) return { players, hasRosterData: true }
-
-  const latestWeek = new Map<string, number>()
-  for (const r of rows) {
-    const seen = latestWeek.get(r.leagueId)
-    if (seen == null || r.week > seen) latestWeek.set(r.leagueId, r.week)
+  const ownedByLeague = new Map<string, Set<string>>()
+  const startedByLeague = new Map<string, Set<string>>()
+  let incomplete = false
+  for (const league of leagues) {
+    const claimed = teams.filter((team) => team.leagueId === league.id)
+    let pool = rosters.filter((roster) => roster.leagueId === league.id)
+    let resolved = resolveRostersForTeams(claimed, pool, (team) => myRosterCandidates(team, userId))
+    if (claimed.some((team) => team.externalId && !resolved.has(team.externalId))) {
+      pool = (await prisma.roster.findMany({ where: { leagueId: league.id }, select: { id: true, leagueId: true, platformUserId: true, playerData: true } })).filter((roster) => roster.leagueId === league.id)
+      resolved = resolveRostersForTeams(claimed, pool, (team) => myRosterCandidates(team, userId))
+    }
+    const owned = new Set<string>()
+    const started = new Set<string>()
+    for (const team of claimed) {
+      const roster = team.externalId ? resolved.get(team.externalId) : pool.find((r) => myRosterCandidates(team, userId).includes(r.platformUserId))
+      if (!roster) { incomplete = true; continue }
+      // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster ties in nobody.
+      const readable = sleeperReadablePlayerData(league.platform, roster.playerData)
+      for (const id of rosterPlayerIds(readable)) owned.add(id)
+      const data = readable as { starters?: unknown } | null
+      for (const id of rosterPlayerIds({ starters: data?.starters })) started.add(id)
+    }
+    ownedByLeague.set(league.platformLeagueId, owned)
+    startedByLeague.set(league.platformLeagueId, started)
   }
 
+  const statedWeek = new Map<string, number>()
+  for (const league of leagues) {
+    const week = leagueWeekFromSettings(league.settings) ?? (period && league.season === period.season ? period.week : null)
+    if (week != null) statedWeek.set(league.platformLeagueId, week)
+  }
+  // Bound the read to this user's starters in the verified period. Reading all
+  // managers and all weeks could hit the row cap before reaching their scores.
+  const scorePeriods = leagues.flatMap((league) => {
+    const week = statedWeek.get(league.platformLeagueId)
+    const playerIds = [...(startedByLeague.get(league.platformLeagueId) ?? [])]
+    return week != null && playerIds.length > 0
+      ? [{ leagueId: league.platformLeagueId, seasonYear: league.season, week, playerId: { in: playerIds } }]
+      : []
+  })
+  const rows = scorePeriods.length > 0 ? await prisma.leaguePlayerWeeklyScore.findMany({
+    where: { OR: scorePeriods },
+    select: { leagueId: true, playerId: true, points: true, week: true },
+    take: 5000,
+  }) : []
+
   const byPlatformId = new Map(leagues.map((l) => [l.platformLeagueId, l]))
-  const current = rows.filter((r) => latestWeek.get(r.leagueId) === r.week)
+  const currentScores = new Map(rows.filter((r) => statedWeek.get(r.leagueId) === r.week).map((r) => [`${r.leagueId}:${r.playerId}`, r.points]))
+  // Roster ownership exists before the first score row. Upcoming players stay
+  // visible, with missing current-week points shown as unknown, never last week.
+  const current = [...ownedByLeague].flatMap(([leagueId, ids]) => [...ids].map((playerId) => ({
+    leagueId, playerId, points: currentScores.get(`${leagueId}:${playerId}`) ?? null,
+  })))
 
   const identities = await prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: [...new Set(current.map((r) => r.playerId))] } },
@@ -437,7 +479,7 @@ async function loadRosteredPlayers(
     const entry = {
       leagueId: league.id,
       leagueName: league.name ?? 'League',
-      isStarter: r.isStarter,
+      isStarter: startedByLeague.get(r.leagueId)?.has(r.playerId) ?? false,
       points: Number.isFinite(r.points) ? r.points : null,
     }
     const existing = players.get(r.playerId)
@@ -465,7 +507,7 @@ async function loadRosteredPlayers(
     }
   }
 
-  return { players, hasRosterData: true }
+  return { players, hasRosterData: true, rosterFailed: incomplete }
 }
 
 /** Games starting within this window of now still count as "the current slate". */
@@ -787,8 +829,14 @@ export async function getLivePageData(opts: {
    * cannot say which half failed.
    */
   let rosterFailed = false
+  const footballPeriod = ['NFL', 'NCAAF'].includes(sport)
+    ? rows.find((row) => row.season != null && row.week != null)
+    : null
   const { players, hasRosterData } = opts.userId
-    ? await loadRosteredPlayers(opts.userId, sport).catch((err) => {
+    ? await loadRosteredPlayers(opts.userId, sport, footballPeriod?.season != null && footballPeriod.week != null ? { season: footballPeriod.season, week: footballPeriod.week } : null).then((result) => {
+        rosterFailed = result.rosterFailed === true
+        return result
+      }).catch((err) => {
         console.error(
           '[live] roster tie-in read failed, rendering slate without it:',
           err instanceof Error ? err.message : err,

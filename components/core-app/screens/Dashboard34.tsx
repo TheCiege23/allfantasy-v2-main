@@ -69,6 +69,8 @@ export type Dash34League = {
    * are different problems with different fixes.
    */
   hurtStarters?: number
+  bestBallMissing?: string[]
+  needsWaivers?: boolean
   lineupVerification?: import('@/lib/core-app/lineupVerification').LineupVerification | null
   flaggedStarters?: Array<{ playerId: string; name: string; status: string; slot: string; index: number }>
   /**
@@ -259,7 +261,7 @@ const TOOLS: ReadonlyArray<{ href: string; glyph: string; name: string; leagueSc
   { href: '/core/players', glyph: '●', name: 'Player finder' },
   { href: '/core/trades', glyph: '⇄', name: 'Trade lab', leagueScoped: true },
   { href: '/core/waivers', glyph: '◷', name: 'Waiver plan', leagueScoped: true },
-  { href: '/rankings', glyph: '↑', name: 'Rankings' },
+  { href: '/rankings', glyph: '↑', name: 'Power rankings' },
   { href: '/core/career', glyph: '★', name: 'Career & Legacy' },
   { href: '/commissioner-os', glyph: '⚑', name: 'Commissioner HQ' },
 ]

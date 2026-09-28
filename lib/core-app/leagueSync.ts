@@ -6,6 +6,7 @@ import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-confi
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { getPausedSyncKeys } from './syncPreferences'
+import { isLeagueGoneState, LEAGUE_GONE_ERROR_PREFIX } from '@/lib/import-os/collector/leagueGone'
 
 /**
  * League Sync — is THIS league fresh, and what exactly did we read (38a·10).
@@ -68,9 +69,24 @@ export type LeagueSyncData = {
    * Overall state. `attention` covers stale auth and repeated failures — the
    * two cases where the user can actually do something.
    */
-  status: 'ok' | 'attention' | 'never' | 'paused'
+  status: 'ok' | 'attention' | 'never' | 'paused' | 'gone'
+  /**
+   * Set when the provider answered that this league no longer exists (deleted, or the season was
+   * reset under a new id). Not a failure we can retry our way out of: the collector re-asks once
+   * a day, and a manual sync re-asks now. Null for every other state.
+   */
+  providerGone: { checkedAt: Date; detail: string | null } | null
+  /** The viewer imported this row, so `DELETE /api/league/[id]` can remove it for them. */
+  canRemove: boolean
   /** AF's own last successful collection. Never presented as data freshness. */
   lastReadAt: Date | null
+  /**
+   * When the five-minute lane last read this league's rosters and transactions — a separate,
+   * narrower collection with its own state row (`<runKey>:active`). Null when it has never
+   * completed here, which is the honest answer for a league outside the lane (offseason,
+   * an older season).
+   */
+  rostersReadAt: Date | null
   lastAttemptedAt: Date | null
   consecutiveFailures: number
   lastError: string | null
@@ -94,7 +110,7 @@ export type LeagueSyncResult =
   | { available: false; leagueName: string; reason: string }
 
 /** Older than this and a league is stale enough to say so. */
-const STALE_AFTER_MS = 6 * 60 * 60 * 1000
+const STALE_AFTER_MS = 60 * 60 * 1000
 
 function describeAge(from: Date | null, now: Date): string {
   if (!from) return 'never'
@@ -146,9 +162,24 @@ export async function getLeagueSync(
       ? `${String(league.platform ?? '').toLowerCase()}:${league.platformLeagueId}:${league.season}`
       : null
 
-  const [syncState, rosterLatest, matchupLatest, seasonCount, lastRun, pausedKeys] = await Promise.all([
+  const [syncState, activeState, rosterLatest, matchupLatest, seasonCount, lastRun, pausedKeys] = await Promise.all([
     runKey
       ? prisma.leagueSyncState.findUnique({ where: { runKey } }).catch(() => null)
+      : Promise.resolve(null),
+    /*
+     * ⚠ THE FIVE-MINUTE LANE KEEPS ITS OWN ROW, AND READING ONLY THE FULL ONE HID IT. Rosters and
+     * transactions are refreshed far more often than the full league-state pass (every league
+     * within 20 minutes on a game day), under `<runKey>:active` so the two cadences never postpone
+     * each other. This screen read only the full row, so it showed "rosters last changed 7h ago"
+     * for a roster we had checked minutes earlier and found unchanged.
+     */
+    runKey
+      ? prisma.leagueSyncState
+          .findUnique({
+            where: { runKey: `${runKey}:active` },
+            select: { lastSuccessfulSyncAt: true, syncStatus: true, lastError: true, lastAttemptedSyncAt: true },
+          })
+          .catch(() => null)
       : Promise.resolve(null),
     prisma.roster
       .findFirst({ where: { leagueId }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } })
@@ -196,6 +227,11 @@ export async function getLeagueSync(
   const lastReadAt = syncState?.lastSuccessfulSyncAt ?? league.lastSyncedAt ?? null
   const lastAttemptedAt = syncState?.lastAttemptedSyncAt ?? league.lastSyncedAt ?? null
   const consecutiveFailures = syncState?.consecutiveFailures ?? 0
+  /*
+   * `lastSuccessfulSyncAt` advances only on a run that completed every scope it was given
+   * (runner-enforced), so a value here means rosters AND transactions were both read then.
+   */
+  const rostersReadAt = activeState?.lastSuccessfulSyncAt ?? null
 
   const orphanedRun =
     lastRun &&
@@ -209,8 +245,31 @@ export async function getLeagueSync(
   const ageMs = lastReadAt ? now.getTime() - lastReadAt.getTime() : null
   const isStale = ageMs != null && ageMs > STALE_AFTER_MS
 
+  /*
+   * 🛑 A LEAGUE THE PROVIDER DELETED READ AS "Never synced" OR "Needs attention" HERE, WITH NOTHING
+   * TO DO ABOUT IT. The gone run leaves `consecutiveFailures` alone (on purpose — see leagueGone.ts),
+   * so the failure alert below never fired, and the only trace was a generic "Sync failed" on the
+   * hubs. Either lane can be the one that learned it; only the NEWEST attempt across both lanes is
+   * the current answer, so a later successful read on either one clears it.
+   */
+  const newestAttempt = Math.max(
+    syncState?.lastAttemptedSyncAt?.getTime() ?? 0,
+    activeState?.lastAttemptedSyncAt?.getTime() ?? 0,
+  )
+  const goneRow = [syncState, activeState].find(
+    (r) => isLeagueGoneState(r) && (r!.lastAttemptedSyncAt as Date).getTime() === newestAttempt,
+  )
+  const providerGone = goneRow
+    ? {
+        checkedAt: goneRow.lastAttemptedSyncAt as Date,
+        detail: (goneRow.lastError ?? '').slice(LEAGUE_GONE_ERROR_PREFIX.length).trim() || null,
+      }
+    : null
+
   const status: LeagueSyncData['status'] =
-    syncPaused ? 'paused' : lastReadAt == null
+    syncPaused ? 'paused' : providerGone
+      ? 'gone'
+      : lastReadAt == null
       ? 'never'
       : consecutiveFailures > 0 || isStale || orphanedRun != null
         ? 'attention'
@@ -231,9 +290,27 @@ export async function getLeagueSync(
   const rowState = (
     scope: string | null,
     ownTimestamp: Date | null,
+    /**
+     * A later, successful read of this scope by the five-minute lane. It wins over the table's
+     * own timestamp when newer: `Roster.updatedAt` says when a roster last CHANGED, and a roster
+     * that has not changed since Tuesday is not stale if we looked at it a minute ago.
+     */
+    laneReadAt: Date | null = null,
   ): SyncDataRow['state'] => {
-    if (scope && incompleteScopes.has(scope)) {
+    /*
+     * The full pass's "did not complete" is about ITS run. A lane read that finished after that
+     * run started has since collected this scope, so the incomplete marker no longer describes it.
+     */
+    const laneSupersedesFull =
+      laneReadAt != null && (lastAttemptedAt == null || laneReadAt.getTime() > lastAttemptedAt.getTime())
+    if (scope && incompleteScopes.has(scope) && !laneSupersedesFull) {
       return { kind: 'stale', detail: 'did not complete on the last run' }
+    }
+    if (laneReadAt && (ownTimestamp == null || laneReadAt.getTime() > ownTimestamp.getTime())) {
+      const age = now.getTime() - laneReadAt.getTime()
+      return age > STALE_AFTER_MS
+        ? { kind: 'stale', detail: `last checked ${describeAge(laneReadAt, now)}` }
+        : { kind: 'fresh', detail: `checked ${describeAge(laneReadAt, now)}` }
     }
     if (ownTimestamp) {
       const age = now.getTime() - ownTimestamp.getTime()
@@ -252,13 +329,13 @@ export async function getLeagueSync(
       key: 'rosters',
       label: 'Rosters',
       note: 'Every roster, bench and IR or taxi slot',
-      state: rowState('teams_rosters', rosterLatest?.updatedAt ?? null),
+      state: rowState('teams_rosters', rosterLatest?.updatedAt ?? null, rostersReadAt),
     },
     {
       key: 'transactions',
       label: 'Transactions',
       note: 'Trades, waiver claims and free-agent moves',
-      state: rowState('transactions', null),
+      state: rowState('transactions', null, rostersReadAt),
     },
     {
       key: 'scores',
@@ -305,9 +382,12 @@ export async function getLeagueSync(
           },
     status,
     lastReadAt,
+    rostersReadAt,
     lastAttemptedAt,
     consecutiveFailures,
     lastError: syncState?.lastError ?? null,
+    providerGone,
+    canRemove: league.userId === userId,
     rows,
     coarse,
     orphanedRun,

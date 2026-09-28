@@ -15,8 +15,9 @@
  * side at 10%/25%.
  *
  * So there is one number and everything else is read off it:
- *   - the number is `percentDiff` on LEAGUE value (`leagueTradeTotals`), signed from the side that
- *     sends `give` — the same figure the Trade Center has always graded on;
+ *   - the number is `percentDiff` on chart + league-scoring value (`leagueTradeTotals`), signed from the side that
+ *     sends `give`. Personal roster utility is reported separately: completion must not drop a
+ *     factor that previously changed the calculator's headline letter;
  *   - the letter is `projectedLetterFor` (`lib/trade-intel/gradeScale.ts`), unchanged;
  *   - the label and the recommendation use the SAME two bands, so a C always reads "Even" and a B
  *     always reads "Slightly favors you". They can no longer disagree, because nothing else is read.
@@ -37,6 +38,7 @@ import {
   type GradeLetter,
 } from '@/lib/trade-intel/gradeScale'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
+import type { TradeValueSource } from './valueSource'
 
 export type TradeGradeAction = 'accept' | 'review' | 'counter' | 'decline'
 
@@ -48,6 +50,17 @@ export type TradeGradeLine = {
   name: string
   marketValue: number | null
   leagueValue: number | null
+  /**
+   * The PLAYER RECORD's origin (`sleeper`, `fantasycalc+rolling`, `fantasycalc_pick`, …) — not the
+   * value's. Kept for compatibility; read `valueSource` for where the price came from.
+   */
+  source?: string | null
+  /** WHICH evidence priced this asset (`./valueSource.ts`). Null when unpriced; absent before 2026-09-28. */
+  valueSource?: TradeValueSource | null
+  /** When that evidence was captured (ISO). Only a market chart has one; null for league math or undated sources. */
+  valueAsOf?: string | null
+  /** The period a league-computed value projects over, e.g. "2026 week 3" for a defender. */
+  valueScope?: string | null
 }
 
 /** One asset whose league value differs from its market value, and why. */
@@ -57,6 +70,14 @@ export type TradeGradeMove = {
   base: number
   leagueValue: number
   reasons: string[]
+}
+
+/** Personal roster utility, separate from the shared trade-value letter. */
+export type TradeRosterFit = {
+  giveValue: number
+  getValue: number
+  percentDiff: number
+  moves: TradeGradeMove[]
 }
 
 export type TradeGradeView =
@@ -87,11 +108,23 @@ export type TradeGradeView =
       /** Every asset, so a card can print the value it was graded on beside each one. */
       lines: TradeGradeLine[]
       moves: TradeGradeMove[]
+      /** Changes in personal utility never replace the league-wide trade-value grade. */
+      rosterFit?: TradeRosterFit | null
       /**
        * The league type the grade was priced under and how we know it (see `leagueTypeGrading.ts`).
        * Set by the league grader; absent where no league was read.
        */
       leagueType?: LeagueTypeBasis | null
+      /**
+       * When this letter was FROZEN as a completed trade's original grade (`frozenCompletedGrade.ts`).
+       * Absent: a live grade, taken on today's values.
+       */
+      frozenAt?: string | null
+      /**
+       * Today's re-evaluation of the same deal, beside a frozen original — never merged into it. Null
+       * when today's grade is the original (just frozen) or could not be taken.
+       */
+      current?: { letter: GradeLetter; partnerLetter: GradeLetter; giveValue: number; getValue: number } | null
     }
   | {
       graded: false
@@ -264,5 +297,11 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
     getMarket: view.giveMarket,
     lines: view.lines.map((l) => ({ ...l, side: l.side === 'give' ? 'get' : 'give' })),
     moves: view.moves.map((m) => ({ ...m, side: m.side === 'give' ? 'get' : 'give' })),
+    // The original viewer's personal utility is not the other manager's roster fit.
+    rosterFit: null,
+    // Today's re-evaluation flips with the original, or the other side reads the wrong "now".
+    current: view.current
+      ? { letter: view.current.partnerLetter, partnerLetter: view.current.letter, giveValue: view.current.getValue, getValue: view.current.giveValue }
+      : view.current,
   }
 }

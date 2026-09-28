@@ -17,6 +17,7 @@
 export type FreshnessTier = 'static' | 'slow' | 'daily' | 'gameday' | 'live'
 
 export type DataClass =
+  | 'fantasy_league'
   | 'leagues'
   | 'venues'
   | 'team_identity'
@@ -45,6 +46,8 @@ const HOUR = 60 * MIN
 const DAY = 24 * HOUR
 
 export const FRESHNESS: Record<DataClass, FreshnessRule> = {
+  fantasy_league: { tier: 'gameday', maxAgeSeconds: HOUR, provider: 'none',
+    why: 'Mutable fantasy rosters and transactions must be collected within one hour; the active lane refreshes them every five minutes.' },
   // ── Static: ingest once, refresh occasionally to pick up corrections ──
   leagues: {
     tier: 'static',
@@ -176,6 +179,7 @@ export function availableFor(sport: string): Record<DataClass, boolean> {
   const isSoccer = sport.toUpperCase() === 'SOCCER'
   const isCollege = sport.toUpperCase() === 'NCAAF' || sport.toUpperCase() === 'NCAAB'
   return {
+    fantasy_league: true,
     leagues: true,
     venues: true,
     team_identity: true,

@@ -20,6 +20,7 @@ import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment }
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
 import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
+import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -308,7 +309,15 @@ async function scoreRosterStarters(args: {
       droppedAt: null,
     },
   })
-  const activeStarters = starters.filter((p: (typeof starters)[number]) => isScoringStarterSlot(p.slotType))
+  // The lineup saved for THIS week, not the current one — see `weekLineupSlots.ts`.
+  const weekLineups = await loadWeekLineups(prisma, {
+    redraftRosterIds: [args.rosterId],
+    season: args.seasonYear,
+    week: args.week,
+  })
+  const activeStarters = starters.filter((p: (typeof starters)[number]) =>
+    isScoringStarterSlot(weekSlotType(p, weekLineups)),
+  )
 
   let pts = 0
   let scoredStarterCount = 0
@@ -368,7 +377,15 @@ async function scoreRosterBestBall(args: {
   const players = await prisma.redraftRosterPlayer.findMany({
     where: { rosterId: args.rosterId, droppedAt: null },
   })
-  const candidates = players.filter((p: (typeof players)[number]) => isBestBallCandidateSlot(p.slotType))
+  // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
+  const weekLineups = await loadWeekLineups(prisma, {
+    redraftRosterIds: [args.rosterId],
+    season: args.seasonYear,
+    week: args.week,
+  })
+  const candidates = players.filter((p: (typeof players)[number]) =>
+    isBestBallCandidateSlot(weekSlotType(p, weekLineups)),
+  )
 
   let scored = 0
   let allFinal = true

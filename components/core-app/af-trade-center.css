@@ -729,6 +729,8 @@
   line-height: 1.45;
 }
 .af-tc-scan-receipt b { color: var(--accent); }
+/* The Sleeper note carries a sentence, two actions and a freshness line: stacked, not one wrapping row. */
+.af-tc-scan-receipt.af-tc-sleeper-offers { flex-direction: column; align-items: flex-start; gap: 6px; }
 
 /*
  * Open AllFantasy offers, each with its counter control. Spans the inbox grid the
@@ -1181,10 +1183,25 @@
 }
 
 .af-tc-timeline-assets > div { min-width: 0; }
-.af-tc-timeline-assets span,
-.af-tc-timeline-assets b { display: block; }
-.af-tc-timeline-assets span { color: var(--faint); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
-.af-tc-timeline-assets b { margin-top: 3px; color: var(--text2); font-size: 10px; line-height: 1.35; }
+/* Direct children only — the asset list below has spans and <b>s of its own. */
+.af-tc-timeline-assets > div > span,
+.af-tc-timeline-assets > div > b { display: block; }
+.af-tc-timeline-assets > div > span { color: var(--faint); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+.af-tc-timeline-assets > div > b { margin-top: 3px; color: var(--text2); font-size: 10px; line-height: 1.35; }
+
+.af-tc-timeline-assetlist { display: grid; gap: 5px; margin: 5px 0 0; padding: 0; list-style: none; }
+.af-tc-timeline-assetlist li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 7px; }
+.af-tc-timeline-assetlist img,
+.af-tc-timeline-glyph { width: 24px; height: 24px; border-radius: 50%; background: var(--chip); object-fit: cover; }
+.af-tc-timeline-glyph { display: grid; place-items: center; color: var(--muted); font-size: 8px; font-weight: 800; }
+.af-tc-timeline-asset-name { display: grid; min-width: 0; }
+.af-tc-timeline-asset-name b { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.af-tc-timeline-asset-name small { overflow: hidden; color: var(--faint); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.af-tc-timeline-assetlist em { color: var(--text2); font-size: 10px; font-style: normal; font-weight: 700; }
+
+.af-tc-timeline-why { display: grid; gap: 3px; margin: 8px 0 0; padding: 7px 9px; border-radius: 9px; background: var(--surface); list-style: none; }
+.af-tc-timeline-why li { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.af-tc-timeline-why li:first-child { color: var(--text2); font-weight: 600; }
 
 .af-tc-timeline-grades {
   display: flex;
@@ -1197,6 +1214,14 @@
 .af-tc-timeline-grades strong { color: var(--text); font-size: 20px; line-height: 1.1; }
 .af-tc-timeline-grades small { color: var(--muted); font-size: 8px; }
 .af-tc-timeline-arrow { color: var(--faint); }
+.af-tc-timeline-grades[data-mode='teams'] { align-items: flex-start; gap: 10px; }
+.af-tc-timeline-grades[data-mode='teams'] > div { min-width: 64px; }
+.af-tc-timeline-grades[data-mode='teams'] span { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-tc-timeline-grades [data-letter='A'] strong { color: #34d399; }
+.af-tc-timeline-grades [data-letter='B'] strong { color: #5eead4; }
+.af-tc-timeline-grades [data-letter='C'] strong { color: #fbbf24; }
+.af-tc-timeline-grades [data-letter='D'] strong { color: #fb923c; }
+.af-tc-timeline-grades [data-letter='F'] strong { color: #fb5b78; }
 .af-tc-timeline-advice,
 .af-tc-timeline-gap { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .af-tc-timeline-gap { color: var(--warn); }
@@ -2378,6 +2403,14 @@
   font-size: 11px;
   line-height: 1.45;
 }
+/* THE grade for a suggested deal — see TradePartnerSuggestions. */
+.af-tc-fit-grade { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
+.af-tc-fit-grade strong { font-size: 18px; font-weight: 800; color: var(--text); }
+.af-tc-fit-grade[data-letter='A'] strong { color: #34d399; }
+.af-tc-fit-grade[data-letter='B'] strong { color: #5eead4; }
+.af-tc-fit-grade[data-letter='C'] strong { color: #fbbf24; }
+.af-tc-fit-grade[data-letter='D'] strong { color: #fb923c; }
+.af-tc-fit-grade[data-letter='F'] strong { color: #fb5b78; }
 .af-tc-fit-actions {
   display: flex;
   flex-wrap: wrap;

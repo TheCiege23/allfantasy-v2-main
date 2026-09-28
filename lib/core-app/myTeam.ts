@@ -23,7 +23,7 @@ import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
-import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap } from './nextGameMap'
 import { displayPosition, inferSlotLabel } from './positionLabels'
@@ -205,6 +205,10 @@ export type LineupSlot = {
 }
 
 export type MyTeamData = {
+  bestBall?: boolean
+  preDraft?: boolean
+  eliminated?: boolean
+  completed?: boolean
   league: {
     id: string
     name: string
@@ -428,7 +432,9 @@ async function resolvePlayers(
   const sleeperIdByRosterId = await crosswalkToSleeperIds(platform, sport, ids).catch(
     () => new Map<string, string>(),
   )
-  const lookupIds = [...new Set(ids.map((id) => sleeperIdByRosterId.get(id) ?? id))]
+  const lookupIds = [
+    ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId)).filter((x): x is string => x != null)),
+  ]
 
   const rows = await prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: lookupIds } },
@@ -837,6 +843,9 @@ export async function getMyTeamData(
 
   const sport = String(league.sport ?? 'NFL')
   const base = {
+    preDraft: ['pre_draft', 'setup', 'drafting'].includes(String(league.status ?? league.lifecycleState ?? '').toLowerCase()),
+    completed: ['complete', 'completed'].includes(String(league.status ?? league.lifecycleState ?? '').toLowerCase()),
+    eliminated: false,
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),
@@ -932,6 +941,10 @@ export async function getMyTeamData(
     ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
     : null
   if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
+  if (typeof liveRoster?.leagueStatus === 'string') {
+    base.preDraft = ['pre_draft', 'setup', 'drafting'].includes(liveRoster.leagueStatus.toLowerCase())
+    base.completed = ['complete', 'completed'].includes(liveRoster.leagueStatus.toLowerCase())
+  }
   const sourceScreen = resolveSourceScreenLink({
     platform: league.platform, sourceLeagueId: league.platformLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season,
@@ -971,6 +984,10 @@ export async function getMyTeamData(
   }
 
   const pd = (roster.playerData ?? {}) as Record<string, unknown>
+  base.eliminated = pd.eliminated === true || (!base.preDraft && !base.completed &&
+    ['in_season', 'active'].includes(String(liveRoster?.leagueStatus ?? league.status ?? league.lifecycleState).toLowerCase()) &&
+    (league.guillotineMode === true || ['guillotine', 'survivor_guillotine'].includes(String(league.leagueVariant))) &&
+    Array.isArray(pd.players) && pd.players.length === 0)
   const asIds = (v: unknown): string[] =>
     Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))).filter(Boolean) : []
 
@@ -1165,7 +1182,7 @@ export async function getMyTeamData(
 
   const starters: LineupSlot[] = starterSlots.map((slot, i) => ({
     ...slot,
-    benchCheck: checkBySlot.get(i) ?? null,
+    benchCheck: liveRoster?.bestBall === true || league.bestBallMode === true ? null : checkBySlot.get(i) ?? null,
   }))
 
   const kickoffs = starters
@@ -1379,6 +1396,7 @@ export async function getMyTeamData(
   return {
     ...base,
     team,
+    bestBall: liveRoster?.bestBall === true || league.bestBallMode === true,
     lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
     upcomingByes,

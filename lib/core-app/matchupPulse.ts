@@ -10,6 +10,8 @@ import { leagueDisplayName } from './leagueHome'
 import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { leagueWeekFromSettings } from './seasonTimeline'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -119,6 +121,13 @@ export type PulseRow = {
 export type MatchupPulse = {
   leading: PulseRow[]
   trailing: PulseRow[]
+  /**
+   * How many leagues are ahead / behind IN TOTAL. `leading` and `trailing` are capped at five for the
+   * two columns; the header printed their lengths, so it read "5 leading · 5 trailing" on an account
+   * the home page correctly put at 32 ahead and 21 behind (production, 2026-09-28).
+   */
+  leadingTotal: number
+  trailingTotal: number
   /** Leagues that carry a head-to-head this week, ranked or not. */
   considered: number
   ranked: number
@@ -152,6 +161,16 @@ export type MatchupPulse = {
      * claimed a team" are different sentences and the screen now says which.
      */
     unidentifiedRoster: number
+    /**
+     * Claimed leagues that have not started — still in setup, before or during their draft.
+     *
+     * 🛑 THESE WERE COUNTED AS `unidentifiedRoster`, "a roster id we cannot match — our gap". On
+     * the audited account (production 2026-09-28) all 8 of that count were not our gap: 7 native
+     * AllFantasy leagues still in setup, which have no schedule to match, and 1 second claimed
+     * copy of a Fantrax league whose other copy is already ranked. The duplicate is now not
+     * counted at all; these are counted here.
+     */
+    notStarted: number
   }
 }
 
@@ -224,10 +243,12 @@ function startersOf(playerData: unknown): string[] {
 const EMPTY_PULSE: MatchupPulse = {
   leading: [],
   trailing: [],
+  leadingTotal: 0,
+  trailingTotal: 0,
   considered: 0,
   ranked: 0,
   basis: null,
-  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 },
+  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
 }
 
 export async function getMatchupPulse(
@@ -252,6 +273,8 @@ export async function getMatchupPulse(
             logoUrl: true,
             avatarUrl: true,
             settings: true,
+            status: true,
+            lifecycleState: true,
           },
         },
       },
@@ -265,12 +288,12 @@ export async function getMatchupPulse(
    * See `notRanked.unidentifiedRoster`. Reporting `considered: 0` here told a
    * manager with four claimed teams that they had none.
    */
-  const unidentifiedRoster = claimed.length - mine.length
+  const { unidentifiedRoster, notStarted } = classifyUnplaced(claimed, mine)
   if (mine.length === 0) {
     return {
       ...EMPTY_PULSE,
       considered: claimed.length,
-      notRanked: { ...EMPTY_PULSE.notRanked, unidentifiedRoster },
+      notRanked: { ...EMPTY_PULSE.notRanked, unidentifiedRoster, notStarted },
     }
   }
 
@@ -320,7 +343,11 @@ export async function getMatchupPulse(
 
   const weekByPlid = new Map<string, { season: number; week: number }>()
   for (const [plid, rows] of summaryByPlid) {
-    const resolved = resolveCurrentWeekFrom(rows)
+    const league = mine.find((team) => team.league?.platformLeagueId === plid)?.league
+    const statedWeek = leagueWeekFromSettings(league?.settings)
+    const resolved = statedWeek && league?.season
+      ? { season: Number(league.season), week: statedWeek }
+      : resolveCurrentWeekFrom(rows)
     if (resolved) weekByPlid.set(plid, { season: resolved.season, week: resolved.week })
   }
 
@@ -491,7 +518,7 @@ export async function getMatchupPulse(
     return {
       ...EMPTY_PULSE,
       considered: claimed.length,
-      notRanked: { ...notRanked, unidentifiedRoster },
+      notRanked: { ...notRanked, unidentifiedRoster, notStarted },
     }
   }
 
@@ -510,8 +537,12 @@ export async function getMatchupPulse(
         .catch(() => [])
     : []
   const startersBy = new Map<string, string[]>()
+  const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
   for (const r of rosters) {
-    startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(r.playerData))
+    // A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id and would be
+    // priced as a stranger; such a lineup reads empty and the league lands in `unpriceable`.
+    const pd = sleeperReadablePlayerData(platformByLeague.get(r.leagueId), r.playerData)
+    startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(pd))
   }
 
   /** First candidate that actually names a roster in this league. */
@@ -689,23 +720,50 @@ export async function getMatchupPulse(
    * not, so exact ties are simply excluded from both lists and still counted in
    * `ranked`, which is what the header renders.
    */
-  const leading = deduped
-    .filter((r) => r.margin > 0)
-    .sort((a, b) => b.margin - a.margin)
-    .slice(0, 5)
-  const trailing = deduped
-    .filter((r) => r.margin < 0)
-    .sort((a, b) => a.margin - b.margin)
-    .slice(0, 5)
+  const ahead = deduped.filter((r) => r.margin > 0)
+  const behind = deduped.filter((r) => r.margin < 0)
+  const leading = [...ahead].sort((a, b) => b.margin - a.margin).slice(0, 5)
+  const trailing = [...behind].sort((a, b) => a.margin - b.margin).slice(0, 5)
 
   const bases = new Set(ranked.map((r) => r.basis))
 
   return {
     leading,
     trailing,
+    leadingTotal: ahead.length,
+    trailingTotal: behind.length,
     considered: claimed.length,
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],
-    notRanked: { ...notRanked, unidentifiedRoster },
+    notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
+}
+
+/** League states in which no schedule exists yet to place a roster against. */
+const NOT_STARTED = new Set(['setup', 'pre_draft', 'predraft', 'drafting'])
+
+type UnplacedClaim = {
+  league: { platform: string | null; platformLeagueId: string | null; status?: string | null; lifecycleState?: string | null } | null
+}
+
+/**
+ * Why each claimed team the board could not place is absent. See `notRanked.notStarted`.
+ *
+ * Exported so the rule can be tested without the loader's reads. PURE.
+ */
+export function classifyUnplaced<T extends UnplacedClaim>(claimed: T[], placed: T[]): { unidentifiedRoster: number; notStarted: number } {
+  const key = (c: T) => `${String(c.league?.platform ?? '').toLowerCase()}:${c.league?.platformLeagueId ?? ''}`
+  const placedSet = new Set(placed)
+  const placedLeagues = new Set(placed.map(key))
+  let unidentifiedRoster = 0
+  let notStarted = 0
+  for (const c of claimed) {
+    if (placedSet.has(c)) continue
+    /* A second claimed copy of a league already on the board is not missing from it. */
+    if (c.league?.platformLeagueId && placedLeagues.has(key(c))) continue
+    const states = [c.league?.status, c.league?.lifecycleState].map((v) => String(v ?? '').toLowerCase())
+    if (states.some((v) => NOT_STARTED.has(v))) notStarted++
+    else unidentifiedRoster++
+  }
+  return { unidentifiedRoster, notStarted }
 }

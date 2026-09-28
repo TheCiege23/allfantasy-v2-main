@@ -460,6 +460,23 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
     expect(text).toMatch(/our gap, not theirs/i)
   })
 
+  /* Production 2026-09-28: 7 native leagues in setup were reported as "our gap". */
+  it('says leagues that have not drafted are not started, and does not call them our gap', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          leading: [row()],
+          notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 7 },
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('7 have not started yet')
+    expect(text).not.toMatch(/our gap/i)
+  })
+
   it('still says "no claimed team" when there genuinely is none', () => {
     const { container } = render(
       <MatchupPulseBoard
@@ -484,5 +501,26 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
       />,
     )
     expect(container.textContent ?? '').toContain('View all 65')
+  })
+})
+
+describe('MatchupPulseBoard header counts', () => {
+  /* Production 2026-09-28: the header printed the capped column lengths, "5 leading · 5 trailing",
+     on an account 32 ahead and 21 behind. */
+  it('states the true totals, not the length of the five-row columns', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          ranked: 53,
+          leading: [row({ leagueId: 'a' }), row({ leagueId: 'b' })],
+          trailing: [row({ leagueId: 'c', margin: -3 })],
+          leadingTotal: 32,
+          trailingTotal: 21,
+        })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-count')?.textContent).toBe('32 leading · 21 trailing')
   })
 })

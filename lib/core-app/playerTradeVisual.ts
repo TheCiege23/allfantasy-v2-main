@@ -17,6 +17,7 @@ import {
 import { describeScoringFit } from '@/lib/trade-value/scoringFit'
 import { allocateFaabAcrossPool, type FaabCandidate } from '@/lib/trade-intel/faabBid'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
+import { tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import { scheduleForLeague, survivorHorizon, type SurvivorHorizon } from '@/lib/trade-intel/survivorSchedule'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { resolveCurrentWeekForLeague } from './currentWeek'
@@ -28,6 +29,7 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
+import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueVariantFor } from './valueBook'
 /*
  * Moved to `lib/trade-intel/marketContext.ts` (2026-09-24) so the trade analysis engine can use the
@@ -154,21 +156,25 @@ export type PlayerTradeVisual = {
   /**
    * Set when the league FORBIDS TRADES, in which case `packages` is empty and this is the answer.
    *
-   * 🛑 A GUILLOTINE LEAGUE IS NOT A TRADE MARKET. Survivor All-Stars says it outright — "there are
+   * 🛑 ONLY A NO-TRADE ELIMINATION LEAGUE. Survivor All-Stars Guillotine says it outright — "there are
    * no trades allowed in this league" — so a package this surface could build is one the manager
-   * can never send. Offering it is worse than refusing: it looks like a plan. What is real is that
-   * the man reaches waivers if his owner is chopped, and what to bid when he does.
+   * can never send. What is real is that the man reaches waivers if his owner is chopped, and what
+   * to bid when he does. A PLAIN guillotine or survivor league trades (concept catalog) and gets
+   * packages, never this.
    */
   bidInstead: PlayerBidInstead | null
   /**
-   * False when the league's format forbids trades (guillotine, survivor). `packages` is then empty
-   * and `recommended` null whether or not a bid could be worked out.
+   * False when the league's format forbids trades, per `lib/league-rules/tradeLegality.ts`
+   * (survivor-guillotine, tournament). `packages` is then empty and `recommended` null whether or
+   * not a bid could be worked out.
    *
    * ⚠ THE BID IS NOT THE GATE. A no-trade league whose bid cannot be computed (no roster values, no
    * allocation) used to fall through with its packages intact — a plan the manager can never send.
    * Optional so a payload built before it existed still reads; absent means allowed.
    */
   tradesAllowed?: boolean
+  /** The catalog's reason trades are forbidden, when they are. Shown on the no-trade card. */
+  tradeBan?: string
 }
 
 export type PlayerBidInstead = {
@@ -241,7 +247,20 @@ export async function readLeagueTradeRows(leagueId: string) {
       })
       .catch(() => []),
     prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
+      .findMany({
+        where: { leagueId },
+        select: { platformUserId: true, playerData: true, faabRemaining: true, league: { select: { platform: true } } },
+      })
+      /*
+       * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your
+       * roster" and every priced package name strangers. Stripped here, every trade surface sees none.
+       */
+      .then((rs) =>
+        rs.map(({ league, ...r }) => ({
+          ...r,
+          playerData: sleeperReadablePlayerData(league?.platform, r.playerData) as typeof r.playerData,
+        })),
+      )
       .catch(() => []),
   ])
   return { teams, rosters }
@@ -495,6 +514,11 @@ export async function getPlayerTradeVisual(
   const { yours, myRoster } = callerTradeSeat(tradeRows, userId)
   if (!myRoster) return { available: false, reason: 'you need a claimed team in this league to build a trade' }
 
+  // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
+  // read them — not that he is free to claim.
+  if (isForeignIdSpace(league.platform)) {
+    return { available: false, reason: "we can't match this league's player ids to ours yet, so we can't tell who holds him" }
+  }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null
   if (!holder) return { available: false, reason: 'he is not on any roster we can read here — claim him instead of trading for him' }
   if (holder.platformUserId === myRoster.platformUserId) {
@@ -603,9 +627,15 @@ export async function getPlayerTradeVisual(
   /*
    * ── THE LEAGUE MAY NOT ALLOW TRADES AT ALL, IN WHICH CASE EVERYTHING ABOVE IS THE WRONG ANSWER ──
    *
-   * Resolved through `readFormatRules`, which is the canonical "what format is this league" — two
-   * implementations of that question is the defect this repo already records, not the fix.
+   * 🛑 WHETHER IT DOES IS THE CONCEPT CATALOG'S ANSWER (`lib/league-rules/tradeLegality.ts`), NOT
+   * "IS IT A GUILLOTINE". This block used to refuse packages in every guillotine and survivor league.
+   * The catalog marks trading LEGAL in both; only Survivor All-Stars Guillotine and Tournament forbid
+   * it. Production (2026-09-28): 16 leagues were refused packages they could send, and 18 tournament
+   * leagues were offered packages they could not. `readFormatRules` below still names the format
+   * for the bid maths, but it maps survivor-guillotine onto plain guillotine, so it cannot decide this.
    */
+  const tradeBan = tradeBanReason({ leagueType: league.leagueType, isDynasty: marketContext.variant.dynasty, settings: league.settings })
+  const tradesAllowed = tradeBan === null
   const concept = readFormatRules({
     leagueType: league.leagueType,
     isDynasty: marketContext.variant.dynasty,
@@ -616,7 +646,13 @@ export async function getPlayerTradeVisual(
      */
     settings: league.settings,
   }).concept
-  const isGuillotine = concept === 'guillotine' || concept === 'survivor'
+  /*
+   * The bid card answers "no trades here, so what do I bid when his team is chopped?". That only
+   * exists in a no-trade ELIMINATION league, where a released roster hits waivers. A plain guillotine
+   * trades, so it gets packages. A tournament forbids trades but has no chop-to-waivers market, so it
+   * gets the plain no-trade card.
+   */
+  const bidsInstead = !tradesAllowed && (concept === 'guillotine' || concept === 'survivor')
   const faabRaw = Number((settings as Record<string, unknown>).faab_budget)
 
   /*
@@ -626,11 +662,11 @@ export async function getPlayerTradeVisual(
    * is a database round trip, and the overwhelming majority of leagues have no schedule on file —
    * paying for a query whose answer can only be discarded would tax every league to serve one.
    */
-  const schedule = isGuillotine ? scheduleForLeague(league.platformLeagueId) : null
+  const schedule = bidsInstead ? scheduleForLeague(league.platformLeagueId) : null
   const resolvedWeek = schedule ? await resolveCurrentWeekForLeague(league.platformLeagueId ?? '').catch(() => null) : null
   const horizon = schedule && resolvedWeek ? survivorHorizon(schedule, resolvedWeek.week) : null
 
-  const bidInstead = isGuillotine
+  const bidInstead = bidsInstead
       ? bidFor({
           horizon,
           concept,
@@ -687,13 +723,14 @@ export async function getPlayerTradeVisual(
        * 🛑 A NO-TRADE LEAGUE GETS NO PACKAGES. Leaving them in would offer a manager a plan they
        * cannot execute, which is worse than offering nothing — it looks actionable.
        */
-      packages: isGuillotine ? [] : packages,
-      recommended: isGuillotine ? null : recommended,
-      grade: isGuillotine
-        ? { available: false, reason: 'this league does not allow trades, so there is no package to grade' }
-        : grade,
+      packages: tradesAllowed ? packages : [],
+      recommended: tradesAllowed ? recommended : null,
+      grade: tradesAllowed
+        ? grade
+        : { available: false, reason: 'this league does not allow trades, so there is no package to grade' },
       bidInstead,
-      tradesAllowed: !isGuillotine,
+      tradesAllowed,
+      ...(tradeBan ? { tradeBan } : {}),
     },
   }
 }

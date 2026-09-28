@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   rosterFind: vi.fn(),
   compute: vi.fn(),
   rl: vi.fn(),
+  evaluate: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
@@ -36,6 +37,17 @@ vi.mock('@/lib/rate-limit', () => ({ rateLimit: h.rl, getClientIp: () => '1.2.3.
 vi.mock('@/lib/trade-value/captureSnapshot', () => ({
   computeRedraftTradeValueSnapshot: h.compute,
 }))
+vi.mock('@/lib/decision-os/trade/evaluateTrade', () => ({ evaluateTrade: h.evaluate }))
+
+/* The one engine's receipt for the preview: a B for the proposer. */
+const RECEIPT = {
+  receiptId: 'rcpt_preview',
+  assets: [],
+  grade: {
+    graded: true, letter: 'B', partnerLetter: 'D', label: 'Slightly favors you', percentDiff: 14,
+    giveValue: 4200, getValue: 4900, recommendation: 'Accept if it fits.',
+  },
+}
 
 import { POST } from '@/app/api/redraft/trade-value-preview/route'
 
@@ -52,6 +64,7 @@ const req = (body: unknown = OK_BODY) =>
 
 beforeEach(() => {
   vi.resetAllMocks()
+  h.evaluate.mockResolvedValue(RECEIPT)
   h.rl.mockReturnValue({ success: true })
   h.session.mockResolvedValue({ user: { id: 'u1' } })
   h.member.mockResolvedValue({ ok: true })
@@ -182,10 +195,30 @@ describe('the valuation itself', () => {
     )
   })
 
-  it('returns the snapshot on success', async () => {
+  it('returns the snapshot on success, and the ONE grade beside it', async () => {
     const res = await POST(req())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ snapshot: { version: '1.0', sides: [], grade: {}, context: {} } })
+    const body = await res.json()
+    expect(body.snapshot).toEqual({ version: '1.0', sides: [], grade: {}, context: {} })
+    // Trade OS: the letter the modal shows is the one engine's, from the proposer's side, as a receipt.
+    expect(body.tradeGrade).toMatchObject({
+      grade: 'B', partnerGrade: 'D', giveValue: 4200, getValue: 4900, gradeWithheld: null, evaluationReceiptId: 'rcpt_preview',
+    })
+    expect(h.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      surface: 'redraft-trade-preview',
+      leagueId: 'l1',
+      userId: 'u1',
+      viewerSide: true,
+      // p1 goes FROM the proposer: it is what they give. No name on file → unpriceable, never guessed.
+      give: { assets: [], unpriceable: ['a player with no name on file'] },
+      get: { assets: [], unpriceable: [] },
+    }))
+  })
+
+  it('grades nothing for a caller refused at the gate', async () => {
+    h.member.mockResolvedValue({ ok: false, status: 403 })
+    await POST(req())
+    expect(h.evaluate).not.toHaveBeenCalled()
   })
 
   it('🛑 500s on a failed valuation rather than returning a zeroed snapshot', async () => {

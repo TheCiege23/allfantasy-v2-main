@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { hasIdpScoring } from '@/lib/core-app/scoringNotes'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -130,13 +131,13 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const league =
     (await args.prisma.league
-      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true } })
+      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true } })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true },
+        select: { id: true, settings: true, platform: true },
       })
       .catch(() => null))
   if (!league) return EMPTY('no_scoring_settings')
@@ -156,15 +157,25 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
   if (!mine.found) return EMPTY(mine.reason === 'no_team_claimed' ? 'no_team_claimed' : 'no_roster')
-  const myIds = rosterPlayerIds(mine.playerData)
-  if (myIds.length === 0) return EMPTY('no_roster')
+  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one it prices
+  // (and names as "displaced") a stranger, and strikes a real free agent off the board.
+  const readableIds = (playerData: unknown) => rosterPlayerIds(sleeperReadablePlayerData(league.platform, playerData))
+  const myIds = readableIds(mine.playerData)
+  if (myIds.length === 0) {
+    return EMPTY(
+      'no_roster',
+      isForeignIdSpace(league.platform)
+        ? ['This platform’s player ids cannot be matched to players yet, so free agents cannot be told apart from rostered players.']
+        : [],
+    )
+  }
 
   /* Everyone rostered anywhere in the league is off the board. */
   const allRosters = await args.prisma.roster
     .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
     .catch(() => [] as Array<{ playerData: unknown }>)
   const rostered = new Set<string>()
-  for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)
+  for (const r of allRosters) for (const id of readableIds(r.playerData)) rostered.add(id)
   for (const id of myIds) rostered.add(id)
 
   const { lookupProjections } = await import('@/lib/core-app/playerProjections')

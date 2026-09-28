@@ -10,6 +10,8 @@ import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/load
 import { startingSlots, slotForStarterIndex, canFillSlot, shareAnySlot } from './slotEligibility'
 import { leagueDisplayName } from './leagueHome'
 import { pickStartOver, type StartOver } from './startOver'
+import { isForeignIdSpace, translateRostersToSleeperIds } from './rosterIdSpace'
+import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 export type { StartOver } from './startOver'
 
 /**
@@ -204,16 +206,33 @@ export async function getPlayerImpact(
   if (teams.length === 0) return []
 
   const out: LeagueImpact[] = []
+  // Fleaflicker/MFL leagues the identity bridge can read (bridgedRosterIds.ts); no query without one.
+  const bridgedLeagues = await loadBridgedLeagues(teams.map((t) => ({ id: t.leagueId, platform: t.league?.platform })))
 
   for (const t of teams) {
+    /*
+     * 🛑 THE ROSTER IS READ IN SLEEPER IDS OR NOT AT ALL. This read the raw `playerData`, so an
+     * ESPN roster (ESPN ids) never matched and ESPN leagues got no start/sit answer, while a
+     * Fleaflicker/MFL/Fantrax/Yahoo roster — the provider's own numeric ids, which overlap Sleeper's
+     * (44 of 248 on the one Fleaflicker league, measured 2026-09-27) — could match the WRONG player
+     * and price a swap for someone the manager does not have. ESPN goes through the same identity
+     * chain as the rest of the finder; the other platforms are skipped, as the triage skips them.
+     */
+    const platform = t.league?.platform
+    const bridged = bridgedLeagues.get(t.leagueId)
+    if (isForeignIdSpace(platform) && !bridged?.readable) continue
     const candidates = [t.platformUserId, t.externalId, userId].filter(Boolean) as string[]
-    const roster = await prisma.roster.findFirst({
+    const found = await prisma.roster.findFirst({
       where: { leagueId: t.leagueId, platformUserId: { in: candidates } },
       select: { playerData: true },
     })
-    if (!roster) continue
+    if (!found) continue
+    // A bridged roster drops its unbridged ids; ESPN keeps its own translator's rules.
+    const [roster] = bridged?.readable
+      ? [{ playerData: applyBridge(found.playerData, bridged.map) }]
+      : (await translateRostersToSleeperIds(platform, [found])).rosters
 
-    const pd = (roster.playerData ?? {}) as Record<string, unknown>
+    const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     const placed = slotOf(pd, playerSleeperId)
     // Not on this roster — not a league that needs an answer.
     if (!placed) continue

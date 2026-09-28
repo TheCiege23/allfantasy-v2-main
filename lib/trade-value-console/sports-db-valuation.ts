@@ -45,7 +45,7 @@ export function sportsRecordToPricedAsset(row: SportsPlayerRecord): PricedAsset 
   const dyn = row.dynastyValue
   const projPts = extractProjectionPoints(row.projections)
   let market = typeof dyn === 'number' && dyn > 0 ? Math.round(dyn * 75) : 0
-  if (market <= 0 && projPts != null) {
+  if (market <= 0 && projPts != null && projPts > 0) {
     market = Math.round(clamp(projPts * 45, 200, 9000))
   }
   if (market <= 0) {

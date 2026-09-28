@@ -87,6 +87,11 @@ describe('before kickoff', () => {
 })
 
 describe('mid-slate', () => {
+  it('never retains the projected gap for a player whose game is final', () => {
+    const s = sides()
+    s.you.starters[0].isFinal = true
+    expect(final(s, live(5, 0, [['QB', 5], ...OPP_ROWS]))).toEqual({ you: 95, opponent: 110 })
+  })
   it('🛑 a starter who has beaten his projection adds nothing more — 121, not 115', () => {
     const l = live(25, 0, [['QB', 0], ['WR', 25], ['RB', 0], ['TE', 0], ['K', 0], ['DEF', 0], ...OPP_ROWS])
     // 25 banked + QB 20 + WR 0 more + the other four's 76.

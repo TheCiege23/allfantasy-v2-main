@@ -8,6 +8,7 @@ import {
   type ReadyWaiverScenario,
   type ScenarioPlayer,
 } from '@/lib/chimmy/tradeScenarioTypes'
+import { tradeDecisionRecommendation } from '@/lib/chimmy/tradeDecisionRecommendation'
 
 /**
  * A scenario's before/after, rendered under the answer that discussed it — a trade, a waiver
@@ -30,6 +31,7 @@ import {
  * light-mode clamp rewrites consistently — and each also differs in sign text, so the direction
  * survives a monochrome render.
  */
+
 
 const label = (p: ScenarioPlayer) => (p.position ? `${p.name} (${p.position})` : p.name)
 const names = (ps: ScenarioPlayer[]) => ps.map(label).join(', ')
@@ -89,16 +91,27 @@ export function ChimmyScenarioCard({ scenario }: { scenario: ReadyChimmyScenario
 
 function TradeScenarioCard({ scenario }: { scenario: ReadyTradeScenario }) {
   const unit = unitLabel(scenario.lineup?.unit, scenario.lineupWeek ?? undefined)
+  const recommendation = tradeDecisionRecommendation(scenario)
+  const verdict = recommendation.startsWith('NO:') ? 'NO' : recommendation.startsWith('COUNTER:') ? 'COUNTER' : recommendation.startsWith('YES,') ? 'YES' : 'HOLD'
+  const reason = recommendation.replace(/^(?:HOLD:|NO:|COUNTER:|COUNTER \/ HOLD:|YES, on verified value and this week's roster fit:)\s*/, '')
   return (
     <div className="af-cm-scn" data-testid="chimmy-scenario" data-kind="trade">
+      <div className="af-cm-verdict" data-verdict={verdict}>
+        <span className="af-cm-verdict-label">Chimmy’s recommendation</span>
+        <strong>{verdict}</strong>
+        <p>{reason}</p>
+      </div>
       <div className="af-cm-scn-title">Trade scenario · with {scenario.partnerTeamName}</div>
       <div className="af-cm-scn-sides">
-        <span className="af-cm-scn-side">
-          <span className="af-cm-scn-label">You give</span> {names(scenario.give)}
-        </span>
-        <span className="af-cm-scn-side">
-          <span className="af-cm-scn-label">You get</span> {names(scenario.get)}
-        </span>
+        {[{ title: 'You give', players: scenario.give }, { title: 'You receive', players: scenario.get }].map(side => (
+          <section className="af-cm-scn-side" key={side.title} aria-label={side.title}>
+            <h3 className="af-cm-scn-label">{side.title}</h3>
+            <ul className="af-cm-trade-assets">{side.players.map(p => <li key={p.playerId}>
+              <span className="af-cm-asset-icon" aria-hidden>{p.playerId.startsWith('pick:') ? 'PICK' : p.position ?? '•'}</span>
+              <span><strong>{p.name}</strong>{p.position ? <small>{p.position}</small> : null}</span>
+            </li>)}</ul>
+          </section>
+        ))}
       </div>
 
       <table className="af-cm-scn-table">
@@ -123,9 +136,11 @@ function TradeScenarioCard({ scenario }: { scenario: ReadyTradeScenario }) {
             </td>
           </tr>
           <LineupRow lineup={scenario.lineup} unavailable={scenario.lineupUnavailable} unit={unit} />
-          <PlayoffRow reason={scenario.playoffOdds.reason} what="trade" />
+          {scenario.playoffOdds.available ? <tr data-row="playoff"><th scope="row">Playoff estimate</th><td>{fmt(scenario.playoffOdds.before, 1)}%</td><td>{fmt(scenario.playoffOdds.after, 1)}%</td><td><Delta value={scenario.playoffOdds.delta} digits={1} /> pp</td></tr> : <PlayoffRow reason={scenario.playoffOdds.reason} what="trade" />}
+          {scenario.depthChanges?.map(d => <tr key={d.position}><th scope="row">{d.position} depth</th><td>{d.before}</td><td>{d.after}</td><td><Delta value={d.after - d.before} digits={0} /></td></tr>)}
         </tbody>
       </table>
+      <details className="af-cm-scn-assumptions"><summary>Scoring basis and limitations</summary><p>{scenario.value.basis ?? 'Your league value chart'}. {scenario.playoffOdds.reason}</p>{scenario.picks ? <p>Pick values use round averages. Future draft slots and future-season results are unknown.</p> : null}</details>
 
       {scenario.value.coverageStatus !== 'complete' ? (
         <p className="af-cm-scn-note" data-testid="chimmy-scenario-coverage">

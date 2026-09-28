@@ -524,8 +524,11 @@ export function Dashboard3A(props: Dashboard3AProps) {
           <li><Link className="af3a-navitem" href="/core/portfolio"><i>◈</i>Portfolio</Link></li>
           <li><Link className="af3a-navitem" href="/core/career"><i>★</i>Your career</Link></li>
           <li>
+            {/* ⚠ THREE PRODUCTS WERE ALL CALLED "Rankings" on /core: the rail's manager ladder
+                (/core/rankings), this career-rank page, and the tools tile's league power rankings
+                (/rankings). Each label now names which one it opens. Production audit 2026-09-28. */}
             <Link className="af3a-navitem" href="/af-rankings">
-              <i>↑</i>Rankings
+              <i>↑</i>Career rank
               {career?.level != null ? <em className="af3a-tag">LVL {career.level}</em> : null}
             </Link>
           </li>
@@ -535,7 +538,9 @@ export function Dashboard3A(props: Dashboard3AProps) {
               {commissionerCount > 0 ? <em className="af3a-count">{commissionerCount}</em> : null}
             </Link>
           </li>
-          <li><Link className="af3a-navitem" href="/tools"><i>⚙</i>Tools</Link></li>
+          {/* /core/tools, not /tools: the latter redirects to the public tools hub and drops the
+              manager out of the Core shell — the rail's own Tools link already goes to /core/tools. */}
+          <li><Link className="af3a-navitem" href="/core/tools"><i>⚙</i>Tools</Link></li>
         </ul>
 
         <div className="af3a-import">
@@ -630,7 +635,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
               <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
               <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
               <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
-              <Link className="af3a-tool" href="/rankings"><i>★</i>Rankings</Link>
+              <Link className="af3a-tool" href="/rankings"><i>★</i>Power rankings</Link>
               {/*
                 Only renders for managers who are in at least one league that starts defenders
                 or kickers — the user-scoped question, because /core is not one league. See
@@ -919,7 +924,8 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                     {career.level != null ? (
                       <b className="af3a-mono af3a-lvl">
                         LVL <i>{career.level}</i>
-                        <em>AF RANK</em>
+                        {/* The XP level, not a rank — "AF RANK" under it read as "your rank is 14". */}
+                        <em>CAREER LEVEL</em>
                       </b>
                     ) : null}
                     <b className="af3a-mono af3a-stat">

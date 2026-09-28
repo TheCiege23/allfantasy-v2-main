@@ -1007,6 +1007,38 @@
   white-space: nowrap;
 }
 
+/* A trade's grade, one chip per team — THE grade, see lib/core-app/leagueHome.ts tradeBuzzGrade. */
+.af-buzz-grades { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-buzz-grade {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 100%;
+}
+.af-buzz-grade-team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.af-buzz-grade b {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--chip, rgba(255, 255, 255, 0.06));
+  color: var(--text);
+}
+.af-buzz-grade[data-letter='A'] b { color: #34d399; }
+.af-buzz-grade[data-letter='B'] b { color: #5eead4; }
+.af-buzz-grade[data-letter='C'] b { color: #fbbf24; }
+.af-buzz-grade[data-letter='D'] b { color: #fb923c; }
+.af-buzz-grade[data-letter='F'] b { color: #fb5b78; }
+.af-buzz-grade-line { font-size: 11px; line-height: 1.4; color: var(--muted); }
+
 .af-buzz-faces {
   display: flex;
   align-items: center;

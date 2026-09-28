@@ -152,9 +152,18 @@ export function Scout({ data, gamePlanHref }: ScoutProps) {
           {coverage.profiledCount} of {coverage.teamCount}
         </span>{' '}
         {coverage.teamCount === 1 ? 'manager' : 'managers'} profiled
-        {coverage.lastRefreshedAt
-          ? ` · last updated ${new Date(coverage.lastRefreshedAt).toLocaleDateString()}`
-          : ''}
+        {/*
+          🛑 THIS SAID "last updated", AND IT WAS READ AS THE LEAGUE'S SYNC TIME. It is the newest
+          PROFILE rebuild, which runs on its own rotation — a league synced 20 minutes ago showed
+          "last updated 9/19" and looked broken, or worse, a fresh sync made week-old profiles look
+          current. Name what it measures, and give the range so the oldest profile is not hidden.
+        */}
+        {coverage.lastRefreshedAt ? (
+          <span title="Manager profiles are rebuilt on their own schedule, separately from league sync.">
+            {' · profiles rebuilt '}
+            {profileRange(coverage.oldestRefreshedAt, coverage.lastRefreshedAt)}
+          </span>
+        ) : null}
         {coverage.profiledCount === 0
           ? ' — the profiler runs on a schedule and has not reached this league yet.'
           : complete
@@ -199,3 +208,11 @@ export function Scout({ data, gamePlanHref }: ScoutProps) {
 }
 
 export default Scout
+
+/** "9/19", or "9/12–9/19" when the league's profiles were rebuilt on different days. */
+function profileRange(oldest: string | null, newest: string): string {
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })
+  const to = fmt(newest)
+  const from = oldest ? fmt(oldest) : to
+  return from === to ? to : `${from}–${to}`
+}

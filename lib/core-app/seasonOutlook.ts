@@ -387,7 +387,14 @@ function describeWhatDecidesIt(
         : 'The regular season is over; the seeding is already what it is.'
   }
   if (you.playoffPct >= 99) return `In all but a rounding error. The last ${weeksRemaining} are about seeding.`
-  if (you.playoffPct <= 1) return `Out in all but ${(100 - you.playoffPct).toFixed(0)}% of runs.`
+  /*
+   * ⚠ THIS READ "Out in all but ${100 - pct}% of runs" — i.e. "Out in all but 99% of runs" at 1%
+   * and "Out in all but 100% of runs" at 0%, which says the opposite of what it means. Measured on
+   * the production standings screen 2026-09-28.
+   */
+  if (you.playoffPct <= 1) {
+    return you.playoffPct < 0.5 ? 'Out in every simulated run.' : 'In the field in about 1 run in 100.'
+  }
 
   if (m) {
     const target = m.winsForSafe ?? m.winsForLikely
@@ -660,6 +667,33 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     }
     const weeks = [...new Set(remaining.map((g) => g.week))].sort((a, b) => a - b)
 
+    /*
+     * 🛑 NO UPCOMING ROW IS NOT THE SAME AS NO UPCOMING GAME. Sleeper, ESPN and Yahoo write a 0-0
+     * placeholder row for every unplayed week, so an empty remainder there does mean the regular
+     * season is over. The Fantrax writer stores only weeks already PLAYED — so Cream Bowl, four
+     * weeks into its season, read "Settled — the regular season is over and you are out" in week 3
+     * (production audit 2026-09-28; its WeeklyMatchup rows were weeks 1–4, all scored, none ahead).
+     *
+     * So an empty remainder is trusted only when the league STATES its last regular week and the
+     * scores have reached it. Otherwise the schedule ahead is simply not on file, and the league is
+     * withheld with that reason rather than simulated as a finished season.
+     */
+    if (weeks.length === 0) {
+      const lastScoredWeek = seasonRows.reduce(
+        (max, r) => (r.pointsFor > 0 || r.pointsAgainst > 0 ? Math.max(max, r.week) : max),
+        0,
+      )
+      if (endWeek == null || lastScoredWeek < endWeek) {
+        const platform = String(league.platform ?? '').trim()
+        const who = platform ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase() : 'The platform'
+        withheld.push({
+          leagueName,
+          reason: `The rest of the schedule is not on file — ${who} has sent only the weeks already played (through week ${lastScoredWeek}), so a finished season cannot be told from one still going.`,
+        })
+        continue
+      }
+    }
+
     const missing: string[] = []
     const unmodelled = simTeams.filter((t) => !t.profile).length
     if (unmodelled > 0) {
@@ -907,7 +941,17 @@ export async function getSeasonOutlook(
   for (const league of contested) {
     const p = preparedById.get(league.leagueId)
     if (!league.you || !p) continue
-    const nextWeek = p.weeks[0]
+    /*
+     * 🛑 THE SWING GAME IS ONE YOU CAN STILL AFFECT. `weeks` holds every week not yet FINAL, which on
+     * a Monday includes the week being played — so the card asked "win week 3?" of The Deep!, then
+     * 110 points down on the scoreboard (production 2026-09-28). A game with points already on the
+     * board is in progress; the swing moves to the first week nobody has scored in yet.
+     */
+    const nextWeek = p.weeks.find((w) => {
+      const r = p.unscored.find((x) => x.week === w && x.rosterId === league.you!.rosterId)
+      return r != null && !(r.pointsFor > 0 || r.pointsAgainst > 0)
+    })
+    if (nextWeek == null) continue
     const mineRow = p.unscored.find((r) => r.week === nextWeek && r.rosterId === league.you!.rosterId)
     if (!mineRow) continue
     const oppRow = p.unscored.find(

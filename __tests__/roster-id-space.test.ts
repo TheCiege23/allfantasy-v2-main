@@ -104,10 +104,16 @@ describe('translateRostersToSleeperIds', () => {
     expect(mockIdentityFindMany).not.toHaveBeenCalled()
   })
 
-  it('leaves a Yahoo league untouched, with no read: there is no column to translate through yet', async () => {
+  /*
+   * This used to pin "leaves a Yahoo league UNTOUCHED". Untouched was the bug: a foreign roster's ids
+   * reached Sleeper-id reads (44 of 248 Fleaflicker ids ARE Sleeper ids, 2026-09-27). It is now
+   * stripped — and still costs no read, since there is no column to translate through.
+   */
+  it('strips a Yahoo league, with no read: there is no column to translate through yet', async () => {
     const out = await translateRostersToSleeperIds('yahoo', [{ platformUserId: 'a', playerData: { players: ['461.p.100'] } }])
     expect(out.idSpace).toBe('other')
-    expect(out.rosters[0]!.playerData).toEqual({ players: ['461.p.100'] })
+    expect(out.rosters[0]!.playerData).toEqual({ players: [] })
+    expect(out.total).toBe(1)
     expect(mockIdentityFindMany).not.toHaveBeenCalled()
   })
 })

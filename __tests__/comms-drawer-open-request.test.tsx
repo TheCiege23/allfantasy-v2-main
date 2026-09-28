@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
  * League-first phase 2: the chat bar names ONE league, so the drawer it opens must be scoped to
@@ -33,7 +33,7 @@ afterEach(() => {
 })
 
 type Req = { seq: number; tab: 'league' | 'chimmy' | null; leagueId: string | null } | null
-const drawer = (openRequest: Req) => (
+const drawer = (openRequest: Req, initialDraft?: string) => (
   <CommsDrawer
     open
     onClose={vi.fn()}
@@ -44,11 +44,27 @@ const drawer = (openRequest: Req) => (
     initialTab="chimmy"
     userId="u1"
     openRequest={openRequest}
+    initialDraft={initialDraft}
   />
 )
 const scopeValue = () => (screen.getByLabelText('League scope') as HTMLSelectElement).value
 
 describe('CommsDrawer openRequest', () => {
+  it('seeds the requested league after saved drafts load, without seeding the previous scope', async () => {
+    const question = 'Review my Draft Junkies Best Ball roster using Decision OS.'
+    const { rerender } = render(drawer(null))
+    rerender(drawer({ seq: 1, tab: 'chimmy', leagueId: 'dj' }, question))
+    await waitFor(() => expect((screen.getByPlaceholderText('Ask Chimmy…') as HTMLTextAreaElement).value).toBe(question))
+    expect(scopeValue()).toBe('dj')
+    fireEvent.change(screen.getByLabelText('League scope'), { target: { value: 'l0' } })
+    expect((screen.getByPlaceholderText('Ask Chimmy…') as HTMLTextAreaElement).value).toBe('')
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST' && String((init as RequestInit)?.body).includes(question))).toBe(false)
+  })
+  it('retains a saved user draft when a scoped screen question opens', async () => {
+    sessionStorage.setItem('af:comms:conversations:u1', JSON.stringify({ dj: { turns: [], draft: 'My unsent question' } }))
+    render(drawer({ seq: 1, tab: 'chimmy', leagueId: 'dj' }, 'Review my roster'))
+    await waitFor(() => expect((screen.getByPlaceholderText('Ask Chimmy…') as HTMLTextAreaElement).value).toBe('My unsent question'))
+  })
   it('rescopes to the requested league over a hand-picked one, and a repeat still applies', () => {
     const { rerender } = render(drawer(null))
     expect(scopeValue()).toBe('l0')

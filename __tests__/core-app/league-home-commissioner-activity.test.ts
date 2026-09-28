@@ -51,7 +51,11 @@ vi.mock('@/lib/prisma', () => {
 })
 
 vi.mock('@/lib/commissioner-hub/managerHealth', () => ({ getLeagueManagerHealth: reads.managerHealth }))
-vi.mock('@/lib/core-app/recentTrades', () => ({ getRecentTrades: reads.recentTrades }))
+vi.mock('@/lib/core-app/recentTrades', () => ({
+  getRecentTrades: reads.recentTrades,
+  gradeProviderRecentTrade: vi.fn(async () => undefined),
+  liveCompletedTrade: vi.fn(() => null),
+}))
 vi.mock('@/lib/league-history/leagueWarehouseReads', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   readManagerActivity: reads.managerActivity,

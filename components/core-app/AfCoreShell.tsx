@@ -1099,7 +1099,6 @@ function RailSide({
     projection.pricedFrom > 0 &&
     projection.pricedFrom < projection.starterCount
   const projected = projection?.afProjected ?? projection?.projected ?? null
-  const remaining = score != null && projected != null ? Math.max(0, projected - score) : null
 
   return (
     <span
@@ -1107,11 +1106,11 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       title={projection
-        ? `Projected from ${projection.pricedFrom} of ${projection.starterCount} starters${
+        ? `Weekly baseline projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
             projection.afProjected == null
               ? ' · using the provider projection because this league’s scoring could not be re-scored'
               : ' · re-scored with this league’s settings'
-          }${remaining != null ? ` · about ${remaining.toFixed(1)} projected points still available` : ''}`
+          } · live score is shown separately`
         : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
@@ -2169,7 +2168,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             It LINKS to /core/notifications rather than asking for permission itself; there
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
-          <GameDayAlertsBanner />
+          {active === 'home' ? <GameDayAlertsBanner /> : null}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
             The VISIBLE button, on the /core home screen: a real action row

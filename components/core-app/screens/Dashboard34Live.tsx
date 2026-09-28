@@ -68,7 +68,7 @@ export function Dash34Time({ iso }: { iso: string }) {
   useEffect(() => {
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return
-    setLabel(d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }))
+    setLabel(d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }))
   }, [iso])
 
   return <>{label}</>

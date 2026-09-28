@@ -118,6 +118,22 @@ describe('getSeasonOutlook', () => {
     expect(out.leagues[0].weeksRemaining).toBe(3)
     expect(out.leagues[0].assumptions.remainingGames).toBe(12)
   })
+  /*
+   * Production 2026-09-28 (Monday): the swing card asked "win week 3?" of a league 110 points down
+   * on the scoreboard. A game with points on the board is in progress, not a game to swing.
+   */
+  it('puts the swing game on the first week nobody has scored in, not the one in progress', async () => {
+    h.leagueMetadata = { season: 2026, settings: { leg: 4 } }
+    for (const r of h.matchups) {
+      if (r.week === 4) { r.pointsFor = 29; r.pointsAgainst = 47; r.win = 0 }
+    }
+    const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(out.swingByLeague['L1']?.week).toBe(5)
+  })
+  it('still swings the current week before anybody has scored in it', async () => {
+    const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(out.swingByLeague['L1']?.week).toBe(4)
+  })
   it('uses the league-stated field and stops the schedule at the last regular week', async () => {
     const out = await getSeasonOutlook('me', [LEAGUE])
     const l = out.leagues[0]
@@ -174,6 +190,29 @@ describe('getSeasonOutlook', () => {
     expect(h.focus).not.toHaveBeenCalled()
     await getSeasonOutlook('me', [LEAGUE], 'L1')
     expect(h.focus).toHaveBeenCalledTimes(1)
+  })
+
+  /*
+   * Production 2026-09-28: a Fantrax league four weeks in read "Settled — the regular season is over"
+   * because its writer stores only played weeks — no placeholder rows for the weeks ahead.
+   */
+  it('withholds a league whose remaining schedule is simply not on file, instead of calling it over', async () => {
+    h.matchups = h.matchups.filter((r) => (r.week as number) <= 3)
+    const fantrax = { ...LEAGUE, platform: 'fantrax', settings: { playoff_teams: 4 } }
+    const out = await getSeasonOutlook('me', [fantrax])
+    expect(out.leagues).toEqual([])
+    expect(out.withheld[0].reason).toMatch(/rest of the schedule is not on file — Fantrax .*through week 3/)
+  })
+
+  it('still settles a league that states its last regular week and has played through it', async () => {
+    for (const r of h.matchups) {
+      if ((r.week as number) >= 4 && (r.week as number) <= 6) {
+        r.pointsFor = 100 + Number(r.rosterId); r.pointsAgainst = 90; r.win = 1
+      }
+    }
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.withheld.map((w) => w.reason).join(' ')).not.toMatch(/not on file/)
+    expect(out.leagues[0]?.weeksRemaining).toBe(0)
   })
 
   it('withholds a league with too few modelled teams, and says why', async () => {
