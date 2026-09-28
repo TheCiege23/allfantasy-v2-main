@@ -81,6 +81,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/import-injuries?sport=NFL&gameWindow=1",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/import-stat-lines",
       "schedule": "30 */6 * * *"
     },
@@ -199,10 +203,6 @@
     {
       "path": "/api/cron/legacy-import-drain",
       "schedule": "*/1 * * * *"
-    },
-    {
-      "path": "/api/brackets/world-cup/cron/sync?job=all&provider=apifootball&recalculate=true",
-      "schedule": "0 8 * * *"
     },
     {
       "path": "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn",
