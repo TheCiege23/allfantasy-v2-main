@@ -96,9 +96,9 @@ describe('waiver board: a pickup who cannot play is not a gain', () => {
 })
 
 describe('waiver board: which week it is pricing', () => {
-  it('reports how much of the projection week has kicked off, one fixture per club pair', async () => {
+  it('hands over one kickoff per fixture (club pair across sources) and no clock-derived count', async () => {
     const board = await getWaiversBoard('me')
     expect(board.at).toEqual({ season: 2026, week: 3 })
-    expect(board.weekPlayed).toEqual({ played: 1, total: 2 })
+    expect(board.weekKickoffs).toEqual(['2000-01-01T00:00:00.000Z', '2999-01-01T00:00:00.000Z'])
   })
 })

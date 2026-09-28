@@ -642,6 +642,13 @@ function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
   }
 }
 
+/* Fourteen fixtures around a fixed clock; the loader hands kickoffs, the board counts. */
+const NOW_MS = Date.parse('2026-09-28T12:36:00Z')
+const kickoffs = (played: number) =>
+  Array.from({ length: 14 }, (_, i) => new Date(NOW_MS + (i < played ? -1 : 1) * (i + 1) * 3_600_000).toISOString())
+const KICKOFFS_13_OF_14 = kickoffs(13)
+const KICKOFFS_2_OF_14 = kickoffs(2)
+
 describe('WaiversBoard', () => {
   /*
    * Production 2026-09-28, Monday: week-3 projections ranked with 13 of 14 week-3 games played, for
@@ -649,7 +656,7 @@ describe('WaiversBoard', () => {
    */
   it('says when the projection week is mostly played, and which week a claim is for', () => {
     const { container } = render(
-      <WaiversBoard data={waiversData({ weekPlayed: { played: 13, total: 14 } })} allHref="/core/waivers?all=1" totalLeagues={65} />,
+      <WaiversBoard data={waiversData({ weekKickoffs: KICKOFFS_13_OF_14 })} nowMs={NOW_MS} allHref="/core/waivers?all=1" totalLeagues={65} />,
     )
     const note = container.querySelector('[data-testid="waivers-spent-week"]')?.textContent ?? ''
     expect(note).toContain('Most of week 3 has been played (13 of 14')
@@ -657,9 +664,9 @@ describe('WaiversBoard', () => {
   })
 
   it('says nothing about a spent week early in the week, or with no schedule read', () => {
-    for (const weekPlayed of [{ played: 2, total: 14 }, null]) {
+    for (const weekKickoffs of [KICKOFFS_2_OF_14, null]) {
       const { container, unmount } = render(
-        <WaiversBoard data={waiversData({ weekPlayed })} allHref="/core/waivers?all=1" totalLeagues={65} />,
+        <WaiversBoard data={waiversData({ weekKickoffs })} nowMs={NOW_MS} allHref="/core/waivers?all=1" totalLeagues={65} />,
       )
       expect(container.querySelector('[data-testid="waivers-spent-week"]')).toBeNull()
       unmount()

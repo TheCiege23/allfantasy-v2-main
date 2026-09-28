@@ -42,6 +42,8 @@ export type WaiversBoardProps = {
   allHref: string
   /** Total leagues on the account, for the footer's denominator. */
   totalLeagues: number
+  /** The render's clock, for the "most of the week is played" note. Defaults to now; tests pin it. */
+  nowMs?: number
 }
 
 function pct(v: number | null): string {
@@ -225,7 +227,13 @@ function Card({ row }: { row: WaiverBoardRow }) {
   )
 }
 
-export function WaiversBoard({ data, allHref, totalLeagues }: WaiversBoardProps) {
+export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }: WaiversBoardProps) {
+  /* Counted HERE, at render, because the loader is cached and must stay clock-free. */
+  const kickoffs = data.weekKickoffs ?? []
+  const weekPlayed =
+    kickoffs.length > 0
+      ? { played: kickoffs.filter((iso) => Date.parse(iso) <= nowMs).length, total: kickoffs.length }
+      : null
   const { withheld } = data
   const excluded =
     withheld.noRoster + withheld.idSpace + withheld.noScoring + withheld.noCandidate
@@ -239,15 +247,14 @@ export function WaiversBoard({ data, allHref, totalLeagues }: WaiversBoardProps)
       />
 
       {/*
-        The projection feed holds ONE week (see `WaiversBoardData.weekPlayed`). Once most of it has
+        The projection feed holds ONE week (see `WaiversBoardData.weekKickoffs`). Once most of it has
         kicked off, the gains below describe a week that is nearly over — say so, and say which week
         a claim made now is actually for.
       */}
-      {data.rows.length > 0 && data.at && data.weekPlayed && data.weekPlayed.total > 0 &&
-      data.weekPlayed.played / data.weekPlayed.total >= 0.75 ? (
+      {data.rows.length > 0 && data.at && weekPlayed && weekPlayed.played / weekPlayed.total >= 0.75 ? (
         <p className="af-bd-note" data-tone="warn" data-testid="waivers-spent-week">
           <strong>
-            Most of week {data.at.week} has been played ({data.weekPlayed.played} of {data.weekPlayed.total}{' '}
+            Most of week {data.at.week} has been played ({weekPlayed.played} of {weekPlayed.total}{' '}
             games).
           </strong>{' '}
           These gains are week {data.at.week} projections — the projection feed has not published week{' '}
