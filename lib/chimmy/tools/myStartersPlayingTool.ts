@@ -375,7 +375,16 @@ export async function buildMyStartersPlayingContext(
     if (available.length > 0) {
       hits.push({ leagueName: r.league.name, season: r.league.season, players: available, ruledOut: out, bestBall: bestBallOf.get(r.league.id) ?? false })
     } else if (out.length > 0) {
-      onlyOut.push(`${r.league.name} (${out.join('; ')})`)
+      /*
+       * ⚠ THE BEST BALL TAG TRAVELS WITH THE LEAGUE EVEN WHEN IT IS NOT COUNTED. It was written only
+       * on counted lines, so on 2026-09-28 a Best Ball league dropped for two Out starters reached the
+       * model untagged, and the answer offered "replacement options before kickoff" for a lineup the
+       * platform sets itself.
+       */
+      const bestBall = bestBallOf.get(r.league.id) ?? false
+      onlyOut.push(
+        `${r.league.name}${bestBall ? ' [Best Ball — lineup set automatically; there is no lineup move to make]' : ''} (${out.join('; ')})`,
+      )
     }
   }
   const bestBallHits = hits.filter((h) => h.bestBall).length
@@ -425,7 +434,7 @@ export async function buildMyStartersPlayingContext(
   if (onlyOut.length > 0) {
     lines.push(
       `NOT COUNTED — in ${onlyOut.length} league(s) every starter on a team in those games is ruled OUT by the injury report: ${onlyOut.join('; ')}. ` +
-        'Say these players are not playing; never list them as playing tonight.',
+        'Say these players are not playing; never list them as playing tonight. In a league tagged Best Ball, never offer to swap, replace or reset the lineup.',
     )
   }
 

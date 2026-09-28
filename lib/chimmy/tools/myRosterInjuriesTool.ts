@@ -405,10 +405,11 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
   if (unchecked > 0) gaps.push(`${unchecked} league(s) were not checked at all (named under PARTIAL SCAN above)`)
   if (unreadable.length > 0) {
     gaps.push(
-      `${unreadable.length} league(s) have no claimed or synced team for this user (${unreadable.slice(0, 6).join(', ')}) — NOT a finding that those rosters are healthy`,
+      `${unreadable.length} league(s) have no claimed or synced team for this user (${nameList(unreadable)}) — NOT a finding that those rosters are healthy`,
     )
   }
-  if (empty.length > 0) gaps.push(`${empty.length} league(s) have a team with no players synced (${empty.slice(0, 6).join(', ')})`)
+  /* nameList, not .slice(0, 6): a 2026-09-28 answer said "8 leagues" and could name only 6 of them. */
+  if (empty.length > 0) gaps.push(`${empty.length} league(s) have a team with no players synced (${nameList(empty)})`)
   if (unnamedTotal > 0) gaps.push(`${unnamedTotal} rostered player(s) could not be identified by name, so they were not checked`)
   if (ambiguous.size > 0) {
     gaps.push(
