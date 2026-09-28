@@ -65,8 +65,9 @@ export async function ensureGuillotineSeason(input: {
   // produce a season that eliminates nobody and reports itself healthy.
   if (rosters === 0) return { ok: false, reason: 'NO_ROSTERS' }
 
+  let created: { id: string; createdAt: Date }
   try {
-    const created = await prisma.guillotineSeason.create({
+    created = await prisma.guillotineSeason.create({
       data: {
         leagueId: input.leagueId,
         redraftSeasonId: redraftSeason.id,
@@ -77,9 +78,8 @@ export async function ensureGuillotineSeason(input: {
         currentTeamsActive: rosters,
         currentScoringPeriod: 0,
       },
-      select: { id: true },
+      select: { id: true, createdAt: true },
     })
-    return { ok: true, created: true, seasonId: created.id }
   } catch {
     // Lost the unique race: somebody else created it between the read above and
     // this write. Their row is as good as ours.
@@ -90,4 +90,33 @@ export async function ensureGuillotineSeason(input: {
     if (winner) return { ok: true, created: false, seasonId: winner.id }
     throw new Error('guillotine season create failed')
   }
+  // Outside the try: a failure here is not a lost create race, and must not be read as one.
+  await clearPriorSeasonChops(input.leagueId, created.id, created.createdAt)
+  return { ok: true, created: true, seasonId: created.id }
+}
+
+/**
+ * A new season starts every team alive.
+ *
+ * 🛑 `GuillotineRosterState` IS KEYED BY LEAGUE ROSTER, NOT BY SEASON, AND A LEAGUE ROSTER OUTLIVES
+ * ITS SEASON. Left alone, every team chopped last year is still "chopped" in year two: its waiver
+ * claims are refused (`guillotineGuard`), the danger and standings views drop it, the chop sweep
+ * refuses the week because that team has a score but no place in the engine's field, and the week
+ * counter resumes from last year's final chop.
+ *
+ * Last season's chops are not lost by clearing them — each is recorded per season in
+ * `GuillotineElimination` and `GuillotineSurvivalLog`. Only a league that has had a guillotine
+ * season before is touched; the bound is the new season's creation time, the same one the engine
+ * uses to tell this season's chops from a previous year's.
+ */
+async function clearPriorSeasonChops(leagueId: string, seasonId: string, seasonCreatedAt: Date): Promise<void> {
+  const prior = await prisma.guillotineSeason.findFirst({
+    where: { leagueId, id: { not: seasonId }, createdAt: { lt: seasonCreatedAt } },
+    select: { id: true },
+  })
+  if (!prior) return
+  await prisma.guillotineRosterState.updateMany({
+    where: { leagueId, choppedAt: { not: null, lt: seasonCreatedAt } },
+    data: { choppedAt: null, choppedInPeriod: null, choppedReason: null },
+  })
 }

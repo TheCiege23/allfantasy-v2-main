@@ -26,6 +26,14 @@ export type EnterRedraftOffseasonResult = {
 export async function enterRedraftOffseason(
   seasonId: string,
   actorUserId: string,
+  options: {
+    /**
+     * Season roster ids, first place first, for a format that has neither a bracket nor a
+     * tournament to read the finish from — guillotine ranks by survival, not by wins. Rosters it
+     * omits follow in standings order.
+     */
+    finishOrder?: string[]
+  } = {},
 ): Promise<EnterRedraftOffseasonResult> {
   const season = await prisma.redraftSeason.findUnique({
     where: { id: seasonId },
@@ -114,9 +122,18 @@ export async function enterRedraftOffseason(
    * season that finished without a bracket.
    */
   const bracketResult = readBracketResult(season.playoffBracket?.structure)
-  const standingsLeader = season.rosters[0] ?? null
+  const finishIndex = !tournament && !bracketResult && options.finishOrder?.length
+    ? new Map(options.finishOrder.map((id, index) => [id, index]))
+    : null
+  // A survival finish has no regular-season table to lead; naming one would be noise.
+  const standingsLeader = finishIndex ? null : season.rosters[0] ?? null
   const ranked = tournament
     ? [...season.rosters].sort((a, b) => tournament.finishByRosterId.get(a.id)! - tournament.finishByRosterId.get(b.id)!)
+    : finishIndex
+    ? season.rosters
+        .map((roster, index) => ({ roster, index, finish: finishIndex.get(roster.id) }))
+        .sort((a, b) => (a.finish ?? Number.MAX_SAFE_INTEGER) - (b.finish ?? Number.MAX_SAFE_INTEGER) || a.index - b.index)
+        .map((row) => row.roster)
     : bracketResult
     ? season.rosters
         .map((roster, index) => ({ roster, index, finish: bracketResult.finishByRosterId.get(roster.id) }))

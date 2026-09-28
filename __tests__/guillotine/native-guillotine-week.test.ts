@@ -30,6 +30,11 @@ const m = vi.hoisted(() => ({
   scoreRosterForWeek: vi.fn(),
   acquire: vi.fn(),
   release: vi.fn(),
+  finish: vi.fn(),
+}))
+vi.mock('@/lib/guillotine/finishGuillotineSeason', async (orig) => ({
+  ...(await orig<typeof import('@/lib/guillotine/finishGuillotineSeason')>()),
+  finishGuillotineSeason: m.finish,
 }))
 vi.mock('@/lib/guillotine/resumeAuditedRosterRelease', () => ({ resumeAuditedRosterRelease: m.resumeRelease }))
 vi.mock('@/lib/guillotine/endgameEngine', () => ({ determineFinalChampion: m.finalChampion }))
@@ -109,6 +114,7 @@ function arrange(overrides: { lastChopWeek?: number | null; active?: typeof SEAS
   m.finalizeRedraftWeek.mockResolvedValue({ refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } })
   m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({ points: POINTS[rosterId] }))
   m.acquire.mockResolvedValue({ ok: true, backend: 'postgres' })
+  m.finish.mockResolvedValue({ championRosterId: 'rr-a', archived: true })
   m.release.mockResolvedValue(undefined)
   m.savePeriodScores.mockResolvedValue(undefined)
   m.runElimination.mockResolvedValue({
@@ -232,6 +238,44 @@ describe('runNativeGuillotineWeek', () => {
     expect((await run()).outcome).toBe('season_complete')
     expect(m.finalizeRedraftWeek).not.toHaveBeenCalled()
     expect(m.runElimination).not.toHaveBeenCalled()
+    // Crowned and archived, not merely marked complete.
+    expect(m.finish).toHaveBeenCalledWith({ seasonId: 's1', guillotineSeasonId: 'g1' })
+  })
+
+  it('🛑 crowns and archives the season when the engine completes the final stage', async () => {
+    arrange()
+    db.guillotineSeason.findUnique.mockResolvedValue({ currentScoringPeriod: 16, status: 'final_stage' })
+    m.runElimination.mockResolvedValue({ choppedRosterIds: [], reason: 'final stage complete' })
+    const result = await runNativeGuillotineWeek({ seasonId: 's1', currentFantasyWeek: 18 }, { now: () => NOW })
+    expect(result).toMatchObject({ outcome: 'season_complete', week: 17 })
+    expect(m.finish).toHaveBeenCalledWith({ seasonId: 's1', guillotineSeasonId: 'g1' })
+  })
+
+  it('a season already complete is only finished — never chopped again', async () => {
+    arrange()
+    db.redraftSeason.findFirst.mockResolvedValue({
+      id: 's1', leagueId: 'L1', sport: 'NFL', season: 2026, status: 'complete', currentWeek: 17, totalWeeks: 17,
+    })
+    const result = await runNativeGuillotineWeek({ seasonId: 's1', currentFantasyWeek: 0 }, { now: () => NOW })
+    expect(result.outcome).toBe('season_complete')
+    expect(m.finish).toHaveBeenCalledWith({ seasonId: 's1', guillotineSeasonId: 'g1' })
+    expect(m.finalizeRedraftWeek).not.toHaveBeenCalled()
+    expect(m.runElimination).not.toHaveBeenCalled()
+    expect(db.redraftSeason.update).not.toHaveBeenCalled()
+  })
+
+  it('reports an archive that did not happen, so the retry is visible', async () => {
+    arrange({ active: [SEASON_ROSTERS[0]!] })
+    m.finish.mockResolvedValue({ championRosterId: 'rr-a', archived: false, reason: 'LEAGUE_NOT_COMPLETED' })
+    expect(await run()).toMatchObject({ outcome: 'season_complete', reason: 'LEAGUE_NOT_COMPLETED' })
+  })
+
+  it('sums the cumulative total from THIS season only', async () => {
+    arrange()
+    await run()
+    expect(db.guillotinePeriodScore.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId: 'L1', season: 2026, weekOrPeriod: { lt: 3 } },
+    }))
   })
 
   it('moves to the next final scoring period without a new chop', async () => {
@@ -256,10 +300,7 @@ describe('runNativeGuillotineWeek', () => {
   it('completes the season when one team is left', async () => {
     arrange({ active: [SEASON_ROSTERS[0]!] })
     expect((await run()).outcome).toBe('season_complete')
-    expect(db.redraftSeason.updateMany).toHaveBeenCalledWith({
-      where: { id: 's1', status: { not: 'complete' } },
-      data: { status: 'complete' },
-    })
+    expect(m.finish).toHaveBeenCalledWith({ seasonId: 's1', guillotineSeasonId: 'g1' })
     expect(m.runElimination).not.toHaveBeenCalled()
   })
 })
