@@ -29,6 +29,8 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
+import { lineupSeatsFromSettings } from './slotEligibility'
+import { lineupGainCalculator } from '@/lib/trade-intel/faabLineupGain'
 import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
 import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueVariantFor } from './valueBook'
@@ -405,13 +407,21 @@ function toPackage(p: TradePackage): TradeVisualPackage {
 
 const OPENABLE: FairnessBand[] = ['balanced', 'slight edge you']
 
-/** How many of each position a lineup starts, for working out who a new man would displace. */
+/**
+ * How many of each position a lineup starts — the FALLBACK, used only when the league's own slots
+ * are not on file or include one `lineupSeatsFromSettings` does not recognise. It is wrong for any
+ * FLEX/SUPER_FLEX lineup, which is why it is no longer the default (see `faabLineupGain.ts`).
+ */
 const STARTS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 }
 
 /**
  * The FAAB candidates among `candidateIds`, each priced under the league's scoring and set against
- * the starter he would displace in YOUR lineup (the weakest starter at his position, or 0 for a slot
- * you cannot fill).
+ * YOUR starting lineup.
+ *
+ * With the league's slots readable (`leagueSettings.roster_positions`), a candidate's worth to you
+ * is what he adds to your best legal lineup under those slots, and `displacedName` says who leaves
+ * it. Without them it falls back to the fixed table: the weakest starter at his position, or 0 for
+ * a seat you cannot fill.
  *
  * One implementation, shared by the Player Finder's bid card (`bidFor`, pool = one owner's roster)
  * and Chimmy's `get_faab_bid_plan` tool (pool = every valued unrostered player), so the two surfaces
@@ -424,13 +434,25 @@ export function faabPoolFor(args: {
   values: MarketValuesPayload
   leagueScoring: Record<string, number>
   myPlayers: DiscoveryPlayer[]
+  /** The league's raw settings. Omitted or slot-less, the fixed 1/2/2/1 table is used. */
+  leagueSettings?: unknown
 }): FaabCandidate[] {
-  /* Your weakest starter at each slot — what a new man would actually displace. */
+  const seats = args.leagueSettings === undefined ? null : lineupSeatsFromSettings(args.leagueSettings)
+  const gainFor = seats
+    ? lineupGainCalculator(
+        seats,
+        args.myPlayers.map((p) => ({ id: p.playerId, name: p.playerName, position: p.position, value: p.value ?? null })),
+      )
+    : null
+
+  /* Fallback only: your weakest starter at each position, by the fixed table. */
   const weakest: Record<string, number> = {}
-  for (const pos of Object.keys(STARTS)) {
-    const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-    const starters = atPos.slice(0, STARTS[pos])
-    weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
+  if (!gainFor) {
+    for (const pos of Object.keys(STARTS)) {
+      const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+      const starters = atPos.slice(0, STARTS[pos])
+      weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
+    }
   }
 
   return args.candidateIds.flatMap((id) => {
@@ -440,6 +462,11 @@ export function faabPoolFor(args: {
     const value = priced?.adjusted ?? playerValue(args.values, id)
     if (value == null) return []
     const position = row.position ? normalizePosition(row.position) : 'UNK'
+    if (gainFor) {
+      /* replacedValue is expressed so that playerValue − replacedValue is exactly his lineup gain. */
+      const { gain, displacedName } = gainFor({ id, name: row.name, position, value })
+      return [{ id, name: row.name, position, playerValue: value, replacedValue: value - gain, displacedName }]
+    }
     return [{
       id,
       name: row.name,
@@ -472,6 +499,8 @@ function bidFor(args: {
   /** The published elimination schedule at this week, or null when the league has none on file. */
   horizon: SurvivorHorizon | null
   myPlayers: DiscoveryPlayer[]
+  /** The league's raw settings, so the lineup gain is measured against its real slots. */
+  leagueSettings: unknown
 }): PlayerBidInstead | null {
   const pool = faabPoolFor({
     candidateIds: allIds(args.holderPlayerData),
@@ -479,6 +508,7 @@ function bidFor(args: {
     values: args.values,
     leagueScoring: args.leagueScoring,
     myPlayers: args.myPlayers,
+    leagueSettings: args.leagueSettings,
   })
   if (!pool.length) return null
 
@@ -705,6 +735,7 @@ export async function getPlayerTradeVisual(
           faabBudget: Number.isFinite(faabRaw) && faabRaw > 0 ? faabRaw : null,
           faabRemaining: typeof myRoster.faabRemaining === 'number' ? myRoster.faabRemaining : null,
           myPlayers: me.players,
+          leagueSettings: league.settings,
         })
       : null
 
