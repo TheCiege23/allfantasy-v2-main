@@ -49,6 +49,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   /* Phase 2 (2026-09-27): an existing trade by reference — loadTrade() → the one engine. */
   { file: 'lib/decision-os/trade/evaluateStoredTrade.ts', entry: /evaluate:\s*evaluateTrade,/, what: 'evaluateStoredTrade, whose default grader is the one engine' },
   { file: 'app/api/trades/evaluate/route.ts', entry: /evaluateStoredTrade\(/, what: 'POST /api/trades/evaluate' },
+  /* 2026-09-27: the dynasty trade analyzer's letter, in the league the viewer chose. */
+  { file: 'app/api/dynasty-trade-analyzer/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the dynasty trade analyzer' },
 ]
 
 /* The private letters these surfaces used to print. Shapes, not words: a call, not a mention. */
