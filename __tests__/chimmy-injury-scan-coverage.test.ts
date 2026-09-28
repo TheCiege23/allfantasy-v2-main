@@ -161,3 +161,18 @@ describe('buildMyRosterInjuriesContext coverage', () => {
     expect(none).toBeGreaterThan(partial)
   })
 })
+
+/* 2026-09-28: an answer said "8 leagues have a team with nothing synced" and could name only 6 — the list was cut at 6. */
+describe('gap lists name every league up to the shared limit', () => {
+  it('names all 8 leagues with nothing synced, and all 8 unreadable ones', async () => {
+    h.leagues.mockResolvedValue(Array.from({ length: 16 }, (_, i) => league(i + 1)))
+    h.team.mockImplementation(async ({ leagueId }: { leagueId: string }) => {
+      const n = Number(leagueId.slice(1))
+      if (n <= 8) return { starters: [], bench: [], injuredReserve: [], taxi: [] }
+      return null
+    })
+    const out = await buildMyRosterInjuriesContext({ userId: 'u1', sport: 'NFL' })
+    expect(out).toContain('8 league(s) have a team with no players synced (League 01, League 02, League 03, League 04, League 05, League 06, League 07, League 08)')
+    expect(out).toContain('8 league(s) have no claimed or synced team for this user (League 09, League 10, League 11, League 12, League 13, League 14, League 15, League 16)')
+  })
+})

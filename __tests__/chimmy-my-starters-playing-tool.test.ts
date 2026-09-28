@@ -418,3 +418,32 @@ describe('buildMyStartersPlayingContext injuries', () => {
     expect(out).toContain('- KBFL: James Cook RB BUF')
   })
 })
+
+/*
+ * 2026-09-28, live after #1488: BB Dynasty (Best Ball) was correctly NOT COUNTED for its two Out
+ * starters, but the tag was written only on counted lines, so the answer offered "replacement
+ * options before kickoff" for a lineup the platform sets itself.
+ */
+describe('buildMyStartersPlayingContext Best Ball, not counted', () => {
+  it('keeps the Best Ball tag on a league dropped because every starter in the game is Out', async () => {
+    h.listLeagues.mockResolvedValue([league('l1', 'BB Dynasty'), league('l2', 'KBFL')])
+    h.leagueFindMany.mockResolvedValue([{ id: 'l1', settings: {}, leagueType: 'best_ball' }, { id: 'l2', settings: {}, leagueType: 'dynasty' }])
+    h.resolveTeam
+      .mockResolvedValueOnce(teamCtx([player('James Cook', 'BUF', 'RB')]))
+      .mockResolvedValueOnce(teamCtx([player('Josh Allen', 'BUF', 'QB')]))
+    h.injuries.mockResolvedValue(injuryReport({ 'James Cook': { status: 'Out' } }))
+
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight' })
+    const notCounted = out.split('\n').find((l) => l.startsWith('NOT COUNTED'))!
+    expect(notCounted).toContain('BB Dynasty [Best Ball — lineup set automatically; there is no lineup move to make] (James Cook RB BUF — Out')
+    expect(notCounted).toContain('In a league tagged Best Ball, never offer to swap, replace or reset the lineup.')
+  })
+
+  it('a non-Best-Ball league dropped for Out starters carries no Best Ball tag', async () => {
+    h.injuries.mockResolvedValue(injuryReport({ 'James Cook': { status: 'Out' } }))
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight' })
+    const notCounted = out.split('\n').find((l) => l.startsWith('NOT COUNTED'))!
+    expect(notCounted).toContain('KBFL (James Cook RB BUF — Out')
+    expect(notCounted).not.toContain('KBFL [Best Ball')
+  })
+})
