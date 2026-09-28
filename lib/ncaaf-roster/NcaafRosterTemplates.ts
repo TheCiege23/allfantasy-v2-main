@@ -59,8 +59,11 @@ export const NCAAF_ROSTER_TEMPLATES: NcaafRosterTemplate[] = [
   // league showed a kicker slot its lineup did not have, and drafted 16 rounds into 18 draftable spots.
   { key: 'keeper', label: 'Keeper', leagueTypes: ['keeper'], description: 'Standard NCAAF keeper.',
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, BN: 8, IR: 2 } },
-  { key: 'best_ball', label: 'Best Ball', leagueTypes: ['best_ball'], description: 'Deep best ball with superflex.',
-    slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPERFLEX: 1, BN: 12 } },
+  // Matches what the best ball optimizer SCORES (lib/bestball/rules.ts NCAAF lineupSlots) and the best
+  // ball contract (bestBallDefaults: 16-player roster, 16-round draft): QB, 2 RB, 3 WR, 2 FLEX — TEs start
+  // through FLEX. It carried a TE, a superflex and 12 bench (22 spots) that nothing scored.
+  { key: 'best_ball', label: 'Best Ball', leagueTypes: ['best_ball'], description: 'Standard NCAAF best ball.',
+    slots: { QB: 1, RB: 2, WR: 3, FLEX: 2, BN: 8 } },
   { key: 'superflex', label: 'Superflex', leagueTypes: ['redraft', 'dynasty'], description: 'Superflex variant.',
     slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 1, SUPERFLEX: 1, BN: 8 } },
   { key: 'idp', label: 'IDP', leagueTypes: ['redraft', 'dynasty'], description: 'College IDP roster.',

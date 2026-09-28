@@ -10,6 +10,7 @@ import {
   getRedraftDefaultContract,
   type RedraftDefaultContract,
 } from '@/lib/league-concepts/redraftDefaults'
+import { getBestBallDefaultContract } from '@/lib/league-concepts/bestBallDefaults'
 import {
   buildKeeperSettingsSnapshot,
   getKeeperDefaultContract,
@@ -322,7 +323,17 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const canonicalDraftSettings = (canonicalSnapshot?.draftSettings as Record<string, unknown> | undefined) ?? null
   const canonicalWaiverSettings = (canonicalSnapshot?.waiverSettings as Record<string, unknown> | undefined) ?? null
   const canonicalPlayoffSettings = (canonicalSnapshot?.playoffSettings as Record<string, unknown> | undefined) ?? null
-  const rounds = numericOr(canonicalDraftSettings?.rounds ?? resolution.draftDefaults.rounds_default, engineDraftType === 'auction' ? 15 : 15)
+  /*
+   * Best ball drafts its whole roster — every drafted player is a lineup candidate and there is no
+   * bench (bestBallDefaults), so the draft length IS the contract's roster size. Without this it fell
+   * to the sport's generic registry default: NCAAF drafted 14 rounds into a 16-player best ball roster,
+   * NFL 12 into 18.
+   */
+  const bestBallRounds =
+    format === 'best_ball'
+      ? getBestBallDefaultContract({ sport, draftType: input.draftType, scoringPresetId: scoringPreset || null, teamCount: input.managerCount })?.rounds ?? null
+      : null
+  const rounds = numericOr(canonicalDraftSettings?.rounds ?? bestBallRounds ?? resolution.draftDefaults.rounds_default, engineDraftType === 'auction' ? 15 : 15)
   const timerSeconds = numericOr(canonicalDraftSettings?.timerSeconds ?? resolution.draftDefaults.timer_seconds_default, 90)
   const playoff = resolution.playoffDefaults as unknown as Record<string, unknown>
   const scoring = resolution.scoring as unknown as Record<string, unknown>

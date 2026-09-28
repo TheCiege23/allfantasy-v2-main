@@ -22,6 +22,7 @@ import { createDefaultLeagueRosterConfig } from '../lib/roster-engine/UnifiedRos
 import { resolveRedraftRosterConfig } from '../lib/redraft/rosterConfigResolver'
 import { validateRedraftLineup, type RedraftLineupPlayer } from '../lib/redraft/lineupValidation'
 import { configureEventInfrastructure, InMemoryOutboxStore } from '../lib/events'
+import { getBestBallSportProfile } from '../lib/bestball/rules'
 
 const check = (ok: unknown, label: string) => { if (!ok) throw new Error(label) }
 
@@ -95,9 +96,27 @@ async function main() {
       check(unfillable.length === 0, `${concept.toUpperCase()}_HAS_UNFILLABLE_STARTER:${unfillable.join(',')}`)
       check(result.ok, `${concept.toUpperCase()}_DEFAULT_LINEUP_REFUSED:${errors.join(',')}`)
       if (concept === 'redraft') controlSettings = settings
-      // Best ball's agreement is recorded, not enforced: its contract (bestBallDefaults) has no TE and no
-      // superflex while its roster template has both, and which one is intended is an open question.
-      if (concept === 'best_ball') { report.bestBallKnownGap = true; continue }
+      /*
+       * Best ball has no bench BY DESIGN (bestBallDefaults stores bench_slots 0: every drafted player is a
+       * lineup candidate), so its size is compared as a whole roster instead. And its lineup must be the one
+       * the optimizer SCORES (lib/bestball/rules.ts) — until 2026-09-28 the template carried a TE, a
+       * superflex and 22 spots that nothing scored, while the draft ran 14 rounds.
+       */
+      if (concept === 'best_ball') {
+        const scored = new Map<string, number>()
+        for (const slot of getBestBallSportProfile('NCAAF').lineupSlots) scored.set(slot.code === 'FLEX' ? 'FLX' : slot.code, slot.count)
+        const sameAsScorer = JSON.stringify([...config.starterCapacities].sort()) === JSON.stringify([...scored].sort())
+        const storedRoster = Number(settings.roster_size ?? NaN)
+        ;(report[concept] as Record<string, unknown>).scorerStarters = Object.fromEntries(scored)
+        ;(report[concept] as Record<string, unknown>).rosterSize = { runtime: draftable, stored: storedRoster }
+        mismatches.push(...[
+          !sameStarters ? 'best_ball:starters' : '',
+          !sameAsScorer ? 'best_ball:starters_vs_scorer' : '',
+          storedRoster !== draftable ? `best_ball:roster_size(${storedRoster} vs ${draftable})` : '',
+          draft?.rounds != null && draft.rounds !== draftable ? `best_ball:rounds(${draft.rounds} vs ${draftable})` : '',
+        ].filter(Boolean))
+        continue
+      }
       mismatches.push(...[
         !sameStarters ? `${concept}:starters` : '',
         Number.isFinite(storedBench) && storedBench !== config.benchSlots ? `${concept}:bench` : '',
