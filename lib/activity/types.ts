@@ -45,7 +45,11 @@ export type ActivityFeedItem = {
  * native trade's receipt when it was offered.
  */
 export type ActivityTradeGrade =
-  | { graded: true; basis: 'today' | 'at-proposal'; sides: Array<{ name: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }> }
+  /**
+   * `first-graded`: a completed provider trade's frozen original (`frozenCompletedGrade.ts`), taken the
+   * first time AllFantasy graded it; `today`: the live grade when nothing is frozen yet.
+   */
+  | { graded: true; basis: 'today' | 'at-proposal' | 'first-graded'; sides: Array<{ name: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }> }
   | { graded: false; reason: string }
 
 /** Minimal league shape the activity sources need — a slice of the dashboard league list. */

@@ -816,6 +816,12 @@ export async function getTradesBoard(
        * treat one of ITS picks as still to come — never a later season's.
        */
       currentSeason: marketSeason ?? (Number(t.season) || 0),
+      /*
+       * The trade's frozen original — a stored row, so the cached payload stays derived from rows.
+       * One read per league (this loop takes each league's first trade). No `now` from this file:
+       * the freeze module stamps a first freeze itself.
+       */
+      original: { afLeagueId: t.leagueId, tradeId: t.transactionId },
     })
 
     const mgr = managersByLeague.get(league.id)

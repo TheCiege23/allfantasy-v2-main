@@ -66,8 +66,17 @@ describe('gradeSleeperActivityTrade', () => {
       picksIn: [{ season: 2027, round: 2, label: '2027 round 2' }],
       picksOut: [],
       currentSeason: 1970,
+      // Which trade on which row, so the letter is its frozen original (`frozenCompletedGrade.ts`).
+      original: { afLeagueId: 'af-1', tradeId: 'tx-1', now: new Date(0) },
     })
+    // A live grade (nothing frozen) is labelled as today's.
     expect(g).toEqual({ graded: true, basis: 'today', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }] })
+  })
+
+  it('a frozen original is labelled as first graded, never as today’s', async () => {
+    gradeArchived.mockResolvedValue({ ...GRADED, frozenAt: '2026-09-20T12:00:00.000Z' })
+    const g = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx(), rosterNames: NAMES, players: PLAYERS, now: 0 })
+    expect(g).toEqual({ graded: true, basis: 'first-graded', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }] })
   })
 
   it('an unnamed player reaches the grader with a null name, so it withholds rather than prices a raw id', async () => {

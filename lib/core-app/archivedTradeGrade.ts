@@ -1,6 +1,11 @@
 import 'server-only'
 
 import { completedTradeGraderFor, gradeArchivedTradeWithInputs } from '@/lib/decision-os/trade/completedTradeGrade'
+import {
+  loadFrozenCompletedGrades,
+  saveFrozenCompletedGrades,
+  type FrozenCompletedGrade,
+} from '@/lib/decision-os/trade/frozenCompletedGrade'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
@@ -61,11 +66,17 @@ export async function gradeArchivedTradeRows(args: {
   const currentSeason = args.currentSeason ?? new Date().getUTCFullYear()
   const grader = await completedTradeGraderFor(args.afLeagueId)
 
-  const ledgerSides = await loadLedgerSidesForTrades(
-    args.rows
-      .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
-      .map((t) => ({ sleeperLeagueId: args.platformLeagueId, transactionId: t.transactionId })),
-  )
+  const [ledgerSides, frozen] = await Promise.all([
+    loadLedgerSidesForTrades(
+      args.rows
+        .filter((t) => pickAssets(t.picksGiven).length + pickAssets(t.picksReceived).length > 0)
+        .map((t) => ({ sleeperLeagueId: args.platformLeagueId, transactionId: t.transactionId })),
+    ),
+    // Each trade's frozen original on this row, one read for the whole list (`frozenCompletedGrade.ts`).
+    loadFrozenCompletedGrades(args.afLeagueId, args.rows.map((t) => t.transactionId)),
+  ])
+  const toFreeze: FrozenCompletedGrade[] = []
+  const now = new Date()
 
   await Promise.all(
     args.rows.map(async (t) => {
@@ -88,9 +99,11 @@ export async function gradeArchivedTradeRows(args: {
         picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         currentSeason,
+        original: { afLeagueId: args.afLeagueId, tradeId: t.transactionId, frozen, onFreeze: (f) => toFreeze.push(f), now },
       })
       out.set(t.transactionId, { grade, picksIn, picksOut, give, get })
     }),
   )
+  await saveFrozenCompletedGrades(args.afLeagueId, toFreeze)
   return out
 }

@@ -102,7 +102,9 @@ describe('Sleeper trades shown in the app', () => {
     mocks.oneGrade.mockResolvedValue(view)
     mocks.grades.mockResolvedValue(payload([trade()]))
     const result = await getSleeperTradeHistory('league', 'owner-1', { afLeagueId: 'row-mine' })
-    expect(mocks.oneGrade).toHaveBeenCalledWith('row-mine', expect.objectContaining({ id: 'league:tx' }), expect.any(Number))
+    // Fourth argument: the preloaded frozen originals for the whole history (`frozenCompletedGrade.ts`).
+    expect(mocks.oneGrade).toHaveBeenCalledWith('row-mine', expect.objectContaining({ id: 'league:tx' }), expect.any(Number),
+      expect.objectContaining({ frozen: expect.any(Map), onFreeze: expect.any(Function) }))
     expect(result?.history[0].leagueGrade).toBe(view)
   })
   it('grades nothing without an AF row, and a failed grade costs the history nothing', async () => {
