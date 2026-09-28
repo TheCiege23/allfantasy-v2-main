@@ -369,37 +369,48 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
   } else {
     lines.push(`CURRENT INJURY COUNTS: ${findings.length} distinct players with reported designations; by listed position: ${listedPositionCounts(findings)}. These count players, not league appearances. No report does not mean healthy or available; stale and undated designations remain flagged below.`)
     lines.push(`${findings.length} player(s) with an injury designation, most serious first:`)
+
+    /*
+     * ⚠ KICKOFF IS CHECKED FOR EVERY INJURED STARTER, NOT ONLY THE OUT/IR ONES. It began with Out/IR
+     * (a 2026-09-28 KBFL answer built "swap a healthy TE into Johnson's slot" after Johnson's game had
+     * kicked off). The same day, an answer on Monday called Questionable starters "the live watch
+     * list" — Breece Hall among them, whose Sunday game was over: nothing told it the game was
+     * played. One schedule read per sport; the dedup key stands in for the player id, and a failed
+     * read leaves every player KICKOFF UNVERIFIED rather than clear.
+     */
+    const now = new Date()
+    const startingAny = findings.filter((f) => f.appearances.some((a) => a.slot === 'starter' && !a.automatic))
+    const kickoffBySport = new Map<string, KickoffCheck | null>()
+    for (const sport of new Set(startingAny.map((f) => f.sport))) {
+      const players = startingAny
+        .filter((f) => f.sport === sport)
+        .map((f) => ({ playerId: f.key, name: f.name, team: f.team, gameTime: null }))
+      kickoffBySport.set(
+        sport,
+        await checkStartedGames({ sport, season: now.getUTCFullYear(), week: 0, players, now }).catch(() => null),
+      )
+    }
+    const startingLabel = (f: Finding): string => `STARTING — ${kickoffLabel(f.key, kickoffBySport.get(f.sport) ?? null)}`
+
     for (const f of findings) {
       const who = [f.name, f.position, f.team].filter(Boolean).join(' ')
       const when = f.reportedAt
         ? `reported ${isoDay(f.reportedAt)}${f.stale ? ', MAY BE OUT OF DATE' : ''}`
         : 'Sleeper player feed, undated'
       const where = f.appearances
-        .map((a) => `${a.leagueName} (${a.slot === 'starter' ? a.automatic ? 'AUTOMATIC BEST BALL LINEUP' : 'STARTING' : a.slot})`)
+        .map((a) => `${a.leagueName} (${a.slot === 'starter' ? a.automatic ? 'AUTOMATIC BEST BALL LINEUP' : startingLabel(f) : a.slot})`)
         .join('; ')
       lines.push(`- ${who}: ${f.status}${f.detail ? ` — ${f.detail}` : ''} [${when}] — on: ${where}`)
     }
-    const startingHurt = findings.filter(
-      (f) => severityOf(f.status) <= 1 && f.appearances.some((a) => a.slot === 'starter' && !a.automatic),
-    )
+    if (startingAny.length > 0) {
+      lines.push(
+        'Each STARTING slot above carries its kickoff from the AllFantasy game schedule (checked ' +
+          `${now.toISOString()}). A starter marked GAME STARTED is settled for this week, whatever his designation — ` +
+          'never call him a watch, a sweat or a decision. Only a starter marked NOT STARTED is still live.',
+      )
+    }
+    const startingHurt = startingAny.filter((f) => severityOf(f.status) <= 1)
     if (startingHurt.length > 0) {
-      /*
-       * ⚠ KICKOFF IS CHECKED HERE, NOT ONLY DISCLAIMED. This is the line a 2026-09-28 KBFL answer
-       * built "swap a healthy TE into Johnson's slot" from, after Johnson's game had kicked off.
-       * One schedule read per sport; the dedup key stands in for the player id, and a failed read
-       * leaves every player KICKOFF UNVERIFIED rather than clear.
-       */
-      const now = new Date()
-      const kickoffBySport = new Map<string, KickoffCheck | null>()
-      for (const sport of new Set(startingHurt.map((f) => f.sport))) {
-        const players = startingHurt
-          .filter((f) => f.sport === sport)
-          .map((f) => ({ playerId: f.key, name: f.name, team: f.team, gameTime: null }))
-        kickoffBySport.set(
-          sport,
-          await checkStartedGames({ sport, season: now.getUTCFullYear(), week: 0, players, now }).catch(() => null),
-        )
-      }
       lines.push(
         `ROSTER PLACEMENT: ${startingHurt.length} player(s) listed Out/IR are among stored STARTERS: ${startingHurt
           .map((f) => {
