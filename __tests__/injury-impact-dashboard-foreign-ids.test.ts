@@ -7,6 +7,8 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/league/league-access', () => ({
   assertLeagueMemberWithCode: vi.fn(async () => ({ ok: true })),
@@ -50,14 +52,14 @@ vi.mock('@/lib/prisma', () => ({
   prisma: new Proxy({}, { get: (_t, prop: string) => prismaMock.current[prop] }),
 }))
 
-function fakePrisma(platform: string) {
+function fakePrisma(platform: string, rostered: string[]) {
   return {
     league: {
       findFirst: vi.fn(async () => ({ id: 'lg-1', name: 'Imported', sport: 'NFL', platform, teams: [] })),
     },
     roster: {
       findMany: vi.fn(async () => [
-        { id: 'r-1', leagueId: 'lg-1', platformUserId: 'u-1', playerData: { players: ['6038'], starters: ['6038'] } },
+        { id: 'r-1', leagueId: 'lg-1', platformUserId: 'u-1', playerData: { players: rostered, starters: rostered } },
       ]),
     },
     sportsPlayerRecord: { findMany: vi.fn(async () => []) },
@@ -71,8 +73,8 @@ function fakePrisma(platform: string) {
   }
 }
 
-async function run(platform: string) {
-  prismaMock.current = fakePrisma(platform)
+async function run(platform: string, rostered: string[] = ['6038']) {
+  prismaMock.current = fakePrisma(platform, rostered)
   const { runInjuryImpactDashboard } = await import('@/lib/injury-impact-dashboard/runInjuryImpactDashboard')
   const out = await runInjuryImpactDashboard({
     userId: 'u-1',
@@ -103,7 +105,7 @@ describe('injury impact dashboard — foreign roster ids', () => {
     expect(row).toBeDefined()
     expect(row!.onRoster).toBe(false)
     expect(row!.isStarter).toBe(false)
-    expect(out.dataGaps.join(' ')).toContain('cannot be matched')
+    expect(out.dataGaps.join(' ')).toContain(FOREIGN_IDS_UNREADABLE)
   })
 
   it('CONTROL: the same id in a Sleeper league IS on the roster', async () => {
@@ -111,5 +113,17 @@ describe('injury impact dashboard — foreign roster ids', () => {
     const row = out.players.find((p) => p.name === 'Wrong Player')
     expect(row?.onRoster).toBe(true)
     expect(row?.isStarter).toBe(true)
+  })
+
+  it('the summary says the ids are unreadable — not "pick a league" to someone who just picked one', async () => {
+    const out = await run('fleaflicker')
+    expect(out.summaryLine).toContain(FOREIGN_IDS_UNREADABLE)
+    expect(out.summaryLine).not.toContain('No roster IDs')
+  })
+
+  it('CONTROL: a Sleeper league whose roster is genuinely empty keeps the old summary', async () => {
+    const out = await run('sleeper', [])
+    expect(out.summaryLine).toContain('No roster IDs — pick a league for roster-aware flags.')
+    expect(out.summaryLine).not.toContain(FOREIGN_IDS_UNREADABLE)
   })
 })

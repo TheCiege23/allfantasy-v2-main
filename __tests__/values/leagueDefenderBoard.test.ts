@@ -285,4 +285,18 @@ describe('foreign roster ids', () => {
     const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
     expect(board.rows.map((r) => r.name)).toContain('Target Backer')
   })
+
+  it('says the ids are unreadable, not that no roster carries a defender', async () => {
+    leagueOn('fleaflicker')
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.state).toBe('ids_unreadable')
+  })
+
+  it('CONTROL: a Sleeper league whose rosters are genuinely empty still says no_rostered_defenders', async () => {
+    leagueOn('sleeper')
+    ROSTERS[0] = { platformUserId: 'u-me', playerData: [] }
+    ROSTERS[1] = { platformUserId: 'u-them', playerData: [] }
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    expect(board.state).toBe('no_rostered_defenders')
+  })
 })

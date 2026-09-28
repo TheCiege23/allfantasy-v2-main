@@ -11,7 +11,7 @@ import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { lineupDeadlines } from './lineupDeadlines'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -196,6 +196,11 @@ export type MyTeamPulse = {
     noRoster: number
     /** A roster on file that carries no `starters` array at all. */
     noLineup: number
+    /**
+     * A roster on file in a Fleaflicker/MFL/Fantrax/Yahoo league: its player ids are the
+     * provider's own, so its lineup is unread — not absent. Never folded into `noLineup`.
+     */
+    idsUnreadable?: number
     automatic?: number
     inactive?: number
   }
@@ -366,7 +371,7 @@ export async function getMyTeamPulse(
   }
 
   const pending: Pending[] = []
-  const notChecked = { noRoster: 0, noLineup: 0, automatic: 0, inactive: 0 }
+  const notChecked = { noRoster: 0, noLineup: 0, idsUnreadable: 0, automatic: 0, inactive: 0 }
 
   for (const c of mine) {
     if (pausedLeagueIds?.has(c.leagueId)) continue
@@ -392,7 +397,9 @@ export async function getMyTeamPulse(
     /* A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id; that lineup is unread. */
     const { ids, empty } = startersOf(sleeperReadablePlayerData(l.platform, roster.playerData))
     if (ids.length === 0 && empty === 0) {
-      notChecked.noLineup++
+      /* Stripped, not absent: "no starting lineup on file" would be false for a foreign league. */
+      if (isForeignIdSpace(l.platform)) notChecked.idsUnreadable++
+      else notChecked.noLineup++
       continue
     }
 

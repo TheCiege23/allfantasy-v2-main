@@ -14,6 +14,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 const LEAGUE = 'L1'
 const USER = 'af-user-1'
@@ -122,10 +123,11 @@ describe('loadIdpMatchup — foreign roster ids', () => {
     const names = [...(out.you?.players ?? []), ...(out.opponent?.players ?? [])].map((p) => p.name)
     expect(names).not.toContain('Player 6038')
     expect(names).not.toContain('Player 4034')
-    expect(out.state).toBe('no_matchup')
+    // Its own state, so the page does not say "No matchup on file" about a matchup that is on file.
+    expect(out.state).toBe('ids_unreadable')
     // And it does not claim the rosters were never imported.
     expect(out.notes.join(' ')).not.toMatch(/no rosters imported/i)
-    expect(out.notes.join(' ')).toMatch(/cannot be matched/i)
+    expect(out.notes.join(' ')).toContain(FOREIGN_IDS_UNREADABLE)
   })
 
   it('CONTROL: the same ids in a Sleeper league ARE named', async () => {

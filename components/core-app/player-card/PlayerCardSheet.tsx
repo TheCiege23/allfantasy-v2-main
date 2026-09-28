@@ -12,6 +12,7 @@ import type {
 import type { PlayerCardRef } from './PlayerCardProvider'
 import { useOverlayContainment } from '../useOverlayContainment'
 import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -436,7 +437,10 @@ export default function PlayerCardSheet({
 
               {league ? (
                 <div className="af-pc-owner">
-                  {league.slot === 'NOT ROSTERED' ? (
+                  {/* UNREADABLE: a foreign-id league — neither "free agent" nor an owner is known. */}
+                  {league.slot === 'UNREADABLE' ? (
+                    <span className="af-pc-faint">{FOREIGN_IDS_UNREADABLE}</span>
+                  ) : league.slot === 'NOT ROSTERED' ? (
                     <span className="af-pc-owner-free">FREE AGENT</span>
                   ) : (
                     <>
@@ -466,7 +470,7 @@ export default function PlayerCardSheet({
                 yours: "propose a trade" for a player on your own roster is not
                 a thing you can do.
               */}
-              {league && !league.isYours && league.slot !== 'NOT ROSTERED' ? (
+              {league && !league.isYours && league.slot !== 'NOT ROSTERED' && league.slot !== 'UNREADABLE' ? (
                 <a
                   className="af-pc-cta"
                   href={`/core/trades?league=${encodeURIComponent(league.leagueId)}`}
@@ -783,6 +787,9 @@ export default function PlayerCardSheet({
                           </span>
                         </div>
                       ))
+                    ) : league.slot === 'UNREADABLE' ? (
+                      // Unread, not empty: "you have nobody else here" would be a claim about a roster we cannot read.
+                      <Absent reason={`${FOREIGN_IDS_UNREADABLE}.`} />
                     ) : (
                       <Absent reason="You have nobody else at this position in this league, or your team is not claimed here." />
                     )}

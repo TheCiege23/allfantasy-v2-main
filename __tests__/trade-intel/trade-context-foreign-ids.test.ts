@@ -11,7 +11,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const state = { platform: 'fleaflicker', sleeperIdsAsked: [] as string[][] }
+const state = { platform: 'fleaflicker', players: ['6038'], sleeperIdsAsked: [] as string[][] }
 
 vi.mock('@/lib/prisma', () => {
   const emptyDelegate = new Proxy(
@@ -46,7 +46,7 @@ vi.mock('@/lib/prisma', () => {
       count: async () => 0,
     },
     roster: {
-      findFirst: async () => ({ id: 'r1', playerData: { players: ['6038'], starters: ['6038'] } }),
+      findFirst: async () => ({ id: 'r1', playerData: { players: state.players, starters: state.players } }),
       findMany: async () => [],
     },
     sportsPlayer: {
@@ -86,6 +86,7 @@ const askedFor6038 = () => state.sleeperIdsAsked.some((ids) => ids.includes('603
 
 beforeEach(() => {
   state.platform = 'fleaflicker'
+  state.players = ['6038']
   state.sleeperIdsAsked = []
 })
 
@@ -103,6 +104,20 @@ describe('buildTradeContextNotes — a foreign league’s roster ids', () => {
       await buildTradeContextNotes(ARGS)
     }
     expect(askedFor6038()).toBe(false)
+  })
+
+  it('🛑 names why the notes are blank: the ids cannot be matched, as the context gap', async () => {
+    const buildTradeContextNotes = await load()
+    const out = await buildTradeContextNotes(ARGS)
+    expect(out.contextGap).toBe("your roster in this league — its player ids can't be matched to ours yet")
+  })
+
+  it('CONTROL: a Sleeper roster that is genuinely empty stays a silent EMPTY, with no gap', async () => {
+    state.platform = 'sleeper'
+    state.players = []
+    const buildTradeContextNotes = await load()
+    const out = await buildTradeContextNotes(ARGS)
+    expect(out.contextGap ?? null).toBeNull()
   })
 
   it('CONTROL: in a Sleeper league the same id IS looked up', async () => {

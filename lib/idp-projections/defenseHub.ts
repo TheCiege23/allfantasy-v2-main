@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
 import { idpPositionGroup, isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShares, type SnapShareOutcome } from '@/lib/core-app/snapShare'
@@ -34,6 +34,12 @@ export type DefenseHubState =
   | 'no_team_claimed'
   | 'no_roster'
   | 'no_defenders'
+  /**
+   * The roster is imported but its ids are the provider's own (Fleaflicker / MFL / Fantrax / Yahoo),
+   * so none of it can be read as a player — not "you roster no defenders", which is a claim about
+   * the team. See `isForeignIdSpace`.
+   */
+  | 'ids_unreadable'
   | 'no_projection_history'
   | 'valuation_refused'
 
@@ -322,7 +328,8 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     )
   }
 
-  if (myDefenders.length === 0) return EMPTY('no_defenders', notes)
+  // A foreign league lands here with every id stripped; its manager may well roster defenders.
+  if (myDefenders.length === 0) return EMPTY(isForeignIdSpace(league.platform) ? 'ids_unreadable' : 'no_defenders', notes)
 
   /*
    * The last COMPLETED week, not the one being projected. `projectedFor.week` is one past the

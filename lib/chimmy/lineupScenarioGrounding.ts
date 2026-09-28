@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import {
   defaultLeagueWeekPricingDeps,
@@ -185,14 +187,24 @@ type Loaded = {
   names: PlayerNames
 }
 
+/** Why neither kind can read a foreign league's roster — the shared words, never a roster claim. */
+const ROSTER_IDS_UNREADABLE_DETAIL = `${FOREIGN_IDS_UNREADABLE}, so no roster in this league can be read to compare lineups.`
+
 async function loadLeague(
   args: { leagueId: string; userId: string },
   deps: LineupScenarioDeps,
-): Promise<Loaded | 'no_league_world' | 'no_viewer_roster'> {
+): Promise<Loaded | 'no_league_world' | 'no_viewer_roster' | 'roster_ids_unreadable'> {
   const world = await deps.resolveWorld(args.leagueId).catch(() => null)
   if (!world) return 'no_league_world'
   const roster = viewerRosterOf(world, args.userId)
   if (!roster) return 'no_viewer_roster'
+  /*
+   * The port strips a foreign league's roster ids (`loadRosters`), so every roster here is empty and
+   * each refusal below would state a falsehood — "X is not on your roster", or a start/sit that
+   * silently never fires. `provenance.provider` is the league's platform; it decides only this
+   * refusal, never a number.
+   */
+  if (isForeignIdSpace(world.provenance?.provider)) return 'roster_ids_unreadable'
   const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(world)).catch(() => new Map() as PlayerNames)
   return { world, roster, byName: indexRosterNames(world, names), names }
 }
@@ -262,6 +274,7 @@ export async function buildStartSitScenario(
   if (loaded === 'no_viewer_roster') {
     return startSitUnresolved('no_viewer_roster', 'Your team in this league is not claimed or has no synced roster.')
   }
+  if (loaded === 'roster_ids_unreadable') return startSitUnresolved('roster_ids_unreadable', ROSTER_IDS_UNREADABLE_DETAIL)
   const { world, roster, byName, names } = loaded
 
   const mine: LocatedPlayer[] = []
@@ -437,6 +450,7 @@ export async function buildWaiverScenario(
   if (loaded === 'no_viewer_roster') {
     return waiverUnresolved('no_viewer_roster', 'Your team in this league is not claimed or has no synced roster.')
   }
+  if (loaded === 'roster_ids_unreadable') return waiverUnresolved('roster_ids_unreadable', ROSTER_IDS_UNREADABLE_DETAIL)
   const { world, roster, byName, names } = loaded
 
   const basis = await weekBasis(world, deps)

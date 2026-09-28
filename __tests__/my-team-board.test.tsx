@@ -85,6 +85,28 @@ describe('paused league accounting', () => {
     expect(text).toContain('62 more leagues are either set or could not be read')
     expect(within(container).getByRole('link', { name: 'View all 65 →' }).getAttribute('href')).toBe(ALL_HREF)
   })
+  it('says a foreign-id league cannot be matched, never that it has no starting lineup', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 3, checked: 1, set: [row()], setTotal: 1,
+      notChecked: { noRoster: 0, noLineup: 0, idsUnreadable: 2 },
+    })} now={NOW} allHref={ALL_HREF} />)
+    const text = container.textContent?.replace(/\s+/g, ' ')
+    expect(text).toContain('2 of your 3 claimed teams could not be checked')
+    expect(text).toContain("2 have a roster on file, but for each league, its player ids can't be matched to ours yet")
+    expect(text).not.toContain('no starting lineup on file')
+    // A re-sync cannot make those ids matchable, so it is not offered as the fix.
+    expect(text).not.toContain('re-sync imported leagues')
+  })
+  it('CONTROL: a genuinely lineup-less roster still reads "no starting lineup on file"', () => {
+    const { container } = render(<MyTeamBoard pulse={pulse({
+      considered: 2, checked: 1, set: [row()], setTotal: 1,
+      notChecked: { noRoster: 0, noLineup: 1, idsUnreadable: 0 },
+    })} now={NOW} allHref={ALL_HREF} />)
+    const text = container.textContent?.replace(/\s+/g, ' ')
+    expect(text).toContain('1 has a roster but no starting lineup on file')
+    expect(text).not.toContain("can't be matched to ours yet")
+    expect(text).toContain('re-sync imported leagues')
+  })
   it('does not claim paused leagues are visible when all active leagues are shown', () => {
     const { container } = render(<MyTeamBoard pulse={pulse({
       considered: 2, paused: 1, set: [row()], setTotal: 1,

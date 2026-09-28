@@ -9,6 +9,7 @@
  */
 
 import React from "react"
+import { FOREIGN_IDS_UNREADABLE } from "@/lib/core-app/foreignIdSpaceCopy"
 
 type UrgencyLevel = "critical" | "high" | "medium" | "low" | "none"
 
@@ -271,7 +272,7 @@ function ReplacementPanel({
     return <div className="mt-2 text-[11px] text-white/40">No projection data available for this league yet.</div>
   }
   if (reps.limitation === "roster_ids_unreadable") {
-    return <div className="mt-2 text-[11px] text-white/40">We can't match this league's player ids to ours yet, so we can't compare replacements.</div>
+    return <div className="mt-2 text-[11px] text-white/40">{FOREIGN_IDS_UNREADABLE}, so we can't compare replacements.</div>
   }
   const empty = (reps.benchOptions?.length ?? 0) === 0 && (reps.freeAgentOptions?.length ?? 0) === 0
   return (

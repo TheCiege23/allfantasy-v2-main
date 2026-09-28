@@ -229,7 +229,11 @@ export type PlayerCardLeague = {
   leagueId: string
   leagueName: string
   platform: string
-  /** STARTER / BENCH / IR SLOT / TAXI / NOT ROSTERED */
+  /**
+   * STARTER / BENCH / IR SLOT / TAXI / NOT ROSTERED / UNREADABLE. UNREADABLE is a
+   * Fleaflicker/MFL/Fantrax/Yahoo league (`isForeignIdSpace`): its rosters hold the
+   * provider's ids, so whether he is rostered is unknown — never "NOT ROSTERED".
+   */
   slot: string
   isYours: boolean
   owner: { teamName: string | null; ownerName: string | null } | null
@@ -1222,7 +1226,8 @@ async function loadLeague(
    * states. `LeagueTeam` is the import's list of managers; `Roster.playerData`
    * is who actually holds whom.
    */
-  let slot = 'NOT ROSTERED'
+  /* A foreign league's rosters were stripped above, so "not found" there is "not read". */
+  let slot = isForeignIdSpace(league.platform) ? 'UNREADABLE' : 'NOT ROSTERED'
   let holder: (typeof rosters)[number] | null = null
   if (sleeperId) {
     for (const r of rosters) {

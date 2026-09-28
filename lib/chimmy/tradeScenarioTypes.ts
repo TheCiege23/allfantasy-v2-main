@@ -15,9 +15,17 @@ import { LEAGUE_WEEK_UNIT } from '@/lib/decision-os/trade/rosterImpactSummary'
 
 export type ScenarioPlayer = { playerId: string; name: string; position: string | null }
 
+/**
+ * The league's roster ids are the provider's own (Fleaflicker / MFL / Fantrax / Yahoo —
+ * `isForeignIdSpace`), so the canonical world carries every roster empty. Checked before any
+ * roster-dependent refusal: "X is not on your roster" would be a false claim about the team.
+ */
+export type RosterIdsUnreadable = 'roster_ids_unreadable'
+
 export type TradeScenarioUnresolvedReason =
   | 'no_league_world'
   | 'no_viewer_roster'
+  | RosterIdsUnreadable
   | 'includes_picks'
   | 'pick_unclear'
   | 'pick_season_unclear'
@@ -109,6 +117,7 @@ export type TradeScenario =
 export type WaiverScenarioUnresolvedReason =
   | 'no_league_world'
   | 'no_viewer_roster'
+  | RosterIdsUnreadable
   | 'add_not_found'
   | 'add_rostered'
   | 'drop_not_on_roster'
@@ -146,6 +155,7 @@ export type StartSitScenarioUnresolvedReason =
   | 'players_locked'
   | 'no_league_world'
   | 'no_viewer_roster'
+  | RosterIdsUnreadable
   | 'players_not_on_roster'
   | 'ambiguous_player'
   | 'unpriced_player'

@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import {
   defaultLeagueWeekPricingDeps,
   isLeagueWeekRefusal,
@@ -14,7 +16,7 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
-import type { ScenarioWeek } from './tradeScenarioTypes'
+import type { RosterIdsUnreadable, ScenarioWeek } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
 import { checkStartedGames, type LockCheck } from './actions/gameLocks'
 import { enrichLineupAvailability, lineupDesignation, unavailableForLineup, type LineupMetadata } from './lineupAvailability'
@@ -72,6 +74,7 @@ export type LineupOptimizationUnresolvedReason =
   | LeagueWeekRefusalReason
   | 'no_league_world'
   | 'no_viewer_roster'
+  | RosterIdsUnreadable
   | 'unknown_slots'
   | 'no_league_projections'
   | 'locked_starter_unpriced'
@@ -147,6 +150,11 @@ export async function buildLineupOptimization(
   const roster = viewerRosterOf(world, args.userId)
   if (!roster) {
     return unresolved('no_viewer_roster', 'Your team in this league is not claimed or has no synced roster.')
+  }
+  // The port strips a foreign league's roster ids, so the roster reads empty and every refusal below
+  // ("no player on your roster has a projection") would be a false claim about the team.
+  if (isForeignIdSpace(world.provenance?.provider)) {
+    return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
   }
 
   const slots = world.league.rosterSettings.starterSlots

@@ -48,6 +48,22 @@ describe('getCrossLeagueExposure — foreign roster ids', () => {
     expect(prisma.sportsPlayer.findMany).not.toHaveBeenCalled()
   })
 
+  it('🛑 says the ids cannot be matched, not that the rosters imported with no resolvable ids', async () => {
+    db.platform = 'fleaflicker'
+    const panel = await getCrossLeagueExposure('u1', ['L1'])
+    expect(panel).toEqual({ available: false, reason: "This league's player ids can't be matched to ours yet" })
+    expect(JSON.stringify(panel)).not.toContain('no resolvable player ids')
+  })
+
+  it('CONTROL: a Sleeper roster holding only unresolvable descriptors keeps the import reason', async () => {
+    db.platform = 'sleeper'
+    vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([
+      { leagueId: 'L1', playerData: { players: ['name:Lamar Jackson:QB:BAL'], starters: [] }, league: { platform: 'sleeper' } },
+    ] as any)
+    const panel = await getCrossLeagueExposure('u1', ['L1'])
+    expect(panel).toEqual({ available: false, reason: 'your rosters imported with no resolvable player ids' })
+  })
+
   it('CONTROL: the same roster in a Sleeper league IS named', async () => {
     db.platform = 'sleeper'
     const panel = await getCrossLeagueExposure('u1', ['L1'])

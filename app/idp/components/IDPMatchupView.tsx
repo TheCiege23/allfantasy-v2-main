@@ -7,6 +7,7 @@ import { Loader2, Sparkles } from 'lucide-react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 import type { IdpMatchupPayload, IdpMatchupSide } from '@/lib/idp-projections/idpMatchup'
 import type { IDPMatchupReport } from '@/lib/idp/ai/idpChimmy'
+import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 /**
  * The IDP matchup, from the league rather than from a hash.
@@ -111,6 +112,7 @@ export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchu
       no_team_claimed: 'Claim your team in this league and your matchup appears here.',
       no_matchup: 'No matchup on file for this league yet.',
       no_scoring_settings: 'We don’t hold this league’s scoring settings, so nothing here can be scored.',
+      ids_unreadable: `${FOREIGN_IDS_UNREADABLE}, so this matchup can’t be scored here.`,
     }
     return (
       <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/50">
