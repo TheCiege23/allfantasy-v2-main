@@ -121,6 +121,13 @@ export type PulseRow = {
 export type MatchupPulse = {
   leading: PulseRow[]
   trailing: PulseRow[]
+  /**
+   * How many leagues are ahead / behind IN TOTAL. `leading` and `trailing` are capped at five for the
+   * two columns; the header printed their lengths, so it read "5 leading · 5 trailing" on an account
+   * the home page correctly put at 32 ahead and 21 behind (production, 2026-09-28).
+   */
+  leadingTotal: number
+  trailingTotal: number
   /** Leagues that carry a head-to-head this week, ranked or not. */
   considered: number
   ranked: number
@@ -226,6 +233,8 @@ function startersOf(playerData: unknown): string[] {
 const EMPTY_PULSE: MatchupPulse = {
   leading: [],
   trailing: [],
+  leadingTotal: 0,
+  trailingTotal: 0,
   considered: 0,
   ranked: 0,
   basis: null,
@@ -699,20 +708,18 @@ export async function getMatchupPulse(
    * not, so exact ties are simply excluded from both lists and still counted in
    * `ranked`, which is what the header renders.
    */
-  const leading = deduped
-    .filter((r) => r.margin > 0)
-    .sort((a, b) => b.margin - a.margin)
-    .slice(0, 5)
-  const trailing = deduped
-    .filter((r) => r.margin < 0)
-    .sort((a, b) => a.margin - b.margin)
-    .slice(0, 5)
+  const ahead = deduped.filter((r) => r.margin > 0)
+  const behind = deduped.filter((r) => r.margin < 0)
+  const leading = [...ahead].sort((a, b) => b.margin - a.margin).slice(0, 5)
+  const trailing = [...behind].sort((a, b) => a.margin - b.margin).slice(0, 5)
 
   const bases = new Set(ranked.map((r) => r.basis))
 
   return {
     leading,
     trailing,
+    leadingTotal: ahead.length,
+    trailingTotal: behind.length,
     considered: claimed.length,
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],

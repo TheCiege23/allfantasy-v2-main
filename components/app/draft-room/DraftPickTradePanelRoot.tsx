@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DraftPickTradeGradeLine } from './DraftPickTradeGradeLine'
 import {
   ArrowLeftRight,
   ArrowDown,
@@ -884,23 +885,36 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                               <span>Verdict detail</span>
                               <ChevronDown className={`h-4 w-4 shrink-0 transition ${analyzerDetailOpen ? 'rotate-180' : ''}`} />
                             </button>
+                            {/*
+                              🛑 THE GRADE LEADS (2026-09-28). When the league's chart graded this swap
+                              (rookie drafts), the accept/reject/counter chip, the fairness chip and the
+                              good/risky-move chip are NOT shown: each is a private scale that could
+                              disagree with the letter. The draft-position delta stays — it is a fact.
+                            */}
+                            <DraftPickTradeGradeLine grade={builderAnalysis.tradeGrade} partnerName={selectedPartner?.displayName ?? null} />
                             <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${verdictChipClass(builderAnalysis.verdict)}`}
-                              >
-                                {builderAnalysis.verdict}
-                              </span>
+                              {builderAnalysis.tradeGrade?.graded ? null : (
+                                <span
+                                  className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${verdictChipClass(builderAnalysis.verdict)}`}
+                                >
+                                  {builderAnalysis.verdict}
+                                </span>
+                              )}
                               {builderAnalysis.executionMode ? (
                                 <span className="text-[11px] text-white/45">{builderAnalysis.executionMode}</span>
                               ) : null}
                               {builderAnalysis.structuredAnalysis ? (
                                 <>
-                                  <span className="rounded-full border border-white/14 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-white/80">
-                                    {structuredFairnessLabel(builderAnalysis.structuredAnalysis.fairnessLabel)}
-                                  </span>
-                                  <span className="rounded-full border border-cyan-400/25 bg-cyan-500/12 px-3 py-1 text-[11px] font-semibold text-cyan-50/95">
-                                    {structuredGuidanceTone(builderAnalysis.structuredAnalysis.guidanceTone)}
-                                  </span>
+                                  {builderAnalysis.tradeGrade?.graded ? null : (
+                                    <>
+                                      <span className="rounded-full border border-white/14 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-white/80">
+                                        {structuredFairnessLabel(builderAnalysis.structuredAnalysis.fairnessLabel)}
+                                      </span>
+                                      <span className="rounded-full border border-cyan-400/25 bg-cyan-500/12 px-3 py-1 text-[11px] font-semibold text-cyan-50/95">
+                                        {structuredGuidanceTone(builderAnalysis.structuredAnalysis.guidanceTone)}
+                                      </span>
+                                    </>
+                                  )}
                                   <span className="text-[11px] text-white/45">
                                     Δ overall{' '}
                                     {builderAnalysis.structuredAnalysis.overallDelta != null

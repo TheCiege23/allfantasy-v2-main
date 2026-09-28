@@ -2604,14 +2604,15 @@
   text-decoration: none;
   color: inherit;
 }
-.af-core .af-pf-triage-row[data-tone='bad'] .af-pf-triage-link {
-  border-left-color: var(--bad);
+/* The tone stripe runs down the whole row — the card link AND its lineup buttons below. */
+.af-core .af-pf-triage-row[data-tone='bad'] {
+  box-shadow: inset 3px 0 0 var(--bad);
 }
-.af-core .af-pf-triage-row[data-tone='warn'] .af-pf-triage-link {
-  border-left-color: var(--warn);
+.af-core .af-pf-triage-row[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
 }
-.af-core .af-pf-triage-row[data-nogame='true'] .af-pf-triage-link {
-  border-left-color: var(--muted);
+.af-core .af-pf-triage-row[data-nogame='true'] {
+  box-shadow: inset 3px 0 0 var(--muted);
 }
 .af-core .af-pf-triage-link:hover {
   background: var(--accent-soft);
@@ -2686,6 +2687,147 @@
   .af-core .af-pf-triage-lock {
     grid-area: lock;
     padding-left: 52px;
+  }
+}
+
+/* ── Game-day home: one lineup button per league, on the row (2026-09-27) ── */
+/*
+ * ⚠ ITS OWN TOP-LEVEL BLOCK, AND ITS OWN MEDIA QUERY BELOW. Inserting rules inside
+ * the 720px block above would move them into that query (CLAUDE.md, the CSS member
+ * of the check-that-cannot-fail family).
+ */
+.af-core .af-pf-triage-leagues {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 10px 59px; /* 3px stripe + 4px + 40px avatar + 12px gap: aligned under the name */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-core .af-pf-triage-leagues--locked {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-core .af-pf-triage-lg {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+.af-core .af-pf-triage-lg-btn,
+.af-core .af-pf-triage-lg[data-link='none'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface, transparent);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-triage-lg-btn:hover,
+.af-core .af-pf-triage-lg-btn:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-triage-lg[data-link='none'] {
+  color: var(--muted);
+  font-weight: 600;
+}
+.af-core .af-pf-triage-lg-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-pf-triage-lg-where {
+  flex: none;
+  font-weight: 600;
+  color: var(--muted);
+}
+.af-core .af-pf-triage-lg-check {
+  flex: none;
+  color: var(--good);
+  font-weight: 800;
+}
+.af-core .af-pf-triage-lg-check:empty {
+  display: none;
+}
+.af-core .af-pf-triage-lg[data-opened='true'] .af-pf-triage-lg-btn {
+  border-color: var(--good);
+  opacity: 0.72;
+}
+.af-core .af-pf-triage-warn {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+@media (max-width: 720px) {
+  /* Full-width buttons on a phone: a 44px tap target, one league per line. */
+  .af-core .af-pf-triage-leagues {
+    padding-left: 7px;
+    flex-direction: column;
+  }
+  .af-core .af-pf-triage-lg,
+  .af-core .af-pf-triage-lg-btn,
+  .af-core .af-pf-triage-lg[data-link='none'] {
+    width: 100%;
+  }
+  .af-core .af-pf-triage-lg-btn,
+  .af-core .af-pf-triage-lg[data-link='none'] {
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .af-core .af-pf-triage-lg-where {
+    margin-left: auto;
+  }
+}
+
+/* ── Game-day home: "Lineups as of … · Refresh my lineups" (2026-09-27) ── */
+.af-core .af-pf-refresh {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.af-core .af-pf-refresh-asof {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-core .af-pf-refresh-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.af-core .af-pf-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.af-core .af-pf-refresh-note {
+  font-size: 12px;
+  color: var(--text2);
+}
+.af-core .af-pf-refresh[data-phase='error'] .af-pf-refresh-note {
+  color: var(--warn);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-refresh-btn {
+    min-height: 44px;
+    width: 100%;
   }
 }
 

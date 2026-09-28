@@ -9,4 +9,10 @@ export interface GeoDetectionResult {
    */
   detectionSource: "cloudflare_headers" | "vercel_headers" | "ip_api" | "unknown"
   rawIp: string | null
+  /**
+   * Set when the client is on iCloud Private Relay and Apple's feed placed it
+   * (lib/geo/privateRelayRanges). `stateCode` is then Apple's state, and
+   * `paidBlocked` keeps a Mountain-time relay user off paid features.
+   */
+  privateRelay?: { state: string; paidBlocked: boolean }
 }

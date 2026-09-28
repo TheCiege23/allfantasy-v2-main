@@ -49,3 +49,11 @@ describe('mergeAudience', () => {
     expect(mergeAudience([], [], 5)).toEqual([])
   })
 })
+
+describe('injuredStarterHref with a player ref (2026-09-27)', () => {
+  it('opens HIS card when the sweep resolved his ref — q= alone only searched', () => {
+    expect(injuredStarterHref(TOP, 'NFL:ri-1')).toBe('/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
+    // No ref resolved: the name search stays as the fallback.
+    expect(injuredStarterHref(TOP, null)).toBe('/core/players?q=Dalton%20Kincaid')
+  })
+})

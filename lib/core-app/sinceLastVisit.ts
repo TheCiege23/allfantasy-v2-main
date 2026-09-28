@@ -299,7 +299,7 @@ function sideText(side: RecentTrade['sides'][number]): string {
   const who = side.teamName || side.managerName
   const got = side.received.slice(0, 2).map((a) => a.name)
   const more = side.received.length > 2 ? ` +${side.received.length - 2}` : ''
-  return got.length ? `${who} got ${got.join(', ')}${more}` : `${who} got nothing we can name`
+  return got.length ? `${who} got ${got.join(', ')}${more}` : `${who} got no players or picks on record`
 }
 
 /**

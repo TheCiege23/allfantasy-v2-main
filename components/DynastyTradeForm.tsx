@@ -28,6 +28,8 @@ import { useAI } from '@/hooks/useAI';
 import TradeAnalysisBadges from '@/components/TradeAnalysisBadges';
 import AIFailureStateRenderer from '@/components/ai-reliability/AIFailureStateRenderer';
 import StickyAIActions from '@/components/ai-interface/StickyAIActions';
+import { GradeLeaguePicker, gradeLeagueOptions, type GradeLeagueListRow } from '@/components/trade-evaluator/GradeLeaguePicker';
+import { DynastyLeagueGrade, type DynastyTradeGrade } from '@/components/dynasty-trade/DynastyLeagueGrade';
 
 type Player = {
   id: string;
@@ -169,7 +171,30 @@ const DEFAULT_DYNASTY_SPORT = SPORT_OPTIONS[0]?.value ?? 'NFL';
 const EMPTY_DYNASTY_STATE = getEmptyTradeState({ leagueContext: DEFAULT_LEAGUE_CONTEXT });
 
 export default function DynastyTradeForm() {
-  const { callAI, loading } = useAI<{ analysis: TradeResult; sections: TradeSections; canonicalContext?: CanonicalContextMeta; deterministicVerdict?: DeterministicVerdictData }>();
+  const { callAI, loading } = useAI<{ analysis: TradeResult; sections: TradeSections; canonicalContext?: CanonicalContextMeta; deterministicVerdict?: DeterministicVerdictData; tradeGrade?: DynastyTradeGrade }>();
+  /* The league THE grade is taken in (2026-09-27). Sent as `gradeLeagueId`, used for the grade only. */
+  const [gradeLeagueId, setGradeLeagueId] = useState('');
+  const [leagueRows, setLeagueRows] = useState<GradeLeagueListRow[]>([]);
+  const [tradeGrade, setTradeGrade] = useState<DynastyTradeGrade | null>(null);
+  const [gradedInLeague, setGradedInLeague] = useState(false);
+  const gradeLeagues = useMemo(() => gradeLeagueOptions(leagueRows), [leagueRows]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/league/list?summary=1');
+        if (!res.ok) return;
+        const data = (await res.json()) as { leagues?: GradeLeagueListRow[] };
+        if (!cancelled) setLeagueRows(data.leagues ?? []);
+      } catch {
+        /* no picker options — the trade is still analyzed, and the grade says why it is missing */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [teamAName, setTeamAName] = useState(EMPTY_DYNASTY_STATE.teamAName);
   const [teamBName, setTeamBName] = useState(EMPTY_DYNASTY_STATE.teamBName);
@@ -193,10 +218,11 @@ export default function DynastyTradeForm() {
       JSON.stringify({
         sport,
         leagueContext,
+        gradeLeagueId,
         teamAAssets: teamAAssets.map((asset) => asset.name),
         teamBAssets: teamBAssets.map((asset) => asset.name),
       }),
-    [sport, leagueContext, teamAAssets, teamBAssets]
+    [sport, leagueContext, gradeLeagueId, teamAAssets, teamBAssets]
   );
   const analysisStale = Boolean(result) && Boolean(lastAnalyzedSignature) && lastAnalyzedSignature !== currentInputSignature;
 
@@ -308,11 +334,16 @@ export default function DynastyTradeForm() {
         sideB: sideBDesc,
         leagueContext,
         sport,
+        ...(gradeLeagueId ? { gradeLeagueId } : {}),
+        gradeSideA: teamAAssets.map((a) => ({ name: a.name, type: a.type })),
+        gradeSideB: teamBAssets.map((a) => ({ name: a.name, type: a.type })),
       },
       { successMessage: 'Trade analyzed!' }
     );
 
     if (data?.analysis) {
+      setTradeGrade(data.tradeGrade ?? null);
+      setGradedInLeague(Boolean(gradeLeagueId));
       const a = data.analysis;
       setResult({
         winner: a.winner || 'Even',
@@ -428,6 +459,7 @@ export default function DynastyTradeForm() {
     setSections(null);
     setCanonicalCtx(null);
     setDetVerdict(null);
+    setTradeGrade(null);
     setReliability(null);
     setLastAnalyzedSignature(null);
     setPlayerValues({});
@@ -446,6 +478,7 @@ export default function DynastyTradeForm() {
     setSections(null);
     setCanonicalCtx(null);
     setDetVerdict(null);
+    setTradeGrade(null);
     setReliability(null);
     setLastAnalyzedSignature(null);
     toast.success('Trade sides swapped');
@@ -509,6 +542,7 @@ export default function DynastyTradeForm() {
             placeholder="e.g. 12-team Superflex PPR dynasty, TE-premium, 1QB"
             className="bg-gray-950 border-gray-700 min-h-[60px]"
           />
+          <GradeLeaguePicker options={gradeLeagues} value={gradeLeagueId} onChange={setGradeLeagueId} />
         </div>
         <div className="flex flex-wrap items-center gap-2 md:mt-6">
           <Label htmlFor="dynasty-trade-sport" className="text-xs text-gray-400">Sport</Label>
@@ -695,6 +729,17 @@ export default function DynastyTradeForm() {
         </Card>
       ) : result && (sections || detVerdict) ? (
         <div id="trade-result" className="space-y-6">
+          {/*
+            🛑 THE ONLY LETTER ON THIS PAGE IS THE LEAGUE GRADE (2026-09-27). The verdict card and the
+            AI section each printed a "Fairness" letter of their own, on private scales; both are gone.
+          */}
+          <DynastyLeagueGrade
+            tradeGrade={tradeGrade}
+            teamAName={teamAName}
+            teamBName={teamBName}
+            leagueChosen={gradedInLeague}
+            leagueOptionCount={gradeLeagues.length}
+          />
           {reliability?.usedDeterministicFallback && (
             <AIFailureStateRenderer
               usedDeterministicFallback
@@ -721,18 +766,6 @@ export default function DynastyTradeForm() {
               <CardContent className="space-y-5">
                 <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 to-cyan-950/30 p-6">
                   <div className="flex items-center justify-between flex-wrap gap-4">
-                    <div className="text-center flex-1 min-w-[120px]">
-                      <div className={`text-5xl font-bold font-mono ${
-                        detVerdict.fairnessGrade.startsWith('A') ? 'text-green-400' :
-                        detVerdict.fairnessGrade.startsWith('B') ? 'text-cyan-400' :
-                        detVerdict.fairnessGrade === 'C' ? 'text-amber-400' :
-                        'text-red-400'
-                      }`}>
-                        {detVerdict.fairnessGrade}
-                      </div>
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Fairness</div>
-                    </div>
-                    <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                     <div className="text-center flex-1 min-w-[120px]">
                       <div className="text-lg font-bold text-white">{detVerdict.winnerLabel}</div>
                       <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Winner</div>
@@ -831,18 +864,6 @@ export default function DynastyTradeForm() {
             <CardContent className="space-y-5">
               <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 to-cyan-950/40 p-6">
                 <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-center flex-1 min-w-[120px]">
-                    <div className={`text-5xl font-bold font-mono ${
-                      sections.valueVerdict.fairnessGrade.startsWith('A') ? 'text-green-400' :
-                      sections.valueVerdict.fairnessGrade.startsWith('B') ? 'text-cyan-400' :
-                      sections.valueVerdict.fairnessGrade === 'C' ? 'text-amber-400' :
-                      'text-red-400'
-                    }`}>
-                      {sections.valueVerdict.fairnessGrade}
-                    </div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Fairness</div>
-                  </div>
-                  <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                   <div className="text-center flex-1 min-w-[120px]">
                     <div className="text-lg font-bold text-white">{sections.valueVerdict.edge}</div>
                     <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Edge</div>
@@ -1189,7 +1210,7 @@ export default function DynastyTradeForm() {
           <StickyAIActions
             copyText={
               detVerdict
-                ? `${detVerdict.winnerLabel} — ${detVerdict.fairnessGrade} fairness, ${detVerdict.confidence}% confidence. ${sections?.actionPlan?.messageText ?? ''}`.trim()
+                ? `${detVerdict.winnerLabel}${tradeGrade?.grade && tradeGrade.partnerGrade ? ` — league grade ${teamAName} ${tradeGrade.grade} · ${teamBName} ${tradeGrade.partnerGrade}` : ''}, ${detVerdict.confidence}% confidence. ${sections?.actionPlan?.messageText ?? ''}`.trim()
                 : `${result.winner} — ${result.confidence}% confidence. ${result.valueDelta ?? ''} ${(result.factors ?? []).slice(0, 2).join('; ')}`.trim()
             }
             chimmyPrompt={buildTradeSummaryForAI(

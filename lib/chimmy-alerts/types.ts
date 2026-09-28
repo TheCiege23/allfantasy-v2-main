@@ -84,6 +84,12 @@ export interface ChimmyAlert {
 export interface InjuredStarterSignal {
   playerName: string
   position: string | null
+  /**
+   * His Sleeper id and sport, when a Sleeper league holds him — what the alert's tap needs to open
+   * HIS Player Finder card (`?player=`) rather than a name search that shows the home list first.
+   */
+  sleeperId?: string | null
+  sport?: string | null
   /** Parsed designation, e.g. "Out" / "Doubtful" / "Questionable". Never invented. */
   designation: string
   /** Body part or prose detail, when the provider stated one. */

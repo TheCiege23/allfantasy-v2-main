@@ -10,9 +10,11 @@ import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { CARD_PAID_LOCK_MESSAGE, CARD_PAID_LOCK_REDIRECT } from "@/lib/geo/cardLockCopy"
-import { isTorExit, resolveEdgeGeo } from "@/lib/geo/geoHeaders"
+import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
-import { resolveAnonymizerByIp } from "@/lib/geo/anonymizerCache"
+import { vpnStatusFromHeaders, type VpnStatus } from "@/lib/geo/vpnStatus"
+import { getRelayRangeSetEdge } from "@/lib/geo/privateRelayEdge"
+import { getServedOrigin } from "@/lib/http/served-origin"
 import { clientIpFromHeaders } from "@/lib/http/clientIp"
 import { INTERNAL_HOP_HEADER, verifyInternalHop } from "@/lib/http/internalHop"
 import { checkOriginLock, originLockRefusal, reportOriginLock } from "@/lib/http/originLock"
@@ -133,6 +135,7 @@ const GEO_EXEMPT_PREFIXES = [
   "/paid-restricted",
   "/restricted",
   "/vpn-blocked",
+  "/offline",
   "/terms",
   "/privacy",
   "/data-deletion",
@@ -247,9 +250,13 @@ function isPaidRoute(pathname: string): boolean {
  * on timeout, outage or an unplaceable IP): best-effort, not a substitute for
  * proxying through Cloudflare.
  */
-async function resolveRequestGeo(request: NextRequest) {
+async function resolveRequestGeo(request: NextRequest, vpn?: VpnStatus | null) {
   const edgeGeo = resolveEdgeGeo(request.headers)
   const ip = clientIpFromHeaders(request.headers)
+  // A Private Relay address Apple's feed places (and the owner's rule accepts)
+  // is judged by Apple's state, not the edge's reading of the relay address.
+  const relay = placedRelayState(vpn)
+  if (relay) return { ip, country: "US" as string | null, region: relay as string | null }
   const viaIp = edgeGeo.source === "unknown" && ip ? await resolveGeoByIp(ip) : null
   return {
     ip,
@@ -367,13 +374,30 @@ function isAnonymousCrawler(request: NextRequest): boolean {
   return !hasSessionOrGuestCookie(request)
 }
 
-/** Tor from the edge header (free); everything else from the cached vendor verdict. */
-async function isAnonymizedClient(request: NextRequest): Promise<boolean> {
-  if (isTorExit(request.headers)) return true
-  const ip = clientIpFromHeaders(request.headers)
-  if (!ip) return false
-  return (await resolveAnonymizerByIp(ip)) === true
+/**
+ * Tor from the edge header (free); everything else from the cached vendor
+ * verdict — and, for an anonymized address, Apple's Private Relay feed, which
+ * can PLACE it instead of blocking it (lib/geo/privateRelayRanges holds the
+ * rule). The feed is fetched from our own route only when a client has already
+ * been judged anonymized, so ordinary visitors never cost that call.
+ */
+async function anonymizedClient(request: NextRequest): Promise<VpnStatus> {
+  return vpnStatusFromHeaders(request.headers, {
+    // NOT request.nextUrl.origin: on Railway that is the bind address
+    // (https://0.0.0.0:8080), which a client cannot reach — the first deploy of
+    // this logged "fetch failed" and every relay user stayed blocked. The same
+    // trap, and the same helper, as lib/api/proxy-adapter.
+    relayRanges: () => getRelayRangeSetEdge(getServedOrigin(request)),
+  })
 }
+
+/** The state of a Private Relay client that was placed rather than blocked, else null. */
+function placedRelayState(vpn: VpnStatus | null | undefined): string | null {
+  return vpn && !vpn.blocked && vpn.relayState ? vpn.relayState : null
+}
+
+const RELAY_PAID_MESSAGE =
+  "Paid features can't be used over iCloud Private Relay where you are, because in your time zone it can hide which state you're in. Free features still work. Turn off Private Relay for this site to use paid features."
 
 /** The owner bypass the geo gates honour. Decodes the session only when asked. */
 async function isOwnerRequest(request: NextRequest): Promise<boolean> {
@@ -394,20 +418,46 @@ const VPN_BLOCKED_MESSAGE =
  * through Cloudflare, which stamps the hop with Railway's data-centre address.
  * The person's own request has already been through this gate by then.
  */
-async function apiVpnRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
-  if (isVpnExemptApi(pathname)) return null
+async function apiVpnRefusal(
+  request: NextRequest,
+  pathname: string,
+): Promise<{ refusal: NextResponse | null; vpn: VpnStatus | null }> {
+  if (isVpnExemptApi(pathname)) return { refusal: null, vpn: null }
   if (
     request.headers.has(INTERNAL_HOP_HEADER) &&
     (await verifyInternalHop(request.headers, request.method, pathname))
   ) {
-    return null
+    return { refusal: null, vpn: null }
   }
-  if (!(await isAnonymizedClient(request))) return null
-  if (await isOwnerRequest(request)) return null
-  return new NextResponse(
-    JSON.stringify({ error: "VPN_BLOCKED", message: VPN_BLOCKED_MESSAGE, redirectTo: "/vpn-blocked" }),
-    { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
-  )
+  const vpn = await anonymizedClient(request)
+  // A Mountain-time relay user is placed, but kept off paid surfaces — the same
+  // 451 shape the paid-block states get, so paid clients already handle it.
+  const relayPaidRefusal = !vpn.blocked && vpn.paidBlocked === true && isPaidRoute(pathname)
+  if (!vpn.blocked && !relayPaidRefusal) return { refusal: null, vpn }
+  if (await isOwnerRequest(request)) return { refusal: null, vpn }
+  if (relayPaidRefusal) {
+    return {
+      refusal: new NextResponse(
+        JSON.stringify({
+          error: "PAID_GEO_BLOCKED",
+          reason: "private_relay",
+          kind: "privacy_relay",
+          message: RELAY_PAID_MESSAGE,
+          allowFree: true,
+          redirectTo: "/vpn-blocked?why=privacy_relay&scope=paid",
+        }),
+        { status: 451, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
+      ),
+      vpn,
+    }
+  }
+  return {
+    refusal: new NextResponse(
+      JSON.stringify({ error: "VPN_BLOCKED", kind: vpn.kind, message: VPN_BLOCKED_MESSAGE, redirectTo: "/vpn-blocked" }),
+      { status: 403, headers: { "Content-Type": "application/json", ...API_EDGE_SECURITY_HEADERS } },
+    ),
+    vpn,
+  }
 }
 
 /** Redirect to /vpn-blocked for a non-public page from an anonymized client, else null. */
@@ -415,18 +465,27 @@ async function pageVpnRedirect(
   request: NextRequest,
   pathname: string,
   tokenUserId: string | null,
-): Promise<NextResponse | null> {
-  if (isVpnPublicPage(pathname)) return null
-  if (isAnonymousCrawler(request)) return null
-  if (hasMachineCredential(request.headers)) return null
-  if (!(await isAnonymizedClient(request))) return null
+): Promise<{ redirect: NextResponse | null; vpn: VpnStatus | null }> {
+  if (isVpnPublicPage(pathname)) return { redirect: null, vpn: null }
+  if (isAnonymousCrawler(request)) return { redirect: null, vpn: null }
+  if (hasMachineCredential(request.headers)) return { redirect: null, vpn: null }
+  const vpn = await anonymizedClient(request)
+  const relayPaidRefusal = !vpn.blocked && vpn.paidBlocked === true && isPaidRoute(pathname)
+  if (!vpn.blocked && !relayPaidRefusal) return { redirect: null, vpn }
   // tokenUserId is only decoded on session-gated paths; decode it here otherwise.
-  if (tokenUserId ? isMiddlewareAdmin(tokenUserId) : await isOwnerRequest(request)) return null
+  if (tokenUserId ? isMiddlewareAdmin(tokenUserId) : await isOwnerRequest(request)) return { redirect: null, vpn }
   const url = request.nextUrl.clone()
   url.pathname = "/vpn-blocked"
   url.search = ""
   url.searchParams.set("from", `${pathname}${request.nextUrl.search}`)
-  return NextResponse.redirect(url)
+  // So the page can say WHAT is on — "iCloud Private Relay is still on" is the
+  // answer a person who already switched their VPN off needs.
+  if (vpn.kind) url.searchParams.set("why", vpn.kind)
+  // A Mountain-time relay user: free pages load, paid ones need the relay off.
+  if (relayPaidRefusal) url.searchParams.set("scope", "paid")
+  const response = NextResponse.redirect(url)
+  response.headers.set("Cache-Control", "private, no-store, max-age=0")
+  return { redirect: response, vpn }
 }
 
 // ─── The account lock ────────────────────────────────────────────────────────
@@ -538,14 +597,14 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
   if (hasMachineCredential(request.headers)) return null
   // Before the geo exemptions and the `country !== "US"` early return below: a
   // VPN is refused wherever its exit is, and /api/auth sign-in is refused too.
-  const vpnRefusal = await apiVpnRefusal(request, pathname)
+  const { refusal: vpnRefusal, vpn } = await apiVpnRefusal(request, pathname)
   if (vpnRefusal) return vpnRefusal
   if (isExemptPath(pathname)) return null
   // Wherever this request appears to be: the lock follows the account.
   const lockRefusal = await apiAccountLockRefusal(request, pathname)
   if (lockRefusal) return lockRefusal
 
-  const { country, region } = await resolveRequestGeo(request)
+  const { country, region } = await resolveRequestGeo(request, vpn)
   if (country !== "US" || !region) return null
   const fullBlock = isFullyBlocked(region) && !isFullBlockApiExempt(pathname)
   const paidBlock = !fullBlock && isPaidRoute(pathname) && (isPaidBlocked(region) || isFullyBlocked(region))
@@ -1006,11 +1065,17 @@ async function routeMiddleware(request: NextRequest) {
   const lockRedirect = await pageAccountLockRedirect(request, pathname)
   if (lockRedirect) return lockRedirect
 
-  const vpnRedirect = await pageVpnRedirect(request, pathname, tokenUserId)
+  const { redirect: vpnRedirect, vpn } = await pageVpnRedirect(request, pathname, tokenUserId)
   if (vpnRedirect) return vpnRedirect
 
-  if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
-    const stateCode = region
+  // A placed Private Relay client is judged by Apple's state from here on — it
+  // is the state the paid rule and the x-user-state header describe.
+  const relayState = placedRelayState(vpn)
+  const effectiveCountry = relayState ? "US" : country
+  const effectiveRegion = relayState ?? region
+
+  if (effectiveCountry === "US" && effectiveRegion && !isMiddlewareAdmin(tokenUserId)) {
+    const stateCode = effectiveRegion
 
     if (isPaidBlocked(stateCode) && isPaidRoute(pathname)) {
       const url = request.nextUrl.clone()
@@ -1027,8 +1092,8 @@ async function routeMiddleware(request: NextRequest) {
   if (clearGuestTrialOnPassThrough) {
     clearGuestTrialCookie(request, response)
   }
-  if (country === "US" && region) {
-    response.headers.set("x-user-state", region)
+  if (effectiveCountry === "US" && effectiveRegion) {
+    response.headers.set("x-user-state", effectiveRegion)
   }
   if (ip) {
     response.headers.set("x-client-ip", ip)

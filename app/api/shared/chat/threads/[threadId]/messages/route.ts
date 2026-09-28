@@ -17,6 +17,7 @@ import {
 import { bracketMessagesToPlatform } from '@/lib/chat-core/league-message-proxy'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
+import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
 import { parseTribeIdFromSource } from '@/lib/survivor/constants'
 import { getTribeChatMemberRosterIds } from '@/lib/survivor/SurvivorChatMembershipService'
 import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
@@ -413,6 +414,22 @@ export async function POST(
           ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: 'survivor_private_ballot' }
           : {}),
       })
+      // The communications drawer writes league chat through this route. Keep the
+      // Discord relay inside the request: an unawaited task can be stopped when a
+      // serverless response ends, leaving a message visible here but absent there.
+      // The relay reads the stored row and rejects private rooms and ballots.
+      if (created?.id) {
+        await syncOutboundLeagueChat({
+          leagueId,
+          messageId: created.id,
+          authorName: created.senderName ?? 'Manager',
+          authorAvatarUrl: created.senderAvatarUrl ?? null,
+          text: created.body,
+          gifUrl: typeof leagueMetadata?.gifUrl === 'string' ? leagueMetadata.gifUrl : null,
+        }).catch((error) => {
+          console.warn('[shared/chat] Discord relay failed', error)
+        })
+      }
       /*
        * League chat alerts are OPT-IN (`league_chat`, off on every channel by default), so for
        * almost everyone this finds nobody. A private ballot and a tribe room are never announced

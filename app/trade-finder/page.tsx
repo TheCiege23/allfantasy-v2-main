@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
+import { toFinderInsights, toFinderTrades, type FinderInsight, type FinderTrade } from '@/lib/trade-finder/pageModel'
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -42,19 +43,8 @@ interface DraftPick {
   round: string
 }
 
-interface TradeOpportunity {
-  id:           string
-  give:         { name: string; position: string; team: string; value: number }[]
-  get:          { name: string; position: string; team: string; value: number }[]
-  partnerName:  string
-  partnerRecord: string
-  partnerObjective: string
-  fairnessScore: number
-  valueDelta:   number
-  aiSummary:    string
-  verdict:      'SMASH' | 'ACCEPT' | 'LEAN' | 'FAIR' | 'DECLINE'
-  confidence:   number
-}
+/** One suggested trade, from the route's graded `candidates` — see lib/trade-finder/pageModel.ts. */
+type TradeOpportunity = FinderTrade
 
 interface PartnerMatch {
   rosterId:       number
@@ -78,12 +68,13 @@ const PLATFORM_CONFIG = {
   espn:    { emoji: '🔴', color: '#f97316' },
 }
 
-const VERDICT_CONFIG = {
-  SMASH:   { label: 'SMASH',   color: '#10b981', dots: 5 },
-  ACCEPT:  { label: 'ACCEPT',  color: '#34d399', dots: 4 },
-  LEAN:    { label: 'LEAN',    color: '#fbbf24', dots: 3 },
-  FAIR:    { label: 'FAIR',    color: '#fbbf24', dots: 3 },
-  DECLINE: { label: 'DECLINE', color: '#ef4444', dots: 1 },
+/** Grade letter colours — the same as every other trade surface. */
+const GRADE_COLOR: Record<'A' | 'B' | 'C' | 'D' | 'F', string> = {
+  A: '#34d399',
+  B: '#5eead4',
+  C: '#fbbf24',
+  D: '#fb923c',
+  F: '#fb5b78',
 }
 
 const POS_COLORS: Record<string, string> = {
@@ -287,34 +278,36 @@ function TradeCard({
   onSendToAnalyzer: (o: TradeOpportunity) => void
   onSave: (o: TradeOpportunity) => void
 }) {
-  const cfg   = VERDICT_CONFIG[opp.verdict] ?? VERDICT_CONFIG.FAIR
-  const delta = opp.valueDelta
+  /*
+   * 🛑 THE GRADE, NOT A LABEL OF THIS PAGE'S OWN (2026-09-27). This header used to print a verdict
+   * ("FAIR", "SMASH") and a fairness score the page INVENTED when the API sent none — every card
+   * read "FAIR · 80". It now shows the one grade the rest of AllFantasy shows for the same deal, or
+   * says why there is none.
+   */
+  const g = opp.grade?.graded ? opp.grade : null
+  const color = g ? GRADE_COLOR[g.letter] : '#94a3b8'
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] overflow-hidden hover:border-white/15 transition-all">
+    <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] overflow-hidden hover:border-white/15 transition-all" data-testid="trade-finder-card">
       {/* Top accent */}
-      <div className="h-0.5" style={{ background: cfg.color }}/>
+      <div className="h-0.5" style={{ background: color }}/>
 
       <div className="p-5">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black px-2.5 py-1 rounded-lg"
-                  style={{ background: `${cfg.color}20`, color: cfg.color, border: `1px solid ${cfg.color}40` }}>
-              {cfg.label}
+        <div className="flex items-center justify-between mb-4" data-testid="trade-finder-grade">
+          {g ? (
+            <>
+              <span className="text-xs font-black px-2.5 py-1 rounded-lg"
+                    style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+                {g.letter} for you · {opp.partnerName} {g.partnerLetter}
+              </span>
+              <span className="text-xs text-white/50">{g.label}</span>
+            </>
+          ) : (
+            <span className="text-xs text-white/45">
+              {opp.grade && !opp.grade.graded ? `Not graded: ${opp.grade.reason}` : 'League grade unavailable for this trade'}
             </span>
-            <div className="flex gap-0.5">
-              {Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full" style={{
-                  background: i < cfg.dots ? cfg.color : 'rgba(255,255,255,0.1)'
-                }}/>
-              ))}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-white/40">Fairness</div>
-            <div className="text-sm font-black text-white">{opp.fairnessScore}</div>
-          </div>
+          )}
         </div>
 
         {/* Trade sides */}
@@ -348,28 +341,37 @@ function TradeCard({
           </div>
         </div>
 
-        {/* Partner info */}
+        {/* Partner info — only what we actually have. */}
         <div className="flex items-center gap-2 mb-3 text-xs text-white/45">
           <span className="w-1 h-1 rounded-full bg-white/30"/>
           <span className="font-semibold text-white/60">{opp.partnerName}</span>
-          <span>·</span>
-          <span>{opp.partnerRecord}</span>
-          <span>·</span>
-          <span className="rounded-full bg-white/8 px-2 py-0.5">{opp.partnerObjective}</span>
+          {opp.partnerObjective ? (
+            <>
+              <span>·</span>
+              <span className="rounded-full bg-white/8 px-2 py-0.5">{opp.partnerObjective}</span>
+            </>
+          ) : null}
         </div>
 
-        {/* AI summary */}
-        <p className="text-xs text-white/60 italic leading-relaxed mb-4 border-l-2 pl-3" style={{ borderColor: cfg.color }}>
-          "{opp.aiSummary}"
-        </p>
+        {/* Why the finder built it */}
+        {opp.aiSummary ? (
+          <p className="text-xs text-white/60 italic leading-relaxed mb-4 border-l-2 pl-3" style={{ borderColor: color }}>
+            &ldquo;{opp.aiSummary}&rdquo;
+          </p>
+        ) : null}
 
-        {/* Value delta */}
-        <div className="flex items-center justify-between text-xs mb-4">
-          <span className="text-white/35">Value delta</span>
-          <span className={`font-black ${delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-white/60'}`}>
-            {delta > 0 ? '+' : ''}{delta.toLocaleString()}
-          </span>
-        </div>
+        {/*
+          The values the letter was taken on. ⚠ NOT the finder's own "value delta" — that was a second,
+          different number that could contradict the letter beside it.
+        */}
+        {g ? (
+          <div className="flex items-center justify-between text-xs mb-4" data-testid="trade-finder-values">
+            <span className="text-white/35">League value</span>
+            <span className="font-black text-white/80">
+              you get {g.getValue.toLocaleString()} for {g.giveValue.toLocaleString()}
+            </span>
+          </div>
+        ) : null}
 
         {/* Actions */}
         <div className="flex gap-2">
@@ -407,7 +409,6 @@ export default function TradeFinderPage() {
   const [needPositions, setNeedPos]     = useState<Set<Position>>(new Set())
   const [tone,         setTone]         = useState<Tone>('CONFIDENT')
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [minFairness,  setMinFairness]  = useState(0)
   const [excludeInjured, setExclInj]   = useState(false)
 
   // Roster state
@@ -421,6 +422,7 @@ export default function TradeFinderPage() {
   const [loading,      setLoading]      = useState(false)
   const [phase,        setPhase]        = useState('context')
   const [results,      setResults]      = useState<TradeOpportunity[]>([])
+  const [insights,     setInsights]     = useState<FinderInsight[]>([])
   const [partners,     setPartners]     = useState<PartnerMatch[]>([])
   const [error,        setError]        = useState<string | null>(null)
   const [savedOpps,    setSavedOpps]    = useState<TradeOpportunity[]>([])
@@ -491,6 +493,7 @@ export default function TradeFinderPage() {
     setLoading(true)
     setError(null)
     setResults([])
+    setInsights([])
 
     const phases = ['pricing','scanning','ai','gating']
     const timers = phases.map((p,i) => window.setTimeout(() => setPhase(p), (i+1)*2000))
@@ -516,37 +519,12 @@ export default function TradeFinderPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`)
 
-      // Map response → TradeOpportunity[]
-      const opps: TradeOpportunity[] = (data.opportunities ?? data.trades ?? data.results ?? []).map(
-        (o: Record<string, unknown>) => {
-          const give = (o.give ?? o.sending ?? o.myAssets ?? []) as Record<string,unknown>[]
-          const get  = (o.get  ?? o.receiving ?? o.theirAssets ?? []) as Record<string,unknown>[]
-          return {
-            id:               String(o.id ?? uid()),
-            give: give.map((a: Record<string,unknown>) => ({
-              name:     String(a.name ?? a.playerName ?? ''),
-              position: String(a.position ?? 'WR'),
-              team:     String(a.team ?? ''),
-              value:    Number(a.value ?? a.tradeValue ?? 0),
-            })),
-            get: get.map((a: Record<string,unknown>) => ({
-              name:     String(a.name ?? a.playerName ?? ''),
-              position: String(a.position ?? 'WR'),
-              team:     String(a.team ?? ''),
-              value:    Number(a.value ?? a.tradeValue ?? 0),
-            })),
-            partnerName:      String(o.partnerName ?? o.managerName ?? o.partner ?? 'Manager'),
-            partnerRecord:    String(o.partnerRecord ?? o.record ?? ''),
-            partnerObjective: String(o.partnerObjective ?? o.strategy ?? ''),
-            fairnessScore:    Number(o.fairnessScore ?? o.fairness ?? 80),
-            valueDelta:       Number(o.valueDelta ?? o.delta ?? 0),
-            aiSummary:        String(o.aiSummary ?? o.summary ?? o.analysis ?? o.narrative ?? ''),
-            verdict:          (o.verdict ?? 'FAIR') as TradeOpportunity['verdict'],
-            confidence:       Number(o.confidence ?? 0.8),
-          }
-        }
-      )
-      setResults(opps.filter(o => o.fairnessScore >= minFairness))
+      /*
+       * The trades are the graded `candidates`; the `opportunities` are notes. See pageModel.ts for
+       * why this no longer reads notes as trades or invents a fairness for them.
+       */
+      setResults(toFinderTrades(data))
+      setInsights(toFinderInsights(data))
 
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to find trades')
@@ -554,7 +532,7 @@ export default function TradeFinderPage() {
       timers.forEach(window.clearTimeout)
       setLoading(false)
     }
-  }, [league, objective, finderMode, preset, targetPos, tone, minFairness, loading])
+  }, [league, objective, finderMode, preset, targetPos, tone, loading])
 
   const loadPartners = useCallback(async () => {
     if (!league) return
@@ -626,7 +604,7 @@ export default function TradeFinderPage() {
               </div>
             )}
             <button
-              onClick={() => { setLeague(null); setResults([]); setPartners([]) }}
+              onClick={() => { setLeague(null); setResults([]); setInsights([]); setPartners([]) }}
               className="text-xs text-white/40 hover:text-white border border-white/10 hover:border-white/25 rounded-xl px-3 py-1.5 transition-all"
             >
               Change League
@@ -829,13 +807,11 @@ export default function TradeFinderPage() {
 
                 {showAdvanced && (
                   <div className="px-4 pb-4 space-y-3 border-t border-white/6">
-                    <div className="pt-3">
-                      <p className="text-[10px] text-white/30 mb-1.5">Min fairness score: {minFairness}</p>
-                      <input type="range" min={0} max={80} value={minFairness}
-                        onChange={e => setMinFairness(Number(e.target.value))}
-                        className="w-full accent-violet-500"/>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    {/*
+                      The "Min fairness score" slider was removed (2026-09-27): it filtered on a
+                      fairness the page invented (80 for every card). Trades now carry the one grade.
+                    */}
+                    <label className="flex items-center gap-2 cursor-pointer pt-3">
                       <input type="checkbox" checked={excludeInjured}
                         onChange={e => setExclInj(e.target.checked)}
                         className="accent-violet-500"/>
@@ -883,13 +859,29 @@ export default function TradeFinderPage() {
               {!loading && results.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-bold text-white">{results.length} trade opportunities found</span>
+                    <span className="font-bold text-white">{results.length} {results.length === 1 ? 'trade' : 'trades'} found</span>
                     <span className="text-white/35">{objective.replace('_',' ')} · {finderMode}</span>
                   </div>
                   {results.map(opp => (
                     <TradeCard key={opp.id} opp={opp}
                       onSendToAnalyzer={sendToAnalyzer}
                       onSave={saveOpportunity}/>
+                  ))}
+                </div>
+              )}
+
+              {/*
+                Notes the finder made that are NOT trades (no assets on either side). They used to be
+                drawn as trade cards with an invented "FAIR · 80"; they are listed as what they are.
+              */}
+              {!loading && insights.length > 0 && (
+                <div className="mt-6 space-y-2" data-testid="trade-finder-insights">
+                  <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Also worth knowing</div>
+                  {insights.map((note, i) => (
+                    <div key={`${note.title}-${i}`} className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
+                      <div className="text-xs font-semibold text-white/75">{note.title}</div>
+                      {note.description ? <div className="mt-0.5 text-xs text-white/45">{note.description}</div> : null}
+                    </div>
                   ))}
                 </div>
               )}

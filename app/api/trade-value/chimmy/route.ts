@@ -5,6 +5,7 @@ import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { CHIMMY_TRADE_SYSTEM_PROMPT } from '@/lib/trade-value-console/chimmy-prompt'
+import { chimmyTradeDeepDiveFrom } from '@/lib/trade-value-console/chimmyDeepDive'
 
 export async function POST(req: Request) {
   const ip = getClientIp(req as any) || 'unknown'
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     const result = await openaiChatJson({
       messages: [
         { role: 'system', content: CHIMMY_TRADE_SYSTEM_PROMPT },
-        { role: 'user', content: JSON.stringify({ payload, userNote: 'Explain this trade using only the payload facts.' }) },
+        { role: 'user', content: JSON.stringify({ payload, userNote: 'Explain the payload grade for this trade using only the payload facts.' }) },
       ],
       temperature: 0.2,
       maxTokens: 700,
@@ -45,8 +46,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'AI unavailable' }, { status: 503 })
     }
 
-    const parsed = parseJsonContentFromChatCompletion(result.json)
-    return NextResponse.json({ chimmy: parsed ?? { raw: result.json } })
+    /*
+     * Only the explanation fields leave this route. It used to return the model's JSON as-is — its own
+     * `verdict` and `confidence` included — or, failing a parse, the raw completion.
+     */
+    const deepDive = chimmyTradeDeepDiveFrom(parseJsonContentFromChatCompletion(result.json))
+    if (!deepDive) {
+      return NextResponse.json({ error: 'Chimmy did not return a readable explanation. Try again.' }, { status: 502 })
+    }
+    return NextResponse.json({ chimmy: deepDive })
   } catch (e) {
     console.error('[trade-value/chimmy]', e)
     return NextResponse.json({ error: 'Chimmy failed' }, { status: 500 })

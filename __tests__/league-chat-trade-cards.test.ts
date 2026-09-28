@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
    */
   postMoment: vi.fn(),
   marketValues: vi.fn(),
+  gradeImported: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -27,6 +28,12 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/league-chat/chimmyMoments', () => ({ postChimmyMoment: h.postMoment }))
 vi.mock('@/lib/league-chat/chimmyTradeMoment', () => ({ readTradeMarketValues: h.marketValues }))
+/*
+ * THE grade (2026-09-27) is a new dependency of the writer. Mocked, or the real archived-trade grader
+ * would run against this file's partial Prisma — whose `sportsDataCache` is the WATERMARK here, not a
+ * value book — and every assertion below would be measuring that accident. Default: no grade.
+ */
+vi.mock('@/lib/league-chat/tradeCardGrade', () => ({ gradeImportedTradeCard: h.gradeImported }))
 
 import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 
@@ -83,6 +90,7 @@ beforeEach(() => {
   h.teamFindMany.mockResolvedValue([])
   h.postMoment.mockResolvedValue({ posted: true, messageId: 'msg1' })
   h.marketValues.mockResolvedValue(null)
+  h.gradeImported.mockResolvedValue(null)
 })
 
 describe('trade cards', () => {
@@ -266,6 +274,43 @@ describe('trade cards are Chimmy moments', () => {
       /^On paper, Casey wins this one, and it isn't close: 8,800 of market value coming in, 3,560 going out \(\+5,240\)\. Jordan/,
     )
     expect(postedMeta().tradeCard).toMatchObject({ manager: 'Casey', partner: 'Jordan', valueGave: 3560, valueGot: 8800 })
+  })
+
+  it('🛑 with THE grade, the message is worded from the letters, the card carries them, and the market take is not used', async () => {
+    h.marketValues.mockResolvedValue({ players: MARKET, isDynasty: true })
+    // The market says Casey won big; the league's grade says the opposite. The grade wins.
+    h.gradeImported.mockResolvedValue({ graded: true, letter: 'D', partnerLetter: 'B', basis: 'today', valueGave: 6100, valueGot: 5200 })
+    h.tradeFindMany.mockResolvedValue([
+      trade({ playersGiven: ['6813'], playersReceived: ['8148'], history: { sleeperUsername: 'Casey' } }),
+      trade({ playersGiven: ['8148'], playersReceived: ['6813'], history: { sleeperUsername: 'Jordan' } }),
+    ])
+
+    await syncTradeCardsForLeague('l1')
+
+    // Graded from the row's own side: what Casey received against what Casey gave, as names.
+    expect(h.gradeImported).toHaveBeenCalledWith(
+      expect.objectContaining({ leagueId: 'l1', received: ["Ja'Marr Chase"], gave: ['Travis Kelce'], teams: 2 }),
+    )
+    expect(postedBody()).toMatch(/^League grade: Casey D, Jordan B — Jordan comes out ahead, on this league's values today\. /)
+    expect(postedBody()).not.toMatch(/On paper|market value/)
+    expect(postedMeta().tradeCard).toMatchObject({
+      manager: 'Casey',
+      partner: 'Jordan',
+      grade: { graded: true, letter: 'D', partnerLetter: 'B', basis: 'today' },
+      valueGave: 6100,
+      valueGot: 5200,
+      valueBasis: 'league',
+    })
+  })
+
+  it('a withheld grade goes on the card with its reason, and the message stays what it was', async () => {
+    h.gradeImported.mockResolvedValue({ graded: false, reason: 'only two-team trades are graded' })
+    h.tradeFindMany.mockResolvedValue([trade()])
+
+    await syncTradeCardsForLeague('l1')
+
+    expect(postedBody()).toBe("Casey traded Travis Kelce for Ja'Marr Chase")
+    expect(postedMeta().tradeCard.grade).toEqual({ graded: false, reason: 'only two-team trades are graded' })
   })
 
   it('names a manager stored as a Sleeper user id by the league’s own name', async () => {

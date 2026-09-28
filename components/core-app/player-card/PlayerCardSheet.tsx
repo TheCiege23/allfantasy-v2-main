@@ -12,6 +12,7 @@ import type {
 import type { PlayerCardRef } from './PlayerCardProvider'
 import { useOverlayContainment } from '../useOverlayContainment'
 import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -135,7 +136,7 @@ function TradeRows({ trades, subject }: { trades: PlayerCardTrade[]; subject: st
                   Paid <b>{t.grade.senderLetter}</b>
                 </span>
                 <span className="af-pc-faint">
-                  {t.grade.got.toLocaleString()} for {t.grade.gave.toLocaleString()} on the league&rsquo;s values today
+                  {t.grade.got.toLocaleString()} for {t.grade.gave.toLocaleString()} on the league&rsquo;s values {gradeMoment(t.grade)}
                 </span>
               </div>
             ) : t.grade && !t.grade.graded ? (

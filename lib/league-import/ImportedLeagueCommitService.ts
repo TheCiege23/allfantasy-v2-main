@@ -175,6 +175,23 @@ export function buildTier0LeagueColumnPatch(
   setIfBool('irAllowDNR', l.reserve_allow_dnr)
   setIfBool('irAllowDoubtful', l.reserve_allow_doubtful)
 
+  /*
+   * Best ball — the provider's own flag (Sleeper `settings.best_ball`), so every surface that
+   * already reads `League.bestBallMode` (portfolio facet, the Chimmy lineup check, autocoach,
+   * start/sit, the league shell's Best Ball tab) agrees with the game-day list. Guap's decision,
+   * 2026-09-27. Absent flag → no key → the column keeps its value.
+   *
+   * ⚠ THE SLEEPER MAPPER WRITES 1 / 0, NOT A BOOLEAN (#1371), so `setIfBool` alone would never fire.
+   *
+   * ⚠ ONE CONSUMER READ IT AS "TRADES OFF": `resolveLeagueTradeSettings` blocked every trade in a
+   * best-ball league, which is AllFantasy's native best-ball default — not Sleeper's, where best-ball
+   * leagues trade. That rule is now scoped to native leagues (tradeSettingsResolver.ts), or this
+   * line would have made Chimmy refuse trade cards in every imported best-ball league.
+   */
+  const bestBall = l.best_ball
+  if (bestBall === 1 || bestBall === true) out.bestBallMode = true
+  else if (bestBall === 0 || bestBall === false) out.bestBallMode = false
+
   return out
 }
 

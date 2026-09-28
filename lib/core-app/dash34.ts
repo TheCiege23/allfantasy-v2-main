@@ -16,6 +16,7 @@ import { composePlayerIdentities } from './playerIdentityCompose'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import { selectKickoffLeague } from './kickoffContext'
+import { clubKey, indexFixturesByWeek, weekVerdict } from './lineupWeekFixtures'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -545,7 +546,8 @@ const readNflFixturesCached = unstable_cache(
         where: { sport: 'NFL', startTime: { gte: new Date() } },
         orderBy: { startTime: 'asc' },
         take: 200,
-        select: { startTime: true, homeTeam: true, awayTeam: true },
+        // `week` so a lineup can be paired with ITS week's game — see `lineupWeekFixtures.ts`.
+        select: { startTime: true, homeTeam: true, awayTeam: true, week: true },
       })
     // No `.catch` here — see the note in `readNextGamesCached`.
     return rows.map((g) => ({ ...g, startTime: g.startTime ? g.startTime.toISOString() : null }))
@@ -827,14 +829,31 @@ export async function getDash34Data(
     }
   }
 
-  /** Next kickoff for an NFL club code, or null when we cannot resolve it. */
-  function kickoffFor(sport: string | null, team: string | null): Date | null {
+  /** The fixture-table key for an NFL club code, or null when we cannot resolve it. */
+  function nflClubKey(sport: string | null, team: string | null): string | null {
     if (String(sport ?? '').toUpperCase() !== 'NFL') return null
     const info = getTeamInfo(team)
     // getTeamInfo returns null for anything outside the 32-club table, so free
     // agents and unrecognised codes fall out here rather than matching loosely.
-    if (!info) return null
-    return nextKickoffByClub.get(info.fullName.trim().toLowerCase()) ?? null
+    return info ? clubKey(info.fullName) : null
+  }
+
+  /** Next kickoff for an NFL club code, or null when we cannot resolve it. */
+  function kickoffFor(sport: string | null, team: string | null): Date | null {
+    const key = nflClubKey(sport, team)
+    return key ? nextKickoffByClub.get(key) ?? null : null
+  }
+
+  /*
+   * 🛑 A LINEUP IS A WEEK'S LINEUP, AND ITS STARTER'S "NEXT KICKOFF" MAY BE NEXT WEEK'S. See
+   * `lineupWeekFixtures.ts`: on the Monday of week 3 a starter whose club played Sunday was raised
+   * as an urgent "cannot play · kicks off in 6d" — a settled slot, alerted against week 4's game.
+   * `startsThisWeek` answers whether the slot can still change; `unknown` keeps the old behaviour
+   * rather than hiding an alert on the strength of missing data.
+   */
+  const fixturesByWeek = indexFixturesByWeek(nflFixtures)
+  function starterWeek(sport: string | null, team: string | null, week: number | null | undefined) {
+    return weekVerdict(fixturesByWeek, nflClubKey(sport, team), week)
   }
 
   /*
@@ -1077,9 +1096,10 @@ export async function getDash34Data(
       if (isStarter) starting++
       if (isUnavailable(d.status)) {
         unavailable++
-        if (isStarter) {
+        const thisWeek = isStarter ? starterWeek(d.sport, d.team, roster.verification?.week) : null
+        if (isStarter && thisWeek?.verdict !== 'done') {
           startingUnavailable++
-          const kickoff = kickoffFor(d.sport, d.team)
+          const kickoff = thisWeek?.verdict === 'plays' ? thisWeek.kickoff : kickoffFor(d.sport, d.team)
           if (kickoff && (!startingUnavailableKickoff || kickoff < startingUnavailableKickoff)) {
             startingUnavailableKickoff = kickoff
           }
@@ -1244,7 +1264,8 @@ export async function getDash34Data(
       lineupVerification: rosterByLeague.get(row.id)?.verification ?? null,
       flaggedStarters: (rosterByLeague.get(row.id)?.orderedStarters ?? []).flatMap((pid, index) => {
         const d = designationOf(pid)
-        return d && isUnavailable(d.status) ? [{ playerId: pid, name: d.name, status: d.status, slot: rosterByLeague.get(row.id)?.verification?.slots[index] ?? 'Starter', index }] : []
+        const settled = d && starterWeek(d.sport, d.team, rosterByLeague.get(row.id)?.verification?.week).verdict === 'done'
+        return d && isUnavailable(d.status) && !settled ? [{ playerId: pid, name: d.name, status: d.status, slot: rosterByLeague.get(row.id)?.verification?.slots[index] ?? 'Starter', index }] : []
       }),
       /* The lock behind that count — see `startingUnavailableKickoff` above for why it is not
          read off `book`. Serialised because every other instant on this row is. */

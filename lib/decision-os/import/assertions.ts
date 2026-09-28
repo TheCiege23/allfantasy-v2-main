@@ -38,6 +38,18 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 export const IMPORT_SCOPES = ['league_state', 'teams_rosters', 'traded_picks'] as const
 export type ImportScope = (typeof IMPORT_SCOPES)[number]
 
+/** The scopes the five-minute lane fills. Mirrors `ACTIVE_SYNC_SCOPES` in
+ *  `lib/import-os/collector/activeSyncLane.ts` — data, not an import, for the same reason as
+ *  `IMPORT_SCOPES`; a test pins the two equal. */
+export const ACTIVE_LANE_SCOPES = ['league_state', 'transactions', 'teams_rosters'] as const
+
+export interface ActiveLaneFreshness {
+  /** Certified: advances only when EVERY scope in `scopes` completed on one run (runner-enforced). */
+  lastSuccessfulSyncAt: string | null
+  staleMs: number | null
+  scopes: readonly string[]
+}
+
 export interface ScopeFreshness {
   scope: string
   /** Completed on the LAST run. Not the same as "ever completed". */
@@ -70,6 +82,18 @@ export interface ImportAssertions {
   syncStatus: string | null
   consecutiveFailures: number
   scopes: ScopeFreshness[]
+  /**
+   * 🛑 THE SECOND CERTIFIED CLOCK, AND IGNORING IT MADE CHIMMY CONTRADICT ITSELF. Rosters,
+   * transactions and league state are also collected by the five-minute lane under
+   * `<runKey>:active` — every league within 20 minutes on a game day — and that lane's success
+   * stamps `League.lastSyncedAt`, which is what an answer's "synced 10:45 PM" header shows. Reading
+   * only the full row, the same answer went on to say "the last successful sync was ~4 hours ago"
+   * and refuse a lineup call that needs only rosters (measured 2026-09-28, KBFL and BB Dynasty).
+   *
+   * Optional so a fixture that predates it still type-checks; the loader always sets it (null when
+   * the lane has no row for this league).
+   */
+  activeLane?: ActiveLaneFreshness | null
 
   // ── 2. Parity ─────────────────────────────────────────────────────────────────────────────
   /**
@@ -172,8 +196,11 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
   const season = Number(league.season ?? 0)
   const runKey = `${provider}:${externalLeagueId}:${season}`
 
-  const [state, rosters] = await Promise.all([
+  const [state, activeState, rosters] = await Promise.all([
     prisma.leagueSyncState.findUnique({ where: { runKey } }).catch(() => null),
+    prisma.leagueSyncState
+      .findUnique({ where: { runKey: `${runKey}:active` }, select: { lastSuccessfulSyncAt: true } })
+      .catch(() => null),
     prisma.roster
       .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
       .catch(() => [] as { platformUserId: string | null; playerData: unknown }[]),
@@ -242,6 +269,13 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
     syncStatus: state?.syncStatus ?? null,
     consecutiveFailures: failures,
     scopes,
+    activeLane: activeState
+      ? {
+          lastSuccessfulSyncAt: activeState.lastSuccessfulSyncAt?.toISOString() ?? null,
+          staleMs: activeState.lastSuccessfulSyncAt ? Date.now() - activeState.lastSuccessfulSyncAt.getTime() : null,
+          scopes: ACTIVE_LANE_SCOPES,
+        }
+      : null,
     parity: state ? verdictFrom(state.syncStatus ?? null, failures) : 'unchecked',
     parityNote: state
       ? null

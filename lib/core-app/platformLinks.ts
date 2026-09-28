@@ -117,7 +117,14 @@ function screenLink(league: LinkLeague, screen: SourceScreen): PlatformLink | nu
 /** Where a lineup change is made — the "Where to fix it" destination. */
 export function lineupLink(league: LinkLeague): PlatformLink | null {
   if (!normalizeSourcePlatform(league.platform)) {
-    return internal(`/core/my-team?league=${encodeURIComponent(league.id)}`, 'My team')
+    /*
+     * ⚠ NOT /core/my-team. That screen READS a lineup and has no control that changes
+     * one — nothing under /core writes a roster — so "Where to fix it" sent a native
+     * manager to a page where it could not be fixed. The native editor is the league
+     * shell's team tab (`?view=team`, aliased to `roster` on the redraft core), which
+     * saves through /api/leagues/roster/save with its own lock checks.
+     */
+    return internal(`/league/${encodeURIComponent(league.id)}?view=team`, 'Lineup')
   }
   return screenLink(league, 'lineup')
 }

@@ -105,6 +105,16 @@ export type TradeGradeView =
        * Set by the league grader; absent where no league was read.
        */
       leagueType?: LeagueTypeBasis | null
+      /**
+       * When this letter was FROZEN as a completed trade's original grade (`frozenCompletedGrade.ts`).
+       * Absent: a live grade, taken on today's values.
+       */
+      frozenAt?: string | null
+      /**
+       * Today's re-evaluation of the same deal, beside a frozen original — never merged into it. Null
+       * when today's grade is the original (just frozen) or could not be taken.
+       */
+      current?: { letter: GradeLetter; partnerLetter: GradeLetter; giveValue: number; getValue: number } | null
     }
   | {
       graded: false
@@ -279,5 +289,9 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
     moves: view.moves.map((m) => ({ ...m, side: m.side === 'give' ? 'get' : 'give' })),
     // The original viewer's personal utility is not the other manager's roster fit.
     rosterFit: null,
+    // Today's re-evaluation flips with the original, or the other side reads the wrong "now".
+    current: view.current
+      ? { letter: view.current.partnerLetter, partnerLetter: view.current.letter, giveValue: view.current.getValue, getValue: view.current.giveValue }
+      : view.current,
   }
 }

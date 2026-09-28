@@ -23,6 +23,8 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { buildLeagueFormatLabel } from '@/lib/leagues/leagueFormatLabel'
 import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { ChimmyTradeDeepDivePanel } from './ChimmyTradeDeepDivePanel'
+import { chimmyTradeDeepDiveFrom, type ChimmyTradeDeepDive } from '@/lib/trade-value-console/chimmyDeepDive'
 
 type SportFilter = 'ALL' | (typeof SUPPORTED_SPORTS)[number]
 
@@ -113,6 +115,14 @@ export function TradeValueModal({
   const [error, setError] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
+  /* Chimmy's explanation of THIS result's grade — dropped whenever the result changes. */
+  const [deepDive, setDeepDive] = useState<ChimmyTradeDeepDive | null>(null)
+  const [deepDiveLoading, setDeepDiveLoading] = useState(false)
+  const [deepDiveError, setDeepDiveError] = useState<string | null>(null)
+  useEffect(() => {
+    setDeepDive(null)
+    setDeepDiveError(null)
+  }, [result])
   const [searchGive, setSearchGive] = useState<SearchHit[]>([])
   const [searchGet, setSearchGet] = useState<SearchHit[]>([])
   const [searchLoading, setSearchLoading] = useState<'give' | 'get' | null>(null)
@@ -464,7 +474,7 @@ export function TradeValueModal({
    * every other trade screen shows for the same deal.
    */
   const proposalGrade = result?.grade as
-    | { graded?: boolean; reason?: string; letter?: string; partnerLetter?: string }
+    | { graded?: boolean; reason?: string; letter?: string; partnerLetter?: string; label?: string; giveValue?: number; getValue?: number }
     | undefined
   const proposalUnavailable = proposalGrade?.graded === false
   const fairnessScore = !proposalUnavailable && typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
@@ -1365,29 +1375,45 @@ export function TradeValueModal({
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
+          disabled={!chimmyPayload || deepDiveLoading}
+          data-testid="trade-value-chimmy-deep-dive"
           onClick={async () => {
             if (!chimmyPayload) return
-            const r = await fetch('/api/trade-value/chimmy', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ payload: chimmyPayload }),
-            })
-            const j = await r.json().catch(() => null)
-            // A refusal used to do nothing at all here; show it with its way forward.
-            const refused = readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
-            if (refused) {
-              setRefusal(refused)
-              return
-            }
-            if (j?.chimmy) {
-              alert(JSON.stringify(j.chimmy, null, 2))
+            setDeepDiveLoading(true)
+            setDeepDiveError(null)
+            try {
+              const r = await fetch('/api/trade-value/chimmy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ payload: chimmyPayload }),
+              })
+              const j = await r.json().catch(() => null)
+              // A refusal used to do nothing at all here; show it with its way forward.
+              const refused = readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
+              if (refused) {
+                setRefusal(refused)
+                return
+              }
+              /*
+               * 🛑 This used to pop the raw model JSON in a browser alert — led by a verdict and a confidence
+               * Chimmy made up, and no grade. The panel below leads with the one grade.
+               */
+              const parsed = chimmyTradeDeepDiveFrom(j?.chimmy)
+              if (parsed) setDeepDive(parsed)
+              else setDeepDiveError(typeof j?.error === 'string' ? j.error : 'Chimmy could not explain this trade just now.')
+            } catch {
+              setDeepDiveError('Chimmy could not explain this trade just now.')
+            } finally {
+              setDeepDiveLoading(false)
             }
           }}
-          className="inline-flex items-center gap-1 rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-1.5 text-[11px] font-semibold text-purple-200 hover:bg-purple-500/15"
+          className="inline-flex items-center gap-1 rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-1.5 text-[11px] font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50"
         >
-          <Sparkles className="h-3.5 w-3.5" /> Chimmy deep dive (JSON)
+          <Sparkles className="h-3.5 w-3.5" /> {deepDiveLoading ? 'Asking Chimmy…' : 'Ask Chimmy why'}
         </button>
       </div>
+      {deepDiveError ? <p className="mt-2 text-[12px] text-amber-200/90">{deepDiveError}</p> : null}
+      {deepDive ? <ChimmyTradeDeepDivePanel grade={proposalGrade} deepDive={deepDive} /> : null}
     </AIToolModalShell>
   )
 }

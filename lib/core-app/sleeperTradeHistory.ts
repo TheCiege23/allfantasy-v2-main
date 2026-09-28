@@ -14,6 +14,11 @@ import type { ResolvedPlayerMedia } from '@/lib/player-media'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
 import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import {
+  loadFrozenCompletedGrades,
+  saveFrozenCompletedGrades,
+  type FrozenCompletedGrade,
+} from '@/lib/decision-os/trade/frozenCompletedGrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { TradeRecord } from './trades'
 
@@ -152,6 +157,12 @@ export async function getSleeperTradeHistory(
   ).catch(() => new Map<string, ResolvedPlayerMedia>())
   const history: TradeRecord[] = []
   const currentSeason = new Date().getUTCFullYear()
+  // Each trade's frozen original on the viewer's row — one read, one insert (`frozenCompletedGrade.ts`).
+  const frozen = opts.afLeagueId
+    ? await loadFrozenCompletedGrades(opts.afLeagueId, trades.map((t) => t.id))
+    : new Map<string, FrozenCompletedGrade>()
+  const toFreeze: FrozenCompletedGrade[] = []
+  const now = new Date()
   // Only trades without realized points need the same market projection used
   // in the email. Bound expensive enrichment to four concurrent trades.
   for (let i = 0; i < trades.length; i += 4) {
@@ -168,12 +179,13 @@ export async function getSleeperTradeHistory(
          * AF row, memoised grader, so sixty trades cost one chart read.
          */
         opts.afLeagueId
-          ? oneGradeForCompletedTrade(opts.afLeagueId, trade, currentSeason).catch(() => null)
+          ? oneGradeForCompletedTrade(opts.afLeagueId, trade, currentSeason, { frozen, onFreeze: (f) => toFreeze.push(f), now }).catch(() => null)
           : Promise.resolve(null),
       ])
       return toTradeRecord(trade, viewerOwnerId, expectation, mediaByPlayerId, leagueGrade)
     })))
   }
+  if (opts.afLeagueId) await saveFrozenCompletedGrades(opts.afLeagueId, toFreeze)
   return {
     history,
     notice: grades.staleAsOf || reconciled.incomplete

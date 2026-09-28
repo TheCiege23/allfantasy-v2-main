@@ -128,7 +128,11 @@ export type PlayerCardTrade = {
    * grade on; `withheld` carries the reason instead of a letter.
    */
   grade?:
-    | { graded: true; acquirerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; senderLetter: 'A' | 'B' | 'C' | 'D' | 'F'; got: number; gave: number }
+    | {
+        graded: true; acquirerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; senderLetter: 'A' | 'B' | 'C' | 'D' | 'F'; got: number; gave: number
+        /** When these letters were frozen as the trade's original grade (`frozenCompletedGrade.ts`). */
+        frozenAt?: string | null
+      }
     | { graded: false; withheld: string }
     | null
 }
@@ -826,7 +830,7 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
       grade: !view
         ? null
         : view.graded
-          ? { graded: true, acquirerLetter: view.letter, senderLetter: view.partnerLetter, got: view.getValue, gave: view.giveValue }
+          ? { graded: true, acquirerLetter: view.letter, senderLetter: view.partnerLetter, got: view.getValue, gave: view.giveValue, frozenAt: view.frozenAt ?? null }
           : { graded: false, withheld: view.reason },
     }
   })

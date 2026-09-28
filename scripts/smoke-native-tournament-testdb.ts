@@ -31,7 +31,7 @@ async function main(){
    const draft=await prisma.draftSession.findFirstOrThrow({where:{leagueId}})
    const positions=['QB','RB','RB','WR','WR','TE','WR','K','DEF','QB','RB','WR','TE','RB','WR','WR','RB','TE']
    const picks=Array.from({length:draft.rounds*4},(_,i)=>{const round=Math.floor(i/4),slot=i%4,owner=round%2===0?slot:3-slot,playerId=marker+'-'+concept.slice(0,1)+'-'+i;playerIds.push(playerId);return{sessionId:draft.id,overall:i+1,round:round+1,slot:owner+1,rosterId:generic[owner].id,playerId,playerName:playerId,position:positions[round%positions.length],sportType:'NFL',source:'simulation_fixture'}})
-   await prisma.draftPick.createMany({data:picks});await prisma.draftSession.update({where:{id:draft.id},data:{status:'completed'}});await syncCompletedDraftToRedraftSeason(leagueId)
+   await prisma.draftPick.createMany({data:picks});await prisma.draftSession.update({where:{id:draft.id},data:{status:'completed'}});await syncCompletedDraftToRedraftSeason(leagueId);await prisma.league.update({where:{id:leagueId},data:{lifecycleState:'post_draft'}})
    const season=await prisma.redraftSeason.findFirstOrThrow({where:{leagueId}}),rosters=await prisma.redraftRoster.findMany({where:{seasonId:season.id}})
    check(rosters.length===4,'FINALIZATION_'+concept)
    if(concept==='best_ball'){
@@ -54,7 +54,15 @@ async function main(){
      const result=await runNativeTournamentWeek(season.id,week)
      check(result===['scored','advanced','complete'][week-1],'AUTO_ROUND_'+week+'_'+result)
      if(week===2)check(await prisma.bestBallEntry.count({where:{contestId:contests[0],isEliminated:false,currentRound:2}})===2,'SURVIVORS')
-     if(week===3)check(await runNativeTournamentWeek(season.id,week)==='complete','FINAL_RETRY')
+     if(week===3){
+      const archive=await prisma.leagueSeason.findUniqueOrThrow({where:{leagueId_season:{leagueId,season:season.season}}})
+      const winner=await prisma.bestBallEntry.findFirstOrThrow({where:{contestId:contests[0],overallRank:1}})
+      const records=archive.teamRecords as any[]
+      check(records.some(r=>r.rosterId===winner.id.slice(contests[0].length+1)&&r.rank===1&&r.tournamentChampion),'CONTEST_CHAMPION_ARCHIVED')
+      check((await prisma.league.findUniqueOrThrow({where:{id:leagueId}})).lifecycleState==='offseason','OFFSEASON_HANDOFF')
+      check(await runNativeTournamentWeek(season.id,week)==='complete','FINAL_RETRY')
+      check(await prisma.leagueSeason.count({where:{leagueId}})===1,'IMMUTABLE_ARCHIVE_ONCE')
+     }
      console.log('Best-ball week '+week+' verified')
     }
     results.push({concept,teams:4,rosterPlayers:picks.length,completeLineupWeeks:lineupWeeks,benchQbSelections,nativeContestCreated:true,draftEntriesIdempotent:true,scheduledAdvancement:true,finalRetrySafe:true})
