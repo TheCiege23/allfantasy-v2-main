@@ -29,6 +29,8 @@ import {
 } from '@/lib/season-week/dailySportSeasonStarts'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
+import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
+import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -42,6 +44,9 @@ export type WeeklyScoreSyncSummary = {
   preseasonRowsSkipped?: number
   /** Daily sports: roster ids translated to game-log (PlayerIdentityMap) ids — see rosterGameLogIdBridge.ts. */
   gameLogIdsBridged?: number
+  /** NCAAF: roster ids resolved to a CFBD athlete id (see ncaafGameLogIdBridge.ts), and those that could not be. */
+  cfbdIdsResolved?: number
+  unresolvedCfbdPlayerIds?: string[]
   scoresUpserted: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
@@ -187,8 +192,10 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * quietly persist zero scores.
    */
   const isDailySport = isDailyStatSport(sport)
-  if (sport !== 'NFL' && !isDailySport) {
-    throw new Error(`Weekly stat sync is wired for NFL, NBA and NHL; ${sport} is not available yet.`)
+  // `RedraftSeason.sport` stores `NCAAFB`, so this must not be a string compare against 'NCAAF'.
+  const isNcaaf = isNcaafSport(sport)
+  if (sport !== 'NFL' && !isDailySport && !isNcaaf) {
+    throw new Error(`Weekly stat sync is wired for NFL, NCAAF, NBA, NHL and NCAAB; ${sport} is not available yet.`)
   }
 
   const rosters = await prisma.redraftRoster.findMany({
@@ -226,7 +233,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     return summary
   }
 
-  const cachedRows = isDailySport
+  const cachedRows = isDailySport || isNcaaf
     ? []
     : await prisma.playerGameLogCache.findMany({
         where: {
@@ -333,6 +340,50 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     summary.cacheRowsRead = gameRows.length
   }
 
+  /**
+   * NCAAF: one `player_game_stats` row per player per game from the scheduled CFBD ingest
+   * (`import-stat-lines` -> `cfbdGameLogs.ts`), keyed on the CFBD athlete id, `sportType: 'NCAAF'`,
+   * `weekOrRound` = the real CFBD week. Selected BY WEEK, unlike the daily sports — college football
+   * carries a real week number, and `gameDate` is null whenever the CFBD schedule row is missing.
+   */
+  const ncaafRowsByPlayer = new Map<string, unknown[]>()
+  if (isNcaaf) {
+    const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, playerIds)
+    summary.cfbdIdsResolved = bridge.cfbdIds.length
+    summary.unresolvedCfbdPlayerIds = bridge.unresolved
+    if (bridge.ambiguous.length) {
+      summary.warnings.push(
+        `${bridge.ambiguous.length} NCAAF roster id(s) resolve to more than one CFBD athlete, or share one with another ` +
+          `rostered player; they were NOT scored rather than risk crediting the wrong player: ${bridge.ambiguous.slice(0, 5).join(', ')}.`,
+      )
+    }
+    if (bridge.unresolved.length) {
+      summary.warnings.push(
+        `${bridge.unresolved.length} NCAAF roster id(s) have no CFBD athlete link (not a CFBD pool player, and no ` +
+          `PlayerIdentityMap.cfbdId): ${bridge.unresolved.slice(0, 5).join(', ')}.`,
+      )
+    }
+    const gameRows = bridge.cfbdIds.length
+      ? await prisma.playerGameStat.findMany({
+          where: {
+            playerId: { in: bridge.cfbdIds },
+            sportType: { in: ['NCAAF', 'ncaaf'] },
+            season: seasonYear,
+            weekOrRound: week,
+          },
+          select: { playerId: true, normalizedStatMap: true },
+        })
+      : []
+    for (const row of gameRows) {
+      const rosterId = bridge.rosterIdFor(row.playerId)
+      if (!rosterId) continue
+      const rows = ncaafRowsByPlayer.get(rosterId) ?? []
+      rows.push(row.normalizedStatMap)
+      ncaafRowsByPlayer.set(rosterId, rows)
+    }
+    summary.cacheRowsRead = gameRows.length
+  }
+
   const cacheByPlayer = new Map<string, { payload: unknown }>(
     cachedRows.map((row: { playerId: string; payload: unknown }) => [row.playerId, row]),
   )
@@ -349,7 +400,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // final score. Pre-load this week's finished games keyed by team abbrev so a
   // DEF starter scores from data we have, even without a per-team box-score
   // provider feed. (Sacks/INT/etc. still require the box-score feed — see G8.)
-  const teamDefensePlayerIds = playerIds.filter((id) => isTeamDefenseRow(id, positionByPlayer.get(id) ?? null))
+  // NFL-shaped team defenses only: NCAAF has no team-defense stat line and takes its own branch below.
+  const teamDefensePlayerIds = isNcaaf ? [] : playerIds.filter((id) => isTeamDefenseRow(id, positionByPlayer.get(id) ?? null))
   const gameByTeam = new Map<string, { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }>()
   if (teamDefensePlayerIds.length > 0) {
     const rawGames = await prisma.sportsGame.findMany({
@@ -422,6 +474,35 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   for (const playerId of playerIds) {
     const position = positionByPlayer.get(playerId) ?? null
     const playerSport = sportByPlayer.get(playerId) ?? sport
+
+    /**
+     * NCAAF runs BEFORE the NFL team-defense branch: a college `DEF` slot has no team stat line in
+     * any feed we ingest, so it is reported unscored here rather than sent looking for NFL box scores.
+     *
+     * A player who appeared and produced nothing scores a real 0 — `gamesCounted` counts appearances,
+     * not stat lines — so a quiet game is never confused with "no data".
+     */
+    if (isNcaaf) {
+      const rows = ncaafRowsByPlayer.get(playerId) ?? []
+      if (rows.length === 0) {
+        summary.missingCachePlayerIds.push(playerId)
+        continue
+      }
+      const aggregate = aggregateNcaafWeek(rows)
+      for (const key of aggregate.unmappedKeys) unmappedStatKeys.add(key)
+      if (aggregate.gamesCounted === 0) {
+        summary.missingStatPlayerIds.push(playerId)
+        continue
+      }
+      const ncaafPts = await calculateScoreFromSportConfig(season.leagueId, playerId, week, aggregate.stats, position)
+      await prisma.playerWeeklyScore.upsert({
+        where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+        update: { stats: aggregate.stats, fantasyPts: ncaafPts, isFinalized: false },
+        create: { playerId, week, season: seasonYear, sport: playerSport, stats: aggregate.stats, fantasyPts: ncaafPts, isFinalized: false },
+      })
+      summary.scoresUpserted += 1
+      continue
+    }
 
     if (isTeamDefenseRow(playerId, position)) {
       const cached = cacheByPlayer.get(playerId)
