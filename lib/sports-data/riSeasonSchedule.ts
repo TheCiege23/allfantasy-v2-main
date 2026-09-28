@@ -1,6 +1,11 @@
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
-import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
+import { classifyRiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
+import { isoDay, scheduleKeyPrefix, type ScheduleCacheDb, type ScheduleGame } from '@/lib/sports-data/riScheduleCache'
+
+// The stored shape and the reader live in the pure leaf so client-reachable code (the lineup lock)
+// can read the schedule without pulling in this module's server-only RI client.
+export { readRiScheduleWindow, scheduleKeyPrefix, type ScheduleGame } from '@/lib/sports-data/riScheduleCache'
 
 /**
  * A COMPLETE season schedule for the sports whose other feeds are not, from Rolling Insights
@@ -28,34 +33,11 @@ import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easte
  * read as "no games scheduled".
  */
 
-export type ScheduleGame = {
-  gameId: string
-  /** US Eastern day, `YYYY-MM-DD` — the same bucketing `player_game_stats.game_date` uses. */
-  day: string
-  startTime: string | null
-  /** The vendor status verbatim (`final`, `completed`, `replaced`, `postponed`, …). */
-  status: string | null
-  seasonType: RiSeasonType | null
-  eventName: string | null
-  replacedBy: string | null
-  /**
-   * The teams, in Rolling Insights' own formal naming ("Winthrop University") — the same naming the
-   * NCAAB player pool carries, which is what lets the lineup lock match a player to his game. Absent
-   * on rows synced before they were kept; a reader must treat that as "unknown", never as "no game".
-   */
-  homeTeam?: string | null
-  awayTeam?: string | null
-  homeTeamId?: string | null
-  awayTeamId?: string | null
-}
-
 const str =(v: unknown): string | null => {
   if (v == null) return null
   const t = String(v).trim()
   return t && t.toLowerCase() !== 'null' ? t : null
 }
-
-const isoDay = (d: Date) => d.toISOString().slice(0, 10)
 
 export function parseRiScheduleSeason(rows: unknown[]): ScheduleGame[] {
   const out: ScheduleGame[] = []
@@ -86,19 +68,6 @@ export function parseRiScheduleSeason(rows: unknown[]): ScheduleGame[] {
   return out
 }
 
-export function scheduleKeyPrefix(sport: string, season: number): string {
-  return `${sport.toUpperCase()}:rischedule:${season}:`
-}
-
-type CacheDb = {
-  sportsDataCache: {
-    upsert(args: unknown): Promise<unknown>
-    deleteMany(args: unknown): Promise<{ count: number }>
-    findMany(args: unknown): Promise<Array<{ cacheKey: string; data: unknown }>>
-    findUnique(args: unknown): Promise<{ data: unknown } | null>
-  }
-}
-
 export type ScheduleSyncResult = {
   sport: string
   season: number
@@ -118,7 +87,7 @@ const KEEP_MS = 400 * 86_400_000
 export async function syncRiSeasonSchedule(opts: {
   sport: string
   season: number
-  db: CacheDb
+  db: ScheduleCacheDb
   now?: Date
   fetchImpl?: typeof fetch
 }): Promise<ScheduleSyncResult> {
@@ -183,28 +152,6 @@ export async function syncRiSeasonSchedule(opts: {
     statusCounts: result.statusCounts,
   })
   return result
-}
-
-/**
- * The stored schedule for Eastern days in `[start, end)`, or `null` when no schedule has been
- * synced for the season at all — which the finalizer must treat as "cannot tell", never "empty".
- */
-export async function readRiScheduleWindow(
-  db: CacheDb,
-  args: { sport: string; season: number; window: { start: Date; end: Date } },
-): Promise<ScheduleGame[] | null> {
-  const prefix = scheduleKeyPrefix(args.sport, args.season)
-  const meta = await db.sportsDataCache.findUnique({ where: { cacheKey: `${prefix}meta` } })
-  if (!meta) return null
-  const keys: string[] = []
-  for (let t = args.window.start.getTime(); t < args.window.end.getTime(); t += 86_400_000) {
-    keys.push(`${prefix}${isoDay(new Date(t))}`)
-  }
-  const rows = await db.sportsDataCache.findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
-  return rows.flatMap((r) => {
-    const games = (r.data as { games?: ScheduleGame[] } | null)?.games
-    return Array.isArray(games) ? games : []
-  })
 }
 
 /** The season a sport's schedule sync should fetch now: the year the CURRENT season started. */

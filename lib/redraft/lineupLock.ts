@@ -23,7 +23,9 @@ import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeason
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
-import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
+// The pure cache reader, NOT riSeasonSchedule.ts: that module imports the server-only RI client, and
+// this file is in client bundles (teamDefenseIdentity -> the league Team tab).
+import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 
 /** `RedraftSeason.sport` stores the config key `NCAAFB`; every other layer says `NCAAF`. */
 function isNcaafLockSport(sport: string): boolean {
