@@ -1,9 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { designationOnset, type InjuryRowLike } from './designationOnset'
-import { triageRows, type GameDayTriage, type TriageInjury, type TriageStarter } from './gameDayTriage'
+import { triageRows, type GameDayTriage, type TriageStarter } from './gameDayTriage'
+import { readInjuryClaims } from './injuryClaims'
 import type { SectionState } from './leagueHome'
 import { isBestBallLeagueRow } from './leagueBestBall'
 import { composePlayerIdentities } from './playerIdentityCompose'
@@ -207,38 +206,14 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     if (!cur || p.externalId === p.sleeperId) playerById.set(p.sleeperId, p)
   }
 
-  const names = [...new Set([...identities.values()].map((p) => p.name).filter((name): name is string => Boolean(name)))]
   const sport = [...playerById.values()][0]?.sport ?? 'NFL'
-  const [injuryRows, sportsWeek] = await Promise.all([
-    prisma.sportsInjury
-      .findMany({
-        where: { sport, playerName: { in: names } },
-        orderBy: { fetchedAt: 'desc' },
-        select: { playerName: true, team: true, status: true, description: true, date: true, fetchedAt: true },
-      })
-      .catch(() => [] as Array<{ playerName: string; team: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>),
+  // One claim per name, with the club check against namesakes — shared with the shares list (injuryClaims.ts).
+  const [injuries, sportsWeek] = await Promise.all([
+    // Name and club from the COMPOSED identity, not an arbitrary catalog row — the row can carry a
+    // stale club, and a wrong club drops the player's own injury as a namesake's.
+    readInjuryClaims(sport, [...identities.values()].flatMap((p) => (p.name ? [{ name: p.name, team: p.team ?? null }] : []))),
     resolveSportsWeek(sport).catch(() => null),
   ])
-  const clubByName = new Map<string, string | null>()
-  for (const p of identities.values()) if (p.name) clubByName.set(p.name.trim().toLowerCase(), normalizeTeamAbbrev(p.team))
-  // Every source's row per name (a namesake on another club dropped), then one
-  // claim per name: the freshest word, the earliest report of it (designationOnset.ts).
-  const rowsByName = new Map<string, InjuryRowLike[]>()
-  for (const r of injuryRows) {
-    const key = r.playerName.trim().toLowerCase()
-    const rowClub = normalizeTeamAbbrev(r.team)
-    const club = clubByName.get(key) ?? null
-    if (rowClub && club && rowClub !== club) continue // a namesake on another club
-    const list = rowsByName.get(key) ?? []
-    list.push(r)
-    rowsByName.set(key, list)
-  }
-  const injuries = new Map<string, TriageInjury>()
-  for (const [key, rows] of rowsByName) {
-    const onset = designationOnset(rows)
-    if (!onset) continue
-    injuries.set(key, { status: onset.status, description: onset.description, reportedAt: onset.reportedAt ? onset.reportedAt.toISOString() : null })
-  }
 
   const games = sportsWeek
     ? await prisma.sportsGame
