@@ -192,6 +192,37 @@ describe('Player Finder — core view', () => {
     expect(link.getAttribute('href')).toBe('/core/players?q=Isaiah%20Likely&player=NFL%3Ari-9')
   })
 
+  it('shows the league strip — one chip per league, FA where nobody has him, "?" where we cannot read', () => {
+    renderCore({
+      signedIn: true,
+      pickLeagues: [
+        { id: 'L-warriors', name: 'Waiver Warriors', platform: 'yahoo' },
+        { id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' },
+        { id: 'L-elites', name: 'End Zone Elites', platform: 'espn' },
+        { id: 'L-gang', name: 'Gridiron Gang', platform: 'espn' },
+        { id: 'L-open', name: 'Open League', platform: 'sleeper' },
+        { id: 'L-espn2', name: 'Office Pool', platform: 'espn' },
+      ],
+      detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
+    })
+    const strip = screen.getByLabelText('Where he is in each of your leagues')
+    const links = within(strip).getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual([
+      'Waiver WarriorsSTART',
+      'Dynasty DragonsBENCH',
+      'End Zone ElitesIR',
+      'Open LeagueFA',
+      "Gridiron GangTasha's Titans",
+      'Office Pool?',
+    ])
+    expect(links[0]).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&league=L-warriors')
+  })
+
+  it('no league strip with a league in context — the card is already that league', () => {
+    renderCore({ signedIn: true, selectedLeagueId: 'L-dragons', pickLeagues: [{ id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' }] })
+    expect(screen.queryByLabelText('Where he is in each of your leagues')).toBeNull()
+  })
+
   it('names the leagues whose rosters could not be read instead of dropping them', () => {
     renderCore({
       detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },

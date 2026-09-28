@@ -3526,3 +3526,108 @@
     min-height: 44px;
   }
 }
+
+/* ── The league strip (leagueStrip.ts): one chip per league under the player's name ───────── */
+.af-core .af-pf-strip {
+  margin-top: 10px;
+}
+.af-core .af-pf-strip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-strip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  min-height: 30px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 12px;
+  text-decoration: none;
+}
+.af-core .af-pf-strip-chip:hover,
+.af-core .af-pf-strip-chip:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-strip-league {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-core .af-pf-strip-badge {
+  flex: none;
+  max-width: 110px;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Yours: starting (green), bench / taxi (neutral), IR (amber). */
+.af-core .af-pf-strip-chip[data-state='start'] .af-pf-strip-badge {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-pf-strip-chip[data-state='ir'] .af-pf-strip-badge {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-core .af-pf-strip-chip[data-state='bench'] .af-pf-strip-badge,
+.af-core .af-pf-strip-chip[data-state='taxi'] .af-pf-strip-badge {
+  background: var(--line2);
+  color: var(--text);
+}
+/* A starter who cannot play: the whole chip says so. */
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='bad'] {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='bad'] .af-pf-strip-badge {
+  background: var(--bad);
+  color: var(--bg);
+}
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='warn'] {
+  border-color: var(--warn);
+}
+.af-core .af-pf-strip-chip[data-state='start'][data-tone='warn'] .af-pf-strip-badge {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+/* Available: the accent — the one state you can act on without a trade. */
+.af-core .af-pf-strip-chip[data-state='free'] .af-pf-strip-badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* Someone else's, and unreadable: quiet. Unreadable is dashed — not "free", not "taken". */
+.af-core .af-pf-strip-chip[data-state='other'] {
+  color: var(--muted);
+}
+.af-core .af-pf-strip-chip[data-state='unknown'] {
+  border-style: dashed;
+  color: var(--muted);
+}
+.af-core .af-pf-strip-sum {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-strip-chip {
+    min-height: 44px;
+    max-width: 100%;
+  }
+}
