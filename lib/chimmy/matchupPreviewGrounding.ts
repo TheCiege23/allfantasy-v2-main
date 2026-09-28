@@ -59,10 +59,17 @@ const defaultDeps: MatchupPreviewDeps = {
     return leagues.filter((l) => Number(l.season) === latest).map((l) => l.id)
   },
   getBoard: getWeekBoard,
+  /*
+   * `getWeekBoard` already reads the verdict for the board (`EliminationWeek.settle`), so the chat
+   * repeats the screen's answer and does not query twice. Only a week it did not read (over its
+   * cap) is read here.
+   */
   loadSettle: (e) =>
-    e.yourScore == null
-      ? Promise.resolve(null)
-      : loadEliminationSettle({ platformLeagueId: e.platformLeagueId, season: e.season, week: e.week, yourRosterId: e.yourRosterId }),
+    e.settle !== undefined
+      ? Promise.resolve(e.settle)
+      : e.yourScore == null
+        ? Promise.resolve(null)
+        : loadEliminationSettle({ platformLeagueId: e.platformLeagueId, season: e.season, week: e.week, yourRosterId: e.yourRosterId }),
 }
 
 const pts = (n: number) => n.toFixed(1)

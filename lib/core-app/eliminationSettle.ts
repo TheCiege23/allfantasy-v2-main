@@ -123,3 +123,31 @@ export function settleSentence(s: EliminationSettle): string {
     }
   }
 }
+
+/**
+ * What the week board's value column shows for a settle verdict. CLIENT-SAFE: this module has no
+ * runtime imports, so the board and Your Week can call it without pulling a server module in.
+ *
+ * Null means "no verdict to show" — the caller keeps its own "+N clear" / "OUT on the block".
+ */
+export function settleBadge(
+  settle: EliminationSettle | null | undefined,
+): { label: string | null; sub: string; tone: 'up' | 'down' | null; aria: string } | null {
+  if (!settle) return null
+  switch (settle.verdict) {
+    case 'safe':
+      return { label: 'SAFE', sub: 'decided', tone: 'up', aria: 'Safe this week: your starters and enough teams below you have finished' }
+    case 'chopped':
+      return { label: 'OUT', sub: 'decided', tone: 'down', aria: 'Every team has finished and yours is eliminated this week' }
+    case 'no_chop':
+      return { label: null, sub: 'no chop this week', tone: null, aria: 'Nobody is eliminated this week' }
+    case 'open': {
+      const mine = settle.yourUpcoming + settle.yourLive
+      if (mine > 0) return { label: null, sub: `${mine} to play`, tone: null, aria: `${mine} of your starters still to finish` }
+      if (settle.cutLinePending) {
+        return { label: null, sub: 'last team playing', tone: null, aria: `Your starters are done; the lowest team still has ${settle.cutLinePending} to finish` }
+      }
+      return null
+    }
+  }
+}

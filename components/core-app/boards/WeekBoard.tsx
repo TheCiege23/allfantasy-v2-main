@@ -10,6 +10,8 @@ import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/wee
  * exists for precisely this trap.
  */
 import { MIN_WEEKS_FOR_PROJECTION } from '@/lib/core-app/weekBoardRules'
+// Client-safe: eliminationSettle.ts has no runtime imports (its one import is a type).
+import { settleBadge } from '@/lib/core-app/eliminationSettle'
 import {
   BoardHead,
   FooterSummary,
@@ -475,24 +477,34 @@ export function WeekBoard({
                         not started
                       </span>
                     </span>
-                  ) : (
-                    <span
-                      className="af-bd-val af-bd-val--form"
-                      data-tone={e.onTheBlock ? 'down' : 'up'}
-                      aria-label={
-                        e.onTheBlock
-                          ? `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize} — you are the one eliminated as it stands`
-                          : `Your ${e.yourScore?.toFixed(1)} is ${e.margin.toFixed(1)} points clear of the cut line of ${e.cutLine?.toFixed(1)}`
-                      }
-                    >
-                      <span className="af-num" aria-hidden>
-                        {e.onTheBlock ? 'OUT' : `+${e.margin.toFixed(1)}`}
+                  ) : (() => {
+                    /*
+                      A settled week says so: "SAFE · decided" rather than "+41.2 clear" for
+                      a user who cannot be chopped, and "N to play" while it is still open.
+                    */
+                    const badge = settleBadge(e.settle)
+                    const margin = e.margin ?? 0 // non-null on this branch; closures lose the narrowing
+                    return (
+                      <span
+                        className="af-bd-val af-bd-val--form"
+                        data-tone={badge?.tone ?? (e.onTheBlock ? 'down' : 'up')}
+                        data-settled={badge?.sub === 'decided' ? 'true' : undefined}
+                        aria-label={
+                          (e.onTheBlock
+                            ? `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize} — you are the one eliminated as it stands`
+                            : `Your ${e.yourScore?.toFixed(1)} is ${margin.toFixed(1)} points clear of the cut line of ${e.cutLine?.toFixed(1)}`) +
+                          (badge ? `. ${badge.aria}` : '')
+                        }
+                      >
+                        <span className="af-num" aria-hidden>
+                          {badge?.label ?? (e.onTheBlock ? 'OUT' : `+${margin.toFixed(1)}`)}
+                        </span>
+                        <span className="af-bd-val-sub" aria-hidden>
+                          {badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear')}
+                        </span>
                       </span>
-                      <span className="af-bd-val-sub" aria-hidden>
-                        {e.onTheBlock ? 'on the block' : 'clear'}
-                      </span>
-                    </span>
-                  )}
+                    )
+                  })()}
                 </Link>
               </li>
             ))}

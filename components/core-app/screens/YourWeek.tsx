@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+// Client-safe: eliminationSettle.ts has no runtime imports (its one import is a type).
+import { settleBadge } from '@/lib/core-app/eliminationSettle'
 /*
  * ⚠ THE VALUE COMES FROM `weekBoardRules`, THE TYPES FROM `weekBoard`. The types
  * are erased at build time so importing them from the `server-only` loader is
@@ -332,25 +334,28 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
                 */}
                 {e.margin == null ? (
                   <span className="af-wk-lean-prob af-wk-lean-prob--none">—</span>
-                ) : e.onTheBlock ? (
-                  <span
-                    className="af-wk-lean-prob af-wk-lean-prob--form"
-                    data-tone="down"
-                    title={`Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize}`}
-                  >
-                    OUT
-                    <span className="af-wk-lean-prob-sub">on the block</span>
-                  </span>
-                ) : (
-                  <span
-                    className="af-wk-lean-prob af-wk-lean-prob--form"
-                    data-tone="up"
-                    title={`Your ${e.yourScore?.toFixed(1)} against a cut line of ${e.cutLine?.toFixed(1)}`}
-                  >
-                    +{e.margin.toFixed(1)}
-                    <span className="af-wk-lean-prob-sub">clear</span>
-                  </span>
-                )}
+                ) : (() => {
+                  /*
+                    A settled week says so ("SAFE · decided"), and an open one says what is
+                    still to play, rather than a bare margin for a race that has stopped.
+                  */
+                  const badge = settleBadge(e.settle)
+                  const margin = e.margin ?? 0 // non-null on this branch; closures lose the narrowing
+                  const title = e.onTheBlock
+                    ? `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize}`
+                    : `Your ${e.yourScore?.toFixed(1)} against a cut line of ${e.cutLine?.toFixed(1)}`
+                  return (
+                    <span
+                      className="af-wk-lean-prob af-wk-lean-prob--form"
+                      data-tone={badge?.tone ?? (e.onTheBlock ? 'down' : 'up')}
+                      data-settled={badge?.sub === 'decided' ? 'true' : undefined}
+                      title={badge ? `${title}. ${badge.aria}` : title}
+                    >
+                      {badge?.label ?? (e.onTheBlock ? 'OUT' : `+${margin.toFixed(1)}`)}
+                      <span className="af-wk-lean-prob-sub">{badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear')}</span>
+                    </span>
+                  )
+                })()}
 
                 <span className="af-wk-lean-score">
                   {e.fieldSize > 0 ? (
