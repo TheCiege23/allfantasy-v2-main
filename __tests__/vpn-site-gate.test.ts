@@ -24,6 +24,10 @@ import { NextRequest } from "next/server"
 
 vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }))
 vi.mock("@/lib/geo/geoIpFetch", () => ({ fetchIpApi: vi.fn(), fetchProxycheck: vi.fn() }))
+// No Private Relay feed stored: every relay user is refused, the rule these tests pin.
+// __tests__/private-relay-placement.test.ts covers the feed being present.
+vi.mock("@/lib/geo/privateRelayEdge", () => ({ getRelayRangeSetEdge: vi.fn(async () => null) }))
+vi.mock("@/lib/geo/privateRelayStore", () => ({ getRelayRangeSetNode: vi.fn(async () => null) }))
 
 import { getToken } from "next-auth/jwt"
 import { middleware } from "@/middleware"

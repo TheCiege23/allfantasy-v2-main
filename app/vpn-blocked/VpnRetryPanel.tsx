@@ -27,7 +27,7 @@ type Check =
  * an installed iPhone app resumes this page after the person visits Settings.
  * The href stays on the anchor so the button still works without JavaScript.
  */
-export function VpnRetryPanel({ href }: { href: string }) {
+export function VpnRetryPanel({ href, paidScope = false }: { href: string; paidScope?: boolean }) {
   const [check, setCheck] = useState<Check>({ state: "idle" })
   const busy = useRef(false)
 
@@ -37,7 +37,10 @@ export function VpnRetryPanel({ href }: { href: string }) {
       busy.current = true
       if (!quiet) setCheck({ state: "checking" })
       try {
-        const res = await fetch("/api/geo/vpn-status?recheck=1", { cache: "no-store", credentials: "same-origin" })
+        const res = await fetch(`/api/geo/vpn-status?recheck=1${paidScope ? "&scope=paid" : ""}`, {
+          cache: "no-store",
+          credentials: "same-origin",
+        })
         const body = res.ok ? ((await res.json()) as { blocked?: unknown; kind?: unknown }) : null
         if (!body || body.blocked !== true) {
           window.location.replace(href)
@@ -54,7 +57,7 @@ export function VpnRetryPanel({ href }: { href: string }) {
         busy.current = false
       }
     },
-    [href],
+    [href, paidScope],
   )
 
   useEffect(() => {

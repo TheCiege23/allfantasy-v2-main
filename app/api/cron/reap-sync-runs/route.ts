@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 
 import { requireCronAuth } from '../_auth'
 import { purgeExpiredCache } from '@/lib/enrichment-cache'
+import { refreshPrivateRelayRanges } from '@/lib/geo/privateRelayIngest'
 import { prisma } from '@/lib/prisma'
 import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
@@ -24,7 +25,7 @@ const JOB = 'cron-reap-sync-runs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60
 
 /**
  * GET /api/cron/reap-sync-runs
@@ -85,14 +86,30 @@ export async function GET(request: NextRequest) {
   const purgeWarnings =
     cachePurge.available || cachePurge.error === 'disabled' ? [] : [`cache purge: ${cachePurge.error ?? 'unavailable'}`]
 
+  /*
+   * The third job: Apple's iCloud Private Relay egress ranges, which let the VPN
+   * gate PLACE a relay user by state instead of refusing them
+   * (lib/geo/privateRelayRanges). Called every hour, acts at most once a day —
+   * see lib/geo/privateRelayIngest for why it rides here (the cron schedule is
+   * at its ceiling). Like the purge, its outcome is a warning, never a failed reap;
+   * a failed refresh keeps the last good set, and the stored set retires itself
+   * after 30 days without one, returning relay users to "blocked".
+   */
+  const privateRelay = await refreshPrivateRelayRanges().catch((err: unknown) => ({
+    status: 'failed' as const,
+    error: String((err as Error)?.message ?? err),
+    keptFetchedAt: null,
+  }))
+  if (privateRelay.status === 'failed') purgeWarnings.push(`private relay ranges: ${privateRelay.error}`)
+
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
   // nothing: if the model is unreachable, this insert would fail anyway.
   await recordSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge } },
+    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge, privateRelay } },
     Date.now() - startedAt,
   )
 
-  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge })
+  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay })
 }

@@ -272,6 +272,11 @@ const DATA_API_HOST_PATTERNS = [
    */
   /(^|\.)ipapi\.co$/i,
   /(^|\.)proxycheck\.io$/i,
+  // Apple's iCloud Private Relay egress feed (a multi-megabyte public CSV). Read
+  // once a day by lib/geo/privateRelayIngest through lib/geo/privateRelayFetch,
+  // which is allowlisted below; a fetch of it from anywhere else — above all from
+  // a request path — is reported.
+  /(^|\.)mask-api\.icloud\.com$/i,
 ];
 
 /**
@@ -576,6 +581,16 @@ const ALLOWED_PATH_PATTERNS = [
    * hostname setting `cf-ipcountry`, after which this path never runs at all.
    */
   /^lib\/geo\/geoIpFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * Apple's Private Relay egress feed, fetched — the same inverted split as
+   * geoIpFetch above. Its ONE runtime importer is lib/geo/privateRelayIngest,
+   * run from the hourly reaper (/api/cron/reap-sync-runs), and request paths read
+   * the parsed ranges from Postgres (lib/geo/privateRelayStore) — never this file.
+   * Conditional on that staying true:
+   *     grep -rnE "privateRelayFetch" --include=*.ts --include=*.tsx .
+   * must show privateRelayIngest and tests, and nothing else.
+   */
+  /^lib\/geo\/privateRelayFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The api-sports.io adapter. Allowlisted on a FULL caller census — every
    * import form, aliased, relative and dynamic:
