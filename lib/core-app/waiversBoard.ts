@@ -10,6 +10,7 @@ import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { isOutDesignation, isRuledOut } from './injuryStatus'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 
 /**
@@ -114,6 +115,22 @@ export type WaiversBoardData = {
   marketLeagues: number
   /** The projection week every figure on the board is drawn from. */
   at: { season: string; week: number } | null
+  /**
+   * One kickoff per fixture of the projection week (ISO), so the renderer can say how much of it
+   * has already been played. Null when the schedule is unread.
+   *
+   * ⚠ KICKOFF TIMES, NOT A "PLAYED" COUNT — THIS MODULE MUST STAY CLOCK-FREE. The board is served
+   * from the screen-summary cache (`waiversBoardSummary`), which is only sound because nothing
+   * here reads `now`; a count taken at build time would freeze in the cache. The first version of
+   * this field did exactly that and the summary's own guard test caught it. The renderer counts.
+   *
+   * 🛑 THE FEED HOLDS ONE WEEK, AND ON A MONDAY THAT WEEK IS OVER. Production 2026-09-28: the board
+   * ranked week-3 projections with 13 of 14 week-3 games played, for claims that process Tuesday for
+   * week 4. There is no week-4 line to rank on instead (see projections-hold-one-week), so the
+   * board says which week it is pricing and how much of it is gone rather than presenting it as
+   * next week's points.
+   */
+  weekKickoffs: string[] | null
 }
 
 const EMPTY: WaiversBoardData = {
@@ -122,6 +139,7 @@ const EMPTY: WaiversBoardData = {
   withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
   marketLeagues: 0,
   at: null,
+  weekKickoffs: null,
 }
 
 /** How many free-agent candidates to consider. The wire below this is noise. */
@@ -578,5 +596,27 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     withheld,
     marketLeagues: market.leaguesCounted,
     at,
+    /* A schedule read that fails costs the note, never the board. */
+    weekKickoffs: await projectionWeekKickoffs(at).catch(() => null),
   }
+}
+
+/** One kickoff per distinct fixture of the projection week. See `weekKickoffs`. */
+async function projectionWeekKickoffs(at: { season: string; week: number }): Promise<string[] | null> {
+  const season = Number(at.season)
+  if (!Number.isFinite(season)) return null
+  const games = await prisma.sportsGame
+    .findMany({
+      where: { sport: 'NFL', season, week: at.week, seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season'] } },
+      select: { homeTeam: true, awayTeam: true, startTime: true },
+    })
+    .catch(() => null)
+  if (!games || games.length === 0) return null
+  /* Each game is stored by more than one source; one fixture per club pair. */
+  const kickoffByFixture = new Map<string, Date | null>()
+  for (const g of games) {
+    const key = [normalizeTeamAbbrev(g.homeTeam) ?? g.homeTeam, normalizeTeamAbbrev(g.awayTeam) ?? g.awayTeam].join('|')
+    if (!kickoffByFixture.has(key) || (g.startTime && !kickoffByFixture.get(key))) kickoffByFixture.set(key, g.startTime)
+  }
+  return [...kickoffByFixture.values()].filter((t): t is Date => t != null).map((t) => t.toISOString()).sort()
 }

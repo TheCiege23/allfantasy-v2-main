@@ -248,6 +248,18 @@ describe("the middleware gate", () => {
     expect(location(await middleware(request("/login", RELAY_NY)))?.pathname).toBe("/vpn-blocked")
   })
 
+  it("asks for the feed at the served origin, never the Railway bind address", async () => {
+    // Production shape: Next builds request.url from the bind address.
+    const req = new NextRequest(new URL("https://0.0.0.0:8080/login"), {
+      headers: { host: "www.allfantasy.ai", "cf-ipcountry": "US", "cf-region-code": "PA", "cf-connecting-ip": RELAY_NY },
+    })
+    expect(location(await middleware(req))).toBeNull()
+    expect(mockedEdge).toHaveBeenCalledTimes(1)
+    const origin = mockedEdge.mock.calls[0]![0]
+    expect(origin).not.toContain("0.0.0.0")
+    expect(new URL(origin).protocol).toBe("https:")
+  })
+
   it("never asks for the feed for an ordinary visitor", async () => {
     VERDICTS["198.51.100.99"] = { proxy: "no", type: "Residential", asn: "AS7922", provider: "Comcast" }
     await middleware(request("/login", "198.51.100.99"))

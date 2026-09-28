@@ -1,4 +1,5 @@
 import 'server-only'
+import { realManagerName } from './managerName'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
@@ -260,9 +261,9 @@ export function collapseMirroredTrades<T extends { leagueId: string; transaction
  * manager" says we could not resolve it, which is true and legible.
  */
 export function managerLabel(raw: string | null | undefined, resolved?: string | null): string {
-  const r = resolved?.trim()
+  const r = realManagerName(resolved)
   if (r) return r
-  const v = String(raw ?? '').trim()
+  const v = realManagerName(raw) ?? ''
   if (!v) return 'a manager'
   return /^\d{6,}$/.test(v) ? 'a manager' : v
 }
@@ -476,7 +477,7 @@ export async function getTradesBoard(
       e = { byUserId: new Map(), byRoster: new Map() }
       managersByLeague.set(row.leagueId, e)
     }
-    const name = row.ownerName?.trim() || row.teamName?.trim() || ''
+    const name = realManagerName(row.ownerName) || realManagerName(row.teamName) || ''
     if (row.platformUserId) {
       e.byUserId.set(String(row.platformUserId), { name, mine: row.claimedByUserId === userId })
     }

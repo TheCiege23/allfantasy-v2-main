@@ -118,6 +118,22 @@ describe('getSeasonOutlook', () => {
     expect(out.leagues[0].weeksRemaining).toBe(3)
     expect(out.leagues[0].assumptions.remainingGames).toBe(12)
   })
+  /*
+   * Production 2026-09-28 (Monday): the swing card asked "win week 3?" of a league 110 points down
+   * on the scoreboard. A game with points on the board is in progress, not a game to swing.
+   */
+  it('puts the swing game on the first week nobody has scored in, not the one in progress', async () => {
+    h.leagueMetadata = { season: 2026, settings: { leg: 4 } }
+    for (const r of h.matchups) {
+      if (r.week === 4) { r.pointsFor = 29; r.pointsAgainst = 47; r.win = 0 }
+    }
+    const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(out.swingByLeague['L1']?.week).toBe(5)
+  })
+  it('still swings the current week before anybody has scored in it', async () => {
+    const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(out.swingByLeague['L1']?.week).toBe(4)
+  })
   it('uses the league-stated field and stops the schedule at the last regular week', async () => {
     const out = await getSeasonOutlook('me', [LEAGUE])
     const l = out.leagues[0]
