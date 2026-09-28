@@ -1,5 +1,6 @@
 import 'server-only'
 import { realManagerName } from './managerName'
+import { translateProviderIdsToSleeper, type ProviderIdTranslation } from '@/lib/player-identity/providerToSleeperIds'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
@@ -41,6 +42,7 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
  *     redraft_trade_proposals   0 rows
  *     trade_block_entries       0 rows
  *     LeagueTrade           7,781 rows, 100% platform='sleeper'
+ *     (true when measured; ESPN trades are ingested now — see `translateForeignTrades`)
  *
  * `LeagueTrade` has **no status column** — it is COMPLETED trade history
  * reconstructed from Sleeper transactions. And Sleeper's own `pending` state is
@@ -485,7 +487,7 @@ export async function getTradesBoard(
   }
 
   const historyIds = histories.map((h) => h.id)
-  const trades =
+  const rawTrades =
     historyIds.length > 0
       ? await prisma.leagueTrade
           .findMany({
@@ -519,10 +521,15 @@ export async function getTradesBoard(
               partnerName: true,
               /* Resolves the OTHER side's manager via LeagueTeam.externalId. */
               partnerRosterId: true,
+              /* Which id space `playersGiven`/`playersReceived` are in — see `translateForeignTrades`. */
+              platform: true,
+              sport: true,
             },
           })
           .catch(() => [])
       : []
+
+  const { trades, foreignLabel } = await translateForeignTrades(rawTrades)
 
   /*
    * Each league's own value book, and the distinct set the query must cover.
@@ -720,9 +727,9 @@ export async function getTradesBoard(
        * would make a 2-for-1 render as a 1-for-1 — a trade the manager never
        * made, shown as fact.
        */
-      name: p?.name ?? `Player ${id}`,
-      position: p?.position ?? null,
-      team: p?.team ?? null,
+      name: p?.name ?? foreignLabel.get(id)?.name ?? `Player ${id}`,
+      position: p?.position ?? foreignLabel.get(id)?.position ?? null,
+      team: p?.team ?? foreignLabel.get(id)?.team ?? null,
       imageUrl: p?.imageUrl ?? null,
       value: v?.value ?? defence?.value ?? null,
     }
@@ -1022,4 +1029,67 @@ export function pointBoardAtReachableLeagues(
       return id === p.leagueId ? p : { ...p, leagueId: id }
     }),
   }
+}
+
+/**
+ * Put every trade's player ids into the Sleeper id space this board names, prices and grades in.
+ *
+ * 🛑 THE BOARD RESOLVED SLEEPER IDS ONLY, AND ITS HEADER STILL SAYS `LeagueTrade` IS 100% SLEEPER.
+ * That stopped being true when ESPN trades began to be ingested: an ESPN trade printed
+ * "Player 4432620" on /core (production audit 2026-09-28), unnamed AND unpriced, because the
+ * FantasyCalc book is keyed on Sleeper ids too. So a non-Sleeper id is translated to its Sleeper id
+ * through `PlayerIdentityMap` (the platform's own column), and from there the board treats the
+ * trade exactly like a Sleeper one.
+ *
+ * ⚠ AN ID THAT DOES NOT TRANSLATE IS NAMESPACED, NEVER LEFT BARE. A foreign id can equal a real
+ * Sleeper id numerically — the collision #1455 audited out of 13 readers — and a bare one would be
+ * named and PRICED as whichever Sleeper player owns that number. `foreign:<platform>:<id>` misses
+ * every Sleeper-keyed map by construction; `foreignLabel` names it (the identity's own name when it
+ * has one without a Sleeper id, otherwise "Unrecognised <Platform> player"), and it stays unpriced.
+ */
+const FOREIGN_PLATFORM_LABEL: Record<string, string> = { espn: 'ESPN', yahoo: 'Yahoo', mfl: 'MFL', fantrax: 'Fantrax', fleaflicker: 'Fleaflicker' }
+
+export async function translateForeignTrades<T extends { platform: string | null; sport: string | null; playersGiven: unknown; playersReceived: unknown }>(
+  rows: T[],
+): Promise<{ trades: T[]; foreignLabel: Map<string, { name: string; position: string | null; team: string | null }> }> {
+  const foreignLabel = new Map<string, { name: string; position: string | null; team: string | null }>()
+  const platformOf = (t: T) => String(t.platform ?? 'sleeper').toLowerCase()
+  const sportOf = (t: T) => String(t.sport ?? 'nfl').toUpperCase()
+
+  const groups = new Map<string, { platform: string; sport: string; ids: string[] }>()
+  for (const t of rows) {
+    const platform = platformOf(t)
+    if (platform === 'sleeper' || platform === 'native') continue
+    const key = `${platform}|${sportOf(t)}`
+    const g = groups.get(key) ?? { platform, sport: sportOf(t), ids: [] }
+    g.ids.push(...idsOf(t.playersGiven), ...idsOf(t.playersReceived))
+    groups.set(key, g)
+  }
+  if (groups.size === 0) return { trades: rows, foreignLabel }
+
+  const translated = new Map<string, ProviderIdTranslation>()
+  await Promise.all([...groups.values()].map(async (g) => {
+    const found = await translateProviderIdsToSleeper(g.platform, g.ids, g.sport).catch(() => new Map<string, ProviderIdTranslation>())
+    for (const [id, x] of found) translated.set(`${g.platform}|${g.sport}|${id}`, x)
+  }))
+
+  const trades = rows.map((t) => {
+    const platform = platformOf(t)
+    if (platform === 'sleeper' || platform === 'native') return t
+    const sport = sportOf(t)
+    const toSleeper = (ids: string[]) =>
+      ids.map((id) => {
+        const x = translated.get(`${platform}|${sport}|${id}`)
+        if (x?.sleeperId) return x.sleeperId
+        const namespaced = `foreign:${platform}:${id}`
+        foreignLabel.set(namespaced, {
+          name: x?.name || `Unrecognised ${FOREIGN_PLATFORM_LABEL[platform] ?? platform} player`,
+          position: x?.position ?? null,
+          team: x?.team ?? null,
+        })
+        return namespaced
+      })
+    return { ...t, playersGiven: toSleeper(idsOf(t.playersGiven)), playersReceived: toSleeper(idsOf(t.playersReceived)) }
+  })
+  return { trades, foreignLabel }
 }
