@@ -343,15 +343,15 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     // A vision reader writing the suffix with a comma, as many rosters print it.
     screenshot: 'Trade gives: Quincy Williams, Carson Schwesinger\nTrade receives: Tyrone Tracy, Jr., Ryan Fitzgerald, 2027 Round 1',
     engine: {
-      trade: { 'Should I trade Quincy Williams, Carson Schwesinger for Tyrone Tracy, Jr., Ryan Fitzgerald, 2027 1st-round pick?': KBFL_AS_MEASURED },
+      trade: { 'Should I trade Quincy Williams, Carson Schwesinger for Tyrone Tracy Jr., Ryan Fitzgerald, 2027 1st-round pick?': KBFL_AS_MEASURED },
     },
-    expect: { kind: 'trade', status: 'needs_data', gap: 'trade_impact_incomplete', verdict: 'HOLD', billing: 'free' },
-    gaps: {
-      gap: {
-        today: 'screenshot_assets_unresolved',
-        why: '`screenshotTradeQuestion` counts assets by splitting on commas, so "Tyrone Tracy, Jr." counts as two. Five read correctly become six expected, the engine resolves five, and a correctly read offer is refused as unresolved.',
-      },
-      verdict: { today: 'none', why: 'Follows from the miscount: the refusal carries no scenario, so no HOLD card either.' },
+    /*
+     * Refused as `screenshot_assets_unresolved` until 2026-09-28: the comma made "Jr." a sixth asset.
+     * The engine must now be asked with the suffix joined, the same text it resolves without a comma.
+     */
+    expect: {
+      kind: 'trade', status: 'needs_data', gap: 'trade_impact_incomplete', verdict: 'HOLD', billing: 'free',
+      extraction: 'Should I trade Quincy Williams, Carson Schwesinger for Tyrone Tracy Jr., Ryan Fitzgerald, 2027 1st-round pick?',
     },
   },
   {

@@ -31,6 +31,30 @@ describe('trade screenshot evidence', () => {
   it('does not classify non-trade images as trade offers', () => {
     expect(screenshotTradeQuestion('Score: 24')).toEqual({ question: null, clarification: null })
   })
+  /*
+   * A comma before a suffix used to count as a new asset, so a correctly read offer was refused as
+   * unresolved. The engine's name parser also dropped the suffix, so the comma goes before either sees it.
+   */
+  it.each([
+    ['Tyrone Tracy, Jr., Ryan Fitzgerald, 2027 Round 1', 'Tyrone Tracy Jr., Ryan Fitzgerald, 2027 1st-round pick', 3],
+    ['Marvin Harrison, Jr. & Ryan Fitzgerald', 'Marvin Harrison Jr. & Ryan Fitzgerald', 2],
+    ['Kenneth Walker, III and Ryan Fitzgerald', 'Kenneth Walker III and Ryan Fitzgerald', 2],
+    ['Ryan Fitzgerald, Michael Pittman, Jr.', 'Ryan Fitzgerald, Michael Pittman Jr.', 2],
+    ['Odell Beckham, Jr; Ryan Fitzgerald', 'Odell Beckham Jr; Ryan Fitzgerald', 2],
+  ])('keeps a comma-separated suffix on its name: %s', (received, normalized, receivedCount) => {
+    const r = screenshotTradeQuestion(`Trade gives: Quincy Williams, Carson Schwesinger\nTrade receives: ${received}`)
+    expect(r.question).toBe(`Should I trade Quincy Williams, Carson Schwesinger for ${normalized}?`)
+    expect(r.assetCount).toBe(2 + receivedCount)
+  })
+  it.each([
+    // No comma: unchanged, as before.
+    ['Tyrone Tracy Jr., Ryan Fitzgerald', 2],
+    // A name that merely begins with a suffix-like letter after a comma is a separate asset.
+    ['Ryan Fitzgerald, Vic Beasley', 2],
+    ['Ryan Fitzgerald, Van Jefferson', 2],
+  ])('does not merge real separate assets: %s', (received, receivedCount) => {
+    expect(screenshotTradeQuestion(`Trade gives: Quincy Williams\nTrade receives: ${received}`).assetCount).toBe(1 + receivedCount)
+  })
   it('reads the actual attachment for an image preview', async () => {
     expect(await readScreenshotPreview(new File(['image-bytes'], 'trade.png', { type: 'image/png' }))).toMatch(/^data:image\/png;base64,/)
   })
