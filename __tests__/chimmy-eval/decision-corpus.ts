@@ -277,13 +277,9 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
       kind: 'trade', status: 'needs_data', gap: 'trade_impact_incomplete', verdict: 'HOLD', billing: 'free',
       extraction: KBFL_IMAGE_MESSAGE,
       says: ['HOLD:', 'Trade Center grade: C', '4033.0 given, 3799.0 received', 'Lineup impact unavailable', 'no weekly projection',
-        'LB roster depth: 5 before, 3 after', 'Playoff effect unavailable', 'adds future draft flexibility', 'Future-season results are not computed', 'no charge'],
-    },
-    gaps: {
-      evidence: {
-        today: 'missing: no charge',
-        why: 'The partial KBFL answer is free (needs_data), but unlike the season_impact_missing remedy it never tells the user so. They see HOLD with no statement that nothing was charged.',
-      },
+        'LB roster depth: 5 before, 3 after', 'Playoff effect unavailable', 'adds future draft flexibility', 'Future-season results are not computed',
+        // Missing until 2026-09-28: a free HOLD that never said it was free.
+        'This answer is not charged.'],
     },
   },
   {

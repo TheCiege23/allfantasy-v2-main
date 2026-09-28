@@ -2802,9 +2802,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       }
     : null
   if (tradeTargetResult?.status === 'unresolved') {
+    // Says it in the text, as every free decision answer now does (`prepareChimmyDecisionAnswer`'s gap).
+    const unresolvedText = `${tradeTargetResult.detail}\nThis answer is not charged.`
     return NextResponse.json({
-      response: tradeTargetResult.detail,
-      result: tradeTargetResult.detail,
+      response: unresolvedText,
+      result: unresolvedText,
       source: 'chimmy_trade_target_verdict',
       sessionId,
       meta: {

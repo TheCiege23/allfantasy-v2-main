@@ -95,6 +95,8 @@ export const INVARIANTS: ReadonlyArray<readonly [string, (a: ChimmyDecisionAnswe
    * checking only the first let offer 2's "YES," through while offer 1 read HOLD.
    */
   ['a free partial answer carries no YES, NO or COUNTER verdict on any line', (a) => a.status !== 'needs_data' || !/^(?:YES,|NO:|COUNTER:)/m.test(a.answer)],
+  /* Free is only worth something if the user can tell. The KBFL HOLD did not say so until 2026-09-28. */
+  ['a free answer says it is not charged', (a) => a.status !== 'needs_data' || /\bno charge\b|\bnot charged\b/i.test(a.answer)],
   ['a ready answer names its sources', (a) => a.status !== 'ready' || a.sources.length > 0],
   ['the league id is the proven one, never the raw request', (a) => a.leagueId === null || a.leagueId === 'proven-league'],
   ['no private reason, error text or infrastructure detail', (a) => !/not_member|not_found|prisma|timed out|10\.0\.0\.|Error\b/.test(a.answer)],
@@ -218,7 +220,7 @@ describe('positive control: the scorer rejects known-bad answers', () => {
   const kbfl = DECISION_CORPUS.find((c) => c.id === 'kbfl-screenshot-as-measured')!
   const good: Observed = {
     kind: 'trade', status: 'needs_data', gap: 'trade_impact_incomplete', verdict: 'HOLD', billing: 'free',
-    extraction: kbfl.expect.extraction!, evidence: kbfl.gaps!.evidence!.today, consistency: 'n/a', invariants: 'ok',
+    extraction: kbfl.expect.extraction!, evidence: 'ok', consistency: 'n/a', invariants: 'ok',
   }
 
   it('accepts the answer the corpus describes', () => {
@@ -228,7 +230,7 @@ describe('positive control: the scorer rejects known-bad answers', () => {
   it.each([
     ['a partial KBFL answer sold as a paid verdict', { status: 'ready', billing: 'charge', verdict: 'YES', gap: 'none' }, ['status', 'gap', 'verdict', 'billing']],
     ['a pick dropped from the screenshot before the engine saw it', { extraction: 'Should I trade Quincy Williams, Carson Schwesinger for Tyrone Tracy Jr., Ryan Fitzgerald?' }, ['extraction']],
-    ['the known evidence gap closing', { evidence: 'ok' }, ['evidence']],
+    ['a free KBFL HOLD that does not say it is free', { evidence: 'missing: This answer is not charged.', invariants: 'a free answer says it is not charged' }, ['evidence', 'invariants']],
     ['a leaked private reason', { invariants: 'no private reason, error text or infrastructure detail' }, ['invariants']],
   ] as const)('flags %s', (_name, bad, dims) => {
     const failures = score(kbfl, { ...good, ...bad })
