@@ -6,7 +6,7 @@ import {
   assertSafeText,
   COMMISSIONER_REVIEW_FRAMING,
 } from '@/lib/chimmy-trade/answerPolicy'
-import { commissionerTradeReview, explainPlayerMarketValue } from '@/lib/chimmy-trade/tradeIntelligenceTools'
+import { explainPlayerMarketValue } from '@/lib/chimmy-trade/tradeIntelligenceTools'
 
 describe('T10 intent classifier (deterministic, no hidden-id guessing)', () => {
   const cases: Array<[string, string]> = [
@@ -71,20 +71,6 @@ describe('T10 answer policy / prompt hardening', () => {
 })
 
 describe('T10 permission + insufficient-data (no DB required — early returns)', () => {
-  it('manager cannot see commissioner review', async () => {
-    const r = await commissionerTradeReview('any-proposal', 'manager')
-    expect(r.ok).toBe(false)
-    expect(r.data).toBeNull()
-    expect(r.limitations[0]?.code).toBe('PERMISSION_REQUIRED')
-    expect(JSON.stringify(r).toLowerCase()).not.toContain('collusion')
-  })
-
-  it('non-member cannot see commissioner review', async () => {
-    const r = await commissionerTradeReview('any-proposal', 'non_member')
-    expect(r.ok).toBe(false)
-    expect(r.limitations[0]?.code).toBe('PERMISSION_REQUIRED')
-  })
-
   it('player value with no sport scope returns limited-data, never a fabricated number', async () => {
     const r = await explainPlayerMarketValue('player-x', null)
     expect(r.ok).toBe(false)

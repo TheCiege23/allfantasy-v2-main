@@ -116,8 +116,46 @@ export async function loadViewerNeedFactors(args: {
 
     const viewer = await resolveViewerLeagueRoster(args.leagueId, args.userId)
     if (!viewer.ok) return none(give, get, viewer.gap)
+    return await rosterNeedFactors({ ...args, requirements, playerData: viewer.roster.playerData })
+  } catch {
+    return none(give, get, 'your roster in this league — it could not be read just now')
+  }
+}
 
-    const pd = (viewer.roster.playerData ?? {}) as Record<string, unknown>
+/**
+ * The same need model for a roster named directly rather than through a user's claimed team — for a
+ * caller that grades from the OTHER side of a deal (the nightly trade agent asks whether the partner's
+ * roster gains too), where the partner is often not an AllFantasy user and has no claim to look up.
+ */
+export async function loadRosterNeedFactors(args: {
+  leagueId: string
+  playerData: unknown
+  sport: string
+  starters: unknown
+  give: NeedLine[]
+  get: NeedLine[]
+}): Promise<NeedFactors> {
+  const { give, get } = args
+  try {
+    const requirements: SlotRequirements | null = readSlotRequirements(args.starters)
+    if (!requirements) return none(give, get, "this league's starting lineup, so roster need is not priced")
+    return await rosterNeedFactors({ ...args, requirements })
+  } catch {
+    return none(give, get, 'this roster — it could not be read just now')
+  }
+}
+
+async function rosterNeedFactors(args: {
+  leagueId: string
+  playerData: unknown
+  sport: string
+  requirements: SlotRequirements
+  give: NeedLine[]
+  get: NeedLine[]
+}): Promise<NeedFactors> {
+  const { give, get, requirements } = args
+  {
+    const pd = (args.playerData ?? {}) as Record<string, unknown>
     const rosterIds = Array.isArray(pd.players) ? pd.players.map(String).filter((x) => x && x !== '0') : []
     if (rosterIds.length === 0) return none(give, get, 'your roster in this league, which has no players on file')
 
@@ -179,7 +217,5 @@ export async function loadViewerNeedFactors(args: {
     }).catch(() => new Map() as ScarcityBoard)
 
     return { ...allocateNeedFactors({ give, get, needAfterOutgoing, needAfterTrade, scarcity }), gap: null }
-  } catch {
-    return none(give, get, 'your roster in this league — it could not be read just now')
   }
 }

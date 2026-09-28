@@ -20,6 +20,9 @@ export type LoadedTradeLeague = {
   leagueVariant: string | null
   bestBallMode: boolean | null
   starters: unknown
+  /** The league's current season and host status — how a pick whose draft was already held is told apart. */
+  season?: number | null
+  status?: string | null
 }
 
 export async function loadLeagueForTrade(args: {
@@ -51,6 +54,8 @@ export async function loadLeagueForTrade(args: {
       leagueVariant: true,
       bestBallMode: true,
       starters: true,
+      season: true,
+      status: true,
     },
   })
   if (!row) return null
@@ -74,5 +79,7 @@ export async function loadLeagueForTrade(args: {
     leagueVariant: row.leagueVariant,
     bestBallMode: row.bestBallMode,
     starters: row.starters,
+    season: row.season,
+    status: row.status,
   }
 }

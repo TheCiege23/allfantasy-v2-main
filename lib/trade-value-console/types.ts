@@ -20,6 +20,12 @@ export type TeamContextMode = 'my_team' | 'team_a' | 'team_b' | 'neutral'
 
 export type TradeAssetInput =
   | { kind: 'player'; playerId?: string; name?: string; sportHint?: string;
+      /**
+       * The player's id on THIS league's rosters, in the league's own id space. Read only where a grade
+       * is priced from the league's rosters (a college redraft league); the chart path never reads it,
+       * so carrying it cannot change an NFL price the way a bare `playerId` would.
+       */
+      rosterPlayerId?: string;
       /** Provider-qualified reference; a Yahoo number must never be read as a Sleeper ID. */
       providerIdentity?: { provider: 'sleeper' | 'yahoo'; id: string; position?: string; team?: string } }
   | {

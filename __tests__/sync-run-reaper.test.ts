@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   recordSyncJobRun: vi.fn(),
   purgeExpiredCache: vi.fn(),
   refreshPrivateRelayRanges: vi.fn(),
+  runTradeAgentPass: vi.fn(),
 }))
 
 const RELAY_FRESH = { status: 'fresh', fetchedAt: '2026-09-05T02:00:00.000Z' }
@@ -117,6 +118,36 @@ describe('GET /api/cron/reap-sync-runs', () => {
     vi.doMock('@/lib/geo/privateRelayIngest', () => ({ refreshPrivateRelayRanges: mocks.refreshPrivateRelayRanges }))
     mocks.purgeExpiredCache.mockResolvedValue(PURGED)
     mocks.refreshPrivateRelayRanges.mockResolvedValue(RELAY_FRESH)
+    // The nightly trade agent rides this route; mocked so these tests do not depend on the clock.
+    vi.doMock('@/lib/decision-os/trade/tradeAgentPass', () => ({ runTradeAgentPass: mocks.runTradeAgentPass }))
+    mocks.runTradeAgentPass.mockResolvedValue({ ran: false, reason: 'outside the nightly window' })
+  })
+
+  it('runs the trade-agent pass only AFTER the heartbeat, inside the route budget', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 1, cutoff: '2026-09-05T11:30:00.000Z' })
+    const order: string[] = []
+    mocks.recordSyncJobRun.mockImplementationOnce(async () => void order.push('heartbeat'))
+    mocks.runTradeAgentPass.mockImplementationOnce(async () => (order.push('agent'), { ran: false, reason: 'x' }))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(order).toEqual(['heartbeat', 'agent'])
+    const budgetMs = mocks.runTradeAgentPass.mock.calls[0]![0].budgetMs
+    expect(budgetMs).toBeGreaterThan(200_000)
+    expect(budgetMs).toBeLessThanOrEqual(240_000)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 1, tradeAgent: { ran: false } })
+  })
+
+  it('a failing trade-agent pass never fails the reap', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 3, cutoff: '2026-09-05T11:30:00.000Z' })
+    mocks.runTradeAgentPass.mockRejectedValueOnce(new Error('grader exploded'))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 3, tradeAgent: { ran: false, reason: 'grader exploded' } })
   })
 
   it('rejects an unauthenticated call without touching the database', async () => {

@@ -9,7 +9,7 @@
  * ⚠ Comments are stripped before matching, so a sentence ABOUT an old producer (and there are many
  * — they explain why it went) cannot satisfy or break a check.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -25,8 +25,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   /* 2026-09-27: the Trade Center's "Best trade partners" suggestions (see lib/trade-intel/partnerSuggestionGrades.ts). */
   { file: 'app/api/leagues/[leagueId]/trades/rosters/route.ts', entry: /gradeDeal\(/, what: 'the Trade Center partner suggestions' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
-  { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade between rostered players' },
-  { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /gradeDeal\(/, what: 'Chimmy, on a trade described in prose' },
+  { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade between rostered players (the evaluate_trade tool and the push path) — through the one engine, with a receipt' },
+  { file: 'lib/chimmy-trade/describedTradeEvaluator.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade described in prose — through the one engine, with a receipt' },
   /* Completed trades and receipts (2026-09-25). */
   { file: 'lib/league-trade-engine/serverTradeDecision.ts', entry: /gradeDeal\(/, what: 'the proposal-time receipt' },
   { file: 'lib/league-trade-engine/tradeLearningCapture.ts', entry: /gradeDeal\(/, what: 'native history "Now"' },
@@ -234,11 +234,14 @@ describe('Trade OS — no screen keeps a private letter', () => {
     expect(SNAPSHOT_LETTER.test(code(file))).toBe(false)
   })
 
-  it('the commissioner review sends the one grade and no snapshot letter', () => {
-    const src = code('app/api/redraft/trades/[proposalId]/commissioner-review/route.ts')
-    expect(src).toMatch(/evaluateStoredTrade\(/)
-    expect(src).toMatch(/summary:\s*\{\s*\.\.\.review\.summary,\s*grade:\s*tradeGrade\.grade\s*\}/)
-    expect(src).not.toMatch(/snapshotSummary:[\s\S]{0,80}grade:\s*snapshot\.grade/)
+  it('the old redraft commissioner review — its snapshot scale, its route and its engine — is gone for good', () => {
+    // Replaced by the code-computed trade review (Phase 6); deleted with Chimmy's unreachable path to it (step 7).
+    for (const f of [
+      'app/api/redraft/trades/[proposalId]/commissioner-review/route.ts',
+      'lib/trade-review/redraftCommissionerTradeReview.ts',
+    ]) {
+      expect(existsSync(resolve(process.cwd(), f)), f).toBe(false)
+    }
   })
 
   it("the inbox's provider rows take nothing from the canonical evaluation but coverage and lineup", () => {
@@ -275,7 +278,7 @@ describe('Trade OS — every screen records its grade as a receipt', () => {
     ['lib/trade-intel/tradeNotifyService.ts', /receiptIdForGrade\(\{\s*surface:\s*'trade-email'/],
     ['app/api/redraft/trade-proposals/route.ts', /receiptIdForGrade\(\{\s*surface:\s*'redraft-trade-list'/],
     ['app/api/redraft/trade-value-preview/route.ts', /evaluateTrade\(\{\s*surface:\s*'redraft-trade-preview'/],
-    ['app/api/redraft/trades/[proposalId]/commissioner-review/route.ts', /surface:\s*'redraft-commissioner-review'/],
+    ['lib/decision-os/trade/tradeReviewContext.ts', /surface: args\.surface \?\? 'commissioner-review'/],
   ])('%s', (file, shape) => {
     expect(code(file)).toMatch(shape)
   })
@@ -324,5 +327,118 @@ describe('Commissioner review mode — advice, never an action', () => {
     expect(DECIDES.test('await commissionerAfTradeDecision({ tradeId, leagueId, userId, decision })')).toBe(true)
     expect(DECIDES.test('await prisma.redraftTradeProposal.update({ where: { id } })')).toBe(true)
     expect(DECIDES.test('const r = await reviewStoredTrade({ leagueId, ref, userId })')).toBe(false)
+  })
+})
+
+describe('Chimmy — explains the one grade, never makes one (design step 7)', () => {
+  it.each([
+    ['lib/chimmy/tradeScenarioGrounding.ts', /evaluateTrade\(\s*\{\s*surface: 'chimmy'/, 'the evaluate_trade tool and the push path'],
+    ['lib/chimmy-trade/describedTradeEvaluator.ts', /evaluateTrade\(\{ surface: 'chimmy-described'/, 'a trade described in prose'],
+    ['lib/chimmy-trade/pendingTradeDecisionGrounding.ts', /surface: 'chimmy-pending'/, 'pending incoming trades'],
+    ['lib/chimmy/tradeTargetVerdict.ts', /evaluateTrade\(\{ surface: 'chimmy-target'/, '"should I trade for X?"'],
+  ])('%s grades through the one engine, with a receipt', (file, entry) => {
+    expect(code(file)).toMatch(entry)
+  })
+
+  it('pending trades never print the proposal-time snapshot letter', () => {
+    const src = code('lib/chimmy-trade/pendingTradeDecisionGrounding.ts')
+    expect(src).not.toMatch(/valueSnapshot/)
+    expect(src).not.toMatch(/toTradeCard|runTradeShadowForProposal/)
+  })
+
+  it('"should I trade for X?" is not decided by a second engine or the finder’s band', () => {
+    const src = code('lib/chimmy/tradeTargetDecision.ts')
+    expect(src).not.toMatch(/FAIRNESS_PHRASE|acceptance|verdict === 'reject'/)
+  })
+
+  it('the answer contract carries no letter of its own', () => {
+    const src = code('lib/chimmy-chat/response-contract.ts')
+    expect(src).not.toMatch(/scoreToGrade|grade:\s*z\.string/)
+  })
+
+  it('the old commissioner review and the snapshot letter are gone from Chimmy’s trade tools', () => {
+    const src = code('lib/chimmy-trade/tradeIntelligenceTools.ts')
+    expect(src).not.toMatch(/buildCommissionerTradeReview|export async function explainTrade/)
+  })
+
+  it('the tool loop’s answer is held to the letters the engine gave', () => {
+    const route = code('app/api/chat/chimmy/route.ts')
+    expect(route).toMatch(/tradeGrades: \[\] as ChimmyTradeGrade\[\]/)
+    expect(route).toMatch(/enforceTradeLetters\(\{\s*answer: loop\.text,\s*grades: toolContext\.tradeGrades,/)
+  })
+})
+
+describe('College redraft — points over replacement, never the private scale (design step 8)', () => {
+  it('the league grader asks the college grader first, before any chart pricing', () => {
+    const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
+    expect(src).toMatch(/sport === 'NCAAF'\s*\?\s*createNcaafLeagueGrader\(/)
+    const college = src.indexOf('await college.grade(give, get)')
+    const chart = src.indexOf('resolveAssets(give, opts)')
+    expect(college).toBeGreaterThan(-1)
+    expect(chart).toBeGreaterThan(college)
+  })
+
+  it('the Trade Center console takes the same college grade, for the deal and for its counters', () => {
+    const src = code('lib/trade-value-console/runTradeConsoleAnalysis.ts')
+    expect(src).toMatch(/effectiveSport === 'NCAAF'[\s\S]{0,80}createNcaafLeagueGrader\(/)
+    expect(src).toMatch(/applyCollegeGrade\(leagueGrade, collegeView\)/)
+    expect(src).toMatch(/collegeGrader \? await collegeGrader\.grade\(counterGive, counterGet\)/)
+  })
+
+  it('the college value reads no chart and no private scale', () => {
+    for (const file of ['lib/decision-os/trade/ncaafRedraftValue.ts', 'lib/decision-os/trade/ncaafRedraftContext.ts', 'lib/decision-os/trade/ncaafLeagueGrader.ts']) {
+      expect(code(file)).not.toMatch(/resolveAssets|dynastyValue|fantasycalc|FantasyCalc|scoringFit|sportsPlayerRecord/i)
+    }
+  })
+
+  it('positive control: the chart pricer the guard forbids is what the chart path calls', () => {
+    expect(code('lib/decision-os/trade/leagueTradeGrader.ts')).toMatch(/resolveAssets\(/)
+  })
+})
+
+describe('League asset rules — picks refused where unpriced, held devy prospects priced (design step 9)', () => {
+  it('the league grader refuses picks before pricing and prices devy before grading', () => {
+    const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
+    const refuse = src.indexOf('assets.pickRefusal([...give, ...get])')
+    const price = src.indexOf('resolveAssets(give, opts)')
+    expect(refuse).toBeGreaterThan(-1)
+    expect(price).toBeGreaterThan(refuse)
+    expect(src).toMatch(/assets\.priceDevy\(\{ inputs: give, lines: g\.lines, priced: g\.priced \}\)/)
+    expect(src).toMatch(/giveLines: gd\.lines,\s*getLines: td\.lines,/)
+  })
+
+  it('the Trade Center console applies the same rules to the deal and to its counters', () => {
+    const src = code('lib/trade-value-console/runTradeConsoleAnalysis.ts')
+    expect(src).toMatch(/withheld: assetPolicy\?\.pickRefusal\(\[\.\.\.give, \.\.\.get\]\) \?\? null/)
+    expect(src).toMatch(/assetPolicy\.priceDevy\(\{ inputs: give, lines: giveLines, priced: givePriced \}\)/)
+    expect(src).toMatch(/assetPolicy\?\.pickRefusal\(\[\.\.\.counterGive, \.\.\.counterGet\]\)/)
+    expect(src).toMatch(/assetPolicy\.priceDevy\(\{ inputs: counterGive, lines: g\.lines, priced: g\.priced \}\)/)
+  })
+
+  it('the devy price is the measured option value, not the commissioner bridge or the private scale', () => {
+    const src = code('lib/decision-os/trade/leagueAssetRules.ts')
+    expect(src).toMatch(/devyOptionValue\(/)
+    expect(src).not.toMatch(/devyMarketBridge|resolveDevyBridge|dynastyValue|c2cSideWeight/)
+  })
+})
+
+describe('Nightly trade agent — suggests only what the one grade reads C for both sides (design step 9)', () => {
+  it('grades every package with the one grader, from each side with that side’s own roster', () => {
+    const src = code('lib/decision-os/trade/tradeAgent.ts')
+    expect(src).toMatch(/createLeagueTradeGrader/)
+    expect(src).toMatch(/grader\.grade\(\{ give: toInputs\(give\), get: toInputs\(get\), viewerSide: true, needRoster: \{ playerData: myRoster\.playerData \} \}\)/)
+    expect(src).toMatch(/grader\.grade\(\{ give: toInputs\(get\), get: toInputs\(give\), viewerSide: true, needRoster: \{ playerData: partnerRoster\.playerData \} \}\)/)
+    expect(src).toMatch(/qualifyDeal\(viewer, theirs\)/)
+  })
+
+  it('saves nothing the finder computed: its band only skips packages, and every saved number is the grade’s', () => {
+    const src = code('lib/decision-os/trade/tradeAgent.ts')
+    expect(src).not.toMatch(/myTotalValue|partnerTotalValue|valueDelta|matchScore/)
+    expect(src).not.toMatch(/createAfLeagueTrade|proposeTrade|sendTemplatedEmail|sendPushToUser/)
+  })
+
+  it('rides the hourly housekeeping cron rather than taking a 61st cron slot', () => {
+    expect(code('app/api/cron/reap-sync-runs/route.ts')).toMatch(/runTradeAgentPass\(\{/)
+    expect(existsSync(resolve(process.cwd(), 'app/api/cron/trade-agent/route.ts'))).toBe(false)
   })
 })

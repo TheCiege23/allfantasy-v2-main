@@ -8,6 +8,7 @@ import {
 } from '@/lib/chimmy/lineupScenarioGrounding'
 import { buildTradeScenario, renderTradeScenarioBlock } from '@/lib/chimmy/tradeScenarioGrounding'
 import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 /**
  * The push path's scenario engines, reachable from the tool loop.
@@ -53,7 +54,14 @@ function names(value: unknown): string[] {
 
 const joinSide = (side: string[]) => side.join(' and ')
 
-export async function runTradeScenarioTool(args: { give: unknown; get: unknown; leagueId: string; userId: string }): Promise<string> {
+export async function runTradeScenarioTool(args: {
+  give: unknown
+  get: unknown
+  leagueId: string
+  userId: string
+  /** Told the letters the one trade engine gave, so the route can hold the answer to them. */
+  onGrade?: (grade: ChimmyTradeGrade) => void
+}): Promise<string> {
   const give = names(args.give)
   const get = names(args.get)
   if (give.length === 0 || get.length === 0) {
@@ -63,6 +71,15 @@ export async function runTradeScenarioTool(args: { give: unknown; get: unknown; 
   const scenario = await buildTradeScenario({ message, leagueId: args.leagueId, userId: args.userId })
   if (!scenario) {
     return `"${message}" could not be read as a trade between two rosters in this league. Ask for full player names on both sides; do not grade it.`
+  }
+  if (args.onGrade && scenario.status === 'ready' && scenario.value.grade) {
+    const theirs = scenario.value.partnerGrade
+    args.onGrade({
+      letters: [scenario.value.grade, ...(theirs ? [theirs] : [])],
+      summary:
+        `AllFantasy grades giving ${joinSide(scenario.give.map((p) => p.name))} for ${joinSide(scenario.get.map((p) => p.name))}: ` +
+        `${scenario.value.grade} for you${theirs ? `, ${theirs} for ${scenario.partnerTeamName}` : ''}.`,
+    })
   }
   return renderTradeScenarioBlock(scenario)
 }

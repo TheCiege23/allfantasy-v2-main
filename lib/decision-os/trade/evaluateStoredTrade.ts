@@ -70,7 +70,7 @@ export function gradeInputsOf(assets: readonly LoadedTradeAsset[]): GradeInputs 
   return {
     assets: assets.map((a) =>
       a.kind === 'player'
-        ? { kind: 'player' as const, name: a.name }
+        ? { kind: 'player' as const, name: a.name, ...(a.playerId ? { rosterPlayerId: a.playerId } : {}) }
         : a.kind === 'pick'
           ? { kind: 'pick' as const, year: a.season, round: a.round, label: a.label }
           : { kind: 'faab' as const, amount: a.amount },

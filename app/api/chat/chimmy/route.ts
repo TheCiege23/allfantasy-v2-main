@@ -174,6 +174,7 @@ import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
 import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
@@ -2264,16 +2265,26 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * tool loop runs ONLY on xAI: measured 2026-09-22, the xAI account was out of credits, so every
    * answer came through this path with no way to call a tool — and no path here could answer the
    * question at all. Gated on the ONE predicate the deterministic injury builder yields on, so
-   * the two agree on who owns the question and the 40-league scan runs only when it is asked.
+   * the two agree on who owns the question and the cross-league scan runs only when it is asked.
    *
    * ⚠ Own race, for the reason given on `portfolioPlayerGroundingTask`: a timeout costs this
    * section, never the answer.
+   *
+   * ⚠ THE SCAN BUDGET SITS INSIDE THE RACE. The tool's default budget is 20s (sized for the tool
+   * loop); raced against 4s here it would lose every large account outright and push NOTHING.
+   * Stopping new league reads at 1.5s, and abandoning any single read at 1.2s, puts the last read
+   * done by ~2.7s and leaves the injury lookup and kickoff check room to finish — so a big account
+   * gets a partial report that names the leagues it did not reach, rather than no report at all.
    */
   const rosterReviewLeagueId = leagueSnapshot && isScopedRosterReviewQuestion(message, true) ? leagueSnapshot.id : null
   const myRosterInjuriesTask: Promise<string | null> =
     userId && (isOwnRosterInjuryQuestion(message) || rosterReviewLeagueId)
       ? Promise.race([
-          buildMyRosterInjuriesContext({ userId, ...(rosterReviewLeagueId ? { leagueId: rosterReviewLeagueId } : {}) }).catch(() => null),
+          buildMyRosterInjuriesContext({
+            userId,
+            ...(rosterReviewLeagueId ? { leagueId: rosterReviewLeagueId } : {}),
+            scan: { budgetMs: 1_500, perItemTimeoutMs: 1_200 },
+          }).catch(() => null),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
         ])
       : Promise.resolve(null)
@@ -3008,8 +3019,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * changes nothing: it reaches the chat in `meta.actionCards`, and only the user's tap on it (the
      * confirm route) makes the move.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[] }
-    const loop = await runChimmyToolLoop({
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[] }
+    const loopArgs = {
       question: message,
       /*
        * The PECR path has always carried the user's clock; the tool loop — the path that answers
@@ -3053,7 +3064,32 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        */
       context: toolContext,
       enabled: true,
-    }).catch(() => null)
+    }
+    let loop = await runChimmyToolLoop(loopArgs).catch(() => null)
+    /*
+     * 🛑 A TRADE LETTER IN THE ANSWER MUST BE ONE THE ENGINE GAVE (design step 7, 2026-09-27). Nothing
+     * checked the tool loop's answer, and it answers most messages. The trade tools record every letter
+     * the one trade engine gave (`toolContext.tradeGrades`); an answer stating another is retried once
+     * with a correction, then replaced by the engine's own summary. See `lib/chimmy/tradeGradeCheck.ts`.
+     */
+    if (loop?.text) {
+      const { enforceTradeLetters } = await import('@/lib/chimmy/tradeGradeCheck')
+      // Set inside the retry callback, so read back through a box rather than a narrowed local.
+      const retry: { result: Awaited<ReturnType<typeof runChimmyToolLoop>> } = { result: null }
+      const held = await enforceTradeLetters({
+        answer: loop.text,
+        grades: toolContext.tradeGrades,
+        retry: async (correction) => {
+          retry.result = await runChimmyToolLoop({ ...loopArgs, question: `${message}\n\n${correction}` }).catch(() => null)
+          return retry.result?.text ?? null
+        },
+      })
+      if (held.outcome !== 'clean') {
+        const base = held.outcome === 'retried' && retry.result ? retry.result : loop
+        loop = { ...base, text: held.text, toolsUsed: [...loop.toolsUsed, ...(retry.result?.toolsUsed ?? [])] }
+        console.warn('[chimmy] trade letter not given by the engine', { outcome: held.outcome, stated: held.stated })
+      }
+    }
     question.tools = loop?.toolsUsed ?? []
     // A league the model bound by name is the league the question was about.
     question.leagueId = toolContext.leagueId ?? question.leagueId

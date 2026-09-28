@@ -18,8 +18,8 @@
  * 🛑 THE APP NEVER VETOES. `recommendation` is advice to a commissioner (Guap, 2026-09-27): any raised
  * HIGH flag → `consider_veto`, any MEDIUM → `review_with_managers`, otherwise `approve`.
  *
- * Named `TradeReview`, not `CommissionerReview`: `lib/trade-review/types.ts` already exports that name
- * for the older redraft snapshot review.
+ * Named `TradeReview`, not `CommissionerReview`, which was the older redraft snapshot review's type
+ * (`lib/trade-review/types.ts`, deleted with that review on 2026-09-27).
  */
 
 export type ReviewFlagCode =
