@@ -116,7 +116,13 @@ export type WaiversBoardData = {
   /** The projection week every figure on the board is drawn from. */
   at: { season: string; week: number } | null
   /**
-   * How much of the projection week has already kicked off. Null when the schedule is unread.
+   * One kickoff per fixture of the projection week (ISO), so the renderer can say how much of it
+   * has already been played. Null when the schedule is unread.
+   *
+   * ⚠ KICKOFF TIMES, NOT A "PLAYED" COUNT — THIS MODULE MUST STAY CLOCK-FREE. The board is served
+   * from the screen-summary cache (`waiversBoardSummary`), which is only sound because nothing
+   * here reads `now`; a count taken at build time would freeze in the cache. The first version of
+   * this field did exactly that and the summary's own guard test caught it. The renderer counts.
    *
    * 🛑 THE FEED HOLDS ONE WEEK, AND ON A MONDAY THAT WEEK IS OVER. Production 2026-09-28: the board
    * ranked week-3 projections with 13 of 14 week-3 games played, for claims that process Tuesday for
@@ -124,7 +130,7 @@ export type WaiversBoardData = {
    * board says which week it is pricing and how much of it is gone rather than presenting it as
    * next week's points.
    */
-  weekPlayed: { played: number; total: number } | null
+  weekKickoffs: string[] | null
 }
 
 const EMPTY: WaiversBoardData = {
@@ -133,7 +139,7 @@ const EMPTY: WaiversBoardData = {
   withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
   marketLeagues: 0,
   at: null,
-  weekPlayed: null,
+  weekKickoffs: null,
 }
 
 /** How many free-agent candidates to consider. The wire below this is noise. */
@@ -591,15 +597,12 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     marketLeagues: market.leaguesCounted,
     at,
     /* A schedule read that fails costs the note, never the board. */
-    weekPlayed: await projectionWeekPlayed(at, new Date()).catch(() => null),
+    weekKickoffs: await projectionWeekKickoffs(at).catch(() => null),
   }
 }
 
-/** Distinct fixtures of the projection week, and how many have kicked off. See `weekPlayed`. */
-async function projectionWeekPlayed(
-  at: { season: string; week: number },
-  now: Date,
-): Promise<{ played: number; total: number } | null> {
+/** One kickoff per distinct fixture of the projection week. See `weekKickoffs`. */
+async function projectionWeekKickoffs(at: { season: string; week: number }): Promise<string[] | null> {
   const season = Number(at.season)
   if (!Number.isFinite(season)) return null
   const games = await prisma.sportsGame
@@ -615,7 +618,5 @@ async function projectionWeekPlayed(
     const key = [normalizeTeamAbbrev(g.homeTeam) ?? g.homeTeam, normalizeTeamAbbrev(g.awayTeam) ?? g.awayTeam].join('|')
     if (!kickoffByFixture.has(key) || (g.startTime && !kickoffByFixture.get(key))) kickoffByFixture.set(key, g.startTime)
   }
-  const total = kickoffByFixture.size
-  const played = [...kickoffByFixture.values()].filter((t) => t != null && t.getTime() <= now.getTime()).length
-  return { played, total }
+  return [...kickoffByFixture.values()].filter((t): t is Date => t != null).map((t) => t.toISOString()).sort()
 }
