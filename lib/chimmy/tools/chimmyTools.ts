@@ -142,6 +142,15 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_faab_bid_plan',
+      description:
+        "How much FAAB the user should spend THIS WEEK, and on whom, in the league in scope. Use for 'should I spend FAAB', 'how much should I bid', 'is anyone worth a bid', 'save or spend my FAAB'. Prices every valued unrostered player against the starter he would replace in the user's lineup, then splits their REMAINING budget across the genuine upgrades by how much each improves them, paced against a published elimination schedule where one exists. Gives dollar ceilings ONLY in guillotine/survivor leagues (the only formats the sizing is calibrated for); elsewhere it ranks the upgrades without dollars and says why. 'Do not bid' is a real answer when nobody improves the lineup. Unrostered is not the same as claimable — for waiver order and pending claims, call get_waiver_status.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_player_value',
       description:
         "What ONE named player is worth on the AllFantasy 0-10000 value scale — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. Returns long-term asset value for TRADING, not a weekly points projection and not a start/sit ranking. Only a few hundred players carry a published value; it says so plainly when there is no row, and a miss is NOT evidence the player is worthless.",
@@ -762,6 +771,13 @@ export async function executeChimmyTool(
       case 'get_available_players': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         return buildAvailablePlayersContext(ctx.leagueId, ctx.userId)
+      }
+
+      case 'get_faab_bid_plan': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        // Lazy: the pricing graph (market values, trade rows) is only loaded when this tool runs.
+        const { buildFaabBidContext } = await import('@/lib/chimmy/tools/faabBidTool')
+        return buildFaabBidContext(ctx.leagueId, ctx.userId)
       }
 
       case 'get_my_roster': {
