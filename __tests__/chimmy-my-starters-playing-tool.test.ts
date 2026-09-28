@@ -464,3 +464,20 @@ describe('buildMyStartersPlayingContext name-every-league rule', () => {
     expect(out).not.toContain('(or count)')
   })
 })
+
+describe('buildMyStartersPlayingContext leagues that have not drafted', () => {
+  it('reports them as NOT DRAFTED YET, not as a gap that could raise the count, with distinct names', async () => {
+    h.listLeagues.mockResolvedValue([
+      league('aaaa-0466', 'Redraft 8', { status: 'setup', platform: 'manual' }),
+      league('bbbb-0427', 'Redraft 8', { status: 'setup', platform: 'manual' }),
+      league('l3', 'KBFL'),
+    ])
+    h.resolveTeam.mockImplementation(async ({ leagueId }: { leagueId: string }) =>
+      leagueId === 'l3' ? teamCtx([player('James Cook', 'BUF', 'RB')]) : teamCtx([]),
+    )
+    const out = await buildMyStartersPlayingContext({ userId: 'u1', window: 'tonight' })
+    expect(out).toContain('ANSWER: 1 of 1 readable NFL league(s)')
+    expect(out).toContain('NOT DRAFTED YET (2): Redraft 8 · 0466, Redraft 8 · 0427')
+    expect(out).not.toContain('have a claimed team with NO starters stored')
+  })
+})

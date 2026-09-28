@@ -4,6 +4,7 @@ import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import { getTeamInfo } from '@/lib/team-abbrev'
+import { isLeagueNotStarted } from './leagueNotStarted'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveCurrentWeekFrom, isScored, type WeekScoreRow } from './currentWeek'
 import { leagueDisplayName } from './leagueHome'
@@ -739,9 +740,6 @@ export async function getMatchupPulse(
   }
 }
 
-/** League states in which no schedule exists yet to place a roster against. */
-const NOT_STARTED = new Set(['setup', 'pre_draft', 'predraft', 'drafting'])
-
 type UnplacedClaim = {
   league: { platform: string | null; platformLeagueId: string | null; status?: string | null; lifecycleState?: string | null } | null
 }
@@ -761,8 +759,8 @@ export function classifyUnplaced<T extends UnplacedClaim>(claimed: T[], placed: 
     if (placedSet.has(c)) continue
     /* A second claimed copy of a league already on the board is not missing from it. */
     if (c.league?.platformLeagueId && placedLeagues.has(key(c))) continue
-    const states = [c.league?.status, c.league?.lifecycleState].map((v) => String(v ?? '').toLowerCase())
-    if (states.some((v) => NOT_STARTED.has(v))) notStarted++
+    /* League states in which no schedule exists yet — the one rule, in leagueNotStarted.ts. */
+    if (isLeagueNotStarted(c.league)) notStarted++
     else unidentifiedRoster++
   }
   return { unidentifiedRoster, notStarted }
