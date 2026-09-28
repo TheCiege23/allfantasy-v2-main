@@ -33,8 +33,13 @@ async function buildPrivateGrounding(context: {
    * member of would leak another league's standings into a private reply. The
    * facts come from the same exported builders the Chimmy panel uses, so there
    * is one implementation of each rather than a second copy living here.
+   *
+   * ⚠ The signature is `(userId, leagueId)`. This call had them swapped from
+   * 2026-08-26, so every member was refused and every @chimmy reply here was told
+   * the league "could not be loaded". The failure is closed, so it leaked nothing
+   * and looked like an ordinary sync gap.
    */
-  const access = await loadLeagueGroundingForUser(leagueId, userId).catch(() => null)
+  const access = await loadLeagueGroundingForUser(userId, leagueId).catch(() => null)
   if (!access || !access.ok) {
     const reason = access && !access.ok ? access.reason : 'error'
     return `CONTEXT: this league's data could not be loaded (${reason}). Do not describe the roster, standings or history; say plainly that you could not read them.`

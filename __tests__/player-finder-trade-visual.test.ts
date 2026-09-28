@@ -255,15 +255,17 @@ describe('getPlayerTradeVisual', () => {
   })
 
   /*
-   * ── A GUILLOTINE LEAGUE IS NOT A TRADE MARKET ──────────────────────────────────────────────
+   * ── A NO-TRADE ELIMINATION LEAGUE (SURVIVOR ALL-STARS GUILLOTINE) IS NOT A TRADE MARKET ─────────
    * "There are no trades allowed in this league." A package this surface could build is one the
    * manager can never send, so offering it is worse than offering nothing — it looks actionable.
+   * These fixtures used a plain `leagueType: 'guillotine'` until 2026-09-28. A plain guillotine
+   * TRADES (concept catalog), so they now carry the confirmed survivor-guillotine concept.
    */
-  it('🛑 a guillotine league gets a BID, not a trade — and no package at all', async () => {
+  it('🛑 a survivor-guillotine league gets a BID, not a trade — and no package at all', async () => {
     mockLeagueFindUnique.mockResolvedValue({
       ...LEAGUE,
       leagueType: 'guillotine',
-      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+      settings: { ...LEAGUE.settings, faab_budget: 1000, leagueTypeConfirmation: { type: 'survivor_guillotine' } },
     })
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     expect(state.available).toBe(true)
@@ -301,7 +303,7 @@ describe('getPlayerTradeVisual', () => {
     /* 4% of rosters carry no FAAB figure. They get the share and an explicit refusal, never a
      * dollar invented from the league total. */
     mockRosterFindMany.mockResolvedValue([{ ...MY_ROSTER, faabRemaining: null }, THEIR_ROSTER])
-    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine', settings: { ...LEAGUE.settings, faab_budget: 1000 } })
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine', settings: { ...LEAGUE.settings, faab_budget: 1000, leagueTypeConfirmation: { type: 'survivor_guillotine' } } })
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     if (!state.available) throw new Error('expected available')
     const bid = state.data.bidInstead!
@@ -325,7 +327,7 @@ describe('getPlayerTradeVisual', () => {
       ...LEAGUE,
       platformLeagueId: SURVIVOR_ALL_STARS_SLEEPER_ID,
       leagueType: 'guillotine',
-      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+      settings: { ...LEAGUE.settings, faab_budget: 1000, leagueTypeConfirmation: { type: 'survivor_guillotine' } },
     })
     /* Week 11: 12 alive, the Gauntlet begins, E[weeks left] = 4.0. */
     mockWeeklyFindFirst.mockResolvedValue({ seasonYear: 2026, week: 11 })
@@ -349,7 +351,7 @@ describe('getPlayerTradeVisual', () => {
       ...LEAGUE,
       platformLeagueId: '999-not-in-the-registry',
       leagueType: 'guillotine',
-      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+      settings: { ...LEAGUE.settings, faab_budget: 1000, leagueTypeConfirmation: { type: 'survivor_guillotine' } },
     })
     mockWeeklyFindFirst.mockResolvedValue({ seasonYear: 2026, week: 11 })
 
@@ -384,7 +386,7 @@ describe('getPlayerTradeVisual', () => {
  */
 describe('a league that does not allow trades', () => {
   it('🛑 gets no package even when no bid can be worked out', async () => {
-    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine' })
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine', settings: { ...LEAGUE.settings, leagueTypeConfirmation: { type: 'survivor_guillotine' } } })
     // A negative remaining budget is unusable, so the allocator returns nothing and there is no bid.
     mockRosterFindMany.mockResolvedValue([{ ...MY_ROSTER, faabRemaining: -5 }, THEIR_ROSTER])
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
@@ -469,5 +471,39 @@ describe('foreign roster ids never reach a Sleeper-id read', () => {
     if (state.available) return
     expect(state.reason).not.toMatch(/claim him/)
     expect(state.reason).toMatch(/can't tell who holds him/)
+  })
+})
+
+/*
+ * 🛑 WHETHER A LEAGUE TRADES IS THE CONCEPT CATALOG'S ANSWER (`lib/league-rules/tradeLegality.ts`).
+ * Until 2026-09-28 this surface refused packages in every guillotine and survivor league. The
+ * catalog marks trading LEGAL in both; only survivor-guillotine and tournament forbid it. Production
+ * then had 16 leagues refused packages they could send, and 18 tournament leagues offered packages
+ * they could not.
+ */
+describe('trade legality follows the concept catalog', () => {
+  it.each([
+    ['a plain guillotine league', { leagueType: 'guillotine', settings: { ...LEAGUE.settings, faab_budget: 1000 } }],
+    ['a confirmed guillotine league', { leagueType: 'guillotine', settings: { ...LEAGUE.settings, leagueTypeConfirmation: { type: 'guillotine' } } }],
+    ['a survivor league', { leagueType: 'survivor', settings: { ...LEAGUE.settings } }],
+  ])('%s trades: packages, and no bid card', async (_name, over) => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, ...over })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.tradesAllowed).toBe(true)
+    expect(state.data.bidInstead).toBeNull()
+    expect(state.data.packages.length).toBeGreaterThan(0)
+    expect(state.data.recommended).not.toBeNull()
+  })
+
+  it('🛑 a tournament does not trade: no packages, no bid, and the catalog\'s reason', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'tournament', settings: { ...LEAGUE.settings, leagueTypeConfirmation: { type: 'tournament' } } })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.tradesAllowed).toBe(false)
+    expect(state.data.bidInstead).toBeNull()
+    expect(state.data.packages).toEqual([])
+    expect(state.data.recommended).toBeNull()
+    expect(state.data.tradeBan).toMatch(/not rosters that trade/)
   })
 })

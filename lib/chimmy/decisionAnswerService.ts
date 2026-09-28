@@ -5,6 +5,8 @@ import { tradeSeasonOutlook } from './tradeSeasonOutlook'
 import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisionRecommendation'
 import { loadLeagueGroundingForUser } from './chimmy-league-snapshot'
 import { chimmyDecisionKind, decisionAnswer, type ChimmyDecisionAnswer } from './decisionAnswerContract'
+import { decisionFormatBlock } from './decisionFormatGate'
+import { compoundDecision, unansweredClausesNote } from './decisionClauses'
 import { buildStartSitScenario, buildWaiverScenario } from './lineupScenarioGrounding'
 import { buildTradeScenario } from './tradeScenarioGrounding'
 import { buildLineupOptimization, singleSwapCall } from './lineupOptimizerGrounding'
@@ -51,16 +53,41 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
     'Future-season results are not computed; player development, future injuries and future draft selections are unknown.'].join('\n')
 }
 
-/** Shared by full chat, bubble/public advice and private mentions. Membership is checked here too. */
-export async function prepareChimmyDecisionAnswer(args: { question: string; leagueId?: string | null; userId?: string | null; screenshotEvidence?: string | null }): Promise<ChimmyDecisionAnswer | null> {
+type DecisionArgs = { question: string; leagueId?: string | null; userId?: string | null; screenshotEvidence?: string | null }
+
+/**
+ * Shared by full chat, bubble/public advice and private mentions. Membership is checked here too.
+ *
+ * A message holding two decisions is answered for the FIRST one, from that clause's text alone,
+ * and the answer names the rest as unanswered (`decisionClauses.ts` says why the whole message
+ * must never reach an engine). A screenshot is one offer, so a message with an attachment is not
+ * split.
+ */
+export async function prepareChimmyDecisionAnswer(args: DecisionArgs): Promise<ChimmyDecisionAnswer | null> {
+  const compound = args.screenshotEvidence ? null : compoundDecision(args.question)
+  if (!compound) return prepareSingleDecisionAnswer(args)
+  const answer = await prepareSingleDecisionAnswer({ ...args, question: compound.primary })
+  return answer && { ...answer, answer: answer.answer + '\n\n' + unansweredClausesNote(compound.others) }
+}
+
+async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDecisionAnswer | null> {
   const imageTrade = screenshotTradeQuestion(args.screenshotEvidence)
   const kind = imageTrade.question || imageTrade.clarification ? 'trade' : chimmyDecisionKind(args.question)
   if (!kind) return null
   let provenLeagueId: string | null = null
+  /*
+   * ⚠ EVERY `needs_data` ANSWER IS FREE, AND NOW EVERY ONE SAYS SO. The chat route returns them
+   * before any spend, and a private mention never charges. Only four of ~19 remedies said it, so
+   * the owner's own KBFL trade came back as a HOLD with a grade, values and depth, and no word that
+   * nothing was charged: from the outside, a paid answer that declined to answer. Added here once,
+   * so a new gap code cannot forget it. It goes in the text, not the remedy, which stays "what to
+   * do next".
+   */
   const gap = (code: string, detail: string, remedy: string, scenario?: ReadyChimmyScenario) => {
     const partial = scenario && 'value' in scenario ? { ...scenario, recommendation: { action: 'hold', explanation: remedy } } : scenario
+    const text = (partial ? renderDecisionScenario(partial) : detail) + '\n' + remedy
     return decisionAnswer({ kind, status: 'needs_data', leagueId: provenLeagueId,
-      answer: (partial ? renderDecisionScenario(partial) : detail) + '\n' + remedy,
+      answer: /\bno charge\b|\bnot charged\b/i.test(text) ? text : text + '\nThis answer is not charged.',
       sources: [], gap: { code, remedy }, ...(partial ? { scenario: partial } : {}) })
   }
   if (!args.leagueId || !args.userId) return gap('league_required', 'I need your league and roster before computing this decision.', 'Select a league in Chimmy and ask again.')
@@ -68,6 +95,9 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
     const access = await loadLeagueGroundingForUser(args.userId, args.leagueId)
     if (!access.ok) return gap('league_unavailable', 'I could not read an authorized league for this decision.', 'Open a league you belong to, sync it, and ask again.')
     provenLeagueId = access.snapshot.id
+    // A move the league's format does not have is refused before any engine prices it.
+    const formatBlock = decisionFormatBlock(access.snapshot, kind)
+    if (formatBlock) return gap(formatBlock.code, formatBlock.detail, formatBlock.remedy)
     const enrichTrade = tradeSeasonOutlook(access.snapshot, args.userId)
     const needsSeason = /\bplayoff|\bcompete|\bfuture|\bnext\s+(?:few\s+)?years/i.test(args.question)
     if (imageTrade.clarification) return gap('screenshot_trade_unclear', imageTrade.clarification, 'Confirm the assets on each side; no trade verdict was computed.')
@@ -82,10 +112,23 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
         return { offer, scenario: scenario?.status === 'ready' ? await enrichTrade(scenario) : scenario }
       }))
       const ready = results.filter(r => r.scenario?.status === 'ready' && (r.offer.assetCount == null || r.offer.assetCount === r.scenario.give.length + r.scenario.get.length) && r.scenario.value.grade && r.scenario.lineup && !r.scenario.unpricedExcluded)
-      const answer = results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready' ? (r.offer.assetCount != null && r.offer.assetCount !== r.scenario.give.length + r.scenario.get.length ? 'Not every offer asset resolved; no verdict was computed for this package.' : renderDecisionScenario(r.scenario)) : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
-      if (!ready.length) return gap('pending_offer_evaluation_missing', answer, 'Sync league rosters, scoring and values before deciding.')
-      if (needsSeason && results.some(r => r.scenario?.status !== 'ready' || !r.scenario.playoffOdds.available)) return gap('season_impact_missing', answer, 'This is a partial analysis, with no charge. Sync the league and complete schedule/projection coverage before relying on a playoff-impact decision.')
-      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer,
+      /*
+       * ⚠ A PARTIAL ANSWER HOLDS EVERY OFFER. `gap()` forces HOLD on the one scenario it is given,
+       * but these partials carry several scenarios in their text, and they used to be rendered with
+       * each offer's own engine verdict. So a free "partial analysis" of a playoff question opened
+       * with "YES," (measured by `__tests__/chimmy-eval/decision.test.ts`). `holdReason` gives every
+       * offer the same HOLD `gap()` would.
+       */
+      const renderOffers = (holdReason?: string) => results.map(r => `Offer ${r.offer.id}:\n${r.scenario?.status === 'ready'
+        ? (r.offer.assetCount != null && r.offer.assetCount !== r.scenario.give.length + r.scenario.get.length
+          ? 'Not every offer asset resolved; no verdict was computed for this package.'
+          : renderDecisionScenario(holdReason ? { ...r.scenario, recommendation: { action: 'hold', explanation: holdReason } } : r.scenario))
+        : r.scenario?.status === 'unresolved' ? r.scenario.detail : 'The assets could not be resolved against your league roster.'}`).join('\n\n')
+      const evaluationRemedy = 'Sync league rosters, scoring and values before deciding.'
+      if (!ready.length) return gap('pending_offer_evaluation_missing', renderOffers(evaluationRemedy), evaluationRemedy)
+      const seasonRemedy = 'This is a partial analysis, with no charge. Sync the league and complete schedule/projection coverage before relying on a playoff-impact decision.'
+      if (needsSeason && results.some(r => r.scenario?.status !== 'ready' || !r.scenario.playoffOdds.available)) return gap('season_impact_missing', renderOffers(seasonRemedy), seasonRemedy)
+      return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: renderOffers(),
         sources: ['provider_pending_offers', 'league_rosters', 'league_scoring', 'trade_engine'] })
     }
     if (kind === 'trade') {
