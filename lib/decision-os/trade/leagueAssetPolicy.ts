@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import type { PricedAsset } from '@/lib/hybrid-valuation'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
-import { applyDevyPricing, pickPolicyRefusal, type HeldDevyPlayer } from './leagueAssetRules'
+import { applyDevyPricing, pickPolicyRefusal, priceHeldDevyAssets, type HeldDevyPlayer } from './leagueAssetRules'
 
 /**
  * The league half of Phase 9's asset rules (`./leagueAssetRules.ts`), shared by `createLeagueTradeGrader`
@@ -65,6 +65,38 @@ export async function loadHeldDevyPlayers(leagueId: string): Promise<HeldDevyPla
     recruitingStars: r.recruitingStars ?? null,
     draftEligibleYear: r.draftEligibleYear ?? null,
   }))
+}
+
+/**
+ * The trade evaluator's first pricing pass, given the grade's devy rule (2026-09-28, see
+ * `priceHeldDevyAssets`). Same conditions as `priceDevy` below: an NFL league with a known season, and
+ * prospects THIS league holds. `leagueId` must be a league the caller is a member of — the route
+ * passes the id `resolveEvaluationLeagueId` returned, the one the grade itself uses. Never throws.
+ */
+export async function priceEvaluatorDevy(
+  args: { leagueId: string; prices: readonly PricedAsset[] },
+  deps: {
+    loadHeld: (leagueId: string) => Promise<HeldDevyPlayer[]>
+    loadLeague: (leagueId: string) => Promise<{ sport: string | null; season: number | null } | null>
+  } = {
+    loadHeld: loadHeldDevyPlayers,
+    loadLeague: async (leagueId) => {
+      const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true } }).catch(() => null)
+      return row ? { sport: String(row.sport), season: row.season } : null
+    },
+  },
+): Promise<{ prices: PricedAsset[]; devyPriced: string[]; unmeasured: string[] }> {
+  const unchanged = { prices: [...args.prices], devyPriced: [] as string[], unmeasured: [] as string[] }
+  try {
+    if (!args.prices.some((p) => p.unpriced)) return unchanged
+    const league = await deps.loadLeague(args.leagueId)
+    if (!league || String(league.sport ?? '').toUpperCase() !== 'NFL' || league.season == null) return unchanged
+    const held = await deps.loadHeld(args.leagueId).catch(() => [] as HeldDevyPlayer[])
+    if (held.length === 0) return unchanged
+    return priceHeldDevyAssets({ prices: args.prices, held, currentSeason: league.season })
+  } catch {
+    return unchanged
+  }
 }
 
 export type LeagueAssetPolicyDeps = { loadHeld: (leagueId: string) => Promise<HeldDevyPlayer[]> }
