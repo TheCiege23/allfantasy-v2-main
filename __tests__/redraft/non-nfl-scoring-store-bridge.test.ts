@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 🛑 A NON-NFL COMMISSIONER'S SCORING EDITS NEVER CHANGED A SCORE. The NHL / NBA / NCAAB / soccer
  * panels save their own key namespace; the scorer read only the engine's, bridging NFL alone.
  * These pin the bridge: its keys are real on both sides, the scorer applies it, the canonical store
- * still wins, NFL and MLB behave exactly as before, and NCAAF reception follows the manager's pick
+ * still wins, NFL behaves exactly as before, MLB scores its panel (default preset when unsaved), and NCAAF reception follows the manager's pick
  * until a commissioner saves the panel.
  */
 
@@ -20,6 +20,7 @@ import { buildFullNcaabScoringConfig } from '@/lib/ncaab-scoring/NcaabScoringPre
 import { buildFullSoccerScoringConfig } from '@/lib/soccer-scoring/SoccerScoringPresets'
 import { buildFullNcaafScoringConfig } from '@/lib/ncaaf-scoring/NcaafScoringPresets'
 import { applyDefaultNcaafScoringOnCreate, getLeagueNcaafScoringConfig } from '@/lib/ncaaf-scoring/NcaafScoringConfigService'
+import { buildFullMlbScoringConfig } from '@/lib/mlb-scoring/MlbScoringPresets'
 
 const UI_DEFAULTS: Record<string, Record<string, number>> = {
   NHL: buildFullNhlScoringConfig('af_default' as never),
@@ -27,6 +28,7 @@ const UI_DEFAULTS: Record<string, Record<string, number>> = {
   NCAAB: buildFullNcaabScoringConfig('af_default' as never),
   SOCCER: buildFullSoccerScoringConfig('af_default' as never),
   NCAAF: buildFullNcaafScoringConfig('af_default'),
+  MLB: buildFullMlbScoringConfig('af_default'),
 }
 
 function league(sport: string, settings: Record<string, unknown>) {
@@ -104,8 +106,19 @@ describe('sports without a bridged store behave exactly as before', () => {
     expect(await score({ pass_td: 1 })).toBe(6)
   })
 
-  it('MLB is not bridged (the panel’s hit-by-type scoring has no engine categories)', () => {
-    expect(bridgeSportUiScoringStore('MLB', { mlb_scoring_config: { rules: { runs: 5 } } })).toBeNull()
+  it('MLB is bridged now that the engine has per-type hit categories — and a saved panel scores', async () => {
+    league('MLB', { mlb_scoring_config: { rules: { ...UI_DEFAULTS.MLB, doubles: 5 } } })
+    expect(await score({ double: 1 })).toBe(5)
+  })
+
+  it('MLB: an UNSAVED league scores the default preset its panel displays, not the engine’s own defaults', async () => {
+    league('MLB', {})
+    // Panel AF default: a single is 1 and total bases 0; the engine alone would score tb 0.5 and single 0.
+    expect(await score({ single: 1, tb: 1 })).toBe(1)
+  })
+
+  it('a sport with no panel store is still not bridged (soccer has one; a sport with none returns null)', () => {
+    expect(bridgeSportUiScoringStore('NOT_A_SPORT', { x: { rules: { runs: 5 } } })).toBeNull()
   })
 
 })

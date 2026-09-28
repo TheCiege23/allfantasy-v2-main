@@ -37,6 +37,7 @@
  * Resolve G-01 by committing a fixture (the contract's own `scripts/probe.sh`,
  * during a game), then reconcile these tables against it.
  */
+import { normalizeMlbGameStats } from './mlbStatNormalization'
 
 type JsonRecord = Record<string, unknown>
 
@@ -318,6 +319,10 @@ const DAILY_SPORT_NORMALIZERS: Readonly<Record<string, (raw: unknown) => Normali
   NBA: normalizeNbaGameStats,
   NHL: normalizeNhlGameStats,
   NCAAB: normalizeNcaabGameStats,
+  // Group-aware (batting vs pitching share field names) and measured against fixtures/live.MLB.json —
+  // see mlbStatNormalization.ts. Registering it lets the weekly sync score MLB once the season's
+  // opener is recorded (dailySportSeasonStarts.ts); without one, the sync declines and says so.
+  MLB: normalizeMlbGameStats,
 }
 
 export function isDailyStatSport(sport: string | null | undefined): boolean {

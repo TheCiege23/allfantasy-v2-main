@@ -300,7 +300,8 @@ describe('finalizeRedraftWeek — a daily sport', () => {
 
   it('still refuses a sport it cannot close at all', async () => {
     const { prisma } = makePrisma([])
-    prisma.redraftSeason.findFirst = vi.fn(async () => ({ ...NHL_SEASON, sport: 'MLB' }))
+    // Was MLB until MLB joined DATE_WINDOWED_SPORTS (2026-09-28); soccer is outside every list.
+    prisma.redraftSeason.findFirst = vi.fn(async () => ({ ...NHL_SEASON, sport: 'SOCCER' }))
 
     const result = await finalizeRedraftWeek(
       { seasonId: 'season-nhl', week: 1, dryRun: true },
