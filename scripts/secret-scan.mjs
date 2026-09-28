@@ -48,6 +48,7 @@ function* walkFiles(dir, extensions = ['.ts', '.tsx', '.js', '.mjs']) {
         name === '.next' ||
         name.startsWith('.next') ||  // any .next-dev-*, .next-build-*, etc.
         name === '.git' ||
+        name === '.worktrees' ||  // sibling checkouts are scanned on their own pushes
         name === '.claude' ||
         name === 'coverage' ||
         name === '__pycache__' ||

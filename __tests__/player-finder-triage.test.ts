@@ -89,6 +89,29 @@ describe('triageRows', () => {
     expect(rows).toEqual([])
   })
 
+  it('does not flag a stale earlier-week designation, but keeps a current-week ruling', () => {
+    const make = (description: string) => triageRows({
+      starters: [starter('10', 'Old Report', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['old report', inj('Questionable', description)]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 3,
+    })
+    expect(make('Questionable For Week 1 At Carolina')).toEqual([])
+    expect(make('Questionable For Week 3 At Miami')).toHaveLength(1)
+  })
+
+  it('does not mistake an expected return week for the designation week', () => {
+    const rows = triageRows({
+      starters: [starter('10', 'IR Player', 'BUF', 'L-a', 'A')],
+      injuries: new Map([['ir player', inj('IR', 'IR. Injured Reserve. Expected Return Week 7')]]),
+      kickoffs: KICKOFFS,
+      nowIso: NOW,
+      week: 3,
+    })
+    expect(rows).toHaveLength(1)
+  })
+
   it('breaks a tie on the same kickoff by severity, then name', () => {
     const same = [starter('7', 'Zed Questionable', 'BUF', 'L-a', 'A'), starter('8', 'Abe Questionable', 'BUF', 'L-a', 'A'), starter('9', 'Out Guy', 'BUF', 'L-a', 'A')]
     const map = new Map<string, TriageInjury>([
