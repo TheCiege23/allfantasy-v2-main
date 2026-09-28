@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import { isSafeInternalPath } from "@/lib/auth/auth-intent-resolver"
+import { RetryOnReconnect } from "./RetryOnReconnect"
 
 export const dynamic = "force-dynamic"
 
@@ -35,6 +36,7 @@ export default async function VpnBlockedPage({
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
+      <RetryOnReconnect href={retry} />
       <div className="mx-auto max-w-xl text-center">
         <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
         <h1 className="mb-2 text-2xl font-black sm:text-3xl">Turn off your VPN to use AllFantasy.ai</h1>
