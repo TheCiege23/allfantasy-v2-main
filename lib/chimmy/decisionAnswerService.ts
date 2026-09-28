@@ -4,6 +4,7 @@ import { tradeSeasonOutlook } from './tradeSeasonOutlook'
 import { tradeDecisionRecommendation, tradeFutureStructure } from './tradeDecisionRecommendation'
 import { loadLeagueGroundingForUser } from './chimmy-league-snapshot'
 import { chimmyDecisionKind, decisionAnswer, type ChimmyDecisionAnswer } from './decisionAnswerContract'
+import { decisionFormatBlock } from './decisionFormatGate'
 import { buildStartSitScenario, buildWaiverScenario } from './lineupScenarioGrounding'
 import { buildTradeScenario } from './tradeScenarioGrounding'
 import { buildLineupOptimization, singleSwapCall } from './lineupOptimizerGrounding'
@@ -67,6 +68,9 @@ export async function prepareChimmyDecisionAnswer(args: { question: string; leag
     const access = await loadLeagueGroundingForUser(args.userId, args.leagueId)
     if (!access.ok) return gap('league_unavailable', 'I could not read an authorized league for this decision.', 'Open a league you belong to, sync it, and ask again.')
     provenLeagueId = access.snapshot.id
+    // A move the league's format does not have is refused before any engine prices it.
+    const formatBlock = decisionFormatBlock(access.snapshot, kind)
+    if (formatBlock) return gap(formatBlock.code, formatBlock.detail, formatBlock.remedy)
     const enrichTrade = tradeSeasonOutlook(access.snapshot, args.userId)
     const needsSeason = /\bplayoff|\bcompete|\bfuture|\bnext\s+(?:few\s+)?years/i.test(args.question)
     if (imageTrade.clarification) return gap('screenshot_trade_unclear', imageTrade.clarification, 'Confirm the assets on each side; no trade verdict was computed.')

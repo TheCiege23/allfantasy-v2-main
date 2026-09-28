@@ -38,8 +38,16 @@ describe('the trade-target verdict in the chat route', () => {
     expect(call).not.toMatch(/leagueId:\s*leagueId\b/)
   })
 
-  it('only parses the question when a proven league is in scope', () => {
-    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot \? parseTradeTargetQuestion\(message\) : null/)
+  it('only parses the question when a proven league is in scope, and that league allows trades', () => {
+    expect(ROUTE).toMatch(/const tradeTargetQuestion = leagueSnapshot && !leagueForbidsTrades\(leagueSnapshot\) \? parseTradeTargetQuestion\(message\) : null/)
+  })
+
+  /*
+   * This read runs BEFORE the shared decision service and is charged when it decides, so without
+   * the skip a guillotine manager bought a trade verdict the service's format gate refuses free.
+   */
+  it('takes its "no trades" test from the shared format gate, not a copy of it', () => {
+    expect(ROUTE).toMatch(/import \{ leagueForbidsTrades \} from '@\/lib\/chimmy\/decisionFormatGate'/)
   })
 
   it('is computed AFTER the confirmation check — the drawer sends every paid question twice', () => {
