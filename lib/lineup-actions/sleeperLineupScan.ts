@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import { isSleeperBestBallLeague } from '@/lib/lineup-actions/sleeperLeagueMeta'
@@ -54,7 +55,7 @@ async function fetchSleeperStateWeek(sportSlug: string): Promise<number> {
 }
 
 type ResolvedPlayer = {
-  externalId: string
+  sleeperId: string
   name: string | null
   position: string | null
   status: string | null
@@ -67,25 +68,23 @@ async function loadSleeperPlayersForSport(
   const ids = Array.from(new Set(playerIds.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 80)
   if (ids.length === 0) return new Map()
 
+  /*
+   * 🛑 SLEEPER IDS, LOOKED UP BY SLEEPER ID — never against `externalId`, where Rolling Insights
+   * keeps its OWN numbers for different people (Sleeper 9228 is Bryce Young; RI 9228 is Michael
+   * Tarquin, an OT). This read matched both columns and keyed its map by both, newest row first, so
+   * the OLDEST row of either person won — and the name, position and injury status this scan alerts
+   * on could be a stranger's. 8,122 Sleeper NFL players share their id with such a row
+   * (2026-09-29). See externalIdNamespace.ts.
+   */
   const rows = await prisma.sportsPlayer.findMany({
-    where: {
-      sport,
-      OR: [{ externalId: { in: ids } }, { sleeperId: { in: ids } }],
-    },
+    where: sleeperIdWhere(ids, sport),
     orderBy: { fetchedAt: 'desc' },
-    select: { externalId: true, sleeperId: true, name: true, position: true, status: true },
+    select: { sleeperId: true, source: true, name: true, position: true, status: true },
   })
 
   const by = new Map<string, ResolvedPlayer>()
-  for (const r of rows) {
-    const entry: ResolvedPlayer = {
-      externalId: r.externalId,
-      name: r.name,
-      position: r.position,
-      status: r.status,
-    }
-    by.set(r.externalId, entry)
-    if (r.sleeperId) by.set(r.sleeperId, entry)
+  for (const [sleeperId, r] of indexBySleeperId(rows)) {
+    by.set(sleeperId, { sleeperId, name: r.name, position: r.position, status: r.status })
   }
   return by
 }

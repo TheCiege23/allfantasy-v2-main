@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
@@ -129,19 +130,20 @@ export async function scanNativeLeagueLineup(args: NativeLineupScanArgs): Promis
    * injury. Not looked up: the starters still count toward the slot gap above, unnamed.
    */
   const ids = isForeignIdSpace(platform) ? [] : starters.slice(0, starterSlots.length).filter(Boolean)
+  /*
+   * 🛑 And the ids that ARE looked up are Sleeper-space, so by Sleeper id only — never against
+   * `externalId`, where Rolling Insights keeps its own colliding numbers (Sleeper 9228 is Bryce
+   * Young; RI 9228 is an offensive tackle). The same stranger-naming the foreign-league guard above
+   * prevents, reached from inside a Sleeper-space league. See externalIdNamespace.ts.
+   */
   const rows = await prisma.sportsPlayer.findMany({
-    where: {
-      sport,
-      OR: [{ externalId: { in: ids } }, { sleeperId: { in: ids } }],
-    },
+    where: sleeperIdWhere(ids, sport),
     orderBy: { fetchedAt: 'desc' },
-    select: { externalId: true, sleeperId: true, name: true, position: true, status: true },
+    select: { sleeperId: true, source: true, name: true, position: true, status: true },
   })
   const by = new Map<string, { name: string | null; position: string | null; status: string | null }>()
-  for (const r of rows) {
-    const e = { name: r.name, position: r.position, status: r.status }
-    by.set(r.externalId, e)
-    if (r.sleeperId) by.set(r.sleeperId, e)
+  for (const [sleeperId, r] of indexBySleeperId(rows)) {
+    by.set(sleeperId, { name: r.name, position: r.position, status: r.status })
   }
 
   for (let i = 0; i < starterSlots.length && i < starters.length; i++) {
