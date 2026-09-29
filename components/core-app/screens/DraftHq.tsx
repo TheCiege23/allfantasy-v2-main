@@ -11,10 +11,10 @@ import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app
  * "Before the draft: your picks, the lottery, the board settings and a prepared
  * queue."
  *
- * Pick slots are COMPUTED from snake order and shown as such. The handoff labels
- * one pick "From @dre · acquired Wk 6"; we cannot say that, because pick trades
- * are not ingested — so every slot here is captioned as an original slot, and
- * the caption is part of the design rather than a footnote.
+ * Your picks carry the draft's recorded pick trades — "from @dre" on a pick you
+ * acquired, and a separate line for the ones you traded away. Where the league
+ * trades on its provider and those trades are not synced, the loader's note says
+ * so beside the heading: it is a correctness statement, not a footnote.
  */
 
 export type DraftHqProps = {
@@ -92,23 +92,44 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
           <h2 className="af-label">Your picks</h2>
-          {data.pickSlots.available ? (
-            <span className="af-dh-section-note">
-              Original slots — pick trades are not ingested, so a pick you have traded away still
-              shows here
+          {data.pickSlots.available && data.pickSlots.data.note ? (
+            <span className="af-dh-section-note" data-testid="draft-hq-picks-note">
+              {data.pickSlots.data.note}
             </span>
           ) : null}
         </header>
 
         {data.pickSlots.available ? (
-          <ol className="af-dh-picks">
-            {data.pickSlots.data.map((p) => (
-              <li key={p.overall} className="af-dh-pick">
-                <span className="af-dh-pick-label af-num">{p.label}</span>
-                <span className="af-dh-pick-overall">#{p.overall} overall</span>
-              </li>
-            ))}
-          </ol>
+          <>
+            {data.pickSlots.data.held.length > 0 ? (
+              <ol className="af-dh-picks" data-testid="draft-hq-picks-held">
+                {data.pickSlots.data.held.map((p) => (
+                  <li
+                    key={p.overall}
+                    className="af-dh-pick"
+                    data-acquired={p.acquiredFrom ? 'true' : undefined}
+                  >
+                    <span className="af-dh-pick-label af-num">{p.label}</span>
+                    <span className="af-dh-pick-overall">#{p.overall} overall</span>
+                    {p.acquiredFrom ? (
+                      <span className="af-dh-pick-from">From {p.acquiredFrom}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <Unavailable reason="you have traded away every pick you started this draft with" />
+            )}
+            {data.pickSlots.data.tradedAway.length > 0 ? (
+              <ul className="af-dh-picks-away" data-testid="draft-hq-picks-away">
+                {data.pickSlots.data.tradedAway.map((p) => (
+                  <li key={p.overall} className="af-dh-pick-away">
+                    <span className="af-num">{p.label}</span> traded to {p.to}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : (
           <Unavailable reason={data.pickSlots.reason} />
         )}
@@ -312,28 +333,102 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
           <h2 className="af-label">Weighted lottery</h2>
         </header>
         {/*
-          The handoff shows a full lottery table — teams, ball counts, odds of the
-          #1 pick. There is no lottery model in this system at all. Odds computed
-          from standings would look exactly like a real lottery and would be
-          entirely ours, so the table is not drawn.
+          Odds from the lottery engine's read-only preview for THIS league's settings
+          and standings — only ever drawn for a league configured to run one. Anywhere
+          else the loader's sentence says why there is no table.
         */}
-        <div className="af-dh-empty">
-          <span className="af-dh-empty-mark af-num" aria-hidden>
-            —
-          </span>
-          <p className="af-dh-empty-text">{data.lottery.reason}</p>
-        </div>
+        {data.lottery.available ? (
+          <>
+            <p className="af-dh-lottery-rule">
+              Odds of landing the #1 pick. The first {data.lottery.data.pickCount} picks are drawn;
+              the rest follow in {data.lottery.data.fallbackOrder}.
+              {data.lottery.data.alreadyRunAt ? ' This league has already run its lottery.' : ''}
+            </p>
+            <table className="af-dh-lottery" data-testid="draft-hq-lottery">
+              <thead>
+                <tr>
+                  <th scope="col">Team</th>
+                  <th scope="col">Record</th>
+                  <th scope="col">Odds #1</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.lottery.data.teams.map((t) => (
+                  <tr key={t.rosterId} data-you={t.isYou ? 'true' : undefined}>
+                    <td>
+                      {t.name}
+                      {t.isYou ? <span className="af-dh-lottery-you"> you</span> : null}
+                    </td>
+                    <td className="af-num">{t.record}</td>
+                    <td className="af-num">{t.oddsPercent.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          <div className="af-dh-empty">
+            <span className="af-dh-empty-mark af-num" aria-hidden>
+              —
+            </span>
+            <p className="af-dh-empty-text">{data.lottery.reason}</p>
+          </div>
+        )}
       </section>
 
       {/* ── Queue & keepers ─────────────────────────────────────────── */}
       <div className="af-dh-pair">
         <section className="af-card af-dh-section">
           <h2 className="af-label">Prepared queue</h2>
-          <Unavailable reason={data.queue.reason} />
+          {data.queue.available ? (
+            <>
+              <ol className="af-dh-queue" data-testid="draft-hq-queue">
+                {data.queue.data.players.map((p) => (
+                  <li key={`${p.rank}:${p.playerName}`} className="af-dh-queue-row">
+                    <span className="af-dh-queue-rank af-num">{p.rank}</span>
+                    <span className="af-dh-made-name">{p.playerName}</span>
+                    <span className="af-dh-made-meta">
+                      {[p.position, p.team].filter(Boolean).join(' · ')}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {data.queue.data.total > data.queue.data.players.length ? (
+                <p className="af-dh-unavailable">
+                  {data.queue.data.total - data.queue.data.players.length} more in your queue
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <Unavailable reason={data.queue.reason} />
+          )}
         </section>
         <section className="af-card af-dh-section">
           <h2 className="af-label">Keepers</h2>
-          <Unavailable reason={data.keepers.reason} />
+          {data.keepers.available ? (
+            <>
+              <p className="af-dh-unavailable">
+                {data.keepers.data.source === 'imported'
+                  ? `kept in your ${data.keepers.data.season ?? 'last'} draft, as Sleeper recorded it`
+                  : data.keepers.data.maxKeepers != null
+                    ? `declared for this draft · up to ${data.keepers.data.maxKeepers} allowed`
+                    : 'declared for this draft'}
+              </p>
+              <ul className="af-dh-made" data-testid="draft-hq-keepers">
+                {data.keepers.data.players.map((k) => (
+                  <li key={`${k.round}:${k.playerName}`} className="af-dh-made-row">
+                    <span className="af-dh-pick-label af-num">Rd {k.round}</span>
+                    <span className="af-dh-made-name">{k.playerName}</span>
+                    <span className="af-dh-made-meta">
+                      {[k.position, k.team].filter(Boolean).join(' · ')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <Unavailable reason={data.keepers.reason} />
+          )}
         </section>
       </div>
     </div>
