@@ -56,7 +56,7 @@ export function PositionalNeedCard({ view, loading = false }: Props) {
           title="What the engine weights when it ranks players for you — a low score means the position is a hole, a high score means it is solved."
           style={{
             width: 16, height: 16, borderRadius: '50%', lineHeight: '14px',
-            fontSize: 10, fontWeight: 700, cursor: 'help',
+            fontSize: 11, fontWeight: 700, cursor: 'help',
             border: '1px solid var(--rule-2, rgba(255,255,255,.16))',
             background: 'transparent', color: 'var(--ink-3, #7e8894)',
           }}

@@ -320,7 +320,7 @@
 /* Shape from `.af-platform-mark`; only the smaller box and type are local. */
 .af-core .af-im-context-mark {
   --af-platform-mark-size: 22px;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.01em;
 }
 
@@ -342,7 +342,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -525,7 +525,7 @@
   background: var(--chip);
   color: var(--muted);
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   cursor: help;
@@ -707,7 +707,7 @@
 }
 
 .af-im-league-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--faint);
@@ -956,7 +956,7 @@
   border-radius: 999px;
   border: 1px solid var(--line2);
   background: var(--chip);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -970,7 +970,7 @@
   border-radius: 999px;
   border: 1px solid var(--good);
   background: var(--good-soft);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   color: var(--good);
@@ -1025,7 +1025,7 @@
   gap: 8px;
   flex-wrap: wrap;
   margin: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1203,7 +1203,7 @@
 .af-im-fx-field--sm { flex: 0 1 130px; }
 .af-im-fx-field > span,
 .af-im-fx-files > span {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);

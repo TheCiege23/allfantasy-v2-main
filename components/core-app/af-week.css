@@ -24,7 +24,7 @@
 .af-wk-eyebrow {
   margin: 0 0 6px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -141,7 +141,7 @@
 .af-wk-gap {
   flex: none;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--warn);
 }
@@ -179,7 +179,7 @@
 }
 
 .af-wk-vs {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -219,7 +219,7 @@
 
 .af-wk-projtag {
   margin-left: 5px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -295,7 +295,7 @@
 .af-wk-lean-prob--form[data-tone='down'] { color: color-mix(in srgb, var(--bad) 62%, var(--muted)); }
 .af-wk-lean-prob-sub {
   font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -305,7 +305,7 @@
 .af-wk-lean-score {
   flex: none;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
   max-width: 130px;
   white-space: nowrap;
@@ -373,7 +373,7 @@
 .af-rr-watch-eyebrow {
   margin: 0 0 5px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -496,7 +496,7 @@
 .af-rr-record[data-tone='neutral'] { color: var(--text2); }
 
 .af-rr-record-label {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -518,7 +518,7 @@
 
 .af-rr-stats dt {
   margin: 0;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -546,7 +546,7 @@
 }
 
 .af-rr-closest b {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -564,7 +564,7 @@
 }
 
 .af-rr-today-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -583,7 +583,7 @@
 
 .af-rr-today-gap {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 

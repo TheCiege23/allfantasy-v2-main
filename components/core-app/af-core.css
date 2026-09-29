@@ -384,7 +384,7 @@ html[data-mode='af'] .af-core {
 
 .af-core .af-label {
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -597,7 +597,7 @@ html[data-mode='af'] .af-core {
 :where(.af-platform-chip) {
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -641,7 +641,7 @@ html[data-mode='af'] .af-core {
   color: var(--muted);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -660,7 +660,7 @@ html[data-mode='af'] .af-core {
   border: 1px solid var(--line2);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   cursor: pointer;
@@ -731,7 +731,7 @@ html[data-mode='af'] .af-core {
   color: var(--faint);
 }
 .af-search-kbd {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -1017,7 +1017,7 @@ html[data-mode='af'] .af-core {
   background: #0b2f7a;
   border: 1.5px solid #22d3ee;
   color: #ffffff;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;

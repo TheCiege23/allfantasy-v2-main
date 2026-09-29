@@ -211,7 +211,7 @@
 .cos-sheet-generated {
   margin: 0;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint, #7d84a8);
 }
 
@@ -251,15 +251,15 @@
 .cos-axis {
   fill: var(--faint, #7d84a8);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
 }
 
-.cos-axis--rot { font-size: 9px; }
+.cos-axis--rot { font-size: 11px; }
 
 .cos-inline {
   fill: var(--text2, #c3c9e6);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -279,7 +279,7 @@
 .cos-target-label {
   fill: #1a1204;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -343,7 +343,7 @@
 
 .cos-lb-rank {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint, #7d84a8);
 }
 
@@ -383,7 +383,7 @@
 
 .cos-lb-delta {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   text-align: right;
   color: var(--faint, #7d84a8);
 }

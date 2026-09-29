@@ -102,7 +102,7 @@ export function MatchupCenter({ leagueId }: { leagueId: string }) {
                           <div style={{ fontSize: 17, fontWeight: 900, fontStyle: 'italic', fontVariantNumeric: 'tabular-nums' }}>
                             {m.winProbA.toFixed(0)}%
                           </div>
-                          <div style={{ fontSize: 10, color: 'var(--bdx-ink-ghost)' }}>vs {(100 - m.winProbA).toFixed(0)}%</div>
+                          <div style={{ fontSize: 11, color: 'var(--bdx-ink-ghost)' }}>vs {(100 - m.winProbA).toFixed(0)}%</div>
                         </>
                       ) : (
                         <div style={{ fontSize: 12, color: 'var(--bdx-ink-ghost)' }}>vs</div>

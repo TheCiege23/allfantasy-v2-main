@@ -3084,7 +3084,7 @@ select, option {
   border: 1px solid var(--at-border2);
   border-radius: 20px;
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--at-text3);
 }
 

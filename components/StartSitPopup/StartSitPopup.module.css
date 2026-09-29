@@ -76,7 +76,7 @@
 }
 
 .apiPill {
-  font-size: 10px;
+  font-size: 11px;
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -138,7 +138,7 @@
 }
 
 .ctrlLabel {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: rgba(148, 163, 184, 0.85);
@@ -198,7 +198,7 @@
 
 .lensSub {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(148, 163, 184, 0.9);
   margin-top: 2px;
 }
@@ -251,7 +251,7 @@
 }
 
 .statusConfLabel {
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(148, 163, 184, 0.85);
   text-transform: uppercase;
 }
@@ -355,7 +355,7 @@
 .newsMetaRow {
   display: flex;
   gap: 8px;
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(148, 163, 184, 0.9);
 }
 
@@ -408,7 +408,7 @@
 }
 
 .wcVenue {
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(148, 163, 184, 0.9);
 }
 
@@ -423,7 +423,7 @@
 }
 
 .wcImpact {
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 2px;
 }
 
@@ -492,7 +492,7 @@
 .loadingSource {
   display: block;
   margin-top: 8px;
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(100, 116, 139, 0.95);
 }
 
@@ -531,7 +531,7 @@
 }
 
 .pcMeta {
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(148, 163, 184, 0.95);
   margin-top: 2px;
 }
@@ -549,7 +549,7 @@
 .badgeInjury {
   display: inline-block;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 11px;
   color: #f5a623;
 }
 
@@ -568,7 +568,7 @@
 }
 
 .pcStatLabel {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   color: rgba(148, 163, 184, 0.85);
 }
@@ -598,7 +598,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   margin-bottom: 4px;
 }
 
@@ -637,7 +637,7 @@
 }
 
 .pcFooterMeta {
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(100, 116, 139, 0.95);
 }
 
@@ -688,7 +688,7 @@
 }
 
 .chimmySubtitle {
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(148, 163, 184, 0.9);
 }
 
@@ -700,7 +700,7 @@
 }
 
 .quickBtn {
-  font-size: 10px;
+  font-size: 11px;
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -728,7 +728,7 @@
 }
 
 .msgLabel {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: rgba(148, 163, 184, 0.85);

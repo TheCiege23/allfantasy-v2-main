@@ -184,7 +184,7 @@
 .af-pc-feed {
   flex-basis: 100%;
   margin: 0;
-  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
   color: var(--faint);
 }
 
@@ -230,7 +230,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 800 9px/1 'Archivo', system-ui, sans-serif;
+  font: 800 11px/1 'Archivo', system-ui, sans-serif;
   background: var(--chip);
   color: var(--text2);
 }
@@ -408,7 +408,7 @@
 /* ── labels + absent reasons ─────────────────────────────────────────────── */
 
 .af-pc-label {
-  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -423,7 +423,7 @@
 
 .af-pc-basis {
   margin: 0;
-  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
   color: var(--faint);
   max-width: 60ch;
 }
@@ -465,7 +465,7 @@
   color: var(--text2);
 }
 .af-pc-chev {
-  font: 700 10px/1 'Archivo', system-ui, sans-serif;
+  font: 700 11px/1 'Archivo', system-ui, sans-serif;
   color: var(--faint);
 }
 .af-pc-insight-d {
@@ -515,7 +515,7 @@
   color: var(--bad);
 }
 .af-pc-tile-sub {
-  font: 700 10px/1.3 'Archivo', system-ui, sans-serif;
+  font: 700 11px/1.3 'Archivo', system-ui, sans-serif;
 }
 .af-pc-up {
   color: var(--good);

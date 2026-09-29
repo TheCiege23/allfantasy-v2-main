@@ -15,9 +15,16 @@
  *     rail overflow / page overflow        none -> none at both widths
  * So the only cost is five more long team names hitting the ellipsis they already use.
  *
- * ⚠ THIS GUARDS THE RAIL, NOT THE APP. There are ~510 sub-11px font declarations across
- * components/core-app; raising all of them is a design decision, not a patch. This pins the one
- * surface that was measured, on every screen, so it cannot quietly slide back.
+ * ⚠ THIS GUARDS THE RAIL SPECIFICALLY, and still earns its place now that the CSS sweep has
+ * landed: type-floor.test.ts asserts the floor across every stylesheet, but it cannot notice a
+ * RENAMED rail selector — a rule that no longer exists declares nothing, so it trivially passes.
+ * The `finds the rules at all` case below is the part that does not transfer.
+ *
+ * The "~510 declarations remain, raising them is a design decision" note that stood here is
+ * SETTLED: 805 CSS declarations across 88 files were raised to the floor after the change was
+ * measured on the live site. See type-floor.test.ts for those measurements, and for the surfaces
+ * deliberately left below the floor (user-zoomable canvases, the satori share card) and the one
+ * that is not done yet (Tailwind `text-[Npx]`, the dominant surface by volume).
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'

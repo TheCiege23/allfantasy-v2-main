@@ -21,7 +21,7 @@
 .af-triage-title {
   margin: 0;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.12em;
@@ -100,7 +100,7 @@
 }
 
 .af-triage-status {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -160,7 +160,7 @@
 }
 
 .af-triage-league-platform {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: color-mix(in srgb, var(--text) 55%, transparent);
@@ -238,7 +238,7 @@
   margin-left: 6px;
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   background: var(--chip);
@@ -252,7 +252,7 @@
 /* The price caveat, stated once for the panel. */
 .af-triage-basis {
   margin: 8px 0 0;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 

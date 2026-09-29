@@ -186,7 +186,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-admin-chip {
-  font: 700 9px/1 var(--af-cc-mono);
+  font: 700 11px/1 var(--af-cc-mono);
   color: var(--bad);
   background: var(--bad-soft);
   border: 1px solid var(--bad);
@@ -208,7 +208,7 @@ html[data-mode='af'] .af-cc--adaptive {
 .af-cc-tab {
   display: inline-flex;
   align-items: center;
-  font: 700 10px/1 var(--af-cc-sans);
+  font: 700 11px/1 var(--af-cc-sans);
   color: var(--muted);
   background: var(--chip);
   border: 1px solid var(--chip-line);
@@ -236,7 +236,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-stamp {
-  font: 400 10px/1 var(--af-cc-mono);
+  font: 400 11px/1 var(--af-cc-mono);
   color: var(--faint);
 }
 
@@ -301,7 +301,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-verdict-evidence {
-  font: 400 10px/1.4 var(--af-cc-sans);
+  font: 400 11px/1.4 var(--af-cc-sans);
   color: var(--muted);
 }
 
@@ -345,7 +345,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-needs-detail {
-  font: 400 10px/1.3 var(--af-cc-sans);
+  font: 400 11px/1.3 var(--af-cc-sans);
   color: var(--muted);
 }
 
@@ -355,7 +355,7 @@ html[data-mode='af'] .af-cc--adaptive {
 
 .af-cc-more-summary {
   cursor: pointer;
-  font: 700 10px/1 var(--af-cc-mono);
+  font: 700 11px/1 var(--af-cc-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -444,7 +444,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-card-scope {
-  font: 700 9px/1 var(--af-cc-mono);
+  font: 700 11px/1 var(--af-cc-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -499,7 +499,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-metric-unit {
-  font: 400 9px/1 var(--af-cc-mono);
+  font: 400 11px/1 var(--af-cc-mono);
   color: var(--faint);
 }
 
@@ -533,12 +533,12 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-untracked-reason {
-  font: 400 9px/1.3 var(--af-cc-sans);
+  font: 400 11px/1.3 var(--af-cc-sans);
   color: var(--faint);
 }
 
 .af-cc-untracked-chip {
-  font: 700 9px/1 var(--af-cc-mono);
+  font: 700 11px/1 var(--af-cc-mono);
   letter-spacing: 0.06em;
   color: var(--muted);
   white-space: nowrap;
@@ -551,12 +551,12 @@ html[data-mode='af'] .af-cc--adaptive {
   padding: 9px 10px;
   background: var(--warn-soft);
   border-radius: 8px;
-  font: 400 10px/1.4 var(--af-cc-sans);
+  font: 400 11px/1.4 var(--af-cc-sans);
   color: var(--text2);
 }
 
 .af-cc-footnote {
-  font: 400 10px/1.5 var(--af-cc-sans);
+  font: 400 11px/1.5 var(--af-cc-sans);
   color: var(--faint);
 }
 
@@ -600,7 +600,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-colhead {
-  font: 700 8px/1 var(--af-cc-mono);
+  font: 700 11px/1 var(--af-cc-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -618,20 +618,20 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-cell-sub {
-  font: 400 10px/1.35 var(--af-cc-sans);
+  font: 400 11px/1.35 var(--af-cc-sans);
   color: var(--muted);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .af-cc-cell-faint {
-  font: 400 9px/1.3 var(--af-cc-sans);
+  font: 400 11px/1.3 var(--af-cc-sans);
   color: var(--faint);
   overflow-wrap: anywhere;
 }
 
 .af-cc-cell-time {
-  font: 400 10px/1 var(--af-cc-mono);
+  font: 400 11px/1 var(--af-cc-mono);
   color: var(--muted);
 }
 
@@ -660,7 +660,7 @@ html[data-mode='af'] .af-cc--adaptive {
 .af-cc-chip {
   display: inline-flex;
   align-items: center;
-  font: 700 8px/1 var(--af-cc-mono);
+  font: 700 11px/1 var(--af-cc-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 5px 7px;
@@ -740,7 +740,7 @@ html[data-mode='af'] .af-cc--adaptive {
 }
 
 .af-cc-job-cadence {
-  font: 400 9px/1.3 var(--af-cc-sans);
+  font: 400 11px/1.3 var(--af-cc-sans);
   color: var(--faint);
 }
 
@@ -803,7 +803,7 @@ html[data-mode='af'] .af-cc--adaptive {
   border: 0;
   background: transparent;
   color: var(--text);
-  font: 400 10px/1.4 var(--af-cc-sans);
+  font: 400 11px/1.4 var(--af-cc-sans);
   outline: none;
 }
 
@@ -915,7 +915,7 @@ html[data-mode='af'] .af-cc--adaptive {
 .af-cc-bars-axis {
   display: flex;
   justify-content: space-between;
-  font: 400 9px/1 var(--af-cc-mono);
+  font: 400 11px/1 var(--af-cc-mono);
   color: var(--faint);
 }
 

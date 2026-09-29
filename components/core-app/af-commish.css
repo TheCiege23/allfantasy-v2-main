@@ -140,7 +140,7 @@
   border: 1px solid var(--chip-line);
   background: var(--chip);
   padding: 3px 7px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -166,7 +166,7 @@
   border-radius: 6px;
   border: 1px solid var(--chip-line);
   padding: 3px 7px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -216,7 +216,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -268,7 +268,7 @@
   border: 1px solid var(--chip-line);
   background: var(--chip);
   color: var(--faint);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   cursor: help;
@@ -636,7 +636,7 @@
   text-align: right;
   padding: 0 12px 10px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -703,7 +703,7 @@
   border: 1px solid var(--chip-line);
   background: var(--chip);
   padding: 4px 9px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -821,7 +821,7 @@
 }
 
 .af-core .af-cm-side-who {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -879,7 +879,7 @@
 }
 
 .af-core .af-cm-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;

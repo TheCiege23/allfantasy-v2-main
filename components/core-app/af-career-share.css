@@ -7,7 +7,7 @@
 .af-cs-eyebrow {
   margin: 0 0 6px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -60,7 +60,7 @@
 .af-cs-blocktitle {
   margin: 0 0 9px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -109,7 +109,7 @@
 
 .af-cs-chip-sub {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -126,7 +126,7 @@
 
 .af-cs-stats dt {
   margin: 0;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -147,7 +147,7 @@
 .af-cs-statsub {
   margin-top: 2px;
   font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--faint);
@@ -187,7 +187,7 @@
 .af-cs-cost {
   margin: 7px 0 0;
   text-align: center;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--faint);
 }
@@ -315,7 +315,7 @@
 
 .af-cs-card-league {
   min-width: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -330,7 +330,7 @@
 .af-cs-card-level {
   margin: 0;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
   opacity: 0.6;
@@ -362,7 +362,7 @@
 .af-cs-card-stats span {
   display: flex;
   flex-direction: column;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -381,7 +381,7 @@
 .af-cs-card-foot {
   margin: 12px 0 0;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   opacity: 0.42;

@@ -102,9 +102,9 @@
 /* ── Trade sides ───────────────────────────────────────────────── */
 .bdx .bdx-trade { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; margin: 12px 0; }
 .bdx .bdx-side { border-radius: 10px; padding: 12px 14px; background: var(--bdx-panel-deep); border: 1px solid var(--bdx-border); }
-.bdx .bdx-side .dir { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; }
+.bdx .bdx-side .dir { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; }
 .bdx .bdx-asset { display: flex; align-items: center; gap: 9px; padding: 4px 0; font-size: 14px; font-weight: 600; }
-.bdx .bdx-pos { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: 0.05em; background: var(--bdx-border); color: var(--bdx-ink-mid); flex: none; }
+.bdx .bdx-pos { font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: 0.05em; background: var(--bdx-border); color: var(--bdx-ink-mid); flex: none; }
 .bdx .bdx-swap { align-self: center; font-size: 18px; opacity: 0.55; }
 
 /* ── Verdict line + confidence meter ───────────────────────────── */
@@ -220,7 +220,7 @@
 .bdx .bdx-rail-name { font-size: 17px; line-height: 1.15; letter-spacing: -0.02em; }
 .bdx .bdx-rail-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
 .bdx .bdx-chip {
-  font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700;
+  font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700;
   background: #181c44; border: 1px solid #2c3260; color: var(--bdx-ink-dim);
 }
 .bdx .bdx-chip.grad { background: var(--bdx-grad); border: 0; color: #fff; font-style: italic; text-transform: uppercase; }
@@ -246,7 +246,7 @@
 .bdx .bdx-rail-brand {
   display: flex; align-items: center; gap: 9px;
   margin-top: 14px; padding: 4px 2px 0;
-  font-size: 10.5px; line-height: 1.5; color: var(--bdx-ink-ghost);
+  font-size: 11px; line-height: 1.5; color: var(--bdx-ink-ghost);
 }
 .bdx .bdx-rail-brand img { width: 34px; height: 34px; border-radius: 9px; flex: none; }
 .bdx .bdx-rail-brand b { color: var(--bdx-ink-faint); }
@@ -258,13 +258,13 @@
   padding: 13px 16px; min-width: 165px; max-width: 240px;
 }
 .bdx .bdx-champ .yr {
-  font-size: 10.5px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic;
+  font-size: 11px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic;
   text-transform: uppercase; letter-spacing: 0.08em;
 }
 .bdx .bdx-champ .nm { font-size: 15px; font-weight: 800; margin-top: 5px; }
 .bdx .bdx-champ .rec { font-size: 11px; color: var(--bdx-ink-ghost); margin-top: 3px; font-variant-numeric: tabular-nums; }
 .bdx .bdx-stand th {
-  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--bdx-ink-faint); text-align: left; padding: 5px 4px;
   border-bottom: 1px solid var(--bdx-border); font-weight: 800;
 }

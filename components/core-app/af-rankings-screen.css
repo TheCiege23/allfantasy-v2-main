@@ -70,7 +70,7 @@
   min-width: 0;
 }
 .af-rk-eyebrow {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--faint);
@@ -97,7 +97,7 @@
   border: 1px solid var(--warn);
   color: var(--warn);
   background: var(--warn-soft);
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   cursor: help;
   flex: none;
 }
@@ -131,7 +131,7 @@
 .af-rk-scope-head p:not(.af-rk-eyebrow) { max-width: 720px; margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .af-rk-scope-counts { display: flex; gap: 8px; flex-wrap: wrap; }
 .af-rk-scope-counts b { min-width: 88px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--accent); background: var(--surface2); font: 800 19px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; }
-.af-rk-scope-counts small { display: block; margin-top: 6px; color: var(--faint); font: 700 9px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+.af-rk-scope-counts small { display: block; margin-top: 6px; color: var(--faint); font: 700 11px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
 .af-rk-scope-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); gap: 14px; }
 .af-rk-league-board { list-style: none; margin: 0; padding: 7px; border: 1px solid var(--line2); border-radius: 14px; background: var(--surface); }
 .af-rk-league-board li { min-height: 38px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 54px 70px; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--text2); }
@@ -157,7 +157,7 @@
 /* Your rank */
 .af-rk-rank-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .af-rk-level {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--accent);
 }
@@ -180,7 +180,7 @@
   margin: 0;
 }
 .af-rk-ranktier {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
@@ -265,7 +265,7 @@
   color: var(--text);
 }
 .af-rk-here {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--accent-ink);
   background: var(--accent);
@@ -441,7 +441,7 @@
 }
 .af-rk-tiercell span {
   display: block;
-  font: 700 10px/1.35 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.35 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   color: var(--faint);
 }
 
@@ -501,7 +501,7 @@
   letter-spacing: -0.02em;
 }
 .af-rk-vsmeta {
-  font: 700 10.5px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -519,7 +519,7 @@
 .af-rk-table th {
   text-align: left;
   padding: 9px 12px;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
@@ -596,7 +596,7 @@
   font: 700 13px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
 }
 .af-rk-found {
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   padding: 5px 7px;
   border-radius: 5px;
@@ -731,7 +731,7 @@
 .af-rk-field { display: flex; flex-direction: column; gap: 5px; min-width: 132px; flex: 1 1 132px; }
 .af-rk-field--wide { flex: 2 1 220px; }
 .af-rk-field > span {
-  font: 700 9.5px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -769,7 +769,7 @@
   color: var(--text2);
 }
 .af-rk-grid-table thead th {
-  font: 700 10px/1.2 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font: 700 11px/1.2 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -793,7 +793,7 @@
   text-decoration: none;
 }
 .af-rk-sortlink:hover { color: var(--text); }
-.af-rk-sorticon { font-size: 9px; opacity: 0.75; }
+.af-rk-sorticon { font-size: 11px; opacity: 0.75; }
 th[aria-sort="ascending"] .af-rk-sortlink,
 th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-celllink { color: inherit; text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
@@ -833,7 +833,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   border: 1px solid var(--line);
   background: var(--surface2);
 }
-.af-rk-moves li span { font-size: 10.5px; color: var(--faint); }
+.af-rk-moves li span { font-size: 11px; color: var(--faint); }
 .af-rk-moves li b { font: 800 16px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; }
 .af-rk-moves .af-rk-moves-note { flex-basis: 100%; min-width: 0; border: 0; background: none; padding: 0; font-size: 11.5px; color: var(--faint); }
 
@@ -845,7 +845,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-components { width: 100%; border-collapse: collapse; margin-top: 12px; }
 .af-rk-components th,
 .af-rk-components td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-size: 12.5px; color: var(--text2); }
-.af-rk-components thead th { font: 700 9.5px/1.2 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.af-rk-components thead th { font: 700 11px/1.2 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
 .af-rk-components tbody th { color: var(--text); font-weight: 700; width: 28%; }
 .af-rk-components .af-rk-right { text-align: right; white-space: nowrap; }
 .af-rk-components tfoot th,
@@ -874,7 +874,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-fresh { margin: 12px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
 .af-rk-fresh b {
   margin-right: 6px;
-  font: 700 9.5px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);

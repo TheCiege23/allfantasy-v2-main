@@ -245,7 +245,7 @@
 .progress-time {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   color: #7a8395;
 }
 
@@ -394,7 +394,7 @@
 }
 
 .favorite-date {
-  font-size: 10px;
+  font-size: 11px;
   color: #6a6b75;
   margin-top: 2px;
 }

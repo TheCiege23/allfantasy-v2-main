@@ -247,7 +247,7 @@
 }
 
 .af-wl-prob-sub {
-  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -387,7 +387,7 @@
   border-radius: 50%;
   background: var(--chip);
   border: 1px solid var(--chip-line);
-  font: 800 8px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 800 11px/1 'JetBrains Mono', ui-monospace, monospace;
   color: var(--muted);
   letter-spacing: 0.02em;
 }
@@ -415,7 +415,7 @@
 }
 
 .af-wl-card-rec {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -442,7 +442,7 @@
 
 .af-wl-card-why {
   margin: 0;
-  font: 400 10px/1.4 'JetBrains Mono', ui-monospace, monospace;
+  font: 400 11px/1.4 'JetBrains Mono', ui-monospace, monospace;
   color: var(--faint);
 }
 
@@ -499,7 +499,7 @@
   .af-wl-avatar {
     width: 28px;
     height: 28px;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.02em;
   }
 

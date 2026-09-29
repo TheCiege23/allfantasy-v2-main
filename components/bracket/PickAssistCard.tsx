@@ -26,11 +26,11 @@ const ROUND_LABELS: Record<number, string> = {
 function ProbBar({ value, label, color }: { value: number; label: string; color: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', width: 60, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', width: 68, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${value}%`, background: color }} />
       </div>
-      <span style={{ fontSize: 9, fontWeight: 700, color, width: 28, textAlign: 'right', flexShrink: 0 }}>{value}%</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color, width: 32, textAlign: 'right', flexShrink: 0 }}>{value}%</span>
     </div>
   )
 }

@@ -403,7 +403,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
           </p>
           <div className="af-rk-thresholds">
             <div className="af-rk-tiercell" style={{ textAlign: 'left' }}>
-              <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              <span style={{ fontSize: 11, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 STARTER VALUE
               </span>
               <b style={{ fontSize: 18, marginTop: 6 }} className="af-rk-mono">
@@ -411,7 +411,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
               </b>
             </div>
             <div className="af-rk-tiercell" style={{ textAlign: 'left' }}>
-              <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              <span style={{ fontSize: 11, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 EXPECTED WINS
               </span>
               <b style={{ fontSize: 18, marginTop: 6 }} className="af-rk-mono">
@@ -419,7 +419,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
               </b>
             </div>
             <div className="af-rk-tiercell" style={{ textAlign: 'left' }}>
-              <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              <span style={{ fontSize: 11, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 INJURY HEALTH
               </span>
               <b style={{ fontSize: 18, marginTop: 6 }} className="af-rk-mono">
@@ -427,7 +427,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
               </b>
             </div>
             <div className="af-rk-tiercell" style={{ textAlign: 'left' }}>
-              <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              <span style={{ fontSize: 11, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 TRADE EFFICIENCY
               </span>
               <b style={{ fontSize: 18, marginTop: 6 }} className="af-rk-mono">

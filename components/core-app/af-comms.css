@@ -112,7 +112,7 @@
   border: 1px solid var(--accent-line);
   background: var(--accent-soft);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -170,7 +170,7 @@
 .af-cm-audience {
   margin: 0;
   padding: 7px 0 9px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -193,7 +193,7 @@
   display: block;
   margin-bottom: 6px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -235,7 +235,7 @@
 
 .af-cm-chip-badge {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.09em;
   color: var(--faint);
@@ -245,11 +245,11 @@
 
 .af-cm-scope-note {
   margin: 8px 0 0;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--faint);
 }
-.af-cm-franchise-scope{margin:10px 0 0;padding:9px;border:1px solid var(--accent-line);border-radius:10px;background:var(--accent-soft)}.af-cm-franchise-scope legend{padding:0 5px;color:var(--accent);font-size:10px;font-weight:800}.af-cm-franchise-scope>p{margin:0 0 7px;color:var(--faint);font-size:9px;line-height:1.4}.af-cm-franchise-scope>div{display:grid;gap:5px}.af-cm-franchise-scope label{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px;padding:6px 7px;border:1px solid var(--line2);border-radius:8px;background:var(--surface)}.af-cm-franchise-scope label span{overflow:hidden;font-size:10px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.af-cm-franchise-scope label small{color:var(--faint);font-size:8px;text-transform:uppercase}.af-cm-connected-used{margin-top:8px;padding:8px;border:1px solid var(--accent-line);border-radius:9px;background:var(--accent-soft)}.af-cm-connected-used>strong{display:block;margin-bottom:5px;color:var(--accent);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.af-cm-connected-used>div{display:flex;flex-wrap:wrap;gap:4px}.af-cm-connected-used span{padding:4px 6px;border:1px solid var(--line2);border-radius:999px;color:var(--faint);font-size:8px}.af-cm-connected-used span[data-available=true]{color:var(--text2)}
+.af-cm-franchise-scope{margin:10px 0 0;padding:9px;border:1px solid var(--accent-line);border-radius:10px;background:var(--accent-soft)}.af-cm-franchise-scope legend{padding:0 5px;color:var(--accent);font-size:11px;font-weight:800}.af-cm-franchise-scope>p{margin:0 0 7px;color:var(--faint);font-size:11px;line-height:1.4}.af-cm-franchise-scope>div{display:grid;gap:5px}.af-cm-franchise-scope label{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px;padding:6px 7px;border:1px solid var(--line2);border-radius:8px;background:var(--surface)}.af-cm-franchise-scope label span{overflow:hidden;font-size:11px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.af-cm-franchise-scope label small{color:var(--faint);font-size:11px;text-transform:uppercase}.af-cm-connected-used{margin-top:8px;padding:8px;border:1px solid var(--accent-line);border-radius:9px;background:var(--accent-soft)}.af-cm-connected-used>strong{display:block;margin-bottom:5px;color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.af-cm-connected-used>div{display:flex;flex-wrap:wrap;gap:4px}.af-cm-connected-used span{padding:4px 6px;border:1px solid var(--line2);border-radius:999px;color:var(--faint);font-size:11px}.af-cm-connected-used span[data-available=true]{color:var(--text2)}
 
 /* Fast / Deep — a second row in the scope block, reusing its label and chip styles. */
 .af-cm-answer-mode {
@@ -266,7 +266,7 @@
   display: inline-block;
   margin: 6px 8px 0 0;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -337,7 +337,7 @@
   padding: 4px 9px;
   border-radius: 7px;
   background: var(--warn-soft);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--warn);
 }
@@ -365,7 +365,7 @@
 .af-cm-grounding {
   display: block;
   margin-top: 5px;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   line-height: 1.4;
 }
@@ -424,7 +424,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -464,7 +464,7 @@
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -478,7 +478,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--chip);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--faint);
 }
@@ -494,7 +494,7 @@
   display: block;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
 }
@@ -525,7 +525,7 @@
   border-radius: 7px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 10px;
+  font-size: 11px;
   text-decoration: none;
 }
 
@@ -551,7 +551,7 @@
 .af-cm-scn-title {
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
 }
@@ -565,7 +565,7 @@
 }
 
 .af-cm-scn-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -587,7 +587,7 @@
 
 .af-cm-scn-table thead th {
   border-top: 0;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -645,7 +645,7 @@
 
 .af-cm-verdict-label {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -739,7 +739,7 @@
   background: transparent;
   color: var(--accent);
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -915,7 +915,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--faint);
@@ -937,7 +937,7 @@
 }
 
 .af-cm-playerpos {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--faint);
 }
@@ -1007,7 +1007,7 @@
   border-radius: 999px;
   background: var(--accent);
   color: var(--bg);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-align: center;
 }
@@ -1031,7 +1031,7 @@
 .af-cm-gif figcaption {
   margin-top: 2px;
   text-align: right;
-  font-size: 8px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--faint);
 }
@@ -1045,7 +1045,7 @@
 .af-cm-seenby,
 .af-cm-typing-note {
   margin: 2px 0 0;
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--faint);
   text-align: right;
 }
@@ -1109,7 +1109,7 @@
 }
 
 .af-cm-trade-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1146,7 +1146,7 @@
   color: var(--ink-soft, inherit);
 }
 
-.af-cm-poll-n { color: var(--faint); font-size: 10px; }
+.af-cm-poll-n { color: var(--faint); font-size: 11px; }
 
 /*
  * A votable option. The bar is a share of votes cast and is painted behind the
@@ -1194,7 +1194,7 @@
 
 .af-cm-poll-tot {
   margin: 2px 0 0;
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1212,7 +1212,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--faint);
-  font-size: 9.5px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -1256,7 +1256,7 @@
 }
 
 .af-cm-act-type {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1265,11 +1265,11 @@
 
 /* The league is the point of this view, so it reads before the description. */
 .af-cm-act-league {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.af-cm-act-when { font-size: 9.5px; color: var(--faint); }
+.af-cm-act-when { font-size: 11px; color: var(--faint); }
 
 .af-cm-act-desc {
   display: block;
@@ -1278,7 +1278,7 @@
 }
 
 /* A trade's grade, one chip per team — lib/activity/tradeGradeLabel.ts. */
-.af-cm-act-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 10.5px; color: var(--faint); }
+.af-cm-act-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; font-size: 11px; color: var(--faint); }
 .af-cm-act-grade-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
 .af-cm-act-grade-chip b { font-weight: 800; }
 
@@ -1302,7 +1302,7 @@
   display: block;
   margin-top: 5px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   color: var(--faint);
 }
@@ -1321,7 +1321,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--faint);
-  font-size: 9.5px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -1348,7 +1348,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.03em;
   color: var(--faint);
   white-space: nowrap;
@@ -1365,7 +1365,7 @@
 .af-cm-presence-who[data-status='away'] .af-cm-presence-dot { background: var(--warn, #d8a13a); }
 
 .af-cm-presence-more {
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -1403,14 +1403,14 @@
 }
 
 .af-cm-rx-n {
-  font-size: 9.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
 .af-cm-rx-add {
   border-style: dashed;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .af-cm-rx-chip:disabled,
@@ -1468,7 +1468,7 @@
   align-items: baseline;
   gap: 5px;
   min-width: 0;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -1488,7 +1488,7 @@
   border: 0;
   background: transparent;
   color: var(--faint);
-  font-size: 9.5px;
+  font-size: 11px;
   cursor: pointer;
   opacity: 0;
   transition: opacity 120ms ease-out;
@@ -1514,7 +1514,7 @@
   padding: 5px 8px;
   border-left: 2px solid var(--accent);
   background: var(--surface-sunk, rgba(255, 255, 255, 0.04));
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -1559,7 +1559,7 @@
   border: 0;
   background: transparent;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.03em;
   cursor: pointer;
 }
@@ -1626,7 +1626,7 @@
 }
 
 .af-cm-msg-author {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
 }
@@ -1636,7 +1636,7 @@
  * the column of stamps from jittering as the digits change down a thread.
  */
 .af-cm-msg-time {
-  font-size: 9.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   color: var(--faint);
@@ -1778,7 +1778,7 @@
   padding: 9px 15px;
   border-bottom: 1px solid var(--line);
   background: var(--warn-soft);
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--warn);
 }
@@ -1791,7 +1791,7 @@
   padding: 0;
   color: var(--accent);
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;
@@ -1851,7 +1851,7 @@
 .af-cm-costnote {
   flex: none;
   margin: 6px 15px 0;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -1869,14 +1869,14 @@
 }
 
 .af-cm-footlink {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   text-decoration: none;
 }
 
 .af-cm-footnote {
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--faint);
   text-align: right;
 }
@@ -1981,7 +1981,7 @@
   background: var(--bad);
   color: #ffffff;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
 }
@@ -2064,7 +2064,7 @@
   background: var(--chip);
   color: var(--muted);
   font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   transition: color 0.13s ease, background-color 0.13s ease;
 }
@@ -2114,7 +2114,7 @@
   padding: 9px 11px;
   border-color: var(--chip-line);
   border-radius: 16px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   text-align: center;
 }
@@ -2268,7 +2268,7 @@
   display: block;
   margin: 0 2px 4px;
   font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2319,7 +2319,7 @@
 .af-cm-brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; color: var(--accent); }
 .af-cm-headtop { min-height: 44px; }
 .af-cm-title { font-family: inherit; font-size: 18px; text-transform: none; color: var(--text); font-weight: 700; }
-.af-cm-scopechip { max-width: 115px; font-size: 9px; border-radius: 4px; }
+.af-cm-scopechip { max-width: 115px; font-size: 11px; border-radius: 4px; }
 .af-cm-close, .af-cm-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .af-cm-tabs { gap: 3px; margin: 16px 0 0; padding: 4px; border-radius: 999px; background: rgba(255,255,255,.04); }
 .af-cm-tab { display: flex; justify-content: center; align-items: center; gap: 7px; min-width: 0; min-height: 44px; border: 0; border-radius: 999px; background: transparent; font-size: 12px; color: var(--muted); }
@@ -2411,7 +2411,7 @@
   .af-cm-head { padding-inline: 12px; }
   .af-cm-brand { gap: 8px; }
   .af-cm-title { font-size: 17px; }
-  .af-cm-tab { flex-direction: column; gap: 4px; font-size: 10px; min-height: 52px; padding: 6px 2px; }
+  .af-cm-tab { flex-direction: column; gap: 4px; font-size: 11px; min-height: 52px; padding: 6px 2px; }
   .af-cm-tabs { border-radius: 22px; }
   .af-cm-tab { border-radius: 18px; }
   .af-cm-scope { padding-inline: 18px; }
@@ -2497,7 +2497,7 @@
 .af-cm .af-cm-input { resize: none; field-sizing: content; min-height: 44px; max-height: 140px; overflow-y: auto; }
 .af-cm-composer .af-cm-icon,
 .af-cm-composer .af-cm-send { flex: none; width: 44px; height: 44px; min-height: 44px; }
-.af-cm-costnote { margin: 0; padding: 2px 20px 10px; background: transparent; font-size: 10.5px; line-height: 1.4; text-align: center; }
+.af-cm-costnote { margin: 0; padding: 2px 20px 10px; background: transparent; font-size: 11px; line-height: 1.4; text-align: center; }
 
 .af-cm-foot { margin-top: 0; padding: 10px 20px; gap: 12px; }
 .af-cm-footlink { flex: none; white-space: nowrap; }
@@ -2508,9 +2508,9 @@
   .af-cm-title { font-size: 16px; }
   .af-cm-tabs { margin-top: 10px; padding: 3px; border-radius: 16px; }
   /* Icon over label: five labels fit a 330px track this way, and the icons come back. */
-  .af-cm-tab { flex-direction: column; gap: 3px; min-height: 48px; padding: 5px 2px; border-radius: 13px; font-size: 10.5px; }
+  .af-cm-tab { flex-direction: column; gap: 3px; min-height: 48px; padding: 5px 2px; border-radius: 13px; font-size: 11px; }
   .af-cm-tab > svg { display: block; }
-  .af-cm-audience { padding: 8px 2px 6px; font-size: 10.5px; }
+  .af-cm-audience { padding: 8px 2px 6px; font-size: 11px; }
 
   .af-cm-scope { padding: 0 14px 10px; }
   .af-cm-league-picker { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; }
@@ -2529,7 +2529,7 @@
   .af-cm-quick { margin-top: 14px; gap: 6px; }
 
   .af-cm-composer { padding: 8px 12px; gap: 6px; }
-  .af-cm-costnote { padding: 0 14px 8px; font-size: 10px; }
+  .af-cm-costnote { padding: 0 14px 8px; font-size: 11px; }
   .af-cm-foot { padding: 8px 14px; }
   .af-cm-footnote { display: none; }
 }
@@ -2624,7 +2624,7 @@
   .af-cm-bubble { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 }
 
-.af-cm-meta { padding: 0 4px; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.af-cm-meta { padding: 0 4px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
 .af-cm-edited { font-style: italic; }
 .af-cm-row .af-cm-quote { max-width: 100%; }
 
@@ -2752,7 +2752,7 @@
 .af-cm-sheet-who { margin-top: 10px; }
 .af-cm-sheet-who ul { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text2); }
 .af-cm-sheet-who li { padding: 3px 0; }
-.af-cm-sheet-label { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.af-cm-sheet-label { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .af-cm-sheet-actions { display: flex; flex-direction: column; margin-top: 10px; border-top: 1px solid var(--line); }
 .af-cm-sheet-btn { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .af-cm-sheet-btn:hover { background: var(--chip); }
@@ -2926,7 +2926,7 @@
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3228,8 +3228,8 @@
 .af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(1) { top: 0; left: 10px; z-index: 1; }
 .af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(2) { bottom: 0; left: 0; }
 .af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-av:nth-child(3) { right: 0; bottom: 0; }
-.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-initials { font-size: 10px; }
-.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-initials { font-size: 9px; letter-spacing: -0.02em; }
+.af-cm-dmrow-avs[data-count='2'] .af-cm-dmrow-initials { font-size: 11px; }
+.af-cm-dmrow-avs[data-count='3'] .af-cm-dmrow-initials { font-size: 11px; letter-spacing: -0.02em; }
 
 .af-cm-dmrow-main { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 3px; }
 .af-cm-dmrow-top,
@@ -3366,7 +3366,7 @@
 }
 /* Small enough that two chips share a row on a 390px phone, so a huddle of four is two rows, not four. */
 .af-cm-pick-chip .af-cm-pick-av { width: 28px; height: 28px; }
-.af-cm-pick-chip .af-cm-dmrow-initials { font-size: 10px; }
+.af-cm-pick-chip .af-cm-dmrow-initials { font-size: 11px; }
 .af-cm-pick-chip-name { min-width: 0; max-width: 112px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .af-cm-pick-chip-x {
   display: grid;
@@ -3405,7 +3405,7 @@
   padding: 10px 14px 6px;
   background: var(--surface2);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -3509,7 +3509,7 @@
 }
 .af-cm-chimmy-kind {
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3526,7 +3526,7 @@
 .af-cm-trade-valuenote,
 .af-cm-trade-note {
   margin: 0;
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 /* Decision comparisons: readable in the drawer and full-page Chimmy. */
@@ -3547,11 +3547,11 @@
 .af-cm-trade-assets li { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .af-cm-trade-assets strong { display: block; font-size: 13px; }
 .af-cm-trade-assets small { display: block; color: var(--muted); }
-.af-cm-asset-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 9px; background: var(--surface2); font-size: 10px; font-weight: 700; }
+.af-cm-asset-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 9px; background: var(--surface2); font-size: 11px; font-weight: 700; }
 .af-cm-scn-table { table-layout: fixed; }
 .af-cm-scn-table th, .af-cm-scn-table td { padding: 10px 3px; white-space: normal; overflow-wrap: anywhere; }
 .af-cm-scn-table th:first-child { width: 38%; }
-.af-cm-scn-table thead th { font-size: 10px; color: var(--muted); }
+.af-cm-scn-table thead th { font-size: 11px; color: var(--muted); }
 .af-cm-scn-table td.af-cm-scn-na, .af-cm-scn-unit { color: var(--muted); }
 .af-cm-scn-assumptions { margin-top: 12px; font-size: 12px; color: var(--muted); }
 .af-cm-scn-assumptions summary { cursor: pointer; min-height: 32px; padding-block: 6px; color: var(--text); }

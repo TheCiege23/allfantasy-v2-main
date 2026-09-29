@@ -232,14 +232,14 @@
 
 .ns-pc-meta { margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ns-rank {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--ns-accent-bright);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .ns-plan {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
@@ -258,7 +258,7 @@
   background: color-mix(in srgb, var(--ns-text) 7%, transparent);
   display: grid;
   place-items: center;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--ns-muted);
 }
@@ -267,7 +267,7 @@
 .ns-completion-row {
   display: flex;
   justify-content: space-between;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ns-dim);
 }
 .ns-completion-row b { color: var(--ns-accent-bright); font-weight: 700; }
@@ -369,7 +369,7 @@
   padding: 0 6px;
   border-radius: 5px;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1;
@@ -461,7 +461,7 @@
   border-radius: 6px;
   border: 1px solid var(--ns-chip-line);
   background: var(--ns-chip);
-  font: 700 10px/1 var(--ns-mono);
+  font: 700 11px/1 var(--ns-mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ns-muted-2);
@@ -489,7 +489,7 @@
   background: var(--ns-border);
 }
 .nocturne-settings .ns-hub-meter > span { display: block; height: 100%; background: var(--ns-accent); }
-.nocturne-settings .ns-hub-nudge { font: 400 10px/1.4 var(--ns-sans); color: var(--ns-dim); }
+.nocturne-settings .ns-hub-nudge { font: 400 11px/1.4 var(--ns-sans); color: var(--ns-dim); }
 
 /* the grid */
 .nocturne-settings .ns-hub-grid {
@@ -535,7 +535,7 @@
 }
 .nocturne-settings .ns-hub-icon > svg { width: 15px; height: 15px; }
 .nocturne-settings .ns-hub-card-title { flex: 1; min-width: 0; font: 800 14px/1.2 var(--ns-sans); }
-.nocturne-settings .ns-hub-card .ns-nav-badge { height: auto; padding: 5px 7px; font-size: 9px; letter-spacing: 0.04em; }
+.nocturne-settings .ns-hub-card .ns-nav-badge { height: auto; padding: 5px 7px; font-size: 11px; letter-spacing: 0.04em; }
 .nocturne-settings .ns-hub-card-desc { flex: 1; font: 400 12px/1.5 var(--ns-sans); color: var(--ns-muted); }
 .nocturne-settings .ns-hub-cta { font: 700 11px/1 var(--ns-sans); color: var(--ns-accent); }
 .nocturne-settings .ns-hub-empty { margin: 0; font-size: 12px; color: var(--ns-muted); }
@@ -552,7 +552,7 @@
 }
 .nocturne-settings .ns-hub-plan-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .nocturne-settings .ns-hub-plan-label {
-  font: 700 9px/1 var(--ns-mono);
+  font: 700 11px/1 var(--ns-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ns-accent);
@@ -672,7 +672,7 @@
 /* Field labels → the hub's tracked mono label ("CURRENT PLAN"). */
 .nocturne-settings[data-view='tab'] .ns-content-card label:is(.block.text-xs.font-medium, .mb-1.block.text-sm.font-medium, .mb-2.block.text-sm.font-medium) {
   margin-bottom: 9px;
-  font: 700 10px/1.2 var(--ns-mono);
+  font: 700 11px/1.2 var(--ns-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ns-muted) !important;
