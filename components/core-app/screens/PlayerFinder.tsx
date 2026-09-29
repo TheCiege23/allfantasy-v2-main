@@ -54,6 +54,8 @@ import { DepthChartBackups } from '@/components/core-app/player-finder/DepthChar
 import type { DepthChartView } from '@/lib/core-app/depthChart'
 import { WhoStartsHim } from '@/components/core-app/player-finder/WhoStartsHim'
 import type { WhoStartsHim as WhoStartsHimData } from '@/lib/core-app/whoStartsHim'
+import { ValueTrend } from '@/components/core-app/player-finder/ValueTrend'
+import type { ValueTrend as ValueTrendData } from '@/lib/core-app/valueTrend'
 import { buildLeagueStrip } from '@/lib/core-app/leagueStrip'
 import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
@@ -192,6 +194,8 @@ export type PlayerFinderProps = {
   depthChart?: DepthChartView | null
   /** Where he is yours: the other teams he would start for (AF Pro; whoStartsHimLoader.ts). */
   whoStartsHim?: WhoStartsHimData | null
+  /** His market value over 30 days per book your leagues use; the nudge is AF Pro (valueTrendLoader.ts). */
+  valueTrend?: ValueTrendData | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -388,6 +392,7 @@ export function PlayerFinder({
   freeAgentBids = null,
   depthChart = null,
   whoStartsHim = null,
+  valueTrend = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -1179,6 +1184,9 @@ export function PlayerFinder({
               claim him (free) and a suggested FAAB bid (AF Pro, withheld server-side when locked).
             */}
             {signedIn ? <FreeAgentBids data={freeAgentBids} playerName={detail.player.name} access={depthAccess} /> : null}
+
+            {/* ── Market value, last 30 days ──: facts free; the buy-low / sell-high call is AF Pro. */}
+            <ValueTrend data={valueTrend} access={depthAccess} />
 
             {/* ── Next man up ──: his depth chart, and where each player around him is in your leagues (free). */}
             <DepthChartBackups

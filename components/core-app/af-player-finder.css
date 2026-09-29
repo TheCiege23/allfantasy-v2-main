@@ -3924,3 +3924,119 @@
     min-height: 44px;
   }
 }
+
+/* ── Market value, last 30 days (valueTrend.ts): sparkline + changes; the nudge is AF Pro ──────── */
+.af-core .af-pf-vt {
+  margin-top: 12px;
+}
+.af-core .af-pf-vt-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-vt-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-vt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.af-core .af-pf-vt-book {
+  color: var(--text);
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.af-core .af-pf-vt-scope {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-vt-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.af-core .af-pf-vt-value {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+}
+.af-core .af-pf-vt-spark {
+  width: 120px;
+  height: 32px;
+  overflow: visible;
+}
+.af-core .af-pf-vt-spark polyline {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.af-core .af-pf-vt-spark circle {
+  fill: var(--muted);
+}
+.af-core .af-pf-vt-spark.is-up polyline {
+  stroke: var(--good);
+}
+.af-core .af-pf-vt-spark.is-up circle {
+  fill: var(--good);
+}
+.af-core .af-pf-vt-spark.is-down polyline {
+  stroke: var(--bad);
+}
+.af-core .af-pf-vt-spark.is-down circle {
+  fill: var(--bad);
+}
+.af-core .af-pf-vt-chgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.af-core .af-pf-vt-chg {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-core .af-pf-vt-chg.is-up {
+  color: var(--good);
+}
+.af-core .af-pf-vt-chg.is-down {
+  color: var(--bad);
+}
+.af-core .af-pf-vt-chg.is-none {
+  font-weight: 500;
+}
+.af-core .af-pf-vt-nudge {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.af-core .af-pf-vt-nudge.is-check-cause {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.af-core .af-pf-vt-nudge span {
+  color: var(--muted);
+}
+.af-core .af-pf-vt-foot {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
