@@ -13,6 +13,7 @@ import type { PlayerCardRef } from './PlayerCardProvider'
 import { useOverlayContainment } from '../useOverlayContainment'
 import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { scheduleProjectionNote, scheduleRowValue } from '@/lib/core-app/scheduleProjectionNote'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 /**
@@ -86,14 +87,20 @@ function Tile({
 function ScheduleRows({ weeks }: { weeks: PlayerCardWeek[] }) {
   return (
     <>
-      {weeks.map((w) => (
-        <div key={w.week} className={`af-pc-row${w.bye ? ' af-pc-row--muted' : ''}`}>
-          <span className="af-pc-row-k">
-            WK{w.week} · {w.bye ? 'BYE' : `${w.home ? 'vs' : '@'} ${w.opponent}`}
-          </span>
-          <span className="af-pc-row-v af-num">{w.projection != null ? w.projection.toFixed(1) : '—'}</span>
-        </div>
-      ))}
+      {weeks.map((w) => {
+        // A later week says WHY it has no number — "not published yet" is a different claim from "—".
+        const value = scheduleRowValue(w)
+        return (
+          <div key={w.week} className={`af-pc-row${w.bye ? ' af-pc-row--muted' : ''}`}>
+            <span className="af-pc-row-k">
+              WK{w.week} · {w.bye ? 'BYE' : `${w.home ? 'vs' : '@'} ${w.opponent}`}
+            </span>
+            <span className={`af-pc-row-v${value.muted ? ' af-pc-faint' : ' af-num'}`} title={value.title}>
+              {value.text}
+            </span>
+          </div>
+        )
+      })}
     </>
   )
 }
@@ -746,11 +753,7 @@ export default function PlayerCardSheet({
                       WEEK. Saying so is the difference between a thin card and a card
                       that looks broken.
                     */}
-                    <p className="af-pc-basis">
-                      {data.schedule.data.projectedWeek != null
-                        ? `Published baseline projections cover week ${data.schedule.data.projectedWeek} only; later weeks show the fixture. Your lineup view applies league scoring and current injury availability.`
-                        : 'No projected week is published yet; these are fixtures.'}
-                    </p>
+                    <p className="af-pc-basis">{scheduleProjectionNote(data.schedule.data)}</p>
                   </>
                 ) : (
                   <Absent reason={data.schedule.reason} />

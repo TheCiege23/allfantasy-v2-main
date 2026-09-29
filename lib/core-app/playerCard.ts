@@ -19,6 +19,11 @@ import type { SectionState } from './leagueHome'
 import type { CoreDepthAccess } from './coreDepthAccess'
 import { gradeArchivedTradeRows, type ArchivedTradeGrade } from './archivedTradeGrade'
 import { mirrorTradeGrade, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import {
+  readFutureWeekProjections,
+  type FutureWeekLine,
+  type FutureWeekStatus,
+} from '@/lib/projections/futureWeekProjections'
 
 /**
  * The player card pop-up — STATE 6 / STATE 7 of the 2026-09-07 design handoff
@@ -110,6 +115,39 @@ export type PlayerCardWeek = {
   bye: boolean
   /** Only ever set for a week a projection actually exists for — see the header note. */
   projection: number | null
+  /*
+   * ── Later weeks (2026-09-29) ───────────────────────────────────────────────
+   * Set only when the schedule was built WITH future-week data (`loadSchedule`'s `future`
+   * argument), so every row built without it keeps its exact earlier shape.
+   */
+  /** Where `projection` came from: this week's published line, or Sleeper's early line for a later week. */
+  projectionKind?: 'current' | 'future'
+  /**
+   * For a later week, what is known about Sleeper's board for it:
+   *   published      a line exists for him (in `projection`)
+   *   no_line        the week is published but carries no line for him
+   *   not_published  Sleeper had not posted that week when we last asked (`projectionAsOf`)
+   *   unchecked      we have not successfully asked — no claim about Sleeper either way
+   */
+  futureStatus?: 'published' | 'no_line' | 'not_published' | 'unchecked'
+  /** ISO — when the later-week number, or the "not published" answer, was last confirmed. */
+  projectionAsOf?: string | null
+}
+
+/** The schedule section's payload. */
+export type PlayerCardSchedule = {
+  weeks: PlayerCardWeek[]
+  season: number
+  projectedWeek: number | null
+  /** Present only when later-week projections were consulted (the future-week tables exist). */
+  futureWeeks?: { enabled: true }
+}
+
+/** This player's later-week projections, as `loadSchedule` consumes them. */
+export type ScheduleFutureWeeks = {
+  weeks: ReadonlyMap<number, FutureWeekStatus>
+  /** week → line, for this one player. */
+  lines: ReadonlyMap<number, FutureWeekLine>
 }
 
 export type PlayerCardTrade = {
@@ -303,7 +341,7 @@ export type PlayerCardData = {
   bio: PlayerCardBio
   market: SectionState<PlayerCardMarket>
   ownership: SectionState<PlayerCardOwnership>
-  schedule: SectionState<{ weeks: PlayerCardWeek[]; season: number; projectedWeek: number | null }>
+  schedule: SectionState<PlayerCardSchedule>
   byeWeek: number | null
   trades: SectionState<PlayerCardTrade[]>
   comps: SectionState<PlayerCardComp[]>
@@ -541,14 +579,39 @@ async function loadComps(
  * week with no fixtures for ANYBODY is skipped rather than reported as a bye.
  * `buildNextGameMap` does the four-rows-per-fixture reconciliation.
  */
+/**
+ * What one later week's row says, from the future-week read. Only called for weeks AFTER the
+ * current projected week — the current week's number always comes from `fantasy_projections`.
+ */
+function futureCell(
+  week: number,
+  future: ScheduleFutureWeeks
+): Pick<PlayerCardWeek, 'projection' | 'projectionKind' | 'futureStatus' | 'projectionAsOf'> {
+  const status = future.weeks.get(week)
+  if (!status || status.state === 'unchecked') {
+    return { projection: null, futureStatus: 'unchecked', projectionAsOf: null }
+  }
+  if (status.state === 'not_published') {
+    return { projection: null, futureStatus: 'not_published', projectionAsOf: status.confirmedAt }
+  }
+  const line = future.lines.get(week)
+  if (!line) return { projection: null, futureStatus: 'no_line', projectionAsOf: status.confirmedAt }
+  return { projection: line.projectedPoints, projectionKind: 'future', futureStatus: 'published', projectionAsOf: line.asOf }
+}
+
 export async function loadSchedule(
   team: string | null,
   season: number,
   fromWeek: number,
   projectedWeek: number | null,
   projection: number | null,
-  weekCount: number = SCHEDULE_WEEKS
-): Promise<{ schedule: SectionState<{ weeks: PlayerCardWeek[]; season: number; projectedWeek: number | null }>; byeWeek: number | null }> {
+  weekCount: number = SCHEDULE_WEEKS,
+  /**
+   * Later-week projections for this player (2026-09-29). Optional, and `null` reproduces the earlier
+   * behaviour exactly: only `projectedWeek` carries a number and no row gains a field.
+   */
+  future: ScheduleFutureWeeks | null = null
+): Promise<{ schedule: SectionState<PlayerCardSchedule>; byeWeek: number | null }> {
   const club = normalizeTeamAbbrev(team)
   if (!club) {
     return {
@@ -586,13 +649,21 @@ export async function loadSchedule(
 
     const found = buildNextGameMap(inWeek, only).get(club)
     if (found) {
-      weeks.push({
+      const row: PlayerCardWeek = {
         week: w,
         opponent: found.opponent,
         home: found.home,
         bye: false,
         projection: projectedWeek === w ? projection : null,
-      })
+      }
+      if (future && projectedWeek != null) {
+        if (w === projectedWeek) {
+          if (projection != null) row.projectionKind = 'current'
+        } else if (w > projectedWeek) {
+          Object.assign(row, futureCell(w, future))
+        }
+      }
+      weeks.push(row)
     } else {
       // Match the roster's coverage gate; a partial week is not proof of a bye.
       const playing = new Set<string>()
@@ -612,7 +683,9 @@ export async function loadSchedule(
   }
 
   if (weeks.length === 0) return { schedule: unavailable('No fixtures on file for these weeks.'), byeWeek: null }
-  return { schedule: { available: true, data: { weeks, season, projectedWeek } }, byeWeek: bye }
+  const data: PlayerCardSchedule = { weeks, season, projectedWeek }
+  if (future && projectedWeek != null) data.futureWeeks = { enabled: true }
+  return { schedule: { available: true, data }, byeWeek: bye }
 }
 
 /* ── trades ──────────────────────────────────────────────────────────────── */
@@ -1518,7 +1591,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     : UNIVERSAL_BOOK
 
   // prettier-ignore
-  const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league] = await Promise.all([
+  const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league, future] = await Promise.all([
     loadMarket(player.sleeperId, player.position, book),
     getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
     player.sleeperId && projWeek
@@ -1548,6 +1621,21 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           player.team,
           projWeek ? Number(projWeek.season) : new Date().getFullYear()
         ).catch(() => null)
+      : Promise.resolve(null),
+    /*
+     * Later weeks of the schedule strip (2026-09-29): Sleeper's early lines from
+     * `future_week_projections`, anchored on the SAME current week the strip already uses, so the
+     * current week's number can never come from this read. Unavailable (table not migrated, not
+     * NFL) or failing reads leave the strip exactly as it was.
+     */
+    player.sleeperId && projWeek
+      ? readFutureWeekProjections({
+          season: projWeek.season,
+          afterWeek: projWeek.week,
+          throughWeek: projWeek.week + SCHEDULE_WEEKS - 1,
+          playerIds: [player.sleeperId],
+          sport: player.sport,
+        }).catch(() => null)
       : Promise.resolve(null),
   ])
 
@@ -1587,12 +1675,19 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
 
   const projected = player.sleeperId ? (projections.get(player.sleeperId)?.projectedPoints ?? null) : null
 
+  const futureForCard: ScheduleFutureWeeks | null =
+    future && future.available && player.sleeperId
+      ? { weeks: future.weeks, lines: future.lines.get(player.sleeperId) ?? new Map() }
+      : null
+
   const { schedule, byeWeek } = await loadSchedule(
     player.team,
     projWeek ? Number(projWeek.season) : new Date().getFullYear(),
     projWeek ? projWeek.week : 1,
     projWeek ? projWeek.week : null,
-    projected
+    projected,
+    SCHEDULE_WEEKS,
+    futureForCard
   )
 
   const comps =
