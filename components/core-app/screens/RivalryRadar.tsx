@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { RivalryCard, RivalryRadar as RivalryRadarData } from '@/lib/core-app/weekBoard'
+import { rosterLabel } from '@/lib/core-app/managerName'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import '@/components/core-app/af-week.css'
 
@@ -34,7 +35,7 @@ function pct(p: number): string {
 }
 
 function opponentLabel(card: RivalryCard): string {
-  return card.opponent.name ?? `Roster ${card.opponent.rosterId}`
+  return rosterLabel([card.opponent.name], card.opponent.rosterId)
 }
 
 function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutral' }) {

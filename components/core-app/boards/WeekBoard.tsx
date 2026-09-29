@@ -10,6 +10,7 @@ import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/wee
  * exists for precisely this trap.
  */
 import { MIN_WEEKS_FOR_PROJECTION } from '@/lib/core-app/weekBoardRules'
+import { rosterLabel } from '@/lib/core-app/managerName'
 // Client-safe: eliminationSettle.ts has no runtime imports (its one import is a type).
 import { settleBadge } from '@/lib/core-app/eliminationSettle'
 import {
@@ -128,11 +129,13 @@ function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
           <span className="af-bd-name">{m.leagueName}</span>
           <span className="af-bd-sub">
             {/*
-              ⚠ AN UNNAMED OPPONENT STAYS UNNAMED. `WeekOpponent.name` is null
-              when no LeagueTeam row names that roster — borrowing the league's
-              own name here would invent a manager.
+              ⚠ NEVER AN INVENTED MANAGER. `WeekOpponent.name` is null when no
+              real name is stored (the importer writes "Unknown" for an unowned
+              roster); borrowing the league's name would invent one. The roster
+              is then "Team N" — the platform's own label, and the same one the
+              home and Matchup board print (`rosterLabel`).
             */}
-            {m.opponent.name ? `vs ${m.opponent.name}` : 'opponent not named'}
+            {`vs ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
             {row.playoffPct != null ? ` · ${pctLabel(row.playoffPct)} playoff odds` : ''}
             {m.elimination ? ' · lowest score is eliminated' : ''}
           </span>
@@ -357,8 +360,8 @@ export function WeekBoard({
                   <span className="af-bd-league">
                     <span className="af-bd-name">{m.leagueName}</span>
                     <span className="af-bd-sub">
-                      {/* Same rule as MatchRow: an unnamed roster stays unnamed. */}
-                      {m.opponent.name ? `vs ${m.opponent.name}` : 'opponent not named'}
+                      {/* Same rule as MatchRow: a real name, else the roster's own "Team N". */}
+                      {`vs ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
                       {m.elimination ? ' · lowest score is eliminated' : ''}
                       {/*
                         The averages behind the value column, so the number is

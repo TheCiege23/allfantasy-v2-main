@@ -13,6 +13,7 @@ import { settleBadge } from '@/lib/core-app/eliminationSettle'
  * lib/core-app/weekBoardRules.ts.
  */
 import { COIN_FLIP_POINTS } from '@/lib/core-app/weekBoardRules'
+import { rosterLabel } from '@/lib/core-app/managerName'
 import '@/components/core-app/af-week.css'
 
 /**
@@ -60,7 +61,7 @@ function ordinal(n: number): string {
 
 function OpponentName({ matchup }: { matchup: WeekMatchup }) {
   // Never invent a name. An unnamed roster says which roster it is.
-  return <>{matchup.opponent.name ?? `Roster ${matchup.opponent.rosterId}`}</>
+  return <>{rosterLabel([matchup.opponent.name], matchup.opponent.rosterId)}</>
 }
 
 /** Large card — the coin-flip tier. */

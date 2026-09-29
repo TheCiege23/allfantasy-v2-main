@@ -13,6 +13,7 @@ import { myRosterCandidates } from './myRoster'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueWeekFromSettings } from './seasonTimeline'
+import { realManagerName, rosterLabel } from './managerName'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -91,6 +92,8 @@ export type PulseRow = {
   leagueBadge: string
   /** Null when no `LeagueTeam` row names the opposing roster — never invented. */
   opponentName: string | null
+  /** What to print: the real name, else the platform's own "Team N" (`rosterLabel`). Never "Unknown". */
+  opponentLabel: string
   opponentAvatarUrl: string | null
   opponentInitials: string
   /** Signed, from your side. Positive means you are ahead. */
@@ -430,6 +433,7 @@ export async function getMatchupPulse(
     yourRosterKeys: string[]
     theirRosterKeys: string[]
     opponentName: string | null
+    opponentLabel: string
     opponentAvatarUrl: string | null
     opponentInitials: string
     scoringSettings: Record<string, unknown> | null
@@ -465,7 +469,9 @@ export async function getMatchupPulse(
     }
 
     const oppTeam = teamBy.get(`${l.id}:${String(oppRow.rosterId)}`)
-    const opponentName = oppTeam?.teamName?.trim() || oppTeam?.ownerName?.trim() || null
+    // The importer stores an unowned Sleeper roster as "Unknown" — a placeholder, not a name (managerName.ts).
+    const opponentName = realManagerName(oppTeam?.teamName) || realManagerName(oppTeam?.ownerName)
+    const opponentLabel = rosterLabel([opponentName], oppRow.rosterId)
     const leagueName = leagueDisplayName(l.name)
     const platform = String(l.platform ?? 'manual').toLowerCase()
 
@@ -509,8 +515,9 @@ export async function getMatchupPulse(
         importedOrphanOwnerKey(platform, String(oppRow.rosterId)),
       ].filter((v): v is string => typeof v === 'string' && v.length > 0),
       opponentName,
+      opponentLabel,
       opponentAvatarUrl: asImageUrl(oppTeam?.avatarUrl, platform),
-      opponentInitials: initialsOf(opponentName ?? `Roster ${oppRow.rosterId}`),
+      opponentInitials: initialsOf(opponentLabel),
       scoringSettings: extractScoringSettings(l.settings),
     })
   }
@@ -683,6 +690,7 @@ export async function getMatchupPulse(
       logoUrl: p.logoUrl,
       leagueBadge: p.leagueBadge,
       opponentName: p.opponentName,
+      opponentLabel: p.opponentLabel,
       opponentAvatarUrl: p.opponentAvatarUrl,
       opponentInitials: p.opponentInitials,
       margin: Math.round(margin * 10) / 10,

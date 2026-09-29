@@ -19,6 +19,7 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
+import { rosterLabel } from '@/lib/core-app/managerName'
 
 /**
  * Jump to another week.
@@ -652,7 +653,7 @@ export function LeagueHome({
                   <span className="af-pb-move af-pb-move--none" aria-hidden />
                 )}
                 <span className="af-pb-name">
-                  {r.teamName ?? r.managerName ?? `Roster ${r.rosterId}`}
+                  {rosterLabel([r.teamName, r.managerName], r.rosterId)}
                 </span>
                 <span className="af-pb-rec af-num" title="Real head-to-head record">
                   {r.wins}-{r.losses}

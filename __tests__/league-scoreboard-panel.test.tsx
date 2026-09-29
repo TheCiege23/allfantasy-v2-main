@@ -236,7 +236,8 @@ describe('LeagueScoreboardPanel', () => {
         ],
       }),
     )
-    expect(t).toContain('Roster 9')
+    // The platform's own label for a nameless roster, the same on every surface (rosterLabel).
+    expect(t).toContain('Team 9')
   })
 
   it('⚠ labels the columns, which none of them were', () => {

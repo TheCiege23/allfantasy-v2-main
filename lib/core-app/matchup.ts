@@ -21,6 +21,22 @@ import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
 import { starterGameStates } from './matchupGameState'
 import { bestBallProjectedFinal } from './bestBallForecast'
+import { realManagerName, rosterLabel } from './managerName'
+
+/*
+ * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
+ * "Unknown" / owner "Unknown", which this page printed verbatim; a placeholder is no name
+ * (managerName.ts). The title is the real team, else the real owner, else the platform's own
+ * "Team N" — the label every Core surface uses (`rosterLabel`). The owner line only appears under
+ * a real team name: when the title already IS the owner, repeating it underneath is noise.
+ */
+type OpponentTeam = { teamName?: string | null; ownerName?: string | null } | null | undefined
+function opponentTeamName(t: OpponentTeam, rosterId: string | number): string {
+  return rosterLabel([t?.teamName, t?.ownerName], rosterId)
+}
+function opponentOwnerName(t: OpponentTeam): string {
+  return realManagerName(t?.teamName) ? realManagerName(t?.ownerName) ?? '' : ''
+}
 
 /**
  * A crest we can actually render, or null.
@@ -818,8 +834,8 @@ export async function getMatchupData(
       },
       opponent: opponentRow
         ? {
-            teamName: oppTeam?.teamName ?? `Roster ${opponentRow.rosterId}`,
-            ownerName: oppTeam?.ownerName ?? '',
+            teamName: opponentTeamName(oppTeam, opponentRow.rosterId),
+            ownerName: opponentOwnerName(oppTeam),
             record: recordOf(oppTeam),
             isYou: false,
             avatarUrl: asImageUrl(oppTeam?.avatarUrl, platform),
@@ -900,8 +916,8 @@ export async function getMatchupData(
       data: {
         you,
         opponent: {
-          teamName: oppTeam?.teamName ?? `Roster ${opponentRow.rosterId}`,
-          ownerName: oppTeam?.ownerName ?? '',
+          teamName: opponentTeamName(oppTeam, opponentRow.rosterId),
+          ownerName: opponentOwnerName(oppTeam),
           record: recordOf(oppTeam),
           points: opponentRow.pointsFor,
           isYou: false,

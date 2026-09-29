@@ -3,6 +3,7 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-schedule.css'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
+import { rosterLabel } from '@/lib/core-app/managerName'
 
 /**
  * Who you play this week — the schedule half of the matchup question.
@@ -48,7 +49,7 @@ const VISIBLE_CAP = 6
 
 function OpponentLabel({ matchup }: { matchup: WeekMatchup }) {
   /* Never invent a manager. An unnamed roster says which roster it is. */
-  return <>{matchup.opponent.name ?? `Roster ${matchup.opponent.rosterId}`}</>
+  return <>{rosterLabel([matchup.opponent.name], matchup.opponent.rosterId)}</>
 }
 
 export function DashScheduleBand({
