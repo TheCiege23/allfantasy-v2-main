@@ -43,15 +43,18 @@ function json(body: unknown, status = 200) {
 }
 
 let answers: unknown[] = []
+/* What `GET /api/chat/chimmy` returns — the stored transcript a new tab hydrates from. */
+let historyTurns: unknown[] = []
 beforeEach(() => {
   sessionStorage.clear()
   localStorage.clear()
   Element.prototype.scrollIntoView = vi.fn()
   answers = []
+  historyTurns = []
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = (init?.method ?? 'GET').toUpperCase()
-    if (url.startsWith('/api/chat/chimmy?') && method === 'GET') return json({ turns: [] })
+    if (url.startsWith('/api/chat/chimmy?') && method === 'GET') return json({ turns: historyTurns })
     if (url === '/api/chat/chimmy' && method === 'POST') return json(answers.shift() ?? { response: 'No answer queued.' })
     return json({})
   }))
@@ -119,6 +122,53 @@ describe('the Chimmy panel shows the engine\'s call above the prose', () => {
     fireEvent.change(box, { target: { value: 'Start Casey Runner or Riley Deep?' } })
     fireEvent.submit(box.closest('form')!)
     await waitFor(() => expect(screen.getByTestId('chimmy-verdict').textContent).toBe('STARTCasey Runner'))
+  })
+
+  /*
+   * SAFE / OUT (2026-09-28): a guillotine week that is DECIDED, from the settle verdict the matchup
+   * tool read. Good news in the good tone, bad news in the bad one — colour AND words.
+   */
+  it('a decided guillotine week reads SAFE in the good tone, and OUT in the bad one', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'You cannot be chopped this week.', meta: { leagueGrounding: GROUNDING, toolsUsed: ['get_my_matchup'],
+      verdict: { key: 'safe', source: 'elimination_settle', detail: 'Week decided' } } })
+    const safe = within(await ask('Am I safe this week?', 'You cannot be chopped this week.')).getByTestId('chimmy-verdict')
+    expect(safe.textContent).toBe('SAFEWeek decided')
+    expect(safe.getAttribute('data-tone')).toBe('go')
+    expect(safe.getAttribute('title')).toMatch(/finished games/)
+
+    answers.push({ response: 'Every team has finished and yours is lowest.', meta: { leagueGrounding: GROUNDING, toolsUsed: ['get_my_matchup'],
+      verdict: { key: 'out', source: 'elimination_settle', detail: 'Week decided' } } })
+    const out = within(await ask('What about now?', 'Every team has finished and yours is lowest.')).getByTestId('chimmy-verdict')
+    expect(out.textContent).toBe('OUTWeek decided')
+    expect(out.getAttribute('data-tone')).toBe('stop')
+  })
+})
+
+/*
+ * Tool-loop answers are now written to chat history with their polish (2026-09-28), and the history
+ * read hands it back. A NEW tab has no sessionStorage, so what renders here came from the server.
+ */
+describe('a new tab rebuilds the polish from the stored transcript', () => {
+  it('the chip, the bid card and "Newer answer below" all come back', async () => {
+    historyTurns = [
+      { id: 'hist-0', role: 'you', text: 'Should I spend FAAB this week?', leagueId: 'L1' },
+      { id: 'hist-1', role: 'chimmy', text: 'Keep your powder dry this week.', leagueId: 'L1', grounding: GROUNDING,
+        verdict: { key: 'hold', source: 'faab_plan', detail: 'Save your FAAB' }, faabPlan: SAVE_CARD, answerKeys: ['get_faab_bid_plan:L1'] },
+      { id: 'hist-2', role: 'you', text: 'Check again?', leagueId: 'L1' },
+      { id: 'hist-3', role: 'chimmy', text: 'You are safe, and bid on Casey Runner.', leagueId: 'L1', grounding: GROUNDING,
+        verdict: { key: 'safe', source: 'elimination_settle', detail: 'Week decided' }, faabPlan: BID_CARD, answerKeys: ['get_faab_bid_plan:L1'] },
+    ]
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+
+    const older = (await screen.findByText('Keep your powder dry this week.')).closest('.af-cm-turn') as HTMLElement
+    const newer = screen.getByText('You are safe, and bid on Casey Runner.').closest('.af-cm-turn') as HTMLElement
+    expect(within(older).getByTestId('chimmy-verdict').textContent).toBe('HOLDSave your FAAB')
+    expect(within(older).getByTestId('chimmy-faab-card')).toBeTruthy()
+    expect(within(older).getByTestId('chimmy-newer-answer')).toBeTruthy()
+    expect(within(newer).getByTestId('chimmy-verdict').textContent).toBe('SAFEWeek decided')
+    expect(within(newer).getByTestId('chimmy-faab-card').textContent).toContain('bid up to $31')
+    expect(within(newer).queryByTestId('chimmy-newer-answer')).toBeNull()
   })
 })
 

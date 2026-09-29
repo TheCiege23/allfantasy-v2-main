@@ -146,6 +146,39 @@ describe('buildMatchupPreviewContext — one league', () => {
     expect(out).toMatch(/- Chop Shop \(elimination format\), week 3: .*SAFE THIS WEEK — IT IS DECIDED/)
   })
 
+  /*
+   * SAFE / OUT chip (2026-09-28): the verdict also leaves as DATA — the same object the sentence was
+   * written from — but only for ONE league in scope. One chip cannot speak for several leagues.
+   */
+  it('reports the settle object it wrote the sentence from, for one league only', async () => {
+    const safe = { verdict: 'safe', finishedBelow: 7, chops: 1 }
+    getBoard.mockResolvedValue(board({ leagueBoard: null, eliminationWeeks: [chopWeek] }))
+    const onSettle = vi.fn()
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1', onSettle }, { ...deps, loadSettle: vi.fn().mockResolvedValue(safe) })
+    expect(out).toMatch(/SAFE THIS WEEK — IT IS DECIDED/)
+    expect(onSettle).toHaveBeenCalledTimes(1)
+    expect(onSettle.mock.calls[0]![0]).toEqual({ leagueId: 'L1', settle: safe })
+
+    onSettle.mockClear()
+    await buildMatchupPreviewContext({ leagueId: null, userId: 'u1', onSettle }, { ...deps, loadSettle: vi.fn().mockResolvedValue(safe) })
+    expect(onSettle).not.toHaveBeenCalled()
+  })
+
+  it('reports null for a league with no elimination week, so a later read clears an earlier chip', async () => {
+    const onSettle = vi.fn()
+    await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1', onSettle }, deps)
+    expect(onSettle).toHaveBeenCalledWith({ leagueId: 'L1', settle: null })
+  })
+
+  it('a collector that throws does not cost the user the matchup', async () => {
+    getBoard.mockResolvedValue(board({ leagueBoard: null, eliminationWeeks: [chopWeek] }))
+    const out = await buildMatchupPreviewContext(
+      { leagueId: 'L1', userId: 'u1', onSettle: () => { throw new Error('boom') } },
+      { ...deps, loadSettle: vi.fn().mockResolvedValue({ verdict: 'safe', finishedBelow: 1, chops: 1 }) },
+    )
+    expect(out).toMatch(/SAFE THIS WEEK — IT IS DECIDED/)
+  })
+
   it('refuses to preview a league with no schedule', async () => {
     getBoard.mockResolvedValue(board({ week: null }))
     expect(await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)).toMatch(/do not invent an opponent/)

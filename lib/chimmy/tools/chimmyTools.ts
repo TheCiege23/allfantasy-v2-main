@@ -18,6 +18,7 @@ import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import type { FaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
+import type { MatchupSettleRun } from '@/lib/chimmy/matchupPreviewGrounding'
 import { SUPERSEDING_TOOLS } from '@/lib/chimmy/answerPolish'
 
 /**
@@ -88,10 +89,19 @@ export type ChimmyToolContext = {
    * Absent = do not collect.
    */
   toolRuns?: ChimmyToolRun[]
+  /**
+   * Every SINGLE-league `get_my_matchup` read's guillotine settle verdict, AS DATA — the same object
+   * the model's "SAFE THIS WEEK — IT IS DECIDED" sentence is written from — so the route can hand the
+   * chat a SAFE / OUT chip without reading prose. `settle` is null for a league with no elimination
+   * week. The all-leagues view records nothing. Absent = do not collect.
+   */
+  eliminationSettles?: ChimmyEliminationSettleRun[]
 }
 
 /** One `get_faab_bid_plan` result, with the league it was computed for. */
 export type ChimmyFaabPlanRun = { leagueId: string; plan: FaabBidPlan }
+/** One single-league `get_my_matchup` read's settle verdict, with the league it was read for. */
+export type ChimmyEliminationSettleRun = MatchupSettleRun
 /** One run of a `SUPERSEDING_TOOLS` tool, with the league it ran against. */
 export type ChimmyToolRun = { tool: string; leagueId: string }
 
@@ -1059,7 +1069,12 @@ export async function executeChimmyTool(
           return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name an opponent.'
         }
         const { buildMatchupPreviewContext } = await import('@/lib/chimmy/matchupPreviewGrounding')
-        return await buildMatchupPreviewContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+        const settles = ctx.eliminationSettles
+        return await buildMatchupPreviewContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(settles ? { onSettle: (run: ChimmyEliminationSettleRun) => settles.push(run) } : {}),
+        })
       }
 
       /* ── League chat, waivers, and the two confirm-card tools. All need the proven league. ── */

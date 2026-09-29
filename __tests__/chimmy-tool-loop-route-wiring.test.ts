@@ -317,11 +317,32 @@ describe('tool loop system prompt', () => {
     expect(polish).toContain('faabCardFromPlan(lastFaabPlan.plan, lastFaabPlan.leagueId)')
     expect(polish).toContain('faabPlanVerdict(lastFaabPlan.plan)')
     expect(polish).toContain('answerKeysFrom(toolContext.toolRuns)')
+    /* SAFE / OUT (2026-09-28): the last settle verdict in the context, for the league the answer reports. */
+    expect(polish).toContain('toolContext.eliminationSettles[toolContext.eliminationSettles.length - 1]')
+    expect(polish).toContain('eliminationSettleVerdict(lastSettle.settle)')
     expect(polish).not.toMatch(/loopText|loop\.text|\.response\b/)
-    const meta = ROUTE.slice(ROUTE.indexOf("source: 'chimmy_tool_loop'"))
+    /* The response meta is built once as `loopMeta` — the history row reads it — and returned as-is. */
+    const metaAt = ROUTE.indexOf('const loopMeta = {')
+    expect(metaAt).toBeGreaterThan(start)
+    const meta = ROUTE.slice(metaAt, ROUTE.indexOf("source: 'chimmy_tool_loop'", metaAt))
     expect(meta).toMatch(/\.\.\.\(loopVerdict \? \{ verdict: loopVerdict \} : \{\}\)/)
     expect(meta).toMatch(/\.\.\.\(loopFaabCard \? \{ faabPlan: loopFaabCard \} : \{\}\)/)
     expect(meta).toMatch(/\.\.\.\(loopAnswerKeys\.length > 0 \? \{ answerKeys: loopAnswerKeys \} : \{\}\)/)
+    expect(ROUTE.slice(ROUTE.indexOf("source: 'chimmy_tool_loop'", metaAt), ROUTE.indexOf("source: 'chimmy_tool_loop'", metaAt) + 80)).toMatch(/meta: loopMeta,/)
+  })
+
+  /*
+   * Tool-loop answers reach `chat_history` (2026-09-28) — AFTER the settlement that decides the
+   * refund, so the write only ever reads what was charged. Behaviour: __tests__/chimmy/tool-loop-history.test.ts.
+   */
+  it('writes both halves to chat history after the charge is settled, before the answer returns', () => {
+    const settled = BLOCK.indexOf('const settlement = await settleUndeliveredChimmyAnswer')
+    const written = BLOCK.indexOf("appendChatHistory({ conversationId, role: 'assistant', content: loopText")
+    const returned = BLOCK.indexOf("source: 'chimmy_tool_loop'")
+    expect(settled).toBeGreaterThan(-1)
+    expect(written).toBeGreaterThan(settled)
+    expect(returned).toBeGreaterThan(written)
+    expect(BLOCK).toContain("appendChatHistory({ conversationId, role: 'user', content: message || '[image-only request]'")
   })
 
   it('hands the loop its graded track record, and records the start/sit calls the answer made', () => {
@@ -331,7 +352,8 @@ describe('tool loop system prompt', () => {
     /* `actionCards` (2026-09-25) collects the confirm cards the propose tools build; see below. */
     /* `tradeGrades` (2026-09-27) collects the letters the one trade engine gave, for the answer check. */
     /* `faabPlans` / `toolRuns` (2026-09-28) feed the answer polish: bid card, chip, "Newer answer below". */
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\] \}/)
+    /* `eliminationSettles` (2026-09-28) feeds the SAFE / OUT chip from a decided guillotine week. */
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */

@@ -198,8 +198,20 @@ function crossLeagueBlock(board: WeekBoard, settles: ReadonlyMap<string, Elimina
   return lines.join('\n')
 }
 
+/** One single-league read's settle verdict, handed to the chat as DATA (the answer's SAFE / OUT chip). */
+export type MatchupSettleRun = { leagueId: string; settle: EliminationSettle | null }
+
 export async function buildMatchupPreviewContext(
-  args: { leagueId: string | null; userId: string },
+  args: {
+    leagueId: string | null
+    userId: string
+    /**
+     * Called once per SINGLE-league read with the settle verdict the block was written from — null for
+     * a league with no elimination week or no settle read, so a later read can clear an earlier one.
+     * Never called for the all-leagues view: one chip cannot speak for several leagues.
+     */
+    onSettle?: (run: MatchupSettleRun) => void
+  },
   deps: MatchupPreviewDeps = defaultDeps,
 ): Promise<string> {
   try {
@@ -215,6 +227,12 @@ export async function buildMatchupPreviewContext(
     if (args.leagueId) {
       const elimination = board.eliminationWeeks.find((e) => e.leagueId === args.leagueId)
       const settle = elimination ? await settleFor(elimination, deps) : null
+      /* The SAME object the sentence below is written from — the chip and the prose are one read. */
+      try {
+        args.onSettle?.({ leagueId: args.leagueId, settle })
+      } catch {
+        /* A collector that throws must not cost the user the matchup. */
+      }
       return (
         leagueBlock(board, args.leagueId, settle) ??
         'This league has no matchup on file for the current week (not synced, or the season has not started). Say so; do not invent an opponent.'
