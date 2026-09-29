@@ -4,8 +4,15 @@
  *
  * A report points at a message by (messageId, threadId). Where the message
  * lives depends on the room:
- *   "league:<id>"  → leagueChatMessage, or bracketLeagueMessage for a bracket league
- *   anything else  → platformChatMessage (DMs and huddles)
+ *   "league:<id>"          → leagueChatMessage, or bracketLeagueMessage for a bracket league
+ *   "draftroom:<session>"  → draftRoomChatMessage (the app/draft shell's chat)
+ *   "mockdraft:<draftId>"  → mockDraftChat (the mock draft simulator's chat)
+ *   anything else          → platformChatMessage (DMs and huddles)
+ *
+ * ⚠ The two draft tables have NO metadata column, so their removal is the text alone
+ * ("[message deleted]") — there is nowhere to record `removedByModeration`. That is a
+ * known loss of audit detail, accepted to avoid a migration; the report row itself still
+ * records who acted, when, and why.
  *
  * Removing a message is the SAME soft delete a sender's own Delete performs
  * (text → "[message deleted]", `deletedAt` in metadata) so every chat surface
@@ -17,8 +24,9 @@
 
 import { prisma } from "@/lib/prisma"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core/ChatRoomResolver"
+import { draftIdFromMockDraftThread, sessionKeyFromDraftRoomThread } from "./reportRooms"
 
-export type ReportedMessageStore = "league" | "bracket" | "platform"
+export type ReportedMessageStore = "league" | "bracket" | "platform" | "draft_room" | "mock_draft"
 
 export interface ReportForReview {
   id: string
@@ -50,6 +58,17 @@ function asMeta(v: unknown): Meta {
   return v && typeof v === "object" && !Array.isArray(v) ? { ...(v as Meta) } : {}
 }
 
+const DELETED_TEXT = "[message deleted]"
+
+/**
+ * The two draft tables have no metadata, so a removed message is known by its text alone. This
+ * gives them the `deletedAt` the rest of the file reads — the review list's `deleted`, and the
+ * remove action's "already gone" check — instead of a second rule for two stores.
+ */
+function textOnlyDeletion(text: string): Meta {
+  return text === DELETED_TEXT ? { deletedAt: "text-only" } : {}
+}
+
 async function loadMessage(messageId: string, threadId: string): Promise<{
   store: ReportedMessageStore
   text: string
@@ -74,6 +93,24 @@ async function loadMessage(messageId: string, threadId: string): Promise<{
     })
     if (!bracket) return null
     return { store: "bracket", text: bracket.message, authorId: bracket.userId ?? null, createdAt: bracket.createdAt, metadata: asMeta(bracket.metadata), roomName: bracket.league?.name ?? null }
+  }
+  const sessionKey = sessionKeyFromDraftRoomThread(threadId)
+  if (sessionKey) {
+    const row = await prisma.draftRoomChatMessage.findFirst({
+      where: { id: messageId, sessionKey },
+      select: { message: true, userId: true, createdAt: true },
+    })
+    if (!row) return null
+    return { store: "draft_room", text: row.message, authorId: row.userId ?? null, createdAt: row.createdAt, metadata: textOnlyDeletion(row.message), roomName: "Draft chat" }
+  }
+  const mockDraftId = draftIdFromMockDraftThread(threadId)
+  if (mockDraftId) {
+    const row = await prisma.mockDraftChat.findFirst({
+      where: { id: messageId, mockDraftId },
+      select: { content: true, userId: true, createdAt: true },
+    })
+    if (!row) return null
+    return { store: "mock_draft", text: row.content, authorId: row.userId ?? null, createdAt: row.createdAt, metadata: textOnlyDeletion(row.content), roomName: "Mock draft chat" }
   }
   const platform = await (prisma as any).platformChatMessage.findFirst({
     where: { id: messageId, threadId },
@@ -159,7 +196,16 @@ export async function reviewReport(reportId: string, action: ReviewAction, admin
   }
 
   const message = await loadMessage(report.messageId, report.threadId)
-  if (message && !message.metadata.deletedAt) {
+  /* No metadata column on the two draft tables (see the header): the text IS the deletion mark. */
+  if (message && (message.store === "draft_room" || message.store === "mock_draft")) {
+    if (!message.metadata.deletedAt) {
+      if (message.store === "draft_room") {
+        await prisma.draftRoomChatMessage.update({ where: { id: report.messageId }, data: { message: DELETED_TEXT } })
+      } else {
+        await prisma.mockDraftChat.update({ where: { id: report.messageId }, data: { content: DELETED_TEXT } })
+      }
+    }
+  } else if (message && !message.metadata.deletedAt) {
     const metadata = {
       ...message.metadata,
       deletedAt: new Date().toISOString(),

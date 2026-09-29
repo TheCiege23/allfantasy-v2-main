@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ArrowDown, Ban, Copy, CornerUpLeft, Flag, MoreHorizontal, Pencil, Pin, SmilePlus, Sparkles, Trash2 } from 'lucide-react'
-import { REPORT_REASONS, type ReportReason } from '@/lib/moderation/shared'
+import { REPORT_REASONS, REPORT_REASON_LABELS, type ReportReason } from '@/lib/moderation/shared'
 import { QUICK_REACTIONS, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { isNearBottom } from '@/lib/chat-core/useChatPolling'
@@ -127,17 +127,6 @@ export type ChatMessageListProps = {
 }
 
 /** What a reporter can pick. The route takes one of these; "Something else" is the default. */
-const REPORT_REASON_LABELS: Record<ReportReason, string> = {
-  spam: 'Spam',
-  harassment: 'Harassment or bullying',
-  hate_speech: 'Hate speech',
-  violence: 'Violence or threats',
-  nudity: 'Nudity or sexual content',
-  self_harm: 'Self-harm',
-  impersonation: 'Pretending to be someone',
-  other: 'Something else',
-}
-
 const LONG_PRESS_MS = 450
 const MOVE_CANCEL_PX = 10
 

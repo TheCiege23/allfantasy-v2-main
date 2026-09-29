@@ -90,8 +90,9 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
   deletion". Deletion is immediate and permanent after typing DELETE to confirm.
 
-  USER CONTENT: league chat, live draft-room chat and direct messages. Press and hold any message to
-  Report it or Block its sender; blocked users' messages are hidden. Offensive
+  USER CONTENT: league chat, draft and mock-draft chat, bracket pool chat and
+  direct messages. Press and hold a message, or tap its "..." button, to Report
+  it or Block its sender; blocked users' messages are hidden. Offensive
   language is filtered, and reports are reviewed within 24 hours (Terms of
   Service, section 11).
 
@@ -99,14 +100,20 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   website do not load inside the app.
   ```
 
-  ⚠ Keep it true. The live draft room gained Report/Block in #1565. These chat
-  surfaces are still live and still have NEITHER (census 2026-09-29, all four import
-  forms checked), which is why the note does not say "all chat":
-  - `app/draft/components/DraftChatPanel.tsx` (the `app/draft` shell's own chat —
-    not the live draft room's `components/app/draft-room/DraftChatPanel.tsx`);
-  - `components/bracket/PoolChat.tsx` (bracket league home tabs);
-  - `components/redraft/RedraftCommunicationPanel.tsx` (NFL redraft league home);
-  - `components/mock-draft/MockDraftChatPanel.tsx` (mock draft simulator).
+  ⚠ Keep it true. Report/Block now covers league chat (both renderers —
+  `LeagueConversation` and the dashboard's `LeagueChatInPanel`), DMs/huddles, the
+  live draft room (#1565), the `app/draft` shell's chat, bracket pool chat
+  (`PoolChat`) and the mock draft chat; every one of their reads hides blocked senders
+  and answers 503 rather than serve an unfiltered list. `RedraftCommunicationPanel`
+  shows no member chat (notices and events only; its composer posts into league chat).
+  STILL MISSING (census 2026-09-29, all four import forms checked), which is why the
+  note does not say "all chat":
+  - `app/leagues/[leagueId]/page.tsx` — the bracket league page renders bracket chat
+    in two lists with no Report (its read already hides blocked senders);
+  - `components/brackets/world-cup/WorldCupBracketShell.tsx` — World Cup challenge
+    chat (`/api/brackets/world-cup/[id]/chat`), no Report or Block, own table;
+  - `app/af-legacy/page.tsx` → `/api/legacy/chat` — NOT YET CLASSIFIED (may be the AI
+    assistant, which is not user content).
   Wire them before widening the sentence. If a purchase surface or a tracker is ever
   added to the app, this block is wrong the same day.
 - **App Privacy**: "Data Used to Track You", **No**. Measure it before each

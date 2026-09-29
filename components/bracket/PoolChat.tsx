@@ -9,6 +9,7 @@ import {
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { fetchGifs, gifSearchPlaceholder, type GifProvider } from "@/lib/rich-message/gifSearchClient"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
+import { MessageModerationMenu } from "@/components/moderation/MessageModerationMenu"
 
 type ChatMember = {
   id: string
@@ -149,6 +150,12 @@ export function PoolChat({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
+  /** Blocked from here, hidden at once — the chat route drops them from the next read. */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
+  const shownMessages = messages.filter((m) => {
+    const author = m.user?.id || m.userId
+    return !author || !blockedAuthors.has(author)
+  })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const lastSeenCount = useRef(0)
@@ -394,9 +401,9 @@ export function PoolChat({
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>No messages yet. Start the trash talk!</p>
           </div>
         )}
-        {messages.map((m, idx) => {
+        {shownMessages.map((m, idx) => {
           const isMe = m.user?.id === currentUserId || m.userId === currentUserId
-          const prevMsg = idx > 0 ? messages[idx - 1] : null
+          const prevMsg = idx > 0 ? shownMessages[idx - 1] : null
           const sameSender = prevMsg && (prevMsg.user?.id || prevMsg.userId) === (m.user?.id || m.userId)
           const timeDiff = prevMsg ? new Date(m.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() : Infinity
           const showHeader = !sameSender || timeDiff > 300000
@@ -586,6 +593,23 @@ export function PoolChat({
                     </span>
                   )}
                 </div>
+                {/*
+                  Report / Block (App Store guideline 1.2). Always visible, NOT in the hover row
+                  above: hover never happens on a phone, so a hover-only control is no control there.
+                  Bracket pool chat is the "league:<id>" room ReportSubmissionService already resolves.
+                */}
+                {!isMe ? (
+                  <div className="self-center">
+                    <MessageModerationMenu
+                      threadId={`league:${leagueId}`}
+                      messageId={m.id}
+                      authorId={m.user?.id || m.userId}
+                      authorName={getUserName(m.user)}
+                      viewerId={currentUserId}
+                      onBlocked={(id) => setBlockedAuthors((prev) => new Set(prev).add(id))}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           )
