@@ -9,7 +9,7 @@
  *   - waivers          → survival-first add/drop
  *   - faab-plan        → conserve vs aggressive FAAB
  *   - dropped-players  → eliminated-team pool ranking
- *   - trade-analyze    → trade verdict (ONLY when trades enabled)
+ *   - trade-analyze    → trade facts + THE one trade grade (ONLY when trades enabled)
  *   - weekly-plan      → composed survival plan
  *   - ask              → grounded AI answer (AF War Room-gated)
  *
@@ -31,6 +31,7 @@ import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { GuillotineWarRoomContext } from '@/lib/guillotine-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -122,7 +123,21 @@ export async function POST(
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * `analysis.verdict` is this engine's own accept/reject/neutral; the panel shows the grade in its
+       * place and keeps the analysis's facts (floor value, elimination-risk fit).
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
+        tradesEnabled: context.guillotine.tradesEnabled,
+      })
+      return NextResponse.json({ tradeAnalysis: analysis, tradeGrade })
     }
     case 'weekly-plan':
       return NextResponse.json({ weeklyPlan: buildWeeklyPlan(context, rosterId) })

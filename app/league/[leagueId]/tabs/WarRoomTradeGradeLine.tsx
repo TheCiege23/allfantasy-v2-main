@@ -3,7 +3,7 @@
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 
 /**
- * THE grade on the War Room's trade analyzer, redraft and dynasty (2026-09-28) — in place of the
+ * THE grade on the War Room's trade analyzer, all five War Rooms (2026-09-28/29) — in place of the
  * engines' own accept/reject/neutral verdict. See lib/decision-os/trade/warRoomTradeGrade.ts.
  */
 export function WarRoomTradeGradeLine({ grade, testId }: { grade: SuggestionGrade | null | undefined; testId: string }) {

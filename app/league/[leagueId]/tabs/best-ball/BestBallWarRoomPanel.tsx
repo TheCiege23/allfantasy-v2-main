@@ -29,6 +29,8 @@ import type { BestBallStackResult } from '@/lib/best-ball-war-room/bestBallStack
 import type { BestBallRiskResult } from '@/lib/best-ball-war-room/bestBallRiskEngine'
 import type { BestBallWaiverResult } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
 import type { BestBallTradeAnalysis, BestBallTradeFinderResult } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'upside' | 'draft-plan' | 'stacks' | 'risk' | 'waivers' | 'trade-analyze' | 'trade-find' | null
 
@@ -58,6 +60,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [risk, setRisk] = useState<BestBallRiskResult | null>(null)
   const [waivers, setWaivers] = useState<BestBallWaiverResult | null>(null)
   const [tradeAnalysis, setTradeAnalysis] = useState<BestBallTradeAnalysis | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<BestBallTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
@@ -100,7 +103,9 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
           const fallback = own[own.length - 1]?.playerId ?? ''
           const outgoing = (tradeOutgoingId || fallback).trim()
           const incoming = tradeIncomingIds.split(',').map((id) => id.trim()).filter(Boolean)
-          setTradeAnalysis((await analyzeBestBallWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })).tradeAnalysis)
+          const analyzed = await analyzeBestBallWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallback) setTradeOutgoingId(fallback)
         } else if (which === 'trade-find') setTradeFinder((await findBestBallWarRoomTrades(leagueId)).tradeFinder)
       } catch (e) {
@@ -299,7 +304,8 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
               </div>
               {tradeAnalysis && (
                 <div className="mt-2 space-y-1" data-testid="best-ball-war-room-trade-analyze-result">
-                  <p className="font-semibold text-white/80">Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}{tradeAnalysis.valueDelta != null ? <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span> : null}</p>
+                  {/* 🛑 THE GRADE IS THE VERDICT (2026-09-29). The engine's own accept/reject/neutral is never shown. */}
+                  <WarRoomTradeGradeLine grade={tradeGrade} testId="best-ball-war-room-trade-grade" />
                   {tradeAnalysis.explanationFacts.map((f) => (<p key={f}>{f}</p>))}
                   {tradeAnalysis.riskFlags.length > 0 && <ul className="mt-2 space-y-1">{tradeAnalysis.riskFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>}
                 </div>

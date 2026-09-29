@@ -29,7 +29,7 @@ import TradeAnalysisBadges from '@/components/TradeAnalysisBadges';
 import AIFailureStateRenderer from '@/components/ai-reliability/AIFailureStateRenderer';
 import StickyAIActions from '@/components/ai-interface/StickyAIActions';
 import { GradeLeaguePicker, gradeLeagueOptions, type GradeLeagueListRow } from '@/components/trade-evaluator/GradeLeaguePicker';
-import { DynastyLeagueGrade, type DynastyTradeGrade } from '@/components/dynasty-trade/DynastyLeagueGrade';
+import { DynastyLeagueGrade, NOT_GRADED_WINNER, winnerFromLeagueGrade, type DynastyTradeGrade } from '@/components/dynasty-trade/DynastyLeagueGrade';
 
 type Player = {
   id: string;
@@ -346,11 +346,12 @@ export default function DynastyTradeForm() {
       setGradedInLeague(Boolean(gradeLeagueId));
       const a = data.analysis;
       setResult({
-        winner: a.winner || 'Even',
+        // 🛑 The winner is read off THE letter; the dual-brain `winner` / `dynastyVerdict` are never kept
+        // (this object is also what a share link stores and prints).
+        winner: winnerFromLeagueGrade(data.tradeGrade ?? null, teamAName, teamBName) ?? NOT_GRADED_WINNER,
         valueDelta: a.valueDelta || '',
         factors: Array.isArray(a.factors) ? a.factors : [],
         confidence: a.confidence || 70,
-        dynastyVerdict: a.dynastyVerdict,
         vetoRisk: a.vetoRisk,
         agingConcerns: a.agingConcerns,
         recommendations: a.recommendations,
@@ -530,6 +531,9 @@ export default function DynastyTradeForm() {
       setSharing(false);
     }
   };
+
+  /* THE only winner this page names — read off the league grade's letter (2026-09-29). */
+  const gradeWinner = winnerFromLeagueGrade(tradeGrade, teamAName, teamBName) ?? NOT_GRADED_WINNER;
 
   return (
     <div className="space-y-8">
@@ -767,7 +771,7 @@ export default function DynastyTradeForm() {
                 <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 to-cyan-950/30 p-6">
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div className="text-center flex-1 min-w-[120px]">
-                      <div className="text-lg font-bold text-white">{detVerdict.winnerLabel}</div>
+                      <div className="text-lg font-bold text-white" data-testid="dynasty-grade-winner">{gradeWinner}</div>
                       <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Winner</div>
                     </div>
                     <div className="w-px h-12 bg-gray-700 hidden sm:block" />
@@ -864,11 +868,7 @@ export default function DynastyTradeForm() {
             <CardContent className="space-y-5">
               <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 to-cyan-950/40 p-6">
                 <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-center flex-1 min-w-[120px]">
-                    <div className="text-lg font-bold text-white">{sections.valueVerdict.edge}</div>
-                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Edge</div>
-                  </div>
-                  <div className="w-px h-12 bg-gray-700 hidden sm:block" />
+                  {/* No "Edge" cell: it named a winner from the engine's own totals (see gradeWinner). */}
                   <div className="text-center flex-1 min-w-[100px]">
                     <div className={`text-3xl font-bold font-mono ${
                       sections.valueVerdict.confidence >= 80 ? 'text-green-400' :
@@ -1173,7 +1173,7 @@ export default function DynastyTradeForm() {
             <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 to-cyan-950/40 p-8">
               <div className="text-center">
                 <p className="text-sm text-gray-400 mb-2 uppercase tracking-wider">Winner</p>
-                <p className="text-4xl font-bold text-white mb-4">{result.winner}</p>
+                <p className="text-4xl font-bold text-white mb-4">{gradeWinner}</p>
               </div>
             </div>
             <div className="flex justify-center gap-8 text-center py-2">
@@ -1210,8 +1210,8 @@ export default function DynastyTradeForm() {
           <StickyAIActions
             copyText={
               detVerdict
-                ? `${detVerdict.winnerLabel}${tradeGrade?.grade && tradeGrade.partnerGrade ? ` — league grade ${teamAName} ${tradeGrade.grade} · ${teamBName} ${tradeGrade.partnerGrade}` : ''}, ${detVerdict.confidence}% confidence. ${sections?.actionPlan?.messageText ?? ''}`.trim()
-                : `${result.winner} — ${result.confidence}% confidence. ${result.valueDelta ?? ''} ${(result.factors ?? []).slice(0, 2).join('; ')}`.trim()
+                ? `${gradeWinner}${tradeGrade?.grade && tradeGrade.partnerGrade ? ` — league grade ${teamAName} ${tradeGrade.grade} · ${teamBName} ${tradeGrade.partnerGrade}` : ''}, ${detVerdict.confidence}% confidence. ${sections?.actionPlan?.messageText ?? ''}`.trim()
+                : `${gradeWinner} — ${result.confidence}% confidence. ${result.valueDelta ?? ''} ${(result.factors ?? []).slice(0, 2).join('; ')}`.trim()
             }
             chimmyPrompt={buildTradeSummaryForAI(
               teamAAssets.map((a) => a.name).join(', '),

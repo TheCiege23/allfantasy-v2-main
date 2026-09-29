@@ -8,7 +8,7 @@ import React from 'react'
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { gradeInputsFromAssetLabels, splitSideAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
-import { DynastyLeagueGrade } from '@/components/dynasty-trade/DynastyLeagueGrade'
+import { DynastyLeagueGrade, NOT_GRADED_WINNER, winnerFromLeagueGrade } from '@/components/dynasty-trade/DynastyLeagueGrade'
 
 const code = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
 
@@ -85,6 +85,26 @@ describe('DynastyLeagueGrade', () => {
   })
 })
 
+describe('winnerFromLeagueGrade — the only winner the page names (2026-09-29)', () => {
+  const withLetter = (grade: string | null) => ({ grade, partnerGrade: null, gradeLabel: null, gradeWithheld: null, giveValue: null, getValue: null })
+
+  it('reads the winner off Team A’s letter: A/B favour A, C is even, D/F favour B', () => {
+    expect(['A', 'B', 'C', 'D', 'F'].map((l) => winnerFromLeagueGrade(withLetter(l), 'Hoovi', 'Nicolodeon'))).toEqual([
+      'Hoovi — major win',
+      'Slight edge to Hoovi',
+      'Even',
+      'Slight edge to Nicolodeon',
+      'Nicolodeon — major win',
+    ])
+  })
+
+  it('no letter, no winner; blank team names fall back', () => {
+    expect(winnerFromLeagueGrade(null, 'A', 'B')).toBeNull()
+    expect(winnerFromLeagueGrade(withLetter(null), 'A', 'B')).toBeNull()
+    expect(winnerFromLeagueGrade(withLetter('F'), ' ', '')).toBe('Team B — major win')
+  })
+})
+
 describe('wiring', () => {
   const route = code('app/api/dynasty-trade-analyzer/route.ts')
   const form = code('components/DynastyTradeForm.tsx')
@@ -110,5 +130,26 @@ describe('wiring', () => {
     expect(form).toMatch(/\.\.\.\(gradeLeagueId \? \{ gradeLeagueId \} : \{\}\)/)
     // `leagueId` would switch on the context assembler's unchecked path; the form never sends it.
     expect(form).not.toMatch(/\bleagueId: /)
+  })
+
+  it('🛑 the form names no winner of the dual-brain engine’s — every winner on screen, in the copy text and in a share link is the letter’s', () => {
+    // The engine's own winners: the verdict card's label, the value card's "Edge", the analysis's winner/verdict.
+    expect(form).not.toMatch(/detVerdict\.winnerLabel/)
+    expect(form).not.toMatch(/sections\.valueVerdict\.edge\b/)
+    expect(form).not.toMatch(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/)
+    expect(form).toMatch(/const gradeWinner = winnerFromLeagueGrade\(tradeGrade, teamAName, teamBName\) \?\? NOT_GRADED_WINNER/)
+    // The verdict card, the no-sections card and both copy texts.
+    expect(form.match(/>\{gradeWinner\}</g)).toHaveLength(2)
+    expect(form.match(/\$\{gradeWinner\}/g)).toHaveLength(2)
+    // What a share link stores (and /trade/[id] prints as "Winner") is the letter's winner too.
+    expect(form).toMatch(/winner: winnerFromLeagueGrade\(data\.tradeGrade \?\? null, teamAName, teamBName\) \?\? NOT_GRADED_WINNER,/)
+    expect(NOT_GRADED_WINNER).toBe('Not graded')
+  })
+
+  it('positive control: the forbidden shapes match the lines the form printed', () => {
+    expect(/detVerdict\.winnerLabel/.test('<div className="text-lg font-bold text-white">{detVerdict.winnerLabel}</div>')).toBe(true)
+    expect(/sections\.valueVerdict\.edge\b/.test('{sections.valueVerdict.edge}')).toBe(true)
+    expect(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/.test("winner: a.winner || 'Even',")).toBe(true)
+    expect(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/.test('dynastyVerdict: a.dynastyVerdict,')).toBe(true)
   })
 })

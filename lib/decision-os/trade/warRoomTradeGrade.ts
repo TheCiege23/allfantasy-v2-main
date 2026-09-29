@@ -5,7 +5,8 @@ import type { GradeInputs } from './tradeGradeInputs'
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 
 /**
- * THE grade on the War Room's trade analyzer (2026-09-28) — redraft and dynasty.
+ * THE grade on the War Room's trade analyzer (2026-09-28) — redraft and dynasty; keeper, guillotine and
+ * best ball since 2026-09-29.
  *
  * Both War Rooms answered "analyze this trade" with a verdict of their own — accept / reject /
  * neutral, from `redraftTradeEngine.ts` / `dynastyTradeEngine.ts` summing a private "composite" — a
@@ -68,6 +69,7 @@ export function warRoomGradeInputs(side: WarRoomTradeSide): GradeInputs {
 }
 
 export const WAR_ROOM_EMPTY_SIDE_REASON = 'Add something to both sides to grade this trade.'
+export const WAR_ROOM_TRADES_DISABLED_REASON = 'Trades are disabled in this league.'
 
 /** Never throws: a grade that cannot be taken is a withheld grade with the reason. */
 export async function gradeWarRoomTrade(args: {
@@ -76,7 +78,10 @@ export async function gradeWarRoomTrade(args: {
   viewerSide: boolean
   outgoing: WarRoomTradeSide
   incoming: WarRoomTradeSide
+  /** Guillotine and best ball can switch trades off; a deal that cannot happen gets no grade. */
+  tradesEnabled?: boolean
 }): Promise<SuggestionGrade> {
+  if (args.tradesEnabled === false) return { graded: false, reason: WAR_ROOM_TRADES_DISABLED_REASON }
   const give = warRoomGradeInputs(args.outgoing)
   const get = warRoomGradeInputs(args.incoming)
   const count = (i: GradeInputs) => i.assets.length + i.unpriceable.length
