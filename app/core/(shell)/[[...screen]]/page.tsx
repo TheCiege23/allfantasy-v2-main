@@ -5,7 +5,6 @@ import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
-import { iosAppSignedOutDestination } from '@/lib/platform/iosApp'
 import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
@@ -659,9 +658,6 @@ export default async function AfCorePage({
       if (typeof value === 'string') carried.set(key, value)
     }
     const carriedQuery = carried.toString()
-    // The iOS app launches here; a first-time user must see what the app is, not a login form.
-    const iosLanding = iosAppSignedOutDestination((await headers()).get('user-agent'), segment, carriedQuery)
-    if (iosLanding) redirect(iosLanding)
     const callbackTarget = `/core${segment ? `/${segment}` : ''}${carriedQuery ? `?${carriedQuery}` : ''}`
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackTarget)}`)
   }

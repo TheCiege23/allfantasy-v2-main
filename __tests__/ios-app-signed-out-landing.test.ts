@@ -62,4 +62,10 @@ describe("iOS app: signed-out /core lands on the landing page", () => {
     const res = await middleware(request("/core/trades", IOS_UA))
     expect(location(res)?.pathname ?? null).not.toBe("/")
   })
+
+  it("a query deep link in the app keeps its league — /core?league= is not bare /core", async () => {
+    vi.mocked(getToken).mockResolvedValue(null)
+    const res = await middleware(request("/core?league=42820255-aef6-4e6b-a6f5-34f968707bc7", IOS_UA))
+    expect(location(res)?.pathname ?? null).not.toBe("/")
+  })
 })
