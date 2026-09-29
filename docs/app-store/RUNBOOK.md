@@ -68,9 +68,24 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
 
 - **Demo account** under App Review Information: an email/password account (not
   a social login, which is hidden in the app) with 1–2 imported leagues.
-- **App Privacy**: "Data Used to Track You", Yes (Meta Pixel and Conversions
-  API). Re-measure before each submission; see the Play runbook's data-safety
-  notes.
+- **App Privacy**: "Data Used to Track You", Yes — the Meta Pixel and Conversions
+  API, Google Tag Manager and Google Ads conversion tracking, **and the TikTok and
+  Reddit pixels GTM loads**. Re-measure before each submission; see the Play
+  runbook's data-safety notes for the measured host list.
+  - 🛑 TikTok and Reddit are NOT in this repo — they live in the GTM container, so
+    `grep` cannot find them and the privacy policy under-disclosed both for weeks.
+    Measure the LIVE site with `performance.getEntriesByType('resource')`; an
+    in-app-browser network panel showed only same-origin requests and none of the
+    ad hosts, which reads exactly like "nothing fires".
+- **What was verified in production on 2026-09-28, and what was not.** Verified by
+  effect: `/upgrade` answers **307 → `/ios-app/plans`** for a UA carrying
+  `AllFantasyiOS` and **200** for a desktop UA, so the purchase-page gate is live.
+  NOT verified: hiding the social sign-in buttons and dropping GTM inside the app
+  are done CLIENT-side off the `data-ios-app` flag, so a `curl` with the iOS UA
+  returns byte-identical HTML and proves nothing either way. Confirm both on a real
+  TestFlight build before submitting — the web login page does show Google, Spotify
+  and Discord (Apple reads "SOON"), which is exactly the 4.8 shape review would
+  reject if the in-app hiding ever silently stopped working.
 - **Release**: "Manually release this version".
 
 ## Known remaining risk

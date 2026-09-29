@@ -73,19 +73,37 @@ bubblewrap build
        clicks and **session recordings**, inputs masked, console not captured).
      - **App info and performance:** crash logs (Sentry, PostHog exception
        capture); diagnostics (PostHog network timing).
-     - **Shared with third parties for advertising:** the Meta Pixel and Google
-       Tag Manager load on every page, and the server sends Meta Conversions API
-       events (`CompleteRegistration`, `Lead`, `Subscribe`, `Purchase`).
-       Declare it as shared, not only collected.
-     - Data encrypted in transit; users can request deletion at
-       `https://allfantasy.ai/data-deletion`.
-     - ⚠ **Blocker before submitting:** `/privacy` does not mention Meta, Google
-       advertising tags or conversion tracking. The form and the policy must
-       agree, and reviewers compare them.
+     - **Shared with third parties for advertising:** the Meta Pixel, Google Tag
+       Manager and **the TikTok and Reddit pixels GTM loads** run on every page,
+       Google Ads conversion tracking fires `ad.doubleclick.net`, and the server
+       sends Meta Conversions API events (`CompleteRegistration`, `Lead`,
+       `Subscribe`, `Purchase`). Declare it as shared, not only collected.
+     - 🛑 **THE AD PARTNER LIST CANNOT BE DERIVED FROM THIS REPO.** TikTok and
+       Reddit load from inside the GTM container, configured in Google's UI, so
+       `grep` finds nothing and both were missing from the policy and this form
+       for weeks. Re-measure from the LIVE site before every submission, and use
+       `performance.getEntriesByType('resource')` — a devtools network panel in
+       the in-app browser reported only same-origin requests and showed none of
+       these hosts, which reads exactly like "no trackers fire".
+     - Measured 2026-09-28 on `https://www.allfantasy.ai/`, third-party hosts on
+       first load: `connect.facebook.net`, `www.googletagmanager.com`,
+       `analytics.tiktok.com` (+ `analytics-ipv6.tiktokw.us`),
+       `www.redditstatic.com`, `pixel-config.reddit.com`, `alb.reddit.com`,
+       `ad.doubleclick.net`, `static.cloudflareinsights.com`, `sentry.io`.
+       One host is UNIDENTIFIED and worth naming before you certify the form:
+       `mpc2-prod-27-is5qnl632q-uk.a.run.app` (arrived as a `fetch`, almost
+       certainly a tag inside the container).
+     - ✅ `/privacy` now names Meta, Google, TikTok and Reddit (the advertising
+       section and the "we do not sell" callout). The earlier blocker here —
+       "/privacy does not mention Meta, Google advertising tags" — was fixed
+       2026-09-25 and this note went stale the same day; it is resolved.
+     - Data encrypted in transit; users delete in-app at **Settings → Account →
+       Start account deletion**, or by email via
+       `https://allfantasy.ai/data-deletion` if locked out.
      - The same facts drive **App Store Connect → App Privacy**: Contact Info
        (email, phone, name), Location (coarse), Usage Data (product interaction,
        advertising data), Diagnostics (crash, performance), and "Data Used to
-       Track You" = yes, because of the Meta and Google ad tags.
+       Track You" = yes, because of the Meta, Google, TikTok and Reddit ad tags.
    - Content rating questionnaire → category Utility/Sports → this GENERATES
      the real IARC rating (the old manifest carried an invented one; it has
      been removed).

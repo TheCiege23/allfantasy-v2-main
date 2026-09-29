@@ -23,11 +23,27 @@ export const metadata = {
  * pages, and app-store listings — turning it into a panel inside /terms would
  * break every one of those inbound links.
  *
- * ⚠ THE PROCESS IS EMAIL-BASED AND HUMAN-OPERATED, WHICH THIS COPY ASSUMES. There
- * is no self-serve deletion endpoint; a request goes to a person. 17b's build note
- * asks that this be flagged to product if a self-serve flow is ever planned,
- * because the wording here ("we may ask you to verify", "within 30 days") is
- * written for a queue with a human in it and would be wrong for a button.
+ * 🛑 THAT SELF-SERVE FLOW NOW EXISTS, AND THIS PAGE SAID OTHERWISE FOR WEEKS. The
+ * comment here used to read "there is no self-serve deletion endpoint; a request
+ * goes to a person", and 17b asked that it be flagged if one was ever built. It was:
+ * Settings → Account → "Start account deletion" (type DELETE to confirm) posts to
+ * `/api/user/delete` and erases the PII immediately.
+ *
+ * ⚠ WHY THE MISMATCH MATTERED MORE THAN THE WORDING. This page is linked from the
+ * privacy policy, the legal footer on all eight legal pages, and the App Store and
+ * Play listings — so a reviewer reading Apple's 5.1.1(v) account-deletion
+ * requirement was told by our own public page that deletion needs an email to a
+ * human, while the app itself has a button. Under-claiming a capability a
+ * guideline requires is the expensive direction to be wrong in.
+ *
+ * ⚠ EMAIL IS KEPT AS THE SECOND PATH, NOT DELETED. It is the only route for someone
+ * locked out of their account, and the "verify ownership / within 30 days" wording
+ * still describes that queue correctly.
+ *
+ * ⚠ AND THE IN-APP BUTTON ANONYMISES RATHER THAN HARD-DELETING (`/api/user/delete`
+ * scrubs the AppUser row and drops OAuth links, keeping an anonymised row so
+ * leagues and rosters stay referentially intact). The copy below says "deleted or
+ * anonymized" for exactly that reason — do not upgrade it to a flat "deleted".
  */
 export default async function DataDeletionPage({ searchParams }: DataDeletionPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
@@ -57,6 +73,28 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
           Fantrax — manage those with each provider directly.
         </p>
 
+        <h2>Delete it yourself, from your account</h2>
+        <p>
+          If you can sign in, you do not need to email anyone. Go to{" "}
+          <Link href="/settings">Settings</Link> → <strong>Account</strong> →{" "}
+          <strong>Start account deletion</strong>, then type <strong>DELETE</strong> to confirm. Your
+          profile is erased straight away: your email address, username, display name, avatar,
+          password and any connected sign-in links (Google, Apple, Discord and the rest) are removed,
+          and you are signed out and cannot sign in again.
+        </p>
+        <p>
+          Leagues, rosters and league history stay in place against an anonymised account, so the
+          other managers in your leagues are not affected. That is why we say
+          &ldquo;deleted or anonymized&rdquo; rather than promising every row disappears.
+        </p>
+
+        <p style={{ marginTop: 22 }}>
+          <Link href="/settings" className="af-legal-cta">
+            Open Settings → Account
+          </Link>
+        </p>
+
+        <h2>Can&apos;t sign in? Email us instead</h2>
         <ol className="af-legal-steps">
           <li className="af-legal-step">
             <span>
