@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { releaseDeletedAccountLinks } from "@/lib/account/releaseDeletedAccountLinks"
+import { revokeAllSessionsForUser } from "@/lib/auth/sessionRevocation"
 
 export const dynamic = "force-dynamic"
 
@@ -83,6 +84,13 @@ export async function POST(req: Request) {
     console.error("[user/delete] erasure failed:", error)
     return NextResponse.json({ error: "Account deletion failed" }, { status: 500 })
   }
+
+  /*
+   * Closes the gap the header above names ("an already-issued token cannot be server-revoked"):
+   * every session this user holds is refused from now on, on every device, not only the one
+   * that pressed Delete (lib/auth/sessionRevocation). Best-effort: the erasure already happened.
+   */
+  await revokeAllSessionsForUser(userId).catch(() => undefined)
 
   console.warn("[user/delete] account erased", { userId })
   return NextResponse.json({ ok: true, deleted: true })

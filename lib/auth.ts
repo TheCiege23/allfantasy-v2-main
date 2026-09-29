@@ -5,6 +5,12 @@ import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
 import { appleFormPostCookies, resolveAppleClientSecret } from "@/lib/auth/appleClientSecret";
 import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv";
+import {
+  isSessionRevoked,
+  newSessionId,
+  revokeSessionForSignOut,
+  SessionRevokedError,
+} from "@/lib/auth/sessionRevocation";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
@@ -653,6 +659,17 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async jwt({ token, user, trigger, session: updatePayload }) {
+      /*
+       * 🛑 A SIGNED-OUT SESSION STAYS SIGNED OUT, WHATEVER THE DEVICE KEPT (lib/auth/sessionRevocation).
+       * Sign-out records this session's `sid` as revoked; a cookie that comes back afterwards — the
+       * iOS app restored one after sign-out + close + reopen — is refused here. It THROWS on purpose,
+       * and OUTSIDE the try below: next-auth's session route clears the session cookie on any throw
+       * from this callback, and getServerSession returns null. Returning the token instead would
+       * leave the cookie in place. Skipped at sign-in (`user` set), where the token is brand new.
+       */
+      if (!user && (await isSessionRevoked(token))) {
+        throw new SessionRevokedError();
+      }
       try {
         // Handle useSession().update({ username }) from the choose-username flow.
         // This re-stamps the cookie so the middleware gate sees the new username
@@ -706,6 +723,11 @@ export const authOptions: NextAuthOptions = {
           token.name = user.name;
           token.username = (user as { username?: string | null }).username ?? null;
           token.picture = user.image;
+          // This login's own id — what sign-out revokes, so only THIS device is signed out.
+          token.sid = newSessionId();
+        } else if (!token.sid) {
+          // A session from before sids existed gets one; it sticks once next-auth re-writes the cookie.
+          token.sid = newSessionId();
         }
 
         // Sign-in included: a Washington sign-in over a normal connection is
@@ -799,6 +821,19 @@ export const authOptions: NextAuthOptions = {
     },
   },
   events: {
+    /*
+     * Sign-out ends the session on the SERVER too, not only in the cookie jar (see the jwt
+     * callback and lib/auth/sessionRevocation). next-auth hands us the decoded session token.
+     * Best-effort: a Redis blip must never stop someone signing out.
+     */
+    async signOut(message) {
+      try {
+        const token = (message as { token?: Record<string, unknown> | null }).token ?? null;
+        await revokeSessionForSignOut(token);
+      } catch (error) {
+        console.error("[auth] signOut revocation failed (cookie still cleared):", error);
+      }
+    },
     async signIn({ user }) {
       if (!user?.id) return;
 
