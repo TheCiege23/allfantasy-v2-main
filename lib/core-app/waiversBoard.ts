@@ -10,6 +10,7 @@ import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { ruledOutByFact } from './injuryStatus'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { isStartableIn, startingSlots } from './slotEligibility'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -332,18 +333,19 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     nameIds.length > 0
       ? await prisma.sportsPlayer
           .findMany({
-            where: {
-              sport: 'NFL',
-              OR: [
-                { sleeperId: { in: nameIds } },
-                { id: { in: nameIds } },
-                { externalId: { in: nameIds } },
-              ],
-            },
+            /*
+             * 🛑 BY SLEEPER ID ONLY — `sleeperIdWhere`, never a bare id against `externalId`. Every
+             * id here is a Sleeper id (the projection feed's and the rosters'), and Rolling
+             * Insights writes its OWN numbers into `externalId`: Sleeper 9228 is Bryce Young, RI
+             * 9228 is Michael Tarquin, an offensive tackle. This read matched both, keyed its map
+             * by both columns, and let the last row win — so Chimmy's Tuesday digest (App Review
+             * account, 2026-09-29) said "add Michael Tarquin (OT)" with Bryce Young's 12.4. Of the
+             * top 900 week-4 projections, 422 had such an impostor. See externalIdNamespace.ts.
+             */
+            where: sleeperIdWhere(nameIds, 'NFL'),
             select: {
-              id: true,
-              externalId: true,
               sleeperId: true,
+              source: true,
               name: true,
               position: true,
               team: true,
@@ -360,18 +362,26 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     imageUrl: string | null
     sleeperId: string | null
   }
+  /*
+   * Keyed by `sleeperId` alone. Several rows can carry the same Sleeper id (Sleeper's own, plus RI
+   * and TheSportsDB rows the crosswalk stamped) — one person, but Sleeper's row holds the
+   * fantasy-shaped fields (`QB`, `CAR`), so it wins a tie rather than whichever row came back last.
+   */
   const metaById = new Map<string, Meta>()
+  const metaFromSleeper = new Set<string>()
   for (const p of players) {
-    const m: Meta = {
+    const k = p.sleeperId
+    if (!k) continue
+    const fromSleeper = p.source === 'sleeper'
+    if (metaById.has(k) && (metaFromSleeper.has(k) || !fromSleeper)) continue
+    metaById.set(k, {
       name: p.name,
       position: p.position ?? null,
       team: p.team ?? null,
       imageUrl: p.imageUrl ?? null,
-      sleeperId: p.sleeperId ?? null,
-    }
-    for (const k of [p.sleeperId, p.id, p.externalId]) {
-      if (k) metaById.set(k, m)
-    }
+      sleeperId: k,
+    })
+    if (fromSleeper) metaFromSleeper.add(k)
   }
 
   const marketOk = market.leaguesCounted >= MIN_LEAGUES_FOR_MARKET
