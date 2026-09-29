@@ -23,8 +23,16 @@ const KINCAID = { kind: 'player' as const, playerId: '10236', name: 'Dalton Kinc
 const POLLARD = { kind: 'player' as const, playerId: 'rb3', name: 'Tony Pollard', position: 'RB', value: 3140 }
 const STEVENSON = { kind: 'player' as const, playerId: 'rb4', name: 'Rhamondre Stevenson', position: 'RB', value: 2610 }
 
-const P1 = { id: 'p1', give: [POLLARD], receive: [KINCAID], giveTotal: 3140, receiveTotal: 3010, delta: -130, fairness: 'balanced' as const, confidence: 85, reasons: ['Values are close — fair starting point'], warnings: [] }
-const P2 = { id: 'p2', give: [STEVENSON], receive: [KINCAID], giveTotal: 2610, receiveTotal: 3010, delta: 400, fairness: 'slight edge you' as const, confidence: 85, reasons: [], warnings: [] }
+const G_EVEN = {
+  available: true as const,
+  data: { letter: 'C' as const, partnerLetter: 'C' as const, label: 'Even', recommendation: 'Fair deal — worth sending.', giveValue: 3100, getValue: 3050, basis: 'Keeper · 1QB · 12 teams · Half PPR' },
+}
+const G_EDGE = {
+  available: true as const,
+  data: { letter: 'B' as const, partnerLetter: 'D' as const, label: 'Slightly favors you', recommendation: 'You come out ahead.', giveValue: 2600, getValue: 3050, basis: 'Keeper · 1QB · 12 teams · Half PPR' },
+}
+const P1 = { id: 'p1', give: [POLLARD], receive: [KINCAID], giveTotal: 3140, receiveTotal: 3010, delta: -130, fairness: 'balanced' as const, confidence: 85, reasons: ['Fills one of your roster needs'], warnings: [], grade: G_EVEN }
+const P2 = { id: 'p2', give: [STEVENSON], receive: [KINCAID], giveTotal: 2610, receiveTotal: 3010, delta: 400, fairness: 'slight edge you' as const, confidence: 85, reasons: [], warnings: [], grade: G_EDGE }
 
 const VISUAL: PlayerTradeVisual = {
   leagueId: 'L-gang', leagueName: 'Gridiron Gang', platform: 'espn', platformLeagueId: '888', season: 2026,
@@ -35,23 +43,37 @@ const VISUAL: PlayerTradeVisual = {
   bidInstead: null,
   packages: [P1, P2],
   recommended: P1,
-  grade: { available: true, data: { verdict: 'accept', verdictConfidence: 'medium', fairnessScore: 71, fairnessDelta: 120, starterDeltaPts: 2.6, lineupNote: 'Kincaid starts over Otton', acceptance: 0.62, explanations: ['Values within band'] } },
+  grade: G_EVEN,
 }
 
 describe('TradeVisual', () => {
-  it('keeps package prices consistent and withholds analysis debug output', () => {
-    const visual = { ...VISUAL, grade: { available: true as const, data: {
-      verdict: 'accept' as const, verdictConfidence: 'medium' as const,
-      fairnessScore: 71, fairnessDelta: 1902, starterDeltaPts: 0,
-      acceptance: 0.62, explanations: ['You are receiving ~1902 more in market value', 'Fills your TE hole'],
-      lineupNote: 'A(MIDDLE:neutral) impact 15870→15870 net 0 | avgVol 0.1.',
-    } } }
-    render(<TradeVisual state={{ available: true, data: visual }} playerName="Dalton Kincaid" />)
-    expect(screen.getByText('-130 value to you')).toBeInTheDocument()
-    expect(screen.getByText('Fills your TE hole')).toBeInTheDocument()
-    expect(screen.queryByText(/1902|avgVol/)).not.toBeInTheDocument()
+  /*
+   * 🛑 ONE VERDICT (2026-09-29). The card printed the finder's fairness band AND a second engine's
+   * "Engine: accept/reject", starter points and acceptance odds — none of them the letter the Trade
+   * Center gives the same deal. Asserted both ways: the one grade is there, the others are not.
+   */
+  it('prints the one trade grade and nothing from any other model', () => {
+    render(<TradeVisual state={{ available: true, data: VISUAL }} playerName="Dalton Kincaid" />)
+    expect(screen.getByText('C · Even')).toHaveAttribute('data-tone', 'good')
+    expect(screen.getByText('Fair deal — worth sending.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Engine/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/starter pts/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/likely to accept/)).not.toBeInTheDocument()
+    expect(screen.queryByText('balanced')).not.toBeInTheDocument()
+    expect(screen.queryByText('slight edge you')).not.toBeInTheDocument()
   })
-  it('draws give and get with totals, the band, the engine verdict, and the hand-off', () => {
+
+  it('an overpay reads as a warning, a big one as bad', () => {
+    const d = { available: true as const, data: { ...G_EVEN.data, letter: 'D' as const, label: 'Slightly favors opponent' } }
+    const f = { available: true as const, data: { ...G_EVEN.data, letter: 'F' as const, label: 'Major overpay' } }
+    const { unmount } = render(<TradeVisual state={{ available: true, data: { ...VISUAL, recommended: { ...P1, grade: d } } }} playerName="Dalton Kincaid" />)
+    expect(screen.getByText('D · Slightly favors opponent')).toHaveAttribute('data-tone', 'warn')
+    unmount()
+    render(<TradeVisual state={{ available: true, data: { ...VISUAL, recommended: { ...P1, grade: f } } }} playerName="Dalton Kincaid" />)
+    expect(screen.getByText('F · Major overpay')).toHaveAttribute('data-tone', 'bad')
+  })
+
+  it('draws give and get with totals, the one grade, the alternatives, and the hand-off', () => {
     render(<TradeVisual state={{ available: true, data: VISUAL }} playerName="Dalton Kincaid" />)
     expect(screen.getByRole('heading', { level: 3, name: "What it takes to get Kincaid from Tasha's Titans" })).toBeInTheDocument()
 
@@ -62,14 +84,13 @@ describe('TradeVisual', () => {
     expect(within(get).getByText('Dalton Kincaid')).toBeInTheDocument()
     expect(within(get).getByText('3,010', { selector: '.af-pf-tv-total' })).toBeInTheDocument()
 
-    expect(screen.getByText('balanced')).toHaveAttribute('data-tone', 'good')
-    expect(screen.getByText('-130 value to you')).toBeInTheDocument()
-    expect(screen.getByText('Engine: accept · medium')).toHaveAttribute('data-tone', 'good')
-    expect(screen.getByText('+2.6 starter pts')).toBeInTheDocument()
-    expect(screen.getByText('62% likely to accept')).toBeInTheDocument()
+    expect(screen.getByText('C · Even')).toBeInTheDocument()
+    expect(screen.getByText('-130 market value to you')).toBeInTheDocument()
+    expect(screen.getByText('Fills one of your roster needs')).toBeInTheDocument()
 
-    // The alternative is listed, the recommended one is not repeated.
+    // The alternative is listed with its own grade, the recommended one is not repeated.
     expect(screen.getByText('Rhamondre Stevenson for Dalton Kincaid')).toBeInTheDocument()
+    expect(screen.getByText('B · Slightly favors you')).toBeInTheDocument()
     expect(screen.queryByText('Tony Pollard for Dalton Kincaid')).not.toBeInTheDocument()
 
     // Hand-off inside the card: the platform, then our own Trade Center.
@@ -93,15 +114,18 @@ describe('TradeVisual', () => {
     expect(screen.queryByText(/too early to tell/)).not.toBeInTheDocument()
   })
 
-  it('says why when the engine could not grade, and keeps the package', () => {
+  it('says why when the grade could not be taken, keeps the package, and puts no other verdict in its place', () => {
+    const miss = { available: false as const, reason: 'the trade grade did not answer in time' }
     render(
       <TradeVisual
-        state={{ available: true, data: { ...VISUAL, grade: { available: false, reason: 'the trade engine did not answer in time' } } }}
+        state={{ available: true, data: { ...VISUAL, recommended: { ...P1, grade: miss }, grade: miss } }}
         playerName="Dalton Kincaid"
       />,
     )
-    expect(screen.getByText('Engine grade: the trade engine did not answer in time')).toBeInTheDocument()
-    expect(screen.getByText('balanced')).toBeInTheDocument()
+    expect(screen.getByText('Grade: the trade grade did not answer in time')).toBeInTheDocument()
+    expect(screen.getByText('Tony Pollard')).toBeInTheDocument()
+    expect(screen.queryByText('balanced')).not.toBeInTheDocument()
+    expect(screen.queryByText('C · Even')).not.toBeInTheDocument()
   })
 
   it('renders the reason, and nothing invented, when there is no visual', () => {

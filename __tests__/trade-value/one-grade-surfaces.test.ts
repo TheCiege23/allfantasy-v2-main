@@ -63,6 +63,8 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/dynasty-trade-analyzer/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the dynasty trade analyzer' },
   /* 2026-09-27: /trade-finder's candidates (see lib/trade-finder/candidateGrades.ts). */
   { file: 'app/api/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the /trade-finder page’s suggested trades' },
+  /* 2026-09-29: the /core Player Finder's "trade for him" card — it printed a second engine's verdict until then. */
+  { file: 'lib/core-app/playerTradeVisual.ts', entry: /gradeDeal\(/, what: 'the /core Player Finder “trade for him” card' },
 ]
 
 /* The private letters these surfaces used to print. Shapes, not words: a call, not a mention. */
@@ -452,5 +454,20 @@ describe('Nightly trade agent — suggests only what the one grade reads C for b
   it('rides the hourly housekeeping cron rather than taking a 61st cron slot', () => {
     expect(code('app/api/cron/reap-sync-runs/route.ts')).toMatch(/runTradeAgentPass\(\{/)
     expect(existsSync(resolve(process.cwd(), 'app/api/cron/trade-agent/route.ts'))).toBe(false)
+  })
+})
+
+describe('the /core Player Finder trade card — one verdict, the one grade (2026-09-29)', () => {
+  it('never asks the second trade engine', () => {
+    const src = code('lib/core-app/playerTradeVisual.ts')
+    expect(src).not.toMatch(/from '@\/lib\/engine\/trade'/)
+    expect(src).not.toMatch(/runTradeAnalysis\(/)
+  })
+
+  it('prints neither the finder’s band nor the old engine’s verdict, odds or starter points', () => {
+    const src = code('components/core-app/player-finder/TradeVisual.tsx')
+    expect(src).not.toMatch(/\{\s*(?:rec|p)\.fairness\s*\}/)
+    expect(src).not.toMatch(/Engine:|\.verdict\b|\.acceptance\b|starterDeltaPts/)
+    expect(src).toMatch(/grade\.data\.letter/)
   })
 })

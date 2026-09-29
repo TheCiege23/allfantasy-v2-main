@@ -83,6 +83,18 @@ export interface PartnerMatch {
 
 export type FairnessBand = 'balanced' | 'slight edge you' | 'slight edge partner' | 'lopsided' | 'low confidence'
 
+/**
+ * The sentence each band adds to a package's reasons. Exported so a surface that shows the ONE trade
+ * grade beside a package (the /core Player Finder card) can drop these: they are this finder's own
+ * fairness call on market value, and printed next to the league-value letter they can disagree with it.
+ */
+export const FAIRNESS_BAND_REASON: Record<Exclude<FairnessBand, 'low confidence'>, string> = {
+  balanced: 'Values are close — fair starting point',
+  'slight edge you': 'Slight value edge to you',
+  'slight edge partner': 'Slight value edge to your partner',
+  lopsided: 'Large value gap — likely needs sweetener',
+}
+
 export interface PackageAsset {
   kind: 'player' | 'faab'
   playerId?: string
@@ -299,10 +311,7 @@ export function findPackages(input: {
 
     const reasons: string[] = []
     if (receives.some((r) => partnerBlock.has(r.playerId))) reasons.push('Target player is on the trade block')
-    if (fairnessBand === 'balanced') reasons.push('Values are close — fair starting point')
-    else if (fairnessBand === 'slight edge you') reasons.push('Slight value edge to you')
-    else if (fairnessBand === 'slight edge partner') reasons.push('Slight value edge to your partner')
-    else if (fairnessBand === 'lopsided') reasons.push('Large value gap — likely needs sweetener')
+    if (fairnessBand !== 'low confidence') reasons.push(FAIRNESS_BAND_REASON[fairnessBand])
     if (receives.some((p) => my.needs.includes(norm(p.position)))) reasons.push('Fills one of your roster needs')
 
     const canStartProposal =
