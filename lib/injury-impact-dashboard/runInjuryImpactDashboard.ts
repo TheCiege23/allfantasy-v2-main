@@ -8,12 +8,7 @@ import { openaiChatText } from '@/lib/openai-client'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import {
-  isForeignIdSpace,
-  loadEspnToSleeperMap,
-  rosterIdSpaceOf,
-  sleeperReadablePlayerData,
-} from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import {
   indexBySleeperId,
@@ -308,38 +303,26 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
       dataGaps.push(`${FOREIGN_IDS_UNREADABLE} — roster-aware injury flags are unavailable.`)
     }
     /*
-     * ⚠ AN ESPN ROSTER HOLDS ESPN IDS, AND `sleeperReadablePlayerData` PASSES THEM THROUGH. Read as
-     * Sleeper ids they matched nobody, so an ESPN manager's own injured players were never "on your
-     * roster". They are translated through `PlayerIdentityMap.espnId` here; an id with no Sleeper
-     * identity is DROPPED, not kept — kept, it is a number that may be somebody's Sleeper id.
-     * Production 2026-09-29: 271 ESPN roster ids, 188 translatable, 83 not (none colliding today).
+     * An ESPN roster holds ESPN ids. `sleeperReadableRosters` translates them through
+     * `PlayerIdentityMap.espnId`, and DROPS an id with no Sleeper identity rather than keep it: kept,
+     * it is a number that may be somebody's Sleeper id (ESPN 12483 is Stafford; Sleeper 12483 is Jack
+     * Bech). Production 2026-09-29: 271 ESPN roster ids, 188 translatable. How many dropped is still
+     * said, as a data gap, by comparing each roster's ids before and after.
      */
-    const espnToSleeper =
-      rosterIdSpaceOf(league.platform) === 'espn'
-        ? await loadEspnToSleeperMap(picked.flatMap((r) => [...getRosterPlayerIds(r.playerData), ...getStarterIds(r.playerData)]))
-        : null
-    const unmappedEspn = new Set<string>()
-    const asSleeperSpace = (id: string): string | null => {
-      if (!espnToSleeper) return id
-      const sid = espnToSleeper.get(id) ?? null
-      if (!sid) unmappedEspn.add(id)
-      return sid
-    }
-    for (const r of picked) {
-      const playerData = sleeperReadablePlayerData(league.platform, r.playerData)
-      for (const id of getRosterPlayerIds(playerData)) {
-        const sid = asSleeperSpace(id)
-        if (sid) rosterIds.push(sid)
-      }
-      for (const id of getStarterIds(playerData)) {
-        const sid = asSleeperSpace(id)
-        if (sid) starterSet.add(sid)
-      }
+    let unmappedEspn = 0
+    const readable = await sleeperReadableRosters(picked, league.platform)
+    const isEspn = rosterIdSpaceOf(league.platform) === 'espn'
+    for (let i = 0; i < readable.length; i += 1) {
+      const playerData = readable[i]!.playerData
+      const ids = getRosterPlayerIds(playerData)
+      if (isEspn) unmappedEspn += Math.max(0, new Set(getRosterPlayerIds(picked[i]!.playerData)).size - new Set(ids).size)
+      rosterIds.push(...ids)
+      for (const sid of getStarterIds(playerData)) starterSet.add(sid)
     }
     rosterIds = [...new Set(rosterIds)]
-    if (unmappedEspn.size > 0) {
+    if (unmappedEspn > 0) {
       dataGaps.push(
-        `${unmappedEspn.size} ESPN roster player${unmappedEspn.size === 1 ? ' has' : 's have'} no linked identity yet — their injuries cannot be matched to your roster.`,
+        `${unmappedEspn} ESPN roster player${unmappedEspn === 1 ? ' has' : 's have'} no linked identity yet — their injuries cannot be matched to your roster.`,
       )
     }
     rosterIdsNative = isNativePlatform(league.platform)

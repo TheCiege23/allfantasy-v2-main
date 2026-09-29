@@ -64,7 +64,7 @@ import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import { resolveViewerLeagueRoster } from './viewerLeagueRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
 import {
   byeCollisionDelta,
@@ -270,13 +270,15 @@ export async function buildTradeContextNotes(args: {
    * and the reason travels as `contextGap`.
    * The same league's opponent roster (`buildLeverageNotes`) is never reached past this return.
    */
-  const pd = (sleeperReadablePlayerData(league.platform, roster.playerData) ?? {}) as Record<string, unknown>
+  // An ESPN roster is translated into Sleeper ids (raw, ESPN 12483 Stafford is Sleeper's Jack Bech).
+  const pd = ((await sleeperReadablePlayerDataOf(league.platform, roster.playerData)) ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []
   if (rosterIds.length === 0) {
-    // Unread, not empty: say so under "what we couldn't see" rather than as a silent blank.
-    return isForeignIdSpace(league.platform)
+    // Unread, not empty: say so under "what we couldn't see" rather than as a silent blank. An ESPN
+    // roster none of whose ids has an identity yet is unread for the same reason.
+    return rosterIdSpaceOf(league.platform) !== 'sleeper'
       ? { ...EMPTY, contextGap: `your roster in this league — ${FOREIGN_IDS_UNREADABLE_CLAUSE}` }
       : EMPTY
   }
@@ -1372,12 +1374,17 @@ async function buildLeverageNotes(args: {
   const roster = await prisma.roster
     .findFirst({
       where: { leagueId, platformUserId: team.platformUserId },
-      select: { playerData: true },
+      select: { playerData: true, league: { select: { platform: true } } },
     })
     .catch(() => null)
   if (!roster) return []
 
-  const pd = (roster.playerData ?? {}) as Record<string, unknown>
+  /*
+   * 🛑 THEIR roster in Sleeper ids too. This was read raw, on the claim that the caller's early return
+   * kept every foreign league from reaching here — true for Fleaflicker/MFL, never for ESPN, whose
+   * roster passed that return. Raw, ESPN 12483 (Stafford) was Sleeper's Jack Bech on their side.
+   */
+  const pd = ((await sleeperReadablePlayerDataOf(roster.league?.platform, roster.playerData)) ?? {}) as Record<string, unknown>
   const ids = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []

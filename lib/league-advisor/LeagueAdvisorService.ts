@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import type { LeagueAdvisorAdvice, LeagueAdvisorContext } from './types'
@@ -342,7 +342,9 @@ export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<Le
   // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids, so it is never named
   // as one; and with no names, the injury reads below would return the whole sport's list as "yours".
   const unreadable = isForeignIdSpace(league.platform)
-  const playerData = sleeperReadablePlayerData(league.platform, roster.playerData)
+  // An ESPN roster is translated into Sleeper ids first — raw, ESPN 12483 (Stafford) is named as
+  // Sleeper's 12483 (Jack Bech) by the Sleeper player blob below.
+  const playerData = await sleeperReadablePlayerDataOf(league.platform, roster.playerData)
   const playerIds = getRosterPlayerIds(playerData)
   const nameMap = await resolveRosterPlayerNames(playerIds, sport)
   const rosterNames = [...nameMap.values()]

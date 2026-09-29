@@ -2,7 +2,7 @@ import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import 'server-only'
 import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { lineupActionability } from './lineupActionability'
 import { getByeWeeks } from './byeWeeks'
 import { isRuledOut } from './injuryStatus'
@@ -711,7 +711,12 @@ export async function getDash34Data(
     for (const row of batch) if (row) liveRosters.push(row)
   }
   const sleeperIds = new Set(sleeperLeagues.map((l) => l.id))
-  const rosters = [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters]
+  // In Sleeper ids: an ESPN roster translated (ESPN 12483 is Stafford, Sleeper 12483 Jack Bech), any
+  // other foreign one emptied. One read covers every ESPN league.
+  const rosters = await sleeperReadableRosters(
+    [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters],
+    (r) => platformByLeague.get(r.leagueId),
+  )
 
   /**
    * leagueId → the roster, split by slot.
@@ -742,7 +747,7 @@ export async function getDash34Data(
   const everyPlayerId = new Set<string>()
   for (const r of rosters) {
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster names nobody.
-    const pd = (sleeperReadablePlayerData(platformByLeague.get(r.leagueId), r.playerData) ?? {}) as Record<string, unknown>
+    const pd = (r.playerData ?? {}) as Record<string, unknown>
     const starters = asIds(pd.starters)
     const reserve = asIds(pd.reserve)
     const taxi = asIds(pd.taxi)

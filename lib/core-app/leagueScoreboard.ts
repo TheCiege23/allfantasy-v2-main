@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { hasScoringRules } from '@/lib/projections/leagueScoring'
 import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
 import { buildRosterIdMap } from './rosterIdMatch'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadableRosters } from './rosterIdSpace'
 
 /**
  * Every game in the league this week, not just yours.
@@ -193,9 +193,13 @@ export async function getLeagueScoreboard(args: {
    */
   const teamBy = buildRosterIdMap(teams, (t) => t.externalId)
 
-  const rosters = await prisma.roster
-    .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { platform: true } } } })
-    .catch(() => [])
+  // In Sleeper ids: ESPN translated, any other foreign platform emptied (see rosterIdSpace.ts).
+  const rosters = await sleeperReadableRosters(
+    await prisma.roster
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, league: { select: { platform: true } } } })
+      .catch(() => []),
+    (r) => r.league?.platform,
+  )
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
 
   /**
@@ -229,7 +233,7 @@ export async function getLeagueScoreboard(args: {
     const roster = t ? rosterFor(t) : null
     // A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id and would be
     // projected as a stranger; such a lineup reads empty, so the board shows no projection.
-    const pd = (sleeperReadablePlayerData(roster?.league?.platform, roster?.playerData) ?? {}) as Record<string, unknown>
+    const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     startersBy.set(
       r.rosterId,
       asIds(pd.starters).filter((s) => s !== EMPTY_SLOT),

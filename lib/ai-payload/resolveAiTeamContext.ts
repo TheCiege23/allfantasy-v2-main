@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
 import type { AiRosterPlayerRef, AiTeamContextPayload } from '@/lib/ai-payload/types'
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -248,7 +248,9 @@ export async function resolveAiTeamContext(args: {
   // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids — `resolveNames` would
   // name a stranger — so such a roster contributes no ids, and says why.
   const platform = leagueTeam.league?.platform
-  const { starters, reserve, taxi, allIds } = bucketPlayerIds(sleeperReadablePlayerData(platform, roster.playerData))
+  // An ESPN roster is translated into Sleeper ids; one with no identity yet drops out rather than
+  // being read as whichever Sleeper player shares its number (ESPN 12483 Stafford = Sleeper Jack Bech).
+  const { starters, reserve, taxi, allIds } = bucketPlayerIds(await sleeperReadablePlayerDataOf(platform, roster.playerData))
   const bench = benchIds(allIds, starters, reserve, taxi)
   const dataGaps: string[] = []
   if (isForeignIdSpace(platform)) {

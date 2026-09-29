@@ -35,7 +35,8 @@ import { projectRosterSlots } from './derive'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
-import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
+import { nonSleeperExternalIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 export interface CanonicalWorldPort {
   loadLeague(leagueId: string): Promise<RawLeagueRow | null>
@@ -163,18 +164,30 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
 
   async loadRosters(leagueId) {
     // Source 1 — canonical `Roster.playerData` (imported leagues + some native AF leagues).
-    const rows = await prisma.roster.findMany({
-      where: { leagueId },
-      select: {
-        id: true,
-        platformUserId: true,
-        playerData: true,
-        faabRemaining: true,
-        waiverPriority: true,
-        settings: true,
-        league: { select: { platform: true } },
-      },
-    })
+    /*
+     * ⚠ THE ONE PLACE THIS SUBSTRATE KNOWS THE PROVIDER, ON PURPOSE. A Fleaflicker/MFL/Fantrax/Yahoo
+     * roster holds that provider's own ids, short numbers that collide with real Sleeper ids, and every
+     * enrichment read below (`loadPlayerMetadataRows`, injuries, values, projections) asks the Sleeper
+     * space first — so a collision named, injured and priced a stranger. Such a roster contributes no
+     * ids; the facts downstream stay origin-blind because they never see one. An ESPN roster is
+     * translated into Sleeper ids (ids with no identity dropped): ESPN 12483 is Matthew Stafford, and
+     * read raw it was Sleeper's Jack Bech.
+     */
+    const rows = await sleeperReadableRosters(
+      await prisma.roster.findMany({
+        where: { leagueId },
+        select: {
+          id: true,
+          platformUserId: true,
+          playerData: true,
+          faabRemaining: true,
+          waiverPriority: true,
+          settings: true,
+          league: { select: { platform: true } },
+        },
+      }),
+      (row: { league: { platform: string | null } | null }) => row.league?.platform,
+    )
     const canonical: RawRosterRow[] = rows.map((row: {
       id: string
       platformUserId: string | null
@@ -186,14 +199,7 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
     }) => ({
       id: row.id,
       platformUserId: row.platformUserId ?? '',
-      /*
-       * ⚠ THE ONE PLACE THIS SUBSTRATE KNOWS THE PROVIDER, ON PURPOSE. A Fleaflicker/MFL/Fantrax/Yahoo
-       * roster holds that provider's own ids, short numbers that collide with real Sleeper ids, and every
-       * enrichment read below (`loadPlayerMetadataRows`, injuries, values, projections) asks the Sleeper
-       * space first — so a collision named, injured and priced a stranger. Such a roster contributes no
-       * ids; the facts downstream stay origin-blind because they never see one.
-       */
-      playerData: sleeperReadablePlayerData(row.league?.platform, row.playerData ?? null),
+      playerData: row.playerData ?? null,
       faabRemaining: row.faabRemaining ?? null,
       waiverPriority: row.waiverPriority ?? null,
       settings: row.settings ?? null,
@@ -286,9 +292,11 @@ export async function loadPlayerMetadataRows(
    * These ids are mixed by design — provider ids for imported leagues, native ids for AF leagues
    * — so the answer is order rather than exclusion. The Sleeper space is asked first; a hit there
    * is no coincidence ONLY because `loadRosters` strips the foreign-id leagues (Fleaflicker, MFL,
-   * Fantrax, Yahoo) whose short numeric ids ARE real Sleeper ids — an ESPN id is long and collides
-   * with nothing. The provider read then runs only for ids nothing in the Sleeper space
-   * claimed. Both keep `fetchedAt desc`, and the authoritative rows lead the returned array so the
+   * Fantrax, Yahoo) whose short numeric ids ARE real Sleeper ids, and translates ESPN's. (This said
+   * "an ESPN id is long and collides with nothing"; ESPN 12483 is Matthew Stafford and Sleeper 12483
+   * is Jack Bech — 17 such ids, measured 2026-09-29.) The provider read then runs only for ids
+   * nothing in the Sleeper space claimed, and never for one that `mayBeSleeperId`: an NFL Sleeper id
+   * with no Sleeper row would otherwise match Rolling Insights' player of that number. Both keep `fetchedAt desc`, and the authoritative rows lead the returned array so the
    * projector's first-write-wins resolves to them.
    */
   const bySleeper = await prisma.sportsPlayer.findMany({
@@ -316,7 +324,7 @@ export async function loadPlayerMetadataRows(
   const byProvider =
     unclaimed.length > 0
       ? await prisma.sportsPlayer.findMany({
-          where: { sport, externalId: { in: unclaimed } },
+          where: nonSleeperExternalIdWhere(unclaimed, sport),
           orderBy: { fetchedAt: 'desc' },
           select: {
             externalId: true,
@@ -612,7 +620,7 @@ export async function loadInjuryContextRows(
   const byProvider =
     unclaimed.length > 0
       ? await prisma.sportsPlayer.findMany({
-          where: { sport, externalId: { in: unclaimed } },
+          where: nonSleeperExternalIdWhere(unclaimed, sport),
           orderBy: { fetchedAt: 'desc' },
           select: {
             externalId: true,

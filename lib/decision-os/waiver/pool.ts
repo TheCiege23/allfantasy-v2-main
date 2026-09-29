@@ -38,7 +38,7 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
-import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
 import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
 import type { WaiverRosterPlayer } from '@/lib/waiver-engine/waiver-scoring'
 
@@ -155,11 +155,12 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
       .then((m) => m.latestProjectionWeek())
       .catch(() => null),
   ])
-  /* A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids; strip them before any lookup. */
-  const leagueRosters = (rosterRows as RosterRow[]).map((r) => ({
-    ...r,
-    playerData: sleeperReadablePlayerData(league?.platform, r.playerData),
-  }))
+  /*
+   * A foreign league's ids (Fleaflicker, MFL, ...) collide with real Sleeper ids; strip them before any
+   * lookup. An ESPN league's are translated — read raw, a rostered Stafford (ESPN 12483) was never
+   * "rostered" in Sleeper's space, so he was recommended as an add.
+   */
+  const leagueRosters = await sleeperReadableRosters(rosterRows as RosterRow[], league?.platform)
 
   /*
    * The season's byes. The league's own season decides, falling back to the projection feed's — the
