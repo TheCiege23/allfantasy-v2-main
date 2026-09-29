@@ -1,5 +1,7 @@
 # AF Stripe Cutover Checklist — new pricing go-live
 
+> ⚠ **SUPERSEDED 2026-09-29.** The prices and plan contents in this file no longer match `lib/monetization/catalog.ts` (e.g. AF Legacy is $9.99/$79.99 there, not $29.99/$299.99). For the Oct 15 paywall launch use [docs/PAYWALL_LAUNCH_CHECKLIST_2026-10-15.md](docs/PAYWALL_LAUNCH_CHECKLIST_2026-10-15.md). Kept for history.
+
 **Prepared:** Jul 15, 2026 · **Do these IN ORDER.** Steps 1–3 are safe now; step 4 (archiving) must come only after prod is verified on the new prices, or you'll break live checkout.
 
 Stripe account: **Henson Family** (live mode). Products already renamed (no "AI"; War Room → Legacy) and new prices created. What remains is switching prod to the new price IDs and cleaning up the old ones.
