@@ -8,6 +8,7 @@ import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
 import { DefaultJsonLd } from '@/components/seo/JsonLd';
 import { SafeGlobalChrome } from '@/components/shell/SafeGlobalChrome';
+import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
 import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
@@ -507,6 +508,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <AppProviders session={initialSession}>
           <ErrorBoundaryClient>
             <PlayerComparisonUIProvider>{children}</PlayerComparisonUIProvider>
+          </ErrorBoundaryClient>
+
+          {/* Links that open the iOS app go to the page they name (lib/platform/iosAppLinks). */}
+          <ErrorBoundaryClient fallback={null}>
+            <IosAppLinkHandler />
           </ErrorBoundaryClient>
 
           {/*
