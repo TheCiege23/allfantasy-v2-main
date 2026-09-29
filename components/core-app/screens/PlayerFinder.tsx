@@ -45,6 +45,8 @@ import type { PlayerDepth } from '@/lib/core-app/playerDepth'
 import type { PlayerShares } from '@/lib/core-app/playerShares'
 import type { LeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { PlayerSharesBoard } from '@/components/core-app/player-finder/PlayerSharesBoard'
+import { LiveGameBadge } from '@/components/core-app/player-finder/LiveGameBadge'
+import type { LiveGameBadge as LiveGameBadgeData } from '@/lib/core-app/liveGameBadge'
 import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
 import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
@@ -204,6 +206,8 @@ export type PlayerFinderProps = {
    * against it so the sentence hydrates to what was rendered.
    */
   nowIso?: string
+  /** His game this week, live or final, and his points in your leagues (liveGameBadgeLoader.ts). */
+  liveGame?: LiveGameBadgeData | null
   /**
    * False on the public `/players/{slug}` surface when nobody is signed in.
    *
@@ -398,6 +402,7 @@ export function PlayerFinder({
   valueTrend = null,
   matchupOutlook = null,
   nowIso = new Date().toISOString(),
+  liveGame = null,
   signedIn = true,
 }: PlayerFinderProps) {
   const depthLocked = depthAccess?.unlocked === false
@@ -853,6 +858,9 @@ export function PlayerFinder({
                 elsewhere={elsewhereCount}
               />
             ) : null}
+
+            {/* Live or final: his game this week and his points in your leagues, as each platform scored them. */}
+            <LiveGameBadge data={liveGame} nowIso={nowIso} />
 
             {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
             {detailRef ? (
