@@ -772,7 +772,7 @@
 /* AllFantasy's own engine total, under the provider's projected total. */
 .af-sb-af {
   display: block;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   white-space: nowrap;
