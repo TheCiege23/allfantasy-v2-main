@@ -69,6 +69,7 @@ import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { getPlayerDepth } from '@/lib/core-app/playerDepth'
 import { loadFreeAgentBids } from '@/lib/core-app/freeAgentBids'
 import { loadDepthChartView } from '@/lib/core-app/depthChartBackups'
+import { loadWhoStartsHim } from '@/lib/core-app/whoStartsHimLoader'
 import { freeLeagueIds } from '@/lib/core-app/leagueStrip'
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
@@ -2150,6 +2151,23 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : Promise.resolve(null)
 
   /*
+   * "Who'd start him": where he is YOURS, the other teams he would crack the best lineup of. AF Pro —
+   * a trade move, like the FAAB bid; a locked viewer gets the lock and nothing is read.
+   */
+  const whoStartsHimRead =
+    activeKey === 'players' && playerDetail && userId && playerDetail.leagues.available
+      ? loadWhoStartsHim({
+          userId,
+          sleeperId: playerDetail.player.sleeperId ?? null,
+          position: playerDetail.player.position,
+          yourLeagues: playerDetail.leagues.data
+            .filter((s) => s.isYours)
+            .map((s) => ({ leagueId: s.leagueId, leagueName: s.leagueName, platform: s.platform })),
+          include: playerDepthOpen,
+        }).catch(() => null)
+      : Promise.resolve(null)
+
+  /*
    * Compare (2026-09-06): a second player held beside the first, the same
    * loader over the same leagues, so the two columns are priced the same way.
    * Only when the first resolved — a `vs` with no `player` is nothing to
@@ -2163,6 +2181,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const playerDepth = await playerDepthRead
   const freeAgentBids = await freeAgentBidsRead
   const depthChart = await depthChartRead
+  const whoStartsHim = await whoStartsHimRead
 
   /*
    * "Recently searched", per account. The write is fire-and-forget by design
@@ -4303,6 +4322,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           savedPicks={finderScope.picked ? finderLeagueIds : null}
           freeAgentBids={freeAgentBids}
           depthChart={depthChart}
+          whoStartsHim={whoStartsHim}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}

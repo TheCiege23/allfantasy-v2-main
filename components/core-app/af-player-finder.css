@@ -3833,3 +3833,89 @@
     min-height: 44px;
   }
 }
+
+/* ── Who'd start him (whoStartsHim.ts): the sell side where he is yours — AF Pro ───────────────── */
+.af-core .af-pf-ws {
+  margin-top: 12px;
+}
+.af-core .af-pf-ws-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-ws-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-ws-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.af-core .af-pf-ws-league {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-pf-ws-count {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.af-core .af-pf-ws-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-ws-teams {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.af-core .af-pf-ws-team {
+  color: var(--text);
+  font-weight: 600;
+}
+.af-core .af-pf-ws-more {
+  list-style: none;
+  margin-left: -20px;
+  color: var(--faint);
+  font-size: 12px;
+}
+.af-core .af-pf-ws-go {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-ws-go:hover,
+.af-core .af-pf-ws-go:focus-visible {
+  border-color: var(--accent);
+}
+.af-core .af-pf-ws-foot {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-ws-go {
+    min-height: 44px;
+  }
+}

@@ -261,6 +261,29 @@ describe('Player Finder — core view', () => {
     expect(screen.getByText(/Who plays if Kincaid misses time/)).toBeInTheDocument()
   })
 
+  it("shows \"Who'd start\" where he is yours, signed in only", () => {
+    const whoStartsHim = {
+      locked: false,
+      leagues: [
+        {
+          leagueId: 'L-dragons',
+          leagueName: 'Dynasty Dragons',
+          state: 'ranked' as const,
+          note: null,
+          otherTeams: 11,
+          teams: [{ key: 'r2', teamName: 'Gridiron Gang', slot: 'SUPER_FLEX', bumps: { name: 'Jake Ferguson', position: 'TE' }, gain: 12 }],
+        },
+      ],
+    }
+    const { unmount } = renderCore({ signedIn: true, whoStartsHim })
+    expect(screen.getByRole('heading', { name: "Who'd start Kincaid" })).toBeInTheDocument()
+    expect(screen.getByText('would start for 1 of 11 teams')).toBeInTheDocument()
+    expect(screen.getByText(/at superflex, over Jake Ferguson/)).toBeInTheDocument()
+    unmount()
+    renderCore({ signedIn: false, whoStartsHim })
+    expect(screen.queryByRole('heading', { name: "Who'd start Kincaid" })).toBeNull()
+  })
+
   it('no league strip with a league in context — the card is already that league', () => {
     renderCore({ signedIn: true, selectedLeagueId: 'L-dragons', pickLeagues: [{ id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' }] })
     expect(screen.queryByLabelText('Where he is in each of your leagues')).toBeNull()
