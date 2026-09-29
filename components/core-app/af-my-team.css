@@ -1146,6 +1146,11 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   font-size: 14.5px;
   font-weight: 800;
 }
+.af-mt-proj--engine {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13.5px;
+}
 .af-mt-proj--ppr {
   color: var(--muted);
   font-weight: 500;

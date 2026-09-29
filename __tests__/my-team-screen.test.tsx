@@ -43,6 +43,7 @@ function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
     ruledOut: false,
     projectedPoints: 19.8,
     afProjectedPoints: 22.4,
+    afEngineProjectedPoints: 21.1,
     indoors: false,
     weather: null,
     market: { ownPct: 1, startPct: 0.92 },
@@ -159,9 +160,9 @@ describe('My Team — the reported problems', () => {
     // roster carried no number at all and could not be compared to the half
     // that did — which is the entire point of looking at a bench.
     const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('19.8')
-    // Twice: once in the starting slot, once on the bench.
-    expect(t.match(/19\.8/g)?.length).toBe(2)
+    // Both projections, twice each: once in the starting slot, once on the bench.
+    expect(t.match(/22\.4/g)?.length).toBe(2)
+    expect(t.match(/21\.1/g)?.length).toBe(2)
   })
 
   it('⚠ shows a ruled-out player as 0.0 beside the reason, not as an em dash', () => {
@@ -479,9 +480,14 @@ describe('My Team — the reported problems', () => {
     expect(bench.textContent).toMatch(/\d+%/)
   })
 
-  it('⚠ labels the columns PTS and AF PTS, with an explainer on the AF one', () => {
+  it('⚠ labels the columns API and AF, with an explainer naming both sources', () => {
     const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('AF PTS')
+    expect(t).toContain('API')
+    expect(t).toContain('AF')
+    const explainer = render(<MyTeam data={data()} />).container
+      .querySelector('.af-mt-info')?.getAttribute('aria-label') ?? ''
+    expect(explainer).toContain('provider')
+    expect(explainer).toContain('AllFantasy')
     // Two numbers side by side with no explanation read as a bug, not a feature.
     const c = render(<MyTeam data={data()} />).container
     expect(c.querySelector('.af-mt-info')).toBeTruthy()
@@ -607,14 +613,15 @@ describe('My Team — the reported problems', () => {
     const c = render(<MyTeam data={data()} />).container
     const pair = c.querySelector('.af-mt-projpair')!
     const nums = [...pair.querySelectorAll('.af-mt-proj')].map((e) => e.textContent)
-    // League-scored first, generic second.
+    // The provider line under league rules first, AllFantasy's own engine second.
     expect(nums[0]).toBe('22.4')
-    expect(nums[1]).toBe('19.8')
+    expect(nums[1]).toBe('21.1')
     expect(pair.querySelector('.af-mt-proj--af')?.textContent).toBe('22.4')
   })
 
-  it('labels the generic column PPR, so it cannot be mistaken for your league', () => {
-    expect(text(<MyTeam data={data()} />)).toContain('PPR')
+  it('keeps the generic PPR figure reachable, labelled, on the league-scored cell', () => {
+    const c = render(<MyTeam data={data()} />).container
+    expect(c.querySelector('.af-mt-proj--af')?.getAttribute('title')).toContain('standard PPR 19.8')
   })
 
   it('puts the league total first among the header tiles', () => {

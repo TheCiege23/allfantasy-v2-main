@@ -519,6 +519,16 @@
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+/* AllFantasy's own engine, under the provider's projection. */
+.af-mu-half-af {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 /* An unpriced player is quiet — the dash is an absence, not a score of zero. */
 .af-mu-half-pts[data-unpriced='true'] {
   color: var(--faint);

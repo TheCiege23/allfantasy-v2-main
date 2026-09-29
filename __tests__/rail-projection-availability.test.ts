@@ -2,11 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   raw: vi.fn(), players: vi.fn(), injuries: vi.fn(), projections: vi.fn(), latest: vi.fn(), byes: vi.fn(),
+  afEngine: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   $queryRawUnsafe: h.raw, sportsPlayer: { findMany: h.players }, sportsInjury: { findMany: h.injuries },
 } }))
-vi.mock('@/lib/core-app/playerProjections', () => ({ lookupProjections: h.projections, latestProjectionWeek: h.latest }))
+// `afEngineForLeague` stays REAL: it is the arithmetic under test in the AF-engine block below.
+vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
+  afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
+  lookupProjections: h.projections,
+  latestProjectionWeek: h.latest,
+  lookupAfEngineProjections: h.afEngine,
+}))
 vi.mock('@/lib/core-app/byeWeeks', () => ({ getByeWeeks: h.byes }))
 
 import { loadRailProjections } from '@/lib/core-app/railMatchups'
@@ -48,6 +55,7 @@ beforeEach(() => {
   ])
   h.projections.mockReset().mockResolvedValue(feed())
   h.latest.mockReset().mockResolvedValue(null)
+  h.afEngine.mockReset().mockResolvedValue(new Map())
   h.byes.mockReset().mockResolvedValue({ byWeek: new Map([[3, ['bye']]]) })
 })
 
@@ -55,7 +63,7 @@ describe('rail projections use the roster availability rules', () => {
   it('zeroes Out, alias-matched IR and verified byes without zeroing questionable or unknown players', async () => {
     const result = await loadRailProjections(fixtures())
     expect(result.byLeague.get('L1')?.sides.get('team')).toEqual({
-      projected: 34, afProjected: 6, pricedFrom: 7, starterCount: 8,
+      projected: 34, afProjected: 6, afEngine: null, afEngineFrom: 4, pricedFrom: 7, starterCount: 8,
     })
     // Missing-out is a known zero; missing remains an explicit coverage gap.
     expect(h.injuries).toHaveBeenCalledTimes(1)
@@ -78,7 +86,7 @@ describe('rail projections use the roster availability rules', () => {
     h.raw.mockReset().mockResolvedValueOnce([meta('L1', null)])
       .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: ['out'] }])
     const side = (await loadRailProjections(fixtures())).byLeague.get('L1')?.sides.get('team')
-    expect(side).toEqual({ projected: 0, afProjected: null, pricedFrom: 1, starterCount: 1 })
+    expect(side).toEqual({ projected: 0, afProjected: null, afEngine: null, afEngineFrom: 1, pricedFrom: 1, starterCount: 1 })
   })
 
   it('honors a newer club-compatible clearance instead of an older Out report', async () => {
@@ -146,5 +154,50 @@ describe('rail projections — a foreign-id league', () => {
       .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters }])
     const result = await loadRailProjections(fixtures())
     expect(result.byLeague.get('L1')?.sides.get('team')?.projected).toBe(34)
+  })
+})
+
+/*
+ * The AF ENGINE column — AllFantasy's own projection beside the provider's. It is a scalar under
+ * generic PPR, carried into the league by the provider line's own league/PPR ratio.
+ */
+describe('rail projections — the AF engine column', () => {
+  beforeEach(() => {
+    h.byes.mockResolvedValue(null)
+    h.injuries.mockResolvedValue([])
+  })
+
+  it('sums the engine for the same starters, scaled by the provider line into this league', async () => {
+    // Provider: healthy 15 PPR -> league 2 (rec:1 x 2). Engine 30 PPR -> 30 x 2/15 = 4.
+    // unknown: provider 11 -> league 1; engine 22 -> 2. Total 6.
+    h.raw.mockReset().mockResolvedValueOnce([meta('L1')])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: ['healthy', 'unknown'] }])
+    h.afEngine.mockResolvedValue(new Map([
+      ['healthy', { playerId: 'healthy', projectedPoints: 30, basis: null, confidence: null }],
+      ['unknown', { playerId: 'unknown', projectedPoints: 22, basis: null, confidence: null }],
+    ]))
+    const side = (await loadRailProjections(fixtures())).byLeague.get('L1')?.sides.get('team')
+    expect(side?.afEngine).toBe(6)
+    expect(side?.afEngineFrom).toBe(2)
+    // Asked for the week the provider numbers came from, so the two columns describe one week.
+    expect(h.afEngine.mock.calls[0][1]).toEqual({ season: '2026', week: 3 })
+  })
+
+  it('keeps an engine number the provider does not carry, as PPR, rather than dropping it', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([meta('L1')])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: ['missing'] }])
+    h.afEngine.mockResolvedValue(new Map([['missing', { playerId: 'missing', projectedPoints: 9.5, basis: null, confidence: null }]]))
+    const side = (await loadRailProjections(fixtures())).byLeague.get('L1')?.sides.get('team')
+    expect(side?.afEngine).toBe(9.5)
+    expect(side?.projected).toBeNull()
+  })
+
+  it('a failed engine read leaves the provider columns exactly as they were', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([meta('L1')])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: ['healthy'] }])
+    h.afEngine.mockRejectedValue(new Error('read failed'))
+    const side = (await loadRailProjections(fixtures())).byLeague.get('L1')?.sides.get('team')
+    expect(side?.projected).toBe(15)
+    expect(side?.afEngine).toBeNull()
   })
 })

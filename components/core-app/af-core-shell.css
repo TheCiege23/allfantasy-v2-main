@@ -1572,7 +1572,7 @@
 
 .af-core .af-rail-row-side {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 42px 42px;
+  grid-template-columns: 16px minmax(0, 1fr) 36px 36px 36px;
   align-items: center;
   column-gap: 5px;
   min-height: 18px;
@@ -1583,7 +1583,7 @@
    of repeating PROJ/AF beneath every name. */
 .af-core .af-rail-row-labels {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px 42px;
+  grid-template-columns: minmax(0, 1fr) 36px 36px 36px;
   column-gap: 5px;
   padding-left: 21px;
   color: var(--faint);
@@ -1636,12 +1636,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.af-core .af-rail-row-projected[data-kind='af'] {
+  color: var(--accent);
+}
+
 .af-core .af-rail-row-side[data-side='them'] {
   border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
   padding-top: 2px;
 }
 
-.af-core .af-rail-row-side[data-partial='true'] .af-rail-row-projected::after {
+.af-core .af-rail-row-side[data-partial='true'] .af-rail-row-projected:not([data-kind='af'])::after {
   content: '*';
   color: var(--warn);
 }
@@ -2357,12 +2361,12 @@ html[data-mode='light'] .af-core {
 }
 
 .af-core .af-rail-row-side {
-  grid-template-columns: 19px minmax(0, 1fr) 44px 44px;
+  grid-template-columns: 19px minmax(0, 1fr) 38px 38px 38px;
   min-height: 21px;
 }
 
 .af-core .af-rail-row-labels {
-  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  grid-template-columns: minmax(0, 1fr) 38px 38px 38px;
   padding-left: 24px;
 }
 

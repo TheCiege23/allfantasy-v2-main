@@ -8,7 +8,7 @@ import { leagueDisplayName, type SectionState, type UnavailableSection } from '.
 import { isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { isBestBallSettings } from './lineupMode'
-import { latestProjectionWeek, lookupProjections, sumLeagueScoredStarters, summariseLineup } from './playerProjections'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections, sumLeagueScoredStarters, summariseLineup } from './playerProjections'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
@@ -109,6 +109,15 @@ export type LineupPlayer = {
    * projection and must never render as 0.0.
    */
   afProjectedPoints: number | null
+  /**
+   * AllFantasy's OWN engine projection (`lib/af-projections`), carried into this league's rules.
+   *
+   * ⚠ NOT `afProjectedPoints`. That older field is the PROVIDER line re-scored — its name predates
+   * the engine's weekly output reaching /core. This one is the AF engine, shown beside the provider
+   * number as the second opinion. Display only: start/sit still reads `afProjectedPoints`.
+   * Optional so every other constructor of a LineupPlayer keeps compiling unchanged.
+   */
+  afEngineProjectedPoints?: number | null
   /**
    * He plays indoors this week, so weather is not a factor.
    *
@@ -582,6 +591,11 @@ async function resolvePlayers(
     ),
     injuryBySleeperId: new Map(composed.map(([id]) => [id, injuryById.get(id) ?? null])),
   }, sport)
+  /* AllFantasy's own engine, same week. College is left out: there the provider map above already
+     IS the AF engine's season figure (ncaafProjections.ts). A failed read costs the AF column only. */
+  const afEngine = String(sport).toUpperCase() === 'NCAAF'
+    ? new Map<string, { projectedPoints: number }>()
+    : await lookupAfEngineProjections(lookupIds, projectionWeek).catch(() => new Map<string, { projectedPoints: number }>())
 
   /*
    * ⚠ ONE PASS PER PLAYER, NOT ONE PER ROW. This iterated `rows` and wrote
@@ -647,6 +661,9 @@ async function resolvePlayers(
           ? null
           : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
+      afEngineProjectedPoints: ruledOut
+        ? 0
+        : afEngineForLeague(afEngine.get(sleeperId)?.projectedPoints, feedProjection, leagueScored?.points ?? null),
       indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
       // All filled in by the caller: byes need the week's full slate, the
       // forecast is one batched cache read, and the market is app-wide.
@@ -818,6 +835,7 @@ async function zeroByeWeekPlayers(
        */
       p.projectedPoints = 0
       p.afProjectedPoints = 0
+      p.afEngineProjectedPoints = 0
     }
   }
   return byes

@@ -249,6 +249,84 @@ async function enrichWithIdpProjections(
   }
 }
 
+/**
+ * AllFantasy's own weekly projection — the AF engine's output, next to the provider feed.
+ *
+ * ⚠ TWO PROJECTIONS, TWO NAMES. `lookupProjections` above is the PROVIDER feed (Sleeper). This is
+ * the AF engine (`lib/af-projections`), mirrored into `fantasy_projections` under
+ * `source: 'allfantasy'` by `writeAfProjectionSnapshots` in the SAME Sleeper-id space and the SAME
+ * season/week keys — which is what lets a surface show both numbers from one id without a second
+ * identity join. Measured on production 2026-09-29: weeks 1–4 of 2026 are present in both, 1,699
+ * AF rows and 1,137 provider rows for week 4.
+ *
+ * ⚠ THE AF NUMBER IS A SCALAR UNDER GENERIC PPR. The mirror row says so itself — "no per-stat
+ * component line exists for this source" — so it cannot be re-scored the way the provider line is.
+ * `afEngineForLeague` below carries it into a league's rules; a surface that renders
+ * `projectedPoints` raw is showing a PPR number in whatever league it sits in.
+ */
+export type AfEngineProjection = {
+  playerId: string
+  /** Per game, generic PPR. */
+  projectedPoints: number
+  /** How the engine built it — `sleeper_weekly_projection`, `weekly_actuals_recency`, … */
+  basis: string | null
+  confidence: string | null
+}
+
+export async function lookupAfEngineProjections(
+  playerIds: readonly string[],
+  at?: { season: string; week: number } | null,
+): Promise<Map<string, AfEngineProjection>> {
+  const ids = [...new Set(playerIds.filter((id) => typeof id === 'string' && id.length > 0 && !id.startsWith('name:')))]
+  if (ids.length === 0) return new Map()
+  const when = at ?? (await latestProjectionWeek())
+  if (!when) return new Map()
+
+  const rows = await prisma.fantasyProjection.findMany({
+    where: { playerId: { in: ids }, season: when.season, week: when.week, source: 'allfantasy' },
+    select: { playerId: true, projectedPoints: true, stats: true },
+  })
+  const out = new Map<string, AfEngineProjection>()
+  for (const r of rows) {
+    const points = Number(r.projectedPoints)
+    if (!Number.isFinite(points)) continue
+    const s = (r.stats ?? {}) as { basis?: unknown; confidenceLevel?: unknown }
+    out.set(r.playerId, {
+      playerId: r.playerId,
+      projectedPoints: points,
+      basis: typeof s.basis === 'string' ? s.basis : null,
+      confidence: typeof s.confidenceLevel === 'string' ? s.confidenceLevel : null,
+    })
+  }
+  return out
+}
+
+/**
+ * The AF engine's number carried into one league's scoring.
+ *
+ * The engine emits generic PPR. Where the provider line for the SAME player priced under both
+ * generic PPR and this league's rules, their ratio is how far this league's rules move that
+ * player's stat mix — a 6-point passing TD lifts a QB, a TE premium lifts a tight end — and it is
+ * applied to the AF number. Where no such ratio exists (no provider row, no league rules, a
+ * provider total too small to divide by) the AF number is returned as the engine wrote it, never
+ * dropped: it is still the AF projection, just under PPR.
+ */
+export function afEngineForLeague(
+  afEngine: number | null | undefined,
+  providerGeneric: number | null | undefined,
+  providerLeague: number | null | undefined,
+): number | null {
+  if (afEngine == null || !Number.isFinite(afEngine)) return null
+  const canScale =
+    providerGeneric != null &&
+    providerLeague != null &&
+    Number.isFinite(providerGeneric) &&
+    Number.isFinite(providerLeague) &&
+    providerGeneric > 0.5
+  const v = canScale ? afEngine * (providerLeague! / providerGeneric!) : afEngine
+  return Math.round(v * 100) / 100
+}
+
 export type PositionRank = {
   rank: number
   outOf: number

@@ -566,6 +566,15 @@
   color: var(--text);
   flex: none;
 }
+.af-pc-proj-src {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+.af-pc-proj-src--af {
+  color: var(--accent);
+}
 .af-pc-row--muted .af-pc-row-k,
 .af-pc-row--muted .af-pc-row-v {
   color: var(--faint);

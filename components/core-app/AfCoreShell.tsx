@@ -90,6 +90,9 @@ export type RailLeague = {
 export type RailSideProjectionSummary = {
   projected: number | null
   afProjected: number | null
+  /** The AF ENGINE's total — AllFantasy's own projection, not the provider line re-scored. */
+  afEngine?: number | null
+  afEngineFrom?: number
   /** Starters priced, of starters in the lineup. Reported in the row's title. */
   pricedFrom: number
   starterCount: number
@@ -1103,7 +1106,10 @@ function RailSide({
     projection != null &&
     projection.pricedFrom > 0 &&
     projection.pricedFrom < projection.starterCount
+  /* Two projections, side by side: the provider's (Sleeper) line under this league's rules, and
+     AllFantasy's own engine. Neither replaces the other — the user asked to see both. */
   const projected = projection?.afProjected ?? projection?.projected ?? null
+  const afEngine = projection?.afEngine ?? null
 
   return (
     <span
@@ -1111,11 +1117,11 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       title={projection
-        ? `Weekly baseline projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
+        ? `Weekly baseline projection — API: provider (Sleeper) from ${projection.pricedFrom} of ${projection.starterCount} starters${
             projection.afProjected == null
-              ? ' · using the provider projection because this league’s scoring could not be re-scored'
-              : ' · re-scored with this league’s settings'
-          } · live score is shown separately`
+              ? ', generic PPR because this league’s scoring could not be re-scored'
+              : ', re-scored with this league’s settings'
+          } · AF: AllFantasy engine from ${projection.afEngineFrom ?? 0} of ${projection.starterCount} starters · live score is shown separately`
         : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
@@ -1124,6 +1130,7 @@ function RailSide({
       <span className="af-rail-row-team">{name}</span>
       <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
       <span className="af-rail-row-projected">{projected == null ? '—' : projected.toFixed(1)}</span>
+      <span className="af-rail-row-projected" data-kind="af">{afEngine == null ? '—' : afEngine.toFixed(1)}</span>
     </span>
   )
 }
@@ -1858,7 +1865,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <span className="af-rail-row-labels" aria-hidden>
                         <span />
                         <span>{m.source === 'history_fallback' ? 'LAST' : 'SCORE'}</span>
-                        <span>PROJ</span>
+                        <span title="Provider (Sleeper) projection">API</span>
+                        <span title="AllFantasy engine projection">AF</span>
                       </span>
                       <RailSide
                         name={m.yourTeam ?? 'Your team'}
