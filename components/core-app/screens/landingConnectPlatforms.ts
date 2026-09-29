@@ -14,6 +14,7 @@
 
 import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export type LandingConnectPlatform = {
   provider: ImportProvider
@@ -39,4 +40,36 @@ export function getLandingConnectPlatforms(
     name: STRIP_NAMES[o.provider] ?? o.label,
     state: o.available ? 'live' : 'soon',
   }))
+}
+
+/** The live platforms' names, in config order — what the landing copy lists in its sentences. */
+export function getLandingLivePlatformNames(
+  options: ReadonlyArray<Pick<(typeof IMPORT_PROVIDER_UI_OPTIONS)[number], 'provider' | 'label' | 'available'>> =
+    IMPORT_PROVIDER_UI_OPTIONS,
+): string[] {
+  return getLandingConnectPlatforms(options)
+    .filter((p) => p.state === 'live')
+    .map((p) => p.name)
+}
+
+/*
+ * ⚠ TWO SPORT LISTS, BECAUSE THERE ARE TWO TRUE ANSWERS. The strip used to print
+ * "NFL · NBA · NHL · MLB · NCAA · SOCCER" under "Connects to", which reads as an import claim —
+ * and every import today is football (the config's `supportedSports`). Leagues CREATED here run
+ * all seven sports (`SUPPORTED_SPORTS`). Both are shown, each under its own label, and both are
+ * read from the config that decides them, so neither can overclaim.
+ */
+
+/** Sports a live platform can import today, in `SUPPORTED_SPORTS` order. */
+export function getLandingImportSports(
+  options: ReadonlyArray<Pick<(typeof IMPORT_PROVIDER_UI_OPTIONS)[number], 'available' | 'supportedSports'>> =
+    IMPORT_PROVIDER_UI_OPTIONS,
+): string[] {
+  const live = new Set<string>(options.filter((o) => o.available).flatMap((o) => o.supportedSports))
+  return SUPPORTED_SPORTS.filter((s) => live.has(s))
+}
+
+/** Sports a league created on AllFantasy can run. */
+export function getLandingCreateSports(): string[] {
+  return [...SUPPORTED_SPORTS]
 }

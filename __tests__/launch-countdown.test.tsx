@@ -222,8 +222,11 @@ describe('landing banner', () => {
     expect(withBanner).toContain('Pro analysis is free until Oct 15.')
     // The static server text, before any clock is read.
     expect(withBanner).toContain('Paid plans start Oct 15')
-    // Above the hero, which is the point.
-    expect(withBanner.indexOf('launch-banner')).toBeLessThan(withBanner.indexOf('landing-hero-headline'))
+    // BELOW the hero, and directly after it (2026-09-29). Above it, the countdown filled the top
+    // half of a phone's first screen, so a stranger read "Pro analysis is free until Oct 15"
+    // before learning what AllFantasy is. The hero says what it is; the countdown follows.
+    expect(withBanner.indexOf('launch-banner')).toBeGreaterThan(withBanner.indexOf('landing-hero-headline'))
+    expect(withBanner.indexOf('launch-banner')).toBeLessThan(withBanner.indexOf('af-lp-connects'))
   })
 })
 
