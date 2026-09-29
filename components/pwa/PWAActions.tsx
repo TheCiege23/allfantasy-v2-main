@@ -42,9 +42,15 @@ export function InstallButton({
     return null;
   }
 
+  /*
+   * Every root below carries `data-hide-in-ios-app`: installing the WEBSITE to the Home Screen is
+   * meaningless inside the App Store app, and App Review saw "Add to Home Screen" on
+   * /core/notifications (2026-09-29). Hidden by the pre-paint `html[data-ios-app]` rule.
+   */
   if (installed) {
     return (
       <span
+        data-hide-in-ios-app
         className={`inline-flex cursor-default items-center gap-2 rounded-xl bg-white/10 px-5 py-3 text-sm font-semibold text-white/60 ${className}`}
       >
         <span aria-hidden="true">✓</span>
@@ -57,6 +63,7 @@ export function InstallButton({
     return (
       <button
         type="button"
+        data-hide-in-ios-app
         className={`inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white/70 transition-all hover:border-cyan-500/50 hover:text-white ${className}`}
         onClick={() => alert(getInstallInstructions())}
       >
@@ -69,6 +76,7 @@ export function InstallButton({
   return (
     <button
       type="button"
+      data-hide-in-ios-app
       disabled={installing}
       onClick={async () => {
         setInstalling(true);

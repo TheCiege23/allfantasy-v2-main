@@ -272,7 +272,8 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
         The card renders its own states (unsupported, not configured, denied, already on),
         so the only correct gate here is "none".
       */}
-      <div className="af-nt-push">
+      {/* Web push and web install only — hidden inside the iOS app, wrapper included, so no empty box. */}
+      <div className="af-nt-push" data-hide-in-ios-app>
         <EnableWebPushCard />
         {/*
           ⚠ INSTALLING IS A PREREQUISITE FOR ALERTS ON IPHONE, NOT A SEPARATE FEATURE.
