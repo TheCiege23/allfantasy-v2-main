@@ -5,6 +5,7 @@ import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from './le
 import type { TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
+import { giveawayReason } from '@/lib/trade-intel/tradeGiveaway'
 import {
   frozenOriginalFor,
   saveFrozenCompletedGrades,
@@ -90,23 +91,8 @@ export function completedTradeInputs(trade: GradedTrade, currentSeason: number):
   return { give: side(a.playersOut, a.picksOut, a.faabOut), get: side(a.playersIn, a.picksIn, a.faabIn) }
 }
 
-/**
- * Why a two-team trade where one side received NOTHING is not graded — said as what Sleeper recorded,
- * not as missing data. Zay Flowers for nothing (Pirate League twinty, 2026 week 3) read "One side of
- * this trade has no assets recorded", which sounds like our gap rather than the league's giveaway.
- *
- * ⚠ ONLY ON A PAYLOAD THAT CARRIES FAAB. "No FAAB" is a claim, and a ledger cached before FAAB was
- * read (`faabIn` absent) cannot make it — that side may have been paid in FAAB we never loaded. Such
- * a trade falls through to the grader's own generic reason, exactly as before.
- */
-export function giveawayReason(trade: GradedTrade): string | null {
-  if (trade.sides.length !== 2) return null
-  const empty = trade.sides.find(
-    (s) => s.playersIn.length === 0 && s.picksIn.length === 0 && typeof s.faabIn === 'number' && s.faabIn <= 0,
-  )
-  if (!empty) return null
-  return `${empty.managerName} received nothing in return — no player, pick or FAAB on Sleeper’s record — so there is no value gap to grade.`
-}
+// Pure, in its own module so the email renderer reads the same answer. Re-exported for callers here.
+export { giveawayReason } from '@/lib/trade-intel/tradeGiveaway'
 
 /**
  * THE grade for one completed ledger trade on one AF league row: the FROZEN ORIGINAL when one exists,
