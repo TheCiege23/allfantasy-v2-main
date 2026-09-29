@@ -3205,7 +3205,10 @@ select, option {
  * af-ios-app-flag script (lib/platform/iosApp). Two App Store rules:
  *  - 3.1.1: nothing is sold in the app, so links to purchase pages are hidden.
  *    Middleware redirects those pages and refuses checkout APIs anyway; this
- *    only keeps a reviewer from tapping into a dead end.
+ *    only keeps a reviewer from tapping into a dead end. A hidden link is not
+ *    enough on its own: price and checkout COPY outside a purchase page (the
+ *    landing pricing band, the launch banner and offer strip, /war-room's plan
+ *    block) is marked data-hide-in-ios-app too.
  *  - 4.8: third-party sign-in requires Sign in with Apple, which is not live,
  *    so anything marked data-hide-in-ios-app (the social sign-in rows) goes.
  * Keep the hrefs in step with IOS_APP_PURCHASE_PAGE_PREFIXES.

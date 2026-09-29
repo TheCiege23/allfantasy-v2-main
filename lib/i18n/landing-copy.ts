@@ -33,7 +33,12 @@ export function resolveLandingLang(raw: string | string[] | undefined): LandingL
 }
 
 type Reason = { n: string; title: [string, string]; body: string }
-type Faq = { q: string; a: string }
+/**
+ * `aboutPrice`: the answer quotes plan prices, so LandingV4 keeps it out of the iOS app, which
+ * sells nothing (App Store 3.1.1). The FAQPage structured data still carries it — crawlers are
+ * not the app.
+ */
+type Faq = { q: string; a: string; aboutPrice?: true }
 type NetworkCard = { name: string; body: string }
 
 export type LandingCopy = {
@@ -173,6 +178,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
         a: prices
           ? `Creating, importing and running leagues is free forever. Paid plans run ${prices.min}–${prices.max}/mo and can be cancelled anytime.`
           : 'Creating, importing and running leagues is free forever. Every paid plan can be cancelled anytime.',
+        aboutPrice: true,
       },
     ],
   },
@@ -300,6 +306,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
         a: prices
           ? `Crear, importar y dirigir ligas es gratis para siempre. Los planes de pago van de ${prices.min} a ${prices.max} al mes y se cancelan cuando quieras.`
           : 'Crear, importar y dirigir ligas es gratis para siempre. Cualquier plan de pago se cancela cuando quieras.',
+        aboutPrice: true,
       },
     ],
   },
