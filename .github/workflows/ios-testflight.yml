@@ -26,6 +26,11 @@ on:
         type: boolean
         required: false
         default: false
+      universal_links:
+        description: "Ship the associated-domains entitlement (the email verify link opens the app). Needs Associated Domains enabled on the App ID ai.allfantasy.app first, or the export fails."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -122,16 +127,33 @@ jobs:
       # and push registration fails on every device. Ad-hoc signing the archived
       # app with App.entitlements puts them where export reads them; export then
       # replaces the ad-hoc signature with the distribution one.
-      - name: Embed push entitlement in the archive
-        if: ${{ inputs.push_notifications }}
+      #
+      # ⚠ ONLY THE REQUESTED KEYS. App.entitlements holds every entitlement the app can use, and
+      # each one needs its capability enabled on the App ID or the export fails. So each key is
+      # shipped only when its input is ticked: a push-only run must not start carrying
+      # associated-domains (added 2026-09-29) and fail on a capability nobody enabled.
+      - name: Embed requested entitlements in the archive
+        if: ${{ inputs.push_notifications || inputs.universal_links }}
+        env:
+          PUSH: ${{ inputs.push_notifications }}
+          LINKS: ${{ inputs.universal_links }}
         run: |
           app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          ent="$RUNNER_TEMP/App.entitlements"
+          cp ios/App/App/App.entitlements "$ent"
+          [ "$PUSH" = "true" ] || /usr/libexec/PlistBuddy -c "Delete :aps-environment" "$ent" 2>/dev/null || true
+          [ "$LINKS" = "true" ] || /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" "$ent" 2>/dev/null || true
           if [ -d "$app/Frameworks" ]; then
             for fw in "$app"/Frameworks/*; do codesign --force --sign - "$fw"; done
           fi
-          codesign --force --sign - --entitlements ios/App/App/App.entitlements "$app"
-          codesign -d --entitlements - "$app" 2>/dev/null | grep -q aps-environment \
-            || { echo "::error::aps-environment is not in the archived app after signing"; exit 1; }
+          codesign --force --sign - --entitlements "$ent" "$app"
+          signed="$(codesign -d --entitlements - "$app" 2>/dev/null)"
+          if [ "$PUSH" = "true" ] && ! grep -q aps-environment <<<"$signed"; then
+            echo "::error::aps-environment is not in the archived app after signing"; exit 1
+          fi
+          if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains <<<"$signed"; then
+            echo "::error::associated-domains is not in the archived app after signing"; exit 1
+          fi
 
       - name: Export and upload to App Store Connect
         env:
@@ -139,6 +161,7 @@ jobs:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PUSH: ${{ inputs.push_notifications }}
+          LINKS: ${{ inputs.universal_links }}
         run: |
           run_export() {
             cat > "$RUNNER_TEMP/ExportOptions-$1.plist" <<PLIST
@@ -173,6 +196,10 @@ jobs:
           codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app" 2>/dev/null | tee "$RUNNER_TEMP/entitlements.txt"
           if [ "$PUSH" = "true" ] && ! grep -q aps-environment "$RUNNER_TEMP/entitlements.txt"; then
             echo "::error::push_notifications was requested but the signed build has no aps-environment entitlement. Enable Push Notifications on the App ID ai.allfantasy.app and re-run."
+            exit 1
+          fi
+          if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains "$RUNNER_TEMP/entitlements.txt"; then
+            echo "::error::universal_links was requested but the signed build has no associated-domains entitlement. Enable Associated Domains on the App ID ai.allfantasy.app and re-run."
             exit 1
           fi
           run_export upload

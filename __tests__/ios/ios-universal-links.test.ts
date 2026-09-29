@@ -173,4 +173,18 @@ describe('the pieces this depends on', () => {
   it('the root layout mounts the handler', () => {
     expect(read('app/layout.tsx')).toMatch(/<IosAppLinkHandler \/>/)
   })
+
+  /**
+   * 🛑 The TestFlight archive is UNSIGNED: entitlements reach the build only through the embed step,
+   * and each needs its capability on the App ID or the export fails. So associated-domains ships
+   * only when asked for, and a push-only run strips it.
+   */
+  it('the TestFlight workflow ships associated-domains only when universal_links is ticked', () => {
+    const wf = read('.github/workflows/ios-testflight.yml')
+    expect(wf).toMatch(/universal_links:\s*\n\s*description:/)
+    expect(wf).toMatch(/if: \$\{\{ inputs\.push_notifications \|\| inputs\.universal_links \}\}/)
+    expect(wf).toMatch(/\[ "\$LINKS" = "true" \] \|\| \/usr\/libexec\/PlistBuddy -c "Delete :com\.apple\.developer\.associated-domains"/)
+    expect(wf).toMatch(/\[ "\$PUSH" = "true" \] \|\| \/usr\/libexec\/PlistBuddy -c "Delete :aps-environment"/)
+    expect(wf).toMatch(/universal_links was requested but the signed build has no associated-domains entitlement/)
+  })
 })
