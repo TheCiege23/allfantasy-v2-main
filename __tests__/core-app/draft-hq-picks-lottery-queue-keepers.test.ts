@@ -404,7 +404,7 @@ describe('getDraftHqData — weighted lottery', () => {
       fallbackOrder: 'reverse order of finish',
       alreadyRunAt: null,
     })
-    // Weights 1000 - PF: Mine 100, Delta 200.
+    // Weights rank PF within the pool, lowest scorer heaviest: Delta (800) 2, Mine (900) 1.
     expect(teams.map((t) => [t.name, t.record, Number(t.oddsPercent.toFixed(1)), t.isYou])).toEqual([
       ['Mine', '5-8', 33.3, true],
       ['Delta', '2-10-1', 66.7, false],

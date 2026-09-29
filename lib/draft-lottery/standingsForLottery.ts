@@ -182,22 +182,34 @@ export function selectEligibleTeams(
 }
 
 /**
- * Compute weight for a team (higher = better lottery odds).
+ * Compute weight for a team (higher = better lottery odds). Worse teams get better odds — what the
+ * settings screen promises ("Worse teams get better odds at top picks").
+ *
+ * 🛑 BOTH WEIGHTINGS WERE FLAT UNTIL 2026-09-29, SO EVERY LOTTERY WAS A COIN TOSS.
+ * - `inverse_standings` computed `bestRank - rank + 1`. `rank` is 1 = best, so for every team in the
+ *   pool (all ranked at or below the pool's best) that is <= 1, and the `max(1, …)` floor made every
+ *   weight 1.
+ * - `inverse_points_for` / `inverse_max_pf` computed `1000 - PF`. A season's points-for is well over
+ *   1,000, so every weight hit the 0.1 floor.
+ * Now both are ranks WITHIN the pool: the worst standing (or the lowest PF) gets the most weight, the
+ * best gets 1, and ties share a weight. A rank is scale-free, so no season's scoring can flatten it.
  */
 export function computeWeight(
   row: StandingsRow,
   weightingMode: LotteryWeightingMode,
   worstRankInPool: number,
-  bestRankInPool: number
+  bestRankInPool: number,
+  pool: readonly StandingsRow[] = [row]
 ): number {
   if (weightingMode === 'inverse_standings') {
-    const range = Math.max(1, bestRankInPool - worstRankInPool + 1)
-    const inverseRank = bestRankInPool - row.rank + 1
-    return Math.max(1, inverseRank)
+    // rank 1 = best, so the pool's worst team (highest rank) gets worstRank - bestRank + 1.
+    return Math.max(1, row.rank - bestRankInPool + 1)
   }
   if (weightingMode === 'inverse_points_for' || weightingMode === 'inverse_max_pf') {
-    const pf = weightingMode === 'inverse_max_pf' ? row.maxPf : row.pointsFor
-    return Math.max(0.1, 1000 - pf)
+    const pfOf = (r: StandingsRow) => (weightingMode === 'inverse_max_pf' ? r.maxPf : r.pointsFor)
+    const pf = pfOf(row)
+    // One plus the teams that scored MORE: the lowest scorer gets the most weight.
+    return 1 + pool.filter((r) => pfOf(r) > pf).length
   }
   return 1
 }
@@ -214,7 +226,7 @@ export function buildEligibleTeamsWithOdds(
   const bestRank = Math.min(...eligible.map((r) => r.rank))
   const withWeight = eligible.map((r) => ({
     ...r,
-    weight: computeWeight(r, weightingMode, worstRank, bestRank),
+    weight: computeWeight(r, weightingMode, worstRank, bestRank, eligible),
   }))
   const totalWeight = withWeight.reduce((s, r) => s + r.weight, 0)
   return withWeight.map((r) => ({
