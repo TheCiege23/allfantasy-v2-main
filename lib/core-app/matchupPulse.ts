@@ -11,7 +11,7 @@ import { leagueDisplayName } from './leagueHome'
 import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadableRosters } from './rosterIdSpace'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { realManagerName, rosterLabel } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
@@ -548,21 +548,24 @@ export async function getMatchupPulse(
     ...new Set(needProjection.flatMap((p) => [...p.yourRosterKeys, ...p.theirRosterKeys])),
   ]
 
+  const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
+  // In Sleeper ids: an ESPN lineup translated, any other foreign one emptied — a Fleaflicker/MFL/
+  // Fantrax/Yahoo starter id (or an untranslatable ESPN one: 12483 is Stafford there, Jack Bech in
+  // Sleeper's space) would be priced as a stranger; such a lineup lands in `unpriceable`.
   const rosters = rosterKeys.length
-    ? await prisma.roster
-        .findMany({
-          where: { leagueId: { in: leagueIds }, platformUserId: { in: rosterKeys } },
-          select: { leagueId: true, platformUserId: true, playerData: true },
-        })
-        .catch(() => [])
+    ? await sleeperReadableRosters(
+        await prisma.roster
+          .findMany({
+            where: { leagueId: { in: leagueIds }, platformUserId: { in: rosterKeys } },
+            select: { leagueId: true, platformUserId: true, playerData: true },
+          })
+          .catch(() => []),
+        (r) => platformByLeague.get(r.leagueId),
+      )
     : []
   const startersBy = new Map<string, string[]>()
-  const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
   for (const r of rosters) {
-    // A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id and would be
-    // priced as a stranger; such a lineup reads empty and the league lands in `unpriceable`.
-    const pd = sleeperReadablePlayerData(platformByLeague.get(r.leagueId), r.playerData)
-    startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(pd))
+    startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(r.playerData))
   }
 
   /** First candidate that actually names a roster in this league. */

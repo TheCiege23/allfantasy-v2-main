@@ -10,7 +10,7 @@ import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSup
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
-import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
 import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
@@ -1211,10 +1211,9 @@ async function loadLeague(
     prisma.roster
       .findMany({ where: { leagueId }, select: { id: true, playerData: true, platformUserId: true } })
       // A foreign league's ids collide with real Sleeper ids: read raw, a stranger's holder, slot and
-      // position-mates would be named as his.
-      .then((rs) =>
-        rs.map((r) => ({ ...r, playerData: sleeperReadablePlayerData(league.platform, r.playerData) as typeof r.playerData })),
-      )
+      // position-mates would be named as his. ESPN is translated (ESPN 12483 is Stafford; read raw
+      // as Sleeper 12483 the card showed Jack Bech rostered and Stafford "NOT ROSTERED").
+      .then((rs) => sleeperReadableRosters(rs, league.platform))
       .catch(() => []),
     prisma.leagueTeam
       .findMany({

@@ -35,7 +35,7 @@ import { normalizePosition } from './positionNormalization'
 import { lineupSeatsFromSettings } from './slotEligibility'
 import { lineupGainCalculator } from '@/lib/trade-intel/faabLineupGain'
 import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
-import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { leagueVariantFor } from './valueBook'
 /*
  * Moved to `lib/trade-intel/marketContext.ts` (2026-09-24) so the trade analysis engine can use the
@@ -278,12 +278,10 @@ export async function readLeagueTradeRows(leagueId: string) {
       /*
        * A foreign league's ids collide with real Sleeper ids: read raw, the holder, "already on your
        * roster" and every priced package name strangers. Stripped here, every trade surface sees none.
+       * An ESPN roster is translated instead — read raw, its 12483 (Stafford) priced as Jack Bech.
        */
-      .then((rs) =>
-        rs.map(({ league, ...r }) => ({
-          ...r,
-          playerData: sleeperReadablePlayerData(league?.platform, r.playerData) as typeof r.playerData,
-        })),
+      .then(async (rs) =>
+        (await sleeperReadableRosters(rs, (r) => r.league?.platform)).map(({ league: _league, ...r }) => r),
       )
       .catch(() => []),
   ])

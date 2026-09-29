@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { buildRosterIdMap } from './rosterIdMatch'
-import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { FOREIGN_IDS_UNREADABLE, FOREIGN_IDS_UNREADABLE_CLAUSE } from './foreignIdSpaceCopy'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekProgress } from './leagueWeekProgress'
@@ -152,17 +152,22 @@ export async function getCrossLeagueExposure(
     }
   }
 
-  const rosters = await prisma.roster
-    .findMany({
-      where: {
-        OR: teams.map((t) => ({
-          leagueId: t.leagueId,
-          platformUserId: { in: rosterCandidates(t, userId) },
-        })),
-      },
-      select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
-    })
-    .catch(fellBack)
+  // In Sleeper ids: an ESPN roster translated (one read for all of them), any other foreign one
+  // emptied — ESPN 12483 is Stafford there and Jack Bech in Sleeper's space.
+  const rosters = await sleeperReadableRosters(
+    await prisma.roster
+      .findMany({
+        where: {
+          OR: teams.map((t) => ({
+            leagueId: t.leagueId,
+            platformUserId: { in: rosterCandidates(t, userId) },
+          })),
+        },
+        select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
+      })
+      .catch(fellBack),
+    (r) => r.league?.platform,
+  )
 
   if (rosters.length === 0) {
     return {
@@ -186,7 +191,7 @@ export async function getCrossLeagueExposure(
 
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id; such a roster
     // still counts toward the denominator (so "every roster" stays honest) but names nobody.
-    const pd = (sleeperReadablePlayerData(r.league?.platform, r.playerData) ?? {}) as Record<string, unknown>
+    const pd = (r.playerData ?? {}) as Record<string, unknown>
     const starters = new Set(asIds(pd.starters).filter(isResolvableId))
     const all = new Set(
       [...asIds(pd.players), ...starters, ...asIds(pd.reserve), ...asIds(pd.taxi)].filter(

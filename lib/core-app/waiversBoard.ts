@@ -8,7 +8,7 @@ import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadableRosters } from './rosterIdSpace'
 import { ruledOutByFact } from './injuryStatus'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { isStartableIn, startingSlots } from './slotEligibility'
@@ -282,13 +282,14 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
 
   const platformByLeague = new Map(mine.map((c) => [c.leagueId, c.league?.platform]))
   const rostersByLeague = new Map<string, RosterRow[]>()
-  for (const raw of rosters) {
-    /*
-     * A foreign league's ids collide with real Sleeper ids — read raw, they name and drop strangers.
-     * Stripped, its roster resolves nothing and the league is withheld as `idSpace`, not left to the
-     * ID_SPACE_FLOOR heuristic (which a league with enough collisions passes).
-     */
-    const r = { ...raw, playerData: sleeperReadablePlayerData(platformByLeague.get(raw.leagueId), raw.playerData) }
+  /*
+   * A foreign league's ids collide with real Sleeper ids — read raw, they name and drop strangers.
+   * Stripped, its roster resolves nothing and the league is withheld as `idSpace`, not left to the
+   * ID_SPACE_FLOOR heuristic (which a league with enough collisions passes). An ESPN roster is
+   * translated: read raw, ESPN 12483 (Stafford) was Sleeper's Jack Bech, and Stafford himself — his
+   * real id never on the roster — was offered as the best free agent in that league.
+   */
+  for (const r of await sleeperReadableRosters(rosters, (raw) => platformByLeague.get(raw.leagueId))) {
     const list = rostersByLeague.get(r.leagueId)
     if (list) list.push(r)
     else rostersByLeague.set(r.leagueId, [r])

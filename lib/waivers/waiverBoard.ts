@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { hasIdpScoring } from '@/lib/core-app/scoringNotes'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
@@ -160,25 +160,30 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
   if (!mine.found) return EMPTY(mine.reason === 'no_team_claimed' ? 'no_team_claimed' : 'no_roster')
-  // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one it prices
-  // (and names as "displaced") a stranger, and strikes a real free agent off the board.
-  const readableIds = (playerData: unknown) => rosterPlayerIds(sleeperReadablePlayerData(league.platform, playerData))
-  const myIds = readableIds(mine.playerData)
+  /*
+   * A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one it prices
+   * (and names as "displaced") a stranger, and strikes a real free agent off the board. An ESPN
+   * roster is translated — read raw, ESPN 12483 (Stafford) struck Sleeper's Jack Bech off the board
+   * and left Stafford himself listed as a free agent.
+   */
+  const myIds = rosterPlayerIds(await sleeperReadablePlayerDataOf(league.platform, mine.playerData))
   if (myIds.length === 0) {
+    const unreadable = rosterIdSpaceOf(league.platform) !== 'sleeper'
     return EMPTY(
-      isForeignIdSpace(league.platform) ? 'ids_unreadable' : 'no_roster',
-      isForeignIdSpace(league.platform)
-        ? [`${FOREIGN_IDS_UNREADABLE}, so free agents cannot be told apart from rostered players.`]
-        : [],
+      unreadable ? 'ids_unreadable' : 'no_roster',
+      unreadable ? [`${FOREIGN_IDS_UNREADABLE}, so free agents cannot be told apart from rostered players.`] : [],
     )
   }
 
   /* Everyone rostered anywhere in the league is off the board. */
-  const allRosters = await args.prisma.roster
-    .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
-    .catch(() => [] as Array<{ playerData: unknown }>)
+  const allRosters = await sleeperReadableRosters(
+    await args.prisma.roster
+      .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
+      .catch(() => [] as Array<{ playerData: unknown }>),
+    league.platform,
+  )
   const rostered = new Set<string>()
-  for (const r of allRosters) for (const id of readableIds(r.playerData)) rostered.add(id)
+  for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)
   for (const id of myIds) rostered.add(id)
 
   const { lookupProjections } = await import('@/lib/core-app/playerProjections')
