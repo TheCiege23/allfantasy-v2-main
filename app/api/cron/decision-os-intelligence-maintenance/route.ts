@@ -4,11 +4,6 @@ import { recomputeAdviceLearning } from '@/lib/chimmy-outcomes/adviceLearning'
 
 import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
 import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
-import {
-  runLineupShadowSweep,
-  shadowSweepEnabled,
-  productionSweepDeps,
-} from '@/lib/decision-os/lineup/shadowSweep'
 import { awaitPendingParityWrites } from '@/lib/decision-os/core/parity/durableParityStore'
 
 export const runtime = 'nodejs'
@@ -48,40 +43,29 @@ function maintenanceEnabled(): boolean {
   return process.env.DECISION_OS_MAINTENANCE_ENABLED === 'true'
 }
 
-/**
- * Lineup shadow sweep — a SECOND, INDEPENDENT feature sharing this schedule.
+/*
+ * 🛑 NO LINEUP WORK RUNS HERE ANY MORE. Until 2026-09-29 this route also drove the Decision OS
+ * lineup SHADOW SWEEP (`lib/decision-os/lineup/shadowSweep.ts`, flag
+ * `DECISION_OS_SHADOW_SWEEP_ENABLED`) every ten minutes, to feed a flip gate for a second lineup
+ * engine. Owner decision that day: /core My Team (`lib/core-app/myTeam.ts`) is the ONE start/sit
+ * answer, so the duplicate engine was retired rather than flipped — the sweep, its two unused
+ * routes (`/api/today/lineup-actions`, `/api/dashboard/today-actions`) and their shadow plumbing
+ * were deleted. `DECISION_OS_SHADOW_SWEEP_ENABLED` is now read by nothing.
  *
- * Deliberately evaluated BEFORE the `maintenanceEnabled()` early return, and behind its own flag,
- * so the two features cannot silently gate each other. `DECISION_OS_MAINTENANCE_ENABLED` is absent
- * from the committed `.env.production` but IS set in the Vercel dashboard — a live authenticated
- * call to the deployed route returns `enabled: true`. That is exactly why the placement matters:
- * whether maintenance runs is an operator setting that can change without a code change, and the
- * sweep must not inherit it in either direction.
- *
- * Folded into this route rather than given its own: the repo is at Vercel's route ceiling and
- * carries a standing rule against new API routes, and this needs a clock, not an endpoint.
- *
- * Never throws (the sweep swallows its own failures), so it cannot turn a scheduled job red over
- * telemetry work.
+ * Do not re-add a lineup phase here without re-opening that decision.
  */
-async function sweepLineupShadow() {
-  return runLineupShadowSweep(productionSweepDeps(), { enabled: shadowSweepEnabled() })
-}
-
 export async function GET(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 
-  const sweep = await sweepLineupShadow()
   const chimmyRecovered = await (await import('@/lib/chimmy/requestReceipts')).reconcileExpiredRequests(20)
     .catch(() => null)
 
   /*
    * Fill in `followed` for draft recommendations whose manager has since picked.
    *
-   * 🛑 DELIBERATELY ABOVE THE `maintenanceEnabled()` GATE, beside the sweep and for the same
-   * reason. This has nothing to do with Decision OS maintenance, and hanging it off that flag
+   * 🛑 DELIBERATELY ABOVE THE `maintenanceEnabled()` GATE. This has nothing to do with Decision OS maintenance, and hanging it off that flag
    * would mean a switch somebody turned off for an unrelated subsystem silently stops the only
    * thing that ever resolves an outcome — the exact shape of a scheduled writer that exists,
    * looks wired, and never runs.
@@ -106,7 +90,7 @@ export async function GET(request: Request) {
     error: error instanceof Error ? error.message.slice(0, 120) : 'learning failed',
   }))
   // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
-  // paths -- so writes are still in flight when the sweep returns, and on Vercel this instance can
+  // paths -- so writes can still be in flight when this handler reaches here, and on Vercel this instance can
   // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
   // protect, so it is the right place to wait. Bounded internally, so a slow database cannot hold
   // the invocation open until a platform duration kill (which runs no user code at all).
@@ -114,8 +98,8 @@ export async function GET(request: Request) {
 
   if (!maintenanceEnabled()) {
     // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
-    // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
+    // providers, tokens, or freshness.
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -126,10 +110,10 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep, draftOutcomes, adviceLearning },
+      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', draftOutcomes, adviceLearning },
       { status: 500 },
     )
   }

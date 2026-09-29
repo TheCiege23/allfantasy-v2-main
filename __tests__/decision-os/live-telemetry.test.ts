@@ -25,10 +25,8 @@ const tradeSrc = readFileSync(
   resolve(process.cwd(), 'app/api/redraft/trade-proposals/route.ts'),
   'utf8',
 )
-const lineupSrc = readFileSync(
-  resolve(process.cwd(), 'app/api/today/lineup-actions/route.ts'),
-  'utf8',
-)
+// The lineup route (`app/api/today/lineup-actions/route.ts`) was deleted 2026-09-29 with the
+// duplicate lineup engine — /core My Team is the one start/sit answer — so it has no wiring to pin.
 const commissionerSrc = readFileSync(
   resolve(process.cwd(), 'lib/commissioner-hub/commissionerHubHealth.ts'),
   'utf8',
@@ -156,38 +154,6 @@ describe('trade route live telemetry wiring', () => {
 
   it('uses decision_type "trade.value"', () => {
     expect(tradeSrc).toContain("'trade.value'")
-  })
-})
-
-// ─── Source-contract: lineup route ────────────────────────────────────────────
-
-describe('lineup route live telemetry wiring', () => {
-  it('imports emitLiveTelemetry from @/lib/decision-os/core/parity', () => {
-    expect(lineupSrc).toContain('emitLiveTelemetry')
-    expect(lineupSrc).toContain("from '@/lib/decision-os/core/parity'")
-  })
-
-  it('records liveStart = Date.now() before the LIVE block', () => {
-    const liveIdx = lineupSrc.indexOf('const isLive = shouldRunLineupLive')
-    expect(liveIdx).toBeGreaterThan(-1)
-    const pre = lineupSrc.slice(liveIdx, liveIdx + 300)
-    expect(pre).toContain('liveStart = Date.now()')
-  })
-
-  it('includes source in the enriched=true flags (tracks redraft_native vs canonical_world)', () => {
-    const liveIdx = lineupSrc.indexOf('if (isLive) {')
-    expect(liveIdx).toBeGreaterThan(-1)
-    const block = lineupSrc.slice(liveIdx, liveIdx + 2600)
-    expect(block).toContain('source: first.source')
-  })
-
-  it('emits enriched=false on shadow_no_result and exception', () => {
-    expect(lineupSrc).toContain("reason: 'shadow_no_result'")
-    expect(lineupSrc).toContain("reason: 'exception'")
-  })
-
-  it('uses decision_type "lineup.set"', () => {
-    expect(lineupSrc).toContain("'lineup.set'")
   })
 })
 
