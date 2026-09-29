@@ -240,6 +240,27 @@ describe('Player Finder — core view', () => {
     expect(screen.getByRole('link', { name: 'Claim Kincaid in Sleeper' })).toHaveAttribute('href', 'https://sleeper.com/leagues/9/players')
   })
 
+  it('shows "Next man up" with the backup linked on the finder and the league scope kept', () => {
+    renderCore({
+      signedIn: true,
+      selectedLeagueId: 'L-dragons',
+      depthChart: {
+        team: 'BUF',
+        slot: 'TE',
+        asOfIso: '2026-09-23T04:18:00.000Z',
+        hisDepth: 1,
+        entries: [
+          { depth: 1, name: 'Dalton Kincaid', sleeperId: '9001', ref: 'NFL:ri-1', isHim: true },
+          { depth: 2, name: 'Dawson Knox', sleeperId: '4000', ref: 'NFL:ri-2', isHim: false },
+        ],
+        presence: { '4000': [{ leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', state: 'yours', detail: 'bench', claim: null }] },
+      },
+    })
+    expect(screen.getByRole('heading', { name: 'Next man up · BUF TE' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dawson Knox' })).toHaveAttribute('href', '/core/players?q=Dawson%20Knox&player=NFL%3Ari-2&league=L-dragons')
+    expect(screen.getByText(/Who plays if Kincaid misses time/)).toBeInTheDocument()
+  })
+
   it('no league strip with a league in context — the card is already that league', () => {
     renderCore({ signedIn: true, selectedLeagueId: 'L-dragons', pickLeagues: [{ id: 'L-dragons', name: 'Dynasty Dragons', platform: 'sleeper' }] })
     expect(screen.queryByLabelText('Where he is in each of your leagues')).toBeNull()
