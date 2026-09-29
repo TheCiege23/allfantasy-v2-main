@@ -2485,17 +2485,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : await getWaiversBoard(userId).catch(() => null)
     : null
 
+  /*
+   * Same split my-team, matchup and trades already make: a FAILED read must not look like
+   * "no league in context". Waivers falls through to `WaiversBoard` or `PickALeague` on null,
+   * so a transient failure quietly showed a manager who HAD picked a league the cross-league
+   * board instead — see ScreenLoadError's header for the original measurement.
+   */
+  let waiversLoadFailed = false
   const waivers =
     activeKey === 'waivers' && selectedLeagueId
-      ? await getWaiversData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      ? await getWaiversData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+          console.error('[core/waivers] read failed', e)
+          waiversLoadFailed = true
+          return null
+        })
       : null
   // Competitive Edge on Waivers — read only for a viewer whose plan includes it.
   const waiverEdgeAccess = activeKey === 'waivers' ? (corePaywall?.competitive_edge ?? null) : null
   const waiverEdge = await loadWaiverEdgeForScreen({ waivers, access: waiverEdgeAccess, userId })
 
+  /* Same split: on null this screen renders the cross-league board or the picker. */
+  let draftHqLoadFailed = false
   const draftHq =
     activeKey === 'draft-hq' && selectedLeagueId
-      ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+          console.error('[core/draft-hq] read failed', e)
+          draftHqLoadFailed = true
+          return null
+        })
       : null
   // Competitive Edge on Draft HQ — read only for a viewer whose plan includes it.
   const draftEdgeAccess = activeKey === 'draft-hq' ? (corePaywall?.competitive_edge ?? null) : null
@@ -2526,9 +2543,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   /* The War Room's first room: every manager in the league, profiled. */
   const connectedToolScreen = ['war-room', 'trades', 'waivers', 'my-team', 'draft-hq', 'players'].includes(activeKey)
+  /*
+   * ⚠ SCOUT ONLY, NOT THE PAIRED HALF. A missing franchise pairing is the NORMAL case — most
+   * leagues have none — so `resolvePairedHalf` returning null says nothing went wrong. Scout is
+   * the read whose failure is indistinguishable from "no league picked", and it is the one the
+   * War Room's picker fallback is reached through.
+   */
+  let scoutLoadFailed = false
   const [scout, connectedFranchise] = await Promise.all([
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
-      ? getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      ? getScoutData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+          console.error('[core/war-room] scout read failed', e)
+          scoutLoadFailed = true
+          return null
+        })
       : Promise.resolve(null),
     connectedToolScreen && selectedLeagueId
       ? resolvePairedHalf(selectedLeagueId, userId, {
@@ -3992,6 +4020,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'waivers' ? (
         waivers ? (
           <Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
+        ) : waiversLoadFailed ? (
+          <ScreenLoadError screen="Waivers" retryHref={retryHref} />
         ) : !showAllLeagues && waiversBoard ? (
           <WaiversBoard
             data={waiversBoard}
@@ -4089,6 +4119,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
           </>
+        ) : draftHqLoadFailed ? (
+          <ScreenLoadError screen="Draft HQ" retryHref={retryHref} />
         ) : showAllLeagues || !homeDrafts ? (
           <PickALeague
             tabKey="draft-hq"
@@ -4178,8 +4210,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                     : '/core/war-room?view=plan'
                 }
               />
+            ) : scoutLoadFailed ? (
+              /*
+               * Inside the fragment, not beside the picker below: a paired franchise can render
+               * while Scout's own read fails, and that half should still be shown rather than
+               * replaced by an error for the other half.
+               */
+              <ScreenLoadError screen="Scout" retryHref={retryHref} />
             ) : null}
           </>
+        ) : scoutLoadFailed ? (
+          <ScreenLoadError screen="War Room" retryHref={retryHref} />
         ) : (
           <PickALeague
             tabKey="war-room"
