@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 
 /**
@@ -31,10 +32,16 @@ export function LeaguePicker({
 
   const total = leagues.length
   const current = saved ? saved.length : total
+  /*
+   * Same-named leagues are told apart by the app's one rule (lib/core-app/leagueNameCollision.ts) —
+   * a tick list of four identical "…12-Team NFL Redraft League (manual)" rows (measured 2026-09-28)
+   * cannot be ticked on purpose. Once over the whole list, so a label does not change as you filter.
+   */
+  const labels = useMemo(() => distinctLeagueLabels(leagues), [leagues])
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    return q ? leagues.filter((l) => l.name.toLowerCase().includes(q) || platformLabel(l.platform).toLowerCase().includes(q)) : leagues
-  }, [filter, leagues])
+    return q ? leagues.filter((l) => (labels.get(l.id) ?? l.name).toLowerCase().includes(q) || platformLabel(l.platform).toLowerCase().includes(q)) : leagues
+  }, [filter, leagues, labels])
 
   const toggle = (id: string) =>
     setChosen((prev) => {
@@ -92,7 +99,7 @@ export function LeaguePicker({
               <li key={l.id}>
                 <label className="af-pf-picker-row">
                   <input type="checkbox" checked={chosen.has(l.id)} onChange={() => toggle(l.id)} />
-                  <span className="af-pf-picker-name">{l.name}</span>
+                  <span className="af-pf-picker-name">{labels.get(l.id) ?? l.name}</span>
                   <span className="af-pf-picker-where">{platformLabel(l.platform)}</span>
                 </label>
               </li>

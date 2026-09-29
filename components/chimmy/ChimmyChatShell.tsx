@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Send, Image as ImageIcon, Loader2, X, RefreshCw, Volume2, History, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { type ChimmyVoicePreset } from '@/lib/chimmy-interface'
 import {
   getAIThreadStorageKey,
@@ -280,6 +281,24 @@ export default function ChimmyChatShell({
     if (scopeSport === 'all') return leagues
     return leagues.filter((l) => normalizeToSupportedSport(l.sport) === scopeSport)
   }, [leagues, scopeSport])
+
+  /*
+   * The option text, told apart by the app's one rule (lib/core-app/leagueNameCollision.ts) when two
+   * options would otherwise read the same — measured 2026-09-28, one account had four leagues named
+   * "…12-Team NFL Redraft League (manual)". The rule runs on the TEXT THE OPTION SHOWS (name cut to
+   * 48, plus sport), so the suffix is never the part the cut removes, and two names that only differ
+   * past character 48 are separated too. Once over exactly the options rendered.
+   */
+  const leagueOptionLabels = useMemo(
+    () =>
+      distinctLeagueLabels(
+        filteredLeagues.map((l) => ({
+          id: l.id,
+          name: `${(l.name || 'League').slice(0, 48)} (${normalizeToSupportedSport(l.sport)})`,
+        })),
+      ),
+    [filteredLeagues],
+  )
 
   useEffect(() => {
     if (scopeLeagueId === 'all') return
@@ -1122,7 +1141,7 @@ export default function ChimmyChatShell({
             <option value="all">All leagues</option>
             {filteredLeagues.map((l) => (
               <option key={l.id} value={l.id}>
-                {(l.name || 'League').slice(0, 48)} ({normalizeToSupportedSport(l.sport)})
+                {leagueOptionLabels.get(l.id)}
               </option>
             ))}
           </select>

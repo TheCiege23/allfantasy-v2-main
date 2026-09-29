@@ -58,3 +58,24 @@ export function findCollidingNames(
   for (const [name, count] of seen) if (count > 1) out.add(name)
   return out
 }
+
+/**
+ * The rule above applied to a whole picker at once: league id → the label that picker shows.
+ *
+ * For a list rendered as a flat set of names — the comms drawer's scope `<select>`, the /core
+ * rail and its header switcher, the scope switcher, the Player Finder's league pick. Collisions
+ * are computed ONCE over exactly the `leagues` passed in, which must be the list the picker
+ * shows, so a name that collides elsewhere but not here stays clean.
+ *
+ * ⚠ MEASURED 2026-09-28 on a real account: six picker entries read identically — two
+ * "…'s 8-Team NFL Redraft League (manual)" and four "…'s 12-Team NFL Redraft League (manual)".
+ * No second rule: this only calls `findCollidingNames` and `resolveTileName`.
+ */
+export function distinctLeagueLabels(
+  leagues: ReadonlyArray<{ id: string; name: string; nickname?: string | null }>,
+): Map<string, string> {
+  const colliding = findCollidingNames(leagues)
+  const out = new Map<string, string>()
+  for (const l of leagues) out.set(l.id, resolveTileName(l, colliding).text)
+  return out
+}
