@@ -2299,7 +2299,8 @@ export function TradeCenter(props: {
         </div>
       ) : intel ? (
         <section className="af-tc-dos" data-mstep="review">
-          <div className="af-label">Decision OS · this deal</div>
+          {/* Was "Decision OS · this deal" — internal name; the section reads this deal. */}
+          <div className="af-label">This deal</div>
           {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
           {noSignal ? <p className="af-tc-why">Proposal grade unavailable. Priced assets and roster context alone do not establish that the complete trade is fair.</p> : intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
 

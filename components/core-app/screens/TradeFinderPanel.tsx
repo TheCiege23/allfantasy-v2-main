@@ -71,7 +71,8 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
 
   return (
     <section className="af-tc-dos">
-      <div className="af-label">Decision OS · Trade Finder</div>
+      {/* "Decision OS · " dropped: internal name, and the section is plainly the finder. */}
+      <div className="af-label">Trade Finder</div>
 
       {data == null ? (
         <>
