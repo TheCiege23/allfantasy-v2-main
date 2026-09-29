@@ -1189,6 +1189,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
  *
  * `evidence` is accepted here but is not written today — see the note at the `display` write.
  */
+/**
+ * The chip and answer keys a decision-engine answer stores in its history row, lifted from the SAME
+ * client meta the live response sends (`decisionAnswerMeta`), which carries them only on a READY
+ * answer. So a reload restores exactly what the live answer showed, and a free partial stores none.
+ */
+function decisionDisplayPolish(meta: ReturnType<typeof decisionAnswerMeta>): { verdict?: unknown; answerKeys?: string[] } {
+  return {
+    ...('verdict' in meta && meta.verdict ? { verdict: meta.verdict } : {}),
+    ...('answerKeys' in meta && meta.answerKeys?.length ? { answerKeys: meta.answerKeys } : {}),
+  }
+}
+
 function readStoredDisplay(meta: unknown): Record<string, unknown> {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {}
   const display = (meta as Record<string, unknown>).display
@@ -2962,6 +2974,21 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   if (tradeTargetResult?.status === 'decided') {
     const v = tradeTargetResult.verdict
     const text = renderTradeTargetVerdict(v)
+    const targetDecision = decisionAnswerMeta(createDecisionAnswer({ kind: 'trade', status: 'ready', leagueId: leagueSnapshot?.id ?? null,
+      answer: text, sources: ['league_rosters', 'league_scoring', 'trade_engine'],
+      verdict: tradeTargetVerdict(v.verdict, tradeTargetResult.targetName) }))
+    /*
+     * 🛑 THIS PATH WROTE NO HISTORY AT ALL (2026-09-29): a paid "should I trade for X" verdict vanished
+     * from the thread on reload. Written like the decision path below — after the spend, cost copied
+     * from what was charged, allSettled so a failed write cannot break or re-charge the answer — with
+     * the YES/NO chip stored so a reload shows it.
+     */
+    if (userId) await Promise.allSettled([
+      appendChatHistory({ conversationId, role: 'user', content: message || '[image-only request]', userId, leagueId: leagueSnapshot?.id ?? null }),
+      appendChatHistory({ conversationId, role: 'assistant', content: text, userId, leagueId: leagueSnapshot?.id ?? null,
+        meta: { display: { grounding: tradeTargetGrounding, cost: spendLedger && tokenPreview ? tokenPreview.tokenCost : planMeta ? null : 0,
+          mode: selectedAssistantMode, ...decisionDisplayPolish(targetDecision) } } }),
+    ])
     return NextResponse.json({
       response: text,
       result: text,
@@ -2981,9 +3008,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
         leagueGrounding: tradeTargetGrounding,
         tradeTarget: { status: 'decided', verdict: v.verdict, player: tradeTargetResult.targetName },
-        decision: decisionAnswerMeta(createDecisionAnswer({ kind: 'trade', status: 'ready', leagueId: leagueSnapshot?.id ?? null,
-          answer: text, sources: ['league_rosters', 'league_scoring', 'trade_engine'],
-          verdict: tradeTargetVerdict(v.verdict, tradeTargetResult.targetName) })),
+        decision: targetDecision,
         dataSources: ['league_rosters', 'league_scoring', 'weekly_projections', 'market_values', 'trade_engine'],
         responseStructure: {
           shortAnswer: `${v.headline}, because ${v.because}.`,
@@ -2996,6 +3021,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   if (decisionAnswer?.status === 'ready') {
+    const readyDecision = decisionAnswerMeta(decisionAnswer)
     if (decisionAnswer.startCalls?.length) {
       await recordChatStartSitAdvice({ userId, calls: decisionAnswer.startCalls, answer: decisionAnswer.answer }).catch(() => null)
     }
@@ -3004,11 +3030,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       appendChatHistory({ conversationId, role: 'user', content: message || '[image-only request]', userId, leagueId: decisionAnswer.leagueId,
         meta: screenshotAttachment ? { display: { imagePreview: screenshotAttachment.url, imageName: screenshotAttachment.name } } : undefined }),
       appendChatHistory({ conversationId, role: 'assistant', content: decisionAnswer.answer, userId, leagueId: decisionAnswer.leagueId,
-        meta: { display: { grounding: tradeTargetGrounding, cost: spendLedger && tokenPreview ? tokenPreview.tokenCost : planMeta ? null : 0, mode: selectedAssistantMode } } }),
+        /* The chip and answer keys stored too, so a reload shows START / SIT / COUNTER as the live answer did. */
+        meta: { display: { grounding: tradeTargetGrounding, cost: spendLedger && tokenPreview ? tokenPreview.tokenCost : planMeta ? null : 0, mode: selectedAssistantMode,
+          ...decisionDisplayPolish(readyDecision) } } }),
     ])
     return NextResponse.json({ response: decisionAnswer.answer, result: decisionAnswer.answer,
       source: 'chimmy_decision_engine', sessionId,
-      meta: { decision: decisionAnswerMeta(decisionAnswer), scenario: decisionAnswer.scenario, screenshotAttachment, mode: selectedAssistantMode,
+      meta: { decision: readyDecision, scenario: decisionAnswer.scenario, screenshotAttachment, mode: selectedAssistantMode,
         leagueGrounding: tradeTargetGrounding, dataSources: decisionAnswer.sources,
         ...(planMeta ? { planAllowance: planMeta } : {}),
         tokenSpend: spendLedger && tokenPreview ? { ruleCode: tokenPreview.ruleCode, tokenCost: tokenPreview.tokenCost,

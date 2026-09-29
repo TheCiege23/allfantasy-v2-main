@@ -89,4 +89,22 @@ describe('the trade-target verdict in the chat route', () => {
     expect(ROUTE.slice(UNRESOLVED_RETURN_AT, MAIN_SPEND_AT)).toMatch(/leagueGrounding: tradeTargetGrounding/)
     expect(ROUTE.slice(DECIDED_RETURN_AT, LOOP_AT)).toMatch(/leagueGrounding: tradeTargetGrounding/)
   })
+
+  /*
+   * 2026-09-29: the decided verdict wrote NO history — a paid "should I trade for X" answer vanished
+   * from the thread on reload. It now writes both halves before returning, after the spend, with the
+   * YES/NO chip lifted from the same meta.decision the response sends, and a failed write cannot
+   * break the answer.
+   */
+  it('writes the decided verdict to chat history, with its chip, after the spend and before the return', () => {
+    const decidedReturn = ROUTE.indexOf('return NextResponse.json({', DECIDED_RETURN_AT)
+    const block = ROUTE.slice(DECIDED_RETURN_AT, decidedReturn)
+    expect(block).toMatch(/await Promise\.allSettled\(\[/)
+    expect(block).toMatch(/appendChatHistory\(\{ conversationId, role: 'user'/)
+    expect(block).toMatch(/appendChatHistory\(\{ conversationId, role: 'assistant', content: text/)
+    expect(block).toMatch(/\.\.\.decisionDisplayPolish\(targetDecision\)/)
+    // The response and the stored row carry ONE decision object.
+    expect(ROUTE.slice(decidedReturn, LOOP_AT)).toMatch(/decision: targetDecision,/)
+    expect(DECIDED_RETURN_AT).toBeGreaterThan(MAIN_SPEND_AT)
+  })
 })
