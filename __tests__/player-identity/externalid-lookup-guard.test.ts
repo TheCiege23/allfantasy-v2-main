@@ -29,7 +29,6 @@ const UNAUDITED = new Set<string>([
   'lib/core-app/depthChartBackups.ts',
   'lib/core-app/waiversBoard.ts', // migrated in #1601
   'lib/core-app/warRoomBoard.ts', // DraftPick.playerId: ours, the provider's, or Sleeper's
-  'lib/injury-impact-dashboard/runInjuryImpactDashboard.ts',
   'lib/nfl-data-foundation/nflDataFoundationService.ts',
   'lib/player-data/getPlayerDataForSurface.ts', // has a name-agreement guard (the 211-photo fix)
   'lib/player-identity/findSportsPlayerByLeagueId.ts',
