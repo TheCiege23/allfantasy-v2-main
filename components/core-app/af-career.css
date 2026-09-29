@@ -485,19 +485,6 @@
   background: radial-gradient(280px 190px at 50% 0%, rgba(246, 196, 69, 0.18), transparent 70%);
 }
 .af-crm-head > * { position: relative; }
-.af-crm-badge {
-  width: 86px;
-  height: 86px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  border: 1px dashed var(--line2);
-  font: 700 11px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
-  letter-spacing: 0.1em;
-  color: var(--faint);
-  text-align: center;
-}
 .af-crm-handle {
   margin: 0;
   font: 900 22px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;

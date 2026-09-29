@@ -200,7 +200,12 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
   return (
     <div className="af-crm">
       <header className="af-crm-head">
-        <div className="af-crm-badge">RANK ART PENDING</div>
+        {/*
+          ⚠ A dashed 86px box reading "RANK ART PENDING" stood here — a design placeholder for rank
+          art that was never made, shipped to every phone. App Review rejects placeholder content
+          (guideline 2.1), and the level it stood in for is already in the chips below. Removed
+          rather than filled with invented art; the header's gradient carries the space.
+        */}
         <h1 className="af-crm-handle">{data.handle ?? 'Your career'}</h1>
         <div className="af-crm-chips">
           {data.level != null ? (
