@@ -2,8 +2,8 @@
  * Lineup Attention Service — Phase 9.
  *
  * Reuses lib/lineup-actions/computeLineupActionsForUser.ts — the real, live,
- * cross-league lineup-issue engine (already wired into Decision OS's lineup
- * slice and an active `/api/today/lineup-actions` route) — as this service's
+ * cross-league lineup-issue engine (also the recommender behind Decision OS's
+ * lineup decider, which Chimmy grounding calls) — as this service's
  * primary attention source. Its `fetch_error` reasonType is dropped, matching
  * that engine's OWN convention (its `countableAction()` helper already
  * excludes fetch_error from anything a user should act on).

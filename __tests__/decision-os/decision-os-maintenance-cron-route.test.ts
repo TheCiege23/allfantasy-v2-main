@@ -47,7 +47,7 @@ vi.mock('@/lib/chimmy-outcomes/adviceLearning', () => ({
 import { GET } from '@/app/api/cron/decision-os-intelligence-maintenance/route'
 
 const SECRET = 'test-cron-secret'
-const ENV_KEYS = ['CRON_SECRET', 'DECISION_OS_MAINTENANCE_ENABLED'] as const
+const ENV_KEYS = ['CRON_SECRET', 'DECISION_OS_MAINTENANCE_ENABLED', 'DECISION_OS_SHADOW_SWEEP_ENABLED'] as const
 let saved: Record<string, string | undefined> = {}
 
 beforeEach(() => {
@@ -97,12 +97,11 @@ describe('decision-os maintenance cron — activation gate', () => {
     const res = await GET(authed())
     expect(res.status).toBe(200)
     const body = await res.json()
-    // The route now carries a SECOND, independently gated feature (the lineup shadow sweep), so
-    // this asserts the maintenance contract rather than the whole envelope. `toEqual` on the
-    // envelope made an unrelated additive field a failure, which is what happened here.
+    // The route carries other, independently gated work (draft outcomes, advice learning), so this
+    // asserts the maintenance contract rather than the whole envelope. `toEqual` on the envelope
+    // made an unrelated additive field a failure once already.
     expect(body).toMatchObject({ ok: true, enabled: false, status: 'maintenance_disabled' })
     // Inertness is the actual guarantee, and it is stronger asserted directly:
-    expect(body.sweep?.ran).toBe(false)
     expect(runMock).not.toHaveBeenCalled()
     expect(depsMock).not.toHaveBeenCalled()
   })
@@ -112,12 +111,9 @@ describe('decision-os maintenance cron — activation gate', () => {
     const res = await GET(authed())
     expect(res.status).toBe(200)
     const body = await res.json()
-    // The route now carries a SECOND, independently gated feature (the lineup shadow sweep), so
-    // this asserts the maintenance contract rather than the whole envelope. `toEqual` on the
-    // envelope made an unrelated additive field a failure, which is what happened here.
+    // Asserts the maintenance contract rather than the whole envelope (see test 3).
     expect(body).toMatchObject({ ok: true, enabled: false, status: 'maintenance_disabled' })
     // Inertness is the actual guarantee, and it is stronger asserted directly:
-    expect(body.sweep?.ran).toBe(false)
     expect(runMock).not.toHaveBeenCalled()
     expect(depsMock).not.toHaveBeenCalled()
   })
@@ -153,6 +149,26 @@ describe('decision-os maintenance cron — activation gate', () => {
     expect(runMock).not.toHaveBeenCalled() // runner (→ drains/reconcile/providers) never called
     expect(depsMock).not.toHaveBeenCalled() // real prisma-backed deps never even constructed
   })
+})
+
+/*
+ * Owner decision 2026-09-29: the duplicate Decision OS lineup engine is retired — /core My Team is
+ * the one start/sit answer. This cron used to run its shadow sweep every ten minutes behind
+ * `DECISION_OS_SHADOW_SWEEP_ENABLED`, which `.env.production` still sets to "true". The flag is set
+ * HERE on purpose: the retirement has to hold with the old switch still on, because nobody is going
+ * to remember to turn it off.
+ */
+describe('decision-os maintenance cron — lineup shadow sweep is retired', () => {
+  for (const maintenance of ['true', 'false']) {
+    it(`runs no lineup sweep even with DECISION_OS_SHADOW_SWEEP_ENABLED=true (maintenance=${maintenance})`, async () => {
+      process.env.DECISION_OS_SHADOW_SWEEP_ENABLED = 'true'
+      process.env.DECISION_OS_MAINTENANCE_ENABLED = maintenance
+      const res = await GET(authed())
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body).not.toHaveProperty('sweep')
+    })
+  }
 })
 
 describe('decision-os maintenance cron — Chimmy outcome loop', () => {
