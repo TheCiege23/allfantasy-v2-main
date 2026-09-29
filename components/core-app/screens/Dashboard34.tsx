@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import OpenCommsButton from '@/components/core-app/comms/OpenCommsButton'
 import { Dash34Countdown, Dash34Img, Dash34Time } from './Dashboard34Live'
 import '@/components/core-app/af-dash34.css'
@@ -544,7 +545,7 @@ function Desktop({ data, leagueId }: { data: Dash34Data; leagueId: string | null
               </strong>
               <p className="af-d34-notice-p">
                 {data.totalLeagues === 0
-                  ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+                  ? `Connect ${availableImportPlatformsPhrase()} and your leagues appear here. Read-only, about a minute.`
                   : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
               </p>
               <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>
@@ -810,7 +811,7 @@ function Mobile({ data, leagueId }: { data: Dash34Data; leagueId: string | null 
           </strong>
           <p className="af-d34-notice-p">
             {data.totalLeagues === 0
-              ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+              ? `Connect ${availableImportPlatformsPhrase()} and your leagues appear here. Read-only, about a minute.`
               : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
           </p>
           <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>

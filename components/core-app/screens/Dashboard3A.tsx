@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
@@ -546,7 +547,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
 
         <div className="af3a-import">
           <h4>Import a league</h4>
-          <p>Sleeper, ESPN or Yahoo. Read-only, takes about a minute.</p>
+          <p>{availableImportPlatformsPhrase()}. Read-only, takes about a minute.</p>
           <Link className="af3a-btn af3a-btn-accent af3a-btn-full" href="/import">
             Connect a platform
           </Link>

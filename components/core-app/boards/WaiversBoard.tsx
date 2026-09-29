@@ -386,8 +386,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
 
       {showNfl ? (
         <p className="af-bd-note af-bd-note--plain">
-          Every projection here is re-scored under that league&apos;s own{' '}
-          <code>scoring_settings</code>
+          Every projection here is re-scored under that league&apos;s own scoring settings
           {data.at ? ` for week ${data.at.week} of ${data.at.season}` : ''}, which is what makes
           the net-gain column comparable between leagues.
           {data.marketLeagues > 0

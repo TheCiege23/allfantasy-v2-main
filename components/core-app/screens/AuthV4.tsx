@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { readableApiError } from '@/lib/http/readableApiError'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { Suspense, useState } from 'react'
@@ -417,11 +418,9 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         // Surface the server's own reason where it gives one — it knows about
         // duplicate emails and unavailable databases, and a generic message here
         // would hide both.
-        setError(
-          typeof data.error === 'string'
-            ? data.error
-            : 'We could not create your account. Please try again.'
-        )
+        // `readableApiError` prefers the readable `message` (GEO_BLOCKED / VPN_BLOCKED carry one) and
+        // never shows a bare code such as PHONE_VERIFY_NOT_CONFIGURED.
+        setError(readableApiError(data, 'We could not create your account. Please try again.'))
         return
       }
 

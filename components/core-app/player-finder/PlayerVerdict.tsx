@@ -1,4 +1,5 @@
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { fixesTotal, formatDelta, type PlayerMove } from '@/lib/core-app/playerMoves'
 
 /**
@@ -175,7 +176,7 @@ export function PlayerVerdict({
         that this is a promise rather than a footnote.
       */}
       <p className="af-pf-verdict-readonly">
-        AllFantasy is read-only. Every change happens on Sleeper, ESPN or Yahoo —
+        AllFantasy is read-only. Every change happens on {availableImportPlatformsPhrase()} —
         we show you which league and which screen.
       </p>
 

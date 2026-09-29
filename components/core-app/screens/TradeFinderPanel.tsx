@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { readableApiError } from '@/lib/http/readableApiError'
 
 /**
  * Decision OS · Trade Finder, on the Trade Center.
@@ -100,7 +101,11 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
         </p>
       ) : null}
 
-      {data?.error ? <p className="af-tc-nosignal">{data.error}</p> : null}
+      {data?.error ? (
+        <p className="af-tc-nosignal">
+          {readableApiError(data, 'The trade finder could not load for this league. Try again in a moment.')}
+        </p>
+      ) : null}
 
       {data?.finder ? (
         <>

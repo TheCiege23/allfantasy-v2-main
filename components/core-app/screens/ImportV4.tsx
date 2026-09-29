@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useCallback, useEffect, useRef, useState } from 'react'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
@@ -1857,7 +1858,7 @@ export function ImportV4({
             with it.
           */}
           <Hint label="What read-only means">
-            AllFantasy never changes anything on Sleeper, ESPN or Yahoo. We read your leagues and
+            AllFantasy never changes anything on {availableImportPlatformsPhrase()}. We read your leagues and
             point you to the exact league and screen where you make the change.
           </Hint>
           <Link href="/core" className="af-im-skip">

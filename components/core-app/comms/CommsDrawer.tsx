@@ -1,6 +1,7 @@
 'use client'
 
 import ThreadPanel from './ThreadPanel'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { Eye, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
 import { LeagueConversation } from './LeagueConversation'
@@ -710,7 +711,7 @@ export function CommsDrawer({
             into. What is true is narrower, and it is the part that matters: we never change your
             league on the platform it lives on.
           */}
-          <span className="af-cm-footnote">AllFantasy never changes your league on Sleeper, ESPN or Yahoo.</span>
+          <span className="af-cm-footnote">AllFantasy never changes your league on {availableImportPlatformsPhrase()}.</span>
         </footer>
       </aside>
     </>

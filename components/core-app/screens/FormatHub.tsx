@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import Link from 'next/link'
 import type { FormatHubData, HubFormat } from '@/lib/core-app/formatHubs'
 import '@/components/core-app/af-format-hubs.css'
@@ -105,7 +106,7 @@ const THEMES: Record<HubFormat, Theme> = {
     broadcastLabel: 'Broadcast to every C2C league',
     emptyTitle: 'You’re not in a C2C league yet',
     canCreate: true,
-    foot: 'AllFantasy never writes back to Sleeper, ESPN or Yahoo — sync reads only.',
+    foot: `AllFantasy never writes back to ${availableImportPlatformsPhrase()} — sync reads only.`,
     video: '/league-type-c2c.mp4',
     poster: '/league-type-c2c.png',
   },
@@ -227,7 +228,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
               ↓
             </span>
             <div className="afh-row-main">
-              <span className="afh-row-title">Import from Sleeper, ESPN, Yahoo, Fantrax or MFL</span>
+              <span className="afh-row-title">Import from {availableImportPlatformsPhrase()}</span>
               <span className="afh-row-detail">It appears here as soon as it is recognised as a {theme.tab} league.</span>
             </div>
             <Link className="afh-btn afh-btn--sm" href="/import">

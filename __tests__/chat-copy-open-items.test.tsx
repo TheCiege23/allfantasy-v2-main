@@ -23,6 +23,7 @@ vi.mock('next-auth/react', () => ({ useSession: () => ({ data: { user: { id: 'me
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() } }))
 
 import CommsDrawer from '@/components/core-app/comms/CommsDrawer'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ChatComposer } from '@/app/dashboard/components/chat/ChatComposer'
 
 const chimmyPosts = (fetchMock: ReturnType<typeof vi.fn>) =>
@@ -109,7 +110,8 @@ describe('V10 — the footer says what is actually true', () => {
   it('says AllFantasy never changes your league on the platform, and no longer calls a chat read-only', () => {
     openDrawer()
     const foot = document.querySelector('.af-cm-foot')!
-    expect(foot.textContent).toContain('AllFantasy never changes your league on Sleeper, ESPN or Yahoo.')
+    // The platforms named are the ones importable today, not a hardcoded list.
+    expect(foot.textContent).toContain(`AllFantasy never changes your league on ${availableImportPlatformsPhrase()}.`)
     expect(foot.textContent).not.toMatch(/Read-only/i)
     expect(foot.textContent).not.toMatch(/never writes/i)
   })
