@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
 import { AuthRouteGlobalChrome } from "@/components/auth/AuthRouteGlobalChrome"
@@ -161,6 +161,36 @@ function ServiceWorkerLifecycle() {
   return null
 }
 
+/**
+ * The Facebook JS SDK sets Facebook cookies — tracking — so the iOS app never
+ * loads it (lib/platform/iosApp).
+ *
+ * 🛑 RENDERED ONLY AFTER MOUNT, BECAUSE THE SERVER CANNOT SEE THE iOS MARKER
+ * (2026-09-28). The gate used to sit in the render: `!isInIosAppClient()`. On
+ * the server that is always false, so the server rendered this <Script>, and
+ * Next.js emits an `afterInteractive` script from the server as
+ * `<link rel="preload" as="script">`. The app then FETCHED the SDK from
+ * connect.facebook.net on `/`, `/privacy` and `/terms` even though it never ran
+ * it — measured with a WebKit probe on the app's User-Agent: one request, `FB`
+ * undefined, no cookies. Waiting for mount keeps it out of the server HTML, so
+ * the only render that decides is one that can read the User-Agent. The web
+ * loses nothing: `afterInteractive` already waited for hydration.
+ */
+function FacebookSdkScript({ appId }: { appId: string }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  if (!mounted || isInIosAppClient()) return null
+  return (
+    <Script
+      src={`https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v25.0&appId=${appId}`}
+      strategy="afterInteractive"
+      crossOrigin="anonymous"
+    />
+  )
+}
+
 export interface SafeGlobalChromeProps {
   fbAppId?: string
 }
@@ -202,23 +232,13 @@ export function SafeGlobalChrome({
   // against React hydration.
   const allowThirdPartyScripts = !shouldBailThirdPartyScripts(pathname)
   const renderFacebookSdk = allowThirdPartyScripts && Boolean(fbAppId)
-  // The SDK sets Facebook cookies — tracking — so the iOS app never loads it
-  // (lib/platform/iosApp). Only the <Script> is gated: it renders no DOM, so
-  // the server/client difference cannot cause a hydration mismatch.
-  const loadFacebookSdk = renderFacebookSdk && !isInIosAppClient()
 
   return (
     <>
       <ServiceWorkerLifecycle />
 
       {renderFacebookSdk ? <div id="fb-root" /> : null}
-      {loadFacebookSdk ? (
-        <Script
-          src={`https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v25.0&appId=${fbAppId}`}
-          strategy="afterInteractive"
-          crossOrigin="anonymous"
-        />
-      ) : null}
+      {renderFacebookSdk ? <FacebookSdkScript appId={fbAppId} /> : null}
 
       {/*
         Mounted here rather than in the root layout so it inherits this component's route
