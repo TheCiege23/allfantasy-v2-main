@@ -60,13 +60,21 @@ export type CoreLeagueContextBarProps = {
   recommendationSlot?: ReactNode
 }
 
-/** `available: null` is "not read yet": a muted chip that claims neither state. */
+/**
+ * `available: null` is "not read yet": a muted chip that claims neither state.
+ *
+ * ⚠ THE CHIP SAYS "League insights", NOT "Decision OS". `docs/CLOSED_BETA_UI_QA_FIXES.md`
+ * already renamed that phrase out of every surface it could reach, because it reads as
+ * internal engineering jargon to a fantasy manager — but that pass covered
+ * `app/league/[leagueId]/**` and never reached `/core`, where this chip renders on EVERY
+ * in-league screen. The internal module name stays `decision-os`; only the label changed.
+ */
 export function CoreLeagueDecisionChip({ available }: { available: boolean | null }) {
   const tone = available === null ? 'muted' : available ? 'decision' : 'muted'
-  const label = available === null ? 'checking' : available ? 'connected' : 'building context'
+  const label = available === null ? 'checking' : available ? 'ready' : 'building'
   return (
     <span className="af-lctx-chip" data-tone={tone}>
-      Decision OS {label}
+      League insights {label}
     </span>
   )
 }

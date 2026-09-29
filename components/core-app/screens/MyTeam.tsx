@@ -570,7 +570,9 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
       </span>
       <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
         tab: 'chimmy', leagueId,
-        prefill: `Should I start ${check.benchName} instead of ${check.starterName} in this league? Use Decision OS to compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
+        // No internal system names in text the user sends as their own question — see
+        // LineupIntelligenceActions for the same correction.
+        prefill: `Should I start ${check.benchName} instead of ${check.starterName} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
       } }))}>Ask Chimmy about this swap</button>
       <span className="af-mt-bench-caveat">Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.</span>
     </div>

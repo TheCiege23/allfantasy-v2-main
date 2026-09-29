@@ -668,11 +668,19 @@ export function LeftChatPanel({
                   <p className="text-[11px] text-white/40">Default — full house, alliances use DMs</p>
                 ) : null}
               </div>
+              {/*
+                🛑 DISABLED, BECAUSE IT DOES NOTHING. This had no `onClick` at all while looking and
+                behaving like a live control: it took hover styling, took focus, and answered a click
+                with silence. Its `aria-label` said "Mute league chat" while only the hover `title`
+                said "coming soon", so a screen-reader user was told it worked and a mouse user was
+                not. The accessible name now carries the same fact the tooltip does.
+              */}
               <button
                 type="button"
-                title="Mute (coming soon)"
-                className="rounded-lg p-1.5 text-white/35 transition hover:bg-white/[0.06] hover:text-white/55"
-                aria-label="Mute league chat"
+                disabled
+                title="Mute — coming soon"
+                className="rounded-lg p-1.5 text-white/35 transition hover:bg-white/[0.06] hover:text-white/55 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/35"
+                aria-label="Mute league chat — coming soon"
               >
                 <VolumeX className="h-4 w-4" />
               </button>

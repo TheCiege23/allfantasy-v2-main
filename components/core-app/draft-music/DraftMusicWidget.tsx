@@ -311,6 +311,13 @@ export function DraftMusicWidget({
 
       {state.kind === 'ready' ? (
         <>
+          {/*
+            ⚠ THE REASON RENDERS EVEN WITH NO TRACK LOADED. This sentence used to be inside
+            `nowPlaying ?`, so the ready-but-empty state showed a full transport — play, skip,
+            scrubber, volume — every control disabled and NOTHING saying why. The controls are
+            honestly disabled (see the transport comment above); the explanation has to be
+            present wherever they are, or "disabled" reads as "broken".
+          */}
           {nowPlaying ? (
             <p className="af-dm-msg">
               Playback controls aren&apos;t wired to Spotify yet, so they&apos;re disabled —{' '}
@@ -323,7 +330,12 @@ export function DraftMusicWidget({
               </a>{' '}
               to hear it.
             </p>
-          ) : null}
+          ) : (
+            <p className="af-dm-msg">
+              Playback controls aren&apos;t wired to Spotify yet, so they&apos;re disabled. Start the
+              queue from Spotify to hear it.
+            </p>
+          )}
           <div className="af-dm-scrub">
             <span className="af-dm-time">0:00</span>
             <div className="af-dm-scrub-track" role="presentation">
