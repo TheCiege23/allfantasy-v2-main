@@ -79,6 +79,7 @@ import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
 import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
+import { loadTrendingAdds } from '@/lib/core-app/trendingAdds'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
@@ -2253,6 +2254,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             : null,
         })
       : []
+  // Most added this week — one aggregate for every viewer, cached 15 minutes (trendingAdds.ts).
+  const trendingAdds = activeKey === 'players' ? await loadTrendingAdds().catch(() => null) : null
 
   /*
    * Game-day home (2026-09-06): your flagged starters across every league,
@@ -4376,6 +4379,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           matchupOutlook={matchupOutlook}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
+          trendingAdds={trendingAdds}
           tradeVisual={playerTradeVisual}
           presence={playerPresence}
           windows={playerWindows.length > 0 ? playerWindows : null}
