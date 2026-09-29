@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /*
  * "Trade for him" — the visual's loader. Prisma, the market-value service and
- * the trade engine are mocked at their module boundaries; the package finder
- * and the team-profile builder are the real ones, so a change in how packages
- * are built or banded shows up here.
+ * the league grader's construction are mocked at their module boundaries; the
+ * package finder, the team-profile builder and `gradeDeal` are the real ones, so
+ * a change in how packages are built, banded or handed to the grader shows up here.
  */
 
 const mockLeagueFindUnique = vi.hoisted(() => vi.fn())
@@ -12,6 +12,8 @@ const mockTeamFindMany = vi.hoisted(() => vi.fn())
 const mockRosterFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
 const mockGetMarketValues = vi.hoisted(() => vi.fn())
+const mockCreateGrader = vi.hoisted(() => vi.fn())
+const mockGrade = vi.hoisted(() => vi.fn())
 const mockRunTradeAnalysis = vi.hoisted(() => vi.fn())
 const mockWeeklyFindFirst = vi.hoisted(() => vi.fn())
 const mockWeeklyFindMany = vi.hoisted(() => vi.fn())
@@ -47,9 +49,21 @@ vi.mock('@/lib/trade-intel/marketValueService', async () => {
   return { ...actual, getMarketValues: mockGetMarketValues }
 })
 
+/*
+ * 🛑 ONLY THE CONSTRUCTION IS MOCKED — `gradeDeal` IS THE REAL ONE, so the unpriceable-asset refusal
+ * and the null-grader answer are exercised, not restated. The old engine stays mocked too: it must
+ * never be called again, and a mock is the only way to prove that.
+ */
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/decision-os/trade/leagueTradeGrader')>(
+    '@/lib/decision-os/trade/leagueTradeGrader',
+  )
+  return { ...actual, createLeagueTradeGrader: mockCreateGrader }
+})
 vi.mock('@/lib/engine/trade', () => ({ runTradeAnalysis: mockRunTradeAnalysis }))
 
-import { getPlayerTradeVisual, marketContextFor } from '@/lib/core-app/playerTradeVisual'
+import { getPlayerTradeVisual, marketContextFor, recommendedPackage } from '@/lib/core-app/playerTradeVisual'
+import type { FairnessBand } from '@/lib/trade-discovery/redraftTradeDiscovery'
 
 const KINCAID = '10236'
 
@@ -102,11 +116,14 @@ const VALUES = {
   byPick: {},
 }
 
-const ENGINE = {
-  verdict: 'accept', verdictConfidence: 'medium',
-  fairness: { score: 71, delta: 120, confidence: 'medium', drivers: [], explanations: ['Values within band', 'Fills your TE hole'] },
-  lineupImpact: { starterDeltaPts: 2.6, note: 'Kincaid starts over Otton' },
-  acceptanceProbability: { base: 0.5, final: 0.62, z: 0, confidence: 'medium', buckets: [], drivers: [] },
+/** A graded view as the one grader returns it — only the fields the card carries are asserted. */
+function gradeView(letter: 'A' | 'B' | 'C' | 'D' | 'F', label: string) {
+  const mirror = { A: 'F', B: 'D', C: 'C', D: 'B', F: 'A' } as const
+  return {
+    graded: true, letter, partnerLetter: mirror[letter], percentDiff: 0, label, sideAdvantage: 'even', action: 'accept',
+    recommendation: `Recommendation for ${letter}`, giveValue: 3100, getValue: 3050, giveMarket: 3100, getMarket: 3000,
+    basis: 'Keeper · 1QB · 2 teams · Half PPR', scoringApplied: true, needApplied: false, needGap: null, lines: [], moves: [],
+  }
 }
 
 beforeEach(() => {
@@ -115,7 +132,9 @@ beforeEach(() => {
   mockRosterFindMany.mockReset().mockResolvedValue([MY_ROSTER, THEIR_ROSTER])
   mockSportsPlayerFindMany.mockReset().mockResolvedValue(PLAYERS)
   mockGetMarketValues.mockReset().mockResolvedValue(VALUES)
-  mockRunTradeAnalysis.mockReset().mockResolvedValue(ENGINE)
+  mockGrade.mockReset().mockResolvedValue(gradeView('C', 'Even'))
+  mockCreateGrader.mockReset().mockResolvedValue({ leagueId: 'L-gang', chart: null, leagueType: null, grade: mockGrade })
+  mockRunTradeAnalysis.mockReset()
   mockWeeklyFindFirst.mockReset().mockResolvedValue(null)
   mockWeeklyFindMany.mockReset().mockResolvedValue([])
 })
@@ -132,7 +151,7 @@ describe('marketContextFor', () => {
 })
 
 describe('getPlayerTradeVisual', () => {
-  it('builds a package for him from your surplus, bands it, and grades it through the engine', async () => {
+  it('builds a package for him from your surplus and grades every package through the ONE grader', async () => {
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     expect(state.available).toBe(true)
     if (!state.available) return
@@ -148,20 +167,81 @@ describe('getPlayerTradeVisual', () => {
       expect(p.give.length).toBeGreaterThan(0)
       for (const a of p.give) expect(['RB']).toContain(a.position)
     }
-    expect(v.grade).toEqual({
+    const oneGrade = {
       available: true,
       data: {
-        verdict: 'accept', verdictConfidence: 'medium', fairnessScore: 71, fairnessDelta: 120,
-        starterDeltaPts: 2.6, lineupNote: 'Kincaid starts over Otton', acceptance: 0.62,
-        explanations: ['Values within band', 'Fills your TE hole'],
+        letter: 'C', partnerLetter: 'C', label: 'Even', recommendation: 'Recommendation for C',
+        giveValue: 3100, getValue: 3050, basis: 'Keeper · 1QB · 2 teams · Half PPR',
       },
-    })
-    // The engine was asked about the recommended package, with both rosters for context.
-    const req = mockRunTradeAnalysis.mock.calls[0][0]
-    expect(req).toMatchObject({ sport: 'NFL', format: 'keeper', leagueId: 'L-gang', numTeams: 2, teamAName: 'Cafe Con Chimmy', teamBName: "Tasha's Titans" })
-    expect(req.assetsB).toEqual([{ type: 'player', player: { id: KINCAID, name: 'Dalton Kincaid', pos: 'TE' } }])
-    expect(req.rosterA).toHaveLength(8)
+    }
+    // The card's headline grade IS the recommended package's grade, and every package carries one.
+    expect(v.grade).toEqual(oneGrade)
+    expect(v.recommended!.grade).toEqual(oneGrade)
+    for (const p of v.packages) expect(p.grade).toEqual(oneGrade)
+
+    // One grader for this league and this viewer, then one grade per package, from your side.
+    expect(mockCreateGrader).toHaveBeenCalledTimes(1)
+    expect(mockCreateGrader).toHaveBeenCalledWith({ leagueId: 'L-gang', userId: 'me' })
+    expect(mockGrade).toHaveBeenCalledTimes(v.packages.length)
+    const call = mockGrade.mock.calls[0][0]
+    expect(call.viewerSide).toBe(true)
+    // Exactly the Trade Center builder's inputs: `{ playerId, name }`.
+    expect(call.get).toEqual([{ kind: 'player', playerId: KINCAID, name: 'Dalton Kincaid' }])
+    for (const a of call.give) expect(a).toMatchObject({ kind: 'player', playerId: expect.any(String), name: expect.any(String) })
+
+    // 🛑 The second engine is never asked, and the finder's own fairness sentence is not printed.
+    expect(mockRunTradeAnalysis).not.toHaveBeenCalled()
+    for (const p of v.packages) {
+      expect(p.reasons.join('\n')).not.toMatch(/Values are close|Slight value edge|Large value gap/)
+    }
     expect(v.values).toMatchObject({ mode: 'redraft', ppr: 0.5, numQbs: 1 })
+  })
+
+  /*
+   * 🛑 THE PACKAGE WE OPEN WITH IS CHOSEN BY THE ONE GRADE. The finder's band called the first
+   * package balanced; if the letter the Trade Center will show calls it an overpay, the card must
+   * not lead with it.
+   */
+  describe('recommendedPackage', () => {
+    const graded = (letter: 'A' | 'B' | 'C' | 'D' | 'F') =>
+      ({ available: true, data: { letter, partnerLetter: 'C', label: '', recommendation: '', giveValue: 0, getValue: 0, basis: '' } }) as const
+    const miss = { available: false, reason: 'no' } as const
+    const pkg = (id: string, fairness: FairnessBand, grade: typeof miss | ReturnType<typeof graded>) => ({ id, fairness, grade })
+
+    it('leads with the first package the one grade calls C or B, over the finder’s own “balanced”', () => {
+      const pkgs = [pkg('a', 'balanced', graded('D')), pkg('b', 'lopsided', graded('F')), pkg('c', 'slight edge partner', graded('B'))]
+      expect(recommendedPackage(pkgs)?.id).toBe('c')
+    })
+
+    it('a graded D is not passed over for an UNGRADED “balanced” one', () => {
+      const pkgs = [pkg('a', 'lopsided', graded('D')), pkg('b', 'balanced', miss)]
+      expect(recommendedPackage(pkgs)?.id).toBe('a')
+    })
+
+    it('only when nothing was graded does the finder’s band choose', () => {
+      const pkgs = [pkg('a', 'lopsided', miss), pkg('b', 'balanced', miss)]
+      expect(recommendedPackage(pkgs)?.id).toBe('b')
+    })
+
+    it('[control] no packages, no recommendation', () => {
+      expect(recommendedPackage([])).toBeNull()
+    })
+  })
+
+  it('a grade the grader withholds is said, with its reason, and no other verdict stands in', async () => {
+    mockGrade.mockResolvedValue({ graded: false, reason: '1 asset has no value on this league’s chart.', basis: null })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected a visual')
+    expect(state.data.recommended).not.toBeNull()
+    expect(state.data.grade).toEqual({ available: false, reason: '1 asset has no value on this league’s chart' })
+  })
+
+  it('a league whose values cannot be loaded withholds every grade (the real gradeDeal on a null grader)', async () => {
+    mockCreateGrader.mockResolvedValue(null)
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected a visual')
+    expect(state.data.grade).toEqual({ available: false, reason: 'This league’s values could not be loaded just now' })
+    expect(mockGrade).not.toHaveBeenCalled()
   })
 
   /* One game is not a season (2026-09-17): the loader carries whether each side's stance is settled. */
@@ -183,13 +263,28 @@ describe('getPlayerTradeVisual', () => {
     expect(state.data.partner.stanceSettled).toBe(true)
   })
 
-  it('keeps the package when the engine fails or runs out of time, and says so', async () => {
-    mockRunTradeAnalysis.mockRejectedValue(new Error('engine down'))
+  it('keeps the package when the grader fails, and says so', async () => {
+    mockCreateGrader.mockRejectedValue(new Error('grader down'))
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     expect(state.available).toBe(true)
     if (!state.available) return
     expect(state.data.recommended).not.toBeNull()
-    expect(state.data.grade).toEqual({ available: false, reason: 'the trade engine could not grade this package' })
+    expect(state.data.grade).toEqual({ available: false, reason: 'this package could not be graded just now' })
+  })
+
+  it('keeps the package when the grader runs out of time, and says so', async () => {
+    vi.useFakeTimers()
+    try {
+      mockCreateGrader.mockReturnValue(new Promise(() => {}))
+      const pending = getPlayerTradeVisual('L-gang', KINCAID, 'me')
+      await vi.advanceTimersByTimeAsync(6_000)
+      const state = await pending
+      if (!state.available) throw new Error('expected a visual')
+      expect(state.data.recommended).not.toBeNull()
+      expect(state.data.grade).toEqual({ available: false, reason: 'the trade grade did not answer in time' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('refuses when he is already yours, unrostered, or you have no team here', async () => {
@@ -205,7 +300,7 @@ describe('getPlayerTradeVisual', () => {
     mockRosterFindMany.mockResolvedValue([MY_ROSTER, THEIR_ROSTER])
     const noTeam = await getPlayerTradeVisual('L-gang', KINCAID, 'stranger')
     expect(noTeam).toMatchObject({ available: false, reason: expect.stringMatching(/claimed team/) })
-    expect(mockRunTradeAnalysis).not.toHaveBeenCalled()
+    expect(mockCreateGrader).not.toHaveBeenCalled()
   })
 
   it('refuses rather than prices when no market values exist for the format', async () => {
@@ -272,10 +367,11 @@ describe('getPlayerTradeVisual', () => {
     if (!state.available) return
     const v = state.data
 
-    // Nothing tradeable is offered, and the engine is not asked to grade a trade that cannot happen.
+    // Nothing tradeable is offered, and the grader is not asked to grade a trade that cannot happen.
     expect(v.packages).toEqual([])
     expect(v.recommended).toBeNull()
     expect(v.grade).toEqual({ available: false, reason: 'this league does not allow trades, so there is no package to grade' })
+    expect(mockCreateGrader).not.toHaveBeenCalled()
 
     const bid = v.bidInstead!
     expect(bid.concept).toBe('guillotine')

@@ -1,15 +1,20 @@
 import Link from 'next/link'
 import type { SectionState } from '@/lib/core-app/leagueHome'
-import type { PlayerTradeVisual, TradeVisualAsset, TradeVisualPackage } from '@/lib/core-app/playerTradeVisual'
+import type { PlayerTradeVisual, TradeVisualAsset, TradeVisualGrade, TradeVisualPackage } from '@/lib/core-app/playerTradeVisual'
 import { platformLabel, tradeLink } from '@/lib/core-app/platformLinks'
 
 /**
  * The trade visual — what it takes to get him, and what we recommend.
  *
- * Give on the left, get on the right, the value totals under each, the
- * fairness band between them, then the engine's verdict. The hand-off to the
- * platform sits inside the card (Guap, 2026-09-02): AllFantasy never sends a
- * trade, so the last thing the card does is point at the screen that can.
+ * Give on the left, get on the right, the value totals under each, then THE
+ * trade grade — the one letter the Trade Center gives the same deal. The hand-off
+ * to the platform sits inside the card (Guap, 2026-09-02): AllFantasy never sends
+ * a trade, so the last thing the card does is point at the screen that can.
+ *
+ * 🛑 ONE VERDICT (2026-09-29). This card used to print the package finder's
+ * fairness band AND a second engine's "Engine: accept/reject", starter points and
+ * acceptance odds — none of them the Trade Center's letter. Only the one grade is
+ * printed now; see `lib/core-app/playerTradeVisual.ts`.
  */
 
 function fmtValue(n: number | null): string {
@@ -17,15 +22,19 @@ function fmtValue(n: number | null): string {
   return n.toLocaleString('en-US')
 }
 
-function fairnessTone(f: TradeVisualPackage['fairness']): 'good' | 'warn' | 'bad' | 'none' {
-  if (f === 'balanced' || f === 'slight edge you') return 'good'
-  if (f === 'slight edge partner') return 'warn'
-  if (f === 'lopsided') return 'bad'
-  return 'none'
+/** Your letter's tone: even or better reads good, a slight overpay warns, a big one is bad. */
+function letterTone(letter: TradeVisualGrade['letter']): 'good' | 'warn' | 'bad' {
+  if (letter === 'A' || letter === 'B' || letter === 'C') return 'good'
+  return letter === 'D' ? 'warn' : 'bad'
 }
 
-function verdictTone(v: 'accept' | 'reject' | 'counter'): 'good' | 'warn' | 'bad' {
-  return v === 'accept' ? 'good' : v === 'counter' ? 'warn' : 'bad'
+function GradeChip({ grade }: { grade: TradeVisualPackage['grade'] }) {
+  if (!grade.available) return null
+  return (
+    <span className="af-chip af-num af-pf-tv-grade" data-tone={letterTone(grade.data.letter)}>
+      {grade.data.letter} · {grade.data.label}
+    </span>
+  )
 }
 
 function AssetList({ assets, empty }: { assets: TradeVisualAsset[]; empty: string }) {
@@ -126,16 +135,14 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
     partnerTeamId: v.partner.externalId,
   })
   const others = v.packages.filter((p) => p.id !== rec?.id)
-  // The package totals own the market-value display. The separate analysis
-  // model can price differently and must not publish a conflicting raw total.
-  const explanations = v.grade.available
-    ? v.grade.data.explanations.filter((reason) => !/market value/i.test(reason))
-    : []
-  const lineupNote = v.grade.available && !/avgVol|A\([^)]*\).*impact|→.*net\s/i.test(v.grade.data.lineupNote)
-    ? v.grade.data.lineupNote : null
+  /*
+   * The recommended package's own grade. `v.grade` is the same object — the loader sets it from the
+   * recommended package — and is the fallback for a payload built before packages carried a grade.
+   */
+  const recGrade: TradeVisualPackage['grade'] = rec?.grade ?? v.grade
 
   return (
-    <section className="af-card af-pf-tv" aria-labelledby="af-pf-tv-h" data-fairness={rec?.fairness ?? 'none'}>
+    <section className="af-card af-pf-tv" aria-labelledby="af-pf-tv-h" data-grade={recGrade.available ? recGrade.data.letter : 'none'}>
       <header className="af-pf-tv-head">
         <span className="af-label">Trade for {last}</span>
         <h3 className="af-pf-h3" id="af-pf-tv-h">
@@ -171,38 +178,23 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
           </div>
 
           <div className="af-pf-tv-verdict">
-            <span className="af-chip af-num af-pf-tv-fairness" data-tone={fairnessTone(rec.fairness)}>
-              {rec.fairness}
-            </span>
-            <span className="af-pf-tv-delta af-num" data-tone={rec.delta >= 0 ? 'good' : 'warn'}>
-              {rec.delta >= 0 ? '+' : ''}
-              {fmtValue(rec.delta)} value to you
-            </span>
-            {v.grade.available ? (
-              <>
-                <span className="af-chip af-num af-pf-tv-engine" data-tone={verdictTone(v.grade.data.verdict)}>
-                  Engine: {v.grade.data.verdict} · {v.grade.data.verdictConfidence}
-                </span>
-                <span className="af-pf-tv-lineup af-num" data-tone={v.grade.data.starterDeltaPts >= 0 ? 'good' : 'bad'}>
-                  {v.grade.data.starterDeltaPts >= 0 ? '+' : ''}
-                  {v.grade.data.starterDeltaPts.toFixed(1)} starter pts
-                </span>
-                {v.grade.data.acceptance != null ? (
-                  <span className="af-pf-tv-accept af-num">{Math.round(v.grade.data.acceptance * 100)}% likely to accept</span>
-                ) : null}
-              </>
+            {recGrade.available ? (
+              <GradeChip grade={recGrade} />
             ) : (
-              <span className="af-pf-nothing">Engine grade: {v.grade.reason}</span>
+              <span className="af-pf-nothing">Grade: {recGrade.reason}</span>
             )}
+            <span className="af-pf-tv-delta af-num">
+              {rec.delta >= 0 ? '+' : ''}
+              {fmtValue(rec.delta)} market value to you
+            </span>
           </div>
 
-          {rec.reasons.length > 0 || explanations.length > 0 || lineupNote ? (
+          {rec.reasons.length > 0 || recGrade.available ? (
             <ul className="af-pf-tv-reasons">
+              {recGrade.available ? <li>{recGrade.data.recommendation}</li> : null}
               {rec.reasons.map((r) => (
                 <li key={r}>{r}</li>
               ))}
-              {explanations.map((r) => <li key={r}>{r}</li>)}
-              {lineupNote ? <li>{lineupNote}</li> : null}
             </ul>
           ) : null}
 
@@ -215,9 +207,7 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
                     <span className="af-pf-tv-other-text">
                       {p.give.map((a) => a.name).join(' + ')} for {p.receive.map((a) => a.name).join(' + ')}
                     </span>
-                    <span className="af-chip af-num af-pf-tv-fairness" data-tone={fairnessTone(p.fairness)}>
-                      {p.fairness}
-                    </span>
+                    {p.grade ? <GradeChip grade={p.grade} /> : null}
                   </li>
                 ))}
               </ul>

@@ -84,8 +84,8 @@ export interface TradeTargetDeps {
 
 /*
  * The package the finder would open with, graded by the one trade engine from your side (design step 7,
- * 2026-09-27) — the letter every trade surface gives it, saved as a receipt. The player card beside this
- * still shows its own engine's verdict; Chimmy's answer no longer rests on it.
+ * 2026-09-27) — the letter every trade surface gives it, saved as a receipt. Since 2026-09-29 the player
+ * card grades the same package through the same grader (without a receipt), so the two show one letter.
  */
 export const defaultGradePackage: NonNullable<TradeTargetDeps['gradePackage']> = async ({ leagueId, userId, give, get }) => {
   const r = await evaluateTrade({ surface: 'chimmy-target', leagueId, userId, give, get, viewerSide: true })
