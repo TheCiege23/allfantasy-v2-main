@@ -126,9 +126,14 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
 
   const copy = COPY[variant]
 
+  /*
+   * Every root carries `data-hide-in-ios-app`: this is WEB push, and inside the iOS app (a
+   * WKWebView, no Push API) its only reachable branch told the user to "tap Share, then Add to
+   * Home Screen" — install the website, from inside the App Store app. See EnableWebPushCard.
+   */
   if (enabled) {
     return (
-      <div className={['af-pushask', className].filter(Boolean).join(' ')} role="status" data-state="on">
+      <div className={['af-pushask', className].filter(Boolean).join(' ')} data-hide-in-ios-app role="status" data-state="on">
         <p className="af-pushask-text">{copy.done}</p>
       </div>
     )
@@ -138,7 +143,7 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
   if (!supported) {
     if (!homeScreen) return null
     return (
-      <div className={['af-pushask', className].filter(Boolean).join(' ')} role="group" aria-label="Phone alerts">
+      <div className={['af-pushask', className].filter(Boolean).join(' ')} data-hide-in-ios-app role="group" aria-label="Phone alerts">
         <p className="af-pushask-text">
           On iPhone, alerts need AllFantasy on your Home Screen: tap Share, then <strong>Add to Home Screen</strong>, and open
           it from there.
@@ -155,14 +160,14 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
   if (permission !== 'default') {
     if (!error) return null
     return (
-      <div className={['af-pushask', className].filter(Boolean).join(' ')} role="status">
+      <div className={['af-pushask', className].filter(Boolean).join(' ')} data-hide-in-ios-app role="status">
         <p className="af-pushask-error">{error}</p>
       </div>
     )
   }
 
   return (
-    <div className={['af-pushask', className].filter(Boolean).join(' ')} role="group" aria-label="Phone alerts">
+    <div className={['af-pushask', className].filter(Boolean).join(' ')} data-hide-in-ios-app role="group" aria-label="Phone alerts">
       <p className="af-pushask-text">{copy.ask}</p>
       <div className="af-pushask-actions">
         <button

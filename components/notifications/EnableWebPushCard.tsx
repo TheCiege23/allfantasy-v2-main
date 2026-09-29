@@ -28,6 +28,14 @@ function isIosSafariWithoutStandalone(): boolean {
   return standalone !== true && !window.matchMedia('(display-mode: standalone)').matches
 }
 
+/*
+ * ⚠ EVERY ROOT BELOW CARRIES `data-hide-in-ios-app`. The iOS app is a WKWebView, which has no
+ * Push API and is not a Home Screen web app, so this card fell into its "iPhone Safari, not
+ * installed" branch and told an App Store user to "Tap the Share button, choose Add to Home
+ * Screen" — installing the website, from inside the app. Measured on the App Review account,
+ * 2026-09-29. The attribute is hidden by the pre-paint `html[data-ios-app]` rule (globals.css),
+ * so the web is unchanged and there is no flash in the app.
+ */
 export function EnableWebPushCard({ className }: { className?: string }) {
   const [vapidKey, setVapidKey] = useState<string | null>(null)
   const [configured, setConfigured] = useState<boolean | null>(null)
@@ -58,7 +66,7 @@ export function EnableWebPushCard({ className }: { className?: string }) {
   // Server-side push isn't configured. Saying so plainly beats a button that cannot work.
   if (configured === false) {
     return (
-      <div className={className}>
+      <div className={className} data-hide-in-ios-app>
         <p className="text-sm text-[var(--af-muted,#9aa4b2)]">
           Push alerts aren&apos;t available yet — the server isn&apos;t configured to send them.
         </p>
@@ -83,7 +91,7 @@ export function EnableWebPushCard({ className }: { className?: string }) {
      */
     if (needsHomeScreen) {
       return (
-        <div className={className}>
+        <div className={className} data-hide-in-ios-app>
           <p className="text-sm font-semibold">Game-day alerts</p>
           <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">
             Add AllFantasy to your Home Screen first — iPhone only allows notifications for
@@ -94,7 +102,7 @@ export function EnableWebPushCard({ className }: { className?: string }) {
       )
     }
     return (
-      <div className={className}>
+      <div className={className} data-hide-in-ios-app>
         <p className="text-sm text-[var(--af-muted,#9aa4b2)]">
           This browser doesn&apos;t support web push notifications.
         </p>
@@ -103,7 +111,7 @@ export function EnableWebPushCard({ className }: { className?: string }) {
   }
 
   return (
-    <div className={className}>
+    <div className={className} data-hide-in-ios-app>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold">Game-day alerts</p>
