@@ -163,7 +163,13 @@ function OAuthGrid({ callbackUrl }: { callbackUrl: string }) {
   const [pending, setPending] = useState<SocialProvider | null>(null)
 
   return (
-    <div className="af-au-oauth">
+    /*
+     * Hidden inside the iOS app (globals.css, html[data-ios-app]): App Store guideline 4.8
+     * requires Sign in with Apple beside any third-party sign-in, and Google refuses OAuth in
+     * an embedded WebView anyway. /login and /signup render THIS grid, not NocturneOAuthGrid —
+     * marking only the older components let every social button through to App Review.
+     */
+    <div className="af-au-oauth" data-hide-in-ios-app>
       <div className="af-au-divider">
         <span className="af-label">Or continue with</span>
       </div>
