@@ -241,4 +241,33 @@ describe("World Cup bracket creation fixture readiness", () => {
     })).rejects.toThrow("maximum number of uses")
     expect(prismaMocks.transaction).not.toHaveBeenCalled()
   })
+
+  /* The participant name is PERSISTED and shown to the whole pool — it must never come from an email. */
+  it("never stores an email prefix as the owner's pool name", async () => {
+    prismaMocks.appUserFindUnique.mockResolvedValue({
+      displayName: null,
+      username: null,
+      email: "secret.person@example.com",
+    })
+
+    await createWorldCupBracketChallenge({
+      user: { id: "user-1", email: "secret.person@example.com" },
+      name: "World Cup",
+    })
+
+    const stored = prismaMocks.participantCreate.mock.calls[0]?.[0]?.data?.displayName
+    expect(stored).toBe("Bracket Manager")
+    expect(JSON.stringify(prismaMocks.participantCreate.mock.calls)).not.toContain("secret.person")
+  })
+
+  it("refuses a session name that is itself an email address", async () => {
+    prismaMocks.appUserFindUnique.mockResolvedValue({ displayName: null, username: "goalhanger", email: "secret.person@example.com" })
+
+    await createWorldCupBracketChallenge({
+      user: { id: "user-1", name: "secret.person@example.com", email: "secret.person@example.com" },
+      name: "World Cup",
+    })
+
+    expect(prismaMocks.participantCreate.mock.calls[0]?.[0]?.data?.displayName).toBe("goalhanger")
+  })
 })

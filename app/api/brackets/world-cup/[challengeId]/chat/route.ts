@@ -165,7 +165,6 @@ type RawWorldCupChatEvent = {
   user?: {
     displayName?: string | null
     username?: string | null
-    email?: string | null
     avatarUrl?: string | null
   } | null
 }
@@ -183,7 +182,6 @@ type WorldCupChatMemberRow = {
     id: string
     username?: string | null
     displayName?: string | null
-    email?: string | null
     avatarUrl?: string | null
   } | null
 }
@@ -427,11 +425,16 @@ function serializeChatMessage(row: RawWorldCupChatEvent, requesterUserId: string
   const visibility = typeof metadata.visibility === "string" ? metadata.visibility : "public"
   const targetUserId = typeof metadata.targetUserId === "string" ? metadata.targetUserId : null
   const authorNameOverride = typeof metadata.authorName === "string" ? metadata.authorName : null
+  /*
+   * 🛑 NEVER A NAME FROM AN EMAIL. This fell back to the part before the "@" of the author's email,
+   * and the result went to every member of the pool — for anyone with no display name or username,
+   * their email prefix was their name in chat (found 2026-09-29). The bracket pool chat route found
+   * and fixed the same leak on 2026-09-25. Email is no longer even selected for these rows.
+   */
   const displayName =
     authorNameOverride ||
     row.user?.displayName ||
     row.user?.username ||
-    row.user?.email?.split("@")[0] ||
     (row.isAiGenerated ? "Chimmy" : null) ||
     (row.userId === requesterUserId ? "You" : "Pool member")
 
@@ -484,7 +487,6 @@ async function listChatMessages(challengeId: string, requesterUserId: string) {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -691,7 +693,6 @@ async function createWorldCupPoll(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -722,7 +723,6 @@ async function voteWorldCupPoll(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -775,7 +775,6 @@ async function voteWorldCupPoll(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -804,14 +803,13 @@ async function resolveMentionedUsers(challengeId: string, names: string[]) {
           id: true,
           username: true,
           displayName: true,
-          email: true,
         },
       },
     },
   }) as Array<{
     userId: string
     displayName: string
-    user?: { id: string; username?: string | null; displayName?: string | null; email?: string | null } | null
+    user?: { id: string; username?: string | null; displayName?: string | null } | null
   }>
 
   return participants.map((participant) => ({
@@ -831,7 +829,6 @@ async function listWorldCupChatMembers(challengeId: string, requesterUserId: str
           id: true,
           username: true,
           displayName: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -841,11 +838,11 @@ async function listWorldCupChatMembers(challengeId: string, requesterUserId: str
   return participants.map((participant) => {
     const user = participant.user
     const username = user?.username ?? null
+    /* Never a name from an email — see serializeChatMessage. This list goes to every member. */
     const label =
       user?.displayName ||
       username ||
       participant.displayName ||
-      user?.email?.split("@")[0] ||
       "Pool member"
     return {
       userId: participant.userId,
@@ -995,7 +992,6 @@ async function createPrivateChimmyResponse(input: {
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
@@ -1273,7 +1269,6 @@ export async function POST(
         select: {
           displayName: true,
           username: true,
-          email: true,
           avatarUrl: true,
         },
       },
