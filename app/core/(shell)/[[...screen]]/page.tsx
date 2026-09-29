@@ -737,10 +737,11 @@ export default async function AfCorePage({
     : null
 
   /*
-   * ⚠ A FAILED MEMBERSHIP READ IS NOT "NOT YOUR LEAGUE". Both failures above degrade to an empty
-   * list, and the gate below used to read that as proof and redirect the viewer out of their own
-   * league. The redirect fires inside `app/core/loading.tsx`'s streamed boundary, so it also
-   * reached the browser as React #419 (the digest is NEXT_REDIRECT, and Next 14 reports it).
+   * ⚠ A FAILED MEMBERSHIP READ IS NOT "NOT YOUR LEAGUE". A thrown list read and a failed query
+   * inside it (`membershipReadFailed`) both give an empty list, and the gate below used to read
+   * that as proof and redirect the viewer out of their own league. The redirect fires inside
+   * `app/core/loading.tsx`'s streamed boundary, so it also reached the browser as React #419 (the
+   * digest is NEXT_REDIRECT, and Next 14 reports it).
    * Measured 2026-09-29: about half of the week's #419 events on /core were followed within a
    * second by a pageview of the same screen without `?league=`, for leagues that the same person
    * had opened a minute earlier. (The other half are the signed-out redirect to /login above.)
