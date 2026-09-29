@@ -44,10 +44,17 @@ import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 
 const KINCAID = '10236'
 
+/*
+ * A SLEEPER league, because these rosters hold Sleeper ids (10236 is Kincaid in Sleeper's space).
+ * This fixture used to say `espn` while holding Sleeper ids, which only worked while an ESPN id the
+ * identity map could not translate was KEPT and read as a Sleeper id — the collision rosterIdSpace
+ * now forbids (ESPN 12483 is Matthew Stafford; Sleeper 12483 is Jack Bech). The ESPN cases below
+ * say `espn` explicitly and translate through the identity chain.
+ */
 const LEAGUE = {
   id: 'L-gang',
   name: 'Gridiron Gang',
-  platform: 'espn',
+  platform: 'sleeper',
   platformLeagueId: '777',
   season: 2026,
   leagueType: 'Keeper',
@@ -116,7 +123,7 @@ describe('getPlayerLeagueView', () => {
     // Both platform team ids travel with the view — they are what a trade deep link needs.
     expect(view?.yourTeam).toEqual({ teamName: 'Cafe Con Chimmy', externalId: '2' })
     expect(view?.leagueName).toBe('Gridiron Gang')
-    expect(view?.platform).toBe('espn')
+    expect(view?.platform).toBe('sleeper')
   })
 
   /* Priced under THIS league's rules: 6 rec × 0.5 + 60 yds × 0.1 + 1 TD × 6. */
@@ -205,6 +212,7 @@ describe('getPlayerLeagueView', () => {
    * player table; a Sleeper-id miss on them is not a free agent.
    */
   it('names the holder on an ESPN roster once its ids are translated through the identity chain', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'espn' })
     mockRosterFindMany.mockResolvedValue([
       { platformUserId: 'espn-1', playerData: { players: ['4430737', '2577417'], starters: ['4430737'] } },
       { platformUserId: 'espn-2', playerData: { players: ['3139477'], starters: ['3139477'] } },
@@ -218,7 +226,14 @@ describe('getPlayerLeagueView', () => {
     if (view?.ownership.kind === 'other') expect(view.ownership.slot).toBe('STARTER')
   })
 
+  /*
+   * An ESPN league whose ids the identity chain cannot translate. They are DROPPED rather than read as
+   * Sleeper ids (the collision rosterIdSpace forbids), so nothing is sampled — and an empty sample is
+   * still "cannot tell", never "free agent". This pinned `sampled: 3` while the untranslated ids were
+   * kept and sampled as Sleeper ids.
+   */
   it('refuses to call him unrostered when the rosters do not speak Sleeper ids', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'espn' })
     mockRosterFindMany.mockResolvedValue([
       { platformUserId: 'u-tasha', playerData: { players: ['3139477', '4241457'], starters: ['3139477'] } },
       { platformUserId: 'u-me', playerData: { players: ['4362628'], starters: ['4362628'] } },
@@ -227,7 +242,17 @@ describe('getPlayerLeagueView', () => {
     const view = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
     expect(view?.ownership.kind).toBe('unknown')
     if (view?.ownership.kind === 'unknown') expect(view.ownership.reason).toMatch(/ESPN player ids/)
-    expect(view?.coverage).toMatchObject({ sampled: 3, matched: 0, usable: false })
+    expect(view?.coverage).toMatchObject({ sampled: 0, matched: 0, usable: false })
+  })
+
+  it('an untranslatable ESPN id that equals a Sleeper id is NOT a hit — it is somebody else', async () => {
+    // ESPN 10236 on this roster, no identity row: read raw it would "be" Sleeper's 10236 (Kincaid).
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'espn' })
+    mockRosterFindMany.mockResolvedValue([
+      { platformUserId: 'u-tasha', playerData: { players: [KINCAID], starters: [KINCAID] } },
+    ])
+    const view = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(view?.ownership.kind).toBe('unknown')
   })
 
   it('a direct hit is still a hit, even on rosters that mostly do not resolve', async () => {
