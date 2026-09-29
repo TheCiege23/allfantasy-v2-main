@@ -28,6 +28,11 @@ const ROOT_FOR: Suggestion = { text: 'Who should I root against this week?', rep
 const INJURIES: Suggestion = { text: "Who's hurt on my teams?", repeats: ['get_my_injuries'] }
 const FIND_TRADE: Suggestion = { text: 'Find me a trade that fills my weakest spot', repeats: ['find_trade_ideas'] }
 const GRADE_IDEA: Suggestion = { text: 'Grade the first trade idea for my lineup', repeats: ['evaluate_trade'] }
+/*
+ * `get_faab_bid_plan` (2026-09-28) had no row here, so a bid plan fell back to the generic chips and
+ * the one question a waiver answer leads to — "so how much do I bid?" — was never offered.
+ */
+const FAAB_PLAN: Suggestion = { text: 'How much FAAB should I bid this week?', repeats: ['get_faab_bid_plan'] }
 
 const ACROSS_ODDS: Suggestion = { text: 'How are my playoff odds across all my leagues?', repeats: ['get_playoff_outlook'] }
 const ACROSS_CLOSE: Suggestion = { text: 'Which of my matchups are coin flips this week?', repeats: ['get_my_matchup'] }
@@ -40,8 +45,10 @@ const AFTER: Record<string, readonly Suggestion[]> = {
   find_trade_ideas: [GRADE_IDEA, LINEUP, PLAYOFFS],
   get_league_trade_activity: [COUNTER, LINEUP, PLAYOFFS],
   get_player_value: [COUNTER, LINEUP, PLAYOFFS],
-  evaluate_waiver_move: [LINEUP, MATCHUP, PLAYOFFS],
-  get_available_players: [LINEUP, MATCHUP, PLAYOFFS],
+  evaluate_waiver_move: [FAAB_PLAN, LINEUP, MATCHUP],
+  get_available_players: [FAAB_PLAN, LINEUP, MATCHUP],
+  /* After a bid plan: the lineup it was measured against, then the week it is spent in. */
+  get_faab_bid_plan: [LINEUP, MATCHUP, INJURIES],
   get_playoff_outlook: [RAISE_ODDS, ROOT_FOR, LINEUP],
   get_my_matchup: [LINEUP, PLAYOFFS, INJURIES],
   get_my_injuries: [LINEUP, PICKUP, MATCHUP],
@@ -70,7 +77,8 @@ export function suggestChimmyFollowUps(args: { toolsUsed: readonly string[]; lea
     ? candidates
     : candidates.map((s) => (s === PLAYOFFS ? ACROSS_ODDS : s === MATCHUP ? ACROSS_CLOSE : s)).filter(
         (s) =>
-          s !== LINEUP && s !== PICKUP && s !== COUNTER && s !== RAISE_ODDS && s !== ROOT_FOR && s !== FIND_TRADE && s !== GRADE_IDEA,
+          s !== LINEUP && s !== PICKUP && s !== COUNTER && s !== RAISE_ODDS && s !== ROOT_FOR && s !== FIND_TRADE && s !== GRADE_IDEA &&
+          s !== FAAB_PLAN,
       )
   const out: string[] = []
   for (const s of [...pool, ...(args.leagueScoped ? DEFAULT_SCOPED : DEFAULT_GLOBAL)]) {

@@ -45,14 +45,19 @@ describe('Chimmy follow-up chips', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  function ask(question: string) {
+  /*
+   * `pageLeagueId`: with none in scope, a grounded answer ADOPTS its league and the drawer remounts
+   * the conversation under it — so a test of what renders under a grounded answer asks from inside
+   * the league, as a real in-league question does.
+   */
+  function ask(question: string, pageLeagueId: string | null = null) {
     render(
       <CommsDrawer
         open
         onClose={vi.fn()}
         mode="overlay"
         leagues={[{ id: 'l0', name: 'KBFL', platform: 'sleeper' }] as never}
-        pageLeagueId={null}
+        pageLeagueId={pageLeagueId}
         chimmyTokenCost={10}
         initialTab="chimmy"
         userId="u1"
@@ -75,6 +80,36 @@ describe('Chimmy follow-up chips', () => {
     const box = ask('Set my best lineup for this week')
     fireEvent.click(await screen.findByRole('button', { name: /What are my playoff odds\?/ }))
     expect(box.value).toBe('What are my playoff odds?')
+    expect(chimmyCalls(fetchMock)).toHaveLength(1)
+  })
+
+  /*
+   * The grounding footer in the real drawer (2026-09-28): relative time, amber when stale, and a
+   * one-league refresh that posts to the refresh route — and never to /api/chat/chimmy.
+   */
+  it('shows how old the league data is, and offers a one-league refresh when it is stale', async () => {
+    const synced = new Date(Date.now() - 5 * 3_600_000).toISOString()
+    fetchMock.mockImplementation(async (url: unknown) => {
+      if (String(url) === '/api/chat/chimmy') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            response: 'Hold your FAAB this week.',
+            meta: { leagueGrounding: { grounded: true, leagueId: 'l0', leagueName: 'KBFL', lastSyncedAt: synced } },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ refreshed: 1, busy: 0 }) }
+    })
+    ask('should I spend FAAB this week?', 'l0')
+    const line = await screen.findByText(/Read from KBFL · synced 5 hr ago/)
+    expect(line.closest('.af-cm-grounding')!.getAttribute('data-stale')).toBe('true')
+    // The refresh appears once the answer has settled (the panel is no longer busy).
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh league data' }))
+    expect(await screen.findByText(/refreshed — ask again to use the new data/)).toBeTruthy()
+    const refreshCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/core/players/refresh-lineups')
+    expect(JSON.parse(refreshCall![1].body)).toEqual({ leagueId: 'l0' })
     expect(chimmyCalls(fetchMock)).toHaveLength(1)
   })
 
