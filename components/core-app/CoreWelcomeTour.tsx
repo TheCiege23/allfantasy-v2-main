@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useEffect, useState } from 'react'
 import '@/components/core-app/core-welcome-tour.css'
 
@@ -33,7 +34,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       title: leagueCount > 0 ? `${leagueCount} ${leagueCount === 1 ? 'league is' : 'leagues are'} connected` : 'Bring your leagues together',
       body: leagueCount > 0
         ? 'Use the Leagues rail to move between them. Core keeps an all-leagues view until you choose one.'
-        : 'Import from Sleeper, ESPN, Yahoo, Fantrax, MFL or another supported source. AllFantasy reads the league and leaves the original platform unchanged.',
+        : `Import from ${availableImportPlatformsPhrase()}. AllFantasy reads the league and leaves the original platform unchanged.`,
       action: leagueCount > 0 ? undefined : { label: 'Import a league', href: '/import' },
     },
     {

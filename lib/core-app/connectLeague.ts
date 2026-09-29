@@ -12,6 +12,8 @@
  * Pure: the reads live in connectLeagueReads.ts; the card in components/core-app/home.
  */
 
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
+
 export type ConnectLeagueStep =
   /** We know their team. Say nothing. */
   | 'none'
@@ -73,7 +75,7 @@ export function connectLeagueCopy(step: Exclude<ConnectLeagueStep, 'none'>): Con
     case 'connect':
       return {
         title: 'Connect your league. It takes about a minute.',
-        body: "Sleeper, ESPN, Fantrax, MFL or Fleaflicker. Once I can see your team I'll check your lineup before kickoff and flag the best pickup on your wire every Tuesday. Read-only: nothing changes on your platform.",
+        body: `${availableImportPlatformsPhrase()}. Once I can see your team I'll check your lineup before kickoff and flag the best pickup on your wire every Tuesday. Read-only: nothing changes on your platform.`,
         cta: 'Connect a league',
       }
   }

@@ -35,7 +35,7 @@ vi.mock('next/link', () => ({
 }))
 
 import ImportV4 from '@/components/core-app/screens/ImportV4'
-import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
+import { IMPORT_PROVIDER_UI_OPTIONS, availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 
 /*
  * ⚠ THE ESPN PANEL FETCHES ITS OWN STATUS ON MOUNT, and without a stub that promise
@@ -170,7 +170,8 @@ describe('6a rule 4 — the READ-ONLY chip and its explainer ride every step', (
     const opener = screen.getByRole('button', { name: /what read-only means/i })
     fireEvent.click(opener)
     expect(screen.getByRole('tooltip')).toBeTruthy()
-    expect(screen.getByText(/never changes anything on Sleeper, ESPN or Yahoo/i)).toBeTruthy()
+    // The platforms named are the ones importable today (availableImportPlatformsPhrase), not a hardcoded list.
+    expect(screen.getByText(new RegExp(`never changes anything on ${availableImportPlatformsPhrase()}`, 'i'))).toBeTruthy()
   })
 
   /**
@@ -314,6 +315,8 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
       isImportProviderAvailable: (p: string) => p === 'sleeper',
       supportsImportProviderDiscovery: (p: string) => p === 'sleeper',
       getImportProviderSupportedSports: () => ['NFL'],
+      // Matches this mock's availability: only Sleeper is importable.
+      availableImportPlatformsPhrase: () => 'Sleeper',
     }))
   })
 

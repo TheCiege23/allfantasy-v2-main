@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { readableApiError } from '@/lib/http/readableApiError'
 import type { WaiverOversight as WaiverOversightData } from '@/lib/core-app/commissionerWaivers'
 import '@/components/core-app/af-commish-waivers.css'
 
@@ -46,9 +47,10 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      const body = (await res.json().catch(() => null)) as { processed?: number; error?: string } | null
+      const body = (await res.json().catch(() => null)) as { processed?: number; error?: string; message?: string } | null
       if (!res.ok) {
-        setNote({ tone: 'bad', text: body?.error ? `Not run: ${body.error}.` : 'Not run. Try again in a moment.' })
+        const why = readableApiError(body, '')
+        setNote({ tone: 'bad', text: why ? `Not run: ${why.replace(/\.$/, '')}.` : 'Not run. Try again in a moment.' })
         return
       }
       const n = body?.processed ?? 0

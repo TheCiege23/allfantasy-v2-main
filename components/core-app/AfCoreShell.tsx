@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
@@ -2001,7 +2002,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         <div className="af-nav-foot">
         <div className="af-import-cta">
           <div className="af-import-title">Import a league</div>
-          <p className="af-import-body">Sleeper, ESPN or Yahoo. Read-only, takes about a minute.</p>
+          <p className="af-import-body">{availableImportPlatformsPhrase()}. Read-only, takes about a minute.</p>
           <Link href="/import" className="af-btn af-import-btn">
             Connect a platform
           </Link>
@@ -2124,7 +2125,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               Read-only
               <HelpDot
                 title="Read-only by design"
-                body="AllFantasy never changes anything on Sleeper, ESPN or Yahoo. We read your leagues and point you to the exact league and screen where you make the change."
+                body={`AllFantasy never changes anything on ${availableImportPlatformsPhrase()}. We read your leagues and point you to the exact league and screen where you make the change.`}
               />
             </span>
 

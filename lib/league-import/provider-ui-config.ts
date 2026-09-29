@@ -104,6 +104,24 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   { provider: 'fleaflicker', label: 'Fleaflicker', available: true, supportedSports: ['NFL'] },
 ];
 
+/** The shortest name a sentence can use for a platform (the option labels are for menus). */
+const SHORT_LABEL: Partial<Record<ImportProvider, string>> = { mfl: 'MFL' };
+
+/**
+ * "Sleeper, ESPN, Fantrax, MFL or Fleaflicker" — every platform a league can be imported from TODAY,
+ * read from `available` above.
+ *
+ * 🛑 ONE LIST, BECAUSE THE COPIES DISAGREED (2026-09-29 UI audit). The nav card and the read-only tip
+ * said "Sleeper, ESPN or Yahoo", the welcome tour named Yahoo too, and the home card named Fantrax,
+ * MFL and Fleaflicker instead — while Yahoo is unavailable ("Coming soon" on the importer). Every
+ * sentence that names platforms reads this, so flipping a platform's `available` updates them all.
+ */
+export function availableImportPlatformsPhrase(): string {
+  const names = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).map((o) => SHORT_LABEL[o.provider] ?? o.label);
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+}
+
 export function getImportProviderLabel(provider: ImportProvider): string {
   return IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.label ?? provider;
 }
