@@ -208,7 +208,10 @@ export function LandingV4({
             Commissioner is a real tier with its own described feature list.
           */}
           <a href="#how">{c.nav.how}</a>
-          <a href="#pricing">{c.nav.pricing}</a>
+          {/* Out of the iOS app with the #pricing section it scrolls to. */}
+          <a href="#pricing" data-hide-in-ios-app>
+            {c.nav.pricing}
+          </a>
           <Link href="/pricing">{c.nav.forCommissioners}</Link>
         </div>
 
@@ -256,7 +259,9 @@ export function LandingV4({
             </summary>
             <div className="af-lp-mobile-panel">
               <a href="#how">{c.nav.how}</a>
-              <a href="#pricing">{c.nav.pricing}</a>
+              <a href="#pricing" data-hide-in-ios-app>
+                {c.nav.pricing}
+              </a>
               <Link href="/pricing">{c.nav.forCommissioners}</Link>
               <Link href="/core/partners" className="af-lp-partners">
                 {c.nav.partners}
@@ -409,7 +414,8 @@ export function LandingV4({
       </section>
 
       {/* ── Pricing line ────────────────────────────────────────────── */}
-      <section className="af-lp-pricing" id="pricing">
+      {/* Not in the iOS app: it quotes prices for a purchase the app does not sell (3.1.1). */}
+      <section className="af-lp-pricing" id="pricing" data-hide-in-ios-app>
         <div className="af-lp-pricing-inner">
           <div className="af-lp-pricing-copy">
             <h2 className="af-lp-h2">{c.pricing.h2}</h2>
@@ -440,7 +446,7 @@ export function LandingV4({
         */}
         <div className="af-lp-faq-grid">
           {c.faq.items.map((f) => (
-            <article key={f.q} className="af-lp-faq-item">
+            <article key={f.q} className="af-lp-faq-item" data-hide-in-ios-app={f.aboutPrice ? '' : undefined}>
               <h3 className="af-lp-faq-q">{f.q}</h3>
               <p className="af-lp-faq-a">{f.a}</p>
             </article>

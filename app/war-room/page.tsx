@@ -242,8 +242,9 @@ export default function WarRoomPage() {
             </a>
           </div>
 
+          {/* data-hide-in-ios-app: a price is a purchase prompt the app cannot honour (3.1.1). */}
           {legacy?.monthly ? (
-            <p className="mt-5 text-[13px] text-white/55">
+            <p className="mt-5 text-[13px] text-white/55" data-hide-in-ios-app>
               AF Legacy is {formatUsd(legacy.monthly.amountUsd)} a month.{' '}
               <Link
                 href={LEGACY_CHECKOUT_PATH}
@@ -352,6 +353,7 @@ export default function WarRoomPage() {
             id="get-legacy"
             className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.05] p-6 sm:p-8"
             data-testid="war-room-buy-section"
+            data-hide-in-ios-app
           >
             <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-cyan-300/70">
               The Plan

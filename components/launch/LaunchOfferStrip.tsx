@@ -38,8 +38,11 @@ export function LaunchOfferStrip({
 
   const cls = ['af-launch-strip', className].filter(Boolean).join(' ')
   return (
+    // data-hide-in-ios-app: founding pricing is "applied at checkout" — a checkout the iOS app does
+    // not have (App Store 3.1.1). /signup and the /core home both render inside the app.
     <section
       className={cls}
+      data-hide-in-ios-app
       data-surface={surface}
       data-counting={counting ? 'true' : 'false'}
       aria-label={counting ? copy.title : 'Founding-member pricing'}
