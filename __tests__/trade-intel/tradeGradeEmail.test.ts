@@ -297,10 +297,21 @@ describe('why these letters', () => {
     )
   })
 
-  it('speaks to the reader as "You" on their own side', () => {
+  it('speaks to the reader as "you" on their own side — capitalised only when it opens a sentence', () => {
     const g = graded({ letter: 'C', partnerLetter: 'C', percentDiff: -2, giveValue: 3326, getValue: 3259 })
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g, viewerOwnerId: 'u2' })
-    expect(why(html)![1]).toMatch(/^Both sides got a C: You received 3,326 and managerOne received 3,259/)
+    expect(why(html)![1]).toMatch(/^Both sides got a C: you received 3,326 and managerOne received 3,259/)
+  })
+
+  // Pirate League twinty, 2026-09-29: CrazyFisher's copy read "Hibboisthebest got an A and You an F".
+  it('the reader on the losing side is "you" mid-sentence', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded(), viewerOwnerId: 'u2' })
+    expect(why(html)![1]).toMatch(/^managerOne got an A and you an F: managerOne received 8,000/)
+  })
+
+  it('the reader on the winning side opens the sentence as "You", then "you"', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded(), viewerOwnerId: 'u1' })
+    expect(why(html)![1]).toMatch(/^You got an A and managerTwo an F: you received 8,000/)
   })
 
   it('a withheld or missing grade explains nothing — there is no letter to explain', () => {
