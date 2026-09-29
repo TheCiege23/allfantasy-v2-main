@@ -17,6 +17,7 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { REDRAFT_SEASON_STATUS, SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
+import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
@@ -184,6 +185,7 @@ async function runRedraftReconciliation() {
 
   let reconciled = 0
   let skippedUnresolvedWeek = 0
+  let skippedSealedWeek = 0
   let failed = 0
   let matchupsRecalculated = 0
   let weeksFinalized = 0
@@ -259,15 +261,32 @@ async function runRedraftReconciliation() {
       continue
     }
     try {
-      const summary = await syncPlayerWeeklyScoresForRedraftSeason({
-        seasonId: season.id,
-        week: resolved.fantasyWeek,
-        actorId: 'system:score-sync',
-      })
-      const matchups = await recalculateMatchupsForSeasonWeek(summary.seasonId, summary.week)
-      await updateStandings(summary.seasonId, summary.week)
-      matchupsRecalculated += matchups.updated
-      reconciled += 1
+      /*
+       * 🛑 A SEALED WEEK IS NOT RECONCILED AGAIN. The calendar keeps calling a finished week "current"
+       * until the next one kicks off — NFL week 3 until Thursday's game — and the stat sync's upserts
+       * write `isFinalized: false`. So every tick after the seal un-sealed the week's rows, the
+       * recalculation dropped its matchups to 'active', the standings dropped the week, and seconds
+       * later the sweep below sealed it all again. Measured on production 2026-09-29: from the 12:17
+       * UTC seal onward, every five-minute run re-finalized week 3 for both native NFL leagues.
+       *
+       * ⚠ THIS MEANS A STAT CORRECTION AFTER THE SEAL IS NOT APPLIED, AND THAT IS THE INTENT. The
+       * finalizer waits 12 hours after the last kickoff precisely so corrections land BEFORE results
+       * are sealed; after that the week's results, standings and the roller's advance stand.
+       * Re-opening a closed week is a commissioner decision, not something a cron does silently.
+       */
+      if (await isRedraftWeekSealed(prisma, season.id, resolved.fantasyWeek)) {
+        skippedSealedWeek += 1
+      } else {
+        const summary = await syncPlayerWeeklyScoresForRedraftSeason({
+          seasonId: season.id,
+          week: resolved.fantasyWeek,
+          actorId: 'system:score-sync',
+        })
+        const matchups = await recalculateMatchupsForSeasonWeek(summary.seasonId, summary.week)
+        await updateStandings(summary.seasonId, summary.week)
+        matchupsRecalculated += matchups.updated
+        reconciled += 1
+      }
     } catch {
       // A single league's provider gap must not end the sweep for the rest.
       failed += 1
@@ -364,6 +383,7 @@ async function runRedraftReconciliation() {
     seasonsConsidered: seasons.length,
     reconciled,
     skippedUnresolvedWeek,
+    skippedSealedWeek,
     failed,
     matchupsRecalculated,
     weeksFinalized,

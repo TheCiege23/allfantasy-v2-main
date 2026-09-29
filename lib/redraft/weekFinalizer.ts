@@ -8,6 +8,7 @@ import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from '.
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { isSealedWeek } from './weekSealed'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -399,7 +400,8 @@ export async function finalizeRedraftWeek(
    * a bye would skip sealing a week that is not done.
    */
   const contested = matchups.filter((m) => m.awayRosterId !== null)
-  if (matchupsConsidered > 0 && contested.every((m) => m.status === 'final')) {
+  // The rule lives in weekSealed.ts, which score-sync also reads, so the two cannot disagree.
+  if (isSealedWeek(matchups)) {
     return emptyResult(base, null, {
       alreadyFinal: true,
       matchupsConsidered: contested.length,
