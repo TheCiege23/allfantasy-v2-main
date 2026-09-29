@@ -1362,6 +1362,17 @@
     opacity: 0.55;
   }
 }
+/*
+ * ⚠ AN INFINITE PULSE IS THE EXACT CASE prefers-reduced-motion EXISTS FOR, and this file was one of
+ * only two under components/ that animated without honouring it (the other is
+ * StartSitPopup.module.css). The skeleton still reads as a skeleton when it stops: it keeps its
+ * min-height and `--chip` background, so the block is there, just still.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .af-ch-skeleton {
+    animation: none;
+  }
+}
 
 /* ── Automations ─────────────────────────────────────────────────────── */
 
