@@ -186,6 +186,43 @@ describe("World Cup pool chat route", () => {
     expect(json.messages[0]).toMatchObject({ body: "hello pool", authorName: "User One" })
   })
 
+  /* Chat names go to every member of the pool — an author with no display name or username must
+     never be named by the part of their email before the "@". */
+  it("never names a chat author by their email prefix", async () => {
+    findManyMessagesMock.mockResolvedValue([
+      dbMessage({ userId: "user-2", user: { displayName: null, username: null, email: "secret.person@example.com", avatarUrl: null } }),
+    ])
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+
+    const res = await GET(request(), { params: { challengeId: "c1" } })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.messages[0].authorName).toBe("Pool member")
+    expect(JSON.stringify(json)).not.toContain("secret.person")
+    const select = findManyMessagesMock.mock.calls[0]?.[0]?.include?.user?.select ?? {}
+    expect(select).not.toHaveProperty("email")
+  })
+
+  it("never labels a pool member by their email prefix in the DM picker", async () => {
+    findManyParticipantsMock.mockResolvedValue([
+      {
+        userId: "user-2",
+        displayName: "",
+        joinedAt: new Date("2026-06-01T12:10:00.000Z"),
+        user: { id: "user-2", username: null, displayName: null, email: "secret.person@example.com", avatarUrl: null },
+      },
+    ])
+    const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
+
+    const res = await GET(new Request("http://localhost/api/brackets/world-cup/c1/chat?action=members"), { params: { challengeId: "c1" } })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.members[0].displayName).toBe("Pool member")
+    expect(JSON.stringify(json)).not.toContain("secret.person")
+  })
+
   it("rejects non-members from GET", async () => {
     memberAccessMock.mockResolvedValue({ ok: false, response: Response.json({ error: "Forbidden" }, { status: 403 }) })
     const { GET } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
