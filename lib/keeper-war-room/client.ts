@@ -11,6 +11,8 @@ import type { KeeperWaiverResult } from './keeperWaiverEngine'
 import type { KeeperLineupResult } from './keeperLineupEngine'
 import type { KeeperTradeAnalysis } from './keeperTradeEngine'
 import type { KeeperTradeFinderResult } from './keeperTradeFinderEngine'
+/** THE grade on trade-analyze (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts). */
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 
 const base = (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/keeper-war-room`
 
@@ -59,7 +61,7 @@ export const fetchKeeperLineup = (leagueId: string, rosterId?: string) =>
 export const analyzeKeeperWarRoomTrade = (
   leagueId: string,
   input: { rosterId?: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] },
-) => postAction<{ tradeAnalysis: KeeperTradeAnalysis }>(leagueId, 'trade-analyze', input)
+) => postAction<{ tradeAnalysis: KeeperTradeAnalysis; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
 
 export const findKeeperWarRoomTrades = (leagueId: string, rosterId?: string) =>
   postAction<{ tradeFinder: KeeperTradeFinderResult }>(leagueId, 'trade-find', { rosterId })

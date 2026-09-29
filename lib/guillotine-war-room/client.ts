@@ -11,6 +11,8 @@ import type { GuillotineWaiverResult } from './guillotineWaiverEngine'
 import type { GuillotineDroppedPlayerResult } from './guillotineDroppedPlayerEngine'
 import type { GuillotineTradeAnalysis } from './guillotineTradeEngine'
 import type { GuillotineWeeklyPlanResult } from './guillotineWeeklyPlanEngine'
+/** THE grade on trade-analyze (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts). */
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 
 const base = (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/guillotine-war-room`
 
@@ -55,7 +57,7 @@ export const fetchGuillotineDroppedPlayers = (leagueId: string, rosterId?: strin
 export const analyzeGuillotineWarRoomTrade = (
   leagueId: string,
   input: { rosterId?: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] },
-) => postAction<{ tradeAnalysis: GuillotineTradeAnalysis }>(leagueId, 'trade-analyze', input)
+) => postAction<{ tradeAnalysis: GuillotineTradeAnalysis; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
 
 export const askGuillotineWarRoom = (leagueId: string, question: string, rosterId?: string) =>
   postAction<{ answer: string | null; aiUnavailable: boolean; detail?: string; grounding: unknown }>(

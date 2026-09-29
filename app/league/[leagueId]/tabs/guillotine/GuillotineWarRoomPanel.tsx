@@ -29,6 +29,8 @@ import type { GuillotineFaabPlanResult } from '@/lib/guillotine-war-room/guillot
 import type { GuillotineWaiverResult } from '@/lib/guillotine-war-room/guillotineWaiverEngine'
 import type { GuillotineDroppedPlayerResult } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
 import type { GuillotineTradeAnalysis } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'roster-risk' | 'lineup-safety' | 'faab-plan' | 'waivers' | 'dropped-players' | 'trade-analyze' | null
 
@@ -71,6 +73,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [waivers, setWaivers] = useState<GuillotineWaiverResult | null>(null)
   const [dropped, setDropped] = useState<GuillotineDroppedPlayerResult | null>(null)
   const [tradeAnalysis, setTradeAnalysis] = useState<GuillotineTradeAnalysis | null>(null)
+  const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')
 
@@ -112,7 +115,9 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
           const fallback = own.find((p) => !p.isStarterSlot)?.playerId ?? own[0]?.playerId ?? ''
           const outgoing = (tradeOutgoingId || fallback).trim()
           const incoming = tradeIncomingIds.split(',').map((id) => id.trim()).filter(Boolean)
-          setTradeAnalysis((await analyzeGuillotineWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })).tradeAnalysis)
+          const analyzed = await analyzeGuillotineWarRoomTrade(leagueId, { outgoingPlayerIds: outgoing ? [outgoing] : [], incomingPlayerIds: incoming })
+          setTradeAnalysis(analyzed.tradeAnalysis)
+          setTradeGrade(analyzed.tradeGrade ?? null)
           if (!tradeOutgoingId && fallback) setTradeOutgoingId(fallback)
         }
       } catch (e) {
@@ -306,7 +311,8 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
               </div>
               {tradeAnalysis && (
                 <div className="mt-2 space-y-1" data-testid="guillotine-war-room-trade-analyze-result">
-                  <p className="font-semibold text-white/80">Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}{tradeAnalysis.valueDelta != null ? <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span> : null}</p>
+                  {/* 🛑 THE GRADE IS THE VERDICT (2026-09-29). The engine's own accept/reject/neutral is never shown. */}
+                  <WarRoomTradeGradeLine grade={tradeGrade} testId="guillotine-war-room-trade-grade" />
                   {tradeAnalysis.explanationFacts.map((f) => (<p key={f}>{f}</p>))}
                   {tradeAnalysis.riskFlags.length > 0 && <ul className="mt-2 space-y-1">{tradeAnalysis.riskFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>}
                 </div>

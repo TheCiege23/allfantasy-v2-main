@@ -26,6 +26,12 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/decision-os/trade/warRoomTradeGrade.ts', entry: /gradeDeal\(/, what: 'War Room trade grading' },
   { file: 'app/api/leagues/[leagueId]/redraft-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the redraft War Room trade analyzer' },
   { file: 'app/api/leagues/[leagueId]/dynasty-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the dynasty War Room trade analyzer' },
+  /* 2026-09-29: the other three War Rooms, the same way. */
+  { file: 'app/api/leagues/[leagueId]/keeper-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the keeper War Room trade analyzer' },
+  { file: 'app/api/leagues/[leagueId]/guillotine-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the guillotine War Room trade analyzer' },
+  { file: 'app/api/leagues/[leagueId]/best-ball-war-room/[action]/route.ts', entry: /gradeWarRoomTrade\(/, what: 'the best-ball War Room trade analyzer' },
+  /* 2026-09-29: the league settings "AI trade" panel, which prints this route's response as-is. */
+  { file: 'app/api/ai/trade-analysis/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the league settings AI trade panel' },
   /* 2026-09-27: the Trade Center's "Best trade partners" suggestions (see lib/trade-intel/partnerSuggestionGrades.ts). */
   { file: 'app/api/leagues/[leagueId]/trades/rosters/route.ts', entry: /gradeDeal\(/, what: 'the Trade Center partner suggestions' },
   /* 2026-09-28: the trade block's suggested offers (see lib/trade-block/tradeBlockOffers.ts). */
@@ -280,6 +286,42 @@ describe('Trade OS — no screen keeps a private letter', () => {
       'proposalGrade: evaluations.get(trade.transactionId)?.grade ?? null,',
     )).toBe(true)
     expect(/realizedGradeDisplay\(/.test('const display = realizedGradeDisplay({')).toBe(true)
+  })
+})
+
+/*
+ * 2026-09-29: surfaces that printed a VERDICT of their own beside (or instead of) the letter — not a
+ * letter, so PRIVATE_LETTERS cannot see them. Each shape is the call or read the screen used to print.
+ */
+describe('no screen prints a second engine’s verdict beside the one grade', () => {
+  it.each([
+    'app/league/[leagueId]/tabs/keeper/KeeperWarRoomPanel.tsx',
+    'app/league/[leagueId]/tabs/guillotine/GuillotineWarRoomPanel.tsx',
+    'app/league/[leagueId]/tabs/best-ball/BestBallWarRoomPanel.tsx',
+  ])('%s shows the grade line and never the War Room engine’s accept/reject/neutral', (file) => {
+    const src = code(file)
+    expect(src).toMatch(/<WarRoomTradeGradeLine grade=\{tradeGrade\}/)
+    expect(src).not.toMatch(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/)
+  })
+
+  it('the AI trade panel’s route returns no Win / Loss / Fair verdict or fairness score', () => {
+    const src = code('app/api/ai/trade-analysis/route.ts')
+    expect(src).not.toMatch(/runTradeAnalysis\(/)
+    expect(src).not.toMatch(/\bverdict:|fairnessScore|fairnessConfidence/)
+    expect(src).toMatch(/tradeGrade = receiptGradeFields\(receipt\)/)
+  })
+
+  it('the dynasty trade analyzer names no winner but the letter’s', () => {
+    const src = code('components/DynastyTradeForm.tsx')
+    expect(src).not.toMatch(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/)
+    expect(src).toMatch(/winnerFromLeagueGrade\(tradeGrade,/)
+  })
+
+  it('positive controls: each shape matches the code it replaced', () => {
+    expect(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/.test("Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}")).toBe(true)
+    expect(/runTradeAnalysis\(/.test('engine = await runTradeAnalysis({')).toBe(true)
+    expect(/\bverdict:|fairnessScore|fairnessConfidence/.test('      verdict: deterministicVerdict,')).toBe(true)
+    expect(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/.test("winner: a.winner || 'Even',")).toBe(true)
   })
 })
 

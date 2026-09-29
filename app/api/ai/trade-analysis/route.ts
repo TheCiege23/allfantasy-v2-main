@@ -5,43 +5,27 @@ import { assertLeagueAccess } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
 import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { buildLeagueContext } from '@/lib/league/buildLeagueContext'
-import { runTradeAnalysis } from '@/lib/engine/trade'
-import type { TradeAssetUnion, LeagueFormat, SportKey } from '@/lib/engine/trade-types'
+import { evaluateTrade } from '@/lib/decision-os/trade/evaluateTrade'
+import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
+import { gradeInputsFromAssetLabels } from '@/lib/decision-os/trade/tradeGradeInputs'
 
 export const dynamic = 'force-dynamic'
 
 type Side = { name?: string; playerId?: string; pos?: string; team?: string }
 
 /**
- * HONESTY PASS (slice 12): this route used to ask the LLM for a
- * Win / Loss / Fair verdict from nothing but player NAMES — no valuation, no
- * projections, no roster context. The verdict was language, not analysis.
+ * 🛑 THE GRADE IS THE ONE TRADE ENGINE'S (2026-09-29). The league settings "AI trade" panel prints this
+ * response as-is, and it used to carry a Win / Loss / Fair verdict and a fairness score from
+ * `runTradeAnalysis` (lib/engine/trade) — a scale no other trade screen uses, beside a Trade Center that
+ * grades the same deal with a letter. Now `evaluateTrade()` grades it in this league, with a receipt,
+ * and the model only writes prose ABOUT that grade. Its own verdict or fairness keys are never passed on.
  *
- * Now the deterministic engine (`runTradeAnalysis`, the same one behind
- * /api/trades/analyze) produces the verdict and fairness, and the model is
- * restricted to writing prose ABOUT that verdict — the pattern
- * TradeAnalyzerAIService already established ("do not override the fairness
- * score"). Every field is tagged with its source so no consumer can confuse
- * a computed number with generated text.
+ * `viewerSide: false`: the panel takes names typed as "you give", which proves nothing about whose
+ * roster they are on, so roster need is not priced — the same call the dynasty analyzer makes.
  */
-function toEngineAssets(side: Side[]): TradeAssetUnion[] {
-  return side
-    .filter((s) => (s.name ?? s.playerId ?? '').trim().length > 0)
-    .map((s) => ({
-      type: 'player' as const,
-      player: {
-        id: (s.playerId ?? s.name ?? '').trim(),
-        name: (s.name ?? s.playerId ?? '').trim(),
-        ...(s.pos ? { pos: s.pos } : {}),
-        ...(s.team ? { team: s.team } : {}),
-      },
-    }))
-}
-
-const VERDICT_LABEL: Record<string, string> = {
-  accept: 'Win',
-  reject: 'Loss',
-  counter: 'Fair',
+function gradeInputs(side: Side[]) {
+  // Untyped, so "2026 1st" typed into the box reads as a pick rather than a player search.
+  return gradeInputsFromAssetLabels(side.map((s) => ({ name: (s.name ?? s.playerId ?? '').trim(), type: null })))
 }
 
 export async function POST(req: Request) {
@@ -70,17 +54,13 @@ export async function POST(req: Request) {
 
   let leagueBlock = ''
   let historyBlock = ''
-  let sport: SportKey = 'NFL'
-  let format: LeagueFormat = 'redraft'
+  // Only a league the caller commissions or has a team in is graded in; anything else is withheld.
+  let gradeLeagueId: string | null = null
   if (body.leagueId) {
     const league = await assertLeagueAccess(body.leagueId, userId)
     if (league) {
+      gradeLeagueId = league.id
       leagueBlock = `League: ${league.name ?? league.id}\nSport: ${league.sport}\nPlatform: ${league.platform}\n`
-      const rawSport = String(league.sport ?? '').toUpperCase()
-      if (['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'].includes(rawSport)) {
-        sport = rawSport as SportKey
-      }
-      if ((league as { isDynasty?: boolean }).isDynasty) format = 'dynasty'
       try {
         historyBlock = await buildLeagueContext(
           body.leagueId,
@@ -92,47 +72,31 @@ export async function POST(req: Request) {
     }
   }
 
-  // Deterministic first. The engine owns the verdict; a failure here means we
-  // report that we could not evaluate — never that we fall back to guessing.
-  let engine: Awaited<ReturnType<typeof runTradeAnalysis>> | null = null
-  try {
-    engine = await runTradeAnalysis({
-      sport,
-      format,
-      assetsA: toEngineAssets(give),
-      assetsB: toEngineAssets(get),
-      ...(body.leagueId ? { leagueId: body.leagueId, league_id: body.leagueId } : {}),
-    })
-  } catch (e) {
-    console.error('[api/ai/trade-analysis] deterministic engine failed', e)
-    engine = null
+  // Never throws: a grade that cannot be taken is a withheld grade with the reason.
+  const receipt = await evaluateTrade({
+    surface: 'league-settings-ai-trade',
+    leagueId: gradeLeagueId,
+    userId,
+    give: gradeInputs(give),
+    get: gradeInputs(get),
+    viewerSide: false,
+  })
+  const tradeGrade = receiptGradeFields(receipt)
+
+  // No letter, no prose: a narrative with no grade under it would be the model's own verdict.
+  if (!tradeGrade.grade) {
+    return NextResponse.json({ ok: true, tradeGrade, shortTerm: null, longTerm: null, advice: null, narrativeSource: 'not_graded' })
   }
 
-  if (!engine) {
-    return NextResponse.json(
-      {
-        ok: false,
-        verdict: null,
-        verdictSource: 'unavailable',
-        error: 'Could not evaluate this trade — the valuation engine had no usable data for these assets.',
-      },
-      { status: 422 },
-    )
-  }
+  const system = `You are Chimmy, AllFantasy's trade analyst. AllFantasy's trade grade has ALREADY graded this trade. Your job is to explain that grade in plain language — never to re-decide it.
 
-  const deterministicVerdict = VERDICT_LABEL[engine.verdict] ?? 'Fair'
-  const fairnessScore = engine.fairness?.score ?? null
-
-  const system = `You are Chimmy, AllFantasy's trade analyst. A deterministic valuation engine has ALREADY graded this trade. Your job is to explain that grade in plain language — never to re-decide it.
-
-DETERMINISTIC RESULT (authoritative, do not contradict or restate differently):
-- Verdict from the trading manager's perspective: ${deterministicVerdict}
-- Fairness score: ${fairnessScore ?? 'unavailable'}
-${engine.fairness?.explanations?.length ? `- Engine reasoning: ${engine.fairness.explanations.slice(0, 4).join('; ')}` : ''}
+THE GRADE (authoritative, do not contradict or restate differently):
+- The trading manager's letter: ${tradeGrade.grade} (the other side: ${tradeGrade.partnerGrade})
+- ${tradeGrade.gradeLabel ?? ''}${tradeGrade.recommendation ? ` — ${tradeGrade.recommendation}` : ''}
 
 Respond with ONLY valid JSON (no markdown):
-{"shortTerm":string,"longTerm":string,"recommendation":string}
-Keep each field concise and consistent with the verdict above. Do NOT output a verdict field, a different fairness number, or any contradicting judgement.
+{"shortTerm":string,"longTerm":string,"advice":string}
+Keep each field concise and consistent with the grade above. Do NOT output a verdict, a letter, a fairness number, or any contradicting judgement.
 ${historyBlock ? `\n\nLEAGUE HISTORY (context for tone and leverage only):\n${historyBlock}` : ''}`
 
   const userPayload = `${leagueBlock}You give up: ${JSON.stringify(give)}
@@ -140,35 +104,18 @@ You receive: ${JSON.stringify(get)}`
 
   try {
     const raw = (await callClaudeJson({ system, user: userPayload, userId })) as Record<string, unknown>
-    // The model cannot override the engine: its verdict/fairness keys are dropped.
-    delete raw.verdict
-    delete raw.fairness
-    delete raw.fairnessScore
+    // Only the three prose fields are read, so no verdict, letter or fairness key the model adds is passed on.
     return NextResponse.json({
       ok: true,
-      verdict: deterministicVerdict,
-      verdictSource: 'deterministic_engine',
-      fairnessScore,
-      fairnessConfidence: engine.fairness?.confidence ?? null,
+      tradeGrade,
       shortTerm: typeof raw.shortTerm === 'string' ? raw.shortTerm : null,
       longTerm: typeof raw.longTerm === 'string' ? raw.longTerm : null,
-      recommendation: typeof raw.recommendation === 'string' ? raw.recommendation : null,
+      advice: typeof raw.advice === 'string' ? raw.advice : null,
       narrativeSource: 'ai',
     })
   } catch (e) {
-    // Prose failed, but the deterministic verdict is still real — return it
-    // without narrative rather than failing the whole request.
+    // Prose failed, but the grade is still real — return it without narrative.
     console.error('[api/ai/trade-analysis] narrative generation failed', e)
-    return NextResponse.json({
-      ok: true,
-      verdict: deterministicVerdict,
-      verdictSource: 'deterministic_engine',
-      fairnessScore,
-      fairnessConfidence: engine.fairness?.confidence ?? null,
-      shortTerm: null,
-      longTerm: null,
-      recommendation: null,
-      narrativeSource: 'unavailable',
-    })
+    return NextResponse.json({ ok: true, tradeGrade, shortTerm: null, longTerm: null, advice: null, narrativeSource: 'unavailable' })
   }
 }

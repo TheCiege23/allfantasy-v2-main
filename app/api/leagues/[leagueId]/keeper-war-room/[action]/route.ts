@@ -9,7 +9,7 @@
  *   - roster-needs           → roster needs after keepers
  *   - waivers                → in-season add/drop (when active)
  *   - lineup                 → in-season start/sit (when active)
- *   - trade-analyze          → keeper-cost-aware trade verdict
+ *   - trade-analyze          → keeper-cost-aware trade facts + THE one trade grade
  *   - trade-find             → keeper-surplus partner fit
  *   - ask                    → grounded AI answer (AF War Room-gated)
  *
@@ -33,6 +33,7 @@ import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { KeeperWarRoomContext } from '@/lib/keeper-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
+import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -137,7 +138,20 @@ export async function POST(
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
         analysis,
       })
-      return NextResponse.json({ tradeAnalysis: analysis })
+      /*
+       * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
+       * `analysis.verdict` is this engine's own accept/reject/neutral; the panel shows the grade in its
+       * place and keeps the analysis's facts (season value, keeper surplus, roster fit).
+       */
+      const players = context.teams.flatMap((t) => t.players)
+      const tradeGrade = await gradeWarRoomTrade({
+        leagueId,
+        userId: user.id,
+        viewerSide: rosterId === context.userRosterId,
+        outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
+        incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
+      })
+      return NextResponse.json({ tradeAnalysis: analysis, tradeGrade })
     }
 
     case 'trade-find':
