@@ -66,7 +66,7 @@ export default function ChimmyVoiceBar({
         className="rounded-lg border border-white/20 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white/90 disabled:cursor-not-allowed disabled:opacity-40 min-h-[44px] min-w-[44px] flex items-center justify-center"
         title={
           ttsUnavailable
-            ? 'ElevenLabs API key required'
+            ? "Voice unavailable right now"
             : voiceEnabled
               ? 'Voice on'
               : 'Voice off'

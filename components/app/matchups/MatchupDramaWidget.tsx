@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { BookOpen, ExternalLink, Zap } from 'lucide-react'
+import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
 
 type DramaEventRow = {
   id: string
@@ -84,15 +85,18 @@ export function MatchupDramaWidget({
       }
       setStoryLoadingId(eventId)
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ eventId }),
-        })
-        const data = await res.json().catch(() => ({}))
+        // Asks before any token is spent; a decline spends nothing and shows nothing.
+        const { response: res, declined } = await postWithTokenConfirm(
+          `/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`,
+          { eventId },
+        )
+        if (declined) return
+        const text = res.ok
+          ? ((await res.json().catch(() => ({})))?.narrative ?? 'No story available.')
+          : await responseErrorMessage(res, 'Could not load story.')
         setStoryByEvent((prev) => ({
           ...prev,
-          [eventId]: data?.narrative ?? 'No story available.',
+          [eventId]: text,
         }))
       } catch {
         setStoryByEvent((prev) => ({

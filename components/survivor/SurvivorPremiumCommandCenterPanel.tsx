@@ -149,7 +149,7 @@ export function SurvivorPremiumCommandCenterPanel({
         <WarRoomStatOrb
           label="Token balance"
           value={typeof tokensRemaining === 'number' ? String(tokensRemaining) : '—'}
-          hint="Preflight + confirm on 2–3 burns"
+          hint="You confirm the cost before any spend"
           accent="amber"
         />
         <WarRoomStatOrb
@@ -166,7 +166,7 @@ export function SurvivorPremiumCommandCenterPanel({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <WarRoomPanel title="Player actions · token costs" subtitle="1 / 2 / 3 AF Tokens — requires AF Pro (or Supreme).">
+        <WarRoomPanel title="Player actions · token costs" subtitle="AF Tokens per run, before any plan discount — requires AF Pro (or Supreme). The exact cost is shown before you confirm.">
           <ul className="max-h-64 space-y-2 overflow-y-auto pr-1 text-[12px] text-white/65">
             {playerActions.map((a) => (
               <li
@@ -174,12 +174,12 @@ export function SurvivorPremiumCommandCenterPanel({
                 className="flex justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/25 px-2 py-1.5"
               >
                 <span>{a.label}</span>
-                <span className="font-mono text-cyan-200/90">{a.tokenCost}</span>
+                <span className="font-mono text-cyan-200/90">{a.tokenCost ?? '—'}</span>
               </li>
             ))}
           </ul>
         </WarRoomPanel>
-        <WarRoomPanel title="Host / commissioner actions · token costs" subtitle="Requires AF Commissioner (or Supreme).">
+        <WarRoomPanel title="Host / commissioner actions · token costs" subtitle="AF Tokens per run, before any plan discount — requires AF Commissioner (or Supreme).">
           <ul className="max-h-64 space-y-2 overflow-y-auto pr-1 text-[12px] text-white/65">
             {hostActions.map((a) => (
               <li
@@ -187,7 +187,7 @@ export function SurvivorPremiumCommandCenterPanel({
                 className="flex justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/25 px-2 py-1.5"
               >
                 <span>{a.label}</span>
-                <span className="font-mono text-amber-200/90">{a.tokenCost}</span>
+                <span className="font-mono text-amber-200/90">{a.tokenCost ?? '—'}</span>
               </li>
             ))}
           </ul>

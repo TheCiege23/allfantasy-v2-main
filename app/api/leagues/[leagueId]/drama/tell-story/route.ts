@@ -6,13 +6,49 @@ import { getDramaEventById } from '@/lib/drama-engine/DramaQueryService'
 import { buildDramaNarrative } from '@/lib/drama-engine/AIDramaNarrativeAdapter'
 import { buildAIRelationshipContext } from '@/lib/relationship-insights'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { refundStorylineSpend } from '@/lib/tokens/storylineSpendRefund'
 
 export const dynamic = 'force-dynamic'
 
+type DramaEvent = NonNullable<Awaited<ReturnType<typeof getDramaEventById>>>
+
+async function tellStory(leagueId: string, event: DramaEvent) {
+  const relationshipContext = await buildAIRelationshipContext({
+    leagueId,
+    sport: event.sport,
+    season: event.season,
+    focusDramaEventId: event.id,
+    focusManagerId: event.relatedManagerIds[0] ?? undefined,
+  }).catch(() => null)
+
+  const storylinePreview =
+    relationshipContext?.payload &&
+    Array.isArray((relationshipContext.payload as { storylines?: unknown[] }).storylines)
+      ? (relationshipContext.payload as { storylines?: Array<{ headline?: string }> }).storylines?.[0]
+          ?.headline ?? null
+      : null
+
+  const enrichedSummary = [event.summary, storylinePreview ? `Linked relationship storyline: ${storylinePreview}` : null]
+    .filter(Boolean)
+    .join(' ')
+
+  const { narrative, source } = await buildDramaNarrative({
+    ...event,
+    summary: enrichedSummary || event.summary,
+  })
+  return { narrative, source, relationshipContextUsed: Boolean(relationshipContext) }
+}
+
 /**
  * POST /api/leagues/[leagueId]/drama/tell-story
- * Body: { eventId: string }
+ * Body: { eventId: string, confirmTokenSpend?: boolean }
  * Returns narrative for "Tell me the story" button.
+ *
+ * 🛑 THE REQUEST IS CHECKED BEFORE ANYTHING IS CHARGED (2026-09-29). The gate used to run first with
+ * `confirmTokenSpend: true` hardcoded, so a click spent tokens with no question asked, and a missing
+ * or foreign `eventId` was charged and then refused. Now a bad request costs nothing, tokens are
+ * spent only when the client says the person confirmed the cost (`lib/tokens/clientTokenConfirm.ts`,
+ * which turns the gate's 409 into that question), and a story that fails after the charge is refunded.
  */
 export async function POST(
   req: Request,
@@ -33,24 +69,8 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const gate = await requireFeatureEntitlement({
-      userId,
-      userEmail: session?.user?.email,
-      featureId: 'storyline_creation',
-      allowTokenFallback: true,
-      confirmTokenSpend: true,
-      tokenRuleCode: 'ai_storyline_creation',
-      tokenSourceType: 'league_drama_tell_story',
-      tokenSourceId: `${leagueId}:${Date.now()}`,
-      tokenDescription: 'League drama story narration',
-      tokenMetadata: {
-        leagueId,
-      },
-    })
-    if (!gate.ok) return gate.response
-
-    const body = await req.json().catch(() => ({}))
-    const eventId = body.eventId
+    const body = (await req.json().catch(() => ({}))) as { eventId?: unknown; confirmTokenSpend?: unknown }
+    const eventId = typeof body.eventId === 'string' ? body.eventId : ''
     if (!eventId) return NextResponse.json({ error: 'Missing eventId' }, { status: 400 })
 
     const event = await getDramaEventById(eventId)
@@ -58,37 +78,41 @@ export async function POST(
       return NextResponse.json({ error: 'Drama event not found' }, { status: 404 })
     }
 
-    const relationshipContext = await buildAIRelationshipContext({
-      leagueId,
-      sport: event.sport,
-      season: event.season,
-      focusDramaEventId: event.id,
-      focusManagerId: event.relatedManagerIds[0] ?? undefined,
-    }).catch(() => null)
-
-    const storylinePreview =
-      relationshipContext?.payload &&
-      Array.isArray((relationshipContext.payload as { storylines?: unknown[] }).storylines)
-        ? (relationshipContext.payload as { storylines?: Array<{ headline?: string }> }).storylines?.[0]
-            ?.headline ?? null
-        : null
-
-    const enrichedSummary = [event.summary, storylinePreview ? `Linked relationship storyline: ${storylinePreview}` : null]
-      .filter(Boolean)
-      .join(' ')
-
-    const { narrative, source } = await buildDramaNarrative({
-      ...event,
-      summary: enrichedSummary || event.summary,
+    const gate = await requireFeatureEntitlement({
+      userId,
+      userEmail: session?.user?.email,
+      featureId: 'storyline_creation',
+      allowTokenFallback: true,
+      confirmTokenSpend: body.confirmTokenSpend === true,
+      tokenRuleCode: 'ai_storyline_creation',
+      tokenSourceType: 'league_drama_tell_story',
+      tokenSourceId: `${leagueId}:${Date.now()}`,
+      tokenDescription: 'League drama story narration',
+      tokenMetadata: {
+        leagueId,
+        eventId,
+      },
     })
+    if (!gate.ok) return gate.response
+
+    let story: Awaited<ReturnType<typeof tellStory>>
+    try {
+      story = await tellStory(leagueId, event)
+    } catch (e) {
+      if (gate.tokenSpend) {
+        await refundStorylineSpend({ userId, ledgerId: gate.tokenSpend.id, surface: 'league_drama_tell_story' })
+      }
+      throw e
+    }
+
     return NextResponse.json({
       eventId,
       leagueId,
-      narrative,
-      source,
+      narrative: story.narrative,
+      source: story.source,
       headline: event.headline,
       dramaType: event.dramaType,
-      relationshipContextUsed: Boolean(relationshipContext),
+      relationshipContextUsed: story.relationshipContextUsed,
       tokenSpend: gate.tokenSpend
         ? {
             ruleCode: gate.tokenPreview?.ruleCode ?? 'ai_storyline_creation',

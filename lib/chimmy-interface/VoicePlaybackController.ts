@@ -199,7 +199,7 @@ export function speakChimmy(
 
       if (!res.ok) {
         if (res.status === 503) {
-          options?.onUnavailable?.("Voice unavailable — check ElevenLabs API key in settings");
+          options?.onUnavailable?.("Voice unavailable right now.");
           options?.onEnd?.();
         } else {
           if (hasBrowserSpeechFallback) {

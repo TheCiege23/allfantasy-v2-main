@@ -6,6 +6,7 @@ import { Sparkles, MessageSquare, HelpCircle, Loader2, AlertCircle } from 'lucid
 import type { SurvivorSummary } from './types'
 import { SurvivorCommandHelp } from './SurvivorCommandHelp'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
+import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
 type SurvivorAIPanelType =
@@ -93,11 +94,18 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, week: summary.currentWeek }),
-      })
+      /*
+       * 🛑 THIS PANEL COULD NEVER SPEND A TOKEN (fixed 2026-09-29). It posted without
+       * `confirmTokenSpend`, the route defaults that to false, and the guard answers 409
+       * `token_confirmation_required` — which `useAfSubGate` (402/403 only) let through as an error.
+       * A user paying in tokens got an error on every gated action. Now the 409 becomes a question
+       * that names the cost, and only a yes spends.
+       */
+      const { response: res, declined } = await postWithTokenConfirm(
+        `/api/leagues/${encodeURIComponent(leagueId)}/survivor/ai`,
+        { type, week: summary.currentWeek },
+      )
+      if (declined) return
       const subFeature = subscriptionFeatureForSurvivorAiType(type)
       if (subFeature) {
         if (!(await handleApiResponse(res, subFeature))) return
