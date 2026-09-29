@@ -82,6 +82,32 @@ type WireTransaction = {
   draft_picks?:
     | { season: string; round: number; roster_id: number; previous_owner_id: number; owner_id: number }[]
     | null
+  /** FAAB dollars moved in the trade, by roster id. */
+  waiver_budget?: { sender: number; receiver: number; amount: number }[] | null
+}
+
+/**
+ * FAAB dollars one roster received and sent in one trade.
+ *
+ * 🛑 FAAB WAS DROPPED FROM THE COMPLETED-TRADE LEDGER (fixed 2026-09-29). Sleeper carries a budget
+ * transfer in `waiver_budget`, not in `adds`/`draft_picks`, and this service read only those two —
+ * so "Jameis Winston for $35 FAAB" (Pirate League twinty, 2026 week 3) reached the email as Winston
+ * for "Nothing", and the grade was withheld as a trade with an empty side. The pending-offer scanner
+ * had already fixed the same omission (`scanPendingSleeperTrades.ts`); this is its completed twin.
+ */
+export function faabFor(
+  waiverBudget: WireTransaction['waiver_budget'],
+  rosterId: number,
+): { faabIn: number; faabOut: number } {
+  let faabIn = 0
+  let faabOut = 0
+  for (const w of waiverBudget ?? []) {
+    const amount = Number(w?.amount)
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    if (w.receiver === rosterId) faabIn += amount
+    if (w.sender === rosterId) faabOut += amount
+  }
+  return { faabIn, faabOut }
 }
 type WireDraft = {
   draft_id: string
@@ -188,6 +214,12 @@ export type TradeSideGrade = {
   playersOut: TradeAsset[]
   picksIn: TradePickAsset[]
   picksOut: TradePickAsset[]
+  /**
+   * FAAB dollars received / sent. OPTIONAL: a payload cached before 2026-09-29 has neither, and
+   * reads as no FAAB until it is rebuilt (6h TTL; the trade emails force a rebuild).
+   */
+  faabIn?: number
+  faabOut?: number
   madePlayoffs: boolean | null
   seasonNets: { season: string; net: number; partial: boolean }[]
   cumulativeNet: number
@@ -689,6 +721,7 @@ async function buildTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPay
         playersOut,
         picksIn,
         picksOut,
+        ...faabFor(side.t.waiver_budget, side.rosterId),
         madePlayoffs: side.seasonData.playoffRosters
           ? side.seasonData.playoffRosters.has(side.rosterId)
           : null,

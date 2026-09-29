@@ -438,7 +438,11 @@ function assetsOf(side: GradedTrade['sides'][number]): RecentTradeAsset[] {
     headshotUrl: null,
     teamLogoUrl: null,
   }))
-  return [...players, ...picks]
+  // FAAB last — the order `completedTradeInputs` prices a side in. Absent on a pre-2026-09-29 payload.
+  const faab: RecentTradeAsset[] = side.faabIn != null && side.faabIn > 0
+    ? [{ kind: 'faab' as const, playerId: null, name: `$${side.faabIn} FAAB`, position: null, team: null, headshotUrl: null, teamLogoUrl: null }]
+    : []
+  return [...players, ...picks, ...faab]
 }
 
 /**

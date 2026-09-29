@@ -425,3 +425,39 @@ describe('stored manager psychology cannot reach the email', () => {
     expect(src).not.toMatch(/psychology\??\s*:/i)
   })
 })
+
+/*
+ * FAAB in a completed trade (2026-09-29). "Jameis Winston for $35 FAAB" printed the FAAB side as
+ * receiving "Nothing", because the ledger never read Sleeper's `waiver_budget`.
+ */
+describe('FAAB a side received', () => {
+  const WINSTON_FOR_FAAB = trade([
+    { ...side({ rosterId: 3, ownerId: 'u3', managerName: 'seller', playersOut: [player('Jameis Winston', 0, 'QB')], net: 0 }), faabIn: 35, faabOut: 0 },
+    { ...side({ rosterId: 8, ownerId: 'u8', managerName: 'buyer', playersIn: [player('Jameis Winston', 0, 'QB')], net: 0 }), faabIn: 0, faabOut: 35 },
+  ])
+  // Side one (seller) gets the FAAB line; side two gets Winston. Names are the grader's own.
+  const g = graded({
+    letter: 'F', partnerLetter: 'A', percentDiff: -74, giveValue: 2400, getValue: 630,
+    lines: [
+      { side: 'give', name: 'Jameis Winston', marketValue: 2400, leagueValue: 2400 },
+      { side: 'get', name: 'FAAB $35', marketValue: 630, leagueValue: 630 },
+    ],
+  })
+
+  it('lists "$35 FAAB" as what the seller received, with its league value — not "Nothing"', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'Pirate League twinty', trade: WINSTON_FOR_FAAB, ledgerUrl: URL, grade: g })
+    expect(html).toContain('$35 FAAB')
+    expect(html).toMatch(/\$35 FAAB<div[^>]*>FAAB<\/div><\/td><td[^>]*>630</)
+    expect(html).not.toContain('>Nothing<')
+  })
+
+  it('names the FAAB in the subject line', () => {
+    const { subject } = buildTradeGradeEmail({ leagueName: 'P', trade: WINSTON_FOR_FAAB, ledgerUrl: URL, grade: g })
+    expect(subject).toBe('Trade completed in P — seller F, buyer A — Jameis Winston, $35 FAAB')
+  })
+
+  it('a side with no FAAB field (an old cached payload) renders exactly as before', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded() })
+    expect(html).not.toContain('FAAB')
+  })
+})

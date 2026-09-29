@@ -72,7 +72,7 @@ export function sleeperPlayerInput(name: string, sleeperId?: string | null, posi
 export function completedTradeInputs(trade: GradedTrade, currentSeason: number): { give: GradeInputs; get: GradeInputs } | null {
   const [a] = trade.sides
   if (!a) return null
-  const side = (players: Side['playersIn'], picks: Side['picksIn']): GradeInputs => {
+  const side = (players: Side['playersIn'], picks: Side['picksIn'], faab: number | undefined): GradeInputs => {
     const out: GradeInputs = { assets: players.map((p) => sleeperPlayerInput(p.name, p.playerId, p.position)), unpriceable: [] }
     for (const pick of picks) {
       const year = Number(pick.season)
@@ -82,9 +82,30 @@ export function completedTradeInputs(trade: GradedTrade, currentSeason: number):
       else if (Number.isFinite(year) && year >= currentSeason && pick.round > 0) out.assets.push({ kind: 'pick', year, round: pick.round })
       else out.unpriceable.push(pick.label)
     }
+    // FAAB LAST — players, picks, FAAB is the order the email lists a side's assets and aligns values to.
+    // Priced on the league's own waiver budget by the chart (`lib/trade-value/faabValue.ts`).
+    if (faab != null && Number.isFinite(faab) && faab > 0) out.assets.push({ kind: 'faab', amount: faab })
     return out
   }
-  return { give: side(a.playersOut, a.picksOut), get: side(a.playersIn, a.picksIn) }
+  return { give: side(a.playersOut, a.picksOut, a.faabOut), get: side(a.playersIn, a.picksIn, a.faabIn) }
+}
+
+/**
+ * Why a two-team trade where one side received NOTHING is not graded — said as what Sleeper recorded,
+ * not as missing data. Zay Flowers for nothing (Pirate League twinty, 2026 week 3) read "One side of
+ * this trade has no assets recorded", which sounds like our gap rather than the league's giveaway.
+ *
+ * ⚠ ONLY ON A PAYLOAD THAT CARRIES FAAB. "No FAAB" is a claim, and a ledger cached before FAAB was
+ * read (`faabIn` absent) cannot make it — that side may have been paid in FAAB we never loaded. Such
+ * a trade falls through to the grader's own generic reason, exactly as before.
+ */
+export function giveawayReason(trade: GradedTrade): string | null {
+  if (trade.sides.length !== 2) return null
+  const empty = trade.sides.find(
+    (s) => s.playersIn.length === 0 && s.picksIn.length === 0 && typeof s.faabIn === 'number' && s.faabIn <= 0,
+  )
+  if (!empty) return null
+  return `${empty.managerName} received nothing in return — no player, pick or FAAB on Sleeper’s record — so there is no value gap to grade.`
 }
 
 /**
@@ -110,6 +131,8 @@ export async function oneGradeForCompletedTrade(
   }
   const inputs = completedTradeInputs(trade, currentSeason)
   if (!inputs) return { graded: false, reason: 'the trade has no sides on record', basis: null }
+  const giveaway = giveawayReason(trade)
+  if (giveaway) return { graded: false, reason: giveaway, basis: null }
   const current = await gradeDeal(await (deps.graderFor ?? completedTradeGraderFor)(leagueId), { ...inputs, viewerSide: false })
   if (deps.frozen) {
     const { view, toFreeze } = withFrozenOriginal({
