@@ -185,11 +185,11 @@ export function ImportedLeaguesPanel() {
                   <div className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>{l.name ?? "Untitled league"}</div>
                   <div className="truncate text-[11.5px]" style={{ color: "var(--muted)" }}>{meta}</div>
                 </div>
-                <span className="shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold" style={{ background: pill.bg, color: pill.color }}>
+                <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: pill.bg, color: pill.color }}>
                   {pill.label}
                 </span>
                 {l.lastSyncedAt ? (
-                  <span className="shrink-0 text-[10.5px]" style={{ color: "var(--muted)" }}>{relTime(l.lastSyncedAt)}</span>
+                  <span className="shrink-0 text-[11px]" style={{ color: "var(--muted)" }}>{relTime(l.lastSyncedAt)}</span>
                 ) : null}
                 <div className="flex shrink-0 gap-1.5">
                   <Link

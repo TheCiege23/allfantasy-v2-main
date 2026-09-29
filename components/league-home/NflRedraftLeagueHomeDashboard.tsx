@@ -115,7 +115,7 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
+      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
         <Icon className="h-3.5 w-3.5 text-violet-300" aria-hidden />
         {label}
       </div>

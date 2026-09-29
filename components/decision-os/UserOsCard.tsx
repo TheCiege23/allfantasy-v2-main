@@ -27,7 +27,7 @@ const PARTICIPATION_TIER_LABEL: Record<string, string> = {
 function StatChip({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-0 rounded-xl border border-subtle bg-surface-muted px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
       <p className="mt-1 text-lg font-black text-primary">{value}</p>
     </div>
   )

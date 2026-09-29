@@ -473,7 +473,7 @@ export default function ImproveTradeModal({
                       className="w-full rounded-xl p-3 text-xs outline-none focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/25 transition-all resize-y font-mono"
                       style={{ background: 'var(--panel2)', border: '1px solid var(--border)', color: 'var(--text)' }}
                     />
-                    <p className="text-[9px] mt-1" style={{ color: 'var(--muted2)' }}>Paste your full roster or key players + FAAB. AI uses this for replacement-level value and needs analysis.</p>
+                    <p className="text-[11px] mt-1" style={{ color: 'var(--muted2)' }}>Paste your full roster or key players + FAAB. AI uses this for replacement-level value and needs analysis.</p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -508,7 +508,7 @@ export default function ImproveTradeModal({
                   <details className="group">
                     <summary className="cursor-pointer text-xs font-medium flex items-center gap-2" style={{ color: 'var(--muted)' }}>
                       Advanced League Settings
-                      <span className="text-[9px]" style={{ color: 'var(--muted2)' }}>(saved automatically)</span>
+                      <span className="text-[11px]" style={{ color: 'var(--muted2)' }}>(saved automatically)</span>
                     </summary>
                     <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                       <div>
@@ -558,7 +558,7 @@ export default function ImproveTradeModal({
                     <span className="text-xs font-medium" style={{ color: 'var(--muted)' }}>
                       Use real-time news, injuries & X sentiment
                     </span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-cyan-400/10 text-cyan-400 font-semibold">LIVE</span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-cyan-400/10 text-cyan-400 font-semibold">LIVE</span>
                   </label>
 
                   <button
@@ -666,7 +666,7 @@ export default function ImproveTradeModal({
                       <div className="flex justify-between items-start mb-3 gap-3">
                         <h3 className="font-bold text-base sm:text-lg" style={{ color: 'var(--text)' }}>{sug.title}</h3>
                         {sug.impact && (
-                          <span className="px-3 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/20 shrink-0 whitespace-nowrap" style={{ color: 'var(--accent-emerald)' }}>
+                          <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/20 shrink-0 whitespace-nowrap" style={{ color: 'var(--accent-emerald)' }}>
                             {sug.impact}
                           </span>
                         )}

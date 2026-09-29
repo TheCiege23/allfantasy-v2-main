@@ -80,7 +80,7 @@ export function PickAssistCard({ entryId }: { entryId: string }) {
             <div className="text-sm font-semibold" style={{ color: '#e0f2fe' }}>
               {t("bracket.ai.pickAssist.title")}
             </div>
-            <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
               {recs.length > 0
                 ? t("bracket.ai.pickAssist.subtitleActive")
                 : t("bracket.ai.pickAssist.subtitleIdle")}
@@ -127,7 +127,7 @@ export function PickAssistCard({ entryId }: { entryId: string }) {
           {upsetCount > 0 && (
             <div className="px-4 py-2 flex items-center gap-2" style={{ background: 'rgba(168,85,247,0.04)' }}>
               <Zap style={{ width: 12, height: 12, color: '#c084fc' }} />
-              <span className="text-[10px] font-semibold" style={{ color: '#c084fc' }}>
+              <span className="text-[11px] font-semibold" style={{ color: '#c084fc' }}>
                 {t("bracket.ai.pickAssist.upsetStrip")}
               </span>
             </div>
@@ -151,10 +151,10 @@ export function PickAssistCard({ entryId }: { entryId: string }) {
                 <div className="px-4 py-2.5 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,146,60,0.1)', color: '#fb923c' }}>
+                      <span className="text-[11px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,146,60,0.1)', color: '#fb923c' }}>
                         {ROUND_LABELS[r.round] || `R${r.round}`}
                       </span>
-                      <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
                         {r.matchup}
                       </span>
                     </div>
@@ -173,8 +173,8 @@ export function PickAssistCard({ entryId }: { entryId: string }) {
                       <div className="flex items-start gap-2 rounded-lg p-2" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.08)' }}>
                         <Shield style={{ width: 12, height: 12, color: '#22d3ee', flexShrink: 0, marginTop: 1 }} />
                         <div>
-                          <div className="text-[10px] font-semibold" style={{ color: '#22d3ee' }}>Safe Pick: {r.safePick || 'TBD'}</div>
-                          <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          <div className="text-[11px] font-semibold" style={{ color: '#22d3ee' }}>Safe Pick: {r.safePick || 'TBD'}</div>
+                          <div className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                             Higher seed advantage, {r.safeConfidence}% confidence
                           </div>
                         </div>
@@ -184,15 +184,15 @@ export function PickAssistCard({ entryId }: { entryId: string }) {
                         <div className="flex items-start gap-2 rounded-lg p-2" style={{ background: 'rgba(168,85,247,0.05)', border: '1px solid rgba(168,85,247,0.08)' }}>
                           <TrendingUp style={{ width: 12, height: 12, color: '#c084fc', flexShrink: 0, marginTop: 1 }} />
                           <div>
-                            <div className="text-[10px] font-semibold" style={{ color: '#c084fc' }}>Upset Dart: {r.upsetPick || 'TBD'}</div>
-                            <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                            <div className="text-[11px] font-semibold" style={{ color: '#c084fc' }}>Upset Dart: {r.upsetPick || 'TBD'}</div>
+                            <div className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                               {upsetConf}% upset probability, high bracket differentiation
                             </div>
                           </div>
                         </div>
                       )}
 
-                      <div className="text-[9px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      <div className="text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>
                         {r.insight}
                       </div>
                     </div>

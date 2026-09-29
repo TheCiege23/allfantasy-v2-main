@@ -46,7 +46,7 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
               style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
             >
               {AUTOMATION_STATUS_LABELS[enabled ? 'enabled' : 'disabled']}

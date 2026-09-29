@@ -730,7 +730,7 @@ function LeagueGate({
       <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-amber-300">
+            <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-amber-300">
               {t("powerRankingsPage.badge")}
             </span>
           </div>
@@ -800,10 +800,10 @@ function LeagueGate({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {t(`powerRankingsPage.sport.${league.sport}`)}
                       </span>
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {t(`powerRankingsPage.format.${league.format}`)}
                       </span>
                     </div>
@@ -861,7 +861,7 @@ function CollapsibleCard({
             {title}
           </span>
           {badge ? (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/45">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">
               {badge}
             </span>
           ) : null}
@@ -893,7 +893,7 @@ function ScorePill({
 }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-white/35">
+      <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-white/35">
         <span>{label}</span>
         <span className="font-bold text-white/60">{value}</span>
       </div>
@@ -921,7 +921,7 @@ function HeroCard({
 }) {
   return (
     <div className={cx("rounded-3xl border p-4 sm:p-5", accent)}>
-      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
+      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">
         {title}
       </div>
       <div className="mt-3 text-lg font-black text-white">{headline}</div>
@@ -1197,7 +1197,7 @@ function ExpandedTeamDetail({
                     <div className="flex items-center gap-2">
                       <span
                         className={cx(
-                          "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                          "rounded-full px-2 py-0.5 text-[11px] font-bold",
                           step.impact === "HIGH"
                             ? "bg-red-500/15 text-red-200"
                             : step.impact === "MEDIUM"
@@ -1224,7 +1224,7 @@ function ExpandedTeamDetail({
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">
                 {t("powerRankingsPage.coach.title")}
               </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/45">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">
                 {team.rankExplanation?.rankLabel ??
                   tInterpolate("powerRankingsPage.coach.scoreFallback", { n: team.score })}
               </span>
@@ -1335,7 +1335,7 @@ function ExpandedTeamDetail({
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">
                     {t("powerRankingsPage.roadmap.title")}
                   </div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/45">
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">
                     {team.dynastyRoadmap.confidence}
                   </span>
                 </div>
@@ -1346,7 +1346,7 @@ function ExpandedTeamDetail({
                   <div className="flex min-w-max gap-3">
                     {team.dynastyRoadmap.yearPlans.map((year) => (
                       <div key={year.year} className="w-60 rounded-2xl border border-white/10 bg-[#0c0c1e] p-4">
-                        <div className="inline-flex rounded-full bg-gradient-to-r from-cyan-500/20 to-teal-500/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200">
+                        <div className="inline-flex rounded-full bg-gradient-to-r from-cyan-500/20 to-teal-500/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200">
                           {tInterpolate("powerRankingsPage.roadmap.year", { n: year.year })}
                         </div>
                         <div className="mt-3 text-sm font-bold text-white">
@@ -1360,7 +1360,7 @@ function ExpandedTeamDetail({
                         {year.targetPositions.length > 0 ? (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {year.targetPositions.map((position) => (
-                              <span key={position} className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-200">
+                              <span key={position} className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
                                 {position}
                               </span>
                             ))}
@@ -1438,7 +1438,7 @@ function TeamRow({
         <div className="text-center text-sm text-white/65">{team.record}</div>
         <div className="text-center">
           <div className="text-xl font-black text-white">{team.score}</div>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.score")}</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.score")}</div>
         </div>
         <div className="space-y-1">
           <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
@@ -1457,7 +1457,7 @@ function TeamRow({
         <div className="text-sm text-white/60">{team.strength}</div>
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-white/45">{team.risk}</span>
-          <span className={cx("rounded-full border px-2 py-0.5 text-[10px]", phaseBadgeClass(team.phase))}>
+          <span className={cx("rounded-full border px-2 py-0.5 text-[11px]", phaseBadgeClass(team.phase))}>
             {phaseLabel}
           </span>
         </div>
@@ -1483,7 +1483,7 @@ function TeamRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <div className="truncate text-sm font-bold text-white">{team.teamName}</div>
-              <span className={cx("rounded-full border px-2 py-0.5 text-[10px]", phaseBadgeClass(team.phase))}>
+              <span className={cx("rounded-full border px-2 py-0.5 text-[11px]", phaseBadgeClass(team.phase))}>
                 {phaseLabel}
               </span>
             </div>
@@ -1493,15 +1493,15 @@ function TeamRow({
             </div>
             <div className="mt-3 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.record")}</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.record")}</div>
                 <div className="mt-1 text-sm font-bold text-white">{team.record}</div>
               </div>
               <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.score")}</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.score")}</div>
                 <div className="mt-1 text-sm font-bold text-white">{team.score}</div>
               </div>
               <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.trend")}</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">{t("powerRankingsPage.col.trend")}</div>
                 <div className={cx("mt-1 text-sm font-bold", trendClass(team.trend))}>
                   {trendGlyph(team.trend)}
                 </div>
@@ -1958,7 +1958,7 @@ export default function PowerRankingsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-amber-300">
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-amber-300">
                   {t("powerRankingsPage.hubBadge")}
                 </span>
               </div>
@@ -2167,7 +2167,7 @@ export default function PowerRankingsPage() {
                 </div>
               </div>
 
-              <div className="mb-3 hidden md:grid grid-cols-[52px_minmax(0,1.5fr)_90px_180px_80px_120px_120px_42px] gap-3 px-4 text-[10px] font-bold uppercase tracking-[0.24em] text-white/30">
+              <div className="mb-3 hidden md:grid grid-cols-[52px_minmax(0,1.5fr)_90px_180px_80px_120px_120px_42px] gap-3 px-4 text-[11px] font-bold uppercase tracking-[0.24em] text-white/30">
                 <div>{t("powerRankingsPage.col.rank")}</div>
                 <div>{t("powerRankingsPage.col.team")}</div>
                 <div className="text-center">{t("powerRankingsPage.col.record")}</div>

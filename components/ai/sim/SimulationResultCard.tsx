@@ -29,7 +29,7 @@ export function SimulationResultCard({
       <div className="mb-3">
         <h4 className="text-sm font-semibold text-white">{title}</h4>
         {subtitle ? <p className="text-[11px] text-white/45">{subtitle}</p> : null}
-        <p className="mt-1 text-[10px] text-white/35">
+        <p className="mt-1 text-[11px] text-white/35">
           {iterations} runs{weeksSimulated ? ` · ${weeksSimulated} wks` : ''}
         </p>
       </div>
@@ -56,7 +56,7 @@ export function SimulationResultCard({
           .slice(0, 8)
           .map(([id, w]) => (
             <div key={id} className="flex justify-between gap-2 text-white/70">
-              <span className="truncate font-mono text-[10px]">{id}</span>
+              <span className="truncate font-mono text-[11px]">{id}</span>
               <span className="tabular-nums text-cyan-200/90">{w.toFixed(1)} w</span>
             </div>
           ))}

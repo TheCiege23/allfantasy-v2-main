@@ -49,7 +49,7 @@ export function ChimmyPrimaryActionButton({
       )}
       <span>{action.label}</span>
       {action.premiumBadgeLabel && action.requiresPremium && (
-        <span className="ml-1 rounded bg-indigo-400/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-200">
+        <span className="ml-1 rounded bg-indigo-400/20 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-indigo-200">
           {action.premiumBadgeLabel}
         </span>
       )}

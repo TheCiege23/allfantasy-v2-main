@@ -80,7 +80,7 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
         {manager.managerName}
       </figcaption>
       {manager.labels.length > 0 ? (
-        <p className="truncate text-[10px]" style={{ color: 'var(--muted2)' }} title={manager.labels.join(', ')}>
+        <p className="truncate text-[11px]" style={{ color: 'var(--muted2)' }} title={manager.labels.join(', ')}>
           {manager.labels.join(' · ')}
         </p>
       ) : null}

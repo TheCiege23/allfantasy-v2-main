@@ -76,7 +76,7 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:min-w-[280px]">
             {pulse.metrics.slice(0, 3).map((metric) => (
               <div key={metric.label} className={`min-w-0 rounded-xl border px-3 py-2 ${metricToneClasses(metric.tone)}`}>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-80">{metric.label}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">{metric.label}</p>
                 <p className="mt-1 break-words text-lg font-black">{metric.value}</p>
               </div>
             ))}

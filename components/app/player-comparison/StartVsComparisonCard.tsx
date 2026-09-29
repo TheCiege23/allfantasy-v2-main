@@ -140,7 +140,7 @@ export function StartVsComparisonCard({
         className="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/[0.07] p-3 text-left shadow-inner"
         data-testid="start-vs-coach-snapshot"
       >
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-sky-200/90">Coach snapshot</p>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-sky-200/90">Coach snapshot</p>
         <p className="text-sm leading-relaxed text-white/92">{data.coach_lens.concise_explanation}</p>
         <dl className="mt-3 grid grid-cols-1 gap-0 text-[11px] sm:grid-cols-2">
           <CoachRow label="Median play" pick={data.coach_lens.median_play} />
@@ -261,7 +261,7 @@ function PlayerFace({
         highlight ? 'border-sky-400/35 bg-sky-500/10' : 'border-white/10 bg-white/[0.03]'
       )}
     >
-      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">{label}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">{label}</p>
       <div className="mt-2 flex justify-center">
         <PlayerHeadshot src={headshotUrl} alt={name} size={56} />
       </div>
@@ -290,7 +290,7 @@ function ConfidenceMeter({ pct }: { pct: number }) {
   const w = Math.max(8, Math.min(100, pct))
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-[10px] uppercase tracking-wide text-white/40">
+      <div className="flex justify-between text-[11px] uppercase tracking-wide text-white/40">
         <span>Confidence</span>
         <span>{pct}%</span>
       </div>

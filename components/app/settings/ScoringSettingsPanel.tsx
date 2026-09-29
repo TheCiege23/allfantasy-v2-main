@@ -238,7 +238,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
                 <tr key={row.statKey} className="border-t border-white/10 text-white/85">
                   <td className="whitespace-nowrap px-2.5 py-2">
                     <div className="font-medium">{formatStatLabel(row.statKey)}</div>
-                    <div className="text-[10px] text-white/40">{row.statKey}</div>
+                    <div className="text-[11px] text-white/40">{row.statKey}</div>
                   </td>
                   <td className="px-2.5 py-2">
                     <input
@@ -281,7 +281,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
                   <td className="px-2.5 py-2 text-white/55">
                     {defaultEnabled ? 'On' : 'Off'} · {defaultPoints}
                     {isChanged ? (
-                      <span className="ml-2 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] text-cyan-200">
+                      <span className="ml-2 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] text-cyan-200">
                         Changed
                       </span>
                     ) : null}

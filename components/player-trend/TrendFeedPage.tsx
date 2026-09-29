@@ -174,7 +174,7 @@ function SnapshotRail({
           </p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                 Recent
               </p>
               <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -182,7 +182,7 @@ function SnapshotRail({
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                 Prior
               </p>
               <p className="text-sm font-medium text-slate-600 dark:text-slate-300">

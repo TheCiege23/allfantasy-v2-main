@@ -29,7 +29,7 @@ export default function ChatBar({
         </Link>
         <Link
           href="/messages"
-          className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-[#0B0F1E]"
+          className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-[#0B0F1E]"
         >
           <Users className="h-4 w-4" />
         </Link>

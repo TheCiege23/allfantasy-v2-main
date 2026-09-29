@@ -126,7 +126,7 @@ export function SimulateWeekSeasonButton({
           <button
             type="button"
             onClick={() => setResult(null)}
-            className="mt-2 text-[10px] text-white/30 hover:text-white/50"
+            className="mt-2 text-[11px] text-white/30 hover:text-white/50"
           >
             Dismiss
           </button>

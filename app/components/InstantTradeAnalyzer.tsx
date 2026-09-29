@@ -90,7 +90,7 @@ function PlayerHeadshot({ player, size = 32 }: { player: PlayerAsset; size?: num
         className="rounded-full flex items-center justify-center shrink-0"
         style={{ width: size, height: size, background: posColor(player.position) + '25' }}
       >
-        <span className="text-[9px] font-bold" style={{ color: posColor(player.position) }}>{player.position}</span>
+        <span className="text-[11px] font-bold" style={{ color: posColor(player.position) }}>{player.position}</span>
       </div>
     )
   }
@@ -218,14 +218,14 @@ function PlayerSearch({ onSelect }: { onSelect: (p: PlayerAsset) => void }) {
               >
                 <div className="flex items-center gap-2.5">
                   <PlayerHeadshot player={p} size={28} />
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: posColor(p.position) + '20', color: posColor(p.position) }}>{p.position}</span>
+                  <span className="px-1.5 py-0.5 rounded text-[11px] font-bold" style={{ background: posColor(p.position) + '20', color: posColor(p.position) }}>{p.position}</span>
                   <span className="font-medium" style={{ color: 'var(--text)' }}>{p.name}</span>
                   <div className="flex items-center gap-1">
                     <TeamLogo team={p.team} size={14} />
-                    <span className="text-[10px]" style={{ color: 'var(--muted2)' }}>{p.team}</span>
+                    <span className="text-[11px]" style={{ color: 'var(--muted2)' }}>{p.team}</span>
                   </div>
                 </div>
-                <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent-cyan-strong)' }}>{p.value.toLocaleString()}</span>
+                <span className="font-mono text-[11px] font-semibold" style={{ color: 'var(--accent-cyan-strong)' }}>{p.value.toLocaleString()}</span>
               </button>
             ))}
           </motion.div>
@@ -242,7 +242,7 @@ function AssetCard({ asset, onRemove, type }: { asset: PlayerAsset | PickAsset; 
       <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'var(--panel2)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'rgba(168,85,247,0.15)' }}>
-            <span className="text-[9px] font-bold" style={{ color: '#a855f7' }}>📋</span>
+            <span className="text-[11px] font-bold" style={{ color: '#a855f7' }}>📋</span>
           </div>
           <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>{pick.label}</span>
         </div>
@@ -260,10 +260,10 @@ function AssetCard({ asset, onRemove, type }: { asset: PlayerAsset | PickAsset; 
         <PlayerHeadshot player={player} size={32} />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="px-1 py-0.5 rounded text-[8px] font-bold shrink-0" style={{ background: pc + '20', color: pc }}>{player.position}</span>
+            <span className="px-1 py-0.5 rounded text-[11px] font-bold shrink-0" style={{ background: pc + '20', color: pc }}>{player.position}</span>
             <span className="text-xs font-medium truncate" style={{ color: 'var(--text)' }}>{player.name}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] mt-0.5" style={{ color: 'var(--muted2)' }}>
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5" style={{ color: 'var(--muted2)' }}>
             <TeamLogo team={player.team} size={12} />
             <span>{player.team}</span>
             {player.age > 0 && <>
@@ -278,7 +278,7 @@ function AssetCard({ asset, onRemove, type }: { asset: PlayerAsset | PickAsset; 
           <div className="text-xs font-bold font-mono" style={{ color: 'var(--accent-cyan-strong)' }}>{player.value.toLocaleString()}</div>
           <div className="flex items-center gap-0.5 justify-end">
             {player.trend > 0 ? <TrendingUp className="w-2.5 h-2.5 text-emerald-400" /> : player.trend < 0 ? <TrendingDown className="w-2.5 h-2.5 text-red-400" /> : <Minus className="w-2.5 h-2.5" style={{ color: 'var(--muted2)' }} />}
-            <span className={`text-[9px] font-mono ${player.trend > 0 ? 'text-emerald-400' : player.trend < 0 ? 'text-red-400' : ''}`} style={player.trend === 0 ? { color: 'var(--muted2)' } : undefined}>
+            <span className={`text-[11px] font-mono ${player.trend > 0 ? 'text-emerald-400' : player.trend < 0 ? 'text-red-400' : ''}`} style={player.trend === 0 ? { color: 'var(--muted2)' } : undefined}>
               {player.trend > 0 ? '+' : ''}{player.trend}
             </span>
           </div>
@@ -355,7 +355,7 @@ function PickSelector({ onSelect, leagueSize }: { onSelect: (pick: PickAsset) =>
     <div ref={ref} className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-[10px] px-2 py-1 rounded-md transition-all hover:opacity-80"
+        className="text-[11px] px-2 py-1 rounded-md transition-all hover:opacity-80"
         style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)' }}
       >
         + Pick
@@ -373,14 +373,14 @@ function PickSelector({ onSelect, leagueSize }: { onSelect: (pick: PickAsset) =>
               <div className="flex gap-1">
                 <button
                   onClick={() => { setMode('tiered'); setQuery('') }}
-                  className="flex-1 text-[10px] py-1 rounded-md font-medium transition-all"
+                  className="flex-1 text-[11px] py-1 rounded-md font-medium transition-all"
                   style={mode === 'tiered' ? { background: 'rgba(168,85,247,0.2)', color: '#a855f7' } : { color: 'var(--muted2)' }}
                 >
                   Tiered
                 </button>
                 <button
                   onClick={() => { setMode('specific'); setQuery('') }}
-                  className="flex-1 text-[10px] py-1 rounded-md font-medium transition-all"
+                  className="flex-1 text-[11px] py-1 rounded-md font-medium transition-all"
                   style={mode === 'specific' ? { background: 'rgba(168,85,247,0.2)', color: '#a855f7' } : { color: 'var(--muted2)' }}
                 >
                   Specific
@@ -393,7 +393,7 @@ function PickSelector({ onSelect, leagueSize }: { onSelect: (pick: PickAsset) =>
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={mode === 'tiered' ? 'e.g. 2026 early 1st' : 'e.g. 2026 1.01'}
-                  className="w-full bg-transparent text-[10px] outline-none"
+                  className="w-full bg-transparent text-[11px] outline-none"
                   style={{ color: 'var(--text)' }}
                   autoFocus
                 />
@@ -407,12 +407,12 @@ function PickSelector({ onSelect, leagueSize }: { onSelect: (pick: PickAsset) =>
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left hover:bg-purple-500/10 transition-colors"
                   style={{ color: 'var(--text)' }}
                 >
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[8px]" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>📋</span>
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[11px]" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>📋</span>
                   <span>{p.label}</span>
                 </button>
               ))}
               {displayPicks.length === 0 && (
-                <div className="px-3 py-4 text-center text-[10px]" style={{ color: 'var(--muted2)' }}>No picks match</div>
+                <div className="px-3 py-4 text-center text-[11px]" style={{ color: 'var(--muted2)' }}>No picks match</div>
               )}
             </div>
           </motion.div>
@@ -547,7 +547,7 @@ export default function InstantTradeAnalyzer() {
           </div>
         </div>
         {(teamAPlayers.length > 0 || teamBPlayers.length > 0) && (
-          <button onClick={clearAll} className="text-[10px] px-2 py-1 rounded-md hover:opacity-80 transition-all" style={{ color: 'var(--muted2)', border: '1px solid var(--border)' }}>
+          <button onClick={clearAll} className="text-[11px] px-2 py-1 rounded-md hover:opacity-80 transition-all" style={{ color: 'var(--muted2)', border: '1px solid var(--border)' }}>
             Clear All
           </button>
         )}
@@ -574,7 +574,7 @@ export default function InstantTradeAnalyzer() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#ef4444' }}>Team 1 gives</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#ef4444' }}>Team 1 gives</div>
             <PickSelector onSelect={(p) => setTeamAPicks(prev => [...prev, p])} leagueSize={leagueSize} />
           </div>
           <PlayerSearch onSelect={(p) => setTeamAPlayers(prev => [...prev, p])} />
@@ -593,7 +593,7 @@ export default function InstantTradeAnalyzer() {
           </div>
           {teamATotal > 0 && (
             <div className="text-right">
-              <span className="text-[10px] font-medium" style={{ color: 'var(--muted2)' }}>Total: </span>
+              <span className="text-[11px] font-medium" style={{ color: 'var(--muted2)' }}>Total: </span>
               <span className="text-xs font-bold font-mono" style={{ color: 'var(--text)' }}>{teamATotal.toLocaleString()}</span>
             </div>
           )}
@@ -601,7 +601,7 @@ export default function InstantTradeAnalyzer() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Team 2 gives</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Team 2 gives</div>
             <PickSelector onSelect={(p) => setTeamBPicks(prev => [...prev, p])} leagueSize={leagueSize} />
           </div>
           <PlayerSearch onSelect={(p) => setTeamBPlayers(prev => [...prev, p])} />
@@ -620,7 +620,7 @@ export default function InstantTradeAnalyzer() {
           </div>
           {teamBTotal > 0 && (
             <div className="text-right">
-              <span className="text-[10px] font-medium" style={{ color: 'var(--muted2)' }}>Total: </span>
+              <span className="text-[11px] font-medium" style={{ color: 'var(--muted2)' }}>Total: </span>
               <span className="text-xs font-bold font-mono" style={{ color: 'var(--text)' }}>{teamBTotal.toLocaleString()}</span>
             </div>
           )}
@@ -646,18 +646,18 @@ export default function InstantTradeAnalyzer() {
             />
           </div>
           <div className="flex justify-between mt-1">
-            <span className="text-[10px] font-mono font-bold" style={{ color: '#ef4444' }}>{teamATotal.toLocaleString()}</span>
-            <span className="text-[10px] font-mono" style={{ color: 'var(--muted2)' }}>
+            <span className="text-[11px] font-mono font-bold" style={{ color: '#ef4444' }}>{teamATotal.toLocaleString()}</span>
+            <span className="text-[11px] font-mono" style={{ color: 'var(--muted2)' }}>
               {Math.abs(((teamATotal - teamBTotal) / Math.max(teamATotal, teamBTotal)) * 100).toFixed(1)}% diff
             </span>
-            <span className="text-[10px] font-mono font-bold" style={{ color: '#22d3ee' }}>{teamBTotal.toLocaleString()}</span>
+            <span className="text-[11px] font-mono font-bold" style={{ color: '#22d3ee' }}>{teamBTotal.toLocaleString()}</span>
           </div>
         </div>
       )}
 
       <div className="flex flex-wrap gap-3 mb-4">
         <div>
-          <div className="text-[10px] font-medium mb-1.5" style={{ color: 'var(--muted2)' }}>League Size</div>
+          <div className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--muted2)' }}>League Size</div>
           <select
             value={leagueSize}
             onChange={(e) => { setLeagueSize(Number(e.target.value)); track('trade_refine_used', { league_size: Number(e.target.value) }) }}
@@ -671,7 +671,7 @@ export default function InstantTradeAnalyzer() {
         </div>
 
         <div>
-          <div className="text-[10px] font-medium mb-1.5" style={{ color: 'var(--muted2)' }}>Scoring</div>
+          <div className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--muted2)' }}>Scoring</div>
           <select
             value={scoring}
             onChange={(e) => setScoring(e.target.value as any)}
@@ -759,7 +759,7 @@ export default function InstantTradeAnalyzer() {
                           </div>
                         </div>
                       </div>
-                      <div className={`px-3 py-1.5 rounded-full text-[10px] font-bold ${
+                      <div className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${
                         result.confidence === 'HIGH' ? 'bg-emerald-500 text-black' : result.confidence === 'MEDIUM' ? 'bg-amber-500 text-black' : 'bg-red-500 text-white'
                       }`}>{result.confidence}</div>
                     </div>
@@ -768,8 +768,8 @@ export default function InstantTradeAnalyzer() {
                       <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-1" style={{ background: 'rgba(0,0,0,0.2)' }}>
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#ef4444' }}>Team 1</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Team 2</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#ef4444' }}>Team 1</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Team 2</span>
                           </div>
                           <div className="flex rounded-full overflow-hidden h-3" style={{ background: 'var(--subtle-bg)' }}>
                             <motion.div
@@ -788,14 +788,14 @@ export default function InstantTradeAnalyzer() {
                             />
                           </div>
                           <div className="flex items-center justify-between mt-1">
-                            <span className="text-[10px] font-mono font-bold" style={{ color: '#ef4444' }}>{result.values?.youGiveTotal.toLocaleString()}</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{
+                            <span className="text-[11px] font-mono font-bold" style={{ color: '#ef4444' }}>{result.values?.youGiveTotal.toLocaleString()}</span>
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{
                               color: isEven ? '#f59e0b' : favorsTeam2 ? '#22d3ee' : '#ef4444',
                               background: isEven ? 'rgba(245,158,11,0.1)' : favorsTeam2 ? 'rgba(34,211,238,0.1)' : 'rgba(239,68,68,0.1)',
                             }}>
                               {pctDiff > 0 ? `${Math.abs(pctDiff).toFixed(1)}% gap` : 'Close'}
                             </span>
-                            <span className="text-[10px] font-mono font-bold" style={{ color: '#22d3ee' }}>{result.values?.youGetTotal.toLocaleString()}</span>
+                            <span className="text-[11px] font-mono font-bold" style={{ color: '#22d3ee' }}>{result.values?.youGetTotal.toLocaleString()}</span>
                           </div>
                         </div>
                       </div>
@@ -808,7 +808,7 @@ export default function InstantTradeAnalyzer() {
             {result.values && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-red-500/5" style={{ border: '1px solid var(--border)' }}>
-                  <div className="text-[10px] font-medium mb-2" style={{ color: '#ef4444', opacity: 0.8 }}>TEAM 1 GIVES</div>
+                  <div className="text-[11px] font-medium mb-2" style={{ color: '#ef4444', opacity: 0.8 }}>TEAM 1 GIVES</div>
                   {result.values.youGive.map((a, i) => (
                     <div key={i} className="flex items-center justify-between text-xs py-0.5">
                       <span className="truncate mr-1" style={{ color: 'var(--muted)' }}>{a.name}</span>
@@ -818,7 +818,7 @@ export default function InstantTradeAnalyzer() {
                   <div className="text-right font-bold text-xs mt-2" style={{ color: '#ef4444', opacity: 0.85 }}>{result.values.youGiveTotal.toLocaleString()}</div>
                 </div>
                 <div className="p-3 rounded-xl bg-emerald-500/5" style={{ border: '1px solid var(--border)' }}>
-                  <div className="text-[10px] font-medium mb-2" style={{ color: '#22d3ee', opacity: 0.8 }}>TEAM 2 GIVES</div>
+                  <div className="text-[11px] font-medium mb-2" style={{ color: '#22d3ee', opacity: 0.8 }}>TEAM 2 GIVES</div>
                   {result.values.youGet.map((a, i) => (
                     <div key={i} className="flex items-center justify-between text-xs py-0.5">
                       <span className="truncate mr-1" style={{ color: 'var(--muted)' }}>{a.name}</span>
@@ -851,9 +851,9 @@ export default function InstantTradeAnalyzer() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full ${result.confidence === 'HIGH' ? 'bg-emerald-400' : result.confidence === 'MEDIUM' ? 'bg-amber-400' : 'bg-red-400'}`} />
-                <span className="text-[10px]" style={{ color: 'var(--muted2)' }}>{result.confidence} confidence</span>
+                <span className="text-[11px]" style={{ color: 'var(--muted2)' }}>{result.confidence} confidence</span>
               </div>
-              <span className="text-[10px]" style={{ color: 'var(--muted2)' }}>{result.leagueSize || leagueSize}-team {scoring.toUpperCase()}{isSuperFlex ? ' SF' : ''}{tePremium ? ' TEP' : ''} {isDynasty ? 'dynasty' : 'redraft'}</span>
+              <span className="text-[11px]" style={{ color: 'var(--muted2)' }}>{result.leagueSize || leagueSize}-team {scoring.toUpperCase()}{isSuperFlex ? ' SF' : ''}{tePremium ? ' TEP' : ''} {isDynasty ? 'dynasty' : 'redraft'}</span>
             </div>
 
             <div className="flex gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>

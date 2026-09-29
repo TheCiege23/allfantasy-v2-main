@@ -119,7 +119,7 @@ export function CommandCenterSettingsSection() {
               <div key={key} className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
                 <Icon className="h-4 w-4" style={{ color: "var(--accent-cyan-strong)" }} />
                 <div className="mt-2 text-2xl font-bold" style={{ color: "var(--text)" }}>{value}</div>
-                <div className="text-[10.5px]" style={{ color: "var(--muted)" }}>{label}</div>
+                <div className="text-[11px]" style={{ color: "var(--muted)" }}>{label}</div>
               </div>
             ))}
           </div>

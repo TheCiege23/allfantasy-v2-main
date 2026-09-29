@@ -50,7 +50,7 @@ export function ScoringSettingsFullSection({
       <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] pb-2">
         <div className="flex items-center gap-2">
           <span className="text-[15px] font-bold text-white">Scoring Settings</span>
-          <span className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/45">
+          <span className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/45">
             {sport}
           </span>
         </div>
@@ -62,7 +62,7 @@ export function ScoringSettingsFullSection({
         Flavor hint: <span className="font-semibold text-[#ffe9f1]">{flavor}</span>.
       </div>
 
-      <p className="text-[10px] font-bold uppercase tracking-wide text-white/38">All scoring rules</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">All scoring rules</p>
 
       {rows.length === 0 ? (
         <p className="text-[13px] text-white/45">No scoring_settings in synced league JSON yet.</p>
@@ -102,7 +102,7 @@ export function ScoringSettingsFullSection({
 
       {sleeperSettingsHref ? (
         <div className="space-y-2 pt-1">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Popular presets</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">Popular presets</p>
           <div className="grid grid-cols-2 gap-2">
             <a
               href={sleeperSettingsHref}

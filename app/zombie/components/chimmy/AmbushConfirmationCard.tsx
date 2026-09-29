@@ -30,7 +30,7 @@ export function AmbushConfirmationCard({
             key={x}
             type="button"
             onClick={() => setT(x)}
-            className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${t === x ? 'bg-red-500/40 text-white' : 'bg-white/10 text-white/70'}`}
+            className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${t === x ? 'bg-red-500/40 text-white' : 'bg-white/10 text-white/70'}`}
           >
             {x}
           </button>

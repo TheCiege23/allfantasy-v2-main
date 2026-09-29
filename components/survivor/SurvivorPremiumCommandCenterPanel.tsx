@@ -45,7 +45,7 @@ function SurvivorPremiumTileCard({
       ) : null}
       <div className="relative flex items-start justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">
             {tile.requiredPlan === 'af_supreme'
               ? 'Supreme'
               : tile.requiredPlan === 'af_commissioner'

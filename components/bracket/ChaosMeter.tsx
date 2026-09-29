@@ -66,7 +66,7 @@ export function ChaosMeter({ tournamentId }: Props) {
           {t("bracket.chaos.title")}
         </div>
         {loading && (
-          <span className="text-[10px] text-white/60">
+          <span className="text-[11px] text-white/60">
             {t("bracket.chaos.loading")}
           </span>
         )}

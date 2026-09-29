@@ -359,11 +359,11 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                     </p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Serums</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Serums</p>
                         <p className="mt-2 text-sm font-bold text-teal-100">{inventory.serums ?? 0}</p>
                       </div>
                       <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Weapons</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Weapons</p>
                         <p className="mt-2 text-sm font-bold text-amber-100">{inventory.weapons ?? 0}</p>
                       </div>
                     </div>
@@ -403,11 +403,11 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                 <ZombieGlassPanel title="Inventory snapshot" eyebrow="Loadout" icon={<FlaskConical className="h-4 w-4 text-teal-200" />}>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Active</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Active</p>
                       <p className="mt-2 text-lg font-black text-white">{inventory.activeItems ?? data.myActiveItemCount ?? 0}</p>
                     </div>
                     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Pending</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Pending</p>
                       <p className="mt-2 text-lg font-black text-white">{inventory.pendingItems ?? data.myPendingItemCount ?? 0}</p>
                     </div>
                   </div>
@@ -434,11 +434,11 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                 <ZombieGlassPanel title="Winnings pulse" eyebrow="Economy" icon={<Trophy className="h-4 w-4 text-amber-200" />} variant="reward">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-amber-500/20 bg-amber-500/8 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Week paid out</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Week paid out</p>
                       <p className="mt-1 text-lg font-black text-amber-50">${winnings.weekly.toFixed(0)}</p>
                     </div>
                     <div className="rounded-2xl border border-amber-500/15 bg-black/30 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Season tracked</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Season tracked</p>
                       <p className="mt-1 text-lg font-black text-white">${winnings.season.toFixed(0)}</p>
                     </div>
                   </div>
@@ -532,7 +532,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Performer {index + 1}</p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Performer {index + 1}</p>
                           <p className="truncate text-sm font-semibold text-white">{teamName(team)}</p>
                         </div>
                         <ZombieStatusBadge status={team.status} />

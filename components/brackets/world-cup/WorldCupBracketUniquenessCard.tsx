@@ -108,7 +108,7 @@ export default function WorldCupBracketUniquenessCard({
             <Sparkles className="h-4 w-4 text-white/85" aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
               {t("wc.uniqueness.eyebrow")}
             </p>
             <h3 className="text-base font-black text-white sm:text-lg">
@@ -124,8 +124,8 @@ export default function WorldCupBracketUniquenessCard({
             data-testid="world-cup-bracket-uniqueness-tier"
             className={
               hasBracketBrainAi
-                ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90"
-                : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/65"
+                ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90"
+                : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/65"
             }
           >
             {hasBracketBrainAi ? t("wc.uniqueness.tierPro") : t("wc.uniqueness.tierBasic")}
@@ -187,12 +187,12 @@ export default function WorldCupBracketUniquenessCard({
                 </span>
                 <span
                   data-testid={`world-cup-bracket-uniqueness-rarity-${idx}`}
-                  className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/75"
+                  className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/75"
                 >
                   {t(RARITY_KEY[insight.rarity])}
                 </span>
                 {typeof insight.percentage === "number" ? (
-                  <span className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/75">
+                  <span className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/75">
                     {t("wc.uniqueness.percentShare", { percent: insight.percentage })}
                   </span>
                 ) : null}
@@ -218,7 +218,7 @@ export default function WorldCupBracketUniquenessCard({
         </div>
       ) : null}
 
-      <p className="mt-3 text-[10px] text-white/40">
+      <p className="mt-3 text-[11px] text-white/40">
         {t("wc.uniqueness.privacyNote")}
       </p>
     </section>

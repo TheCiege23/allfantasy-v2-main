@@ -267,7 +267,7 @@ export function MockDraftRecap({
                   <td className="p-2 text-white">{p.playerName}</td>
                   <td className="p-2">
                     <span
-                      className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${POSITION_COLORS[p.position] || 'text-white/70 bg-white/10'}`}
+                      className={`inline-flex rounded border px-1.5 py-0.5 text-[11px] ${POSITION_COLORS[p.position] || 'text-white/70 bg-white/10'}`}
                     >
                       {p.position}
                     </span>
@@ -307,15 +307,15 @@ export function MockDraftRecap({
                     {grade.letter}
                   </span>
                 </div>
-                <p className="text-[10px] text-white/55">{grade.title}</p>
-                <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+                <p className="text-[11px] text-white/55">{grade.title}</p>
+                <div className="mt-2 flex flex-wrap gap-1 text-[11px]">
                   {Object.entries(posCounts).map(([pos, n]) => (
                     <span key={pos} className="rounded bg-white/10 px-1.5 py-0.5 text-white/70">
                       {pos}:{n}
                     </span>
                   ))}
                 </div>
-                <ul className="mt-2 space-y-0.5 text-[10px] text-white/65">
+                <ul className="mt-2 space-y-0.5 text-[11px] text-white/65">
                   {grade.strengths.map((s) => (
                     <li key={s}>+ {s}</li>
                   ))}
@@ -323,7 +323,7 @@ export function MockDraftRecap({
                     <li key={w}>− {w}</li>
                   ))}
                 </ul>
-                <p className="mt-1 text-[10px] text-white/50">{grade.valueAdded}</p>
+                <p className="mt-1 text-[11px] text-white/50">{grade.valueAdded}</p>
               </div>
             )
           })}

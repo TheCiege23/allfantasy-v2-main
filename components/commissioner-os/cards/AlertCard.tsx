@@ -24,7 +24,7 @@ export function AlertCard({ message, severity, onClick }: AlertCardProps) {
           {message}
         </span>
         <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
           style={{ color: style.text, borderColor: style.border, border: '1px solid' }}
         >
           {SEVERITY_LABELS[severity]}

@@ -71,7 +71,7 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
       <div>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             Commissioner concept notes (JSON merge)
           </span>
           <textarea

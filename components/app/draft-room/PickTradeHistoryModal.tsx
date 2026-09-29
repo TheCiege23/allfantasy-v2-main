@@ -78,7 +78,7 @@ export function PickTradeHistoryModal({
             <History className="h-4 w-4 text-cyan-300/80" aria-hidden />
             <div>
               <h2 className="text-sm font-semibold text-white">Pick trade history</h2>
-              <p className="text-[10px] text-white/50">
+              <p className="text-[11px] text-white/50">
                 {tradedPicks.length} {tradedPicks.length === 1 ? 'traded pick' : 'traded picks'}
               </p>
             </div>
@@ -101,7 +101,7 @@ export function PickTradeHistoryModal({
             <div className="space-y-4">
               {byRound.map(([round, entries]) => (
                 <section key={round}>
-                  <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-cyan-200/80">
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-cyan-200/80">
                     Round {round}
                   </p>
                   <ul className="space-y-1">
@@ -129,7 +129,7 @@ export function PickTradeHistoryModal({
                             {entry.newOwnerName || 'Unknown'}
                           </span>
                           {entry.season ? (
-                            <span className="ml-2 shrink-0 rounded border border-white/10 bg-black/25 px-1.5 py-0.5 text-[9px] text-white/55">
+                            <span className="ml-2 shrink-0 rounded border border-white/10 bg-black/25 px-1.5 py-0.5 text-[11px] text-white/55">
                               {entry.season}
                             </span>
                           ) : null}
@@ -143,7 +143,7 @@ export function PickTradeHistoryModal({
           )}
         </div>
 
-        <footer className="border-t border-white/8 bg-[#050c1d] px-4 py-2 text-[10px] text-white/40">
+        <footer className="border-t border-white/8 bg-[#050c1d] px-4 py-2 text-[11px] text-white/40">
           Read-only · open a pick's menu to propose new trades
         </footer>
       </div>

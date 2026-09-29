@@ -437,7 +437,7 @@ function PlayerDetailSheet({
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-bold text-primary">{resolved.name || `Player ${playerId.slice(-4)}`}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-secondary">
-              <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${positionBadgeClass(pos)}`}>{pos}</span>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${positionBadgeClass(pos)}`}>{pos}</span>
               {resolved.team && resolved.team !== 'FA' ? (
                 <span className="flex items-center gap-1">
                   <TeamLogo
@@ -450,7 +450,7 @@ function PlayerDetailSheet({
                 </span>
               ) : <span className="text-muted">Free Agent</span>}
               {slotLabel ? (
-                <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${slotBadgeClass(slotLabel)}`}>{slotLabel}</span>
+                <span className={`rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${slotBadgeClass(slotLabel)}`}>{slotLabel}</span>
               ) : null}
               {statusDot}
             </div>
@@ -468,26 +468,26 @@ function PlayerDetailSheet({
         {/* Stats row */}
         <div className="mx-5 mb-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-subtle bg-surface-muted">
           <div className="flex flex-col items-center gap-0.5 bg-surface px-3 py-3">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Proj</span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted">Proj</span>
             <span className="text-[18px] font-bold text-primary">
               {projection != null ? projection.toFixed(1) : '—'}
             </span>
             {showCrest ? (
-              <span className="text-[9px] text-muted">via AF</span>
+              <span className="text-[11px] text-muted">via AF</span>
             ) : null}
           </div>
           <div className="flex flex-col items-center gap-0.5 bg-surface px-3 py-3">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Pts</span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted">Pts</span>
             <span className="text-[18px] font-bold text-muted">-</span>
-            <span className="text-[9px] text-muted">live feed</span>
+            <span className="text-[11px] text-muted">live feed</span>
           </div>
           <div className="flex flex-col items-center gap-0.5 bg-surface px-3 py-3">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Status</span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted">Status</span>
             <span className={`flex items-center gap-1 text-[12px] font-semibold ${statusTextClass}`}>
               <Activity className="h-3 w-3" />
               {statusText}
             </span>
-            <span className="text-[9px] text-muted">provider status</span>
+            <span className="text-[11px] text-muted">provider status</span>
           </div>
         </div>
 
@@ -669,7 +669,7 @@ function LineupReplacementPickerSheet({
                       data-testid={`lineup-replace-candidate-${c.id}`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border border-subtle bg-surface px-1.5 py-0.5 text-[10px] font-bold text-secondary">
+                        <span className="inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border border-subtle bg-surface px-1.5 py-0.5 text-[11px] font-bold text-secondary">
                           {c.badge ?? '-'}
                         </span>
                         <PlayerHeadshot
@@ -687,7 +687,7 @@ function LineupReplacementPickerSheet({
                         />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-semibold text-primary">{c.name}</p>
-                          <p className="flex items-center gap-1 text-[10px] text-muted">
+                          <p className="flex items-center gap-1 text-[11px] text-muted">
                             <span>{c.position || '-'}</span>
                             <span className="text-muted">·</span>
                             {c.team && c.team !== 'FA' ? (
@@ -706,12 +706,12 @@ function LineupReplacementPickerSheet({
                           </p>
                         </div>
                         {!c.eligible ? (
-                          <span className="rounded-md border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                          <span className="rounded-md border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-200">
                             Ineligible
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-1.5 grid grid-cols-3 gap-2 text-[10px] text-secondary">
+                      <div className="mt-1.5 grid grid-cols-3 gap-2 text-[11px] text-secondary">
                         <span>Proj: <ProjectionValue projection={candidateProjection} className="" /></span>
                         <span>Pts: -</span>
                         <span>Status: {status}</span>
@@ -807,7 +807,7 @@ function RosterRow({
             e.stopPropagation()
             onSlotClick?.()
           }}
-          className={`inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${badgeClassEarly}`}
+          className={`inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${badgeClassEarly}`}
         >
           {leftBadgeEarly}
         </button>
@@ -850,7 +850,7 @@ function RosterRow({
               }
             : undefined
         }
-        className={`inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${badgeClass} ${
+        className={`inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${badgeClass} ${
           onSlotClick ? 'cursor-pointer hover:brightness-110' : ''
         }`}
       >
@@ -878,7 +878,7 @@ function RosterRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-semibold text-white">{label}</p>
-        <p className="flex flex-wrap items-center gap-1 text-[10px] text-white/40">
+        <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/40">
           {playersLoading ? (
             '- · -'
           ) : (
@@ -963,7 +963,7 @@ function RosterRow({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          <label className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-white/35" htmlFor={`chimmy-note-${playerId}`}>
+          <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/35" htmlFor={`chimmy-note-${playerId}`}>
             Chimmy note
           </label>
           <textarea
@@ -979,7 +979,7 @@ function RosterRow({
             type="button"
             onClick={() => onAskChimmy?.()}
             data-testid={`roster-row-chimmy-ask-${playerId}`}
-            className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
+            className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
           >
             Ask Chimmy
           </button>
@@ -1747,7 +1747,7 @@ const maxWeekMenu = useMemo(() => {
           <div className="flex items-center gap-1">
             <Link
               href={`/waiver-ai?leagueId=${encodeURIComponent(league.id)}`}
-              className="inline-flex h-10 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-muted px-2.5 text-[9px] font-bold uppercase tracking-wide text-secondary transition hover:border-brand-primary/30 hover:text-brand-primary"
+              className="inline-flex h-10 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-muted px-2.5 text-[11px] font-bold uppercase tracking-wide text-secondary transition hover:border-brand-primary/30 hover:text-brand-primary"
               data-testid="team-tab-waiver"
             >
               <ClipboardList className="mb-0.5 h-4 w-4 text-[#ff9ec0]/90" strokeWidth={2} />
@@ -1755,7 +1755,7 @@ const maxWeekMenu = useMemo(() => {
             </Link>
             <Link
               href={`/league/${encodeURIComponent(league.id)}?view=trades`}
-              className="inline-flex h-10 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-muted px-2.5 text-[9px] font-bold uppercase tracking-wide text-secondary transition hover:border-brand-primary/30 hover:text-brand-primary"
+              className="inline-flex h-10 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-muted px-2.5 text-[11px] font-bold uppercase tracking-wide text-secondary transition hover:border-brand-primary/30 hover:text-brand-primary"
               data-testid="team-tab-trade"
             >
               <ArrowLeftRight className="mb-0.5 h-4 w-4 text-[#ff9ec0]/90" strokeWidth={2} />
@@ -1909,7 +1909,7 @@ const maxWeekMenu = useMemo(() => {
       </div>
 
       <div className="rounded-xl border border-brand-primary/15 bg-surface-muted p-4 backdrop-blur-sm">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted">Start A vs B</p>
+        <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">Start A vs B</p>
         <p className="mb-3 text-xs text-muted">
           Compare two players with deterministic projections first; AI explains the math (Pro). Supports all league sports.
         </p>
@@ -1968,10 +1968,10 @@ const maxWeekMenu = useMemo(() => {
           <section>
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Starters</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Starters</p>
                 <p className="text-[11px] text-muted">Click a row to open the player card (stub).</p>
               </div>
-              <div className="flex gap-4 text-[10px] font-semibold uppercase tracking-wide text-white/35">
+              <div className="flex gap-4 text-[11px] font-semibold uppercase tracking-wide text-white/35">
                 <span className="w-10 text-right">OWN%</span>
                 <span className="w-10 text-right">START%</span>
               </div>
@@ -1998,7 +1998,7 @@ const maxWeekMenu = useMemo(() => {
 
           <section>
             <div className="mb-2 flex items-center gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Bench</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Bench</p>
               <div className="h-px flex-1 bg-subtle" />
             </div>
             <div className="space-y-1">
@@ -2023,7 +2023,7 @@ const maxWeekMenu = useMemo(() => {
           {showTaxiSectionSleeper ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Taxi</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Taxi</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2049,7 +2049,7 @@ const maxWeekMenu = useMemo(() => {
           {showIrSectionSleeper ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Reserve / IR</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Reserve / IR</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2075,7 +2075,7 @@ const maxWeekMenu = useMemo(() => {
           {payload.roster.picks.length > 0 ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Draft picks</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Draft picks</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <ul className="space-y-1 text-xs text-secondary">
@@ -2099,7 +2099,7 @@ const maxWeekMenu = useMemo(() => {
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Starters</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Starters</p>
                   <div className="h-px flex-1 bg-subtle" />
                 </div>
                 <p className="mt-0.5 text-[11px] text-muted">
@@ -2108,7 +2108,7 @@ const maxWeekMenu = useMemo(() => {
                     : 'Lineup changes are locked for this view or scoring period.'}
                 </p>
               </div>
-              <div className="flex gap-4 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+              <div className="flex gap-4 text-[11px] font-semibold uppercase tracking-wide text-white/40">
                 <span className="w-10 text-right">PROJ</span>
                 <span className="w-10 text-right">PTS</span>
               </div>
@@ -2148,7 +2148,7 @@ const maxWeekMenu = useMemo(() => {
 
           <section>
             <div className="mb-2 flex items-center gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Bench</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Bench</p>
               <div className="h-px flex-1 bg-subtle" />
             </div>
             <div className="space-y-1">
@@ -2182,7 +2182,7 @@ const maxWeekMenu = useMemo(() => {
           {showIrSectionDb ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Injured reserve</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Injured reserve</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2217,7 +2217,7 @@ const maxWeekMenu = useMemo(() => {
           {showTaxiSectionDb ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Taxi</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Taxi</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2255,7 +2255,7 @@ const maxWeekMenu = useMemo(() => {
           {showDevySectionDb ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Devy</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Devy</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2345,10 +2345,10 @@ const maxWeekMenu = useMemo(() => {
           <section>
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Starters</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Starters</p>
                 <p className="text-[11px] text-muted">Click a row to open the player card (stub).</p>
               </div>
-              <div className="flex gap-4 text-[10px] font-semibold uppercase tracking-wide text-white/35">
+              <div className="flex gap-4 text-[11px] font-semibold uppercase tracking-wide text-white/35">
                 <span className="w-10 text-right">OWN%</span>
                 <span className="w-10 text-right">START%</span>
               </div>
@@ -2374,7 +2374,7 @@ const maxWeekMenu = useMemo(() => {
 
           <section>
             <div className="mb-2 flex items-center gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Bench</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Bench</p>
               <div className="h-px flex-1 bg-subtle" />
             </div>
             <div className="space-y-1">
@@ -2399,7 +2399,7 @@ const maxWeekMenu = useMemo(() => {
           {showIrSectionDb ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">IR</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">IR</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2429,7 +2429,7 @@ const maxWeekMenu = useMemo(() => {
           {showTaxiSectionDb ? (
             <section>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Taxi</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Taxi</p>
                 <div className="h-px flex-1 bg-subtle" />
               </div>
               <div className="space-y-1">
@@ -2464,7 +2464,7 @@ const maxWeekMenu = useMemo(() => {
           data-testid="team-tab-draft-picks-section"
         >
           <div className="mb-3 flex items-center gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">Draft picks</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">Draft picks</p>
             <div className="h-px flex-1 bg-subtle" />
           </div>
           <ul className="space-y-1.5">
@@ -2512,9 +2512,9 @@ const maxWeekMenu = useMemo(() => {
                 >
                   {p.label}
                   {p.status && p.status !== 'pending' && p.status !== 'scheduled' ? (
-                    <span className="ml-2 text-[10px] text-white/35">({p.status})</span>
+                    <span className="ml-2 text-[11px] text-white/35">({p.status})</span>
                   ) : null}
-                  <span className="mt-1 block text-[10px] text-[#ff3d81]/80">Tap for trade history</span>
+                  <span className="mt-1 block text-[11px] text-[#ff3d81]/80">Tap for trade history</span>
                 </button>
               </li>
             ))}
@@ -2566,7 +2566,7 @@ const maxWeekMenu = useMemo(() => {
                 <p className="mt-2 text-sm text-primary">{draftPickDetail.pick.label}</p>
                 <p className="mt-1 text-[11px] text-muted">Status: {draftPickDetail.pick.status}</p>
                 <div className="mt-4 border-t border-subtle pt-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Trade chain (AF)</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Trade chain (AF)</p>
                   {draftPickDetail.tradeChain.length === 0 ? (
                     <p className="mt-2 text-xs text-muted">No linked trades found for this pick id.</p>
                   ) : (
@@ -2583,7 +2583,7 @@ const maxWeekMenu = useMemo(() => {
                   )}
                   <Link
                     href={`/league/${encodeURIComponent(league.id)}?view=trades`}
-                    className="mt-2 inline-block text-[10px] font-semibold text-[#ff3d81]/90 hover:text-[#ff9ec0]"
+                    className="mt-2 inline-block text-[11px] font-semibold text-[#ff3d81]/90 hover:text-[#ff9ec0]"
                   >
                     Open trades tab -&gt;
                   </Link>

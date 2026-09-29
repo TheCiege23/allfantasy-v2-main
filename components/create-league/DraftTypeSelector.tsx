@@ -110,7 +110,7 @@ export function DraftTypeSelector({
           </div>
         ) : null}
         {draftInView ? (
-          <p className="mt-3 text-[10px] text-white/30" aria-hidden>
+          <p className="mt-3 text-[11px] text-white/30" aria-hidden>
             {t('createLeague.draft.previewNote')}
           </p>
         ) : null}

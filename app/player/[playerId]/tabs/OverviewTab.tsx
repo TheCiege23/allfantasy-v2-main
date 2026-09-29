@@ -49,14 +49,14 @@ export function OverviewTab({ player }: { player: PlayerIdentity }) {
     <div className="space-y-4">
       {data.outlookSummary && (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-white/30">Outlook Summary</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/30">Outlook Summary</p>
           <p className="text-[13px] leading-relaxed text-white/70">{data.outlookSummary}</p>
         </div>
       )}
 
       {data.recentTrendSummary && (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-white/30">Recent Trend</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/30">Recent Trend</p>
           <p className="text-[13px] leading-relaxed text-white/70">{data.recentTrendSummary}</p>
         </div>
       )}
@@ -73,7 +73,7 @@ export function OverviewTab({ player }: { player: PlayerIdentity }) {
       {data.tags && data.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {data.tags.map((t) => (
-            <span key={t} className="rounded-md bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">{t}</span>
+            <span key={t} className="rounded-md bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-300">{t}</span>
           ))}
         </div>
       )}
@@ -88,7 +88,7 @@ export function OverviewTab({ player }: { player: PlayerIdentity }) {
 function StatBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-center">
-      <p className="text-[9px] uppercase tracking-wide text-white/30">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-white/30">{label}</p>
       <p className="mt-0.5 text-[16px] font-bold text-white/80">{value}</p>
     </div>
   )

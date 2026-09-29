@@ -127,7 +127,7 @@ function Pill({ label, color = "white" }: PillProps) {
     white:   "border-white/20 bg-white/[0.06] text-white/60",
   }
   return (
-    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${colorMap[color]}`}>
+    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${colorMap[color]}`}>
       {label}
     </span>
   )
@@ -500,7 +500,7 @@ export function AiProviderHealthPanel() {
                   <p className="text-[11px] font-medium text-rose-400 mb-1">Missing env vars:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {data.worldCup.provider.missingEnvVars.map((v) => (
-                      <code key={v} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-300">{v}</code>
+                      <code key={v} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[11px] text-rose-300">{v}</code>
                     ))}
                   </div>
                 </div>
@@ -509,25 +509,25 @@ export function AiProviderHealthPanel() {
               {/* Data counts */}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="ai-health-wc-counts">
                 <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] text-white/40 uppercase tracking-wide">Fixtures</p>
+                  <p className="text-[11px] text-white/40 uppercase tracking-wide">Fixtures</p>
                   <p className="text-lg font-bold text-white tabular-nums">{data.worldCup.data.fixtureCount}</p>
-                  <p className="text-[10px] text-white/30">
+                  <p className="text-[11px] text-white/30">
                     {data.worldCup.data.groupStageFixtureCount} group · {data.worldCup.data.knockoutFixtureCount} KO
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] text-white/40 uppercase tracking-wide">Standings rows</p>
+                  <p className="text-[11px] text-white/40 uppercase tracking-wide">Standings rows</p>
                   <p className="text-lg font-bold text-white tabular-nums">{data.worldCup.data.standingsRowCount}</p>
-                  <p className="text-[10px] text-white/30">{data.worldCup.data.standingsState}</p>
+                  <p className="text-[11px] text-white/30">{data.worldCup.data.standingsState}</p>
                 </div>
                 <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] text-white/40 uppercase tracking-wide">Group stage</p>
+                  <p className="text-[11px] text-white/40 uppercase tracking-wide">Group stage</p>
                   <p className={`text-lg font-bold tabular-nums ${data.worldCup.data.groupStageReady ? "text-emerald-300" : "text-amber-300"}`}>
                     {data.worldCup.data.groupStageReady ? "Ready" : "Partial"}
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] text-white/40 uppercase tracking-wide">Knockouts</p>
+                  <p className="text-[11px] text-white/40 uppercase tracking-wide">Knockouts</p>
                   <p className={`text-lg font-bold tabular-nums ${data.worldCup.data.knockoutsReady ? "text-emerald-300" : "text-amber-300"}`}>
                     {data.worldCup.data.knockoutsReady ? "Ready" : "Partial"}
                   </p>
@@ -541,7 +541,7 @@ export function AiProviderHealthPanel() {
                   {data.worldCup.liveChain.map((id, i) => (
                     <span key={id} className="flex items-center gap-1.5">
                       {i > 0 ? <span className="text-white/20 text-xs">→</span> : null}
-                      <code className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/60">
+                      <code className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-white/60">
                         {id}
                       </code>
                     </span>

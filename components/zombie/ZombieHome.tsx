@@ -112,7 +112,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         />
         <div className="relative z-[1] p-4 sm:p-6">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--zombie-toxic)]">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/35 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--zombie-toxic)]">
               <Radio className="h-3 w-3" aria-hidden />
               League embed
             </span>

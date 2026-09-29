@@ -281,25 +281,25 @@ export default function LeagueDramaDashboardPage() {
         {timeline.map((event) => (
           <article key={event.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] text-amber-200">
                 {event.dramaType}
               </span>
-              <span className="text-[10px] text-white/45">Score {Math.round(event.dramaScore)}</span>
-              <span className="text-[10px] text-white/45">
+              <span className="text-[11px] text-white/45">Score {Math.round(event.dramaScore)}</span>
+              <span className="text-[11px] text-white/45">
                 Teams {event.relatedTeamIds.length} · Managers {event.relatedManagerIds.length}
               </span>
               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => void tellStory(event.id)}
-                  className="inline-flex items-center gap-1 rounded border border-cyan-500/25 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/15"
+                  className="inline-flex items-center gap-1 rounded border border-cyan-500/25 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/15"
                 >
                   <BookOpen className="h-3 w-3" />
                   {storyLoadingId === event.id ? 'Loading…' : storyByEvent[event.id] ? 'Hide story' : 'Tell me the story'}
                 </button>
                 <Link
                   href={`/app/league/${encodeURIComponent(leagueId)}/drama/${encodeURIComponent(event.id)}`}
-                  className="rounded border border-white/20 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+                  className="rounded border border-white/20 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
                 >
                   Story detail
                 </Link>

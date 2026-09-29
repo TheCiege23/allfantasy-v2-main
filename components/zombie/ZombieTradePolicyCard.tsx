@@ -74,7 +74,7 @@ export function ZombieTradePolicyCard({ leagueId }: { leagueId: string }) {
             Do not allow trading Serums and Weapons after games have been completed
           </label>
           {!commissioner ? (
-            <p className="mt-2 text-[10px] text-white/35">Only the commissioner can change this policy.</p>
+            <p className="mt-2 text-[11px] text-white/35">Only the commissioner can change this policy.</p>
           ) : null}
         </div>
       </div>

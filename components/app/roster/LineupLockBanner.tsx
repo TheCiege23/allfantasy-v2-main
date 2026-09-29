@@ -23,9 +23,9 @@ export default function LineupLockBanner({ lineupLock, canEditLineup }: LineupLo
       <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200/90" aria-hidden />
       <div className="min-w-0 space-y-0.5">
         <p className="font-semibold text-amber-50/95">Lineup locked</p>
-        {reason && <p className="text-[10px] leading-snug text-amber-100/85">{reason}</p>}
+        {reason && <p className="text-[11px] leading-snug text-amber-100/85">{reason}</p>}
         {lineupLock?.policy && (
-          <p className="text-[9px] uppercase tracking-wide text-amber-200/60">
+          <p className="text-[11px] uppercase tracking-wide text-amber-200/60">
             Policy: {lineupLock.policy}
           </p>
         )}

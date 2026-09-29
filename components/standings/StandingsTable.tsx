@@ -96,7 +96,7 @@ export default function StandingsTable({
       data-scoring-mode={scoringMode}
     >
       <div
-        className={`grid ${gridCols} gap-2 border-b border-white/10 px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/40`}
+        className={`grid ${gridCols} gap-2 border-b border-white/10 px-4 py-3 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/40`}
       >
         <div>#</div>
         <div>Team</div>
@@ -199,7 +199,7 @@ export default function StandingsTable({
                   data-testid="standings-playoff-cut"
                 >
                   <span className="h-px flex-1 bg-amber-400/40" />
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-amber-400">
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-amber-400">
                     Playoff cut · top {playoffCut}
                   </span>
                   <span className="h-px flex-1 bg-amber-400/40" />

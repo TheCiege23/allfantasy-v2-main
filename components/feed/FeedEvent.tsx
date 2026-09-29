@@ -109,7 +109,7 @@ export default function FeedEvent({ item }: { item: ActivityFeedItem }) {
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-bold text-white">{item.userName || 'League'}</span>
           <span
-            className={`font-mono text-[10px] font-bold uppercase tracking-[0.12em] ${
+            className={`font-mono text-[11px] font-bold uppercase tracking-[0.12em] ${
               isBroadcast ? 'text-amber-300' : 'text-white/35'
             }`}
           >

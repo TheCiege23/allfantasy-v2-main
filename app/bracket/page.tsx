@@ -89,21 +89,21 @@ function BracketLandingInner() {
               className="flex min-h-[48px] touch-manipulation items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60 active:bg-black/70"
             >
               <span className="min-w-0 font-medium">{t('bracket.landing.secondaryLink')}</span>
-              <span className="hidden shrink-0 font-mono text-[10px] text-white/50 sm:inline">/brackets</span>
+              <span className="hidden shrink-0 font-mono text-[11px] text-white/50 sm:inline">/brackets</span>
             </Link>
             <Link
               href="/brackets/leagues/new"
               className="flex min-h-[48px] touch-manipulation items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60 active:bg-black/70"
             >
               <span className="min-w-0 font-medium">Create a pool</span>
-              <span className="hidden shrink-0 font-mono text-[10px] text-white/50 sm:inline">/brackets/leagues/new</span>
+              <span className="hidden shrink-0 font-mono text-[11px] text-white/50 sm:inline">/brackets/leagues/new</span>
             </Link>
             <Link
               href="/brackets/join"
               className="flex min-h-[48px] touch-manipulation items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60 active:bg-black/70"
             >
               <span className="min-w-0 font-medium">Join a pool</span>
-              <span className="hidden shrink-0 font-mono text-[10px] text-white/50 sm:inline">/brackets/join</span>
+              <span className="hidden shrink-0 font-mono text-[11px] text-white/50 sm:inline">/brackets/join</span>
             </Link>
           </div>
         </aside>

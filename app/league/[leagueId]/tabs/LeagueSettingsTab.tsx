@@ -578,7 +578,7 @@ export function LeagueSettingsTab({
               {s?.slowDraftPause ? (
                 <div className="mt-3 flex items-center gap-3">
                   <div>
-                    <label className="mb-1 block text-[10px] text-white/40">Pause From</label>
+                    <label className="mb-1 block text-[11px] text-white/40">Pause From</label>
                     <Input
                       type="time"
                       value={String(s?.slowPauseFrom ?? '22:00')}
@@ -587,7 +587,7 @@ export function LeagueSettingsTab({
                   </div>
                   <span className="text-[12px] text-white/30">→</span>
                   <div>
-                    <label className="mb-1 block text-[10px] text-white/40">Pause Until</label>
+                    <label className="mb-1 block text-[11px] text-white/40">Pause Until</label>
                     <Input
                       type="time"
                       value={String(s?.slowPauseUntil ?? '08:00')}
@@ -613,7 +613,7 @@ export function LeagueSettingsTab({
             <div>
               <Toggle checked={Boolean(s?.aiAutoPick)} onChange={(v) => void patch({ aiAutoPick: v })} />
               {s?.aiAutoPick ? (
-                <p className="mt-1.5 text-[10px] text-[#ff3d81]/70">✓ AI takes priority over CPU auto-pick</p>
+                <p className="mt-1.5 text-[11px] text-[#ff3d81]/70">✓ AI takes priority over CPU auto-pick</p>
               ) : null}
             </div>
           }
@@ -802,7 +802,7 @@ export function LeagueSettingsTab({
                     onChange={(e) => setRandomizeCount(Number(e.target.value) || 1)}
                   />
                 </div>
-                <p className="mt-1 text-[10px] text-white/30">Max 50 randomizations</p>
+                <p className="mt-1 text-[11px] text-white/30">Max 50 randomizations</p>
               </div>
               <button
                 type="button"
@@ -1136,7 +1136,7 @@ export function LeagueSettingsTab({
               <div>
                 <p className="flex items-center gap-2 text-sm font-bold text-white">
                   ⚡ AutoCoach AI
-                  <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[9px] font-bold text-[#ff3d81]">
+                  <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[11px] font-bold text-[#ff3d81]">
                     FREE FOR LEAGUES
                   </span>
                 </p>
@@ -1206,14 +1206,14 @@ export function LeagueSettingsTab({
                   {member.avatarUrl ? (
                     <img src={member.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full" />
                   ) : (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[10px] font-bold text-white/50">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-bold text-white/50">
                       {(member.teamName || member.ownerName || '?').slice(0, 2)}
                     </div>
                   )}
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold text-white">{member.ownerName || member.teamName}</p>
                     {member.isCommissioner ? (
-                      <p className="text-[10px] text-[#ff3d81]">Commissioner</p>
+                      <p className="text-[11px] text-[#ff3d81]">Commissioner</p>
                     ) : null}
                   </div>
                 </div>

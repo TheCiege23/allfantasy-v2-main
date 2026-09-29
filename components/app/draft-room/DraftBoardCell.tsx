@@ -101,7 +101,7 @@ function TinyTeamLogo({
     )
   }
   return (
-    <span className="inline-flex h-[14px] min-w-[14px] items-center justify-center rounded border border-cyan-300/50 bg-[#1a2844] px-0.5 text-[7px] font-bold text-cyan-100">
+    <span className="inline-flex h-[14px] min-w-[14px] items-center justify-center rounded border border-cyan-300/50 bg-[#1a2844] px-0.5 text-[11px] font-bold text-cyan-100">
       {team ? team.slice(0, 3).toUpperCase() : '—'}
     </span>
   )
@@ -166,7 +166,7 @@ function StatusBadge({
   className: string
 }) {
   return (
-    <span className={`inline-flex items-center rounded px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] ${className}`}>
+    <span className={`inline-flex items-center rounded px-1 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${className}`}>
       {label}
     </span>
   )
@@ -176,7 +176,7 @@ function PositionBadge({ pos }: { pos: string | null }) {
   const p = (pos ?? '—').trim().slice(0, 4).toUpperCase()
   return (
     <span
-      className="inline-flex min-w-[1.5rem] shrink-0 items-center justify-center rounded-md border border-cyan-300/45 bg-cyan-500/25 px-1 py-0.5 text-[8px] font-bold text-cyan-100/95 shadow-sm"
+      className="inline-flex min-w-[1.5rem] shrink-0 items-center justify-center rounded-md border border-cyan-300/45 bg-cyan-500/25 px-1 py-0.5 text-[11px] font-bold text-cyan-100/95 shadow-sm"
       title={pos ?? undefined}
     >
       {p}
@@ -259,7 +259,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[42px] min-h-[42px] flex-col overflow-hidden rounded-[6px] border px-1 pb-0.5 pt-0.5 text-[9px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[44px] sm:min-h-[44px] sm:px-1 sm:pb-0.5 sm:pt-0.5 ${
+      className={`group relative flex h-[42px] min-h-[42px] flex-col overflow-hidden rounded-[6px] border px-1 pb-0.5 pt-0.5 text-[11px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[44px] sm:min-h-[44px] sm:px-1 sm:pb-0.5 sm:pt-0.5 ${
         onTradeFromCell ? 'pr-7 sm:pr-8' : ''
       } ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
@@ -352,7 +352,7 @@ function DraftBoardCellInner({
           {pick.isPromotedFromDevy ? <StatusBadge label="Promoted" className="bg-amber-500/25 text-amber-200" /> : null}
           {showTradeChip ? (
             <span
-              className={`max-w-[70px] truncate rounded px-1 py-0.5 text-[8px] font-semibold ${
+              className={`max-w-[70px] truncate rounded px-1 py-0.5 text-[11px] font-semibold ${
                 showNewOwnerInRed ? 'bg-red-500/20 text-red-200' : 'bg-white/20 text-white/95'
               }`}
               title={ownerLabel ?? undefined}
@@ -362,7 +362,7 @@ function DraftBoardCellInner({
           ) : null}
         </div>
 
-        <span className="-mt-px tabular-nums text-[9px] font-medium text-white/38" aria-hidden>
+        <span className="-mt-px tabular-nums text-[11px] font-medium text-white/38" aria-hidden>
           {compactLabel}
         </span>
       </div>
@@ -375,7 +375,7 @@ function DraftBoardCellInner({
             ) : (
               <ArrowRight className="h-2.5 w-2.5 shrink-0" aria-hidden />
             )}
-            <span className="truncate text-[8px] font-normal" title={ownerLabel ?? 'Awaiting pick'}>
+            <span className="truncate text-[11px] font-normal" title={ownerLabel ?? 'Awaiting pick'}>
               {ownerLabel ?? 'Awaiting pick'}
             </span>
             {isCollegeRound ? (
@@ -386,7 +386,7 @@ function DraftBoardCellInner({
           </div>
           {pick.tradedPickMeta?.previousOwnerName ? (
             <span
-              className="max-w-[56px] shrink-0 truncate text-[8px] text-white/30"
+              className="max-w-[56px] shrink-0 truncate text-[11px] text-white/30"
               title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
             >
               from {pick.tradedPickMeta.previousOwnerName}
@@ -419,12 +419,12 @@ function DraftBoardCellInner({
                 </span>
                 <PositionBadge pos={pick.position} />
                 {pick.experienceBadge ? (
-                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[7px] font-bold uppercase tracking-wide text-cyan-100/95">
+                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
                     {pick.experienceBadge}
                   </span>
                 ) : null}
               </div>
-              <p className="truncate text-[8px] text-white/44">
+              <p className="truncate text-[11px] text-white/44">
                 {(pick.team ?? '—').toString()}
                 {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
               </p>
@@ -432,14 +432,14 @@ function DraftBoardCellInner({
           </div>
 
           {pick.amount != null && pick.amount > 0 ? (
-            <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/16 px-1.5 py-0.5 text-[8px] font-semibold text-amber-100">
+            <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/16 px-1.5 py-0.5 text-[11px] font-semibold text-amber-100">
               <Gavel className="h-2.5 w-2.5" aria-hidden />
               ${pick.amount}
             </span>
           ) : null}
 
           {pick.injuryStatus ? (
-            <span className="truncate text-[8px] text-amber-300/90" title={pick.injuryStatus}>
+            <span className="truncate text-[11px] text-amber-300/90" title={pick.injuryStatus}>
               {pick.injuryStatus}
             </span>
           ) : null}

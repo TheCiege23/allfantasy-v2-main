@@ -88,7 +88,7 @@ export function LegalSettingsSection({ profile }: { profile: SettingsProfile }) 
               <span>{doc.label}</span>
               {doc.agreed ? (
                 <span
-                  className="text-[10px] font-bold uppercase tracking-[0.12em]"
+                  className="text-[11px] font-bold uppercase tracking-[0.12em]"
                   style={{ color: "var(--good, #34d399)" }}
                 >
                   {t("settings.legal.agreedAtSignup")}

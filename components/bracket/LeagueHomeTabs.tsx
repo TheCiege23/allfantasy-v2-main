@@ -371,7 +371,7 @@ function InviteSection({
             {members.slice(0, 5).map((m) => (
               <div
                 key={m.id}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold"
                 style={{ background: 'rgba(251,146,60,0.12)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.2)' }}
               >
                 {(m.user.displayName || m.user.email || '?').slice(0, 2).toUpperCase()}
@@ -411,7 +411,7 @@ function InviteSection({
             </button>
           </div>
           <div className="pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-            <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Share via</p>
+            <p className="text-[11px] uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Share via</p>
             <LeagueInviteShareButtons inviteUrl={inviteUrl} message="Join my bracket pool on AllFantasy!" />
           </div>
         </div>
@@ -629,7 +629,7 @@ function SettingsPanel({
         </div>
 
         <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
             Scoring Mode {saving && <span style={{ color: '#fb923c' }}>(saving...)</span>}
           </div>
           <div className="flex gap-2">
@@ -645,10 +645,10 @@ function SettingsPanel({
                   opacity: !canEdit && scoringMode !== m.id ? 0.4 : 1,
                 }}
               >
-                <div className="text-[10px] font-bold" style={{ color: scoringMode === m.id ? '#fb923c' : 'rgba(255,255,255,0.6)' }}>
+                <div className="text-[11px] font-bold" style={{ color: scoringMode === m.id ? '#fb923c' : 'rgba(255,255,255,0.6)' }}>
                   {m.label}
                 </div>
-                <div className="text-[8px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                <div className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
                   {m.desc}
                 </div>
               </button>
@@ -677,14 +677,14 @@ function SettingsPanel({
 
         <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
           <div className="flex items-center justify-between mb-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>
               Round Points Override
             </div>
-            {savingRoundPoints && <span className="text-[10px]" style={{ color: '#fb923c' }}>saving...</span>}
+            {savingRoundPoints && <span className="text-[11px]" style={{ color: '#fb923c' }}>saving...</span>}
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {[1, 2, 3, 4, 5, 6].map((round) => (
-              <label key={round} className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              <label key={round} className="text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 R{round}
                 <input
                   type="number"
@@ -705,7 +705,7 @@ function SettingsPanel({
               type="button"
               disabled={!canEdit || savingRoundPoints}
               onClick={() => setRoundPoints(getDefaultRoundPoints(scoringMode))}
-              className="text-[10px] px-2 py-1 rounded-md"
+              className="text-[11px] px-2 py-1 rounded-md"
               style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
             >
               Reset Defaults
@@ -714,7 +714,7 @@ function SettingsPanel({
               type="button"
               disabled={!canEdit || savingRoundPoints}
               onClick={saveRoundPoints}
-              className="text-[10px] px-2 py-1 rounded-md"
+              className="text-[11px] px-2 py-1 rounded-md"
               style={{ background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.2)' }}
             >
               Save Round Points
@@ -722,17 +722,17 @@ function SettingsPanel({
           </div>
         </div>
         {scoringMode === 'momentum' && (
-          <div className="px-4 py-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+          <div className="px-4 py-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
             Upset bonus scales with seed gap and round depth. Rewards correctly picking upsets deeper in the tournament.
           </div>
         )}
         {scoringMode === 'accuracy_boldness' && (
-          <div className="px-4 py-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+          <div className="px-4 py-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
             Uniqueness bonus rewards bold picks that fewer league members made. More unique correct picks earn more points.
           </div>
         )}
         {scoringMode === 'streak_survival' && (
-          <div className="px-4 py-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+          <div className="px-4 py-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
             Streak multipliers: 2nd correct = 1.5x, 3rd = 2x, 4th+ = 2.5x. Consecutive correct picks compound your points.
           </div>
         )}
@@ -741,10 +741,10 @@ function SettingsPanel({
       {canEdit && (
         <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(148,163,184,0.35)' }}>
           <div className="px-4 py-2 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(148,163,184,0.25)' }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(226,232,240,0.85)' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(226,232,240,0.85)' }}>
               Commissioner Tools
             </div>
-            <span className="text-[10px]" style={{ color: 'rgba(148,163,184,0.9)' }}>
+            <span className="text-[11px]" style={{ color: 'rgba(148,163,184,0.9)' }}>
               Owner & co‑commissioners only
             </span>
           </div>
@@ -765,7 +765,7 @@ function SettingsPanel({
                   type="button"
                   onClick={regenerateJoinCode}
                   disabled={regenLoading}
-                  className="text-[10px] px-2 py-1 rounded-md border border-amber-400/40 bg-amber-400/10 text-amber-200 disabled:opacity-60"
+                  className="text-[11px] px-2 py-1 rounded-md border border-amber-400/40 bg-amber-400/10 text-amber-200 disabled:opacity-60"
                 >
                   {regenLoading ? "Regenerating..." : "Regenerate"}
                 </button>
@@ -792,7 +792,7 @@ function SettingsPanel({
                           <div className="truncate" style={{ color: 'rgba(226,232,240,0.9)' }}>
                             {m.user.displayName || m.user.email}
                           </div>
-                          <div className="text-[9px]" style={{ color: 'rgba(148,163,184,0.8)' }}>
+                          <div className="text-[11px]" style={{ color: 'rgba(148,163,184,0.8)' }}>
                             {m.role.toLowerCase()}
                             {isSelf && " · you"}
                           </div>
@@ -812,7 +812,7 @@ function SettingsPanel({
 
       {scoringMode === 'fancred_edge' && (
         <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div className="text-[11px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
             Scoring Bonuses
           </div>
 
@@ -859,7 +859,7 @@ function SettingsPanel({
               <div className="mb-1 font-semibold" style={{ color: 'rgba(243,244,246,0.9)' }}>
                 Insurance applies to:
               </div>
-              <div className="flex flex-wrap gap-1.5 text-[10px]">
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
                 {["Round 1", "Sweet 16 / Elite 8", "Final Four / Champion"].map((label, idx) => (
                   <span
                     key={label}
@@ -874,7 +874,7 @@ function SettingsPanel({
                   </span>
                 ))}
               </div>
-              <div className="mt-1 text-[10px]" style={{ color: 'rgba(148,163,184,0.85)' }}>
+              <div className="mt-1 text-[11px]" style={{ color: 'rgba(148,163,184,0.85)' }}>
                 For this version, insurance is available in Round 1, late regional rounds, and Final Four / title games.
               </div>
             </div>
@@ -883,7 +883,7 @@ function SettingsPanel({
       )}
 
       <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="text-[10px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="text-[11px] font-semibold uppercase tracking-wider px-4 py-2" style={{ color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
           Entry Controls
         </div>
         <EntryControlRow
@@ -977,9 +977,9 @@ function BonusToggleCard({
           <span className="text-xs font-bold" style={{ color: enabled ? accentColor : 'rgba(255,255,255,0.5)' }}>
             {label}
           </span>
-          {saving && <span className="text-[9px]" style={{ color: '#fb923c' }}>(saving...)</span>}
+          {saving && <span className="text-[11px]" style={{ color: '#fb923c' }}>(saving...)</span>}
         </div>
-        <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>
+        <p className="text-[11px] mt-0.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>
           {description}
         </p>
       </div>
@@ -1028,7 +1028,7 @@ function DonateSection() {
         <div className="text-xs font-semibold" style={{ color: '#f87171' }}>
           Support FanCred Brackets
         </div>
-        <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
           All brackets are free forever. Donations help keep it running.
         </div>
       </div>
@@ -1103,9 +1103,9 @@ function EntryControlRow({
     <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>
-          {label} {saving && <span className="text-[10px]" style={{ color: '#fb923c' }}>(saving...)</span>}
+          {label} {saving && <span className="text-[11px]" style={{ color: '#fb923c' }}>(saving...)</span>}
         </div>
-        <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{description}</div>
+        <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{description}</div>
       </div>
       <button
         onClick={toggle}
@@ -1156,7 +1156,7 @@ function RemoveMemberButton({ leagueId, userId }: { leagueId: string; userId: st
       type="button"
       onClick={handleRemove}
       disabled={removing}
-      className="ml-2 text-[10px] px-2 py-1 rounded-md border border-red-400/40 bg-red-500/10 text-red-200 disabled:opacity-60"
+      className="ml-2 text-[11px] px-2 py-1 rounded-md border border-red-400/40 bg-red-500/10 text-red-200 disabled:opacity-60"
     >
       {removing ? "Removing..." : "Remove"}
     </button>
@@ -1241,7 +1241,7 @@ function FeedTab({ tournamentId, leagueId }: { tournamentId: string; leagueId: s
                         {event.detail}
                       </div>
                     )}
-                    <div className="text-[10px] mt-1.5 flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                    <div className="text-[11px] mt-1.5 flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
                       <span>{timeAgo}</span>
                       {event.leagueId && <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.05)' }}>Pool</span>}
                       {!event.leagueId && <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.05)' }}>Global</span>}
@@ -1346,7 +1346,7 @@ function GlobalTab({ tournamentId, currentUserId }: { tournamentId: string; curr
         <div className="flex gap-1.5 overflow-x-auto pb-1 px-1">
           <button
             onClick={() => { setActiveConfig(""); setPage(1) }}
-            className="px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex-shrink-0"
             style={{
               background: !activeConfig ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.03)',
               border: `1px solid ${!activeConfig ? 'rgba(251,146,60,0.2)' : 'rgba(255,255,255,0.06)'}`,
@@ -1359,7 +1359,7 @@ function GlobalTab({ tournamentId, currentUserId }: { tournamentId: string; curr
             <button
               key={cfg.key}
               onClick={() => { setActiveConfig(cfg.key); setPage(1) }}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0"
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex-shrink-0"
               style={{
                 background: activeConfig === cfg.key ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.03)',
                 border: `1px solid ${activeConfig === cfg.key ? 'rgba(251,146,60,0.2)' : 'rgba(255,255,255,0.06)'}`,
@@ -1373,7 +1373,7 @@ function GlobalTab({ tournamentId, currentUserId }: { tournamentId: string; curr
       )}
 
       <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="flex items-center px-3 py-2 text-[9px] font-semibold uppercase tracking-wider" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)' }}>
+        <div className="flex items-center px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)' }}>
           <div className="w-8 text-center">#</div>
           <div className="flex-1">Player</div>
           <div className="w-12 text-center">Pts</div>
@@ -1399,22 +1399,22 @@ function GlobalTab({ tournamentId, currentUserId }: { tournamentId: string; curr
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium truncate" style={{ color: isMe ? '#fb923c' : 'rgba(255,255,255,0.8)' }}>
                   {r.displayName || 'Anonymous'}
-                  {isMe && <span className="ml-1 text-[10px]" style={{ color: 'rgba(251,146,60,0.6)' }}>(you)</span>}
+                  {isMe && <span className="ml-1 text-[11px]" style={{ color: 'rgba(251,146,60,0.6)' }}>(you)</span>}
                 </div>
-                <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                <div className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,0.25)' }}>
                   {r.entryName} - {r.championPick || '--'}
                 </div>
               </div>
               <div className="w-12 text-center text-xs font-bold" style={{ color: '#fb923c' }}>
                 {r.totalPoints}
               </div>
-              <div className="w-12 text-center text-[10px]" style={{ color: r.accuracy >= 60 ? '#22c55e' : 'rgba(255,255,255,0.4)' }}>
+              <div className="w-12 text-center text-[11px]" style={{ color: r.accuracy >= 60 ? '#22c55e' : 'rgba(255,255,255,0.4)' }}>
                 {r.accuracy}%
               </div>
-              <div className="w-12 text-center text-[10px]" style={{ color: r.riskIndex >= 30 ? '#818cf8' : 'rgba(255,255,255,0.4)' }}>
+              <div className="w-12 text-center text-[11px]" style={{ color: r.riskIndex >= 30 ? '#818cf8' : 'rgba(255,255,255,0.4)' }}>
                 {r.riskIndex}%
               </div>
-              <div className="w-12 text-center text-[10px]" style={{ color: r.percentile >= 90 ? '#fb923c' : 'rgba(255,255,255,0.3)' }}>
+              <div className="w-12 text-center text-[11px]" style={{ color: r.percentile >= 90 ? '#fb923c' : 'rgba(255,255,255,0.3)' }}>
                 {r.percentile}
               </div>
             </div>
@@ -1510,7 +1510,7 @@ function PublicPoolsTab({ tournamentId }: { tournamentId: string }) {
           <button
             key={m.id}
             onClick={() => { setFilterMode(m.id); setPage(1) }}
-            className="text-[10px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap transition"
+            className="text-[11px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap transition"
             style={{
               background: filterMode === m.id ? 'rgba(251,146,60,0.15)' : 'rgba(255,255,255,0.03)',
               color: filterMode === m.id ? '#fb923c' : 'rgba(255,255,255,0.4)',
@@ -1546,14 +1546,14 @@ function PublicPoolsTab({ tournamentId }: { tournamentId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-white truncate">{pool.name}</div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                       by {pool.ownerName}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(251,146,60,0.08)', color: '#fb923c' }}>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(251,146,60,0.08)', color: '#fb923c' }}>
                       {SCORING_MODES.find(m => m.id === pool.scoringMode)?.label || pool.scoringMode}
                     </span>
                     {pool.memberCount >= 50 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.08)', color: '#22c55e' }}>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.08)', color: '#22c55e' }}>
                         Popular
                       </span>
                     )}
@@ -1564,7 +1564,7 @@ function PublicPoolsTab({ tournamentId }: { tournamentId: string }) {
                     <div className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>
                       {pool.memberCount}
                     </div>
-                    <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                    <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
                       / {pool.maxManagers}
                     </div>
                   </div>

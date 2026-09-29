@@ -152,7 +152,7 @@ export default function DramaEventDetailPage() {
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-lg font-bold text-white">{event.headline}</h1>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 shrink-0">
+          <span className="text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 shrink-0">
             {event.dramaType}
           </span>
         </div>

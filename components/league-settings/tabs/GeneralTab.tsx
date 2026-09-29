@@ -41,18 +41,18 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         <div className="mb-3 flex items-center gap-2">
           <h3 className="text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">Basics</h3>
           <span
-            className="inline-flex items-center gap-1 text-[10px] text-white/35"
+            className="inline-flex items-center gap-1 text-[11px] text-white/35"
             title="Changes save automatically"
           >
             <HelpCircle className="h-3 w-3" aria-hidden />
             Auto-save
           </span>
           {saving ? (
-            <span className="ml-auto text-[10px] font-semibold text-cyan-300/80">Saving…</span>
+            <span className="ml-auto text-[11px] font-semibold text-cyan-300/80">Saving…</span>
           ) : null}
         </div>
         <label className="mb-3 block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             League name
           </span>
           <input
@@ -70,7 +70,7 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
         <label className="mb-3 block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             Timezone
           </span>
           <select
@@ -91,7 +91,7 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             Logo URL
           </span>
           <input

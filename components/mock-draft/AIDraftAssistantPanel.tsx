@@ -77,7 +77,7 @@ export function AIDraftAssistantPanel({
         </span>
         <div>
           <p className="font-semibold text-white">AI Draft Assistant</p>
-          <p className="text-[10px] text-white/55">
+          <p className="text-[11px] text-white/55">
             Suggestions only - not a guarantee. You decide.
           </p>
         </div>
@@ -107,7 +107,7 @@ export function AIDraftAssistantPanel({
       {!loading && bestPick && (
         <>
           <div className="mb-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
-            <p className="mb-1 text-[10px] uppercase tracking-wider text-cyan-400/80">Best pick</p>
+            <p className="mb-1 text-[11px] uppercase tracking-wider text-cyan-400/80">Best pick</p>
             <p className="font-semibold text-white">
               {bestPick.player}
               <span className="ml-2 text-white/60">
@@ -129,7 +129,7 @@ export function AIDraftAssistantPanel({
 
           {compareOptions.length > 1 && (
             <div className="mb-3">
-              <p className="mb-1.5 text-[10px] uppercase tracking-wider text-white/55">
+              <p className="mb-1.5 text-[11px] uppercase tracking-wider text-white/55">
                 Compare options
               </p>
               <ul className="space-y-1.5">
@@ -148,7 +148,7 @@ export function AIDraftAssistantPanel({
 
           {strategyMetaContext.length > 0 && (
             <div className="mb-3 rounded-lg border border-purple-500/25 bg-purple-500/10 p-2.5">
-              <p className="mb-1 text-[10px] uppercase tracking-wider text-purple-200/90">
+              <p className="mb-1 text-[11px] uppercase tracking-wider text-purple-200/90">
                 Strategy meta context
               </p>
               <ul className="space-y-1 text-[11px] text-purple-100/85">
@@ -160,7 +160,7 @@ export function AIDraftAssistantPanel({
               </ul>
               <Link
                 href={`/app/strategy-meta?sport=${encodeURIComponent(params?.sport ?? 'NFL')}&timeframe=30d`}
-                className="mt-1 inline-block text-[10px] text-purple-200 hover:underline"
+                className="mt-1 inline-block text-[11px] text-purple-200 hover:underline"
               >
                 View strategy details
               </Link>
@@ -193,7 +193,7 @@ export function AIDraftAssistantPanel({
           )}
           {evidence.length > 0 && (
             <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
-              <p className="mb-1 text-[10px] uppercase tracking-wider text-white/55">Evidence</p>
+              <p className="mb-1 text-[11px] uppercase tracking-wider text-white/55">Evidence</p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-white/75">
                 {evidence.slice(0, 4).map((item, idx) => (
                   <li key={`ev-${idx}`}>{item}</li>
@@ -203,7 +203,7 @@ export function AIDraftAssistantPanel({
           )}
           {caveats.length > 0 && (
             <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
-              <p className="mb-1 text-[10px] uppercase tracking-wider text-amber-200/90">Caveats</p>
+              <p className="mb-1 text-[11px] uppercase tracking-wider text-amber-200/90">Caveats</p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-amber-100/85">
                 {caveats.slice(0, 3).map((item, idx) => (
                   <li key={`cv-${idx}`}>{item}</li>

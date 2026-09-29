@@ -255,7 +255,7 @@ export function InjuryImpactModal({
     data?.ok ? (
       <div className="flex flex-wrap items-center gap-1">
         <span
-          className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${
+          className={`rounded border px-2 py-0.5 text-[11px] font-bold uppercase ${
             data.dataQuality === 'full'
               ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'
               : data.dataQuality === 'partial'
@@ -265,7 +265,7 @@ export function InjuryImpactModal({
         >
           {data.dataQuality === 'full' ? 'Full intel' : data.dataQuality === 'partial' ? 'Partial intel' : 'Degraded'}
         </span>
-        <span className="rounded border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-red-200/90">
+        <span className="rounded border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-red-200/90">
           {data.analysisMode === 'league' ? 'League' : 'Global'}
         </span>
         {data.feedFreshness ? (
@@ -275,7 +275,7 @@ export function InjuryImpactModal({
                 ? `Latest injury_report row: ${new Date(data.feedFreshness.latestReportDateIso).toLocaleString()} (${data.feedFreshness.staleHours ?? 0}h ago · ${data.feedFreshness.rowsSeen} rows)`
                 : 'No injury_report rows returned — falling back to sports_players injuryStatus only'
             }
-            className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${
+            className={`rounded border px-2 py-0.5 text-[11px] font-bold uppercase ${
               data.feedFreshness.stale
                 ? 'border-amber-500/40 bg-amber-500/15 text-amber-100'
                 : data.feedFreshness.latestReportDateIso
@@ -363,7 +363,7 @@ export function InjuryImpactModal({
         <div className="space-y-3">
           <div className="rounded-xl border border-white/[0.08] bg-[#0a0f18] p-3 space-y-2">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Sport
                 <select
                   value={sportFilter}
@@ -378,7 +378,7 @@ export function InjuryImpactModal({
                   ))}
                 </select>
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480] sm:col-span-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480] sm:col-span-2">
                 League
                 <select
                   value={leagueId}
@@ -410,7 +410,7 @@ export function InjuryImpactModal({
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Team context
                 <select
                   value={teamContext}
@@ -424,7 +424,7 @@ export function InjuryImpactModal({
                   ))}
                 </select>
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Status filter
                 <select
                   value={statusFilter}
@@ -438,7 +438,7 @@ export function InjuryImpactModal({
                   ))}
                 </select>
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Time horizon
                 <select
                   value={timeHorizon}
@@ -455,7 +455,7 @@ export function InjuryImpactModal({
             </div>
 
             {(teamContext === 'specific_team' || teamContext === 'opponent_team') && leagueId ? (
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 {teamContext === 'opponent_team' ? 'Opponent team' : 'Team'}
                 <select
                   value={teamContext === 'opponent_team' ? opponentTeamExternalId : specificTeamExternalId}
@@ -477,7 +477,7 @@ export function InjuryImpactModal({
             ) : null}
 
             <details className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5">
-              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wide text-[#7a8199]">
+              <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wide text-[#7a8199]">
                 Optional toggles
               </summary>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -506,10 +506,10 @@ export function InjuryImpactModal({
             </details>
 
             {!leagueId.trim() ? (
-              <p className="text-[10px] text-amber-200/85">No league selected — analysis is general and not roster-specific.</p>
+              <p className="text-[11px] text-amber-200/85">No league selected — analysis is general and not roster-specific.</p>
             ) : null}
             {data?.computedAt ? (
-              <p className="text-[10px] text-[#5c6480]">Updated {new Date(data.computedAt).toLocaleString()}</p>
+              <p className="text-[11px] text-[#5c6480]">Updated {new Date(data.computedAt).toLocaleString()}</p>
             ) : null}
           </div>
 
@@ -518,7 +518,7 @@ export function InjuryImpactModal({
               <div className="rounded-2xl border border-red-500/15 bg-gradient-to-br from-red-500/[0.06] to-transparent px-4 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-300/70">Availability risk</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-red-300/70">Availability risk</p>
                     <p className="mt-1 text-[13px] font-semibold text-white/85">
                       {data.players.length} surfaced {data.players.length === 1 ? 'player' : 'players'}
                     </p>
@@ -534,7 +534,7 @@ export function InjuryImpactModal({
                     style={{ width: `${Math.min(100, data.overallRisk)}%` }}
                   />
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 text-[10px]">
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 text-[11px]">
                   <CountPill label="Out / IR" value={data.summaryCounts.outIr} tone="red" />
                   <CountPill label="Doubtful" value={data.summaryCounts.doubtful} tone="amber" />
                   <CountPill label="Q / GTD" value={data.summaryCounts.questionable} tone="sky" />
@@ -550,8 +550,8 @@ export function InjuryImpactModal({
               ) : null}
 
               {data.timeContext ? (
-                <div className="rounded-lg border border-white/[0.06] bg-[#080c14] px-3 py-2 text-[10px] text-[#8b93a8]">
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-sky-200/80">Time & data freshness</p>
+                <div className="rounded-lg border border-white/[0.06] bg-[#080c14] px-3 py-2 text-[11px] text-[#8b93a8]">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/80">Time & data freshness</p>
                   <p className="mt-1 text-white/65">{data.timeContext.freshnessSummary}</p>
                   <p className="mt-1">
                     {data.timeContext.userLocalCalendarDate} · {data.timeContext.userLocalTime} ({data.timeContext.userTimezone})
@@ -570,7 +570,7 @@ export function InjuryImpactModal({
               ) : null}
 
               {data.validation ? (
-                <div className="flex flex-wrap gap-1.5 text-[9px] text-[#6b7280]">
+                <div className="flex flex-wrap gap-1.5 text-[11px] text-[#6b7280]">
                   <ValidationChip ok={data.validation.leagueContextResolved} label="League context" />
                   <ValidationChip ok={data.validation.rosterContextAvailable} label="Roster" />
                   <ValidationChip ok={data.validation.projectionLayerReady} label="Projections" />
@@ -585,7 +585,7 @@ export function InjuryImpactModal({
                     key={t.id}
                     type="button"
                     onClick={() => setViewTab(t.id)}
-                    className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                    className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${
                       viewTab === t.id
                         ? 'border border-red-500/35 bg-red-500/15 text-red-100'
                         : 'border border-transparent text-[#7a8199] hover:bg-white/[0.04]'
@@ -607,7 +607,7 @@ export function InjuryImpactModal({
 
               {data.dataGaps.length > 0 ? (
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
-                  <p className="text-[9px] font-bold uppercase text-amber-200/90">Data notes</p>
+                  <p className="text-[11px] font-bold uppercase text-amber-200/90">Data notes</p>
                   <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-amber-100/85">
                     {data.dataGaps.map((g) => (
                       <li key={g}>{g}</li>
@@ -650,7 +650,7 @@ function CountPill({ label, value, tone }: { label: string; value: number; tone:
             : 'border-white/10 text-white/55'
   return (
     <div className={`rounded-lg border px-2 py-1 ${cls}`}>
-      <p className="text-[8px] font-bold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide opacity-80">{label}</p>
       <p className="text-[15px] font-black tabular-nums">{value}</p>
     </div>
   )
@@ -759,7 +759,7 @@ function InjuryAlertCard({ alert, onOpen }: { alert: InjuryPlayerIntelRow; onOpe
             <Image src={alert.headshotUrl} alt="" fill className="object-cover" sizes="40px" />
           </span>
         ) : (
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/30 text-[10px] font-bold text-white/50`}>
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/30 text-[11px] font-bold text-white/50`}>
             {alert.position.slice(0, 2)}
           </span>
         )}
@@ -768,36 +768,36 @@ function InjuryAlertCard({ alert, onOpen }: { alert: InjuryPlayerIntelRow; onOpe
             <p className="truncate text-[12px] font-bold text-white/90">{alert.name}</p>
             <AlertTriangle className={`h-3 w-3 shrink-0 ${s.text}`} />
             {alert.onRoster ? (
-              <span className="rounded bg-red-500/20 px-1 text-[8px] font-bold uppercase text-red-100">Roster</span>
+              <span className="rounded bg-red-500/20 px-1 text-[11px] font-bold uppercase text-red-100">Roster</span>
             ) : null}
             {alert.isStarter ? (
-              <span className="rounded bg-amber-500/15 px-1 text-[8px] font-bold uppercase text-amber-100">Starter</span>
+              <span className="rounded bg-amber-500/15 px-1 text-[11px] font-bold uppercase text-amber-100">Starter</span>
             ) : null}
           </div>
-          <p className="truncate text-[10px] text-white/40">
+          <p className="truncate text-[11px] text-white/40">
             {alert.position} · {alert.team} · {alert.sport}
           </p>
           <p className="mt-1 text-[11px] text-white/65">{alert.statusRaw}</p>
           {alert.freshnessNote ? (
-            <p className="mt-0.5 text-[10px] text-sky-200/75">{alert.freshnessNote}</p>
+            <p className="mt-0.5 text-[11px] text-sky-200/75">{alert.freshnessNote}</p>
           ) : null}
           {alert.effectiveProjection != null && Number.isFinite(alert.effectiveProjection) ? (
-            <p className="mt-0.5 text-[10px] font-semibold text-amber-200/85">
+            <p className="mt-0.5 text-[11px] font-semibold text-amber-200/85">
               League proj ~{alert.effectiveProjection.toFixed(1)} pts (when healthy / engine slice)
             </p>
           ) : null}
           {alert.replacementHint ? (
-            <p className="mt-0.5 line-clamp-2 text-[10px] text-white/45">{alert.replacementHint}</p>
+            <p className="mt-0.5 line-clamp-2 text-[11px] text-white/45">{alert.replacementHint}</p>
           ) : null}
           {alert.returnTimeline && alert.returnTimeline.category !== 'unknown' ? (
             <p
-              className="mt-0.5 inline-flex items-center rounded-full bg-sky-500/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-200/90"
+              className="mt-0.5 inline-flex items-center rounded-full bg-sky-500/12 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-200/90"
               title={alert.returnTimeline.rawText ?? ''}
             >
               Return: {alert.returnTimeline.label}
             </p>
           ) : null}
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] font-semibold text-white/40">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-white/40">
             {alert.reportDate ? (
               <span>
                 <Clock className="mr-0.5 inline h-2.5 w-2.5" />
@@ -811,11 +811,11 @@ function InjuryAlertCard({ alert, onOpen }: { alert: InjuryPlayerIntelRow; onOpe
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <span className={`inline-block rounded-md px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest ${s.text} ${s.bg}`}>
+          <span className={`inline-block rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-widest ${s.text} ${s.bg}`}>
             {s.label}
           </span>
           <p className="mt-1 text-[14px] font-black tabular-nums text-white/85">{alert.impactScore.toFixed(0)}</p>
-          <p className="text-[7px] font-bold uppercase tracking-widest text-white/30">impact</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-white/30">impact</p>
         </div>
       </div>
     </button>
@@ -854,18 +854,18 @@ function InjuryDetailDrawer({ row, onClose }: { row: InjuryPlayerIntelRow; onClo
         <div className={`mt-3 rounded-lg border px-3 py-2 ${s.border} ${s.bg}`}>
           <p className={`text-[11px] font-bold ${s.text}`}>{row.statusRaw}</p>
           <p className="mt-1 text-[11px] text-white/65">{row.notes || 'No notes on file.'}</p>
-          {row.practice ? <p className="mt-1 text-[10px] text-white/45">Practice: {row.practice}</p> : null}
+          {row.practice ? <p className="mt-1 text-[11px] text-white/45">Practice: {row.practice}</p> : null}
           {row.injuryNewsSummary ? (
-            <p className="mt-1 text-[10px] text-sky-200/80">News: {row.injuryNewsSummary}</p>
+            <p className="mt-1 text-[11px] text-sky-200/80">News: {row.injuryNewsSummary}</p>
           ) : null}
-          {row.freshnessNote ? <p className="mt-1 text-[10px] text-sky-200/70">{row.freshnessNote}</p> : null}
+          {row.freshnessNote ? <p className="mt-1 text-[11px] text-sky-200/70">{row.freshnessNote}</p> : null}
         </div>
         {row.effectiveProjection != null && Number.isFinite(row.effectiveProjection) ? (
           <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase text-amber-200/90">League weekly projection</p>
+            <p className="text-[11px] font-bold uppercase text-amber-200/90">League weekly projection</p>
             <p className="text-[13px] font-bold tabular-nums text-white/90">~{row.effectiveProjection.toFixed(1)} pts</p>
             {row.projectionNotes?.length ? (
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[10px] text-white/55">
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-white/55">
                 {row.projectionNotes.slice(0, 4).map((n) => (
                   <li key={n}>{n}</li>
                 ))}
@@ -875,22 +875,22 @@ function InjuryDetailDrawer({ row, onClose }: { row: InjuryPlayerIntelRow; onClo
         ) : null}
         {row.returnTimeline ? (
           <div className="mt-2 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase text-sky-200/80">Return window</p>
+            <p className="text-[11px] font-bold uppercase text-sky-200/80">Return window</p>
             <p className="text-[12px] font-semibold text-white/85">{row.returnTimeline.label}</p>
             {row.returnTimeline.rawText && row.returnTimeline.category !== 'unknown' ? (
-              <p className="mt-0.5 text-[10px] italic text-white/45">"{row.returnTimeline.rawText}"</p>
+              <p className="mt-0.5 text-[11px] italic text-white/45">"{row.returnTimeline.rawText}"</p>
             ) : null}
           </div>
         ) : null}
         {row.replacementHint ? (
           <div className="mt-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase text-[#5c6480]">Replacement structure</p>
+            <p className="text-[11px] font-bold uppercase text-[#5c6480]">Replacement structure</p>
             <p className="text-[11px] text-white/70">{row.replacementHint}</p>
           </div>
         ) : null}
         {row.suggestedWaiverAdds && row.suggestedWaiverAdds.length > 0 ? (
           <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase text-emerald-200/80">Named FA replacements</p>
+            <p className="text-[11px] font-bold uppercase text-emerald-200/80">Named FA replacements</p>
             <ul className="mt-1 space-y-1">
               {row.suggestedWaiverAdds.map((add) => (
                 <li key={add.playerId} className="flex items-start justify-between gap-2 text-[11px]">
@@ -898,12 +898,12 @@ function InjuryDetailDrawer({ row, onClose }: { row: InjuryPlayerIntelRow; onClo
                     <p className="font-semibold text-white/90">
                       {add.name} <span className="text-white/50">· {add.position} · {add.team}</span>
                     </p>
-                    <p className="line-clamp-2 text-[10px] text-white/55">{add.why}</p>
+                    <p className="line-clamp-2 text-[11px] text-white/55">{add.why}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-[9px] font-bold uppercase text-emerald-200/90">{add.tier.replace('_', ' ')}</p>
+                    <p className="text-[11px] font-bold uppercase text-emerald-200/90">{add.tier.replace('_', ' ')}</p>
                     {add.faabPct > 0 ? (
-                      <p className="text-[9px] text-white/55">FAAB ~{add.faabPct}%</p>
+                      <p className="text-[11px] text-white/55">FAAB ~{add.faabPct}%</p>
                     ) : null}
                   </div>
                 </li>
@@ -913,19 +913,19 @@ function InjuryDetailDrawer({ row, onClose }: { row: InjuryPlayerIntelRow; onClo
         ) : null}
         <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Impact score</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Impact score</p>
             <p className="font-semibold text-white/90">{row.impactScore.toFixed(1)}</p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Lineup disruption</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Lineup disruption</p>
             <p className="font-semibold text-white/90">{row.lineupDisruption.toFixed(1)}</p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Replacement urgency</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Replacement urgency</p>
             <p className="font-semibold text-white/90">{row.replacementUrgency.toFixed(1)}</p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Source</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Source</p>
             <p className="font-semibold text-white/90">{row.source}</p>
           </div>
         </div>

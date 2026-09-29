@@ -124,7 +124,7 @@ export function AutoSubSection({
                   </span>
                   <span className="flex flex-wrap items-center gap-1.5">
                     {risky && enabled ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-100">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium text-cyan-100">
                         <HeartHandshake className="h-3 w-3" aria-hidden />
                         Protected by Auto-Sub
                       </span>
@@ -189,7 +189,7 @@ export function AutoSubSection({
               className="flex flex-col gap-2 rounded-xl border border-white/12 bg-[#0a1228]/95 p-3 text-sm shadow-sm"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/50">
+                <span className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white/50">
                   {p.slotCode}
                 </span>
                 <span className="text-[11px] tabular-nums text-cyan-200/90">
@@ -218,11 +218,11 @@ export function AutoSubSection({
               <div className="pl-6 text-cyan-100/90">
                 → <span className="font-medium">{p.replacementPlayer}</span>
                 {p.samePositionReplacement ? (
-                  <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-200">
+                  <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-200">
                     Same position
                   </span>
                 ) : (
-                  <span className="ml-2 rounded bg-slate-500/15 px-1.5 py-0.5 text-[10px] text-slate-200">
+                  <span className="ml-2 rounded bg-slate-500/15 px-1.5 py-0.5 text-[11px] text-slate-200">
                     Best legal slot
                   </span>
                 )}

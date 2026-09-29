@@ -74,8 +74,8 @@ export function SurvivorVoteRevealScrolls({
               <div className={`text-base font-semibold ${invalid ? 'text-neutral-300 line-through' : 'text-amber-100'}`}>
                 {s.targetName ?? '—'}
               </div>
-              {copy.label ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-wide ${copy.tone}`}>{copy.label}</div> : null}
-              {s.isExtraVote ? <div className="mt-1 text-[10px] uppercase tracking-wide text-purple-300">Extra Vote</div> : null}
+              {copy.label ? <div className={`mt-1 text-[11px] font-bold uppercase tracking-wide ${copy.tone}`}>{copy.label}</div> : null}
+              {s.isExtraVote ? <div className="mt-1 text-[11px] uppercase tracking-wide text-purple-300">Extra Vote</div> : null}
             </div>
           )
         })}

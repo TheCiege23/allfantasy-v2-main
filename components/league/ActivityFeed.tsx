@@ -31,7 +31,7 @@ export default function ActivityFeed({
             <div key={item.id} className="rounded-2xl border border-[#1E2A42] bg-[#131929] p-4">
               <div className="flex flex-wrap items-center gap-2 text-[13px]">
                 <span className="font-semibold text-white">{item.managerName}</span>
-                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${badgeClasses(item.badgeTone)}`}>
+                <span className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${badgeClasses(item.badgeTone)}`}>
                   {item.badge}
                 </span>
                 <span className="ml-auto text-[#8B9DB8]">{item.timestamp}</span>

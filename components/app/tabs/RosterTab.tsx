@@ -119,7 +119,7 @@ export default function RosterTab({ leagueId }: LeagueTabProps) {
                   </button>
                 </div>
               </div>
-              <p className="mt-1 text-[10px] text-cyan-100/75">
+              <p className="mt-1 text-[11px] text-cyan-100/75">
                 Winning build patterns for {sport}. Use this before adjusting bench depth and lineup allocations.
               </p>
               <div className="mt-2">

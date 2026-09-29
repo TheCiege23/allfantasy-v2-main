@@ -3861,11 +3861,11 @@ export function DraftRoomPageClient({
             className="flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-[linear-gradient(90deg,rgba(13,20,40,0.96),rgba(16,26,48,0.96))] px-2.5 py-1.5 text-left text-xs text-cyan-50 hover:bg-[linear-gradient(90deg,rgba(24,36,64,0.98),rgba(16,26,48,0.98))]"
           >
             <span>
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">Draft intelligence</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">Draft intelligence</span>
               <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and AI context</span>
             </span>
             {draftHelperBadgeCount > 0 ? (
-              <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+              <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
                 {draftHelperBadgeCount}
               </span>
             ) : null}
@@ -4229,7 +4229,7 @@ export function DraftRoomPageClient({
               Draft room
             </span>
           )}
-          <div className="inline-flex items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-100">
+          <div className="inline-flex items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-cyan-100">
             <span className="text-cyan-200/80">Clock</span>
             <span className="font-mono tabular-nums">{mobileTimerLabel}</span>
           </div>
@@ -4241,7 +4241,7 @@ export function DraftRoomPageClient({
         ribbonPicksUntilUser != null &&
         ribbonPicksUntilUser > 0 &&
         !isCurrentUserOnClock ? (
-          <p className="text-[10px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
+          <p className="text-[11px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
             ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
           </p>
         ) : null}
@@ -4250,7 +4250,7 @@ export function DraftRoomPageClient({
             type="button"
             data-testid="draft-mobile-quick-search"
             onClick={openMobilePlayerSearch}
-            className="rounded border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] text-cyan-100 whitespace-nowrap"
+            className="rounded border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] text-cyan-100 whitespace-nowrap"
           >
             Search
           </button>
@@ -4258,7 +4258,7 @@ export function DraftRoomPageClient({
             type="button"
             data-testid="draft-mobile-quick-queue"
             onClick={() => setMobileTab('queue')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[10px] text-white/75 whitespace-nowrap"
+            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
           >
             Queue
           </button>
@@ -4266,7 +4266,7 @@ export function DraftRoomPageClient({
             type="button"
             data-testid="draft-mobile-quick-roster"
             onClick={() => setMobileTab('roster')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[10px] text-white/75 whitespace-nowrap"
+            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
           >
             Roster
           </button>
@@ -4274,7 +4274,7 @@ export function DraftRoomPageClient({
             type="button"
             data-testid="draft-mobile-quick-chat"
             onClick={() => setMobileTab('chat')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[10px] text-white/75 whitespace-nowrap"
+            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
           >
             Chat
           </button>
@@ -4282,7 +4282,7 @@ export function DraftRoomPageClient({
             type="button"
             data-testid="draft-mobile-quick-helper"
             onClick={() => setMobileTab('helper')}
-            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[10px] text-white/75 whitespace-nowrap"
+            className="rounded border border-white/20 bg-black/30 px-2.5 py-1.5 text-[11px] text-white/75 whitespace-nowrap"
           >
             AI helper
           </button>
@@ -4370,14 +4370,14 @@ export function DraftRoomPageClient({
                 <span className="font-medium text-white/90 truncate">
                   {p.playerName}
                   {isCollegeAsset && (
-                    <span className="ml-1 rounded bg-violet-500/20 px-1 py-0.5 text-[9px] font-medium text-violet-100">College</span>
+                    <span className="ml-1 rounded bg-violet-500/20 px-1 py-0.5 text-[11px] font-medium text-violet-100">College</span>
                   )}
                   {isProAsset && (
-                    <span className="ml-1 rounded bg-cyan-500/20 px-1 py-0.5 text-[9px] font-medium text-cyan-100">Pro</span>
+                    <span className="ml-1 rounded bg-cyan-500/20 px-1 py-0.5 text-[11px] font-medium text-cyan-100">Pro</span>
                   )}
                 </span>
                 <span className="text-white/50 shrink-0 ml-2">{p.position}</span>
-                <span className="text-[10px] text-white/40">#{p.overall}</span>
+                <span className="text-[11px] text-white/40">#{p.overall}</span>
               </li>
             )
           })}
@@ -4598,7 +4598,7 @@ export function DraftRoomPageClient({
                     type="button"
                     onClick={() => setCenterDockTab('queue')}
                     data-testid="draft-bottom-tab-queue"
-                    className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
                       centerDockTab === 'queue'
                         ? presentationVariant === 'redraft_snake'
                           ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
@@ -4612,7 +4612,7 @@ export function DraftRoomPageClient({
                     type="button"
                     onClick={() => setCenterDockTab('chat')}
                     data-testid="draft-bottom-tab-chat"
-                    className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
                       centerDockTab === 'chat'
                         ? presentationVariant === 'redraft_snake'
                           ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/15 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]'
@@ -4626,7 +4626,7 @@ export function DraftRoomPageClient({
                     type="button"
                     onClick={() => setCenterDockTab('ai')}
                     data-testid="draft-bottom-tab-ai"
-                    className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                    className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
                       centerDockTab === 'ai'
                         ? presentationVariant === 'redraft_snake'
                           ? 'bg-gradient-to-r from-violet-500/30 to-fuchsia-500/15 text-violet-50 shadow-[0_0_22px_rgba(167,139,250,0.2)]'
@@ -4641,7 +4641,7 @@ export function DraftRoomPageClient({
                       type="button"
                       onClick={() => setCenterDockTab('commish')}
                       data-testid="draft-bottom-tab-commish"
-                      className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
                         centerDockTab === 'commish'
                           ? 'bg-white/12 text-amber-100'
                           : 'text-white/55 hover:bg-white/5'
@@ -4670,7 +4670,7 @@ export function DraftRoomPageClient({
                       }`}
                       data-testid="draft-bottom-ai-panel"
                     >
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200/90">AF Legacy</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200/90">AF Legacy</p>
                       {entitlements.loading ? (
                         <div className="mt-2 rounded-lg border border-white/12 bg-black/25 p-3">
                           <p className="text-white/55">Checking access…</p>
@@ -4687,14 +4687,14 @@ export function DraftRoomPageClient({
                           <div className="mt-2 flex flex-wrap gap-2">
                             <a
                               href="/pricing"
-                              className="inline-flex items-center rounded border border-amber-300/45 bg-amber-500/20 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100 hover:bg-amber-500/30"
+                              className="inline-flex items-center rounded border border-amber-300/45 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-100 hover:bg-amber-500/30"
                               data-testid="draft-bottom-ai-upgrade-cta"
                             >
                               Upgrade
                             </a>
                             <a
                               href="/tokens"
-                              className="inline-flex items-center rounded border border-cyan-300/45 bg-cyan-500/15 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/25"
+                              className="inline-flex items-center rounded border border-cyan-300/45 bg-cyan-500/15 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/25"
                               data-testid="draft-bottom-ai-tokens-cta"
                             >
                               Buy tokens
@@ -4730,7 +4730,7 @@ export function DraftRoomPageClient({
                             {Number.isFinite(recommendationResult.recommendation.confidence) ? (
                               <span
                                 data-testid="draft-bottom-chimmy-confidence"
-                                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${
+                                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold tabular-nums ${
                                   recommendationResult.recommendation.confidence >= 80
                                     ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
                                     : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
@@ -4776,13 +4776,13 @@ export function DraftRoomPageClient({
                             </p>
                           ) : null}
                           {/* 8b requires the disclosure: the product analyses, the manager picks. */}
-                          <p className="text-[10px] text-white/45">
+                          <p className="text-[11px] text-white/45">
                             You make the pick — AllFantasy never drafts for you.
                           </p>
                           <button
                             type="button"
                             onClick={() => setMobileTab('helper')}
-                            className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
+                            className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
                             data-testid="draft-bottom-ai-open-helper"
                           >
                             Ask Chimmy
@@ -5114,7 +5114,7 @@ export function DraftRoomPageClient({
                     void fetchSession()
                   }}
                   data-testid="draft-session-mismatch-retry"
-                  className="rounded-md border border-cyan-400/50 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-100 hover:bg-cyan-500/25"
+                  className="rounded-md border border-cyan-400/50 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100 hover:bg-cyan-500/25"
                 >
                   Try again
                 </button>
@@ -5352,7 +5352,7 @@ export function DraftRoomPageClient({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="Broadcast to leagues" data-testid="draft-broadcast-overlay">
         <div className="w-full max-w-md rounded-xl border border-white/12 bg-[#070f21] p-4 shadow-xl" data-testid="draft-broadcast-modal">
           <h3 className="mb-3 text-sm font-semibold text-white">@everyone Broadcast</h3>
-          <p className="mb-2 text-[10px] text-white/60">Select leagues to send the message to.</p>
+          <p className="mb-2 text-[11px] text-white/60">Select leagues to send the message to.</p>
           <div className="mb-3 max-h-40 overflow-y-auto rounded border border-white/12 bg-black/20 p-2">
             {commissionerLeagues.map((l) => (
               <label key={l.id} className="flex cursor-pointer items-center gap-2 py-1 text-xs text-white">

@@ -33,32 +33,32 @@ export function MatchupHeaderCard({
         <div className="min-w-0 flex-1 text-center">
           <div className="truncate text-[13px] font-bold text-white">{left.teamName}</div>
           <div className="mt-1 text-2xl font-black tabular-nums text-[#ff9ec0]">{left.totalPoints.toFixed(2)}</div>
-          <div className="text-[10px] text-white/45">Proj {left.projectedTotal.toFixed(1)}</div>
+          <div className="text-[11px] text-white/45">Proj {left.projectedTotal.toFixed(1)}</div>
           <div className="mt-1 text-[11px] text-white/55">
             {left.record.wins}-{left.record.losses}
             {left.record.ties ? `-${left.record.ties}` : ''} · {pct(left.winPct)}
           </div>
-          <div className="mt-1 text-[10px] text-white/40">{left.remainingStarters} left to play</div>
+          <div className="mt-1 text-[11px] text-white/40">{left.remainingStarters} left to play</div>
         </div>
         <div className="flex flex-col items-center justify-center px-1">
-          <span className="rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-white/55">
+          <span className="rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-white/55">
             {statusLabel}
           </span>
         </div>
         <div className="min-w-0 flex-1 text-center">
           <div className="truncate text-[13px] font-bold text-white">{right.teamName}</div>
           <div className="mt-1 text-2xl font-black tabular-nums text-[#ff9ec0]">{right.totalPoints.toFixed(2)}</div>
-          <div className="text-[10px] text-white/45">Proj {right.projectedTotal.toFixed(1)}</div>
+          <div className="text-[11px] text-white/45">Proj {right.projectedTotal.toFixed(1)}</div>
           <div className="mt-1 text-[11px] text-white/55">
             {right.record.wins}-{right.record.losses}
             {right.record.ties ? `-${right.record.ties}` : ''} · {pct(right.winPct)}
           </div>
-          <div className="mt-1 text-[10px] text-white/40">{right.remainingStarters} left to play</div>
+          <div className="mt-1 text-[11px] text-white/40">{right.remainingStarters} left to play</div>
         </div>
       </div>
       {winProbabilityLeft != null ? (
         <div className="border-t border-white/[0.06] px-4 py-2">
-          <div className="mb-1 flex justify-between text-[9px] text-white/40">
+          <div className="mb-1 flex justify-between text-[11px] text-white/40">
             <span>{pct(winProbabilityLeft)} win prob</span>
             <span>{pct(1 - winProbabilityLeft)} win prob</span>
           </div>
@@ -75,7 +75,7 @@ export function MatchupHeaderCard({
           </div>
         </div>
       ) : (
-        <div className="border-t border-white/[0.06] px-4 py-2 text-[9px] text-white/40">
+        <div className="border-t border-white/[0.06] px-4 py-2 text-[11px] text-white/40">
           Win probability unavailable — real projections are missing for some starters.
         </div>
       )}

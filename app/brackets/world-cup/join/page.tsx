@@ -43,7 +43,7 @@ export default async function WorldCupJoinWithCodePage() {
             />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">{t("wc.join.brandEyebrow")}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">{t("wc.join.brandEyebrow")}</p>
             <h1 className="text-base font-black leading-tight text-white">{t("wc.join.brandTitle")}</h1>
           </div>
         </div>

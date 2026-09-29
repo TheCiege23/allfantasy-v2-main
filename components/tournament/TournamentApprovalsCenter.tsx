@@ -115,7 +115,7 @@ export function TournamentApprovalsCenter({ tournamentId }: { tournamentId: stri
                   </button>
                 </div>
               </div>
-              <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-white/5 bg-black/40 p-2 text-[10px] leading-relaxed text-cyan-100/80">
+              <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-white/5 bg-black/40 p-2 text-[11px] leading-relaxed text-cyan-100/80">
                 {JSON.stringify(r.proposedPatch, null, 2)}
               </pre>
             </li>

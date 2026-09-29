@@ -84,7 +84,7 @@ export function MarketMoverRow({ player, rank }: { player: Player; rank: number 
       {/* Name + meta */}
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold text-white/85">{player.name}</p>
-        <p className="text-[10px] text-white/35">
+        <p className="text-[11px] text-white/35">
           <span className="font-semibold text-cyan-300/60">{player.position}</span>
           {' · '}
           {player.team}
@@ -103,7 +103,7 @@ export function MarketMoverRow({ player, rank }: { player: Player; rank: number 
       </div>
 
       {/* Tier */}
-      <span className={`w-10 rounded-md border px-1.5 py-0.5 text-center text-[10px] font-bold ${tierColor(player.tier)}`}>
+      <span className={`w-10 rounded-md border px-1.5 py-0.5 text-center text-[11px] font-bold ${tierColor(player.tier)}`}>
         {player.tier}
       </span>
     </Link>

@@ -53,11 +53,11 @@ export default function MessageCard({ msg, isPreferred }: { msg: DmMessage; isPr
     <div className={`rounded-xl border ${style.border} ${style.bg} p-3 space-y-2`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${style.text}`}>
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${style.text}`}>
             {TONE_LABELS[msg.tone]}
           </span>
           {isPreferred && (
-            <span className="text-[9px] bg-white/10 text-white/50 px-1.5 py-0.5 rounded-full">Your style</span>
+            <span className="text-[11px] bg-white/10 text-white/50 px-1.5 py-0.5 rounded-full">Your style</span>
           )}
         </div>
         <div className="flex items-center gap-1">

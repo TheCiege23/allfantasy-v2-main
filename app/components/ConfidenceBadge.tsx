@@ -44,7 +44,7 @@ export default function ConfidenceBadge({
   }, [logged, insightId, level, placement]);
 
   const sizeClasses = size === "sm" 
-    ? "px-2 py-0.5 text-[10px] gap-1" 
+    ? "px-2 py-0.5 text-[11px] gap-1" 
     : "px-2.5 py-1 text-xs gap-1.5";
 
   return (
@@ -64,7 +64,7 @@ export default function ConfidenceBadge({
 
       {showTooltip && (
         <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 rounded-lg bg-slate-800 border border-white/10 shadow-xl text-xs text-white/80 leading-relaxed">
-          <div className="text-white/50 text-[10px] uppercase tracking-wide mb-1">
+          <div className="text-white/50 text-[11px] uppercase tracking-wide mb-1">
             {label}
           </div>
           {tooltip}

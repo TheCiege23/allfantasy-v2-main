@@ -61,7 +61,7 @@ export default function SurvivorTribePage() {
             {(tribe?.name ?? 'T').slice(0, 1)}
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-text-dim)]">Your tribe</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-text-dim)]">Your tribe</p>
             <h1
               className="text-2xl font-black uppercase tracking-wide text-white"
               style={{ color: tribe?.colorHex ? undefined : undefined }}

@@ -160,7 +160,7 @@ export function TournamentIntroVideoOverlay({
           className="aspect-video w-full rounded-xl border border-white/15 bg-black shadow-2xl"
           data-testid="tournament-intro-video"
         />
-        <p className="pt-2 text-center text-[10px] text-white/45">
+        <p className="pt-2 text-center text-[11px] text-white/45">
           This intro plays once. Skip or wait for it to finish — it won&apos;t show again.
         </p>
       </div>

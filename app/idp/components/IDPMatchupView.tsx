@@ -127,20 +127,20 @@ export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchu
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3">
-        <div className="mb-2 flex items-baseline justify-between text-[10px] uppercase tracking-wide text-white/35">
+        <div className="mb-2 flex items-baseline justify-between text-[11px] uppercase tracking-wide text-white/35">
           <span>Week {data.week}</span>
           <span>{data.season} season</span>
         </div>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <ScoreSide side={you} align="left" leading={youLead} />
-          <span className="text-[10px] font-bold text-white/30">vs</span>
+          <span className="text-[11px] font-bold text-white/30">vs</span>
           <ScoreSide side={opponent} align="right" leading={!youLead} />
         </div>
       </div>
 
       {/* The caveat rides with the numbers rather than sitting in a tooltip nobody opens. */}
       {data.notes.map((n) => (
-        <p key={n} className="text-[10px] leading-relaxed text-white/35">
+        <p key={n} className="text-[11px] leading-relaxed text-white/35">
           {n}
         </p>
       ))}
@@ -209,7 +209,7 @@ function ScoreSide({
       <p className={`text-2xl font-bold ${leading ? 'text-white' : 'text-white/55'}`}>
         {side.officialScore != null ? fmt(side.officialScore) : <span className="text-white/25">—</span>}
       </p>
-      <p className="text-[9px] text-white/30">
+      <p className="text-[11px] text-white/30">
         priced {side.scoredPlayers}/{side.totalPlayers} rostered
       </p>
     </div>
@@ -223,7 +223,7 @@ function PlayerColumn({ side, tab }: { side: IdpMatchupSide; tab: Tab }) {
   return (
     <div className="space-y-1">
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-white/[0.06] p-2 text-[10px] text-white/30">
+        <p className="rounded-lg border border-white/[0.06] p-2 text-[11px] text-white/30">
           No players on this side of the ball.
         </p>
       ) : null}
@@ -234,7 +234,7 @@ function PlayerColumn({ side, tab }: { side: IdpMatchupSide; tab: Tab }) {
         >
           <div className="min-w-0">
             <p className="truncate text-[11px] font-medium text-white/85">{p.name}</p>
-            <p className="text-[9px] text-white/35">
+            <p className="text-[11px] text-white/35">
               {p.position ?? '—'} {p.team ? `· ${p.team}` : ''}
             </p>
           </div>

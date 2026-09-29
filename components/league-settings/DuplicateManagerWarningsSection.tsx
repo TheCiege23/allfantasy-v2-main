@@ -81,7 +81,7 @@ export function DuplicateManagerWarningsSection({ leagueId }: { leagueId: string
 
   return (
     <div className="space-y-2.5">
-      <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-300/80">
+      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">
         <ShieldAlert className="h-3.5 w-3.5" />
         Possible duplicate manager detected
       </p>
@@ -91,9 +91,9 @@ export function DuplicateManagerWarningsSection({ leagueId }: { leagueId: string
         return (
           <div key={flag.id} className="rounded-lg border border-white/15 bg-[#0d1526] p-3">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${risk.className}`}>{risk.label}</span>
+              <span className={`rounded border px-2 py-0.5 text-[11px] font-bold uppercase ${risk.className}`}>{risk.label}</span>
               {flag.status === 'pending_review' && (
-                <span className="rounded border border-cyan-500/25 bg-cyan-950/25 px-2 py-0.5 text-[10px] font-bold uppercase text-cyan-300">
+                <span className="rounded border border-cyan-500/25 bg-cyan-950/25 px-2 py-0.5 text-[11px] font-bold uppercase text-cyan-300">
                   Join on hold
                 </span>
               )}

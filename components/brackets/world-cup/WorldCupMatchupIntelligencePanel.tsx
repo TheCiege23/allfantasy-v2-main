@@ -27,7 +27,7 @@ function ProbBar({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-      <span className="flex max-w-[38%] min-w-0 items-center justify-end gap-1 truncate text-right text-[10px] text-white/50 sm:w-24 sm:max-w-none">
+      <span className="flex max-w-[38%] min-w-0 items-center justify-end gap-1 truncate text-right text-[11px] text-white/50 sm:w-24 sm:max-w-none">
         <WorldCupTeamFlag flagUrl={flagUrl} teamName={label} size="xs" />
         {label}
       </span>
@@ -39,7 +39,7 @@ function ProbBar({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="w-9 text-[10px] tabular-nums text-white/60">{pct}%</span>
+      <span className="w-9 text-[11px] tabular-nums text-white/60">{pct}%</span>
     </div>
   )
 }
@@ -146,7 +146,7 @@ export default function WorldCupMatchupIntelligencePanel({
           </span>
         </div>
         {!hasBracketBrainAi && (
-          <span className="text-[9px] font-semibold uppercase tracking-wide text-white/35">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-white/35">
             Basic stats (non-AI)
           </span>
         )}
@@ -205,44 +205,44 @@ export default function WorldCupMatchupIntelligencePanel({
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${riskBadgeClass(intel.riskLevel)}`}>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${riskBadgeClass(intel.riskLevel)}`}>
               Risk {intel.riskLevel}
             </span>
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60">
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/60">
               Upset volatility {intel.upsetRisk}
             </span>
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60">
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/60">
               Confidence {intel.confidence}
             </span>
             {intel.generative && (
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold text-violet-300">
+              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-bold text-violet-300">
                 AI summary
               </span>
             )}
             {intel.narrativesGenerative && (
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold text-violet-300">
+              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-bold text-violet-300">
                 AI insight
               </span>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+          <div className="grid grid-cols-2 gap-1.5 text-[11px]">
             <div className="rounded-lg bg-white/[0.05] px-2 py-1.5">
-              <span className="block text-[9px] font-semibold uppercase text-white/40">Safe pick</span>
+              <span className="block text-[11px] font-semibold uppercase text-white/40">Safe pick</span>
               <span className="font-bold text-white/90">{intel.safePickTeamName}</span>
             </div>
             <div className="rounded-lg bg-white/[0.05] px-2 py-1.5">
-              <span className="block text-[9px] font-semibold uppercase text-white/40">Upset pick</span>
+              <span className="block text-[11px] font-semibold uppercase text-white/40">Upset pick</span>
               <span className="font-bold text-white/90">{intel.upsetPickTeamName}</span>
             </div>
           </div>
 
           {intel.keyFactors.length > 0 && (
             <div>
-              <span className="text-[9px] font-bold uppercase text-white/35">Key factors</span>
+              <span className="text-[11px] font-bold uppercase text-white/35">Key factors</span>
               <ul className="mt-1 space-y-0.5">
                 {intel.keyFactors.slice(0, 5).map((f) => (
-                  <li key={f} className="text-[10px] text-white/45 before:content-['·_']">
+                  <li key={f} className="text-[11px] text-white/45 before:content-['·_']">
                     {f}
                   </li>
                 ))}
@@ -250,11 +250,11 @@ export default function WorldCupMatchupIntelligencePanel({
             </div>
           )}
 
-          <p className="text-[10px] leading-relaxed text-white/45">{intel.recentFormSummary}</p>
+          <p className="text-[11px] leading-relaxed text-white/45">{intel.recentFormSummary}</p>
 
-          <p className="text-[10px] leading-relaxed text-white/55">{intel.rankingSeedComparison}</p>
+          <p className="text-[11px] leading-relaxed text-white/55">{intel.rankingSeedComparison}</p>
 
-          <div className="space-y-1 rounded-lg border border-white/10 bg-black/20 px-2 py-2 text-[10px] text-white/55">
+          <div className="space-y-1 rounded-lg border border-white/10 bg-black/20 px-2 py-2 text-[11px] text-white/55">
             <span className="font-bold text-white/45">If {homeName} wins</span>
             <p>{intel.bracketImpactIfHomeWins}</p>
             <span className="mt-2 block font-bold text-white/45">If {awayName} wins</span>
@@ -264,18 +264,18 @@ export default function WorldCupMatchupIntelligencePanel({
           <p className="text-[11px] leading-relaxed text-white/70">{intel.summary}</p>
 
           <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-2">
-            <div className="flex items-center gap-1 text-[10px] font-bold text-white/80">
+            <div className="flex items-center gap-1 text-[11px] font-bold text-white/80">
               <Target className="h-3 w-3" /> Why this pick makes sense
             </div>
-            <p className="text-[10px] leading-relaxed text-white/60">{intel.whyThisPickMakesSense}</p>
-            <div className="flex items-center gap-1 text-[10px] font-bold text-white/75">
+            <p className="text-[11px] leading-relaxed text-white/60">{intel.whyThisPickMakesSense}</p>
+            <div className="flex items-center gap-1 text-[11px] font-bold text-white/75">
               <Zap className="h-3 w-3" /> How risky this pick is
             </div>
-            <p className="text-[10px] leading-relaxed text-white/60">{intel.howRiskyIsThisPick}</p>
-            <div className="flex items-center gap-1 text-[10px] font-bold text-white/75">
+            <p className="text-[11px] leading-relaxed text-white/60">{intel.howRiskyIsThisPick}</p>
+            <div className="flex items-center gap-1 text-[11px] font-bold text-white/75">
               <Brain className="h-3 w-3" /> What this means for your bracket
             </div>
-            <p className="text-[10px] leading-relaxed text-white/60">{intel.whatThisMeansForYourBracket}</p>
+            <p className="text-[11px] leading-relaxed text-white/60">{intel.whatThisMeansForYourBracket}</p>
           </div>
 
           {!hasBracketBrainAi && <BracketBrainLockedCard className="mt-1" />}
@@ -325,7 +325,7 @@ export default function WorldCupMatchupIntelligencePanel({
             <p
               data-testid="wc-ai-staged-side"
               data-side={stagedSide}
-              className="text-center text-[10px] text-white/80"
+              className="text-center text-[11px] text-white/80"
             >
               Staged: {stagedSide === "home" ? homeName : awayName}
             </p>

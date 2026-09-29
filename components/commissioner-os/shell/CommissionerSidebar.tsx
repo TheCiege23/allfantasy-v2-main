@@ -156,7 +156,7 @@ function SidebarList({
               {!collapsed && <span>{item.label}</span>}
               {!enabled && !collapsed && (
                 <span
-                  className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
                   style={{ background: 'var(--status-disabled-bg)', color: 'var(--status-disabled-text)' }}
                 >
                   Off

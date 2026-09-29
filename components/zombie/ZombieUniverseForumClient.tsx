@@ -109,7 +109,7 @@ export function ZombieUniverseForumClient({ universeId }: ZombieUniverseForumCli
           <div className="space-y-3">
             {pinned.map((post) => (
               <article key={post.id} className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200/75">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/75">
                   {post.type.replace(/_/g, ' ')}
                 </p>
                 <p className="mt-2 text-base font-semibold text-white">{post.title}</p>

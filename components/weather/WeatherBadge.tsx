@@ -33,7 +33,7 @@ export function WeatherBadge({
 
   return (
     <span
-      className={`inline-flex items-center text-[10px] text-white/40 ${className ?? ''}`}
+      className={`inline-flex items-center text-[11px] text-white/40 ${className ?? ''}`}
       data-testid="weather-badge"
     >
       {parts.join(' · ')}

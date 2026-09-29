@@ -567,7 +567,7 @@ function SectionTitle({ title, subtitle, accent }: { title: string; subtitle?: s
       <h2 className="text-[14px] font-bold" style={{ color: accent === 'white' ? 'rgba(255,255,255,0.85)' : accent }}>
         {title}
       </h2>
-      {subtitle ? <p className="text-[10px] text-white/40">{subtitle}</p> : null}
+      {subtitle ? <p className="text-[11px] text-white/40">{subtitle}</p> : null}
     </div>
   )
 }

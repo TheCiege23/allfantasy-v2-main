@@ -113,7 +113,7 @@ function LeaderboardAiSummaryCard({
     <details data-testid="world-cup-leaderboard-ai-summary" className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.055] p-3 text-xs text-white/85">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-black">
         <span>{t("wc.insights.aiSummaryTitle")}</span>
-        <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+        <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[11px] uppercase tracking-wide">
           {aiInsightsUnlocked
             ? t("wc.insights.aiBadgeUnlocked")
             : t("wc.insights.aiBadgeLocked")}
@@ -161,7 +161,7 @@ function LeaderboardAiSummaryCard({
 function InsightCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-2">
-      <div className="text-[10px] text-white/40">{label}</div>
+      <div className="text-[11px] text-white/40">{label}</div>
       <div className="mt-1 font-bold text-white/85">{value}</div>
     </div>
   )

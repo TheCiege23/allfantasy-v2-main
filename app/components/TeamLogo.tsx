@@ -41,7 +41,7 @@ export function TeamLogo({ teamAbbr, sport = 'nfl', logoUrl = null, size = 24, c
   if (!teamAbbr || teamAbbr === 'FA') {
     return (
       <div
-        className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] text-[9px] font-bold text-white/50 ${sportFallbackClass(sport)} ${className}`}
+        className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] text-[11px] font-bold text-white/50 ${sportFallbackClass(sport)} ${className}`}
         style={{ width: size, height: size }}
         aria-hidden
       >
@@ -56,7 +56,7 @@ export function TeamLogo({ teamAbbr, sport = 'nfl', logoUrl = null, size = 24, c
   if (exhausted || !currentUrl) {
     return (
       <div
-        className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] text-[9px] font-bold text-white/90 ${sportFallbackClass(sport)} ${className}`}
+        className={`flex shrink-0 items-center justify-center rounded-full border border-white/[0.12] text-[11px] font-bold text-white/90 ${sportFallbackClass(sport)} ${className}`}
         style={{ width: size, height: size }}
         title={teamAbbr}
         aria-hidden

@@ -259,7 +259,7 @@ export function WarRoomPanel({
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-200/85">Live draft companion</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-200/85">Live draft companion</p>
               <p className="text-[11px] text-white/45">
                 Same surfaces as the draft-room helper — copilot + intelligence while your draft is live.
               </p>
@@ -270,7 +270,7 @@ export function WarRoomPanel({
                   type="button"
                   onClick={() => onDraftCompanionRefresh()}
                   disabled={draftCompanionDataLoading}
-                  className="inline-flex items-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-semibold text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                   data-testid="war-room-companion-refresh"
                   title="Refresh draft board, intelligence, and copilot"
                 >
@@ -284,7 +284,7 @@ export function WarRoomPanel({
               {companionDraft?.draftRoomHref ? (
                 <Link
                   href={companionDraft.draftRoomHref}
-                  className="shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-100 transition hover:bg-cyan-500/20"
+                  className="shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-500/20"
                   data-testid="war-room-enter-draft-room"
                   onClick={(e) => void handleDraftRoomLinkClick(e, companionDraft.draftRoomHref ?? '')}
                 >
@@ -390,7 +390,7 @@ export function WarRoomPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF Legacy AI</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF Legacy AI</p>
           <p className="text-[11px] text-white/45">
             Live pick engine · tiers · scarcity · stacks · contingencies · take vs wait
             {useDemoBoard && !brainInput?.available?.length ? (
@@ -402,7 +402,7 @@ export function WarRoomPanel({
           <select
             value={strategyMode}
             onChange={(e) => setStrategyMode(e.target.value)}
-            className="rounded-lg border border-white/10 bg-[#0a1228] px-2 py-1 text-[10px] text-white/90"
+            className="rounded-lg border border-white/10 bg-[#0a1228] px-2 py-1 text-[11px] text-white/90"
             data-testid="war-room-strategy-select"
             aria-label="Draft strategy mode"
           >
@@ -416,7 +416,7 @@ export function WarRoomPanel({
             type="button"
             onClick={() => void loadIntel()}
             disabled={loadingIntel || !recommendPayload}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/15 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-40"
+            className="rounded-lg border border-cyan-500/30 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-40"
             data-testid="war-room-refresh-intel"
           >
             {loadingIntel ? 'Updating…' : 'Refresh intel'}
@@ -424,7 +424,7 @@ export function WarRoomPanel({
         </div>
       </div>
 
-      {loadingSession && <p className="text-[10px] text-white/40">Loading draft session…</p>}
+      {loadingSession && <p className="text-[11px] text-white/40">Loading draft session…</p>}
       {error && (
         <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100/90">
           {error}
@@ -435,24 +435,24 @@ export function WarRoomPanel({
         <div className="space-y-2 rounded-xl border border-white/8 bg-[#060d1e]/80 p-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Pick now</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Pick now</p>
               <p className="text-sm font-semibold text-white">
                 {intel.pickNow.playerName}{' '}
                 <span className="text-white/50">
                   {intel.pickNow.position} · {intel.pickNow.team}
                 </span>
               </p>
-              <p className="text-[10px] text-cyan-200/70">
+              <p className="text-[11px] text-cyan-200/70">
                 Mode: {intel.strategyMode.brainMode}
                 {intel.strategyMode.requested ? ` · requested: ${intel.strategyMode.requested}` : ''}
               </p>
             </div>
             <div className="min-w-[120px] flex-1">
-              <p className="text-[9px] uppercase tracking-wider text-white/35">Confidence</p>
+              <p className="text-[11px] uppercase tracking-wider text-white/35">Confidence</p>
               <div className="mt-0.5 h-2 w-full overflow-hidden rounded-full bg-white/10">
                 <div className="h-full bg-cyan-500/70 transition-all" style={{ width: confWidth }} />
               </div>
-              <p className="mt-0.5 text-[10px] text-white/50">{intel.confidencePct}%</p>
+              <p className="mt-0.5 text-[11px] text-white/50">{intel.confidencePct}%</p>
             </div>
           </div>
 
@@ -464,9 +464,9 @@ export function WarRoomPanel({
               { k: 'Safest', p: intel.bestSafePick },
             ].map((row) => (
               <div key={row.k} className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                <p className="text-[9px] uppercase tracking-wider text-white/40">{row.k}</p>
+                <p className="text-[11px] uppercase tracking-wider text-white/40">{row.k}</p>
                 <p className="text-[11px] font-medium text-white/90">{row.p.playerName}</p>
-                <p className="text-[10px] text-white/45">
+                <p className="text-[11px] text-white/45">
                   {row.p.position} · {row.p.recommendationType}
                 </p>
               </div>
@@ -474,9 +474,9 @@ export function WarRoomPanel({
           </div>
 
           <div className="rounded-lg border border-white/8 bg-white/[0.02] px-2 py-1.5">
-            <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">Take vs wait</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Take vs wait</p>
             <p className="text-[11px] text-cyan-100/90">{intel.takeVsWait.headline}</p>
-            <ul className="mt-1 list-inside list-disc text-[10px] text-white/55">
+            <ul className="mt-1 list-inside list-disc text-[11px] text-white/55">
               {intel.takeVsWait.bullets.map((b) => (
                 <li key={b.slice(0, 24)}>{b}</li>
               ))}
@@ -485,7 +485,7 @@ export function WarRoomPanel({
 
           {narrative?.body ? (
             <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-2 py-1.5" data-testid="war-room-narrative">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-cyan-200/50">Chimmy voice</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/50">Chimmy voice</p>
               <p className="mt-0.5 text-[11px] text-white/80">{narrative.body}</p>
             </div>
           ) : null}
@@ -496,7 +496,7 @@ export function WarRoomPanel({
                 type="button"
                 disabled={telemetryBusy}
                 onClick={() => void sendTelemetry(true)}
-                className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-40"
+                className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-40"
                 data-testid="war-room-telemetry-accept"
               >
                 Aligns with my plan
@@ -505,7 +505,7 @@ export function WarRoomPanel({
                 type="button"
                 disabled={telemetryBusy}
                 onClick={() => void sendTelemetry(false)}
-                className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-white/75 hover:bg-white/10 disabled:opacity-40"
+                className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/75 hover:bg-white/10 disabled:opacity-40"
                 data-testid="war-room-telemetry-ignore"
               >
                 Going another direction
@@ -526,7 +526,7 @@ export function WarRoomPanel({
         <button
           type="button"
           onClick={() => setCompareOpen(true)}
-          className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/20"
+          className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/20"
           data-testid="war-room-open-compare"
         >
           Compare
@@ -534,7 +534,7 @@ export function WarRoomPanel({
         <button
           type="button"
           onClick={() => setOutlookOpen(true)}
-          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-white/85 hover:bg-white/10"
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/85 hover:bg-white/10"
           data-testid="war-room-open-outlook"
         >
           Outlook
@@ -542,7 +542,7 @@ export function WarRoomPanel({
         <button
           type="button"
           onClick={() => setPostDraftOpen(true)}
-          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-white/85 hover:bg-white/10"
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/85 hover:bg-white/10"
           data-testid="war-room-open-post-draft"
         >
           Post-draft

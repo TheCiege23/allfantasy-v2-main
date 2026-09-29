@@ -386,7 +386,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
         <div className="flex items-center gap-3">
           <h3 className="text-lg font-bold text-white">Season Strategy</h3>
           {strategy.fromCache && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
               Cached
             </span>
           )}
@@ -431,7 +431,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
           { label: 'Draft Capital', value: `#${m.draftCapitalRank}`, sub: `${Math.round(m.draftCapitalValue)} value` },
         ].map((stat, i) => (
           <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/10">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{stat.label}</div>
+            <div className="text-[11px] text-white/40 uppercase tracking-wider mb-1">{stat.label}</div>
             <div className="text-lg font-bold text-white">{stat.value}</div>
             <div className="text-[11px] text-white/50">{stat.sub}</div>
           </div>
@@ -461,7 +461,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-white">{phase.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/50">{phase.weekRange}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/50">{phase.weekRange}</span>
                     </div>
                     <p className="text-xs text-white/50 mt-0.5 truncate">{phase.priority}</p>
                   </div>
@@ -478,9 +478,9 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
                       ))}
                       {phase.targets.length > 0 && (
                         <div className="flex items-center gap-2 mt-2">
-                          <span className="text-[10px] text-white/40">Focus positions:</span>
+                          <span className="text-[11px] text-white/40">Focus positions:</span>
                           {phase.targets.map((t, k) => (
-                            <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-400/20">{t}</span>
+                            <span key={k} className="text-[11px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-400/20">{t}</span>
                           ))}
                         </div>
                       )}
@@ -504,14 +504,14 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
               <div key={i} className={`p-4 rounded-xl border ${urgencyColors[tw.urgency]}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-semibold uppercase">{tw.type}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/50">{tw.window}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${urgencyColors[tw.urgency]}`}>{tw.urgency}</span>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/50">{tw.window}</span>
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${urgencyColors[tw.urgency]}`}>{tw.urgency}</span>
                 </div>
                 <p className="text-xs text-white/60">{tw.reason}</p>
                 {tw.targets && tw.targets.length > 0 && (
                   <div className="flex items-center gap-1.5 mt-2">
                     {tw.targets.map((t, k) => (
-                      <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">{t}</span>
+                      <span key={k} className="text-[11px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">{t}</span>
                     ))}
                   </div>
                 )}
@@ -537,7 +537,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-semibold text-white">{rp.category}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 capitalize">{rp.severity}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 capitalize">{rp.severity}</span>
                       </div>
                       <p className="text-xs text-white/60 mb-2">{rp.description}</p>
                       <div className="flex items-start gap-1.5">
@@ -569,12 +569,12 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
               <div className="grid gap-2">
                 {strategy.rosterMoves.holdCore.map((p, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-400/15">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-400/20 flex items-center justify-center text-[10px] font-bold text-emerald-300">{p.position}</div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-400/20 flex items-center justify-center text-[11px] font-bold text-emerald-300">{p.position}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
-                        {p.age && <span className="text-[10px] text-white/40">Age {p.age}</span>}
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
+                        {p.age && <span className="text-[11px] text-white/40">Age {p.age}</span>}
                       </div>
                       <p className="text-xs text-white/50 mt-0.5">{p.reason}</p>
                     </div>
@@ -594,12 +594,12 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
               <div className="grid gap-2">
                 {strategy.rosterMoves.sellHigh.map((p, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-red-500/5 border border-red-400/15">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/15 border border-red-400/20 flex items-center justify-center text-[10px] font-bold text-red-300">{p.position}</div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/15 border border-red-400/20 flex items-center justify-center text-[11px] font-bold text-red-300">{p.position}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
-                        {p.age && <span className="text-[10px] text-white/40">Age {p.age}</span>}
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
+                        {p.age && <span className="text-[11px] text-white/40">Age {p.age}</span>}
                       </div>
                       <p className="text-xs text-white/50 mt-0.5">{p.reason}</p>
                     </div>
@@ -619,12 +619,12 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
               <div className="grid gap-2">
                 {strategy.rosterMoves.tradeChips.map((p, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-400/15">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-400/20 flex items-center justify-center text-[10px] font-bold text-amber-300">{p.position}</div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-400/20 flex items-center justify-center text-[11px] font-bold text-amber-300">{p.position}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
-                        {p.age && <span className="text-[10px] text-white/40">Age {p.age}</span>}
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
+                        {p.age && <span className="text-[11px] text-white/40">Age {p.age}</span>}
                       </div>
                       <p className="text-xs text-white/50 mt-0.5">{p.reason}</p>
                     </div>
@@ -644,12 +644,12 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
               <div className="grid gap-2">
                 {strategy.rosterMoves.sleepers.map((p, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-purple-500/5 border border-purple-400/15">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-400/20 flex items-center justify-center text-[10px] font-bold text-purple-300">{p.position}</div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-400/20 flex items-center justify-center text-[11px] font-bold text-purple-300">{p.position}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
-                        {p.age && <span className="text-[10px] text-white/40">Age {p.age}</span>}
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">{p.team || '—'}</span>
+                        {p.age && <span className="text-[11px] text-white/40">Age {p.age}</span>}
                       </div>
                       <p className="text-xs text-white/50 mt-0.5">{p.reason}</p>
                     </div>
@@ -686,11 +686,11 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
               <div className="grid gap-2">
                 {strategy.rosterMoves.dropCandidates.map((p, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/3 border border-white/8">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white/40">{p.position}</div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-bold text-white/40">{p.position}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-white/60">{p.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-white/40">{p.team || '—'}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/5 text-white/40">{p.team || '—'}</span>
                       </div>
                       <p className="text-xs text-white/40 mt-0.5">{p.reason}</p>
                     </div>
@@ -713,7 +713,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
             <div>
               <div className="flex items-center gap-3 mb-1">
                 <span className="text-base font-bold text-white">{strategy.draftStrategy.approach}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/15 text-green-300 border border-green-400/20">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-500/15 text-green-300 border border-green-400/20">
                   {strategy.draftStrategy.picksOwned} pick{strategy.draftStrategy.picksOwned !== 1 ? 's' : ''} owned
                 </span>
               </div>
@@ -722,9 +722,9 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
 
             {strategy.draftStrategy.targetPositions.length > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-white/40 uppercase tracking-wider">Target Positions:</span>
+                <span className="text-[11px] text-white/40 uppercase tracking-wider">Target Positions:</span>
                 {strategy.draftStrategy.targetPositions.map((pos, i) => (
-                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/15 text-green-300 border border-green-400/20 font-semibold">{pos}</span>
+                  <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-green-500/15 text-green-300 border border-green-400/20 font-semibold">{pos}</span>
                 ))}
               </div>
             )}
@@ -773,7 +773,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
         </div>
       )}
 
-      <div className="text-center text-[10px] text-white/30 pt-2">
+      <div className="text-center text-[11px] text-white/30 pt-2">
         Snapshot ID: {strategy.snapshotId?.slice(0, 8)} | {strategy.isOffseason ? 'Offseason' : `Week ${strategy.weekNumber}`} | Updated weekly
       </div>
     </div>

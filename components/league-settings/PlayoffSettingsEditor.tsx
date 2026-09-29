@@ -182,23 +182,23 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-white/90">{stage.label}</span>
                   {stage.premium && (
-                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300">
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-300">
                       Premium
                     </span>
                   )}
                   {stage.additionalWeeks > 0 && (
-                    <span className="text-[10px] text-white/40">+{stage.additionalWeeks} week{stage.additionalWeeks !== 1 ? 's' : ''}</span>
+                    <span className="text-[11px] text-white/40">+{stage.additionalWeeks} week{stage.additionalWeeks !== 1 ? 's' : ''}</span>
                   )}
                 </div>
                 <p className="mt-0.5 text-[11px] text-white/50">{stage.description}</p>
-                {stage.timing && <p className="text-[10px] text-white/30">Timing: {stage.timing}</p>}
+                {stage.timing && <p className="text-[11px] text-white/30">Timing: {stage.timing}</p>}
                 {stage.warning && enabled && (
-                  <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-300/80">
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-300/80">
                     <AlertTriangle className="h-3 w-3" /> {stage.warning}
                   </p>
                 )}
                 {locked && (
-                  <p className="mt-1 text-[10px] text-amber-300/60">
+                  <p className="mt-1 text-[11px] text-amber-300/60">
                     Available with AF Commissioner Subscription <ChevronRight className="inline h-3 w-3" />
                   </p>
                 )}
@@ -219,7 +219,7 @@ export function PlayoffSettingsEditor({ leagueId }: { leagueId: string }) {
               </li>
             ))}
           </ul>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[10px]">
+          <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
             <div className="rounded bg-white/5 px-2 py-1">
               <p className="font-mono text-white">{preview.newPlayoffStartWeek}</p>
               <p className="text-white/40">Playoff start</p>

@@ -152,7 +152,7 @@ export default function WorldCupBracketCreateModal() {
           <h1 className="text-lg font-black">{t("wc.create.header")}</h1>
           <p className="text-xs text-white/45">{t("wc.create.subheader")}</p>
         </div>
-        <ThemeModeSelect className="ml-auto inline-flex items-center gap-1.5 text-[10px]" size="sm" />
+        <ThemeModeSelect className="ml-auto inline-flex items-center gap-1.5 text-[11px]" size="sm" />
       </header>
 
       <main className="overflow-y-auto">

@@ -113,7 +113,7 @@ export default function OverviewInsights({
           </div>
           <div className="text-sm font-semibold text-white/80">Chimmy Insight</div>
         </div>
-        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-[9px] text-emerald-300/70 font-medium flex items-center gap-1">
+        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-[11px] text-emerald-300/70 font-medium flex items-center gap-1">
           <span className="w-1 h-1 rounded-full bg-emerald-400/80" />
           Computed from stats
         </span>
@@ -145,7 +145,7 @@ export default function OverviewInsights({
 
       <div className="pt-3 border-t border-white/5 flex items-start gap-2">
         <Info className="w-3 h-3 text-white/20 flex-shrink-0 mt-0.5" />
-        <p className="text-[10px] text-white/25 leading-relaxed">All insights are computed from your imported stats. No hallucinated analysis.</p>
+        <p className="text-[11px] text-white/25 leading-relaxed">All insights are computed from your imported stats. No hallucinated analysis.</p>
       </div>
     </div>
   )

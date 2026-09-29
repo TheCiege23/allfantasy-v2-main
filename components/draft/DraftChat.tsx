@@ -25,7 +25,7 @@ export function DraftChat({
             <div key={message.id} className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-cyan-100">{message.from}</p>
-                <p className="text-[10px] text-white/35">{new Date(message.at).toLocaleTimeString()}</p>
+                <p className="text-[11px] text-white/35">{new Date(message.at).toLocaleTimeString()}</p>
               </div>
               <p className="mt-1 text-sm text-white/75">{message.text}</p>
             </div>

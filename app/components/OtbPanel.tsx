@@ -171,14 +171,14 @@ export default function OtbPanel({
                   <div className="flex items-center justify-between gap-1">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-white/85 truncate text-xs">{p.name}</div>
-                      <div className="text-[10px] text-white/50">{p.pos} · {p.team || "—"}</div>
+                      <div className="text-[11px] text-white/50">{p.pos} · {p.team || "—"}</div>
                     </div>
                     {isOtb ? (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/30">
                         OTB
                       </span>
                     ) : (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
                         +
                       </span>
                     )}

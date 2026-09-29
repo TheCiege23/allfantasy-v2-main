@@ -239,7 +239,7 @@ export default function WorldCupMatchImpactCenter({
         data-testid="match-impact-match-title"
       >
         <p className="text-sm font-black text-white/95">{topImpact.matchLabel}</p>
-        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-widest text-white/40">
           {topImpact.roundLabel}
         </p>
       </div>
@@ -337,7 +337,7 @@ function ImpactCell({
       className="rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2.5"
       data-testid={testId}
     >
-      <p className="text-[9px] font-black uppercase tracking-widest text-white/35">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-widest text-white/35">{label}</p>
       <p className={`mt-0.5 text-xs font-bold ${valueClass ?? "text-white/80"}`}>{value}</p>
     </div>
   )
@@ -362,7 +362,7 @@ function TeamInsightButton({
       onClick={() => onToggle(teamId)}
       data-testid="match-impact-team-insight-btn"
       disabled={loading}
-      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
+      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
         active
           ? "border-indigo-400/40 bg-indigo-500/15 text-indigo-200"
           : "border-white/[0.08] bg-white/[0.03] text-white/50 hover:border-white/15 hover:text-white/70"
@@ -420,20 +420,20 @@ function TeamIntelligenceInline({
           )}
           <span className="text-[11px] font-black text-white">{report.teamName}</span>
           {report.fifaCode && (
-            <span className="text-[9px] text-white/40 font-semibold">{report.fifaCode}</span>
+            <span className="text-[11px] text-white/40 font-semibold">{report.fifaCode}</span>
           )}
         </div>
         <button
           onClick={onClose}
           aria-label="Close team insight"
-          className="text-[10px] text-white/30 hover:text-white/60 transition-colors px-1"
+          className="text-[11px] text-white/30 hover:text-white/60 transition-colors px-1"
         >
           Close
         </button>
       </div>
 
       {report.groupStanding && (
-        <div data-testid="team-intel-standing" className="mb-2 flex flex-wrap gap-2 text-[10px]">
+        <div data-testid="team-intel-standing" className="mb-2 flex flex-wrap gap-2 text-[11px]">
           <span className="text-white/50">
             Grp {report.groupStanding.groupName} · #{report.groupStanding.rank ?? "—"} · {report.groupStanding.points} pts
           </span>
@@ -448,19 +448,19 @@ function TeamIntelligenceInline({
 
       {report.recentForm.length > 0 && (
         <div data-testid="team-intel-form" className="mb-2 flex items-center gap-1">
-          <span className="text-[9px] text-white/35 font-semibold mr-1">Form:</span>
+          <span className="text-[11px] text-white/35 font-semibold mr-1">Form:</span>
           {formDisplay}
         </div>
       )}
 
       <button
         onClick={() => setShowMissing((v) => !v)}
-        className="text-[9px] text-white/30 hover:text-white/50 transition-colors"
+        className="text-[11px] text-white/30 hover:text-white/50 transition-colors"
       >
         {showMissing ? "Hide" : "What's not loaded?"}
       </button>
       {showMissing && (
-        <p data-testid="team-intel-missing-list" className="mt-1 text-[9px] text-white/30">
+        <p data-testid="team-intel-missing-list" className="mt-1 text-[11px] text-white/30">
           Not loaded: {report.missingData.join(", ")}.
         </p>
       )}

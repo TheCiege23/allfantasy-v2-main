@@ -196,7 +196,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
               type="button"
               onClick={() => void handleSync()}
               disabled={syncing}
-              className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/60 hover:bg-white/[0.08] disabled:opacity-50"
+              className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/60 hover:bg-white/[0.08] disabled:opacity-50"
             >
               {syncing ? 'Syncing…' : 'Sync History'}
             </button>
@@ -208,7 +208,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
               key={k}
               type="button"
               onClick={() => setSortKey(k)}
-              className={`rounded-md px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${
+              className={`rounded-md px-2 py-1 text-[11px] font-medium uppercase tracking-wide ${
                 sortKey === k ? 'bg-white/10 text-white' : 'text-white/35 hover:text-white/55'
               }`}
             >
@@ -218,7 +218,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
         </div>
         <table className="w-full text-left">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-white/40">
+            <tr className="text-[11px] uppercase tracking-wider text-white/40">
               <th className="px-4 py-2 font-medium">Manager</th>
               <th className="px-2 py-2 font-medium">Seasons</th>
               <th className="px-2 py-2 font-medium">W-L</th>
@@ -249,7 +249,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
                         className="h-6 w-6 rounded-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-white/50">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/50">
                         {m.managerName.slice(0, 1)}
                       </div>
                     )}
@@ -275,7 +275,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[11px] font-bold uppercase tracking-wider text-white/40">Season History</h2>
           {historicalBackfillStatus === 'pending' ? (
-            <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#ffd7e5]">
+            <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ffd7e5]">
               Layering prior seasons…
             </span>
           ) : null}
@@ -298,10 +298,10 @@ export function HistoryTab({ league }: HistoryTabProps) {
                 className={`rounded-2xl border p-4 ${accent.card}`}
               >
                 <div className="flex flex-wrap items-center gap-2 text-sm text-white/80">
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${accent.pill}`}>
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.22em] ${accent.pill}`}>
                     {s.season}
                   </span>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/45">{accent.label}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">{accent.label}</span>
                   <span className="text-white/35">·</span>
                   <span className="text-white/55">{league.sport}</span>
                   <span className="text-white/35">·</span>

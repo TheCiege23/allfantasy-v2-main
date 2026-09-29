@@ -84,7 +84,7 @@ function PoolStatusBadge({
 }) {
   if (status === "locked" || status === "final") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/40">
+      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/40">
         <Lock className="h-2.5 w-2.5" />
         {status === "final"
           ? t("wc.publicHub.statusFinal")
@@ -93,7 +93,7 @@ function PoolStatusBadge({
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-300">
       <Radio className="h-2.5 w-2.5" />
       {t("wc.publicHub.statusOpen")}
     </span>
@@ -178,7 +178,7 @@ export default async function WorldCupBracketsPage() {
         className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-10 pt-8 text-center sm:px-6 sm:pt-14 sm:pb-16"
       >
         {/* Eyebrow badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs">
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs">
           <span className="relative inline-flex h-1.5 w-1.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300" />
@@ -333,7 +333,7 @@ export default async function WorldCupBracketsPage() {
                     <div className="mt-3 flex items-end justify-between gap-2">
                       <div className="flex items-center gap-3">
                         <div>
-                          <div className="text-[9px] font-bold uppercase tracking-widest text-white/30">
+                          <div className="text-[11px] font-bold uppercase tracking-widest text-white/30">
                             {t("wc.publicHub.scoreLabel")}
                           </div>
                           <div className="text-base font-black tabular-nums text-cyan-200">
@@ -341,7 +341,7 @@ export default async function WorldCupBracketsPage() {
                           </div>
                         </div>
                         <div>
-                          <div className="text-[9px] font-bold uppercase tracking-widest text-white/30">
+                          <div className="text-[11px] font-bold uppercase tracking-widest text-white/30">
                             {t("wc.publicHub.rankLabel")}
                           </div>
                           {challenge.rank != null ? (

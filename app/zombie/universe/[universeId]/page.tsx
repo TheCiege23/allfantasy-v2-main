@@ -136,11 +136,11 @@ export default function ZombieUniverseHubPage() {
 
         <div className="relative z-[1] p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/35 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--zombie-toxic)]">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/35 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--zombie-toxic)]">
               <Radio className="h-3.5 w-3.5" aria-hidden />
               Universe tracker
             </span>
-            <span className="rounded-full border border-white/12 bg-white/[0.05] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
+            <span className="rounded-full border border-white/12 bg-white/[0.05] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
               {preset.sport} · {preset.label}
             </span>
           </div>
@@ -157,7 +157,7 @@ export default function ZombieUniverseHubPage() {
 
           {u.levels && u.levels.length > 0 ? (
             <div className="mt-6 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Tier ladder</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Tier ladder</span>
               {[...u.levels]
                 .sort((a, b) => a.rankOrder - b.rankOrder)
                 .map((lv) => {
@@ -166,7 +166,7 @@ export default function ZombieUniverseHubPage() {
                     <span
                       key={lv.id}
                       className={clsx(
-                        'rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]',
+                        'rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em]',
                         zombieTierBadgeClasses(tier),
                       )}
                     >
@@ -179,28 +179,28 @@ export default function ZombieUniverseHubPage() {
 
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-emerald-500/22 bg-emerald-500/[0.07] px-3 py-3">
-              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Shield className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
                 Survivors
               </p>
               <p className="mt-2 text-2xl font-black tabular-nums text-white">{counts.survivorCount}</p>
             </div>
             <div className="rounded-2xl border border-lime-500/25 bg-lime-500/[0.06] px-3 py-3">
-              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Skull className="h-3.5 w-3.5 text-lime-300" aria-hidden />
                 Zombies
               </p>
               <p className="mt-2 text-2xl font-black tabular-nums text-white">{counts.zombieCount}</p>
             </div>
             <div className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-950/25 px-3 py-3">
-              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Sparkles className="h-3.5 w-3.5 text-fuchsia-300" aria-hidden />
                 Whisperers
               </p>
               <p className="mt-2 text-2xl font-black tabular-nums text-white">{counts.whispererCount}</p>
             </div>
             <div className="rounded-2xl border border-amber-500/28 bg-amber-500/[0.08] px-3 py-3">
-              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Biohazard className="h-3.5 w-3.5 text-amber-200" aria-hidden />
                 Leagues
               </p>
@@ -246,7 +246,7 @@ export default function ZombieUniverseHubPage() {
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-white/[0.07] bg-black/20">
               <table className="w-full min-w-[320px] text-left text-[13px]">
-                <thead className="text-[10px] uppercase tracking-[0.15em] text-white/45">
+                <thead className="text-[11px] uppercase tracking-[0.15em] text-white/45">
                   <tr>
                     <th className="p-3 font-semibold">#</th>
                     <th className="p-3 font-semibold">Manager</th>

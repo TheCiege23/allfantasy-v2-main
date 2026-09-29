@@ -400,7 +400,7 @@ export function FindLeagueClient() {
           <SlidersHorizontal className="h-4 w-4" />
           <span>{showFilters ? 'Hide filters' : 'Filters'}</span>
           {activeFilterCount > 0 && (
-            <span className="rounded-full bg-cyan-500/80 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+            <span className="rounded-full bg-cyan-500/80 px-1.5 py-0.5 text-[11px] font-bold text-white leading-none">
               {activeFilterCount}
             </span>
           )}

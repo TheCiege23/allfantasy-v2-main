@@ -373,7 +373,7 @@ export function WaiverWireClient({ leagueId, preselectPlayerId = null }: WaiverW
                             )}
                             <span className="font-medium">{player.name}</span>
                             {player.isRookie && (
-                              <span className="ml-1 rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400">
+                              <span className="ml-1 rounded bg-yellow-500/20 px-1.5 py-0.5 text-[11px] font-medium text-yellow-400">
                                 Rookie
                               </span>
                             )}

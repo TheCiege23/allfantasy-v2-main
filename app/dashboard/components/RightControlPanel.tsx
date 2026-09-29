@@ -185,17 +185,17 @@ export function RightControlPanel({
                 className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-white/12 bg-black/20 px-2 py-1 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.07]"
               >
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${chip.dotClass}`} />
-                <span className="truncate text-[9px] font-bold text-white/72">{chip.label}</span>
+                <span className="truncate text-[11px] font-bold text-white/72">{chip.label}</span>
                 {visibleTokenCount != null ? (
                   tokenBalance.isAdminBypassAccount ? (
                     <span
-                      className="text-[9px] text-white/35"
+                      className="text-[11px] text-white/35"
                       title="Admin bypass — synthetic balance, no ledger history"
                     >
                       · Admin bypass
                     </span>
                   ) : (
-                    <span className="text-[9px] text-white/35">· {visibleTokenCount.toLocaleString()} tokens</span>
+                    <span className="text-[11px] text-white/35">· {visibleTokenCount.toLocaleString()} tokens</span>
                   )
                 ) : null}
               </Link>

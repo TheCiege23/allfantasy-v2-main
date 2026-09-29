@@ -322,7 +322,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       ) : null}
 
       <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Search members</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Search members</p>
         <div className="relative">
           <input
             type="search"
@@ -349,7 +349,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
             key={id}
             type="button"
             onClick={() => setMemberFilter(id)}
-            className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${
               memberFilter === id
                 ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
                 : 'border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20'
@@ -394,16 +394,16 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
                     <p className="text-[12px] text-white/40">{member.ownerName}</p>
                   )}
                   {member.isCommissioner ? (
-                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-200">
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-200">
                       Commissioner
                     </span>
                   ) : null}
                   {member.isCoCommissioner ? (
-                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-200">
+                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-200">
                       Co-comm
                     </span>
                   ) : null}
-                  <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-medium uppercase text-white/35">
+                  <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-medium uppercase text-white/35">
                     {member.teamRole}
                   </span>
                 </div>
@@ -422,7 +422,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
                 {/* Starters label + more names */}
                 {member.starters.length > 0 && (
                   <div className="mt-1">
-                    <p className="text-[10px] font-semibold text-white/30">{t('member.starters')}</p>
+                    <p className="text-[11px] font-semibold text-white/30">{t('member.starters')}</p>
                     <p className="text-[12px] text-white/50 leading-relaxed">
                       {member.starters.slice(0, 5).join(', ')}
                       {member.starters.length > 5 && ','}
@@ -463,7 +463,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
                       {addPickerOpen === member.teamId && (
                         <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
                           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
                               {t('member.selectManager')}
                             </span>
                             <button type="button" onClick={() => setAddPickerOpen(null)}>
@@ -479,7 +479,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
                                   onClick={() => member.rosterId && handleAssign(member.rosterId, user.id)}
                                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-white/70 transition hover:bg-white/[0.06] hover:text-white"
                                 >
-                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/40">
+                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/40">
                                     {(user.displayName ?? user.username ?? '?')[0]?.toUpperCase()}
                                   </div>
                                   <span>{user.displayName ?? user.username ?? user.id}</span>

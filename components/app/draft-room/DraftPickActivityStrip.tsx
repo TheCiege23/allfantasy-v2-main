@@ -25,20 +25,20 @@ export function DraftPickActivityStrip({
       data-testid="draft-activity-strip"
     >
       <div className={`shrink-0 border-b px-2 py-1.5 ${rs ? 'border-cyan-500/15' : 'border-white/8'}`}>
-        <p className={`text-[9px] font-semibold uppercase tracking-wider ${rs ? 'text-cyan-200/55' : 'text-white/45'}`}>
+        <p className={`text-[11px] font-semibold uppercase tracking-wider ${rs ? 'text-cyan-200/55' : 'text-white/45'}`}>
           Live activity
         </p>
       </div>
       <div className="flex-1 overflow-x-auto overflow-y-auto px-2 py-1.5">
         <ul className="grid grid-cols-1 gap-1.5 md:grid-cols-2 xl:grid-cols-3">
           {recent.length === 0 ? (
-            <li className="text-[10px] text-white/35">No picks yet.</li>
+            <li className="text-[11px] text-white/35">No picks yet.</li>
           ) : (
             recent.map((p, idx) => (
               <li
                 key={p.id}
                 data-latest={idx === 0 ? 'true' : undefined}
-                className={`draft-live-activity-item shrink-0 rounded-lg border px-2 py-1.5 text-[10px] md:shrink md:px-2 ${
+                className={`draft-live-activity-item shrink-0 rounded-lg border px-2 py-1.5 text-[11px] md:shrink md:px-2 ${
                   idx === 0
                     ? // The most recent pick is EMERALD here because it is emerald on the board.
                       // It was amber, which put the just-picked cell and the on-the-clock cell in
@@ -54,14 +54,14 @@ export function DraftPickActivityStrip({
                   <span className="font-medium text-white/90 truncate">{p.playerName}</span>
                   <div className="flex shrink-0 items-center gap-1">
                     {idx === 0 ? (
-                      <span className="rounded border border-emerald-400/40 bg-emerald-500/15 px-1 py-px text-[8px] font-bold uppercase tracking-[0.1em] text-emerald-200">
+                      <span className="rounded border border-emerald-400/40 bg-emerald-500/15 px-1 py-px text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-200">
                         Latest
                       </span>
                     ) : null}
                     <span className="tabular-nums text-cyan-200/80">#{p.overall}</span>
                   </div>
                 </div>
-                <div className="mt-0.5 flex items-center justify-between gap-1 text-[9px] text-white/45">
+                <div className="mt-0.5 flex items-center justify-between gap-1 text-[11px] text-white/45">
                   <span>
                     {p.position}
                     {p.team ? ` · ${p.team}` : ''}

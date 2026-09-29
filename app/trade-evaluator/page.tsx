@@ -1027,10 +1027,10 @@ function TradeHubInner() {
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-300">
+              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
                 AI Trade Analyzer
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-white/50">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-white/50">
                 PECR
               </span>
             </div>
@@ -1311,18 +1311,18 @@ function TradeHubInner() {
                       <div className="mt-4 grid grid-cols-3 gap-3">
                         <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                           <div className="text-2xl font-black text-white">{result.receiptTotals.send.toLocaleString()}</div>
-                          <div className="mt-1 text-[10px] text-white/35">Sender gives</div>
+                          <div className="mt-1 text-[11px] text-white/35">Sender gives</div>
                         </div>
                         <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                           <div className="text-2xl font-black text-white">{result.receiptTotals.get.toLocaleString()}</div>
-                          <div className="mt-1 text-[10px] text-white/35">Sender gets</div>
+                          <div className="mt-1 text-[11px] text-white/35">Sender gets</div>
                         </div>
                         <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                           <div className={`text-2xl font-black ${result.receiptTotals.gapPct >= 0 ? "text-emerald-300" : "text-red-300"}`}>
                             {result.receiptTotals.gapPct > 0 ? "+" : ""}
                             {result.receiptTotals.gapPct}%
                           </div>
-                          <div className="mt-1 text-[10px] text-white/35">Gap</div>
+                          <div className="mt-1 text-[11px] text-white/35">Gap</div>
                         </div>
                       </div>
                     </div>
@@ -1333,18 +1333,18 @@ function TradeHubInner() {
                     <div className="mt-4 grid grid-cols-3 gap-3">
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                         <div className="text-2xl font-black text-white">{result.fairnessScore ?? "—"}</div>
-                        <div className="mt-1 text-[10px] text-white/35">Fairness</div>
+                        <div className="mt-1 text-[11px] text-white/35">Fairness</div>
                       </div>
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                         <div className={`text-2xl font-black ${(result.valueDelta ?? 0) >= 0 ? "text-emerald-300" : "text-red-300"}`}>
                           {(result.valueDelta ?? 0) > 0 ? "+" : ""}
                           {result.valueDelta == null ? "—" : Math.round(result.valueDelta)}
                         </div>
-                        <div className="mt-1 text-[10px] text-white/35">Value Delta</div>
+                        <div className="mt-1 text-[11px] text-white/35">Value Delta</div>
                       </div>
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-center">
                         <div className="text-2xl font-black text-white">{result.confidencePct == null ? "—" : `${result.confidencePct}%`}</div>
-                        <div className="mt-1 text-[10px] text-white/35">Confidence</div>
+                        <div className="mt-1 text-[11px] text-white/35">Confidence</div>
                       </div>
                     </div>
                   </div>
@@ -1355,11 +1355,11 @@ function TradeHubInner() {
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
                       <div className="text-3xl font-black text-cyan-200">{result.senderGrade ?? '—'}</div>
-                      <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-cyan-100/70">Sender</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-[0.24em] text-cyan-100/70">Sender</div>
                     </div>
                     <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4 text-center">
                       <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade ?? '—'}</div>
-                      <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-fuchsia-100/70">Receiver</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-[0.24em] text-fuchsia-100/70">Receiver</div>
                     </div>
                   </div>
                   {result.gradeWithheld && (
@@ -1391,16 +1391,16 @@ function TradeHubInner() {
               <div className="space-y-6">
                 <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-6">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-300">
+                    <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
                       AI Analysis
                     </span>
                     {result.fairnessMethod ? (
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">
                         {result.fairnessMethod}
                       </span>
                     ) : null}
                     {typeof result.pECRIterations === "number" && result.pECRIterations > 1 ? (
-                      <span className="ml-auto rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white/50">
+                      <span className="ml-auto rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/50">
                         {result.pECRIterations} PECR iterations
                       </span>
                     ) : null}
@@ -1459,7 +1459,7 @@ function TradeHubInner() {
                               }`}
                             />
                             <div className="text-sm font-semibold text-white">{driver.label}</div>
-                            <div className="ml-auto text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">{driver.strength}</div>
+                            <div className="ml-auto text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">{driver.strength}</div>
                           </div>
                           <p className="mt-2 text-sm leading-6 text-white/55">{driver.detail}</p>
                         </div>

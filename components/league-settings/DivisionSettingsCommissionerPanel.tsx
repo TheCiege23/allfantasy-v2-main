@@ -212,7 +212,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
             Num of {groupLabelPlural}
           </p>
-          <p className="text-[10px] text-white/30">
+          <p className="text-[11px] text-white/30">
             Set number of {isSurvivor ? 'tribes' : 'divisions'} for league
           </p>
         </div>
@@ -306,7 +306,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
             <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
               {t('division.aiAutoNaming')}
             </p>
-            <p className="text-[10px] text-white/30">
+            <p className="text-[11px] text-white/30">
               Automatically generate creative {isSurvivor ? 'tribe' : 'division'} names
             </p>
           </div>
@@ -341,7 +341,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                   backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'][divIdx % 8]
                 }} />
                 <span className="text-[12px] font-semibold text-white/70">{names[divIdx] ?? `${groupLabel} ${divIdx + 1}`}</span>
-                <span className="ml-auto text-[10px] text-white/30">
+                <span className="ml-auto text-[11px] text-white/30">
                   {teamsByDivision.groups[divIdx]?.length ?? 0} {t('division.teams')}
                 </span>
               </div>
@@ -353,7 +353,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                       {team.avatarUrl ? (
                         <img src={team.avatarUrl} alt="" className="h-6 w-6 rounded-full border border-white/10 object-cover" />
                       ) : (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[9px] font-bold text-white/40">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] font-bold text-white/40">
                           {(team.teamName ?? '?')[0]}
                         </div>
                       )}
@@ -362,7 +362,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                         <select
                           value={divIdx}
                           onChange={(e) => handleTeamAssign(team.id, parseInt(e.target.value, 10))}
-                          className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[10px] text-white/60"
+                          className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[11px] text-white/60"
                         >
                           {names.map((n, idx) => (
                             <option key={idx} value={idx}>{n || `${groupLabel} ${idx + 1}`}</option>
@@ -388,7 +388,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                     {team.avatarUrl ? (
                       <img src={team.avatarUrl} alt="" className="h-6 w-6 rounded-full border border-white/10 object-cover" />
                     ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[9px] font-bold text-white/40">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] font-bold text-white/40">
                         {(team.teamName ?? '?')[0]}
                       </div>
                     )}
@@ -397,7 +397,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
                       <select
                         value=""
                         onChange={(e) => { if (e.target.value !== '') handleTeamAssign(team.id, parseInt(e.target.value, 10)) }}
-                        className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[10px] text-white/60"
+                        className="rounded border border-white/15 bg-[#0d1526] px-1.5 py-0.5 text-[11px] text-white/60"
                       >
                         <option value="">Assign...</option>
                         {names.map((n, idx) => (

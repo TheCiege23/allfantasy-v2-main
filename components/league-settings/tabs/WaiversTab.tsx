@@ -36,7 +36,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">Waiver type</span>
+        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">Waiver type</span>
         <select
           value={waiverType}
           disabled={!canEdit}
@@ -57,7 +57,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">FAAB budget</span>
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">FAAB budget</span>
           <input
             type="number"
             min={0}
@@ -73,7 +73,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">Min bid</span>
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">Min bid</span>
           <input
             type="number"
             min={0}
@@ -88,7 +88,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             Waiver period (hrs)
           </span>
           <input

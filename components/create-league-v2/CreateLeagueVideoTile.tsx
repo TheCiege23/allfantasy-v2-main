@@ -192,7 +192,7 @@ export function CreateLeagueVideoTile({
 
       <span className="relative z-10 block pr-8">
         {eyebrow ? (
-          <span className={cx('mb-1 block text-[10px] font-black uppercase tracking-[0.16em]', selected ? 'text-white/70' : 'text-violet-600 dark:text-violet-300')}>
+          <span className={cx('mb-1 block text-[11px] font-black uppercase tracking-[0.16em]', selected ? 'text-white/70' : 'text-violet-600 dark:text-violet-300')}>
             {eyebrow}
           </span>
         ) : null}

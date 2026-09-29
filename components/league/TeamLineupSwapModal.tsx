@@ -97,7 +97,7 @@ export function TeamLineupSwapModal({
                   )}
                   data-testid={`lineup-swap-candidate-${c.id}`}
                 >
-                  <span className="min-w-[2.25rem] text-center text-[10px] font-bold text-white/35">
+                  <span className="min-w-[2.25rem] text-center text-[11px] font-bold text-white/35">
                     {c.badge ?? '—'}
                   </span>
                   <div className="relative shrink-0">

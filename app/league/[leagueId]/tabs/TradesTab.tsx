@@ -498,7 +498,7 @@ function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; w
         <span className={`inline-flex items-center justify-center border border-white/10 bg-white/[0.04] font-black text-white/35 ${dim}`}>
           —
         </span>
-        {why ? <span className="text-[10px] leading-tight text-white/35">{why}</span> : null}
+        {why ? <span className="text-[11px] leading-tight text-white/35">{why}</span> : null}
       </span>
     )
   }
@@ -516,7 +516,7 @@ function GradeWhy({ lines }: { lines: string[] | null | undefined }) {
   return (
     <ul className="col-span-full flex flex-col gap-0.5 rounded-lg bg-white/[0.03] px-3 py-2" aria-label="Why it graded this way">
       {lines.map((line, i) => (
-        <li key={line} className={`text-[10.5px] leading-snug ${i === 0 ? 'font-semibold text-[#CBD5E1]' : 'text-white/45'}`}>
+        <li key={line} className={`text-[11px] leading-snug ${i === 0 ? 'font-semibold text-[#CBD5E1]' : 'text-white/45'}`}>
           {line}
         </li>
       ))}
@@ -526,7 +526,7 @@ function GradeWhy({ lines }: { lines: string[] | null | undefined }) {
 
 function StatusChip({ status }: { status: LogRow['status'] }) {
   return (
-    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.06em] ${STATUS_TONE[status.tone]}`}>
+    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.06em] ${STATUS_TONE[status.tone]}`}>
       {status.label}
     </span>
   )
@@ -534,7 +534,7 @@ function StatusChip({ status }: { status: LogRow['status'] }) {
 
 function YouPill() {
   return (
-    <span className="rounded border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-1 py-px font-mono text-[8px] font-bold tracking-[0.08em] text-[#ffb8d1]">
+    <span className="rounded border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-1 py-px font-mono text-[11px] font-bold tracking-[0.08em] text-[#ffb8d1]">
       YOU
     </span>
   )
@@ -715,7 +715,7 @@ function initialsOf(name: string): string {
 function AssetAvatar({ a, sport }: { a: CardAsset; sport: string }) {
   if (a.kind === 'pick') {
     return (
-      <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#8f97bd]/20 font-mono text-[9px] font-black tracking-[0.06em] text-[#c3c9e6]">
+      <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#8f97bd]/20 font-mono text-[11px] font-black tracking-[0.06em] text-[#c3c9e6]">
         PICK
       </span>
     )
@@ -734,7 +734,7 @@ function AssetAvatar({ a, sport }: { a: CardAsset; sport: string }) {
     return <PlayerImage sleeperId={a.sleeperId} sport={sport} name={a.name} size={32} variant="round" />
   }
   return (
-    <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-[10px] font-bold text-white/70">
+    <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-[11px] font-bold text-white/70">
       {initialsOf(a.name)}
     </span>
   )
@@ -769,11 +769,11 @@ function ManagerBlock({
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
         {avatarUrl ? <PlayerHeadshot src={avatarUrl} alt={name} size={24} /> : (
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/15 text-[9px] font-black text-[#ffb8d1]">{initialsOf(name)}</span>
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/15 text-[11px] font-black text-[#ffb8d1]">{initialsOf(name)}</span>
         )}
         <span className="text-[13px] font-extrabold text-white">{name}</span>
         {isYou ? <YouPill /> : null}
-        <span className={`${EYEBROW} text-[8.5px] text-white/35`}>sends</span>
+        <span className={`${EYEBROW} text-[11px] text-white/35`}>sends</span>
         <span className="flex-1" />
         {grade ? <GradeTile letter={grade} why={null} size="sm" /> : null}
         {values ? <span className="font-mono text-[11px] font-bold text-[#CBD5E1]">{money(total)}</span> : null}
@@ -788,7 +788,7 @@ function ManagerBlock({
               <AssetAvatar a={a} sport={sport} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-bold leading-tight text-white">{a.name}</p>
-                {a.meta ? <p className="font-mono text-[10px] text-white/45">{a.meta}</p> : null}
+                {a.meta ? <p className="font-mono text-[11px] text-white/45">{a.meta}</p> : null}
               </div>
               {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={sport} size={21} /> : null}
               {values ? (
@@ -800,7 +800,7 @@ function ManagerBlock({
           )
         })
       )}
-      {gradeReason ? <p className="pl-8 text-[10.5px] leading-snug text-white/45">{gradeReason}</p> : null}
+      {gradeReason ? <p className="pl-8 text-[11px] leading-snug text-white/45">{gradeReason}</p> : null}
     </div>
   )
 }
@@ -889,13 +889,13 @@ export function PendingTradeCard(props: {
           </span>
           <div>
             <p className="text-[13px] font-extrabold leading-tight text-white">{headline}</p>
-            <p className="mt-0.5 text-[10.5px] text-white/40">
+            <p className="mt-0.5 text-[11px] text-white/40">
               {whenLabel(t.timestamp)}
               {review ? ' · awaiting the commissioner' : ''}
             </p>
           </div>
         </div>
-        <span className={`whitespace-nowrap rounded px-1.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] ${role.cls}`}>
+        <span className={`whitespace-nowrap rounded px-1.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.08em] ${role.cls}`}>
           {role.label}
         </span>
       </div>
@@ -932,7 +932,7 @@ export function PendingTradeCard(props: {
       {/* ── The AllFantasy read ──────────────────────────────────────── */}
       <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.06] px-3 py-2.5">
         {t.decisionReceipt ? (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.06em]">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em]">
             <span className={t.decisionReceipt.completeness === 'complete'
               ? 'rounded bg-emerald-400/15 px-1.5 py-1 text-emerald-200'
               : 'rounded bg-amber-400/15 px-1.5 py-1 text-amber-200'}>
@@ -955,7 +955,7 @@ export function PendingTradeCard(props: {
         {t.decisionReceipt?.participantDecisions.length ? (
           <div className="mb-2 space-y-1.5">
             {t.decisionReceipt.participantDecisions.map((participant, index) => (
-              <p key={participant.rosterId} className="text-[10.5px] leading-snug text-white/55">
+              <p key={participant.rosterId} className="text-[11px] leading-snug text-white/55">
                 <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade} at proposal` : ''}:</strong>{' '}{participant.reason}
               </p>
             ))}
@@ -963,7 +963,7 @@ export function PendingTradeCard(props: {
         ) : null}
         {t.decisionRecommendation ? (
           <div className="mb-2 flex items-start gap-2 rounded-lg border border-[#22d3ee]/20 bg-black/10 px-2.5 py-2">
-            <span className="rounded bg-[#22d3ee]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#67e4f7]">
+            <span className="rounded bg-[#22d3ee]/15 px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase text-[#67e4f7]">
               {t.decisionAction ?? 'review'}
             </span>
             <p className="text-[11.5px] leading-snug text-white/75">
@@ -973,7 +973,7 @@ export function PendingTradeCard(props: {
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className={`${EYEBROW} text-[9px] text-[#67e4f7]`}>AF read</span>
+          <span className={`${EYEBROW} text-[11px] text-[#67e4f7]`}>AF read</span>
           {!verdict || verdict.kind === 'loading' ? (
             <span className="text-[11.5px] text-white/50">Pricing this deal…</span>
           ) : verdict.kind === 'failed' ? (
@@ -1347,7 +1347,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {/* ── Header ───────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <p className={`${EYEBROW} text-[10px] text-white/40`}>
+          <p className={`${EYEBROW} text-[11px] text-white/40`}>
             {league.name} · Trades
           </p>
           <h1 className="text-[22px] font-black tracking-tight text-white">Trade Center</h1>
@@ -1412,7 +1412,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             : `${activeTrades.length} pending`}
         </span>
         {deadlineChip ? (
-          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-amber-200">
+          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.04em] text-amber-200">
             {deadlineChip}
           </span>
         ) : null}
@@ -1467,9 +1467,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {!loading && !err && needsAction.length > 0 ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex items-baseline gap-2">
-            <span className={`${EYEBROW} text-[10px] text-amber-300`}>Needs your action</span>
+            <span className={`${EYEBROW} text-[11px] text-amber-300`}>Needs your action</span>
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">
+            <span className="text-[11px] text-white/35">
               Offers waiting on you, and reviews waiting on the commissioner
             </span>
           </div>
@@ -1507,9 +1507,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {!loading && !err && !tradeShadowNotice && executedTrades.length > 0 ? (
         <section className="flex flex-col gap-2.5" data-testid="executed-trades-section">
           <div className="flex items-baseline gap-2">
-            <span className={`${EYEBROW} text-[10px] text-white/60`}>Executed trades</span>
+            <span className={`${EYEBROW} text-[11px] text-white/60`}>Executed trades</span>
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">Commissioner only · most recent first</span>
+            <span className="text-[11px] text-white/35">Commissioner only · most recent first</span>
           </div>
           <ul className="grid gap-2 md:grid-cols-2">
             {executedTrades.map((t) => {
@@ -1589,14 +1589,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {!loading && !err && !nothingAtAll ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>Your trades</span>
+            <span className={`${EYEBROW} text-[11px] text-white/40`}>Your trades</span>
             <div className="flex gap-0.5 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
               {(['active', 'completed'] as const).map((k) => (
                 <button
                   key={k}
                   type="button"
                   onClick={() => setYourTab(k)}
-                  className={`rounded-md px-2.5 py-1.5 font-mono text-[10px] font-bold ${
+                  className={`rounded-md px-2.5 py-1.5 font-mono text-[11px] font-bold ${
                     yourTab === k ? 'bg-[#ff3d81] text-black' : 'text-white/50 hover:text-white/80'
                   }`}
                 >
@@ -1605,7 +1605,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               ))}
             </div>
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">
+            <span className="text-[11px] text-white/35">
               {yourTab === 'active'
                 ? 'Offers with your name on them'
                 : importedLeague
@@ -1651,7 +1651,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               yourCompletedGroups.map(({ season, items }) => (
                 <div key={season} data-testid={`your-trades-season-${season}`}>
                   <div className="border-b border-white/[0.06] bg-white/[0.025] px-4 py-2">
-                    <span className={`${EYEBROW} text-[9px] text-[#ffb8d1]`}>{season} season</span>
+                    <span className={`${EYEBROW} text-[11px] text-[#ffb8d1]`}>{season} season</span>
                   </div>
                   {items.map((r) => {
                 const youA = r.a.you
@@ -1663,26 +1663,26 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     className="grid items-center gap-3 border-b border-white/[0.06] px-4 py-3 last:border-b-0 md:grid-cols-[110px_1fr_1fr_150px_130px]"
                   >
                     <div className="flex flex-col gap-1">
-                      <span className="self-start rounded bg-white/[0.06] px-1.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#CBD5E1]">
+                      <span className="self-start rounded bg-white/[0.06] px-1.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#CBD5E1]">
                         Done
                       </span>
-                      <span className="font-mono text-[10px] text-white/35">{r.when}</span>
+                      <span className="font-mono text-[11px] text-white/35">{r.when}</span>
                     </div>
                     <div className="min-w-0">
-                      <p className={`${EYEBROW} text-[8.5px] text-rose-300`}>You send</p>
+                      <p className={`${EYEBROW} text-[11px] text-rose-300`}>You send</p>
                       <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{you.sends}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className={`${EYEBROW} truncate text-[8.5px] text-emerald-300`}>You get · {them.name}</p>
+                      <p className={`${EYEBROW} truncate text-[11px] text-emerald-300`}>You get · {them.name}</p>
                       <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{them.sends}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex items-center gap-1" title="Realized result in the first scored season">
-                        <span className={`${EYEBROW} text-[8px] text-white/35`}>{you.initialLabel}</span>
+                        <span className={`${EYEBROW} text-[11px] text-white/35`}>{you.initialLabel}</span>
                         <GradeTile letter={you.initialGrade} why={you.gradeWhy} size="sm" />
                       </span>
                       <span className="flex items-center gap-1" title="Realized result through the latest scored season">
-                        <span className={`${EYEBROW} text-[8px] text-white/35`}>Now</span>
+                        <span className={`${EYEBROW} text-[11px] text-white/35`}>Now</span>
                         <GradeTile letter={you.grade} why={you.gradeWhy} size="sm" />
                       </span>
                     </div>
@@ -1708,7 +1708,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           data-testid="league-trade-history-link"
         >
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>Completed trades</span>
+            <span className={`${EYEBROW} text-[11px] text-white/40`}>Completed trades</span>
             <p className="max-w-[62ch] text-[12px] leading-relaxed text-[#8B9DB8]">
               {importedHistory
                 ? 'The log below grades every completed trade on this league’s values. The Trade Center shows the same grades with player photos and a full breakdown.'
@@ -1728,7 +1728,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {!loading && !err && !nothingAtAll ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>League trade log</span>
+            <span className={`${EYEBROW} text-[11px] text-white/40`}>League trade log</span>
             <div className="flex gap-1.5">
               {(
                 [
@@ -1742,7 +1742,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   key={k}
                   type="button"
                   onClick={() => setLogFilter(k)}
-                  className={`rounded-md border px-2.5 py-1.5 text-[10.5px] font-bold ${
+                  className={`rounded-md border px-2.5 py-1.5 text-[11px] font-bold ${
                     logFilter === k
                       ? 'border-[#ff3d81] bg-[#ff3d81]/10 text-[#ffb8d1]'
                       : 'border-white/10 bg-[#0a1228] text-white/60 hover:border-white/20'
@@ -1756,7 +1756,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               type="button"
               onClick={() => setOnlyMine((v) => !v)}
               aria-pressed={onlyMine}
-              className={`flex items-center gap-2 text-[10.5px] font-bold ${onlyMine ? 'text-[#ffb8d1]' : 'text-white/55'}`}
+              className={`flex items-center gap-2 text-[11px] font-bold ${onlyMine ? 'text-[#ffb8d1]' : 'text-white/55'}`}
             >
               <span
                 className={`relative h-[18px] w-[30px] rounded-full border ${
@@ -1771,7 +1771,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               Only mine
             </button>
             {seasonOptions.length > 0 ? (
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-white/45">
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-white/45">
                 Season
                 <select
                   value={seasonFilter}
@@ -1788,12 +1788,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               </label>
             ) : null}
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">{logRows.length} shown</span>
+            <span className="text-[11px] text-white/35">{logRows.length} shown</span>
           </div>
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-white/[0.06] px-4 py-2 md:grid">
               {['When', 'Side A sends', 'Side B sends', 'Earlier / now · A and B', 'Status'].map((h, i) => (
-                <span key={h} className={`${EYEBROW} text-[9px] text-white/35 ${i === 4 ? 'text-right' : ''}`}>
+                <span key={h} className={`${EYEBROW} text-[11px] text-white/35 ${i === 4 ? 'text-right' : ''}`}>
                   {h}
                 </span>
               ))}
@@ -1804,7 +1804,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               logRowGroups.map(({ season, items }) => (
                 <div key={season} data-testid={`league-trade-season-${season}`}>
                   <div className="border-b border-white/[0.06] bg-white/[0.025] px-4 py-2">
-                    <span className={`${EYEBROW} text-[9px] text-[#ffb8d1]`}>{season} season</span>
+                    <span className={`${EYEBROW} text-[11px] text-[#ffb8d1]`}>{season} season</span>
                   </div>
                   {items.map((r) => (
                 <div
@@ -1821,7 +1821,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                         <span className="truncate text-[12.5px] font-extrabold text-white">{s.name}</span>
                         {s.you ? <YouPill /> : null}
                         {i === 1 && r.extraSides > 0 ? (
-                          <span className="text-[10px] text-white/40">+{r.extraSides} more</span>
+                          <span className="text-[11px] text-white/40">+{r.extraSides} more</span>
                         ) : null}
                       </div>
                       <p className="mt-0.5 text-[11.5px] leading-snug text-[#CBD5E1]">{s.sends}</p>
@@ -1829,24 +1829,24 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   ))}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="flex items-center gap-1" title="Side A: first scored season, then current realized result">
-                      <span className={`${EYEBROW} text-[7.5px] text-white/30`}>A {r.a.initialLabel}</span>
+                      <span className={`${EYEBROW} text-[11px] text-white/30`}>A {r.a.initialLabel}</span>
                       <GradeTile letter={r.a.initialGrade} why={r.a.initialWhy ?? null} size="sm" />
-                      <span className="text-[8px] text-white/25">→</span>
+                      <span className="text-[11px] text-white/25">→</span>
                       <GradeTile letter={r.a.grade} why={null} size="sm" />
                     </span>
                     <span className="flex items-center gap-1" title="Side B: first scored season, then current realized result">
-                      <span className={`${EYEBROW} text-[7.5px] text-white/30`}>B {r.b.initialLabel}</span>
+                      <span className={`${EYEBROW} text-[11px] text-white/30`}>B {r.b.initialLabel}</span>
                       <GradeTile letter={r.b.initialGrade} why={r.b.initialWhy ?? null} size="sm" />
-                      <span className="text-[8px] text-white/25">→</span>
+                      <span className="text-[11px] text-white/25">→</span>
                       <GradeTile letter={r.b.grade} why={null} size="sm" />
                     </span>
                     {!r.a.grade && !r.b.grade && r.a.gradeWhy ? (
-                      <span className="max-w-[70px] text-[9.5px] leading-tight text-white/35">{r.a.gradeWhy}</span>
+                      <span className="max-w-[70px] text-[11px] leading-tight text-white/35">{r.a.gradeWhy}</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col items-start gap-1 md:items-end md:justify-self-end">
                     <StatusChip status={r.status} />
-                    {r.receiptNote ? <span className="max-w-[120px] text-[9px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
+                    {r.receiptNote ? <span className="max-w-[120px] text-[11px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
                   </div>
                   <GradeWhy lines={r.why} />
                 </div>
@@ -1862,9 +1862,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       {!loading && !err ? (
         <section className="flex flex-col gap-2.5">
           <div className="flex items-baseline gap-2">
-            <span className={`${EYEBROW} text-[10px] text-white/40`}>Trade block</span>
+            <span className={`${EYEBROW} text-[11px] text-white/40`}>Trade block</span>
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
-            <span className="text-[10px] text-white/35">Players managers have flagged available</span>
+            <span className="text-[11px] text-white/35">Players managers have flagged available</span>
           </div>
           {tradeBlock.length === 0 ? (
             <div className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-8 text-center">
@@ -1900,7 +1900,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     className={`relative flex flex-col gap-2 rounded-xl border-2 ${accent.border} bg-[#07071a]/90 p-2.5 shadow-sm`}
                   >
                     <div className="flex items-start justify-between gap-1">
-                      <span className={`text-[10px] font-bold leading-tight ${accent.label}`}>{teamLine}</span>
+                      <span className={`text-[11px] font-bold leading-tight ${accent.label}`}>{teamLine}</span>
                       <button
                         type="button"
                         onClick={() => toggleWatch(item.playerId)}
@@ -1925,14 +1925,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                         {shortDisplayName(item.name)}
                       </p>
                     </div>
-                    <p className="truncate text-[10px] text-[#ffb8d1]/45">{item.ownerName}</p>
+                    <p className="truncate text-[11px] text-[#ffb8d1]/45">{item.ownerName}</p>
                   </div>
                 )
               })}
             </div>
           )}
           {tradeBlock.length > 0 && tradeBlockNote ? (
-            <p className="text-[10px] text-white/35" data-testid="trade-block-note">
+            <p className="text-[11px] text-white/35" data-testid="trade-block-note">
               {tradeBlockNote}
             </p>
           ) : null}

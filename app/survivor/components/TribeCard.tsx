@@ -51,13 +51,13 @@ export function TribeCard({
       <p className="mt-2 text-[11px] text-[var(--survivor-text-dim)]">{memberCount} members</p>
       <div className="mt-2">
         {status === 'immune' ? (
-          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-300">🛡 Immune</span>
+          <span className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">🛡 Immune</span>
         ) : status === 'tribal' ? (
-          <span className="tribal-dot-pulse text-[10px] font-bold uppercase tracking-wide text-red-400">
+          <span className="tribal-dot-pulse text-[11px] font-bold uppercase tracking-wide text-red-400">
             🔥 Tribal tonight
           </span>
         ) : (
-          <span className="text-[10px] text-white/35">—</span>
+          <span className="text-[11px] text-white/35">—</span>
         )}
       </div>
     </article>

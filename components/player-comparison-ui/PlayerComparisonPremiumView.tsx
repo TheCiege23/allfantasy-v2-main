@@ -97,7 +97,7 @@ function ConfidenceRing({ pct }: { pct: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
         <span className="text-lg font-bold text-white">{p}%</span>
-        <span className="text-[9px] font-semibold uppercase tracking-wide text-white/45">conf.</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-white/45">conf.</span>
       </div>
     </div>
   )
@@ -161,7 +161,7 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-cyan-300" aria-hidden />
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/80">Edge</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200/80">Edge</p>
               <p className="text-base font-bold text-white sm:text-lg">
                 {winnerName ? (
                   <>
@@ -238,7 +238,7 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
 
       {/* Edge score bars */}
       <div className="space-y-2" data-testid="pc-edge-bars">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">Factor edges</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Factor edges</p>
         {rows.length === 0 ? (
           <p className="text-sm text-white/45">No factor rows for this lens — showing full set.</p>
         ) : null}
@@ -256,11 +256,11 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
           <Sparkles className="h-4 w-4 text-sky-300" />
           <p className="text-sm font-semibold text-white">AI summary</p>
           {data.explanation?.source === 'ai' ? (
-            <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-medium text-sky-200">
+            <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[11px] font-medium text-sky-200">
               AI
             </span>
           ) : (
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/50">Deterministic</span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/50">Deterministic</span>
           )}
         </div>
         <p className="text-sm leading-relaxed text-white/80">{data.explanation?.text || det.summary}</p>
@@ -271,7 +271,7 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
 
       {/* What changes */}
       <div data-testid="pc-what-changes">
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-amber-200/80">What changes the answer?</p>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-amber-200/80">What changes the answer?</p>
         <ul className="list-inside list-disc space-y-1.5 text-sm text-white/65">
           {whatChanges.map((line) => (
             <li key={line}>{line}</li>
@@ -342,7 +342,7 @@ function PlayerCard({
       )}
       data-testid="pc-player-card"
     >
-      <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">{label}</p>
       <div className="mt-2 flex items-center gap-3">
         <PlayerHeadshot src={headshotUrl} alt={name} size={52} />
         <div className="min-w-0">
@@ -424,7 +424,7 @@ function WorkflowButton({ href, label, sub }: { href: string; label: string; sub
       data-testid={`pc-workflow-${label.toLowerCase().replace(/\s+/g, '-')}`}
     >
       <span className="text-xs font-semibold text-white">{label}</span>
-      <span className="mt-0.5 text-[10px] text-white/45">{sub}</span>
+      <span className="mt-0.5 text-[11px] text-white/45">{sub}</span>
     </Link>
   )
 }

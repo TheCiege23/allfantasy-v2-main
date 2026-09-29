@@ -59,7 +59,7 @@ export default function SurvivorChatPage() {
           >
             {t.label}
             {t.unread ? (
-              <span className="ml-1 rounded-full bg-red-500 px-1.5 text-[9px] text-white" aria-label={`${t.unread} unread`}>
+              <span className="ml-1 rounded-full bg-red-500 px-1.5 text-[11px] text-white" aria-label={`${t.unread} unread`}>
                 {t.unread}
               </span>
             ) : null}

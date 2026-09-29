@@ -44,7 +44,7 @@ function RecCard({ title, rec, accent }: { title: string; rec: Rec | null; accen
   if (!rec) {
     return (
       <div className="rounded-[10px] border border-[#2e3347] bg-[#161b22] px-3 py-3 text-[11px] text-[#5c6480]">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">{title}</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">{title}</p>
         <p className="mt-2">Not enough projected data for this pick.</p>
       </div>
     )
@@ -52,38 +52,38 @@ function RecCard({ title, rec, accent }: { title: string; rec: Rec | null; accen
   const p = rec.player
   return (
     <div className={`rounded-[10px] border border-[#2e3347] bg-[#161b22] px-3 py-3 ${accent}`}>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">{title}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">{title}</p>
       <div className="mt-2 flex items-start gap-2">
         {p.headshotUrl ? (
           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-[#2e3347]">
             <Image src={p.headshotUrl} alt="" fill className="object-cover" unoptimized />
           </div>
         ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#2e3347] bg-[#242838] text-[10px] font-bold text-[#5c6480]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#2e3347] bg-[#242838] text-[11px] font-bold text-[#5c6480]">
             {p.position}
           </div>
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-bold text-[#e8eaf6]">{p.name}</p>
-          <p className="text-[10px] text-[#5c6480]">
+          <p className="text-[11px] text-[#5c6480]">
             {p.position} · {p.team}
           </p>
           <div className="mt-1 grid grid-cols-3 gap-1 text-center">
             <div className="rounded-[6px] bg-[#242838] px-1 py-1">
-              <p className="text-[8px] text-[#5c6480]">Proj</p>
+              <p className="text-[11px] text-[#5c6480]">Proj</p>
               <p className="text-[12px] font-bold text-[#e8eaf6]">{p.projectedPoints != null ? p.projectedPoints.toFixed(1) : '—'}</p>
             </div>
             <div className="rounded-[6px] bg-[#242838] px-1 py-1">
-              <p className="text-[8px] text-[#5c6480]">Floor</p>
+              <p className="text-[11px] text-[#5c6480]">Floor</p>
               <p className="text-[12px] font-bold text-[#e8eaf6]">{p.floor != null ? p.floor.toFixed(1) : '—'}</p>
             </div>
             <div className="rounded-[6px] bg-[#242838] px-1 py-1">
-              <p className="text-[8px] text-[#5c6480]">Ceil</p>
+              <p className="text-[11px] text-[#5c6480]">Ceil</p>
               <p className="text-[12px] font-bold text-[#e8eaf6]">{p.ceiling != null ? p.ceiling.toFixed(1) : '—'}</p>
             </div>
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-[#9ba3bf]">{rec.reason}</p>
-          <p className="mt-1 text-[9px] text-[#5c6480]">Confidence {rec.confidence}%</p>
+          <p className="mt-2 text-[11px] leading-relaxed text-[#9ba3bf]">{rec.reason}</p>
+          <p className="mt-1 text-[11px] text-[#5c6480]">Confidence {rec.confidence}%</p>
         </div>
       </div>
     </div>
@@ -260,7 +260,7 @@ export function StartSitModal({
       headerBadge={
         <div className="flex flex-wrap items-center gap-1.5">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
               isGlobalMode
                 ? 'border-amber-500/35 bg-amber-500/10 text-amber-100'
                 : 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200'
@@ -277,7 +277,7 @@ export function StartSitModal({
                     ? 'Normalized sports player data loaded for this roster'
                     : 'Sports data layer unavailable — projections may be partial'
                 }
-                className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                   result.sourceFlags.sportsDataReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                 }`}
               >
@@ -289,7 +289,7 @@ export function StartSitModal({
                     ? 'Injury/news feed returned headlines for this roster'
                     : 'No injury/news headlines returned for this roster'
                 }
-                className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                   result.sourceFlags.injuryNewsLayerReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                 }`}
               >
@@ -301,7 +301,7 @@ export function StartSitModal({
                     ? 'Weather layer attached for at least one outdoor game'
                     : 'Weather layer inactive (indoor or no outdoor games)'
                 }
-                className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                   result.sourceFlags.weatherLayerReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                 }`}
               >
@@ -313,7 +313,7 @@ export function StartSitModal({
                     ? 'League scoring rules applied to projections'
                     : 'League scoring not applied — generic projections'
                 }
-                className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                   result.sourceFlags.leagueScoringApplied ? 'bg-emerald-500/15 text-emerald-200' : 'bg-amber-500/12 text-amber-100/90'
                 }`}
               >
@@ -325,7 +325,7 @@ export function StartSitModal({
                     ? 'AI time/league envelope attached'
                     : 'AI envelope missing — Chimmy context may be degraded'
                 }
-                className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                   result.sourceFlags.aiEnvelopeReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                 }`}
               >
@@ -338,7 +338,7 @@ export function StartSitModal({
                       ? 'Long-term strategic coaching snapshot attached to AI context'
                       : 'Strategic coaching snapshot unavailable for this league'
                   }
-                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                     result.sourceFlags.strategicCoachingReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                   }`}
                 >
@@ -455,7 +455,7 @@ export function StartSitModal({
             <span className="inline-flex items-center gap-1 text-[12px] font-semibold">
               {m.icon} {m.label}
             </span>
-            <span className={`text-[10px] opacity-80 ${mode === m.id ? 'text-[#5b8ef0]' : 'text-[#5c6480]'}`}>
+            <span className={`text-[11px] opacity-80 ${mode === m.id ? 'text-[#5b8ef0]' : 'text-[#5c6480]'}`}>
               {m.tone}
             </span>
           </button>
@@ -480,7 +480,7 @@ export function StartSitModal({
             </div>
           ) : null}
           {result.timeContext ? (
-            <div className="mb-3 rounded-lg border border-white/[0.08] bg-[#0d111a] px-3 py-2 text-[10px] text-white/55">
+            <div className="mb-3 rounded-lg border border-white/[0.08] bg-[#0d111a] px-3 py-2 text-[11px] text-white/55">
               <span className="font-semibold text-white/70">Time · </span>
               Local {result.timeContext.userLocalTime ?? '—'} ({result.timeContext.userTimezone ?? '—'})
               {result.timeContext.timezoneMismatch ? (
@@ -514,7 +514,7 @@ export function StartSitModal({
                   {quickBadges.map((b) => (
                     <span
                       key={b}
-                      className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#9ba3bf]"
+                      className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#9ba3bf]"
                     >
                       {b}
                     </span>
@@ -570,7 +570,7 @@ export function StartSitModal({
                     <span
                       key={`${s.slotName}-${i}`}
                       title={s.topCandidateGameStart ? `Top candidate game: ${new Date(s.topCandidateGameStart).toLocaleString()}` : 'No game time available'}
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${tone}`}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tone}`}
                     >
                       {s.slotName} · {label}
                     </span>
@@ -582,7 +582,7 @@ export function StartSitModal({
           {result.unresolvedDecisions && result.unresolvedDecisions.length > 0 ? (
             <div className="at-panel mb-3 px-3 py-2">
               <p className="at-section-title mb-1">Close calls (same-slot)</p>
-              <ul className="space-y-1 text-[10px] text-[#9ba3bf]">
+              <ul className="space-y-1 text-[11px] text-[#9ba3bf]">
                 {result.unresolvedDecisions.map((u, i) => (
                   <li key={`${u.slotLabel}-${i}`}>
                     <span className="font-semibold text-[#e8eaf6]">{u.slotLabel}</span>: {u.optionA} vs {u.optionB}{' '}
@@ -629,7 +629,7 @@ export function StartSitModal({
           <p className="at-section-title mb-2">Roster (live DB)</p>
           <div className="at-panel overflow-x-auto p-0">
             <table className="w-full min-w-[520px] text-left text-[11px]">
-              <thead className="border-b border-[#2e3347] bg-[#161b22] text-[9px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <thead className="border-b border-[#2e3347] bg-[#161b22] text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 <tr>
                   <th className="px-2 py-2">Player</th>
                   <th className="px-2 py-2">Pos</th>
@@ -649,7 +649,7 @@ export function StartSitModal({
                     <td className="px-2 py-2 tabular-nums">{p.floor != null ? p.floor.toFixed(1) : '—'}</td>
                     <td className="px-2 py-2 tabular-nums">{p.ceiling != null ? p.ceiling.toFixed(1) : '—'}</td>
                     <td className="px-2 py-2 tabular-nums">{p.rollingFppg != null ? p.rollingFppg.toFixed(1) : '—'}</td>
-                    <td className="px-2 py-2 text-[10px] text-amber-200/90">{p.injuryStatus ?? '—'}</td>
+                    <td className="px-2 py-2 text-[11px] text-amber-200/90">{p.injuryStatus ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -657,12 +657,12 @@ export function StartSitModal({
           </div>
 
           {result.dataGaps.length > 0 ? (
-            <p className="mt-3 text-[10px] text-amber-200/85">
+            <p className="mt-3 text-[11px] text-amber-200/85">
               Data gaps: {result.dataGaps.slice(0, 4).join(' · ')}
               {result.dataGaps.length > 4 ? '…' : ''}
             </p>
           ) : null}
-          <p className="mt-1 text-[9px] text-[#5c6480]">Updated {new Date(result.dataFreshness).toLocaleString()}</p>
+          <p className="mt-1 text-[11px] text-[#5c6480]">Updated {new Date(result.dataFreshness).toLocaleString()}</p>
         </>
       ) : null}
 
@@ -673,7 +673,7 @@ export function StartSitModal({
           </div>
           <div>
             <p className="text-[13px] font-semibold text-[#a78bfa]">Ask Chimmy</p>
-            <p className="text-[9px] text-[#5c6480]">Uses structured roster + league payload when analysis has run</p>
+            <p className="text-[11px] text-[#5c6480]">Uses structured roster + league payload when analysis has run</p>
           </div>
         </div>
         <Link

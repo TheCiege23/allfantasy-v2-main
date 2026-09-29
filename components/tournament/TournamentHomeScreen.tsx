@@ -136,7 +136,7 @@ export function TournamentHomeScreen({ tournamentId }: TournamentHomeScreenProps
           <div className="mt-1.5 h-1.5 rounded-full bg-white/10 overflow-hidden">
             <div className="h-full rounded-full bg-purple-400/60" style={{ width: `${(data.currentRound / data.totalRounds) * 100}%` }} />
           </div>
-          <div className="mt-1 text-[10px] text-white/30">{data.currentRound}/{data.totalRounds} rounds</div>
+          <div className="mt-1 text-[11px] text-white/30">{data.currentRound}/{data.totalRounds} rounds</div>
         </div>
       </div>
 
@@ -156,14 +156,14 @@ export function TournamentHomeScreen({ tournamentId }: TournamentHomeScreenProps
           <BarChart3 className="h-5 w-5 text-cyan-400/60" />
           <div>
             <div className="text-sm font-medium text-white/80">Standings</div>
-            <div className="text-[10px] text-white/40">League, conference, and global rankings</div>
+            <div className="text-[11px] text-white/40">League, conference, and global rankings</div>
           </div>
         </a>
         <a href={`/tournament/${tournamentId}`} className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 flex items-center gap-3 hover:border-white/20 transition">
           <Trophy className="h-5 w-5 text-purple-400/60" />
           <div>
             <div className="text-sm font-medium text-white/80">Tournament Central</div>
-            <div className="text-[10px] text-white/40">Forum, announcements, round progress</div>
+            <div className="text-[11px] text-white/40">Forum, announcements, round progress</div>
           </div>
         </a>
       </div>

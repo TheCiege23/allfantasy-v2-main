@@ -64,7 +64,7 @@ function PollMessageInline({
                 />
                 <span className="relative flex items-center justify-between gap-2 px-3 py-2">
                   <span className="font-bold text-white/75">{option.label}</span>
-                  <span className="text-[10px] font-black text-white/65">
+                  <span className="text-[11px] font-black text-white/65">
                     {option.votes} vote{option.votes === 1 ? "" : "s"} · {option.percentage}%
                   </span>
                 </span>
@@ -73,7 +73,7 @@ function PollMessageInline({
           )
         })}
       </div>
-      <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
+      <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-white/35">
         {poll.totalVotes} total vote{poll.totalVotes === 1 ? "" : "s"}
         {poll.currentUserVote ? " · Your vote is counted" : ""}
         {poll.closed ? " · Closed" : ""}
@@ -125,7 +125,7 @@ function CopyButton({ text }: { text: string }) {
       type="button"
       onClick={handleCopy}
       aria-label={copied ? "Copied" : "Copy message"}
-      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-bold text-white/50 transition hover:border-cyan-300/25 hover:text-white/75 touch-manipulation"
+      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] font-bold text-white/50 transition hover:border-cyan-300/25 hover:text-white/75 touch-manipulation"
     >
       {copied
         ? <Check className="h-2.5 w-2.5" aria-hidden />
@@ -181,7 +181,7 @@ export function WorldCupChatMessageBubble({
         data-msg-type="system"
         className="flex justify-center py-1"
       >
-        <span className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-0.5 text-[10px] text-white/38">
+        <span className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-0.5 text-[11px] text-white/38">
           {message.body}
         </span>
       </div>
@@ -210,7 +210,7 @@ export function WorldCupChatMessageBubble({
             </span>
             {/* AI pill */}
             <span
-              className="rounded-full border border-cyan-400/35 bg-cyan-400/[0.12] px-1.5 py-px text-[9px] font-black uppercase tracking-wide text-cyan-300/90"
+              className="rounded-full border border-cyan-400/35 bg-cyan-400/[0.12] px-1.5 py-px text-[11px] font-black uppercase tracking-wide text-cyan-300/90"
               aria-label="AI-generated response"
             >
               AI
@@ -224,12 +224,12 @@ export function WorldCupChatMessageBubble({
             ) : null}
             {/* Private badge */}
             {message.isPrivate ? (
-              <span className="rounded-full border border-purple-400/30 bg-purple-400/[0.08] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-purple-300/75">
+              <span className="rounded-full border border-purple-400/30 bg-purple-400/[0.08] px-1.5 py-px text-[11px] font-bold uppercase tracking-wide text-purple-300/75">
                 {labels.privateLabel ?? "Private"}
               </span>
             ) : null}
           </span>
-          <span className="shrink-0 text-[10px] text-cyan-300/45">{time}</span>
+          <span className="shrink-0 text-[11px] text-cyan-300/45">{time}</span>
         </div>
 
         {/* Message body */}
@@ -258,7 +258,7 @@ export function WorldCupChatMessageBubble({
             <button
               type="button"
               onClick={() => onPostToPool(message)}
-              className="inline-flex items-center gap-1 rounded-full border border-cyan-300/18 bg-cyan-300/[0.06] px-2 py-0.5 text-[10px] font-bold text-cyan-300/65 transition hover:border-cyan-300/40 hover:text-cyan-200 touch-manipulation"
+              className="inline-flex items-center gap-1 rounded-full border border-cyan-300/18 bg-cyan-300/[0.06] px-2 py-0.5 text-[11px] font-bold text-cyan-300/65 transition hover:border-cyan-300/40 hover:text-cyan-200 touch-manipulation"
             >
               <Share2 className="h-2.5 w-2.5" aria-hidden />
               {labels.postToPool ?? "Post to pool"}
@@ -280,12 +280,12 @@ export function WorldCupChatMessageBubble({
       >
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 font-black">
-            <span className="rounded-full border border-amber-400/35 bg-amber-400/[0.12] px-1.5 py-px text-[9px] font-black uppercase tracking-wide text-amber-300/80">
+            <span className="rounded-full border border-amber-400/35 bg-amber-400/[0.12] px-1.5 py-px text-[11px] font-black uppercase tracking-wide text-amber-300/80">
               Commissioner
             </span>
             <span className="text-sm text-amber-100">{message.authorName}</span>
           </span>
-          <span className="text-[10px] text-amber-300/40">{time}</span>
+          <span className="text-[11px] text-amber-300/40">{time}</span>
         </div>
         <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-amber-50/88">
           {message.body}
@@ -307,7 +307,7 @@ export function WorldCupChatMessageBubble({
       >
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-black text-cyan-100/80">You</span>
-          <span className="text-[10px] text-cyan-300/40">{time}</span>
+          <span className="text-[11px] text-cyan-300/40">{time}</span>
         </div>
         <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-100/90">
           {message.body}
@@ -335,7 +335,7 @@ export function WorldCupChatMessageBubble({
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-black text-slate-50">{message.authorName}</span>
-        <span className="text-[10px] text-slate-300/55">{time}</span>
+        <span className="text-[11px] text-slate-300/55">{time}</span>
       </div>
       <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-100/86">
         {message.body}
@@ -351,7 +351,7 @@ export function WorldCupChatMessageBubble({
         />
       ) : null}
       {message.isPrivate ? (
-        <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-white/50">
+        <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/50">
           {labels.privateLabel ?? "Private"}
         </p>
       ) : null}

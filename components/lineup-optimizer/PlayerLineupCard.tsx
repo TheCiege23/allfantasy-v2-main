@@ -80,7 +80,7 @@ export function PlayerLineupCard({
             .join('')
             .slice(0, 3)}
           {aiRecommended ? (
-            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/90 text-[10px] text-[#040915]">
+            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/90 text-[11px] text-[#040915]">
               <Sparkles className="h-3 w-3" aria-hidden />
             </span>
           ) : null}
@@ -88,7 +88,7 @@ export function PlayerLineupCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/80">{slotLabel}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">{slotLabel}</p>
               <p className="truncate font-medium text-white">{player.name}</p>
               <p className="text-xs text-white/55">
                 {player.team ?? '—'} · {player.opponent ?? '—'}
@@ -96,7 +96,7 @@ export function PlayerLineupCard({
             </div>
             <div className="text-right">
               <p className="text-sm font-semibold tabular-nums text-white">{player.projectedPoints.toFixed(1)}</p>
-              <p className="text-[10px] text-white/45">proj</p>
+              <p className="text-[11px] text-white/45">proj</p>
             </div>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">

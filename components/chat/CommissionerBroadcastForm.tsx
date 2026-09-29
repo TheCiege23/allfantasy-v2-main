@@ -139,7 +139,7 @@ export default function CommissionerBroadcastForm({ leagueId, onSent, className 
 
   if (availability.state === "checking") {
     return shell(
-      <p className="mt-1 text-[10px]" style={{ color: "var(--muted2)" }}>
+      <p className="mt-1 text-[11px]" style={{ color: "var(--muted2)" }}>
         Checking this league…
       </p>,
     )
@@ -164,7 +164,7 @@ export default function CommissionerBroadcastForm({ leagueId, onSent, className 
 
   return shell(
     <>
-      <p className="mt-1 text-[10px]" style={{ color: "var(--muted2)" }}>
+      <p className="mt-1 text-[11px]" style={{ color: "var(--muted2)" }}>
         Lands in league chat as a commissioner announcement, and everyone gets pinged unless your league has announcement alerts switched off.
       </p>
       <textarea
@@ -183,12 +183,12 @@ export default function CommissionerBroadcastForm({ leagueId, onSent, className 
         }}
       />
       {error && (
-        <p className="mt-1 text-[10px]" role="alert" style={{ color: "var(--accent-red-strong)" }}>
+        <p className="mt-1 text-[11px]" role="alert" style={{ color: "var(--accent-red-strong)" }}>
           {error}
         </p>
       )}
       {sentNote && !error && (
-        <p className="mt-1 text-[10px]" role="status" style={{ color: "var(--accent-amber-strong)" }}>
+        <p className="mt-1 text-[11px]" role="status" style={{ color: "var(--accent-amber-strong)" }}>
           {sentNote}
         </p>
       )}

@@ -164,7 +164,7 @@ export function PlayerAvatar({
         </span>
       ) : showBadge && teamAbbr ? (
         <span
-          className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center rounded-md border border-white/15 bg-[#0a1228] px-1 text-[8px] font-bold text-white/85 shadow-md"
+          className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center rounded-md border border-white/15 bg-[#0a1228] px-1 text-[11px] font-bold text-white/85 shadow-md"
           aria-hidden
         >
           {teamAbbr.slice(0, 3).toUpperCase()}

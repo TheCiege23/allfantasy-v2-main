@@ -190,7 +190,7 @@ export default function ZombieLeagueShell({
     <div className="flex min-h-screen flex-col md:flex-row">
       <aside className="hidden w-[270px] shrink-0 border-r border-[var(--zombie-border)] bg-[radial-gradient(circle_at_top,_rgba(220,38,38,0.14),_transparent_35%),linear-gradient(180deg,#0a0b10_0%,#12141c_52%,#0c0d12_100%)] p-4 md:block">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-[0_0_40px_rgba(220,38,38,0.08)]">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--zombie-text-dim)]">{t('zombie.shell.ops')}</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-[var(--zombie-text-dim)]">{t('zombie.shell.ops')}</p>
           <div className="mt-3 flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-red-500/25 bg-red-950/40 text-red-200">
               <Skull className="h-6 w-6" />
@@ -230,11 +230,11 @@ export default function ZombieLeagueShell({
               Horde alerts
             </span>
             {notificationCount > 0 ? (
-              <span className="rounded-full bg-red-500/20 px-2 py-1 text-[10px] font-bold text-red-100">
+              <span className="rounded-full bg-red-500/20 px-2 py-1 text-[11px] font-bold text-red-100">
                 {notificationCount > 9 ? '9+' : notificationCount}
               </span>
             ) : (
-              <span className="text-[10px] text-white/45">Clear</span>
+              <span className="text-[11px] text-white/45">Clear</span>
             )}
           </button>
 
@@ -287,14 +287,14 @@ export default function ZombieLeagueShell({
                 <ShieldAlert className="h-4 w-4" />
                 {t('zombie.shell.commissionerOps')}
               </span>
-              <span className="rounded-full bg-black/25 px-2 py-1 text-[10px]">
+              <span className="rounded-full bg-black/25 px-2 py-1 text-[11px]">
                 {opsBadgeText}
               </span>
             </button>
           ) : null}
         </div>
 
-        <p className="mt-5 text-[10px] font-bold uppercase tracking-widest text-[var(--zombie-text-dim)]">{t('zombie.shell.navigation')}</p>
+        <p className="mt-5 text-[11px] font-bold uppercase tracking-widest text-[var(--zombie-text-dim)]">{t('zombie.shell.navigation')}</p>
         <nav className="mt-3 flex flex-col gap-1">
           {desktopNav.map((n) =>
             n.href === '#ops' ? (
@@ -313,9 +313,9 @@ export default function ZombieLeagueShell({
                   {n.label}
                 </span>
                 {urgentOps > 0 ? (
-                  <span className="rounded-full bg-amber-500/20 px-2 text-[10px] font-bold text-amber-100">{urgentOps}</span>
+                  <span className="rounded-full bg-amber-500/20 px-2 text-[11px] font-bold text-amber-100">{urgentOps}</span>
                 ) : unreadOps > 0 ? (
-                  <span className="rounded-full bg-white/10 px-2 text-[10px] font-bold text-white/75">{unreadOps}</span>
+                  <span className="rounded-full bg-white/10 px-2 text-[11px] font-bold text-white/75">{unreadOps}</span>
                 ) : null}
               </button>
             ) : (
@@ -333,7 +333,7 @@ export default function ZombieLeagueShell({
                   {n.label}
                 </span>
                 {n.key === 'items' && itemCount > 0 ? (
-                  <span className="rounded-full bg-teal-500/25 px-1.5 text-[10px] font-bold text-teal-200">{itemCount}</span>
+                  <span className="rounded-full bg-teal-500/25 px-1.5 text-[11px] font-bold text-teal-200">{itemCount}</span>
                 ) : null}
               </Link>
             ),
@@ -370,7 +370,7 @@ export default function ZombieLeagueShell({
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <span className="truncate text-[14px] font-semibold text-white">{title}</span>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-white/45">{weekLine}</p>
+              <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/45">{weekLine}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -381,7 +381,7 @@ export default function ZombieLeagueShell({
               >
                 <Bell className="h-4 w-4" />
                 {notificationCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
                     {notificationCount > 9 ? '9+' : notificationCount}
                   </span>
                 ) : null}
@@ -428,7 +428,7 @@ export default function ZombieLeagueShell({
               )}
             </div>
           ) : null}
-          <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[10px]">
+          <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[11px]">
             <div className="rounded-lg bg-white/5 px-2 py-2 text-white/70">
               <div className="text-white/40">{t('zombie.shell.alive')}</div>
               <div className="mt-1 font-black text-emerald-200">{survivorCount}</div>
@@ -454,7 +454,7 @@ export default function ZombieLeagueShell({
               key={n.href}
               href={n.href}
               className={clsx(
-                'flex min-h-[48px] flex-col items-center justify-center px-1 py-2 text-[10px] font-medium',
+                'flex min-h-[48px] flex-col items-center justify-center px-1 py-2 text-[11px] font-medium',
                 navActive(currentPath, n.href, leagueId) ? 'text-sky-200' : 'text-white/60',
               )}
             >
@@ -464,7 +464,7 @@ export default function ZombieLeagueShell({
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className="flex min-h-[48px] flex-col items-center justify-center px-1 py-2 text-[10px] font-medium text-white/60"
+            className="flex min-h-[48px] flex-col items-center justify-center px-1 py-2 text-[11px] font-medium text-white/60"
             aria-expanded={moreOpen}
             aria-label={t('zombie.shell.moreAria')}
             data-testid="zombie-nav-more"

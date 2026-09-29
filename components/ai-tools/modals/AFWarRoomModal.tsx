@@ -218,11 +218,11 @@ export function AFWarRoomModal({
   const headerBadge = (
     <span className="flex flex-wrap items-center gap-1">
       {data?.overview.degraded || data?.dataGaps?.length ? (
-        <span className="rounded border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-200">
+        <span className="rounded border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-200">
           Partial data
         </span>
       ) : (
-        <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
+        <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-200">
           Live
         </span>
       )}
@@ -230,7 +230,7 @@ export function AFWarRoomModal({
         const agg = data?.orchestration?.aggregatedSourceFlags
         if (!agg) return null
         const counts = agg.moduleCounts
-        const chipBase = 'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide'
+        const chipBase = 'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
         const green = 'bg-emerald-500/15 text-emerald-200'
         const dim = 'bg-white/5 text-white/35'
         const amber = 'bg-amber-500/12 text-amber-100/90'
@@ -278,7 +278,7 @@ export function AFWarRoomModal({
 
   const scopeNote =
     !leagueId.trim() || teamContext === 'full_portfolio' ? (
-      <p className="text-[10px] text-amber-200/90">
+      <p className="text-[11px] text-amber-200/90">
         General / portfolio scope — pick a league for roster-specific orchestration.
       </p>
     ) : null
@@ -413,7 +413,7 @@ export function AFWarRoomModal({
           {(Object.keys(toggles) as (keyof WarRoomToggles)[]).map((k) => (
             <label
               key={k}
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[9px] text-white/70"
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[11px] text-white/70"
             >
               <input
                 type="checkbox"
@@ -432,7 +432,7 @@ export function AFWarRoomModal({
               key={t.id}
               type="button"
               onClick={() => setViewTab(t.id)}
-              className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+              className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${
                 viewTab === t.id ? 'bg-rose-500/20 text-rose-100' : 'text-white/45 hover:text-white/75'
               }`}
             >
@@ -534,9 +534,9 @@ function WarRoomTabBody({
           />
         </div>
           <div className="rounded-xl border border-white/[0.08] bg-[#0d111a] p-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">Command overview</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-white/35">Command overview</p>
           <p className="mt-1 inline-flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-100/90">
+            <span className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-rose-100/90">
               {data.overview.analysisModeLabel}
             </span>
             <span className="text-[13px] font-bold text-white/90">
@@ -549,13 +549,13 @@ function WarRoomTabBody({
             {data.overview.nextMatchupNote ?? 'Matchup context loads with Start/Sit sync.'}
           </p>
           {data.orchestration.timeContextSummary ? (
-            <p className="mt-2 text-[10px] leading-snug text-cyan-100/85">
+            <p className="mt-2 text-[11px] leading-snug text-cyan-100/85">
               <span className="font-bold text-white/45">Time · </span>
               {data.orchestration.timeContextSummary}
             </p>
           ) : null}
           {data.orchestration.leagueScoringDigest ? (
-            <p className="mt-1 text-[10px] text-white/50">
+            <p className="mt-1 text-[11px] text-white/50">
               <span className="font-bold text-white/35">Scoring · </span>
               {data.orchestration.leagueScoringDigest}
             </p>
@@ -566,7 +566,7 @@ function WarRoomTabBody({
                 <span
                   key={row.module}
                   title={row.detail ?? row.status}
-                  className={`rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+                  className={`rounded px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
                     row.status === 'ok'
                       ? 'border border-emerald-500/25 bg-emerald-500/10 text-emerald-100/90'
                       : row.status === 'skipped'
@@ -579,10 +579,10 @@ function WarRoomTabBody({
               ))}
             </div>
           ) : null}
-          <p className="mt-2 text-[9px] leading-relaxed text-white/35">{data.orchestration.prioritizationModel}</p>
+          <p className="mt-2 text-[11px] leading-relaxed text-white/35">{data.orchestration.prioritizationModel}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {data.overview.topActions.map((a) => (
-              <span key={a} className="rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-100">
+              <span key={a} className="rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-100">
                 {a}
               </span>
             ))}
@@ -625,7 +625,7 @@ function WarRoomTabBody({
           </p>
         ) : null}
         {wav?.timeContext || wav?.lockStatusLabel ? (
-          <div className="rounded-lg border border-white/[0.06] bg-[#0d111a] px-3 py-2 text-[10px] text-white/45">
+          <div className="rounded-lg border border-white/[0.06] bg-[#0d111a] px-3 py-2 text-[11px] text-white/45">
             {wav.timeContext?.userLocalTime ? (
               <span>
                 Local {wav.timeContext.userLocalTime} ({wav.timeContext.userTimezone ?? '—'})
@@ -641,14 +641,14 @@ function WarRoomTabBody({
           </div>
         ) : null}
         {wav?.dataQuality === 'degraded' ? (
-          <p className="text-[10px] text-amber-200/85">Waiver data is degraded — verify free-agent pool and league rules before bidding.</p>
+          <p className="text-[11px] text-amber-200/85">Waiver data is degraded — verify free-agent pool and league rules before bidding.</p>
         ) : null}
         {wav?.teamNeeds && wav.teamNeeds.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {wav.teamNeeds.map((n) => (
               <span
                 key={n}
-                className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100/90"
+                className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-100/90"
               >
                 Thin: {n}
               </span>
@@ -657,13 +657,13 @@ function WarRoomTabBody({
         ) : null}
         {wav?.structuredRecommendations ? (
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.05] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-cyan-200/70">Grounded summary</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/70">Grounded summary</p>
             <p className="mt-1 text-[11px] font-semibold text-white/88">
               Best add: {wav.structuredRecommendations.bestAddOverall.name}{' '}
               <span className="text-white/45">({wav.structuredRecommendations.bestAddOverall.position})</span>
             </p>
-            <p className="mt-1 text-[10px] leading-snug text-white/55">{wav.structuredRecommendations.faabRecommendation}</p>
-            <div className="mt-2 flex flex-wrap gap-2 text-[9px] text-white/40">
+            <p className="mt-1 text-[11px] leading-snug text-white/55">{wav.structuredRecommendations.faabRecommendation}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/40">
               {wav.structuredRecommendations.bestStreamer ? (
                 <span>Streamer: {wav.structuredRecommendations.bestStreamer.name}</span>
               ) : null}
@@ -697,16 +697,16 @@ function WarRoomTabBody({
         <ToolJumpRow tool="trade" label="Open Trade Value" />
         {tv?.ok ? (
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.05] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-cyan-200/75">League trade engine</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/75">League trade engine</p>
             <p className="mt-1 text-[11px] leading-snug text-cyan-100/90">{tv.summaryLine}</p>
             {tv.scoringLine ? (
-              <p className="mt-1 text-[10px] text-white/45">Normalized scoring: {tv.scoringLine}</p>
+              <p className="mt-1 text-[11px] text-white/45">Normalized scoring: {tv.scoringLine}</p>
             ) : null}
-            <p className="mt-1 text-[9px] text-white/35">
+            <p className="mt-1 text-[11px] text-white/35">
               Teams in league: {tv.teamCount ?? '—'} · Engine: {tv.leagueContextResolved ? 'on' : 'partial'}
             </p>
             {tv.yourTeamClaimed === false ? (
-              <p className="mt-2 text-[10px] text-amber-200/85">Claim your team to unlock full roster-aware trade pricing.</p>
+              <p className="mt-2 text-[11px] text-amber-200/85">Claim your team to unlock full roster-aware trade pricing.</p>
             ) : null}
           </div>
         ) : null}
@@ -795,7 +795,7 @@ function WarRoomTabBody({
           {data.overview.injuryRisk != null ? Math.round(data.overview.injuryRisk) : '—'}
         </p>
         {data.aiSummary ? <p className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2 text-white/75">{data.aiSummary}</p> : null}
-        <p className="text-[10px] text-white/35">Data gaps: {data.dataGaps.join('; ') || 'none'}</p>
+        <p className="text-[11px] text-white/35">Data gaps: {data.dataGaps.join('; ') || 'none'}</p>
       </div>
     )
   }
@@ -846,7 +846,7 @@ function MetricTile({
           : 'border-violet-500/25'
   return (
     <div className={`rounded-xl border ${ring} bg-[#0d111a] px-2 py-2`}>
-      <p className="text-[9px] font-bold uppercase tracking-wide text-white/35">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">{label}</p>
       <p className="mt-0.5 text-[20px] font-black tabular-nums text-white">
         {value}
         <span className="text-[11px] font-semibold text-white/35">{sub}</span>
@@ -866,21 +866,21 @@ function ActionQueueList({
     <div className="space-y-2">
       {conflicts.length > 0 ? (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-2">
-          <p className="text-[10px] font-bold uppercase text-amber-200/90">Conflicts</p>
+          <p className="text-[11px] font-bold uppercase text-amber-200/90">Conflicts</p>
           {conflicts.map((c) => (
             <div key={c.id} className="mt-2 rounded-lg border border-amber-500/15 bg-black/20 px-2 py-1.5">
-              <p className="text-[10px] text-amber-100/85">{c.summary}</p>
-              <p className="mt-1 text-[9px] text-emerald-200/80">
+              <p className="text-[11px] text-amber-100/85">{c.summary}</p>
+              <p className="mt-1 text-[11px] text-emerald-200/80">
                 Primary: {c.primaryAction}
               </p>
-              <p className="mt-0.5 text-[9px] text-white/50">Alt: {c.alternateAction}</p>
+              <p className="mt-0.5 text-[11px] text-white/50">Alt: {c.alternateAction}</p>
               {c.recommendedConfidence != null ? (
-                <p className="mt-0.5 text-[9px] text-white/40">
+                <p className="mt-0.5 text-[11px] text-white/40">
                   Confidence in primary: {c.recommendedConfidence}%
                 </p>
               ) : null}
               {c.resolutionNote ? (
-                <p className="mt-0.5 text-[9px] text-white/35">{c.resolutionNote}</p>
+                <p className="mt-0.5 text-[11px] text-white/35">{c.resolutionNote}</p>
               ) : null}
             </div>
           ))}
@@ -893,25 +893,25 @@ function ActionQueueList({
         >
           <div>
             <p className="text-[11px] font-bold text-white/90">{a.title}</p>
-            <p className="text-[10px] text-white/45">{a.detail}</p>
-            <p className="mt-1 text-[9px] uppercase text-white/30">
+            <p className="text-[11px] text-white/45">{a.detail}</p>
+            <p className="mt-1 text-[11px] uppercase text-white/30">
               {a.source}
               {a.sourceTools?.length ? ` · tools: ${a.sourceTools.join(', ')}` : ''} · urgency {a.urgency} · conf{' '}
               {a.confidence}
               {a.confidenceNote ? ` · ${a.confidenceNote}` : ''}
             </p>
-            {a.reasoning ? <p className="mt-0.5 text-[9px] text-white/40">{a.reasoning}</p> : null}
-            {a.expectedPayoff ? <p className="mt-0.5 text-[9px] text-emerald-200/80">Payoff: {a.expectedPayoff}</p> : null}
-            {a.biggestRisk ? <p className="mt-0.5 text-[9px] text-rose-200/75">Risk: {a.biggestRisk}</p> : null}
+            {a.reasoning ? <p className="mt-0.5 text-[11px] text-white/40">{a.reasoning}</p> : null}
+            {a.expectedPayoff ? <p className="mt-0.5 text-[11px] text-emerald-200/80">Payoff: {a.expectedPayoff}</p> : null}
+            {a.biggestRisk ? <p className="mt-0.5 text-[11px] text-rose-200/75">Risk: {a.biggestRisk}</p> : null}
             {a.biggestOpportunity ? (
-              <p className="mt-0.5 text-[9px] text-cyan-200/75">Opportunity: {a.biggestOpportunity}</p>
+              <p className="mt-0.5 text-[11px] text-cyan-200/75">Opportunity: {a.biggestOpportunity}</p>
             ) : null}
           </div>
           {a.linkTool ? (
             <button
               type="button"
               onClick={() => openTool(a.linkTool!)}
-              className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[9px] font-bold uppercase text-cyan-200"
+              className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold uppercase text-cyan-200"
             >
               Open
             </button>
@@ -940,7 +940,7 @@ function InfoRow({ title, body }: { title: string; body: string }) {
   return (
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5">
       <p className="text-[11px] font-semibold text-white/85">{title}</p>
-      <p className="text-[10px] text-white/50">{body}</p>
+      <p className="text-[11px] text-white/50">{body}</p>
     </div>
   )
 }

@@ -840,7 +840,7 @@ export function CommissionerControlCenterModal({
                     </label>
                   ))}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-white/60">
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/60">
                   <label className="flex items-center gap-1">
                     Cooldown (s)
                     <input
@@ -890,7 +890,7 @@ export function CommissionerControlCenterModal({
                     const row = aiRowState[rid] ?? { aiStyle: 'BALANCED', tradeAggression: 'medium', active: true }
                     return (
                       <div key={rid} className="flex flex-wrap items-center gap-2 rounded border border-white/10 bg-black/30 px-2 py-1.5">
-                        <label className="flex items-center gap-1 text-[10px] text-white/70">
+                        <label className="flex items-center gap-1 text-[11px] text-white/70">
                           <input
                             type="checkbox"
                             checked={row.active}
@@ -904,7 +904,7 @@ export function CommissionerControlCenterModal({
                           <span className="font-mono">{rid.slice(0, 8)}…</span>
                         </label>
                         <select
-                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[10px] text-white"
+                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
                           value={row.aiStyle}
                           data-testid={`draft-commissioner-ai-style-${rid}`}
                           onChange={(e) =>
@@ -918,7 +918,7 @@ export function CommissionerControlCenterModal({
                           ))}
                         </select>
                         <select
-                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[10px] text-white"
+                          className="rounded border border-white/15 bg-black/40 px-1 py-0.5 text-[11px] text-white"
                           value={row.tradeAggression}
                           data-testid={`draft-commissioner-ai-agg-${rid}`}
                           onChange={(e) =>

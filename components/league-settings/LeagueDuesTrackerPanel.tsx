@@ -166,7 +166,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
 
       {/* Payment links — FanCred + LeagueSafe */}
       <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">{t('dues.paymentPlatforms')}</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">{t('dues.paymentPlatforms')}</p>
         <div className="flex gap-2">
           <a
             href="https://fancred.app"
@@ -194,7 +194,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
       {/* Dues amount (commissioner only) */}
       {isCommissioner && (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">{t('dues.duesAmount')}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">{t('dues.duesAmount')}</p>
           <div className="flex items-center gap-2">
             <span className="text-[14px] text-white/50">$</span>
             <input
@@ -233,7 +233,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
 
       {/* Member payment list */}
       <div className="space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Member Payment Status</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Member Payment Status</p>
         {teams.map((team) => {
           const entry = getEntry(team.id)
           const isPaid = entry.paid
@@ -249,7 +249,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
               {team.avatarUrl ? (
                 <img src={team.avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full border border-white/10 object-cover" />
               ) : (
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] font-bold text-white/30">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] font-bold text-white/30">
                   {(team.teamName ?? '?')[0]}
                 </div>
               )}
@@ -260,7 +260,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
                   {team.ownerName || team.teamName}
                 </span>
                 {isPaid && (
-                  <span className="ml-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-300">
+                  <span className="ml-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-emerald-300">
                     Paid
                   </span>
                 )}
@@ -272,7 +272,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
                   <button
                     type="button"
                     onClick={() => setSeasonDropdownOpen(seasonDropdownOpen === team.id ? null : team.id)}
-                    className="flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[10px] text-white/50 hover:bg-white/10"
+                    className="flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/50 hover:bg-white/10"
                   >
                     {entry.paidSeasons.length > 0 ? entry.paidSeasons.join(', ') : 'Seasons'}
                     <ChevronDown className="h-3 w-3" />
@@ -338,7 +338,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
         </div>
       )}
 
-      <p className="text-[10px] leading-relaxed text-white/25">
+      <p className="text-[11px] leading-relaxed text-white/25">
         {t('dues.disclaimer')}
       </p>
     </div>

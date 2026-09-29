@@ -85,7 +85,7 @@ function PlayerListCard({
               {player.badges.map((badge) => (
                 <span
                   key={`${player.id}-${badge}`}
-                  className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-white/70"
+                  className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white/70"
                 >
                   {badge}
                 </span>
@@ -95,7 +95,7 @@ function PlayerListCard({
         </div>
         {player.adp != null ? (
           <div className="rounded-xl bg-[#1C2539] px-3 py-2 text-right">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-[#8B9DB8]">ADP</div>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[#8B9DB8]">ADP</div>
             <div className="text-[15px] font-semibold text-white">{Math.round(player.adp)}</div>
           </div>
         ) : null}
@@ -117,7 +117,7 @@ function PlayerListCard({
         <div className="mt-3 grid grid-cols-5 gap-x-3 gap-y-2 border-t border-white/5 pt-3">
           {player.stats.map((stat) => (
             <div key={`${player.id}-${stat.label}`}>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[#8B9DB8]">{stat.label}</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[#8B9DB8]">{stat.label}</div>
               <div className="text-[14px] font-semibold text-white">{stat.value}</div>
             </div>
           ))}

@@ -104,7 +104,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             disabled={saving}
             data-testid="autopick-mode-standard"
             onClick={() => void save(true, 'standard')}
-            className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
               localMode === 'standard'
                 ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
                 : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
@@ -125,7 +125,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
               }
               void save(true, 'ai_queue')
             }}
-            className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
               localMode === 'ai_queue'
                 ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
                 : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
@@ -140,7 +140,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
         <span
           data-testid="autopick-me-error"
           role="alert"
-          className="ml-auto shrink-0 text-[10px] text-red-300"
+          className="ml-auto shrink-0 text-[11px] text-red-300"
         >
           {error}
         </span>

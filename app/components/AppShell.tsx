@@ -238,7 +238,7 @@ export default function AppShell({
             </button>
             {rightRailCollapsedHint ? (
               <span
-                className="max-w-[2.5rem] text-center text-[9px] font-bold uppercase leading-tight text-white/35 [writing-mode:vertical-rl] [text-orientation:mixed]"
+                className="max-w-[2.5rem] text-center text-[11px] font-bold uppercase leading-tight text-white/35 [writing-mode:vertical-rl] [text-orientation:mixed]"
                 title={rightRailCollapsedHint}
               >
                 {rightRailCollapsedHint}

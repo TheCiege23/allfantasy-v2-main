@@ -49,14 +49,14 @@ export function WorldCupCompactBracketPreview({ matches }: WorldCupCompactBracke
         <section key={round.round} className="rounded-2xl border border-white/10 bg-black/20 p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-xs font-black uppercase tracking-[0.18em] text-white/90">{round.label}</h3>
-            <span className="rounded-full bg-white/[0.06] px-2 py-1 text-[10px] font-bold text-white/45">
+            <span className="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] font-bold text-white/45">
               {round.matches.length} games
             </span>
           </div>
           <div className="space-y-2">
             {round.matches.slice(0, 8).map((match) => (
               <div key={match.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-2">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">
                   Match {match.matchNumber}
                 </div>
                 <div className="mt-1 grid gap-1 text-xs font-bold text-white/75">

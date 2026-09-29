@@ -201,11 +201,11 @@ export function AIToolModalShell({
 
           {showApiPills ? (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="at-api-pill at-api-pill--live text-[9px] font-semibold uppercase tracking-wide">
+              <span className="at-api-pill at-api-pill--live text-[11px] font-semibold uppercase tracking-wide">
                 Rolling Insights
               </span>
-              <span className="at-api-pill text-[9px] font-semibold uppercase tracking-wide">News API</span>
-              <span className="at-api-pill text-[9px] font-semibold uppercase tracking-wide">AI Engine</span>
+              <span className="at-api-pill text-[11px] font-semibold uppercase tracking-wide">News API</span>
+              <span className="at-api-pill text-[11px] font-semibold uppercase tracking-wide">AI Engine</span>
             </div>
           ) : null}
         </div>

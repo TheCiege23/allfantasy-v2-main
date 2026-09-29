@@ -38,8 +38,8 @@ export default function TrustTimeline({ points, size = 'md' }: TrustTimelineProp
 
   const height = size === 'sm' ? 40 : 56
   const dotSize = size === 'sm' ? 8 : 10
-  const labelSize = size === 'sm' ? 'text-[8px]' : 'text-[10px]'
-  const scoreSize = size === 'sm' ? 'text-[9px]' : 'text-[11px]'
+  const labelSize = size === 'sm' ? 'text-[11px]' : 'text-[11px]'
+  const scoreSize = size === 'sm' ? 'text-[11px]' : 'text-[11px]'
 
   const maxScore = 100
   const minY = 4

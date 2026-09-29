@@ -141,7 +141,7 @@ export function DraftRightDockTabs({
               id={`${testIdBase}-tab-${tab.id}`}
               data-testid={`${testIdBase}-tab-${tab.id}`}
               onClick={() => onSelect(tab.id)}
-              className={`relative flex items-center justify-center gap-1 py-1 text-[8px] font-semibold uppercase tracking-[0.14em] transition ${
+              className={`relative flex items-center justify-center gap-1 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
                 isActive
                   ? 'text-cyan-100'
                   : 'text-white/50 hover:bg-white/[0.04] hover:text-white/85'
@@ -150,7 +150,7 @@ export function DraftRightDockTabs({
               <span>{tab.label}</span>
               {tab.id === 'queue' && typeof queueCount === 'number' && queueCount > 0 ? (
                 <span
-                  className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-500/20 px-1 text-[8px] font-bold text-cyan-100"
+                  className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-500/20 px-1 text-[11px] font-bold text-cyan-100"
                   aria-label={`${queueCount} queued`}
                   data-testid={`${testIdBase}-queue-count`}
                 >

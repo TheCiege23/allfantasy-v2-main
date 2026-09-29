@@ -150,14 +150,14 @@ export function WarRoomPopup({
         >
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-cyan-400/15 bg-[linear-gradient(90deg,rgba(8,18,40,0.95),rgba(6,14,30,0.92))] px-3 py-2">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-cyan-400/35 bg-gradient-to-br from-cyan-500/25 to-violet-600/20 text-[10px] font-extrabold text-cyan-50">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-cyan-400/35 bg-gradient-to-br from-cyan-500/25 to-violet-600/20 text-[11px] font-extrabold text-cyan-50">
                 AF
               </span>
               <div className="flex flex-col leading-tight">
                 <span className="text-[12px] font-semibold uppercase tracking-[0.18em] text-white/90">
                   {triggerLabel}
                 </span>
-                <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-cyan-200/70">Command Center</span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-200/70">Command Center</span>
               </div>
             </div>
             <button

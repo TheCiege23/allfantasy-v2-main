@@ -117,7 +117,7 @@ export function LegacyRankSettingsSection() {
                 style={{ background: "var(--panel2)" }}
               >
                 <span className="text-xl font-bold" style={{ color: "var(--text)" }}>{level ?? "—"}</span>
-                <span className="text-[9px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>Level</span>
+                <span className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>Level</span>
               </div>
             </div>
             <div className="min-w-0 flex-1">
@@ -157,7 +157,7 @@ export function LegacyRankSettingsSection() {
               <div key={key} className="flex flex-col gap-1">
                 <Icon className="h-4 w-4" style={{ color: "var(--accent-cyan-strong)" }} />
                 <span className="text-lg font-bold" style={{ color: "var(--text)" }}>{value}</span>
-                <span className="text-[10.5px]" style={{ color: "var(--muted)" }}>{label}</span>
+                <span className="text-[11px]" style={{ color: "var(--muted)" }}>{label}</span>
               </div>
             ))}
           </div>
@@ -194,7 +194,7 @@ export function LegacyRankSettingsSection() {
                   <span className="text-lg leading-none">{earned ? (a.icon || "🏆") : "🔒"}</span>
                   <div className="min-w-0">
                     <div className="truncate text-xs font-semibold" style={{ color: "var(--text)" }}>{a.name}</div>
-                    <div className="text-[10.5px]" style={{ color: "var(--muted)" }}>
+                    <div className="text-[11px]" style={{ color: "var(--muted)" }}>
                       {earned ? "Unlocked" : "Locked"}
                     </div>
                   </div>

@@ -17,15 +17,15 @@ export function WarRoomContingencyCard({ plans, stacks, rosterBuild, className =
       data-testid="war-room-contingency-card"
     >
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-200/80">Contingency · stacks · build</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/80">Contingency · stacks · build</p>
         {rosterBuild && (
-          <p className="mt-1 text-[10px] text-amber-100/75">{rosterBuild.buildSummary}</p>
+          <p className="mt-1 text-[11px] text-amber-100/75">{rosterBuild.buildSummary}</p>
         )}
       </div>
       {plans && plans.length > 0 && (
         <ul className="space-y-1.5">
           {plans.slice(0, 6).map((c) => (
-            <li key={c.id} className="rounded-lg border border-white/8 bg-black/20 px-2 py-1 text-[10px] text-amber-50/95">
+            <li key={c.id} className="rounded-lg border border-white/8 bg-black/20 px-2 py-1 text-[11px] text-amber-50/95">
               <span className="text-white/55">{c.trigger}</span> → <strong>{c.thenPick}</strong> ({c.position}) —{' '}
               {c.rationale}
             </li>
@@ -34,8 +34,8 @@ export function WarRoomContingencyCard({ plans, stacks, rosterBuild, className =
       )}
       {stacks && stacks.length > 0 && (
         <div>
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-cyan-200/70">Stack signals</p>
-          <ul className="mt-1 space-y-0.5 text-[10px] text-cyan-100/80">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/70">Stack signals</p>
+          <ul className="mt-1 space-y-0.5 text-[11px] text-cyan-100/80">
             {stacks.slice(0, 4).map((s) => (
               <li key={s.playerName}>
                 {s.playerName} + {s.stacksWith}: {s.reason}

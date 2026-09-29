@@ -47,7 +47,7 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
       <div className="flex flex-1 flex-col gap-2.5 sm:gap-3 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.18em] sm:tracking-[0.22em]" style={{ color: "var(--muted)" }}>
+            <p className="text-[11px] sm:text-[11px] font-semibold uppercase tracking-[0.18em] sm:tracking-[0.22em]" style={{ color: "var(--muted)" }}>
               {getSourceLabel(league)}
             </p>
             <h3 className="mt-1.5 sm:mt-2 truncate text-base sm:text-lg font-semibold" style={{ color: "var(--text)" }}>
@@ -66,21 +66,21 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
 
         <div className="flex flex-wrap gap-1.5">
           <span
-            className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold"
+            className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
             style={{ background: "var(--panel2)", color: "var(--text)" }}
           >
             {league.sport}
           </span>
           {league.leagueStyle ? (
             <span
-              className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold capitalize"
+              className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold capitalize"
               style={{ background: "rgba(14, 165, 233, 0.12)", color: "rgb(56, 189, 248)" }}
             >
               {league.leagueStyle.replace(/_/g, " ")}
             </span>
           ) : null}
           <span
-            className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold"
+            className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
             title={league.isPaid ? paidBoundaryDisclosure : undefined}
             style={{
               background: league.isPaid ? "rgba(234, 179, 8, 0.16)" : "rgba(34, 197, 94, 0.12)",
@@ -91,7 +91,7 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
           </span>
           {fillingFast ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold"
+              className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
               style={{ background: "rgba(34, 211, 238, 0.12)", color: "rgb(34, 211, 238)" }}
             >
               <Zap className="h-3 w-3" />
@@ -100,7 +100,7 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
           ) : null}
           {showNew ? (
             <span
-              className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold"
+              className="inline-flex items-center rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
               style={{ background: "rgba(251, 146, 60, 0.14)", color: "rgb(251, 146, 60)" }}
             >
               New
@@ -108,7 +108,7 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
           ) : null}
           {league.inviteOnlyByTier ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold"
+              className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
               title="This league is outside your current rank window and needs a commissioner invite."
               style={{ background: "rgba(251, 146, 60, 0.16)", color: "rgb(251, 146, 60)" }}
             >
@@ -118,7 +118,7 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
           ) : null}
           {hasAI ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold"
+              className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
               style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
             >
               <Sparkles className="h-3 w-3" />
@@ -137,7 +137,7 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
             {league.aiFeatures.slice(0, 2).map((feature) => (
               <span
                 key={`${league.id}-${feature}`}
-                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
                 style={{ borderColor: "rgba(167, 139, 250, 0.35)", color: "rgb(221, 214, 254)" }}
               >
                 {feature}

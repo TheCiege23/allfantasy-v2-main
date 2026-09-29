@@ -63,7 +63,7 @@ export default function SubTabNav({ tabs, activeTab, onChange }: SubTabNavProps)
                 {tab.icon && <span className="flex-shrink-0">{tab.icon}</span>}
                 <span>{tab.label}</span>
                 {tab.badge && (
-                  <span className={`px-1 py-0.5 rounded text-[8px] font-semibold uppercase ${
+                  <span className={`px-1 py-0.5 rounded text-[11px] font-semibold uppercase ${
                     tab.badge === 'Chimmy'
                       ? 'bg-purple-500/20 text-purple-300/80'
                       : 'bg-white/10 text-white/50'

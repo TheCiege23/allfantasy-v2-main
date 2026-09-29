@@ -510,7 +510,7 @@ export default function WorldCupBracketSettingsPanel({
             }}
             className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white disabled:opacity-45"
           />
-          <span className="mt-1 block text-[10px] text-white/40">
+          <span className="mt-1 block text-[11px] text-white/40">
             Stored securely — never shown again after save. Leave blank and save to clear.
           </span>
         </label>
@@ -606,7 +606,7 @@ export default function WorldCupBracketSettingsPanel({
           data-testid="world-cup-settings-scoring-preview"
           className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"
         >
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">Scoring preview</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Scoring preview</p>
           <ul className="mt-2 space-y-1 text-xs text-white/75">
             <li>Round of 32: {previewScoring.roundOf32Points} pts</li>
             <li>Round of 16: {previewScoring.roundOf16Points} pts</li>
@@ -676,7 +676,7 @@ export default function WorldCupBracketSettingsPanel({
             <option value="always">Always (before lock)</option>
           </select>
           {!payload.isAdmin && !payload.earlyPublicPicksAllowed ? (
-            <span className="mt-1 block text-[10px] text-white/75/80">
+            <span className="mt-1 block text-[11px] text-white/75/80">
               “Always” requires platform approval unless enabled for your environment.
             </span>
           ) : null}

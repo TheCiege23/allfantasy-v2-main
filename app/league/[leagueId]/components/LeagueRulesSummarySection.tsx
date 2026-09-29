@@ -13,7 +13,7 @@ import {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-white/38">{children}</p>
+    <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/38">{children}</p>
   )
 }
 

@@ -22,7 +22,7 @@ export function DraftQueue({ queue, onRemove, onReorder }: DraftQueueProps) {
           </span>
           <div className="leading-tight">
             <p className="text-sm font-semibold text-white">Draft Queue</p>
-            <p className="text-[10px] text-white/65">
+            <p className="text-[11px] text-white/65">
               Players you want to target next. Queue persists across draft and mock draft views.
             </p>
           </div>
@@ -30,7 +30,7 @@ export function DraftQueue({ queue, onRemove, onReorder }: DraftQueueProps) {
       </header>
 
       {queue.length === 0 ? (
-        <p className="text-[10px] text-white/55">
+        <p className="text-[11px] text-white/55">
           No players in your queue yet. Add players from rankings, search, or mock draft board.
         </p>
       ) : (
@@ -55,12 +55,12 @@ export function DraftQueue({ queue, onRemove, onReorder }: DraftQueueProps) {
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-4 items-center justify-center text-[10px] text-white/50">
+                <span className="inline-flex h-6 w-4 items-center justify-center text-[11px] text-white/50">
                   <GripVertical className="h-3.5 w-3.5" />
                 </span>
                 <div className="min-w-0">
                   <p className="truncate font-medium text-white">{item.name}</p>
-                  <p className="text-[10px] text-white/60">
+                  <p className="text-[11px] text-white/60">
                     {item.position} • {item.team} • Rank {item.rank}
                   </p>
                 </div>
@@ -68,7 +68,7 @@ export function DraftQueue({ queue, onRemove, onReorder }: DraftQueueProps) {
               <button
                 type="button"
                 onClick={() => onRemove(item.id)}
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 text-[10px] text-white/65 hover:bg-white/10"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20 text-[11px] text-white/65 hover:bg-white/10"
               >
                 <X className="h-3 w-3" />
               </button>

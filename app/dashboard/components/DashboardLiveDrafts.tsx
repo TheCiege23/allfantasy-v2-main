@@ -53,7 +53,7 @@ export function DashboardLiveDrafts({ leagues }: { leagues: UserLeague[] }) {
   // top. The `.bdx` wrapper stays only for the severity-chip colors.
   return (
     <div className="bdx bdx-strip px-2 pt-2" data-testid="dashboard-live-drafts">
-      <p className="px-1.5 pb-1 text-[10px] font-black uppercase italic tracking-wide text-[#ff8a3d]">
+      <p className="px-1.5 pb-1 text-[11px] font-black uppercase italic tracking-wide text-[#ff8a3d]">
         Draft radar · {active.length}
       </p>
       <div className="space-y-0.5">
@@ -85,7 +85,7 @@ export function DashboardLiveDrafts({ leagues }: { leagues: UserLeague[] }) {
               }
             >
               <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[11px] font-black ${
                   d.status === 'drafting'
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
                     : 'border-[#262c6a] bg-[#12163e] text-[#ff9ec0]'
@@ -98,7 +98,7 @@ export function DashboardLiveDrafts({ leagues }: { leagues: UserLeague[] }) {
                 <span className="block truncate text-[13px] font-extrabold leading-tight tracking-tight text-white/90">
                   {name}
                 </span>
-                <span className="block truncate text-[10.5px] leading-tight text-white/40">
+                <span className="block truncate text-[11px] leading-tight text-white/40">
                   Draft · {d.teams || '—'} teams · {d.rounds || '—'} rounds
                 </span>
               </span>

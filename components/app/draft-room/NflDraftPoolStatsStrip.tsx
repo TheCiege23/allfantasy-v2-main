@@ -39,7 +39,7 @@ export function NflDraftPoolStatsGroupHeader() {
   return (
     <div className="select-none">
       <div
-        className={`${NFL_DRAFT_POOL_STATS_GRID} items-end border-b border-white/10 pb-1 text-[9px] font-semibold uppercase tracking-wide text-cyan-100/55`}
+        className={`${NFL_DRAFT_POOL_STATS_GRID} items-end border-b border-white/10 pb-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/55`}
       >
         <div className="col-span-2 text-center">Proj</div>
         <div className="col-span-3 text-center">Rushing</div>
@@ -47,7 +47,7 @@ export function NflDraftPoolStatsGroupHeader() {
         <div className="col-span-5 text-center">Passing</div>
       </div>
       <div
-        className={`${NFL_DRAFT_POOL_STATS_GRID} mt-1 text-[9px] font-medium text-white/40`}
+        className={`${NFL_DRAFT_POOL_STATS_GRID} mt-1 text-[11px] font-medium text-white/40`}
         aria-hidden
       >
         <span>PTS</span>
@@ -84,7 +84,7 @@ export function NflDraftPoolStatsRow({ splits }: { splits: NflDraftProjectionSpl
     )
   }
   return (
-    <div className={`${NFL_DRAFT_POOL_STATS_GRID} text-[10px]`} data-testid="nfl-draft-pool-stats-row">
+    <div className={`${NFL_DRAFT_POOL_STATS_GRID} text-[11px]`} data-testid="nfl-draft-pool-stats-row">
       <Cell>{formatNflStatCell(s.projectedPoints, 1)}</Cell>
       <Cell>{formatNflStatCell(s.projectedPointsPerGame, 1)}</Cell>
       <Cell>{formatNflStatCell(s.rushing.att)}</Cell>

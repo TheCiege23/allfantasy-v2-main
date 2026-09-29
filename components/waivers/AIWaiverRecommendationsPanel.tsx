@@ -157,7 +157,7 @@ export default function AIWaiverRecommendationsPanel({ leagueId }: { leagueId: s
                 {rec.tags?.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {rec.tags.map((tag) => (
-                      <span key={`${rec.addPlayerId}-${tag}`} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/60">
+                      <span key={`${rec.addPlayerId}-${tag}`} className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-white/60">
                         {tag}
                       </span>
                     ))}

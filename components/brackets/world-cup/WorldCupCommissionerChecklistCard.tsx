@@ -62,7 +62,7 @@ export default function WorldCupCommissionerChecklistCard(props: BuildChecklistI
             <ClipboardCheck className="h-4 w-4 text-white/85" aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
               {t("wc.checklist.eyebrow")}
             </p>
             <h3 className="text-base font-black text-white sm:text-lg">
@@ -135,17 +135,17 @@ export default function WorldCupCommissionerChecklistCard(props: BuildChecklistI
               <div className="flex flex-wrap items-center gap-1.5">
                 <span
                   data-testid={`world-cup-commissioner-checklist-row-${idx}-status`}
-                  className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/85"
+                  className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/85"
                 >
                   {t(STATUS_KEY[row.status])}
                 </span>
                 {row.missingPicks > 0 ? (
-                  <span className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/75">
+                  <span className="rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/75">
                     {t("wc.checklist.missingPicks", { count: row.missingPicks })}
                   </span>
                 ) : null}
                 {row.status !== "Finalized" ? (
-                  <span className="rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/90">
+                  <span className="rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/90">
                     {t("wc.checklist.needsReminderBadge")}
                   </span>
                 ) : null}
@@ -167,7 +167,7 @@ export default function WorldCupCommissionerChecklistCard(props: BuildChecklistI
         </div>
       </details>
 
-      <p className="mt-3 text-[10px] text-white/40">
+      <p className="mt-3 text-[11px] text-white/40">
         {t("wc.checklist.privacyNote")}
       </p>
     </section>
@@ -185,7 +185,7 @@ function StatCell({
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
-      <div className="text-[10px] font-black uppercase tracking-widest text-white/45">
+      <div className="text-[11px] font-black uppercase tracking-widest text-white/45">
         {label}
       </div>
       <div

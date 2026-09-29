@@ -151,13 +151,13 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
               key={step.id}
               className="flex items-center gap-3 rounded-lg border border-[var(--zombie-border)] bg-[var(--zombie-panel)] px-4 py-2.5"
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/[0.06] text-[10px] font-bold text-[var(--zombie-text-dim)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/[0.06] text-[11px] font-bold text-[var(--zombie-text-dim)]">
                 {i + 1}
               </span>
               <span className="text-lg">{step.icon}</span>
               <div className="flex-1">
                 <p className="text-[12px] font-semibold text-[var(--zombie-text-full)]">{step.label}</p>
-                <p className="text-[10px] text-[var(--zombie-text-mid)]">{step.description}</p>
+                <p className="text-[11px] text-[var(--zombie-text-mid)]">{step.description}</p>
               </div>
             </div>
           ))}
@@ -172,7 +172,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
         {resolutions.length > 0 ? (
           <div className="overflow-x-auto rounded-xl border border-[var(--zombie-border)]">
             <table className="w-full text-left text-[12px]">
-              <thead className="border-b border-[var(--zombie-border)] text-[10px] uppercase text-[var(--zombie-text-dim)]">
+              <thead className="border-b border-[var(--zombie-border)] text-[11px] uppercase text-[var(--zombie-text-dim)]">
                 <tr>
                   <th className="p-2.5">Week</th>
                   <th className="p-2.5">Status</th>
@@ -189,7 +189,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
                     <td className="p-2.5">
                       <span
                         className={clsx(
-                          'rounded px-1.5 py-0.5 text-[10px] font-bold',
+                          'rounded px-1.5 py-0.5 text-[11px] font-bold',
                           r.status === 'complete'
                             ? 'bg-[var(--zombie-green)]/15 text-[var(--zombie-green)]'
                             : 'bg-amber-500/15 text-amber-300',
@@ -223,7 +223,7 @@ function StatusCard({ label, value, color, icon }: { label: string; value: strin
       <div className="flex items-center gap-2">
         <span className="text-lg">{icon}</span>
         <div>
-          <p className="text-[10px] text-[var(--zombie-text-dim)]">{label}</p>
+          <p className="text-[11px] text-[var(--zombie-text-dim)]">{label}</p>
           <p className="text-[16px] font-black" style={{ color }}>{value}</p>
         </div>
       </div>

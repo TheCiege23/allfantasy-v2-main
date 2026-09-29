@@ -55,14 +55,14 @@ export function TeamForecastCard({
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           {rank != null && (
-            <span className="text-[10px] text-white/40 mr-1.5">#{rank}</span>
+            <span className="text-[11px] text-white/40 mr-1.5">#{rank}</span>
           )}
           <p className="text-sm font-semibold text-white truncate" title={name}>
             {name}
           </p>
         </div>
         {inPlayoffZone && (
-          <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+          <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
             Playoff zone
           </span>
         )}
@@ -112,7 +112,7 @@ export function TeamForecastCard({
       </div>
 
       <div className="pt-2 border-t border-white/10 space-y-1.5">
-        <div className="flex justify-between text-[10px]">
+        <div className="flex justify-between text-[11px]">
           <span className="text-white/50">Playoffs</span>
           <span className="font-bold text-emerald-400 tabular-nums">
             {forecast.playoffProbability.toFixed(1)}%
@@ -124,13 +124,13 @@ export function TeamForecastCard({
             style={{ width: `${Math.min(forecast.playoffProbability, 100)}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px]">
+        <div className="flex justify-between text-[11px]">
           <span className="text-white/50">1st place</span>
           <span className="text-amber-400/90 font-semibold tabular-nums">
             {forecast.firstPlaceProbability.toFixed(1)}%
           </span>
         </div>
-        <div className="flex justify-between text-[10px]">
+        <div className="flex justify-between text-[11px]">
           <span className="text-white/50">Championship</span>
           <span className="text-cyan-400/90 font-semibold tabular-nums">
             {forecast.championshipProbability.toFixed(1)}%
@@ -140,7 +140,7 @@ export function TeamForecastCard({
       <div className="pt-1">
         <Link
           href={chatHref}
-          className="text-[10px] text-cyan-300 hover:text-cyan-200 underline-offset-2 hover:underline"
+          className="text-[11px] text-cyan-300 hover:text-cyan-200 underline-offset-2 hover:underline"
           aria-label={`Explain playoff odds for ${name}`}
         >
           Explain playoff odds

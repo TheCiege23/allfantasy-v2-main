@@ -33,7 +33,7 @@ export default async function DevyHistoryPage({ params }: { params: Promise<{ le
               <div key={y} className="relative rounded-xl border border-white/[0.08] bg-[#0a1228] p-4">
                 <span className="absolute -left-[21px] top-4 h-3 w-3 rounded-full bg-cyan-500/60" />
                 <p className="text-[13px] font-bold text-white">{y} season</p>
-                <span className="mt-1 inline-flex rounded-full border border-white/[0.1] px-2 py-0.5 text-[10px] text-white/45">
+                <span className="mt-1 inline-flex rounded-full border border-white/[0.1] px-2 py-0.5 text-[11px] text-white/45">
                   Imported from Sleeper (preview)
                 </span>
                 <p className="mt-2 text-[12px] text-white/55">🏆 Champion: —</p>

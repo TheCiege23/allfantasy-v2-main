@@ -176,11 +176,11 @@ export function PowerRankingsMiniCard({
             <p className="text-[11px] text-[#7a8199]">
               <span className="text-white/80">{data.leagueName || 'League'}</span>
               {data.degraded ? (
-                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[9px] font-bold uppercase text-amber-200/90">
+                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[11px] font-bold uppercase text-amber-200/90">
                   Partial
                 </span>
               ) : (
-                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[9px] font-bold uppercase text-emerald-200/85">
+                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[11px] font-bold uppercase text-emerald-200/85">
                   Live
                 </span>
               )}
@@ -188,12 +188,12 @@ export function PowerRankingsMiniCard({
             {my ? (
               <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-violet-300/80">Your rank</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-violet-300/80">Your rank</p>
                   <p className="text-[26px] font-black tabular-nums leading-none text-white/95">#{my.rank}</p>
                   <p className="mt-0.5 truncate text-[12px] font-semibold text-white/80">{my.teamName}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] uppercase text-[#5c6480]">vs prior</p>
+                  <p className="text-[11px] uppercase text-[#5c6480]">vs prior</p>
                   <p
                     className={`text-[16px] font-bold tabular-nums ${
                       (delta ?? 0) > 0 ? 'text-emerald-300' : (delta ?? 0) < 0 ? 'text-red-300' : 'text-white/40'
@@ -209,17 +209,17 @@ export function PowerRankingsMiniCard({
                 Claim a team in this league to see &quot;your&quot; rank here. Full leaderboard is in the tool.
               </p>
             )}
-            <p className="mt-2 text-[10px] text-[#5c6480]">
+            <p className="mt-2 text-[11px] text-[#5c6480]">
               Updated {new Date(data.computedAt).toLocaleString()}
               {data.week != null ? ` · Week ${data.week}` : ''}
             </p>
             {my && snapshotTrail != null && snapshotTrail.length >= 2 ? (
-              <p className="mt-1.5 text-[10px] leading-snug text-[#7a8199]" data-testid="power-rankings-mini-trail">
+              <p className="mt-1.5 text-[11px] leading-snug text-[#7a8199]" data-testid="power-rankings-mini-trail">
                 <span className="font-semibold text-[#8b93ab]">Saved rank trail (DB): </span>
                 {snapshotTrail.map((n) => `#${n}`).join(' → ')}
               </p>
             ) : my && snapshotTrail != null && snapshotTrail.length === 1 ? (
-              <p className="mt-1.5 text-[10px] text-[#5c6480]">
+              <p className="mt-1.5 text-[11px] text-[#5c6480]">
                 One snapshot stored — more history appears as rankings are saved each week.
               </p>
             ) : null}

@@ -197,7 +197,7 @@ export function AIToolCard({
               aria-hidden
               className={`inline-block h-1.5 w-1.5 rounded-full ${accent.dot} ${statusDotAnimation(freshness?.status)}`}
             />
-            <span className={`text-[8px] font-bold uppercase tracking-[0.14em] ${accent.statusMuted}`}>
+            <span className={`text-[11px] font-bold uppercase tracking-[0.14em] ${accent.statusMuted}`}>
               {label}
             </span>
           </span>
@@ -221,7 +221,7 @@ export function AIToolCard({
 
       {freshness && freshness.status !== 'idle' ? (
         <div
-          className={`mt-2.5 inline-flex max-w-full items-center gap-1.5 self-start rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] ${accent.footerPill} ${accent.footerText}`}
+          className={`mt-2.5 inline-flex max-w-full items-center gap-1.5 self-start rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] ${accent.footerPill} ${accent.footerText}`}
         >
           <span
             aria-hidden

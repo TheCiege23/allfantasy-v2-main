@@ -354,7 +354,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
             </button>
           )}
         </div>
-        <p className="text-[10px] text-white/30">This is relative to your local timezone</p>
+        <p className="text-[11px] text-white/30">This is relative to your local timezone</p>
       </div>
 
       {/* ===== AUTOSTART DRAFT ===== */}
@@ -403,7 +403,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         />
         {slowDraftPauseEnabled && (
           <div className="ml-0 space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Pause From</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Pause From</p>
             <div className="flex items-center gap-2">
               <input type="time" value={slowDraftPauseFrom}
                 onChange={(e) => setSlowDraftPauseFrom(e.target.value)}
@@ -471,7 +471,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                 {slot.avatarUrl ? (
                   <img src={slot.avatarUrl} alt="" className="h-8 w-8 rounded-full border border-white/10 object-cover" />
                 ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] font-bold text-white/40">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] font-bold text-white/40">
                     {slot.teamName?.[0] ?? '?'}
                   </div>
                 )}
@@ -520,7 +520,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
               <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">
                 {t('draft.rookieDraftOrder')}
               </p>
-              <p className="text-[10px] text-white/30">
+              <p className="text-[11px] text-white/30">
                 Auto-calculated for {rookieNextSeason || 'next'} season
               </p>
             </div>
@@ -528,7 +528,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
 
           {/* Mode selector */}
           <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Draft Order Mode</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Draft Order Mode</p>
 
             {/* Option 1: Worst to First */}
             <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
@@ -590,7 +590,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('draft.autoSetOrder')}</p>
-                <p className="text-[10px] text-white/30">{t('draft.autoSetOrderDesc')}</p>
+                <p className="text-[11px] text-white/30">{t('draft.autoSetOrderDesc')}</p>
               </div>
               <button type="button" role="switch" aria-checked={rookieEnabled}
                 onClick={() => setRookieEnabled(!rookieEnabled)}
@@ -608,17 +608,17 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
           {rookieSlots.length > 0 && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
                   {rookieNextSeason} Rookie Draft Order Preview
                 </p>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[9px] font-bold uppercase text-white/30">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-bold uppercase text-white/30">
                   {rookieMode === 'worst_to_first' ? 'W2F' : 'RMPF'}
                 </span>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-2">
                 {/* Non-playoff header */}
                 {rookieSlots.some(s => !s.isPlayoffTeam) && (
-                  <p className="px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-white/20">Non-Playoff</p>
+                  <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-widest text-white/20">Non-Playoff</p>
                 )}
                 {rookieSlots.filter(s => !s.isPlayoffTeam).map((slot) => (
                   <div key={slot.slot} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
@@ -626,17 +626,17 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                     {slot.avatarUrl ? (
                       <img src={slot.avatarUrl} alt="" className="h-6 w-6 rounded-full border border-white/10 object-cover" />
                     ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/30">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/30">
                         {(slot.teamName ?? '?')[0]}
                       </div>
                     )}
                     <span className="flex-1 text-[12px] font-medium text-white/70">{slot.ownerName || slot.teamName}</span>
-                    <span className="text-[10px] text-white/30">{slot.orderLabel}</span>
+                    <span className="text-[11px] text-white/30">{slot.orderLabel}</span>
                   </div>
                 ))}
                 {/* Playoff header */}
                 {rookieSlots.some(s => s.isPlayoffTeam) && (
-                  <p className="mt-1 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-amber-400/40">Playoff Teams</p>
+                  <p className="mt-1 px-2 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-400/40">Playoff Teams</p>
                 )}
                 {rookieSlots.filter(s => s.isPlayoffTeam).map((slot) => (
                   <div key={slot.slot} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03] ${
@@ -646,12 +646,12 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                     {slot.avatarUrl ? (
                       <img src={slot.avatarUrl} alt="" className="h-6 w-6 rounded-full border border-white/10 object-cover" />
                     ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/30">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/30">
                         {(slot.teamName ?? '?')[0]}
                       </div>
                     )}
                     <span className="flex-1 text-[12px] font-medium text-white/70">{slot.ownerName || slot.teamName}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
                       slot.playoffFinish === 'Champion' ? 'bg-amber-500/20 text-amber-300'
                         : slot.playoffFinish === 'Runner-Up' ? 'bg-slate-500/20 text-slate-300'
                         : 'bg-white/5 text-white/30'
@@ -660,7 +660,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                 ))}
               </div>
               {rookieWarning && (
-                <p className="text-[10px] text-amber-300/60">{rookieWarning}</p>
+                <p className="text-[11px] text-amber-300/60">{rookieWarning}</p>
               )}
             </div>
           )}
@@ -702,7 +702,7 @@ function ToggleRow({ label, description, enabled, onChange, disabled }: {
     <div className="flex items-center justify-between gap-4">
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{label}</p>
-        <p className="text-[10px] text-white/30">{description}</p>
+        <p className="text-[11px] text-white/30">{description}</p>
       </div>
       <button
         type="button"

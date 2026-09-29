@@ -134,7 +134,7 @@ export function DraftRoundOneAnnouncementOverlay({
                 <img src={teamLogoUrl} alt="" className="h-full w-full object-contain" />
               </div>
             ) : pick.team ? (
-              <div className="absolute bottom-1 right-1 rounded-md border border-white/15 bg-black/55 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white/80">
+              <div className="absolute bottom-1 right-1 rounded-md border border-white/15 bg-black/55 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white/80">
                 {pick.team}
               </div>
             ) : null}
@@ -144,13 +144,13 @@ export function DraftRoundOneAnnouncementOverlay({
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className={`h-4 w-4 shrink-0 ${rs ? 'text-cyan-300' : 'text-violet-300'}`} />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Round 1 selection</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Round 1 selection</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={onDismissFront}
-                  className="rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-500/22"
+                  className="rounded-lg border border-cyan-300/30 bg-cyan-500/12 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-500/22"
                   aria-label="Skip announcement"
                   data-testid="draft-round-one-announcement-skip"
                 >
@@ -175,7 +175,7 @@ export function DraftRoundOneAnnouncementOverlay({
               {chips.slice(0, 4).map((chip) => (
                 <span
                   key={chip}
-                  className="rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[10px] font-semibold text-white/80"
+                  className="rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[11px] font-semibold text-white/80"
                 >
                   {chip}
                 </span>
@@ -194,7 +194,7 @@ export function DraftRoundOneAnnouncementOverlay({
         </div>
 
         {queue.length > 1 ? (
-          <div className="border-t border-white/[0.06] bg-black/35 px-4 py-2 text-center text-[10px] font-medium text-white/40">
+          <div className="border-t border-white/[0.06] bg-black/35 px-4 py-2 text-center text-[11px] font-medium text-white/40">
             +{queue.length - 1} more Round 1 pick{queue.length > 2 ? 's' : ''} queued
           </div>
         ) : null}

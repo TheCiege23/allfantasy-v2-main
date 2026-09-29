@@ -132,7 +132,7 @@ export function ProjectionsClient() {
                 key={p}
                 type="button"
                 onClick={() => setPosition(p)}
-                className={`rounded-lg px-2 py-1 text-[10px] font-semibold transition ${
+                className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition ${
                   position === p ? 'bg-purple-500/15 text-purple-300' : 'text-white/30 hover:text-white/50'
                 }`}
               >
@@ -173,7 +173,7 @@ export function ProjectionsClient() {
         {/* ── AF engine ─────────────────────────────────────────────────────────────────── */}
         {source === 'af' ? (
           <>
-            <div className="mb-2 flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wide text-white/20">
+            <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-white/20">
               <span className="flex-1">
                 Player{afSeason != null ? <span className="ml-1.5 normal-case text-white/25">{afSeason} season</span> : null}
               </span>
@@ -224,7 +224,7 @@ export function ProjectionsClient() {
         ) : (
         <>
         {/* Column header */}
-        <div className="mb-2 flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wide text-white/20">
+        <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-white/20">
           <span className="flex-1">Player</span>
           <span className="w-14 text-right">Proj</span>
           <span className="w-14 text-right">Delta</span>

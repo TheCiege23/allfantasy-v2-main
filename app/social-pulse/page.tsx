@@ -1029,7 +1029,7 @@ export default function SocialPulsePage() {
 
                   <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-5 sm:p-6">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-300">
+                      <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
                         Grok
                       </span>
                       <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/35">AI Narrative Summary</span>

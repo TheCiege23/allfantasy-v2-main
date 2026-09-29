@@ -28,7 +28,7 @@ function statusBadge(status: string) {
   }
   const cls = colors[s] ?? 'bg-white/10 text-white/50 border-white/10'
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase ${cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-bold uppercase ${cls}`}>
       <AlertTriangle className="h-2.5 w-2.5" /> {status}
     </span>
   )
@@ -122,13 +122,13 @@ export function PlayerHeaderCard({
           <div className="mt-3 flex flex-wrap gap-2">
             {outlook?.currentValue != null && (
               <div className="rounded-lg bg-white/[0.04] px-2.5 py-1">
-                <span className="text-[9px] uppercase text-white/30">Value</span>
+                <span className="text-[11px] uppercase text-white/30">Value</span>
                 <p className="text-[14px] font-bold text-white">{outlook.currentValue}</p>
               </div>
             )}
             {outlook?.trend && (
               <div className="flex items-center gap-1 rounded-lg bg-white/[0.04] px-2.5 py-1">
-                <span className="text-[9px] uppercase text-white/30">Trend</span>
+                <span className="text-[11px] uppercase text-white/30">Trend</span>
                 <div className={`flex items-center gap-0.5 text-[13px] font-bold ${trendColor(outlook.trend)}`}>
                   {trendIcon(outlook.trend)}
                   <span className="uppercase">{outlook.trend}</span>
@@ -137,13 +137,13 @@ export function PlayerHeaderCard({
             )}
             {outlook?.restOfSeasonTier != null && (
               <div className="rounded-lg bg-white/[0.04] px-2.5 py-1">
-                <span className="text-[9px] uppercase text-white/30">ROS Tier</span>
+                <span className="text-[11px] uppercase text-white/30">ROS Tier</span>
                 <p className="text-[14px] font-bold text-white">{outlook.restOfSeasonTier}</p>
               </div>
             )}
             {outlook?.riskLevel && (
               <div className="rounded-lg bg-white/[0.04] px-2.5 py-1">
-                <span className="text-[9px] uppercase text-white/30">Risk</span>
+                <span className="text-[11px] uppercase text-white/30">Risk</span>
                 <p className={`text-[13px] font-bold ${
                   outlook.riskLevel === 'low' ? 'text-emerald-400' :
                   outlook.riskLevel === 'moderate' ? 'text-amber-300' :

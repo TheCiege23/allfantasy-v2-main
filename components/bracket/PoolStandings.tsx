@@ -94,10 +94,10 @@ function StandingCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-semibold text-white truncate">{displayName}</span>
-              {isUser && <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'rgba(251,146,60,0.12)', color: '#fb923c' }}>YOU</span>}
+              {isUser && <span className="text-[11px] px-1 py-0.5 rounded" style={{ background: 'rgba(251,146,60,0.12)', color: '#fb923c' }}>YOU</span>}
             </div>
             {row.entryName && row.entryName !== displayName && (
-              <div className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <div className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>
                 {row.entryName}
               </div>
             )}
@@ -106,7 +106,7 @@ function StandingCard({
           <div className="text-right flex items-center gap-2">
             <div>
               <div className="text-lg font-bold tabular-nums" style={{ color: '#fb923c' }}>{pts}</div>
-              <div className="text-[9px] tabular-nums" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              <div className="text-[11px] tabular-nums" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 {row.correctPicks ?? 0}/{row.totalPicks ?? 0}
               </div>
             </div>
@@ -125,7 +125,7 @@ function StandingCard({
             <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(6, 1fr) auto` }}>
               {ROUND_HEADERS.map((rh) => (
                 <div key={`h-${rh.round}`} className="text-center">
-                  <div className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  <div className="text-[11px] font-bold" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     {rh.icon ? <Trophy className="h-2.5 w-2.5 mx-auto" style={{ color: 'rgba(255,255,255,0.3)' }} /> : rh.label}
                   </div>
                 </div>
@@ -137,13 +137,13 @@ function StandingCard({
                 const max = ROUND_MAX_PICKS[rh.round] ?? 0
                 return (
                   <div key={`c-${rh.round}`} className="text-center">
-                    <div className="text-[10px] font-semibold tabular-nums" style={{ color: correct > 0 ? 'rgba(34,197,94,0.8)' : 'rgba(255,255,255,0.15)' }}>
+                    <div className="text-[11px] font-semibold tabular-nums" style={{ color: correct > 0 ? 'rgba(34,197,94,0.8)' : 'rgba(255,255,255,0.15)' }}>
                       {correct}/{max}
                     </div>
                   </div>
                 )
               })}
-              <div className="text-[9px] pl-2 font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>PICKS</div>
+              <div className="text-[11px] pl-2 font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>PICKS</div>
 
               {ROUND_HEADERS.map((rh) => {
                 const rPts = roundPoints[rh.round] ?? 0
@@ -155,17 +155,17 @@ function StandingCard({
                   </div>
                 )
               })}
-              <div className="text-[9px] pl-2 font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>PTS</div>
+              <div className="text-[11px] pl-2 font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>PTS</div>
             </div>
 
             <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
               {champion && (
-                <span className="flex items-center gap-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                <span className="flex items-center gap-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                   <Trophy className="h-2.5 w-2.5" style={{ color: '#fbbf24' }} />
                   Champion: {champion}
                 </span>
               )}
-              <span className="text-[10px] ml-auto" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              <span className="text-[11px] ml-auto" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 MAX {maxPossible}
               </span>
             </div>
@@ -206,9 +206,9 @@ export function PoolStandings({
       <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div>
           <h2 className="text-base font-bold text-white">Standings</h2>
-          <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{totalEntries} brackets in pool</p>
+          <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{totalEntries} brackets in pool</p>
         </div>
-        <span className="text-[9px] px-2 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)' }}>
+        <span className="text-[11px] px-2 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)' }}>
           TAP TO EXPAND
         </span>
       </div>
@@ -216,7 +216,7 @@ export function PoolStandings({
       {userRows.length > 0 && (
         <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="px-3 py-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(251,146,60,0.5)' }}>Your Brackets</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(251,146,60,0.5)' }}>Your Brackets</span>
           </div>
           {userRows.map((r) => (
             <div key={r.entryId} style={{ borderTop: '1px solid rgba(255,255,255,0.03)' }}>
@@ -234,8 +234,8 @@ export function PoolStandings({
 
       <div>
         <div className="px-3 py-1.5 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>All Brackets</span>
-          <div className="flex items-center gap-3 text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>All Brackets</span>
+          <div className="flex items-center gap-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
             <span>RANK</span>
             <span>PTS</span>
           </div>

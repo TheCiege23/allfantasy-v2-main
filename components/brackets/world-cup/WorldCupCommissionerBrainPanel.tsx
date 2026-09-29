@@ -424,7 +424,7 @@ export default function WorldCupCommissionerBrainPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           {snapshot.usersWithIncompleteBrackets.length > 0 ? (
             <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">
                 Users with incomplete brackets
               </p>
               <ul className="mt-1 space-y-1 text-[11px] text-white/70">
@@ -439,7 +439,7 @@ export default function WorldCupCommissionerBrainPanel({
           ) : null}
           {snapshot.entriesMissingPicks.length > 0 ? (
             <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">
                 Entries missing picks
               </p>
               <ul className="mt-1 space-y-1 text-[11px] text-white/70">
@@ -529,7 +529,7 @@ export default function WorldCupCommissionerBrainPanel({
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-violet-300/70" />
           <h3 className="text-sm font-black text-white">Proactive Insights</h3>
-          <span className="ml-auto rounded-full border border-violet-300/25 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/70">
+          <span className="ml-auto rounded-full border border-violet-300/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
             {hasAi ? "AI active" : "AF Commissioner"}
           </span>
         </div>
@@ -595,7 +595,7 @@ export default function WorldCupCommissionerBrainPanel({
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-amber-300/70" />
           <h3 className="text-sm font-black text-white">AI Insight Cards</h3>
-          <span className="ml-auto rounded-full border border-amber-300/25 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/70">
+          <span className="ml-auto rounded-full border border-amber-300/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
             Structured
           </span>
         </div>
@@ -638,13 +638,13 @@ export default function WorldCupCommissionerBrainPanel({
       {insightCard ? (
         <section data-testid="world-cup-insight-card">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-black uppercase tracking-wide text-white/40">
+            <p className="text-[11px] font-black uppercase tracking-wide text-white/40">
               Insight Card
             </p>
             <button
               type="button"
               onClick={() => setInsightCard(null)}
-              className="text-[10px] text-white/30 hover:text-white/60"
+              className="text-[11px] text-white/30 hover:text-white/60"
             >
               Dismiss
             </button>
@@ -659,10 +659,10 @@ export default function WorldCupCommissionerBrainPanel({
       {brainActionResult ? (
         <section data-testid="world-cup-brain-action-result" className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.055] p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[10px] font-black uppercase tracking-wide text-white/60">
+            <p className="text-[11px] font-black uppercase tracking-wide text-white/60">
               Bracket Brain Result
             </p>
-            <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90">
+            <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90">
               {brainActionResult.proLocked ? "AF Pro locked preview" : brainActionResult.posted ? "Posted to pool chat" : "Preview only"}
             </span>
           </div>
@@ -689,7 +689,7 @@ export default function WorldCupCommissionerBrainPanel({
               Generate a preview from finalized/public leaderboard data only, then post it to pool chat when it reads right.
             </p>
           </div>
-          <span className="rounded-full border border-cyan-200/25 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white/90">
+          <span className="rounded-full border border-cyan-200/25 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-white/90">
             {hasAi ? "Commissioner AI active" : "Tokens or AF Commissioner"}
           </span>
         </div>
@@ -736,7 +736,7 @@ export default function WorldCupCommissionerBrainPanel({
 
         {recapLines.length > 0 ? (
           <div data-testid="world-cup-ai-recap-preview" className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3">
-            <p className="text-[10px] font-black uppercase tracking-wide text-white/40">Preview</p>
+            <p className="text-[11px] font-black uppercase tracking-wide text-white/40">Preview</p>
             <div className="mt-2 space-y-1.5 text-xs leading-5 text-white/75">
               {recapLines.map((line, index) => (
                 <p key={`${line}-${index}`}>{line}</p>
@@ -771,7 +771,7 @@ export default function WorldCupCommissionerBrainPanel({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">{label}</p>
       <p className="mt-0.5 text-sm font-semibold text-white">{value}</p>
     </div>
   )
@@ -833,7 +833,7 @@ function InsightButton({
         )}
         {label}
       </span>
-      <span className="text-[10px] leading-snug text-white/40">{description}</span>
+      <span className="text-[11px] leading-snug text-white/40">{description}</span>
     </button>
   )
 }
@@ -869,7 +869,7 @@ function CardInsightButton({
         )}
         {label}
       </span>
-      <span className="text-[10px] leading-snug text-white/40">{description}</span>
+      <span className="text-[11px] leading-snug text-white/40">{description}</span>
     </button>
   )
 }

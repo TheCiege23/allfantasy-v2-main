@@ -328,9 +328,9 @@ function ManagerRankCard({ entry }: { entry: ManagerRankingEntry }) {
             <p className="text-xs text-white/70">
               {entry.explanation}
               {entry.explanationSource === 'ai' ? (
-                <span className="ml-1 text-[10px] uppercase tracking-wide text-violet-300">AI</span>
+                <span className="ml-1 text-[11px] uppercase tracking-wide text-violet-300">AI</span>
               ) : (
-                <span className="ml-1 text-[10px] uppercase tracking-wide text-cyan-300">Deterministic</span>
+                <span className="ml-1 text-[11px] uppercase tracking-wide text-cyan-300">Deterministic</span>
               )}
             </p>
           )}

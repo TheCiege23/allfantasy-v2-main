@@ -84,7 +84,7 @@ export default function ChimmyVoiceBar({
 
       {onVoiceSelect && !ttsUnavailable && (
         <div
-          className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1 text-[10px] text-white/60"
+          className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1 text-[11px] text-white/60"
           data-testid="chimmy-voice-choice-group"
           aria-label="Select Chimmy voice"
         >
@@ -148,7 +148,7 @@ export default function ChimmyVoiceBar({
           className="flex items-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.07] px-2 py-1"
           data-testid="chimmy-autoplay-volume-nudge"
         >
-          <span className="text-[10px] uppercase tracking-wider text-cyan-300/70">Auto</span>
+          <span className="text-[11px] uppercase tracking-wider text-cyan-300/70">Auto</span>
           <input
             type="range"
             min={0}
@@ -159,7 +159,7 @@ export default function ChimmyVoiceBar({
             aria-label="Auto-play volume"
             data-testid="chimmy-autoplay-volume-slider"
           />
-          <span className="min-w-[2.5ch] text-[10px] tabular-nums text-white/55">
+          <span className="min-w-[2.5ch] text-[11px] tabular-nums text-white/55">
             {Math.round(volume * 100)}%
           </span>
         </div>
@@ -173,10 +173,10 @@ export default function ChimmyVoiceBar({
       )}
 
       {ttsUnavailable && (
-        <span className="text-[10px] text-white/40">Voice (unavailable)</span>
+        <span className="text-[11px] text-white/40">Voice (unavailable)</span>
       )}
       {speechInputUnavailable && onSpeechInputToggle && (
-        <span className="text-[10px] text-white/40">Mic unavailable</span>
+        <span className="text-[11px] text-white/40">Mic unavailable</span>
       )}
 
       {transcriptRef && <div ref={transcriptRef} className="sr-only" aria-hidden />}

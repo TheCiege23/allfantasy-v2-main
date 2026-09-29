@@ -34,7 +34,7 @@ export default function SurvivorFinalePage() {
                 </div>
                 <div>
                   <p className="text-lg font-bold text-white">{p.displayName}</p>
-                  <span className="mt-1 inline-block rounded border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-200">
+                  <span className="mt-1 inline-block rounded border border-amber-500/30 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-200">
                     Finalist
                   </span>
                   <ul className="mt-3 space-y-1 text-[12px] text-white/55">

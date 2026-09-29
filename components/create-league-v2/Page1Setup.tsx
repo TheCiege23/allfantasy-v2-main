@@ -157,7 +157,7 @@ function SportPreviewVideo({ sport, label, accent }: { sport: string; label: str
           el.poster = media.fallback
         }}
       />
-      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
+      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
         {label}
       </div>
     </div>

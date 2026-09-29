@@ -132,7 +132,7 @@ export default function ZombieUniverseListPage() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${statusTone(universe.status)}`}>
+                  <div className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${statusTone(universe.status)}`}>
                     {universe.status ?? 'draft'}
                   </div>
                   <h2 className="mt-3 truncate text-2xl font-black text-white">{universe.name}</h2>
@@ -145,21 +145,21 @@ export default function ZombieUniverseListPage() {
                 <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
                   <div className="flex items-center gap-2 text-white/45">
                     <Layers3 className="h-4 w-4" />
-                    <span className="text-[10px] uppercase tracking-[0.18em]">Tiers</span>
+                    <span className="text-[11px] uppercase tracking-[0.18em]">Tiers</span>
                   </div>
                   <p className="mt-2 text-lg font-black text-white">{universe.tierCount ?? 0}</p>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
                   <div className="flex items-center gap-2 text-white/45">
                     <RadioTower className="h-4 w-4" />
-                    <span className="text-[10px] uppercase tracking-[0.18em]">Leagues</span>
+                    <span className="text-[11px] uppercase tracking-[0.18em]">Leagues</span>
                   </div>
                   <p className="mt-2 text-lg font-black text-white">{universe.leagueCount ?? 0}</p>
                 </div>
                 <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
                   <div className="flex items-center gap-2 text-white/45">
                     {universe.status === 'active' ? <Shield className="h-4 w-4" /> : <Trophy className="h-4 w-4" />}
-                    <span className="text-[10px] uppercase tracking-[0.18em]">Mode</span>
+                    <span className="text-[11px] uppercase tracking-[0.18em]">Mode</span>
                   </div>
                   <p className="mt-2 text-sm font-bold text-white">{universe.status === 'active' ? 'Live' : 'Staged'}</p>
                 </div>

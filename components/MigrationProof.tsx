@@ -131,7 +131,7 @@ function AIFoundTag({ label, delay }: { label: string; delay?: number }) {
   useEffect(() => { const t = setTimeout(() => setShow(true), delay || 200); return () => clearTimeout(t) }, [delay])
   if (!show) return null
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/20 text-[8px] font-semibold text-cyan-300 animate-ai-found">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/20 text-[11px] font-semibold text-cyan-300 animate-ai-found">
       <span className="w-1 h-1 rounded-full bg-cyan-400 animate-rival-pulse" />
       AI found: {label}
     </span>
@@ -147,10 +147,10 @@ function ConfidenceBar({ value }: { value: number }) {
       <div className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
         <div className={cx('h-full rounded-full transition-all shadow-sm', color, glowColor)} style={{ width: `${Math.max(value, 3)}%` }} />
       </div>
-      <span className={cx('text-[8px] font-bold tabular-nums',
+      <span className={cx('text-[11px] font-bold tabular-nums',
         value >= 80 ? 'text-emerald-400' : value >= 50 ? 'text-amber-400' : 'text-red-400'
       )}>{value}%</span>
-      <span className={cx('text-[7px] uppercase font-semibold tracking-wider',
+      <span className={cx('text-[11px] uppercase font-semibold tracking-wider',
         value >= 80 ? 'text-emerald-400/50' : value >= 50 ? 'text-amber-400/50' : 'text-red-400/50'
       )}>{label}</span>
     </div>
@@ -236,14 +236,14 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
         {/* LEFT: Sleeper Snapshot */}
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02] flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-[#1a1a2e] flex items-center justify-center text-[10px] font-bold text-[#00c2ff]">S</div>
+            <div className="w-6 h-6 rounded-md bg-[#1a1a2e] flex items-center justify-center text-[11px] font-bold text-[#00c2ff]">S</div>
             <span className="text-xs font-semibold text-white/60">Sleeper Snapshot</span>
-            <span className="ml-auto text-[8px] text-white/20 uppercase tracking-widest font-medium">Raw Data</span>
+            <span className="ml-auto text-[11px] text-white/20 uppercase tracking-widest font-medium">Raw Data</span>
           </div>
 
           <div className="p-4 space-y-4 max-h-[600px] overflow-y-auto">
             <div>
-              <div className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">League Settings</div>
+              <div className="text-[11px] font-semibold text-white/30 uppercase tracking-wider mb-2">League Settings</div>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
                   { label: 'Format', value: league.type },
@@ -253,7 +253,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                   { label: 'Playoff Teams', value: String(league.playoffTeams) },
                   { label: 'Season', value: league.season },
                 ].map(s => (
-                  <div key={s.label} className="flex justify-between items-center px-2 py-1.5 rounded-lg bg-white/[0.03] text-[10px]">
+                  <div key={s.label} className="flex justify-between items-center px-2 py-1.5 rounded-lg bg-white/[0.03] text-[11px]">
                     <span className="text-white/30">{s.label}</span>
                     <span className="text-white/60 font-medium">{s.value}</span>
                   </div>
@@ -262,47 +262,47 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
             </div>
 
             <div>
-              <div className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">Standings</div>
+              <div className="text-[11px] font-semibold text-white/30 uppercase tracking-wider mb-2">Standings</div>
               <div className="space-y-1">
                 {sorted.map((m, idx) => (
                   <div key={m.rosterId} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03]">
-                    <span className="w-4 text-[10px] font-bold text-white/25 text-center tabular-nums">{idx + 1}</span>
+                    <span className="w-4 text-[11px] font-bold text-white/25 text-center tabular-nums">{idx + 1}</span>
                     {m.avatar ? (
                       <img src={m.avatar} alt="" className="w-5 h-5 rounded-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                     ) : (
-                      <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[8px] font-bold text-white/40">{m.displayName.charAt(0).toUpperCase()}</div>
+                      <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[11px] font-bold text-white/40">{m.displayName.charAt(0).toUpperCase()}</div>
                     )}
-                    <span className="text-[10px] text-white/60 flex-1 truncate">{m.displayName}</span>
-                    <span className="text-[10px] text-white/40 tabular-nums">{m.wins}-{m.losses}{m.ties ? `-${m.ties}` : ''}</span>
-                    <span className="text-[9px] text-white/20 tabular-nums w-12 text-right">{m.pointsFor}</span>
+                    <span className="text-[11px] text-white/60 flex-1 truncate">{m.displayName}</span>
+                    <span className="text-[11px] text-white/40 tabular-nums">{m.wins}-{m.losses}{m.ties ? `-${m.ties}` : ''}</span>
+                    <span className="text-[11px] text-white/20 tabular-nums w-12 text-right">{m.pointsFor}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <div className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">
+              <div className="text-[11px] font-semibold text-white/30 uppercase tracking-wider mb-2">
                 Recent Trades ({stats.totalTrades} total)
               </div>
               {recentTrades.length === 0 ? (
-                <div className="text-[10px] text-white/20 text-center py-3">No trades recorded</div>
+                <div className="text-[11px] text-white/20 text-center py-3">No trades recorded</div>
               ) : (
                 <div className="space-y-2">
                   {recentTrades.slice(0, 3).map(trade => (
                     <div key={trade.id} className="rounded-lg bg-white/[0.03] p-2 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-white/25">{timeAgo(trade.created)}</span>
-                        <span className="text-[8px] text-white/15">{trade.teamsInvolved} teams</span>
+                        <span className="text-[11px] text-white/25">{timeAgo(trade.created)}</span>
+                        <span className="text-[11px] text-white/15">{trade.teamsInvolved} teams</span>
                       </div>
                       {trade.sides.map(side => (
                         <div key={side.rosterId} className="flex items-start gap-1.5">
-                          <span className="text-[9px] text-white/40 shrink-0 mt-0.5">{side.username} gets:</span>
+                          <span className="text-[11px] text-white/40 shrink-0 mt-0.5">{side.username} gets:</span>
                           <div className="flex flex-wrap gap-1">
                             {side.receives.players.map(p => (
-                              <span key={p.id} className="text-[8px] px-1.5 py-0.5 rounded bg-white/[0.05] text-white/50">{p.name} <span className="text-white/20">{p.pos}</span></span>
+                              <span key={p.id} className="text-[11px] px-1.5 py-0.5 rounded bg-white/[0.05] text-white/50">{p.name} <span className="text-white/20">{p.pos}</span></span>
                             ))}
                             {side.receives.picks > 0 && (
-                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/50">+{side.receives.picks} pick{side.receives.picks > 1 ? 's' : ''}</span>
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/50">+{side.receives.picks} pick{side.receives.picks > 1 ? 's' : ''}</span>
                             )}
                           </div>
                         </div>
@@ -321,7 +321,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
               ].map(s => (
                 <div key={s.label} className="text-center py-2 rounded-lg bg-white/[0.03]">
                   <div className="text-sm font-bold text-white/40 tabular-nums">{s.value}</div>
-                  <div className="text-[8px] text-white/20 uppercase">{s.label}</div>
+                  <div className="text-[11px] text-white/20 uppercase">{s.label}</div>
                 </div>
               ))}
             </div>
@@ -331,15 +331,15 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
         {/* RIGHT: AF Enhanced View */}
         <div className="glass-card-vivid rounded-2xl overflow-hidden neon-glow-cyan animate-neon-border">
           <div className="px-4 py-3 border-b border-cyan-500/10 bg-gradient-to-r from-cyan-500/[0.08] to-purple-500/[0.06] flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shadow-lg shadow-cyan-500/20">AF</div>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-[11px] font-bold text-white shadow-lg shadow-cyan-500/20">AF</div>
             <div>
               <span className="text-xs font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent">AllFantasy Enhanced</span>
               <div className="flex items-center gap-1 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-rival-pulse" />
-                <span className="text-[8px] text-emerald-400/60 font-medium">AI-Powered</span>
+                <span className="text-[11px] text-emerald-400/60 font-medium">AI-Powered</span>
               </div>
             </div>
-            <span className="ml-auto text-[8px] text-cyan-400/40 uppercase tracking-widest font-medium">Enhanced</span>
+            <span className="ml-auto text-[11px] text-cyan-400/40 uppercase tracking-widest font-medium">Enhanced</span>
           </div>
 
           <div className="p-4 space-y-5 max-h-[600px] overflow-y-auto">
@@ -349,7 +349,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm animate-rival-pulse">{'\u{2694}\uFE0F'}</span>
-                    <span className="text-[10px] font-bold text-red-300 uppercase tracking-wider">Rivalry Matchup</span>
+                    <span className="text-[11px] font-bold text-red-300 uppercase tracking-wider">Rivalry Matchup</span>
                   </div>
                   <AIFoundTag label="rivalry" delay={300} />
                 </div>
@@ -358,7 +358,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                   <span className="text-xs font-black bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent animate-score-glow">VS</span>
                   <span className="text-xs font-bold text-white">{rivalry.team2}</span>
                 </div>
-                <p className="text-[10px] text-white/45 text-center leading-relaxed">{rivalry.narrative}</p>
+                <p className="text-[11px] text-white/45 text-center leading-relaxed">{rivalry.narrative}</p>
               </div>
             )}
 
@@ -368,7 +368,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm">{'\u{1F4DD}'}</span>
-                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Season Arc Timeline</span>
+                    <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">Season Arc Timeline</span>
                   </div>
                   <AIFoundTag label={`${storylines.length} storylines`} delay={500} />
                 </div>
@@ -385,9 +385,9 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                               <span className="text-sm">{STORYLINE_ICONS[s.type] || '\u{1F4A1}'}</span>
                               <span className="text-[11px] font-bold text-white">{s.title}</span>
                             </div>
-                            <span className={cx('text-[7px] uppercase tracking-widest font-bold', style.label)}>{s.type.replace('_', ' ')}</span>
+                            <span className={cx('text-[11px] uppercase tracking-widest font-bold', style.label)}>{s.type.replace('_', ' ')}</span>
                           </div>
-                          <p className="text-[10px] text-white/50 leading-relaxed mt-1">{s.description}</p>
+                          <p className="text-[11px] text-white/50 leading-relaxed mt-1">{s.description}</p>
 
                           {typeof s.confidence === 'number' && (
                             <div className="mt-2">
@@ -400,12 +400,12 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                               {s.evidence.map((e, j) => (
                                 <span
                                   key={j}
-                                  className={cx('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[8px] font-medium backdrop-blur-sm',
+                                  className={cx('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[11px] font-medium backdrop-blur-sm',
                                     EVIDENCE_COLORS[e.type] || 'bg-white/10 text-white/50 border-white/10'
                                   )}
                                   title={e.detail}
                                 >
-                                  <span className="text-[7px]">{EVIDENCE_ICONS[e.type] || '\u{1F4CC}'}</span>
+                                  <span className="text-[11px]">{EVIDENCE_ICONS[e.type] || '\u{1F4CC}'}</span>
                                   {e.label}
                                 </span>
                               ))}
@@ -414,8 +414,8 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
 
                           {s.nextTrigger && (
                             <div className="flex items-start gap-1.5 mt-2 pt-2 border-t border-white/[0.04]">
-                              <span className="text-[8px] mt-0.5 text-white/15">{'\u{1F514}'}</span>
-                              <span className="text-[8px] text-white/25 leading-relaxed italic">{s.nextTrigger}</span>
+                              <span className="text-[11px] mt-0.5 text-white/15">{'\u{1F514}'}</span>
+                              <span className="text-[11px] text-white/25 leading-relaxed italic">{s.nextTrigger}</span>
                             </div>
                           )}
                         </div>
@@ -432,19 +432,19 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm">{'\u{1F4B1}'}</span>
-                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Trade Opportunities</span>
+                    <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">Trade Opportunities</span>
                   </div>
                   <AIFoundTag label={`${tradeOpps.length} matches`} delay={700} />
                 </div>
                 <div className="space-y-2">
                   {tradeOpps.map((opp, i) => (
                     <div key={i} className="rounded-xl glass-card neon-glow-emerald p-3 space-y-1.5">
-                      <div className="flex items-center gap-2 text-[10px]">
+                      <div className="flex items-center gap-2 text-[11px]">
                         <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/20">{opp.buyer}</span>
                         <span className="text-cyan-400/40">{'\u2192'}</span>
                         <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-bold border border-amber-500/20">{opp.seller}</span>
                       </div>
-                      <p className="text-[9px] text-white/40 leading-relaxed">{opp.reason}</p>
+                      <p className="text-[11px] text-white/40 leading-relaxed">{opp.reason}</p>
                     </div>
                   ))}
                 </div>
@@ -457,7 +457,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm">{'\u{1F3AF}'}</span>
-                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Waiver Priorities</span>
+                    <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">Waiver Priorities</span>
                   </div>
                   <AIFoundTag label="priorities" delay={900} />
                 </div>
@@ -467,10 +467,10 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                       <span className="text-[11px] font-black text-purple-400 shrink-0 mt-0.5 animate-score-glow">{i + 1}</span>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[10px] font-bold text-white">{wp.team}</span>
-                          <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-300 font-semibold border border-purple-500/20">{wp.priority}</span>
+                          <span className="text-[11px] font-bold text-white">{wp.team}</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-300 font-semibold border border-purple-500/20">{wp.priority}</span>
                         </div>
-                        <p className="text-[9px] text-white/35 leading-relaxed mt-0.5">{wp.reason}</p>
+                        <p className="text-[11px] text-white/35 leading-relaxed mt-0.5">{wp.reason}</p>
                       </div>
                     </div>
                   ))}
@@ -483,7 +483,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm">{'\u{1F4CA}'}</span>
-                  <span className="text-[10px] font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent uppercase tracking-wider">AI Power Rankings</span>
+                  <span className="text-[11px] font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent uppercase tracking-wider">AI Power Rankings</span>
                 </div>
                 <AIFoundTag label="rankings" delay={1100} />
               </div>
@@ -495,21 +495,21 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
                   return (
                     <div key={m.rosterId} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03]">
                       <span className={cx(
-                        'w-5 h-5 flex items-center justify-center rounded-md text-[10px] font-black',
+                        'w-5 h-5 flex items-center justify-center rounded-md text-[11px] font-black',
                         idx === 0 ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-sm shadow-amber-500/30' :
                         idx === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-500 text-black' :
                         idx === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-black' :
                         'bg-white/10 text-white/40',
                       )}>{idx + 1}</span>
-                      <span className="text-[10px] text-white/60 flex-1 truncate">{m.displayName}</span>
+                      <span className="text-[11px] text-white/60 flex-1 truncate">{m.displayName}</span>
                       <span className="text-[11px] font-black text-white tabular-nums"><TickUpNumber value={composite} /></span>
-                      <span className={cx('text-[7px] px-1.5 py-0.5 rounded-full font-bold border', tierColor)}>{tier}</span>
+                      <span className={cx('text-[11px] px-1.5 py-0.5 rounded-full font-bold border', tierColor)}>{tier}</span>
                     </div>
                   )
                 })}
               </div>
               <div className="text-center pt-1">
-                <span className="text-[8px] bg-gradient-to-r from-cyan-400/40 to-purple-400/40 bg-clip-text text-transparent font-medium">Full rankings with 5-score breakdown available after import</span>
+                <span className="text-[11px] bg-gradient-to-r from-cyan-400/40 to-purple-400/40 bg-clip-text text-transparent font-medium">Full rankings with 5-score breakdown available after import</span>
               </div>
             </div>
           </div>

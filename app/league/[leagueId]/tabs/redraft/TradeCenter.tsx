@@ -190,7 +190,7 @@ export function TradeCenter({
       </div>
 
       {settings ? (
-        <div className="flex flex-wrap gap-2 text-[10px] text-white/55" data-testid="trade-settings-summary">
+        <div className="flex flex-wrap gap-2 text-[11px] text-white/55" data-testid="trade-settings-summary">
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
             Review: {settings.commissionerTradeReviewType}
           </span>
@@ -212,19 +212,19 @@ export function TradeCenter({
           data-testid="redraft-trade-runtime-summary"
         >
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Runtime</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Runtime</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.pendingTrades} pending</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">History</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">History</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.transactionCount} records</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Vote State</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Vote State</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.voteCount} votes</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
             <p className="mt-1 font-semibold text-white">
               {runtime.settings.pickExecutionStatus === 'unavailable'
                 ? 'Not in proposals'
@@ -259,14 +259,14 @@ export function TradeCenter({
                     {/* The one grade, from the proposer's side — not the proposal-time snapshot's own scale. */}
                     {p.tradeGrade?.grade ? (
                       <span
-                        className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
+                        className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[11px] font-bold text-[#ffd7e5]"
                         title={`Grade for ${rosterNameById.get(p.proposerRosterId) ?? 'the proposer'} on this league's values`}
                         data-testid="trade-proposal-grade"
                       >
                         {p.tradeGrade.grade}
                       </span>
                     ) : null}
-                    <span className={`rounded border px-2 py-0.5 text-[10px] uppercase ${tone}`}>{p.status}</span>
+                    <span className={`rounded border px-2 py-0.5 text-[11px] uppercase ${tone}`}>{p.status}</span>
                   </div>
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">

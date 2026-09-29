@@ -295,7 +295,7 @@ export default function AdvancedOptionsSection({
               title={AVATAR_PRESET_LABELS[preset]}
             >
               <span className="block text-lg">{AVATAR_PRESET_EMOJIS[preset as AvatarPresetId]}</span>
-              <span className="mt-1 block text-[9px]" style={{ color: "var(--muted2)" }}>
+              <span className="mt-1 block text-[11px]" style={{ color: "var(--muted2)" }}>
                 {AVATAR_PRESET_LABELS[preset as AvatarPresetId]}
               </span>
             </button>

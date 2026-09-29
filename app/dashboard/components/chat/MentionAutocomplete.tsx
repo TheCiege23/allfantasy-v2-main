@@ -35,7 +35,7 @@ export function MentionAutocomplete({ suggestions, onSelect, onDismiss }: Props)
           <div>
             <span className="text-[12px] font-semibold text-white/90">{s.label}</span>
             {s.description ? (
-              <span className="ml-1.5 text-[10px] text-white/45">{s.description}</span>
+              <span className="ml-1.5 text-[11px] text-white/45">{s.description}</span>
             ) : null}
           </div>
         </button>

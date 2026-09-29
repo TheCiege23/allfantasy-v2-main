@@ -53,7 +53,7 @@ export function CreateLeagueHeroMedia({
             aria-hidden
           />
           {media.badge ? (
-            <div className="absolute left-4 top-4 rounded-full border border-white/15 bg-black/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
+            <div className="absolute left-4 top-4 rounded-full border border-white/15 bg-black/45 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/85 backdrop-blur-md">
               {media.badge}
             </div>
           ) : null}

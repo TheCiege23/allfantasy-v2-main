@@ -253,7 +253,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
 
       {/* Preset selector */}
       <div className="space-y-2">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
           Scoring Preset
         </label>
         <div className="flex flex-wrap gap-2">
@@ -318,7 +318,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
               key={cat.id}
               type="button"
               onClick={() => setActiveTab(cat.id)}
-              className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${colorClass}`}
+              className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
             >
               {cat.label}
               {isPremiumTab && !isPremium && <Lock className="h-3 w-3 opacity-60" />}
@@ -343,7 +343,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                 <button
                   type="button"
                   onClick={() => setGateOpen(true)}
-                  className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-cyan-600/80"
+                  className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-cyan-600/80"
                 >
                   Upgrade
                 </button>
@@ -353,11 +353,11 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
 
           {/* Category stat count */}
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
               {activeCategory.label} ({activeCategory.rows.length} stats)
             </span>
             {isCommissioner && activeCategory.id !== 'advanced' && (
-              <span className="text-[10px] text-white/25">Click value to edit</span>
+              <span className="text-[11px] text-white/25">Click value to edit</span>
             )}
           </div>
 
@@ -380,7 +380,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                     {row.premium && <Lock className="h-3 w-3 text-cyan-400/60" />}
                   </div>
                   {row.helper && (
-                    <p className="mt-0.5 text-[10px] text-white/30">{row.helper}</p>
+                    <p className="mt-0.5 text-[11px] text-white/30">{row.helper}</p>
                   )}
                 </div>
 

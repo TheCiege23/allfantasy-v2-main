@@ -13,7 +13,7 @@ import {
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="mb-10">
-      <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#8b93b8]">
+      <p className="mb-3 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#8b93b8]">
         {label}
       </p>
       {children}
@@ -113,7 +113,7 @@ export function StatesPreviewClient() {
         </Group>
 
         <p className="rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4 text-sm leading-relaxed text-[#989fc2]">
-          <span className="mb-1 block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#8b93b8]">
+          <span className="mb-1 block font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#8b93b8]">
             The rule
           </span>
           Every state says what happened, whether your data is safe, and what to press. No blank

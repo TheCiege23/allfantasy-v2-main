@@ -463,7 +463,7 @@ export default function TournamentHomePage() {
 
       <div className="rounded-xl border border-orange-500/35 bg-[#0c1219] p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-100">
+          <span className="rounded-md bg-orange-500/20 px-2 py-0.5 text-[11px] font-bold uppercase text-orange-100">
             {state.isDraftLive ? t('tournament.hub.nextEvent.draftMatchup') : t('tournament.hub.nextEvent.nextEvent')}
           </span>
         </div>
@@ -511,7 +511,7 @@ export default function TournamentHomePage() {
         <div className="tournament-panel overflow-x-auto p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-[13px] font-bold text-white">{t('tournament.hub.conferenceRace')}</h2>
-            <span className="text-[10px] text-[var(--tournament-text-dim)]">{conference.name}</span>
+            <span className="text-[11px] text-[var(--tournament-text-dim)]">{conference.name}</span>
           </div>
           <ul className="space-y-2">
             {top5.map((row, i) => (
@@ -532,19 +532,19 @@ export default function TournamentHomePage() {
                   {row.wins}-{row.losses}
                 </span>
                 <span className="font-semibold text-white">{row.pointsFor.toFixed(1)}</span>
-                <span className="hidden text-[10px] uppercase text-[var(--tournament-text-dim)] sm:inline">
+                <span className="hidden text-[11px] uppercase text-[var(--tournament-text-dim)] sm:inline">
                   {row.advancementStatus.replace('_', ' ')}
                 </span>
               </li>
             ))}
           </ul>
           {adv > 0 ? (
-            <div className="mt-3 border-t border-dashed border-[var(--tournament-gold)]/50 pt-2 text-center text-[10px] font-bold uppercase tracking-wide text-[var(--tournament-gold)]">
+            <div className="mt-3 border-t border-dashed border-[var(--tournament-gold)]/50 pt-2 text-center text-[11px] font-bold uppercase tracking-wide text-[var(--tournament-gold)]">
               {tInterpolate('tournament.hub.qualificationLine', { adv: String(adv) })}
             </div>
           ) : null}
           {bubbleN > 0 ? (
-            <div className="mt-2 border-t border-dashed border-amber-500/50 pt-2 text-center text-[10px] font-bold uppercase tracking-wide text-amber-200">
+            <div className="mt-2 border-t border-dashed border-amber-500/50 pt-2 text-center text-[11px] font-bold uppercase tracking-wide text-amber-200">
               {tInterpolate('tournament.hub.bubbleZone', { n: String(bubbleN) })}
             </div>
           ) : null}

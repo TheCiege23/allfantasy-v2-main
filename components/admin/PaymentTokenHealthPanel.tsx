@@ -164,7 +164,7 @@ export function PaymentTokenHealthPanel() {
             <span className="text-xs font-bold">
               {health.ok ? "All systems healthy" : "Issues detected — review below"}
             </span>
-            <span className="ml-auto text-[10px] text-white/35">
+            <span className="ml-auto text-[11px] text-white/35">
               {windowHours}h window
             </span>
           </div>
@@ -188,7 +188,7 @@ export function PaymentTokenHealthPanel() {
               />
               {stripe.oldestUnresolvedError ? (
                 <div className="mt-3 rounded-md border border-rose-400/20 bg-rose-400/5 px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-rose-300">
                     Oldest unresolved error
                   </p>
                   <p className="mt-1 text-[11px] text-white/60">
@@ -205,7 +205,7 @@ export function PaymentTokenHealthPanel() {
                     </p>
                   )}
                   {stripe.oldestUnresolvedError.errorSnippet && (
-                    <p className="mt-1 text-[10px] text-rose-200/70 font-mono break-all">
+                    <p className="mt-1 text-[11px] text-rose-200/70 font-mono break-all">
                       {stripe.oldestUnresolvedError.errorSnippet}
                     </p>
                   )}

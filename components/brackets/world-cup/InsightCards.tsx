@@ -42,7 +42,7 @@ function CardShell({
         <span className="text-white/70">{icon}</span>
         <span className="text-[13px] font-black text-white">{title}</span>
         {badge && (
-          <span className="ml-auto rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/55">
+          <span className="ml-auto rounded-full border border-white/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/55">
             {badge}
           </span>
         )}
@@ -167,7 +167,7 @@ function RootingGuideCardView({
     >
       {/* Hero stat */}
       <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-3 text-center">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">
           {card.entryName} needs
         </p>
         <p className="mt-1 text-[22px] font-black leading-none text-white">
@@ -193,7 +193,7 @@ function RootingGuideCardView({
         <DataRow label="Best outcome" value={card.bestOutcomeLabel} />
         {card.usersAboveWithThreat.length > 0 && (
           <div className="pt-1">
-            <p className="text-[10px] text-white/35">
+            <p className="text-[11px] text-white/35">
               Rivals: {card.usersAboveWithThreat.join(", ")}
             </p>
           </div>
@@ -251,7 +251,7 @@ function PoolSwingAlertCardView({
       {/* Key numbers */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">
             Points at risk
           </p>
           <p className="mt-1 text-[20px] font-black text-rose-300">
@@ -259,7 +259,7 @@ function PoolSwingAlertCardView({
           </p>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">
             Chaos rating
           </p>
           <div className="mt-1">
@@ -319,7 +319,7 @@ function ChampionPickRiskCardView({
     >
       {/* Champion hero */}
       <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.06] px-4 py-3 text-center">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">
           {card.entryName ? `${card.entryName}'s champion` : "Top champion pick"}
         </p>
         <p className="mt-1 text-[22px] font-black text-white">{card.topChampion}</p>
@@ -337,7 +337,7 @@ function ChampionPickRiskCardView({
             style={{ width: `${pct}%` }}
           />
         </div>
-        <p className="text-right text-[10px] text-white/40">
+        <p className="text-right text-[11px] text-white/40">
           {card.topChampionCount} of {card.totalEntries} {card.totalEntries === 1 ? "entry" : "entries"}
         </p>
       </div>
@@ -387,7 +387,7 @@ function CommissionerRecapCardView({
         <div className="flex items-center gap-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2.5">
           <span className="text-[20px]">🏆</span>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">
               Biggest winner this round
             </p>
             <p className="text-[13px] font-black text-white">
@@ -405,7 +405,7 @@ function CommissionerRecapCardView({
         <div className="flex items-center gap-3 rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2.5">
           <span className="text-[20px]">📉</span>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">
               Struggled most
             </p>
             <p className="text-[13px] font-black text-white">
@@ -421,7 +421,7 @@ function CommissionerRecapCardView({
       {/* Best upcoming match */}
       {card.bestUpcomingMatch && (
         <div className="space-y-1.5 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">
             Best upcoming match
           </p>
           <p className="text-[14px] font-black text-white">
@@ -445,7 +445,7 @@ function CommissionerRecapCardView({
       {/* AI suggested post */}
       {card.suggestedPost && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">
             Suggested post to group chat
           </p>
           <NarrativePill text={card.suggestedPost} />

@@ -82,24 +82,24 @@ function DiscoveryCardItem({ card, showJoin }: { card: DiscoveryCard; showJoin?:
           <h3 className="font-semibold text-sm sm:text-base text-white truncate">{card.name}</h3>
           <p className="text-xs text-white/50 mt-0.5">{card.memberCount}/{card.maxMembers} teams</p>
           <div className="flex flex-wrap gap-1 mt-1.5 sm:mt-2">
-            <span className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 text-white/80">{card.sport}</span>
-            <span className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 capitalize">
+            <span className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 text-white/80">{card.sport}</span>
+            <span className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 capitalize">
               {String(card.leagueStyle ?? card.leagueType ?? card.source).replace(/_/g, " ")}
             </span>
             {card.isPaid && (
               <span
-                className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
+                className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
                 title={paidBoundaryDisclosure}
               >
                 Paid
               </span>
             )}
             {!card.isPaid && (
-              <span className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 text-white/70">Free</span>
+              <span className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 text-white/70">Free</span>
             )}
-            <span className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 text-white/70">{card.fillPct}% full</span>
+            <span className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 text-white/70">{card.fillPct}% full</span>
             {hasAI && (
-              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-200">
+              <span className="inline-flex items-center gap-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-200">
                 <Sparkles className="h-3 w-3" />
                 AI-enabled
               </span>
@@ -130,7 +130,7 @@ function OrphanCardItem({ card }: { card: OrphanCard }) {
           <p className="text-xs text-white/50 mt-0.5">
             {card.sport} · {card.memberCount}/{card.leagueSize} · {card.isDynasty ? 'Dynasty' : 'Redraft'}
           </p>
-          <span className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 mt-1.5 sm:mt-2 inline-block">
+          <span className="text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 mt-1.5 sm:mt-2 inline-block">
             Seeking manager
           </span>
         </div>
@@ -299,14 +299,14 @@ export default function LeagueDiscoveryClientUnified() {
                     {item.reasons.map((reason) => (
                       <span
                         key={`${item.league.id}-${reason}`}
-                        className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] text-white/70"
+                        className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] text-white/70"
                       >
                         {reason}
                       </span>
                     ))}
                   </div>
                 )}
-                <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-white/35">
+                <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-white/35">
                   {item.explanationSource === 'ai' ? 'AI-enhanced explanation' : 'Deterministic explanation'}
                 </p>
               </div>

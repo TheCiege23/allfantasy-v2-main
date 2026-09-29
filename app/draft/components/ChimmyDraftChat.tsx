@@ -188,12 +188,12 @@ export function ChimmyDraftChat({ sessionId, context }: Props) {
     >
       <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/85">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300/85">
             Chimmy ✨ {picksUntilUser === 0 ? '· On the clock' : picksUntilUser === 1 ? '· Up next' : ''}
           </p>
-          <p className="text-[10px] text-white/40">Private suggestions — only you see this.</p>
+          <p className="text-[11px] text-white/40">Private suggestions — only you see this.</p>
         </div>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-white/55">
+        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-white/55">
           <input
             type="checkbox"
             checked={autoSuggest}
@@ -212,7 +212,7 @@ export function ChimmyDraftChat({ sessionId, context }: Props) {
               type="button"
               disabled={loading}
               onClick={() => void callAi(b.path, { quickKey: b.key })}
-              className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-200/90 hover:bg-cyan-500/20 disabled:opacity-50"
+              className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-200/90 hover:bg-cyan-500/20 disabled:opacity-50"
               data-testid={`chimmy-quick-${b.key}`}
             >
               {b.label}
@@ -225,7 +225,7 @@ export function ChimmyDraftChat({ sessionId, context }: Props) {
           <ChimmyMessageView key={m.id} msg={m} />
         ))}
         {loading ? (
-          <p className="px-1 text-[10px] italic text-cyan-300/70">Chimmy is thinking…</p>
+          <p className="px-1 text-[11px] italic text-cyan-300/70">Chimmy is thinking…</p>
         ) : null}
       </div>
       <div className="flex gap-1 border-t border-white/[0.06] p-2">
@@ -265,7 +265,7 @@ function ChimmyMessageView({ msg }: { msg: Message }) {
   }
   if (msg.role === 'system') {
     return (
-      <div className="text-center text-[10px] italic text-white/35" data-testid="chimmy-msg-system">
+      <div className="text-center text-[11px] italic text-white/35" data-testid="chimmy-msg-system">
         {msg.text}
       </div>
     )
@@ -275,7 +275,7 @@ function ChimmyMessageView({ msg }: { msg: Message }) {
   return (
     <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] px-2.5 py-2 text-white/85" data-testid="chimmy-msg-assistant">
       {msg.source ? (
-        <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300/65">
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-cyan-300/65">
           {msg.source}
         </p>
       ) : null}
@@ -296,16 +296,16 @@ function ChimmyMessageView({ msg }: { msg: Message }) {
             <li key={i} className="rounded border border-white/[0.06] bg-black/20 px-2 py-1">
               <p className="text-[11px] font-semibold text-white">
                 {i + 1}. {r.player ?? '—'}
-                {r.position ? <span className="ml-1 text-[10px] text-white/45">({r.position}{r.team ? `, ${r.team}` : ''})</span> : null}
+                {r.position ? <span className="ml-1 text-[11px] text-white/45">({r.position}{r.team ? `, ${r.team}` : ''})</span> : null}
               </p>
-              {r.reason ? <p className="mt-0.5 text-[10px] text-white/60">{r.reason}</p> : null}
+              {r.reason ? <p className="mt-0.5 text-[11px] text-white/60">{r.reason}</p> : null}
             </li>
           ))}
         </ol>
       ) : null}
-      {msg.result?.notes ? <p className="mt-1.5 text-[10px] text-white/55">{msg.result.notes}</p> : null}
+      {msg.result?.notes ? <p className="mt-1.5 text-[11px] text-white/55">{msg.result.notes}</p> : null}
       {!msg.result && msg.text ? (
-        <pre className="whitespace-pre-wrap break-words text-[10px] text-white/65">{msg.text}</pre>
+        <pre className="whitespace-pre-wrap break-words text-[11px] text-white/65">{msg.text}</pre>
       ) : null}
     </div>
   )

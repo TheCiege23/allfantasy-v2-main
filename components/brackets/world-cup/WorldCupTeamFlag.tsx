@@ -144,8 +144,8 @@ const FIFA_TO_ISO2: Record<string, string> = {
 }
 
 const SIZE_CLASS = {
-  xs: "h-5 w-5 text-[9px]",
-  sm: "h-7 w-7 text-[10px]",
+  xs: "h-5 w-5 text-[11px]",
+  sm: "h-7 w-7 text-[11px]",
   md: "h-12 w-12 text-sm",
   lg: "h-16 w-16 text-xl sm:h-14 sm:w-14 sm:text-lg",
 }

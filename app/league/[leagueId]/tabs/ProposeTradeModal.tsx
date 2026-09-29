@@ -481,9 +481,9 @@ export function ProposeTradeModal({
                             <img src={roster.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
                           ) : null}
                           <span className="font-bold text-white">{roster?.ownerName ?? 'Manager'}</span>
-                          <span className="ml-auto font-mono text-[10px] text-emerald-300">{suggestion.fitScore}% fit</span>
+                          <span className="ml-auto font-mono text-[11px] text-emerald-300">{suggestion.fitScore}% fit</span>
                         </span>
-                        {best ? <span className="mt-1.5 block text-[10.5px] leading-snug text-white/55">Send {best.send.map((a) => a.name).join(' + ')} for {best.receive.map((a) => a.name).join(' + ')}</span> : null}
+                        {best ? <span className="mt-1.5 block text-[11px] leading-snug text-white/55">Send {best.send.map((a) => a.name).join(' + ')} for {best.receive.map((a) => a.name).join(' + ')}</span> : null}
                         {best ? <ComposerGradeLine compact grade={best.grade} partnerName={roster?.ownerName} testId="composer-partner-grade" /> : null}
                       </button>
                     )
@@ -498,8 +498,8 @@ export function ProposeTradeModal({
                   {visibleMultiTeamSuggestions.map((suggestion) => (
                     <button key={suggestion.id} type="button" onClick={() => applyMultiTeamSuggestion(suggestion)} className="rounded-xl border border-violet-400/20 bg-violet-400/[0.04] p-2.5 text-left hover:border-violet-300/50">
                       <span className="font-semibold text-violet-100">Circular three-team deal · {suggestion.fairness}% minimum match</span>
-                      <span className="mt-1 block text-[10.5px] leading-snug text-white/55">{suggestion.reason}</span>
-                      {suggestion.simulation?.available ? <span className={`mt-1 block text-[10px] ${(suggestion.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{suggestion.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability impact: {(suggestion.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{suggestion.simulation.deltaPct?.toFixed(1)}%</span> : null}
+                      <span className="mt-1 block text-[11px] leading-snug text-white/55">{suggestion.reason}</span>
+                      {suggestion.simulation?.available ? <span className={`mt-1 block text-[11px] ${(suggestion.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{suggestion.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability impact: {(suggestion.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{suggestion.simulation.deltaPct?.toFixed(1)}%</span> : null}
                     </button>
                   ))}
                 </div>
@@ -550,11 +550,11 @@ export function ProposeTradeModal({
                         quotes it is cut — it could read against the letter beside it.
                       */}
                       <ComposerGradeLine compact grade={proposal.grade} partnerName={partnerRoster?.ownerName} testId="composer-package-grade" />
-                      <span className="mt-1 block text-[10px] text-emerald-100/60">
+                      <span className="mt-1 block text-[11px] text-emerald-100/60">
                         {proposal.grade ? reasonWithoutValueGap(proposal.reason) : `${proposal.fairness}% value match · ${proposal.reason}`}
                       </span>
-                      {proposal.acceptanceLikelihood != null ? <span className="mt-1 block text-[10px] text-cyan-200/70">{proposal.acceptanceLikelihood}% learned acceptance likelihood</span> : null}
-                      {proposal.simulation?.available ? <span className={`mt-1 block text-[10px] ${(proposal.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{proposal.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability {proposal.simulation.beforePct?.toFixed(1)}% → {proposal.simulation.afterPct?.toFixed(1)}% ({(proposal.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{proposal.simulation.deltaPct?.toFixed(1)}%)</span> : proposal.simulation ? <span className="mt-1 block text-[10px] text-amber-200/60">Simulation withheld: {proposal.simulation.reason}</span> : null}
+                      {proposal.acceptanceLikelihood != null ? <span className="mt-1 block text-[11px] text-cyan-200/70">{proposal.acceptanceLikelihood}% learned acceptance likelihood</span> : null}
+                      {proposal.simulation?.available ? <span className={`mt-1 block text-[11px] ${(proposal.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{proposal.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability {proposal.simulation.beforePct?.toFixed(1)}% → {proposal.simulation.afterPct?.toFixed(1)}% ({(proposal.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{proposal.simulation.deltaPct?.toFixed(1)}%)</span> : proposal.simulation ? <span className="mt-1 block text-[11px] text-amber-200/60">Simulation withheld: {proposal.simulation.reason}</span> : null}
                     </button>
                   ))}
                 </div>
@@ -633,7 +633,7 @@ export function ProposeTradeModal({
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-violet-200">Third-team leg · {secondPartnerRoster.ownerName ?? 'Manager'}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="mb-1 text-[10px] font-bold uppercase text-white/40">You send to them</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/40">You send to them</p>
                     <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-white/10 p-2">
                       {myRoster.players.map((p) => <label key={p.id} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGivePlayerIds.has(p.id)} disabled={givePlayerIds.has(p.id)} onChange={() => toggle(secondGivePlayerIds, setSecondGivePlayerIds, p.id)} /><span className="truncate">{p.name}</span><span className="ml-auto text-white/35">{p.position}</span></label>)}
                       {myRoster.picks.map((p) => <label key={p.pickId} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGivePickIds.has(p.pickId)} disabled={givePickIds.has(p.pickId)} onChange={() => toggle(secondGivePickIds, setSecondGivePickIds, p.pickId)} /><span>{p.label}</span></label>)}
@@ -641,7 +641,7 @@ export function ProposeTradeModal({
                     {myRoster.faabRemaining != null ? <label className="mt-2 flex items-center gap-2 text-[11px] text-white/55">FAAB<input type="number" min="0" max={Math.max(0, myRoster.faabRemaining - Number(giveFaab || 0))} value={secondGiveFaab} onChange={(e) => { markCustomChange(); setSecondGiveFaab(e.target.value) }} className="ml-auto w-20 rounded border border-white/10 bg-[#0a1220] px-2 py-1 text-white" /></label> : null}
                   </div>
                   <div>
-                    <p className="mb-1 text-[10px] font-bold uppercase text-white/40">You receive from them</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/40">You receive from them</p>
                     <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-white/10 p-2">
                       {secondPartnerRoster.players.map((p) => <label key={p.id} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGetPlayerIds.has(p.id)} onChange={() => toggle(secondGetPlayerIds, setSecondGetPlayerIds, p.id)} /><span className="truncate">{p.name}</span><span className="ml-auto text-white/35">{p.position}</span></label>)}
                       {secondPartnerRoster.picks.map((p) => <label key={p.pickId} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGetPickIds.has(p.pickId)} onChange={() => toggle(secondGetPickIds, setSecondGetPickIds, p.pickId)} /><span>{p.label}</span></label>)}
@@ -649,9 +649,9 @@ export function ProposeTradeModal({
                     {secondPartnerRoster.faabRemaining != null ? <label className="mt-2 flex items-center gap-2 text-[11px] text-white/55">FAAB<input type="number" min="0" max={secondPartnerRoster.faabRemaining} value={secondGetFaab} onChange={(e) => { markCustomChange(); setSecondGetFaab(e.target.value) }} className="ml-auto w-20 rounded border border-white/10 bg-[#0a1220] px-2 py-1 text-white" /></label> : null}
                   </div>
                 </div>
-                <p className="mt-2 text-[10.5px] text-violet-100/55">Every participating manager must accept before league review or processing begins.</p>
+                <p className="mt-2 text-[11px] text-violet-100/55">Every participating manager must accept before league review or processing begins.</p>
                 {directPartnerLegs.length > 0 ? (
-                  <div className="mt-2 rounded-xl border border-violet-300/15 bg-black/10 p-2 text-[10.5px] text-violet-100/70">
+                  <div className="mt-2 rounded-xl border border-violet-300/15 bg-black/10 p-2 text-[11px] text-violet-100/70">
                     {directPartnerLegs.map((leg) => {
                       const from = rosters?.find((roster) => roster.rosterId === leg.fromRosterId)?.ownerName ?? 'Manager'
                       const to = rosters?.find((roster) => roster.rosterId === leg.toRosterId)?.ownerName ?? 'Manager'
@@ -665,7 +665,7 @@ export function ProposeTradeModal({
             {/* THE grade for the deal as composed, before it is sent (2026-09-28). */}
             {myRoster && partnerRoster && firstHasAssets ? (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2" data-testid="composer-deal-grade-box">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">League grade for this offer</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">League grade for this offer</p>
                 {multiTeam ? (
                   <span className="mt-1 block text-[11px] text-white/55">Three-team trades aren&apos;t graded.</span>
                 ) : composedGradeLoading && !composedGrade ? (

@@ -47,7 +47,7 @@ export default function WorldCupScoreSummary({
     >
       <div className="mb-2 flex items-start justify-between gap-2 sm:mb-3 sm:gap-3">
         <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/40 sm:text-[10px]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40 sm:text-[11px]">
             {t("wc.summary.title")}
           </p>
           <p className="truncate text-sm font-black text-white">{entry.name}</p>
@@ -67,7 +67,7 @@ export default function WorldCupScoreSummary({
           )}
           <span
             data-testid="wc-summary-completion"
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
               complete ? "bg-emerald-500/20 text-white/85" : "bg-amber-500/15 text-white/75"
             }`}
           >
@@ -110,7 +110,7 @@ export default function WorldCupScoreSummary({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
-          <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-white/40 sm:text-[11px]">
             {t("wc.summary.totalPts")}
           </div>
           <div data-testid="wc-summary-total-points" className="mt-0.5 text-xl font-black tabular-nums text-white sm:mt-1 sm:text-2xl">
@@ -118,7 +118,7 @@ export default function WorldCupScoreSummary({
           </div>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
-          <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-white/40 sm:text-[11px]">
             {t("wc.summary.possibleLeft")}
           </div>
           <div
@@ -129,7 +129,7 @@ export default function WorldCupScoreSummary({
           </div>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
-          <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-white/40 sm:text-[11px]">
             {t("wc.summary.correct")}
           </div>
           <div
@@ -141,7 +141,7 @@ export default function WorldCupScoreSummary({
           </div>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
-          <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-white/40 sm:text-[11px]">
             {t("wc.summary.wrong")}
           </div>
           <div
@@ -156,7 +156,7 @@ export default function WorldCupScoreSummary({
 
       <div className="mt-3 grid gap-2 sm:mt-4 sm:gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 sm:px-3 sm:py-2.5">
-          <div className="mb-0.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wide text-white/45 sm:mb-1 sm:text-[10px]">
+          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/45 sm:mb-1 sm:text-[11px]">
             <Trophy className="h-3 w-3 shrink-0 text-white/70/90 sm:h-3.5 sm:w-3.5" />
             {t("wc.summary.championPick")}
           </div>
@@ -164,7 +164,7 @@ export default function WorldCupScoreSummary({
           {championName ? (
             <div
               data-testid="wc-summary-champion-status"
-              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold sm:mt-2 sm:text-[10px] ${
+              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold sm:mt-2 sm:text-[11px] ${
                 championStillAlive
                   ? "bg-emerald-500/20 text-white/85"
                   : "bg-rose-500/20 text-white/85"
@@ -176,13 +176,13 @@ export default function WorldCupScoreSummary({
                 : t("wc.summary.championBusted")}
             </div>
           ) : (
-            <p className="mt-0.5 text-[10px] text-white/35 sm:mt-1 sm:text-[11px]">
+            <p className="mt-0.5 text-[11px] text-white/35 sm:mt-1 sm:text-[11px]">
               {t("wc.summary.noChampionYet")}
             </p>
           )}
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 sm:px-3 sm:py-2.5">
-          <div className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-white/45 sm:mb-1 sm:text-[10px]">
+          <div className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-white/45 sm:mb-1 sm:text-[11px]">
             {t("wc.summary.maxCeiling")}
           </div>
           <p className="text-xs leading-snug text-white/70 sm:text-sm">

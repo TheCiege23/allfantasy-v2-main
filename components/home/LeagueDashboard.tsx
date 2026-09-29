@@ -212,7 +212,7 @@ export default function LeagueDashboard() {
                   >
                     <span className="inline-flex items-center gap-2">
                       <span
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-[10px] font-semibold"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-[11px] font-semibold"
                         style={{ borderColor: "var(--border)", background: "var(--panel)" }}
                       >
                         {sport}
@@ -292,7 +292,7 @@ export default function LeagueDashboard() {
 
                           <div className="mt-2 grid grid-cols-2 gap-2">
                             <div>
-                              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
+                              <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
                                 Team
                               </div>
                               <div className="mt-0.5 text-xs font-medium" style={{ color: "var(--text)" }}>
@@ -300,7 +300,7 @@ export default function LeagueDashboard() {
                               </div>
                             </div>
                             <div>
-                              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
+                              <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
                                 Record
                               </div>
                               <div className="mt-0.5 text-xs font-medium" style={{ color: "var(--text)" }}>
@@ -308,7 +308,7 @@ export default function LeagueDashboard() {
                               </div>
                             </div>
                             <div>
-                              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
+                              <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
                                 Projected
                               </div>
                               <div className="mt-0.5 text-xs font-medium" style={{ color: "var(--text)" }}>
@@ -321,7 +321,7 @@ export default function LeagueDashboard() {
                               </div>
                             </div>
                             <div>
-                              <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
+                              <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
                                 Teams
                               </div>
                               <div className="mt-0.5 flex items-center gap-1 text-xs font-medium" style={{ color: "var(--text)" }}>
@@ -334,7 +334,7 @@ export default function LeagueDashboard() {
                           <div className="mt-2 flex items-center justify-between text-[11px]">
                             <div className="inline-flex items-center gap-1">
                               <span
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold"
                                 title={league.paid ? "Paid league" : "Free league"}
                                 style={{
                                   background: league.paid

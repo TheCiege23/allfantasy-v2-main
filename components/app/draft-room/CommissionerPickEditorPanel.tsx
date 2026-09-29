@@ -323,7 +323,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
         <button
           type="button"
           onClick={resetForm}
-          className="rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white/65 hover:bg-white/10"
+          className="rounded border border-white/15 px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-white/65 hover:bg-white/10"
         >
           Reset
         </button>
@@ -334,7 +334,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
       </p>
 
       <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">Action</label>
+        <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">Action</label>
         <select
           data-testid="commish-edit-action"
           value={form.action}
@@ -350,7 +350,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">
+        <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
           Overall pick #
         </label>
         <input
@@ -378,14 +378,14 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
 
       {needsPlayer ? (
         <div className="flex flex-col gap-1.5" data-testid="commish-edit-player-search-wrapper">
-          <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">Player</label>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">Player</label>
           {/* G.2 — embedded search. The commissioner picks a replacement here
               instead of leaving the modal to use the player-pool Draft button
               (which routes through submitPick and rejects "not on the clock"
               for past picks). The search input below filters the dropdown's
               option list so the user can find a player by name, position, or
               team without leaving the modal. */}
-          <p className="text-[10px] leading-snug text-white/45">
+          <p className="text-[11px] leading-snug text-white/45">
             Use this search to pick the replacement player. The pool Draft button is for live drafting only.
           </p>
           <input
@@ -414,7 +414,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
           </select>
           <p
             data-testid="commish-edit-player-result-count"
-            className="text-[10px] text-white/45"
+            className="text-[11px] text-white/45"
           >
             {filteredPlayers.length === 0
               ? 'No matches.'
@@ -425,7 +425,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
 
       {needsRoster || showOptionalAssignRoster ? (
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
             {showOptionalAssignRoster && !needsRoster ? 'Override owner (optional)' : 'Roster / Team'}
           </label>
           <select
@@ -444,13 +444,13 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
             ))}
           </select>
           {showOptionalAssignRoster && !needsRoster ? (
-            <p className="text-[10px] text-white/45">Leave blank to assign using the board slot’s resolved owner.</p>
+            <p className="text-[11px] text-white/45">Leave blank to assign using the board slot’s resolved owner.</p>
           ) : null}
         </div>
       ) : null}
 
       <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">Reason (optional)</label>
+        <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">Reason (optional)</label>
         <textarea
           data-testid="commish-edit-reason"
           value={form.reason}
@@ -497,7 +497,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
             data-testid="commish-edit-force-anyway"
             onClick={() => submit(true)}
             disabled={submitting}
-            className="mt-2 rounded border border-amber-300/45 bg-amber-500/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-50 hover:bg-amber-500/30 disabled:opacity-50"
+            className="mt-2 rounded border border-amber-300/45 bg-amber-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-50 hover:bg-amber-500/30 disabled:opacity-50"
           >
             Force anyway
           </button>
@@ -521,7 +521,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
             data-testid="commish-edit-self-benefit-confirm"
             onClick={() => submitWithSelfBenefitConfirm()}
             disabled={submitting || !form.reason.trim()}
-            className="mt-2 rounded border border-violet-300/45 bg-violet-500/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-50 hover:bg-violet-500/30 disabled:opacity-50"
+            className="mt-2 rounded border border-violet-300/45 bg-violet-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-50 hover:bg-violet-500/30 disabled:opacity-50"
           >
             Confirm and apply
           </button>
@@ -530,7 +530,7 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
             data-testid="commish-edit-self-benefit-cancel"
             onClick={() => setSelfBenefit(null)}
             disabled={submitting}
-            className="ml-2 mt-2 rounded border border-white/15 bg-black/30 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/75 hover:bg-white/10 disabled:opacity-50"
+            className="ml-2 mt-2 rounded border border-white/15 bg-black/30 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/75 hover:bg-white/10 disabled:opacity-50"
           >
             Cancel
           </button>

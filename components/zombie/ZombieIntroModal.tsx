@@ -150,7 +150,7 @@ export function ZombieIntroModal({
 
         {/* Mobile tap hint */}
         <div className="absolute bottom-4 left-4 right-4 z-20 text-center md:hidden">
-          <p className="text-[10px] text-red-200/50">Tap anywhere to dismiss</p>
+          <p className="text-[11px] text-red-200/50">Tap anywhere to dismiss</p>
         </div>
       </div>
     </div>

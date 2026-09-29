@@ -43,7 +43,7 @@ export function TribeMemberCard({
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <SurvivorStatusBadge variant={statusVariant} />
             {publicAdvantage ? (
-              <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200">
+              <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">
                 {publicAdvantage}
               </span>
             ) : null}

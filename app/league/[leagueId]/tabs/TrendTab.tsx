@@ -200,13 +200,13 @@ export function TrendTab({ league, onPlayerClick, sport }: TrendTabProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:gap-4 md:p-5">
       <div className="space-y-1.5">
-        <p className="text-[10px] leading-snug text-white/35">
+        <p className="text-[11px] leading-snug text-white/35">
           Trend blends <span className="text-white/55">real-world signals</span> from injuries, usage, lineup and market activity with{' '}
           <span className="text-white/55">fantasy valuation</span> from the DB-backed FantasyCalc cache. Each row is labeled as Real, Fantasy, or Real + Fantasy.
         </p>
         {data?.sourceFlags ? <SourceFlagsBar flags={data.sourceFlags} /> : null}
         {data?.dataGaps?.length ? (
-          <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[10px] text-amber-100/85">
+          <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[11px] text-amber-100/85">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="leading-snug">{data.dataGaps.slice(0, 2).join(' ')}</span>
           </div>
@@ -247,7 +247,7 @@ export function TrendTab({ league, onPlayerClick, sport }: TrendTabProps) {
 }
 
 function SourceFlagsBar({ flags }: { flags: TrendingSourceFlags }) {
-  const chipBase = 'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide'
+  const chipBase = 'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
   const on = 'bg-emerald-500/15 text-emerald-200'
   const off = 'bg-white/5 text-white/35'
   const partial = 'bg-amber-500/12 text-amber-100/90'
@@ -313,7 +313,7 @@ function TrendColumn({
               </option>
             ))}
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-white/35">
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-white/35">
             ▾
           </span>
         </label>
@@ -382,13 +382,13 @@ function TrendColumn({
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-2">
                           <p className="truncate text-[13px] font-semibold text-white">{row.name}</p>
-                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide ${sourceSignalClass(row.signalType)}`}>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${sourceSignalClass(row.signalType)}`}>
                             {sourceSignalLabel(row.signalType)}
                           </span>
                         </div>
                         <div className="text-[11px] text-white/40">{posLine}</div>
-                        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-white/55">{row.snippet}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/55">{row.snippet}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
                           {row.chips.slice(0, 2).map((chip) => (
                             <span key={chip} className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-white/55">
                               {chip}
@@ -402,7 +402,7 @@ function TrendColumn({
                     </button>
                     <div className="flex shrink-0 flex-col items-end gap-0.5 pl-1">
                       <span className={`text-[15px] font-bold tabular-nums ${deltaClass}`}>{deltaText}</span>
-                      <span className="text-[10px] text-white/38">Rostered {rosteredLabel}</span>
+                      <span className="text-[11px] text-white/38">Rostered {rosteredLabel}</span>
                     </div>
                   </div>
                 </li>

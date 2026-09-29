@@ -39,7 +39,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             Review window (hours)
           </span>
           <input
@@ -57,7 +57,7 @@ export function TradesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-white/40">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
             Trade deadline (week #)
           </span>
           <input

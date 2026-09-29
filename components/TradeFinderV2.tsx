@@ -249,14 +249,14 @@ function AssetRow({ asset, direction }: { asset: TradeAsset; direction: 'in' | '
       )} />
       <div className="flex-1 min-w-0 overflow-hidden">
         <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-          <span className={cx('text-[10px] font-bold uppercase flex-shrink-0', posColor)}>{asset.position}</span>
+          <span className={cx('text-[11px] font-bold uppercase flex-shrink-0', posColor)}>{asset.position}</span>
           {!asset.isPick && <MiniPlayerImg sleeperId={asset.assetId} name={asset.name} size={18} />}
           <span className="text-xs sm:text-sm text-white font-medium truncate min-w-0">{asset.name}</span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 min-w-0 overflow-hidden">
-          <span className="text-[9px] sm:text-[10px] text-white/40 flex-shrink-0">{tierShort}</span>
-          {asset.age && <span className="text-[9px] sm:text-[10px] text-white/30 flex-shrink-0">Age {asset.age}</span>}
-          <span className="text-[9px] sm:text-[10px] text-white/25 flex-shrink-0 truncate">{asset.value.toLocaleString()}</span>
+          <span className="text-[11px] sm:text-[11px] text-white/40 flex-shrink-0">{tierShort}</span>
+          {asset.age && <span className="text-[11px] sm:text-[11px] text-white/30 flex-shrink-0">Age {asset.age}</span>}
+          <span className="text-[11px] sm:text-[11px] text-white/25 flex-shrink-0 truncate">{asset.value.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -299,11 +299,11 @@ function ScoreBar({ label, value, max = 100, color = 'cyan' }: { label: string; 
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-white/50 w-20 flex-shrink-0 text-right">{label}</span>
+      <span className="text-[11px] text-white/50 w-20 flex-shrink-0 text-right">{label}</span>
       <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
         <div className={cx('h-full rounded-full transition-all', colorMap[color] || 'bg-cyan-400')} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] text-white/40 w-6 text-right">{Math.round(value)}</span>
+      <span className="text-[11px] text-white/40 w-6 text-right">{Math.round(value)}</span>
     </div>
   )
 }
@@ -317,7 +317,7 @@ function AcceptBadge({ label, estimate }: { label: string; estimate: number }) {
   }
   const classes = colorMap[label] || 'bg-white/10 text-white/60 border-white/10'
   return (
-    <span className={cx('text-[10px] font-medium px-2 py-0.5 rounded-full border', classes)}>
+    <span className={cx('text-[11px] font-medium px-2 py-0.5 rounded-full border', classes)}>
       {label} ({Math.round(estimate * 100)}%)
     </span>
   )
@@ -340,7 +340,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-semibold text-white truncate">{partner.displayName}</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-white/5 rounded text-white/40">{partner.contenderTier}</span>
+              <span className="text-[11px] px-1.5 py-0.5 bg-white/5 rounded text-white/40">{partner.contenderTier}</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-cyan-400 font-medium">Match: {partner.matchScore}/100</span>
@@ -359,7 +359,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
       {expanded && (
         <div className="px-4 pb-4 space-y-4 border-t border-white/5 pt-3">
           <div className="space-y-1.5">
-            <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Score Breakdown</p>
+            <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Score Breakdown</p>
             <ScoreBar label="Need Overlap" value={bd.needOverlap} color="cyan" />
             <ScoreBar label="Availability" value={bd.targetAvailability} color="emerald" />
             <ScoreBar label="Bias Align" value={bd.biasAlignment} color="purple" />
@@ -369,7 +369,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 
           {partner.reasons.length > 1 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Why They Match</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Why They Match</p>
               <ul className="space-y-1">
                 {partner.reasons.map((r, i) => (
                   <li key={i} className="text-[11px] text-white/60 flex items-start gap-1.5">
@@ -383,22 +383,22 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 
           {partner.suggestedOffer && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-2">Suggested Trade</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-2">Suggested Trade</p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-2.5">
-                  <p className="text-[10px] text-amber-400/70 font-medium mb-1.5">You Send</p>
+                  <p className="text-[11px] text-amber-400/70 font-medium mb-1.5">You Send</p>
                   {partner.suggestedOffer.userGives.map((a, i) => (
                     <div key={i} className="flex items-center gap-1 py-0.5">
-                      <span className="text-[10px] font-bold text-white/40">{a.position}</span>
+                      <span className="text-[11px] font-bold text-white/40">{a.position}</span>
                       <span className="text-xs text-white/80 truncate">{a.name}</span>
                     </div>
                   ))}
                 </div>
                 <div className="bg-cyan-500/5 border border-cyan-500/10 rounded-xl p-2.5">
-                  <p className="text-[10px] text-cyan-400/70 font-medium mb-1.5">You Get</p>
+                  <p className="text-[11px] text-cyan-400/70 font-medium mb-1.5">You Get</p>
                   {partner.suggestedOffer.partnerGives.map((a, i) => (
                     <div key={i} className="flex items-center gap-1 py-0.5">
-                      <span className="text-[10px] font-bold text-white/40">{a.position}</span>
+                      <span className="text-[11px] font-bold text-white/40">{a.position}</span>
                       <span className="text-xs text-white/80 truncate">{a.name}</span>
                     </div>
                   ))}
@@ -406,7 +406,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
               </div>
               <div className="mt-2 flex items-center justify-center">
                 <span className={cx(
-                  'text-[10px] font-medium px-2 py-0.5 rounded-full',
+                  'text-[11px] font-medium px-2 py-0.5 rounded-full',
                   Math.abs(partner.suggestedOffer.fairnessPct) < 10
                     ? 'bg-emerald-500/15 text-emerald-300'
                     : Math.abs(partner.suggestedOffer.fairnessPct) < 20
@@ -421,10 +421,10 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
 
           {partner.tendencyInsights.length > 0 && (
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Tendency Insights</p>
+              <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium mb-1.5">Tendency Insights</p>
               <div className="flex flex-wrap gap-1">
                 {partner.tendencyInsights.map((t, i) => (
-                  <span key={i} className="text-[10px] px-2 py-0.5 bg-purple-500/10 border border-purple-500/15 rounded-full text-purple-300/80">{t}</span>
+                  <span key={i} className="text-[11px] px-2 py-0.5 bg-purple-500/10 border border-purple-500/15 rounded-full text-purple-300/80">{t}</span>
                 ))}
               </div>
             </div>
@@ -522,7 +522,7 @@ export function CounterAppliedNote({ onReset }: { onReset?: () => void }) {
   return (
     <div className="flex items-center justify-between p-2.5 rounded-xl bg-black/20 border border-white/5" data-testid="finder-counter-applied">
       <div className="flex items-center gap-2">
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/20 text-purple-300">
+        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/20 text-purple-300">
           Counter Applied
         </span>
         <span className="text-[11px] text-white/50">
@@ -530,7 +530,7 @@ export function CounterAppliedNote({ onReset }: { onReset?: () => void }) {
         </span>
       </div>
       {onReset && (
-        <button onClick={onReset} className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/60 transition-colors touch-manipulation">
+        <button onClick={onReset} className="flex items-center gap-1 text-[11px] text-white/40 hover:text-white/60 transition-colors touch-manipulation">
           <RotateCcw className="w-3 h-3" />
           Reset
         </button>
@@ -606,7 +606,7 @@ function TradeCard({
             <span className="text-sm font-bold text-white">
               {index === 0 ? 'Best Trade' : `Trade #${index + 1}`}
             </span>
-            <span className="text-[10px] text-white/30">{index + 1}/{total}</span>
+            <span className="text-[11px] text-white/30">{index + 1}/{total}</span>
           </div>
           <ConfidencePill
             confidence={{ rating: recommendation.confidence, score: recommendation.confidenceScore }}
@@ -658,7 +658,7 @@ function TradeCard({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mb-1">
           <div>
-            <div className="text-[10px] font-bold uppercase text-cyan-400/70 mb-1.5 tracking-wider">You Receive</div>
+            <div className="text-[11px] font-bold uppercase text-cyan-400/70 mb-1.5 tracking-wider">You Receive</div>
             <div className="space-y-0.5">
               {displayReceives.map((asset, i) => (
                 <AssetRow key={i} asset={asset} direction="in" />
@@ -666,7 +666,7 @@ function TradeCard({
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-bold uppercase text-amber-400/70 mb-1.5 tracking-wider">You Send</div>
+            <div className="text-[11px] font-bold uppercase text-amber-400/70 mb-1.5 tracking-wider">You Send</div>
             <div className="space-y-0.5">
               {displayGives.map((asset, i) => (
                 <AssetRow key={i} asset={asset} direction="out" />
@@ -1503,15 +1503,15 @@ export default function TradeFinderV2({
                         <div>
                           <h4 className="text-sm font-bold text-white">{opp.title}</h4>
                           {opp.targetManager && (
-                            <span className="text-[10px] text-white/40">Target: {opp.targetManager}</span>
+                            <span className="text-[11px] text-white/40">Target: {opp.targetManager}</span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
                         {opp.actionable && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/20">ACTIONABLE</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/20">ACTIONABLE</span>
                         )}
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                           opp.confidence >= 60 ? 'bg-emerald-500/20 text-emerald-300' :
                           opp.confidence >= 40 ? 'bg-amber-500/20 text-amber-300' :
                           'bg-slate-500/20 text-slate-300'
@@ -1523,7 +1523,7 @@ export default function TradeFinderV2({
                       <div className="space-y-1">
                         {opp.relevantPlayers.map((player, pIdx) => (
                           <div key={pIdx} className="flex items-center gap-2 p-1.5 rounded-lg bg-black/20 border border-white/5">
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                               player.position === 'QB' ? 'bg-red-500/20 text-red-300' :
                               player.position === 'RB' ? 'bg-blue-500/20 text-blue-300' :
                               player.position === 'WR' ? 'bg-green-500/20 text-green-300' :
@@ -1532,11 +1532,11 @@ export default function TradeFinderV2({
                             }`}>{player.position}</span>
                             <span className="text-xs text-white font-medium flex-1 truncate">{player.name}</span>
                             {player.value > 0 && (
-                              <span className="text-[10px] text-white/30 font-mono">{player.value.toLocaleString()}</span>
+                              <span className="text-[11px] text-white/30 font-mono">{player.value.toLocaleString()}</span>
                             )}
                           </div>
                         ))}
-                        <p className="text-[10px] text-white/30 italic mt-1">{opp.relevantPlayers[0]?.reason}</p>
+                        <p className="text-[11px] text-white/30 italic mt-1">{opp.relevantPlayers[0]?.reason}</p>
                       </div>
                     )}
                   </div>

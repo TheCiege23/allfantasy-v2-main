@@ -257,7 +257,7 @@ function ConfidenceBadge({ rating, score }: { rating: string; score: number }) {
     : { bg: 'bg-white/10', border: 'border-white/20', text: 'text-white/50' }
 
   return (
-    <span className={cx('text-[9px] px-2 py-0.5 rounded-full font-semibold border', config.bg, config.border, config.text)}>
+    <span className={cx('text-[11px] px-2 py-0.5 rounded-full font-semibold border', config.bg, config.border, config.text)}>
       {rating} ({score})
     </span>
   )
@@ -271,11 +271,11 @@ function TeamConfidenceBadge({ badge }: { badge: ConfidenceBadgeType }) {
     : { bg: 'bg-orange-700/15', border: 'border-orange-700/30', text: 'text-orange-400', icon: '\u{1F949}' }
 
   return (
-    <div className={cx('flex items-center gap-2 px-3 py-2 rounded-lg border text-[10px]', config.bg, config.border)} title={badge.tooltip}>
+    <div className={cx('flex items-center gap-2 px-3 py-2 rounded-lg border text-[11px]', config.bg, config.border)} title={badge.tooltip}>
       <span className="text-base">{config.icon}</span>
       <div className="flex flex-col">
         <span className={cx('font-semibold', config.text)}>{badge.label}</span>
-        <span className="text-white/30 text-[9px] leading-snug">{badge.tooltip}</span>
+        <span className="text-white/30 text-[11px] leading-snug">{badge.tooltip}</span>
       </div>
     </div>
   )
@@ -291,12 +291,12 @@ function ForwardOddsCard({ odds }: { odds: ForwardOddsType }) {
   return (
     <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Forward Odds</span>
-        <span className="text-[8px] text-white/20">{odds.simCount.toLocaleString()} sims</span>
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Forward Odds</span>
+        <span className="text-[11px] text-white/20">{odds.simCount.toLocaleString()} sims</span>
       </div>
       {items.map(it => (
         <div key={it.label} className="space-y-0.5">
-          <div className="flex items-center justify-between text-[10px]">
+          <div className="flex items-center justify-between text-[11px]">
             <span className="text-white/50">{it.label}</span>
             <span className={cx('font-bold tabular-nums', it.color)}>{it.pct}%</span>
           </div>
@@ -313,17 +313,17 @@ function RankChangeDriversCard({ drivers }: { drivers: RankChangeDriverType[] })
   if (!drivers || drivers.length === 0) return null
   return (
     <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 space-y-2">
-      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Why Rank Changed</span>
+      <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Why Rank Changed</span>
       <div className="space-y-1.5">
         {drivers.map(d => {
           const isUp = d.polarity === 'UP'
           const isDown = d.polarity === 'DOWN'
           return (
             <div key={d.id} className={cx(
-              'flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[10px]',
+              'flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px]',
               isUp ? 'bg-emerald-500/8 border-emerald-500/20' : isDown ? 'bg-red-500/8 border-red-500/20' : 'bg-white/5 border-white/10',
             )}>
-              <span className={cx('text-[10px] font-bold', isUp ? 'text-emerald-400' : isDown ? 'text-red-400' : 'text-white/40')}>
+              <span className={cx('text-[11px] font-bold', isUp ? 'text-emerald-400' : isDown ? 'text-red-400' : 'text-white/40')}>
                 {isUp ? '\u25B2' : isDown ? '\u25BC' : '\u25CF'}
               </span>
               <div className="flex-1 min-w-0">
@@ -335,7 +335,7 @@ function RankChangeDriversCard({ drivers }: { drivers: RankChangeDriverType[] })
                 <span className="text-white/70 font-bold tabular-nums">{typeof d.value === 'number' ? d.value : '—'}</span>
                 <span className="text-white/25 ml-0.5">{d.unit}</span>
                 {d.delta != null && (
-                  <span className={cx('ml-1.5 text-[9px] font-semibold', d.delta > 0 ? 'text-emerald-400' : d.delta < 0 ? 'text-red-400' : 'text-white/30')}>
+                  <span className={cx('ml-1.5 text-[11px] font-semibold', d.delta > 0 ? 'text-emerald-400' : d.delta < 0 ? 'text-red-400' : 'text-white/30')}>
                     {d.delta > 0 ? '+' : ''}{d.delta}
                   </span>
                 )}
@@ -356,8 +356,8 @@ function RankSparklineCard({ sparkline, currentRank }: { sparkline: number[]; cu
   return (
     <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Rank History</span>
-        <div className="flex items-center gap-2 text-[9px] text-white/25">
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Rank History</span>
+        <div className="flex items-center gap-2 text-[11px] text-white/25">
           <span>Best: #{best}</span>
           <span>Worst: #{worst}</span>
         </div>
@@ -369,7 +369,7 @@ function RankSparklineCard({ sparkline, currentRank }: { sparkline: number[]; cu
       <div className="flex gap-1 flex-wrap">
         {sparkline.map((r, i) => (
           <span key={i} className={cx(
-            'text-[8px] w-5 text-center rounded py-0.5 tabular-nums',
+            'text-[11px] w-5 text-center rounded py-0.5 tabular-nums',
             r === currentRank ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'bg-white/5 text-white/30',
           )}>
             {r}
@@ -388,19 +388,19 @@ function DriverChip({ driver }: { driver: DriverType }) {
 
   return (
     <div className={cx(
-      'text-[10px] px-2.5 py-1.5 rounded-lg border flex flex-col gap-0.5',
+      'text-[11px] px-2.5 py-1.5 rounded-lg border flex flex-col gap-0.5',
       isUp ? 'bg-emerald-500/10 border-emerald-500/20' : isDown ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10',
     )}>
       <div className="flex items-center gap-1.5">
-        <span className={cx('text-[9px] font-bold', isUp ? 'text-emerald-400' : isDown ? 'text-red-400' : 'text-white/40')}>
+        <span className={cx('text-[11px] font-bold', isUp ? 'text-emerald-400' : isDown ? 'text-red-400' : 'text-white/40')}>
           {isUp ? '\u25B2' : isDown ? '\u25BC' : '\u25CF'}
         </span>
         <span className={cx('font-medium', isUp ? 'text-emerald-300' : isDown ? 'text-red-300' : 'text-white/60')}>
           {label}
         </span>
-        <span className="text-white/20 ml-auto text-[9px]">{Math.round(driver.impact * 100)}%</span>
+        <span className="text-white/20 ml-auto text-[11px]">{Math.round(driver.impact * 100)}%</span>
       </div>
-      {evidence && <span className="text-white/35 text-[9px] leading-snug pl-4">{evidence}</span>}
+      {evidence && <span className="text-white/35 text-[11px] leading-snug pl-4">{evidence}</span>}
     </div>
   )
 }
@@ -413,10 +413,10 @@ function NextActionButton({ action }: { action: ActionType }) {
   return (
     <div className={cx('rounded-lg border p-2.5', impactColor)}>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold">{action.title}</span>
-        <span className="text-[8px] uppercase tracking-wider opacity-60">{action.expectedImpact} impact</span>
+        <span className="text-[11px] font-semibold">{action.title}</span>
+        <span className="text-[11px] uppercase tracking-wider opacity-60">{action.expectedImpact} impact</span>
       </div>
-      <p className="text-[9px] opacity-60 mt-0.5 leading-snug">{action.why}</p>
+      <p className="text-[11px] opacity-60 mt-0.5 leading-snug">{action.why}</p>
     </div>
   )
 }
@@ -453,11 +453,11 @@ function MiniSparkline({ points, width = 60, height = 20 }: { points: number[]; 
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[9px] text-white/40 w-7 text-right shrink-0 uppercase">{label}</span>
+      <span className="text-[11px] text-white/40 w-7 text-right shrink-0 uppercase">{label}</span>
       <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
         <div className={cx('h-full rounded-full transition-all duration-700', color)} style={{ width: `${Math.min(100, value)}%` }} />
       </div>
-      <span className="text-[9px] font-bold text-white/60 w-5 text-right">{value}</span>
+      <span className="text-[11px] font-bold text-white/60 w-5 text-right">{value}</span>
     </div>
   )
 }
@@ -465,9 +465,9 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
 function RankMovement({ delta }: { delta: number | null }) {
   if (delta === null || delta === 0) return <span className="text-white/15 text-xs">—</span>
   if (delta > 0) {
-    return <span className="text-red-400 text-[11px] font-bold flex items-center gap-0.5"><span className="text-[9px]">&#x25BC;</span>{Math.abs(delta)}</span>
+    return <span className="text-red-400 text-[11px] font-bold flex items-center gap-0.5"><span className="text-[11px]">&#x25BC;</span>{Math.abs(delta)}</span>
   }
-  return <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-0.5"><span className="text-[9px]">&#x25B2;</span>{Math.abs(delta)}</span>
+  return <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-0.5"><span className="text-[11px]">&#x25B2;</span>{Math.abs(delta)}</span>
 }
 
 function PhaseLabel({ phase, week }: { phase: string; week: number }) {
@@ -494,7 +494,7 @@ function HeroCard({ title, subtitle, detail, accent, icon, cta, onCta }: {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">{icon}</span>
-          <span className="text-[10px] uppercase tracking-wider text-white/40 font-semibold">{title}</span>
+          <span className="text-[11px] uppercase tracking-wider text-white/40 font-semibold">{title}</span>
         </div>
         <div className="text-sm font-bold text-white leading-tight">{subtitle}</div>
         {detail && <div className="text-[11px] text-white/50 mt-1 leading-snug">{detail}</div>}
@@ -502,7 +502,7 @@ function HeroCard({ title, subtitle, detail, accent, icon, cta, onCta }: {
       {cta && (
         <button
           onClick={onCta}
-          className="mt-3 text-[10px] font-semibold text-cyan-300 hover:text-cyan-200 self-start transition-colors"
+          className="mt-3 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200 self-start transition-colors"
         >
           {cta} &rarr;
         </button>
@@ -535,7 +535,7 @@ function RankHistoryChart({ teams, weeklyPtsMap, selectedTeam, onSelectTeam }: {
     <div>
       <div className="flex items-center gap-2 mb-3">
         <span className="text-xs font-semibold text-white/70">{teamInfo?.displayName || teamInfo?.username || 'Team'}</span>
-        <span className="text-[10px] text-white/30">Weekly Points</span>
+        <span className="text-[11px] text-white/30">Weekly Points</span>
       </div>
       <div className="flex items-end gap-px h-20">
         {teamPts.map((pts, i) => {
@@ -552,8 +552,8 @@ function RankHistoryChart({ teams, weeklyPtsMap, selectedTeam, onSelectTeam }: {
         })}
       </div>
       <div className="flex justify-between mt-1">
-        <span className="text-[8px] text-white/20">Wk 1</span>
-        <span className="text-[8px] text-white/20">Wk {teamPts.length}</span>
+        <span className="text-[11px] text-white/20">Wk 1</span>
+        <span className="text-[11px] text-white/20">Wk {teamPts.length}</span>
       </div>
     </div>
   )
@@ -827,7 +827,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             {data.computedAt && <> &middot; Updated {timeAgo(data.computedAt)}</>}
             {data.meta?.modelConfidence && (
               <span className={cx(
-                'ml-2 inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border font-medium',
+                'ml-2 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full border font-medium',
                 data.meta.modelConfidence.rating === 'HIGH' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
                 data.meta.modelConfidence.rating === 'MEDIUM' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
                 'bg-red-500/10 border-red-500/20 text-red-400',
@@ -837,7 +837,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             )}
             {data.meta?.dataFreshness && (
               <span className={cx(
-                'ml-1 inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border font-medium',
+                'ml-1 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full border font-medium',
                 data.meta.dataFreshness.overall === 'fresh' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
                 data.meta.dataFreshness.overall === 'aging' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
                 'bg-red-500/10 border-red-500/20 text-red-400',
@@ -890,13 +890,13 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
           <div className="flex items-center gap-1">
             <span className={cx(
-              'text-[10px] px-2 py-0.5 rounded-full font-semibold border',
+              'text-[11px] px-2 py-0.5 rounded-full font-semibold border',
               'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
             )}>
               {data.isDynasty ? 'Dynasty' : 'Redraft'}
             </span>
             <span className={cx(
-              'text-[10px] px-2 py-0.5 rounded-full font-semibold border',
+              'text-[11px] px-2 py-0.5 rounded-full font-semibold border',
               'bg-purple-500/15 border-purple-500/30 text-purple-300',
             )}>
               {data.isSuperFlex ? 'SF' : '1QB'}
@@ -953,7 +953,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             >
               <span>{chip.type === 'hot' ? '\uD83D\uDD25' : '\u2744\uFE0F'}</span>
               <span>{chip.label}</span>
-              <span className="text-[10px] opacity-60">LDI {chip.ldi}</span>
+              <span className="text-[11px] opacity-60">LDI {chip.ldi}</span>
             </span>
           ))}
         </div>
@@ -980,7 +980,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
         return totalPoints > 0 ? (
           <div className="mb-6 glass-card rounded-2xl p-6">
             <h3 className="text-sm font-medium mb-4 flex items-center gap-2 text-white/80">
-              League Power Breakdown <span className="text-[10px] text-cyan-400 font-normal">(by total points scored)</span>
+              League Power Breakdown <span className="text-[11px] text-cyan-400 font-normal">(by total points scored)</span>
             </h3>
             <div className="h-7 bg-gray-900 rounded-full overflow-hidden flex">
               {sortedTeams.map((team, i) => {
@@ -988,7 +988,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 return pct > 0 ? (
                   <div
                     key={team.rosterId}
-                    className="h-full flex items-center justify-center text-[10px] font-mono text-white/90 relative group cursor-default transition-all hover:brightness-125"
+                    className="h-full flex items-center justify-center text-[11px] font-mono text-white/90 relative group cursor-default transition-all hover:brightness-125"
                     style={{ width: `${pct}%`, background: BAR_COLORS[i % BAR_COLORS.length] }}
                     title={`${team.displayName || team.username || `Team ${team.rosterId}`} — ${team.pointsFor.toFixed(1)} pts (${pct.toFixed(1)}%)`}
                   >
@@ -999,7 +999,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
               {sortedTeams.slice(0, 6).map((team, i) => (
-                <div key={team.rosterId} className="flex items-center gap-1.5 text-[10px] text-white/50">
+                <div key={team.rosterId} className="flex items-center gap-1.5 text-[11px] text-white/50">
                   <span className="w-2.5 h-2.5 rounded-sm" style={{ background: BAR_COLORS[i % BAR_COLORS.length].replace('linear-gradient(to right, ', '').split(',')[0] }} />
                   <span>{team.displayName || team.username || `#${team.rank}`}</span>
                 </div>
@@ -1015,10 +1015,10 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">
               {rankingView === 'power' ? 'Power Rankings' : rankingView === 'dynasty' ? 'Dynasty Outlook' : 'Composite Rankings'}
             </span>
-            <span className="text-[10px] text-white/25">{sortedTeams.length} teams</span>
+            <span className="text-[11px] text-white/25">{sortedTeams.length} teams</span>
           </div>
 
-          <div className="hidden md:grid grid-cols-[40px_1fr_60px_140px_60px_24px] gap-2 px-3 py-1.5 text-[9px] text-white/25 uppercase tracking-wider">
+          <div className="hidden md:grid grid-cols-[40px_1fr_60px_140px_60px_24px] gap-2 px-3 py-1.5 text-[11px] text-white/25 uppercase tracking-wider">
             <span>Rank</span>
             <span>Team</span>
             <span className="text-center">Score</span>
@@ -1066,7 +1066,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                     {team.avatar ? (
                       <img src={`https://sleepercdn.com/avatars/thumbs/${team.avatar}`} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                     ) : (
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
                         {(team.displayName || team.username || '?')[0].toUpperCase()}
                       </div>
                     )}
@@ -1075,12 +1075,12 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                         <span className="text-sm font-semibold text-white truncate">
                           {team.displayName || team.username || `Team ${team.rosterId}`}
                         </span>
-                        {isUser && <span className="text-[8px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded-full font-bold shrink-0">YOU</span>}
+                        {isUser && <span className="text-[11px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded-full font-bold shrink-0">YOU</span>}
                         {team.badges.slice(0, 3).map(b => (
                           <span key={b.id} className="text-xs shrink-0" title={b.label}>{BADGE_ICONS[b.icon] || b.icon}</span>
                         ))}
                         <span className={cx(
-                          'text-[8px] px-1.5 py-0.5 rounded-full shrink-0',
+                          'text-[11px] px-1.5 py-0.5 rounded-full shrink-0',
                           team.composite > 90 ? 'tier-contender' :
                           team.composite > 80 ? 'tier-frisky' :
                           team.composite > 65 ? 'tier-midpack' :
@@ -1090,8 +1090,8 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                         </span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-white/35">{team.record.wins}-{team.record.losses}{team.record.ties > 0 ? `-${team.record.ties}` : ''}</span>
-                        <span className={cx('text-[10px] font-medium', team.streak > 0 ? 'text-emerald-400' : team.streak < 0 ? 'text-red-400' : 'text-white/20')}>
+                        <span className="text-[11px] text-white/35">{team.record.wins}-{team.record.losses}{team.record.ties > 0 ? `-${team.record.ties}` : ''}</span>
+                        <span className={cx('text-[11px] font-medium', team.streak > 0 ? 'text-emerald-400' : team.streak < 0 ? 'text-red-400' : 'text-white/20')}>
                           {team.streak > 0 ? `${team.streak}W` : team.streak < 0 ? `${Math.abs(team.streak)}L` : ''}
                         </span>
                       </div>
@@ -1152,12 +1152,12 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       <span className="text-sm font-semibold text-white truncate">
                         {team.displayName || team.username || `Team ${team.rosterId}`}
                       </span>
-                      {isUser && <span className="text-[8px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded-full font-bold shrink-0">YOU</span>}
+                      {isUser && <span className="text-[11px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded-full font-bold shrink-0">YOU</span>}
                       {team.badges.slice(0, 2).map(b => (
                         <span key={b.id} className="text-xs shrink-0" title={b.label}>{BADGE_ICONS[b.icon] || b.icon}</span>
                       ))}
                       <span className={cx(
-                        'text-[8px] px-1.5 py-0.5 rounded-full shrink-0',
+                        'text-[11px] px-1.5 py-0.5 rounded-full shrink-0',
                         team.composite > 90 ? 'tier-contender' :
                         team.composite > 80 ? 'tier-frisky' :
                         team.composite > 65 ? 'tier-midpack' :
@@ -1167,9 +1167,9 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-white/35">{team.record.wins}-{team.record.losses}{team.record.ties > 0 ? `-${team.record.ties}` : ''}</span>
+                      <span className="text-[11px] text-white/35">{team.record.wins}-{team.record.losses}{team.record.ties > 0 ? `-${team.record.ties}` : ''}</span>
                       <RankMovement delta={team.rankDelta} />
-                      <span className={cx('text-[10px] font-medium', team.streak > 0 ? 'text-emerald-400' : team.streak < 0 ? 'text-red-400' : 'text-white/20')}>
+                      <span className={cx('text-[11px] font-medium', team.streak > 0 ? 'text-emerald-400' : team.streak < 0 ? 'text-red-400' : 'text-white/20')}>
                         {team.streak > 0 ? `${team.streak}W` : team.streak < 0 ? `${Math.abs(team.streak)}L` : ''}
                       </span>
                     </div>
@@ -1196,7 +1196,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       {displayScore}
                     </div>
                     <span className={cx(
-                      'text-white/20 text-[10px] transition-transform inline-block',
+                      'text-white/20 text-[11px] transition-transform inline-block',
                       isExpanded ? 'rotate-90' : '',
                     )}>&#x25B6; details</span>
                   </div>
@@ -1205,11 +1205,11 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 {isExpanded && (
                   <div className="px-4 pb-4 border-t border-white/[0.05] pt-4 space-y-4" data-testid={`rankings-v2-team-expanded-${team.rosterId}`}>
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Rank Explanation</span>
+                      <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Rank Explanation</span>
                       <div className="flex items-center gap-2">
                         {team.confidenceBadge && (
                           <span className={cx(
-                            'text-[9px] px-2 py-0.5 rounded-full font-semibold border',
+                            'text-[11px] px-2 py-0.5 rounded-full font-semibold border',
                             team.confidenceBadge.tier === 'GOLD' ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
                             team.confidenceBadge.tier === 'SILVER' ? 'bg-slate-300/15 border-slate-300/30 text-slate-300' :
                             'bg-orange-700/15 border-orange-700/30 text-orange-400',
@@ -1250,7 +1250,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
                     {explanation && explanation.valid && explanation.drivers.length > 0 ? (
                       <div className="space-y-1.5">
-                        <span className="text-[9px] text-white/30 uppercase tracking-wider">Key Drivers</span>
+                        <span className="text-[11px] text-white/30 uppercase tracking-wider">Key Drivers</span>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                           {explanation.drivers.slice(0, 4).map(d => (
                             <DriverChip key={d.id} driver={d} />
@@ -1259,7 +1259,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       </div>
                     ) : (
                       <div className="bg-white/[0.03] rounded-lg p-3 text-center">
-                        <span className="text-[10px] text-white/30">Not enough data to explain movement this week.</span>
+                        <span className="text-[11px] text-white/30">Not enough data to explain movement this week.</span>
                       </div>
                     )}
 
@@ -1270,11 +1270,11 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
                     <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider flex items-center gap-1.5">
                           {'\u{1F340}'} Luck Meter
                         </span>
                         <span className={cx(
-                          'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                          'text-[11px] font-bold px-2 py-0.5 rounded-full',
                           team.luckScore >= 65 ? 'bg-emerald-500/15 text-emerald-400' :
                           team.luckScore <= 35 ? 'bg-red-500/15 text-red-400' :
                           'bg-amber-500/15 text-amber-400',
@@ -1295,21 +1295,21 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                         />
                         <div className="absolute top-0 left-1/2 w-px h-full bg-white/20" />
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-[9px] font-bold text-white/80 drop-shadow-sm">{team.luckScore}</span>
+                          <span className="text-[11px] font-bold text-white/80 drop-shadow-sm">{team.luckScore}</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-[9px] text-white/25">
+                      <div className="flex justify-between text-[11px] text-white/25">
                         <span>Unlucky</span>
                         <span>Lucky</span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-white/[0.04] rounded-lg p-2.5 text-center">
-                          <div className="text-[9px] text-white/30 mb-0.5">Actual Record</div>
+                          <div className="text-[11px] text-white/30 mb-0.5">Actual Record</div>
                           <div className="text-sm font-bold text-white">{team.record.wins}–{team.record.losses}</div>
                         </div>
                         <div className="bg-white/[0.04] rounded-lg p-2.5 text-center">
-                          <div className="text-[9px] text-white/30 mb-0.5">Should-Be Record</div>
+                          <div className="text-[11px] text-white/30 mb-0.5">Should-Be Record</div>
                           <div className={cx(
                             'text-sm font-bold',
                             team.luckDelta <= -1.5 ? 'text-emerald-400' :
@@ -1320,7 +1320,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-center gap-2 text-[10px]">
+                      <div className="flex items-center justify-center gap-2 text-[11px]">
                         <span className="text-white/40">Luck:</span>
                         <span className={cx(
                           'font-bold',
@@ -1333,12 +1333,12 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
                       {team.bounceBackIndex > 0 && team.luckDelta < -0.5 && (
                         <div className="bg-white/[0.03] rounded-lg p-2 flex items-center gap-2">
-                          <span className="text-[10px]">{'\u{1F680}'}</span>
+                          <span className="text-[11px]">{'\u{1F680}'}</span>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <span className="text-[9px] text-white/30 uppercase tracking-wider">Bounce-Back Index</span>
+                              <span className="text-[11px] text-white/30 uppercase tracking-wider">Bounce-Back Index</span>
                               <span className={cx(
-                                'text-[10px] font-bold',
+                                'text-[11px] font-bold',
                                 team.bounceBackIndex >= 70 ? 'text-emerald-400' :
                                 team.bounceBackIndex >= 45 ? 'text-amber-400' : 'text-white/50',
                               )}>
@@ -1378,11 +1378,11 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                             <div className="text-[11px] font-semibold text-white leading-tight">
                               {team.motivationalFrame.headline}
                             </div>
-                            <div className="text-[10px] text-white/50 leading-relaxed">
+                            <div className="text-[11px] text-white/50 leading-relaxed">
                               {team.motivationalFrame.subtext}
                             </div>
                             <div className={cx(
-                              'text-[10px] font-medium leading-relaxed',
+                              'text-[11px] font-medium leading-relaxed',
                               team.motivationalFrame.tone === 'encouraging' ? 'text-emerald-300/70' :
                               team.motivationalFrame.tone === 'cautionary' ? 'text-amber-300/70' :
                               team.motivationalFrame.tone === 'celebratory' ? 'text-cyan-300/70' :
@@ -1395,12 +1395,12 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       </div>
                     )}
 
-                    <div className="grid grid-cols-4 gap-2 text-[10px]">
+                    <div className="grid grid-cols-4 gap-2 text-[11px]">
                       {['QB', 'RB', 'WR', 'TE'].map(pos => {
                         const pv = team.positionValues?.[pos]
                         return (
                           <div key={pos} className="bg-white/[0.03] rounded-lg p-2 text-center">
-                            <span className="text-white/30 text-[9px]">{pos}</span>
+                            <span className="text-white/30 text-[11px]">{pos}</span>
                             <div className="text-white font-semibold text-[11px]">
                               {pv ? (pv.total > 999 ? `${(pv.total / 1000).toFixed(1)}k` : pv.total) : '—'}
                             </div>
@@ -1413,7 +1413,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       <div className="flex gap-2 flex-wrap">
                         {team.badges.map(b => (
                           <span key={b.id} className={cx(
-                            'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border',
+                            'inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border',
                             b.tier === 'gold' ? 'bg-amber-500/10 border-amber-500/25 text-amber-300' :
                             b.tier === 'silver' ? 'bg-slate-400/10 border-slate-400/25 text-slate-300' :
                             'bg-orange-400/10 border-orange-400/25 text-orange-300',
@@ -1424,7 +1424,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div className="bg-white/[0.03] rounded-lg p-2.5">
                         <div className="text-white/35">Starter Value</div>
                         <div className="text-white font-semibold">{team.starterValue.toLocaleString()}</div>
@@ -1437,7 +1437,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
                     {explanation && explanation.valid && explanation.nextActions.length > 0 && (
                       <div className="space-y-1.5">
-                        <span className="text-[9px] text-white/30 uppercase tracking-wider">Next Steps</span>
+                        <span className="text-[11px] text-white/30 uppercase tracking-wider">Next Steps</span>
                         <div className="grid grid-cols-1 gap-1.5">
                           {explanation.nextActions.map(a => (
                             <NextActionButton key={a.id} action={a} />
@@ -1467,7 +1467,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 <ConfidenceBadge rating={userTeam.explanation.confidence.rating} score={userTeam.explanation.confidence.score} />
               ) : (
                 <span className={cx(
-                  'text-[9px] px-2 py-0.5 rounded-full font-semibold border',
+                  'text-[11px] px-2 py-0.5 rounded-full font-semibold border',
                   'bg-white/10 border-white/20 text-white/50',
                 )}>
                   LEARNING
@@ -1502,19 +1502,19 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             {coachInsight && (
               <div className="space-y-3">
                 <div>
-                  <span className="text-[10px] text-emerald-400/70 uppercase tracking-wider font-semibold">What you're doing well</span>
+                  <span className="text-[11px] text-emerald-400/70 uppercase tracking-wider font-semibold">What you're doing well</span>
                   {coachInsight.bullets.slice(0, 1).map((b, i) => (
                     <p key={i} className="text-xs text-white/70 mt-1 leading-relaxed">{b}</p>
                   ))}
                 </div>
                 <div>
-                  <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold">What's holding you back</span>
+                  <span className="text-[11px] text-amber-400/70 uppercase tracking-wider font-semibold">What's holding you back</span>
                   {coachInsight.bullets.slice(1, 2).map((b, i) => (
                     <p key={i} className="text-xs text-white/70 mt-1 leading-relaxed">{b}</p>
                   ))}
                 </div>
                 <div>
-                  <span className="text-[10px] text-cyan-400/70 uppercase tracking-wider font-semibold">1 move to climb</span>
+                  <span className="text-[11px] text-cyan-400/70 uppercase tracking-wider font-semibold">1 move to climb</span>
                   {coachInsight.bullets.slice(2, 3).map((b, i) => (
                     <p key={i} className="text-xs text-white/70 mt-1 leading-relaxed">{b}</p>
                   ))}
@@ -1555,7 +1555,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold text-white/60 uppercase tracking-wider">{yearPlan.horizon || '3-5 Year Plan'}</h4>
                   <span className={cx(
-                    'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                    'text-[11px] px-2 py-0.5 rounded-full font-medium',
                     yearPlan.currentPhase === 'Contending' ? 'bg-emerald-500/15 text-emerald-400' :
                     yearPlan.currentPhase === 'Rebuilding' ? 'bg-red-500/15 text-red-400' :
                     yearPlan.currentPhase === 'Retooling' ? 'bg-amber-500/15 text-amber-400' :
@@ -1572,7 +1572,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 {yearPlan.yearPlans?.map((yp: any) => (
                   <div key={yp.year} className="bg-white/[0.02] border border-white/[0.06] rounded-lg p-3 space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-cyan-400/80 shrink-0">Y{yp.year}</span>
+                      <span className="text-[11px] font-bold text-cyan-400/80 shrink-0">Y{yp.year}</span>
                       <span className="text-[11px] font-semibold text-white/70">{yp.label?.replace(`Year ${yp.year}: `, '') || `Year ${yp.year}`}</span>
                     </div>
                     {yp.priorities?.length > 0 && (
@@ -1587,16 +1587,16 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                     )}
                     {yp.keyMoves?.length > 0 && (
                       <div className="space-y-1 pt-1 border-t border-white/[0.04]">
-                        <span className="text-[9px] text-white/30 uppercase tracking-wider font-semibold">Key Moves</span>
+                        <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Key Moves</span>
                         {yp.keyMoves.map((m: string, i: number) => (
-                          <p key={i} className="text-[10px] text-white/40 leading-relaxed pl-2">{m}</p>
+                          <p key={i} className="text-[11px] text-white/40 leading-relaxed pl-2">{m}</p>
                         ))}
                       </div>
                     )}
                     {yp.targetPositions?.length > 0 && (
                       <div className="flex gap-1 pt-1">
                         {yp.targetPositions.map((pos: string) => (
-                          <span key={pos} className="text-[9px] bg-cyan-500/10 text-cyan-400/70 px-1.5 py-0.5 rounded">{pos}</span>
+                          <span key={pos} className="text-[11px] bg-cyan-500/10 text-cyan-400/70 px-1.5 py-0.5 rounded">{pos}</span>
                         ))}
                       </div>
                     )}
@@ -1605,9 +1605,9 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
                 {yearPlan.riskFactors?.length > 0 && (
                   <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-2.5 space-y-1">
-                    <span className="text-[9px] text-amber-400/60 uppercase tracking-wider font-semibold">Risk Factors</span>
+                    <span className="text-[11px] text-amber-400/60 uppercase tracking-wider font-semibold">Risk Factors</span>
                     {yearPlan.riskFactors.map((r: string, i: number) => (
-                      <p key={i} className="text-[10px] text-amber-200/50 leading-relaxed">{r}</p>
+                      <p key={i} className="text-[11px] text-amber-200/50 leading-relaxed">{r}</p>
                     ))}
                   </div>
                 )}
@@ -1615,7 +1615,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 <button
                   onClick={() => { setYearPlan(null); setYearPlanError('') }}
                   data-testid="rankings-v2-regenerate-year-plan-button"
-                  className="w-full py-1.5 text-[10px] text-white/30 hover:text-white/50 transition-colors"
+                  className="w-full py-1.5 text-[11px] text-white/30 hover:text-white/50 transition-colors"
                 >
                   Regenerate Plan
                 </button>
@@ -1660,9 +1660,9 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                 }
                 return (
                   <div key={award.id} className="bg-white/[0.03] rounded-lg p-3">
-                    <div className="text-[10px] text-white/30 mb-1">{award.title}</div>
+                    <div className="text-[11px] text-white/30 mb-1">{award.title}</div>
                     <div className={`text-sm font-bold ${colorMap[award.id] || 'text-white'}`}>{award.subtitle.split(' ')[0]}</div>
-                    <div className="text-[10px] text-white/40">{award.subtitle}</div>
+                    <div className="text-[11px] text-white/40">{award.subtitle}</div>
                   </div>
                 )
               })}
@@ -1675,7 +1675,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
               <select
                 value={timelineTeam ?? ''}
                 onChange={e => setTimelineTeam(e.target.value ? Number(e.target.value) : null)}
-                className="text-[10px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white/60 appearance-none"
+                className="text-[11px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white/60 appearance-none"
               >
                 <option value="">Select team</option>
                 {data.teams.map(t => (
@@ -1708,7 +1708,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
                     <a
                       key={cta.id}
                       href={cta.href}
-                      className="text-[10px] px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+                      className="text-[11px] px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
                     >
                       {cta.label}
                     </a>

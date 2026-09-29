@@ -133,7 +133,7 @@ export function DraftTypeSelector({ sport, leagueType, value, onChange }: DraftT
                     {DRAFT_TYPE_ICONS[id]}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-cyan-200/75">
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-cyan-200/75">
                       {leagueType === 'devy' || leagueType === 'c2c'
                         ? draftTypeLabel(leagueType, id).toUpperCase()
                         : id.replace('_', ' ')}

@@ -60,7 +60,7 @@ function ActionCard({ action }: { action: WorkspaceAction }) {
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff3d81]/10 text-[#ffb8d1]">
           <Icon className="h-5 w-5" aria-hidden />
         </span>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/50">
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
           {label}
         </span>
       </div>
@@ -159,7 +159,7 @@ export function CommissionerOperationsWorkspace({
       <header className="rounded-3xl border border-[#262c6a] bg-[#12163e]/70 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase italic tracking-[0.18em] text-[#ff8a3d]">Commissioner OS</p>
+            <p className="text-[11px] font-black uppercase italic tracking-[0.18em] text-[#ff8a3d]">Commissioner OS</p>
             <h2 className="mt-1 text-xl font-black italic text-[#f0f2ff]">{league.name}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Run the league from one place — live manager-health signals from the Decision OS above, and every authoritative workflow one tap below.</p>
           </div>

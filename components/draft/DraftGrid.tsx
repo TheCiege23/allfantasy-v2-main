@@ -29,7 +29,7 @@ export function DraftGrid({ state, bigScreen = false }: DraftGridProps) {
         <table className={`min-w-full border-separate border-spacing-0 ${bigScreen ? 'text-sm' : 'text-xs'}`}>
           <thead className="sticky top-0 z-10 bg-[#0b1326]">
             <tr>
-              <th className="sticky left-0 z-20 bg-[#0b1326] px-3 py-3 text-left text-[10px] uppercase tracking-wide text-white/45">
+              <th className="sticky left-0 z-20 bg-[#0b1326] px-3 py-3 text-left text-[11px] uppercase tracking-wide text-white/45">
                 Round
               </th>
               {state.slotOrder.map((team) => (
@@ -62,7 +62,7 @@ export function DraftGrid({ state, bigScreen = false }: DraftGridProps) {
                   <td className="sticky left-0 z-10 border-b border-white/10 bg-[#0b1326] px-3 py-3 align-top text-sm font-semibold text-white/70">
                     <div>R{round}</div>
                     {state.draftType === 'third_round_reversal' && round === 3 ? (
-                      <div className="mt-1 text-[10px] uppercase tracking-wide text-cyan-300">Reversal</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-wide text-cyan-300">Reversal</div>
                     ) : null}
                   </td>
                   {state.slotOrder.map((team) => {

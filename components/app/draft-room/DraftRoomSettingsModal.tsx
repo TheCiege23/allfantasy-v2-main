@@ -241,12 +241,12 @@ export function DraftRoomSettingsModal({
                 Draft settings
               </h2>
               {canEdit ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/12 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
                   <Shield className="h-3 w-3" />
                   Commissioner
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/75">
                   <Eye className="h-3 w-3" />
                   View only
                 </span>
@@ -477,7 +477,7 @@ export function DraftRoomSettingsModal({
                 ) : null}
               </section>
 
-              <p className="mt-3 text-[10px] leading-relaxed text-white/45">
+              <p className="mt-3 text-[11px] leading-relaxed text-white/45">
                 Full league draft setup (order lottery, salary cap, devy/C2C) lives in{' '}
                 <a
                   href={`/league/${encodeURIComponent(leagueId)}?settingsPanel=draft`}
@@ -512,7 +512,7 @@ export function DraftRoomSettingsModal({
           } ${rs ? 'border-cyan-500/12 bg-black/30' : 'border-white/10 bg-black/25'}`}
         >
           {!canEdit ? (
-            <p className="max-w-[14rem] text-[10px] leading-snug text-white/48">
+            <p className="max-w-[14rem] text-[11px] leading-snug text-white/48">
               View-only for members. Commissioners can adjust preferences here when the league allows it.
             </p>
           ) : null}

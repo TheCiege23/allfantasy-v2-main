@@ -98,7 +98,7 @@ function AccordionSection({
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
         <div>
-          {eyebrow ? <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200/55">{eyebrow}</p> : null}
+          {eyebrow ? <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-200/55">{eyebrow}</p> : null}
           <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">{title}</h2>
         </div>
         <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black text-cyan-100 transition group-open:rotate-180">
@@ -217,7 +217,7 @@ function AdminOverviewDeck({
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/42">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/42">
               Access Source
             </p>
             <p className="mt-1 text-sm font-black text-white">
@@ -242,7 +242,7 @@ function AdminOverviewDeck({
                 key={card.label}
                 className={`rounded-2xl border p-4 shadow-[0_16px_44px_-32px_rgba(15,23,42,0.9)] ${toneClass}`}
               >
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-current/75">
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-current/75">
                   {card.label}
                 </p>
                 <p className="mt-2 text-2xl font-black text-white">{card.value}</p>
@@ -354,7 +354,7 @@ function DeploymentMarker() {
       ]
         .filter(Boolean)
         .join("\n")}
-      className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100"
+      className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100"
     >
       build {commit} · {env}
     </span>
@@ -544,7 +544,7 @@ function ProductionReadinessPanel({ data }: { data: AdminProductionReadiness }) 
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-xs">
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
               <tr>
                 <th className="py-2 pr-3">Env group</th>
                 <th className="py-2 pr-3">Status</th>
@@ -560,7 +560,7 @@ function ProductionReadinessPanel({ data }: { data: AdminProductionReadiness }) 
                     <div className="text-[11px] uppercase tracking-[0.12em] text-cyan-100/45">{row.category} · {row.severity}</div>
                   </td>
                   <td className="py-3 pr-3">
-                    <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${statusPillClass(row.status)}`}>
+                    <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${statusPillClass(row.status)}`}>
                       {envStatusLabel(row.status)}
                     </span>
                   </td>
@@ -795,7 +795,7 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
                 <div key={row.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-black text-white">{row.label}</div>
-                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${sportsOsStatusClass(row.status)}`}>
+                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-black ${sportsOsStatusClass(row.status)}`}>
                       {sportsOsStatusLabel(row.status)}
                     </span>
                   </div>
@@ -815,7 +815,7 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
       <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-4">
         <h3 className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100/75">Per-sport grounding</h3>
         <table className="mt-3 w-full min-w-[980px] text-left text-xs">
-          <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+          <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
             <tr>
               <th className="py-2 pr-3">Sport</th>
               <th className="py-2 pr-3">Identity</th>
@@ -832,7 +832,7 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
                 <td className="py-3 pr-3 font-black text-white">{row.label}</td>
                 {[row.identityStatus, row.historicalStatus, row.currentFactsStatus, row.imageLogoStatus, row.aiGroundingStatus].map((status, index) => (
                   <td key={`${row.id}-${index}`} className="py-3 pr-3">
-                    <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${sportsOsStatusClass(status)}`}>
+                    <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${sportsOsStatusClass(status)}`}>
                       {sportsOsStatusLabel(status)}
                     </span>
                   </td>
@@ -857,7 +857,7 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
                     <div className="font-black text-white">{route.intent}</div>
                     <div className="text-[11px] text-white/45">{route.targetEngine}</div>
                   </div>
-                  <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${sportsOsStatusClass(route.status)}`}>
+                  <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${sportsOsStatusClass(route.status)}`}>
                     {sportsOsStatusLabel(route.status)}
                   </span>
                 </div>
@@ -877,7 +877,7 @@ function SportsOperatingSystemPanel({ audit }: { audit: SportsOperatingSystemAud
                     <div className="font-black text-white">{format.label}</div>
                     <div className="text-[11px] text-white/45">{format.supportedSports.join(", ")}</div>
                   </div>
-                  <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${sportsOsStatusClass(format.status)}`}>
+                  <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${sportsOsStatusClass(format.status)}`}>
                     {sportsOsStatusLabel(format.status)}
                   </span>
                 </div>
@@ -910,7 +910,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
         <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-4">
           <h3 className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100/75">Identity coverage</h3>
           <table className="mt-3 w-full min-w-[1280px] text-left text-xs">
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
               <tr>
                 <th className="py-2 pr-3">Sport</th>
                 <th className="py-2 pr-3">Status</th>
@@ -932,7 +932,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
                 <tr key={row.id} className="align-top text-white/70">
                   <td className="py-3 pr-3 font-black text-white">{row.label}</td>
                   <td className="py-3 pr-3">
-                    <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${identityStatusClass(row.status)}`}>
+                    <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${identityStatusClass(row.status)}`}>
                       {identityStatusLabel(row.status)}
                     </span>
                   </td>
@@ -956,7 +956,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
         <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-4">
           <h3 className="text-xs font-black uppercase tracking-[0.16em] text-amber-100/75">Image / logo coverage</h3>
           <table className="mt-3 w-full min-w-[760px] text-left text-xs">
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
               <tr>
                 <th className="py-2 pr-3">Sport</th>
                 <th className="py-2 pr-3">Status</th>
@@ -972,7 +972,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
                 <tr key={row.id} className="align-top text-white/70">
                   <td className="py-3 pr-3 font-black text-white">{row.label}</td>
                   <td className="py-3 pr-3">
-                    <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${identityStatusClass(row.status)}`}>
+                    <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${identityStatusClass(row.status)}`}>
                       {identityStatusLabel(row.status)}
                     </span>
                   </td>
@@ -996,7 +996,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
               Cached rows only. This panel compares stored provider player/team rows against canonical identity and team metadata without remote image or provider checks.
             </p>
           </div>
-          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-100">
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100">
             {activeProviderRows.length} provider sport maps
           </span>
         </div>
@@ -1012,7 +1012,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
         ) : null}
         {activeProviderRows.length > 0 ? (
           <table className="mt-3 w-full min-w-[1180px] text-left text-xs">
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
               <tr>
                 <th className="py-2 pr-3">Sport</th>
                 <th className="py-2 pr-3">Provider</th>
@@ -1033,7 +1033,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
                   <td className="py-3 pr-3 font-black text-white">{row.label}</td>
                   <td className="py-3 pr-3">{row.provider}</td>
                   <td className="py-3 pr-3">
-                    <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${identityStatusClass(row.status)}`}>
+                    <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${identityStatusClass(row.status)}`}>
                       {identityStatusLabel(row.status)}
                     </span>
                   </td>
@@ -1068,7 +1068,7 @@ function SportsIdentityHealthPanel({ snapshot }: { snapshot: SportsIdentityHealt
             <div key={problem.id} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-white/65">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-black text-white">{problem.label}</span>
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${identityStatusClass(problem.severity === "low" ? "ready" : "partial")}`}>
+                <span className={`rounded-full border px-2 py-1 text-[11px] font-black ${identityStatusClass(problem.severity === "low" ? "ready" : "partial")}`}>
                   {problem.severity}
                 </span>
               </div>
@@ -1161,7 +1161,7 @@ function ProviderTeamReconciliationPanel({
             Summary by sport / provider
           </h3>
           <table className="mt-3 w-full min-w-[1100px] text-left text-xs" data-testid="recon-summary-table">
-            <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+            <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
               <tr>
                 <th className="py-2 pr-3">Sport</th>
                 <th className="py-2 pr-3">Provider</th>
@@ -1185,7 +1185,7 @@ function ProviderTeamReconciliationPanel({
                     <td className="py-3 pr-3">{row.provider}</td>
                     <td className="py-3 pr-3">
                       <span
-                        className={`rounded-full border px-2 py-1 text-[10px] font-black ${reconStatusClass(status)}`}
+                        className={`rounded-full border px-2 py-1 text-[11px] font-black ${reconStatusClass(status)}`}
                         data-testid={`recon-status-${row.sport}-${row.provider}`}
                       >
                         {reconStatusLabel(status)}
@@ -1222,7 +1222,7 @@ function ProviderTeamReconciliationPanel({
           </h3>
           <a
             href="/api/admin/sports/provider-team-reconciliation"
-            className="rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-[10px] font-black text-amber-100 hover:bg-amber-300/15"
+            className="rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-[11px] font-black text-amber-100 hover:bg-amber-300/15"
           >
             topUnmapped + topAmbiguous JSON ↗
           </a>
@@ -1235,7 +1235,7 @@ function ProviderTeamReconciliationPanel({
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-rose-300/80">
+            <div className="text-[11px] font-black uppercase tracking-[0.14em] text-rose-300/80">
               Fix unmapped first
             </div>
             <p className="mt-2 text-[11px] leading-4 text-white/55">
@@ -1244,7 +1244,7 @@ function ProviderTeamReconciliationPanel({
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-300/80">
+            <div className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-300/80">
               Then fix ambiguous
             </div>
             <p className="mt-2 text-[11px] leading-4 text-white/55">
@@ -1376,7 +1376,7 @@ function SportDataReliabilityPanel({ rows }: { rows: AdminSportDataReliabilityRo
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[1120px] text-left text-xs">
-          <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+          <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
             <tr>
               <th className="py-2 pr-3">Sport</th>
               <th className="py-2 pr-3">Imported</th>
@@ -1503,7 +1503,7 @@ function SportImportMatrixPanel({ rows }: { rows: SportImportMatrixRow[] }) {
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[1320px] text-left text-xs">
-          <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+          <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
             <tr>
               <th className="py-2 pr-3">Sport</th>
               {columns.map((key) => (
@@ -1522,7 +1522,7 @@ function SportImportMatrixPanel({ rows }: { rows: SportImportMatrixRow[] }) {
                   const cell = row.cells[key]
                   return (
                     <td key={key} className="max-w-[150px] py-4 pr-3">
-                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black ${importStatusClass(cell.status)}`}>
+                      <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-black ${importStatusClass(cell.status)}`}>
                         {importStatusLabel(cell.status)}
                       </span>
                       <div className="mt-2 font-black text-white">{cell.count == null ? "Not tracked" : cell.count.toLocaleString("en-US")}</div>
@@ -1573,7 +1573,7 @@ function AiToolAvailabilityPanel({ rows }: { rows: DashboardAiToolAvailability[]
           <div key={row.id} className="rounded-2xl border border-white/10 bg-black/25 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="font-black text-white">{row.label}</div>
-              <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${toolStatusClass(row.status)}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-black ${toolStatusClass(row.status)}`}>
                 {toolStatusLabel(row.status)}
               </span>
             </div>
@@ -1993,7 +1993,7 @@ export default async function AdminPage({
                         </td>
                         <td className="py-3 pr-3">{user.emailMasked}</td>
                         <td className="py-3 pr-3">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${subStatusClass(user.subscriptionStatus)}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black ${subStatusClass(user.subscriptionStatus)}`}>
                             {user.subscriptionStatus}
                           </span>
                         </td>
@@ -2077,19 +2077,19 @@ export default async function AdminPage({
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
               <div className="text-2xl font-black text-white">{data.waitlist.total}</div>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Total signups</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Total signups</div>
             </div>
             <div className="rounded-2xl border border-emerald-300/20 bg-black/25 p-3">
               <div className="text-2xl font-black text-emerald-300">{data.waitlist.confirmed}</div>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Confirmed</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Confirmed</div>
             </div>
             <div className="rounded-2xl border border-amber-300/20 bg-black/25 p-3">
               <div className="text-2xl font-black text-amber-300">{data.waitlist.unconfirmed}</div>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Never confirmed</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Never confirmed</div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
               <div className="text-2xl font-black text-white">{data.waitlist.last30Days}</div>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Last 30 days</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">Last 30 days</div>
             </div>
           </div>
 
@@ -2111,7 +2111,7 @@ export default async function AdminPage({
           {(data.waitlist.bySource.length > 0 || data.waitlist.byUtmSource.length > 0) ? (
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">By source</div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">By source</div>
                 <ul className="mt-2 space-y-1 text-sm text-white/70">
                   {data.waitlist.bySource.map((r) => (
                     <li key={r.source} className="flex justify-between gap-3">
@@ -2122,7 +2122,7 @@ export default async function AdminPage({
                 </ul>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">By UTM source</div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">By UTM source</div>
                 <ul className="mt-2 space-y-1 text-sm text-white/70">
                   {data.waitlist.byUtmSource.map((r) => (
                     <li key={r.source} className="flex justify-between gap-3">
@@ -2160,8 +2160,8 @@ export default async function AdminPage({
                         <span
                           className={
                             row.confirmed
-                              ? "rounded-full border border-emerald-300/30 px-2 py-0.5 text-[10px] font-black text-emerald-300"
-                              : "rounded-full border border-amber-300/30 px-2 py-0.5 text-[10px] font-black text-amber-300"
+                              ? "rounded-full border border-emerald-300/30 px-2 py-0.5 text-[11px] font-black text-emerald-300"
+                              : "rounded-full border border-amber-300/30 px-2 py-0.5 text-[11px] font-black text-amber-300"
                           }
                         >
                           {row.confirmed ? "YES" : "NO"}
@@ -2210,7 +2210,7 @@ export default async function AdminPage({
                       <td className="py-3 font-black text-white">@{user.username}</td>
                       <td className="py-3">{user.emailMasked}</td>
                       <td className="py-3">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${subStatusClass(user.subscriptionStatus)}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black ${subStatusClass(user.subscriptionStatus)}`}>
                           {user.subscriptionStatus}
                         </span>
                       </td>
@@ -2246,10 +2246,10 @@ export default async function AdminPage({
                         </td>
                         <td className="py-3 pr-3">
                           <div className="font-semibold text-white/85">{sub.plan}</div>
-                          {sub.sku ? <div className="mt-0.5 font-mono text-[10px] text-white/38">{sub.sku}</div> : null}
+                          {sub.sku ? <div className="mt-0.5 font-mono text-[11px] text-white/38">{sub.sku}</div> : null}
                         </td>
                         <td className="py-3 pr-3">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${subStatusClass(sub.status)}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black ${subStatusClass(sub.status)}`}>
                             {sub.status}
                           </span>
                         </td>
@@ -2294,7 +2294,7 @@ export default async function AdminPage({
                         </td>
                         <td className="py-3 pr-3 text-xs">{payment.paymentType}</td>
                         <td className="py-3 pr-3">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${paymentStatusClass(payment.status)}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black ${paymentStatusClass(payment.status)}`}>
                             {payment.status}
                           </span>
                         </td>

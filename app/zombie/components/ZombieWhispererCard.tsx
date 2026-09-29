@@ -31,7 +31,7 @@ export function ZombieWhispererCard({
           <Crown className="h-5 w-5 text-fuchsia-200" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-fuchsia-200/90">
+          <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-fuchsia-200/90">
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
             Whisperer
           </p>

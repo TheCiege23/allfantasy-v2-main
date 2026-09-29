@@ -209,7 +209,7 @@ export function ExecutiveDecisionSequence({
               <span className="truncate text-[13px] font-bold text-primary">{item.label}</span>
               <span
                 className={cn(
-                  'shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase',
+                  'shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-bold uppercase',
                   EXECUTIVE_STATUS_SURFACE[item.status],
                 )}
               >
@@ -218,7 +218,7 @@ export function ExecutiveDecisionSequence({
             </div>
             <p className="mt-0.5 text-[11px] leading-snug text-secondary">{item.detail}</p>
             <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              {item.meta ? <span className="text-[10px] font-semibold text-muted">{item.meta}</span> : <span />}
+              {item.meta ? <span className="text-[11px] font-semibold text-muted">{item.meta}</span> : <span />}
               {item.actionHref && item.actionLabel ? (
                 <Link
                   href={item.actionHref}

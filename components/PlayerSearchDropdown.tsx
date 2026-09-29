@@ -94,7 +94,7 @@ export default function PlayerSearchDropdown({
                 showSlot={false}
               />
               {p.slot && (
-                <span className="ml-auto text-[10px] text-white/30 group-hover:text-white/50 transition flex-shrink-0">
+                <span className="ml-auto text-[11px] text-white/30 group-hover:text-white/50 transition flex-shrink-0">
                   {p.slot}
                 </span>
               )}

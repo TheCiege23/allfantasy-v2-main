@@ -383,7 +383,7 @@ export default function NewBracketLeaguePage() {
                 <Lock className="w-5 h-5 flex-shrink-0" style={{ color: !isPublic ? "var(--accent)" : "var(--muted2)" }} />
                 <div className="text-left">
                   <div className="text-sm font-semibold" style={{ color: !isPublic ? "var(--text)" : "var(--muted)" }}>Private</div>
-                  <div className="text-[10px] mt-0.5" style={{ color: !isPublic ? "var(--muted)" : "var(--muted2)" }}>
+                  <div className="text-[11px] mt-0.5" style={{ color: !isPublic ? "var(--muted)" : "var(--muted2)" }}>
                     Invite only via code
                   </div>
                 </div>
@@ -401,7 +401,7 @@ export default function NewBracketLeaguePage() {
                 <Globe className="w-5 h-5 flex-shrink-0" style={{ color: isPublic ? "var(--accent)" : "var(--muted2)" }} />
                 <div className="text-left">
                   <div className="text-sm font-semibold" style={{ color: isPublic ? "var(--text)" : "var(--muted)" }}>Public</div>
-                  <div className="text-[10px] mt-0.5" style={{ color: isPublic ? "var(--muted)" : "var(--muted2)" }}>
+                  <div className="text-[11px] mt-0.5" style={{ color: isPublic ? "var(--muted)" : "var(--muted2)" }}>
                     Anyone can find & join
                   </div>
                 </div>

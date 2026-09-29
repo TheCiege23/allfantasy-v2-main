@@ -112,7 +112,7 @@ export function ChimmyDraftNarration({
         >
           {/* Header */}
           <div className="bg-gradient-to-r from-cyan-500/10 via-purple-500/5 to-transparent px-6 py-3 text-center">
-            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-cyan-200/60">
+            <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-200/60">
               {data.season} {draftLabel} · Round {data.round}
             </p>
           </div>
@@ -182,7 +182,7 @@ export function ChimmyDraftNarration({
             <p className="text-[12px] leading-relaxed text-white/60 italic">
               &ldquo;{data.analysis}&rdquo;
             </p>
-            <p className="mt-2 text-right text-[10px] text-cyan-300/50">— Chimmy, AllFantasy AI</p>
+            <p className="mt-2 text-right text-[11px] text-cyan-300/50">— Chimmy, AllFantasy AI</p>
           </div>
         </div>
 

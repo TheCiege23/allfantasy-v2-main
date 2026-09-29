@@ -150,15 +150,15 @@ export function TournamentStatusCard({
 
         <div className="grid grid-cols-3 gap-2 border-t border-[var(--tournament-border)] pt-4 text-center">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Record</p>
+            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Record</p>
             <p className="text-[15px] font-bold text-white">{wl}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Points for</p>
+            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Points for</p>
             <p className="text-[15px] font-bold text-white">{pointsFor.toFixed(1)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Conf. rank</p>
+            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Conf. rank</p>
             <p className="text-[15px] font-bold text-white">{conferenceRank ?? '—'}</p>
           </div>
         </div>

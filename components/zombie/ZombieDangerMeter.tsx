@@ -37,7 +37,7 @@ export function ZombieDangerMeter({
   return (
     <div className={clsx('space-y-2', className)}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/45">Outbreak pressure</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">Outbreak pressure</p>
         {displayScore != null ? (
           <span className={clsx('text-xs font-bold tabular-nums', styles.label)}>{displayScore}</span>
         ) : null}
@@ -59,7 +59,7 @@ export function ZombieDangerMeter({
         />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent)] opacity-40" />
       </div>
-      <div className="flex justify-between text-[10px] uppercase tracking-[0.18em] text-white/35">
+      <div className="flex justify-between text-[11px] uppercase tracking-[0.18em] text-white/35">
         {LEVEL_ORDER.map((l) => (
           <span key={l} className={clsx(l === level && styles.label)}>
             {l}

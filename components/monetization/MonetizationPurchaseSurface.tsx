@@ -632,7 +632,7 @@ export default function MonetizationPurchaseSurface({
                         {PLAN_FAMILY_LABELS[family]}
                       </div>
                       {focused ? (
-                        <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+                        <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
                           Recommended
                         </span>
                       ) : null}
@@ -694,14 +694,14 @@ export default function MonetizationPurchaseSurface({
                                 : "Continue with Stripe — Monthly"}
                           </button>
                           {!appliedCouponCode && !foundingMember && (
-                            <p className="mt-1.5 text-center text-[10px] text-white/30">
+                            <p className="mt-1.5 text-center text-[11px] text-white/30">
                               Use <span className="font-bold text-amber-300/60">WassupFred</span> for 20% off first purchase
                             </p>
                           )}
                           {monthly.stripePriceConfigured ? (
                             <StripePaymentHint className="mt-2" />
                           ) : (
-                            <p className="mt-2 text-[10px] text-amber-200/90">
+                            <p className="mt-2 text-[11px] text-amber-200/90">
                               Checkout unavailable until this price is configured in Stripe.
                             </p>
                           )}
@@ -732,7 +732,7 @@ export default function MonetizationPurchaseSurface({
                           {yearly.stripePriceConfigured ? (
                             <StripePaymentHint className="mt-2" />
                           ) : (
-                            <p className="mt-2 text-[10px] text-amber-200/90">
+                            <p className="mt-2 text-[11px] text-amber-200/90">
                               Checkout unavailable until this price is configured in Stripe.
                             </p>
                           )}

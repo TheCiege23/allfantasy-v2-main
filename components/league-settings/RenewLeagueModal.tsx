@@ -337,7 +337,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
                   <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-400/90">{t('renew.step2Title')}</p>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">League Type</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">League Type</p>
                     {LEAGUE_TYPES.map((type) => (
                       <label key={type.value}
                         className={`flex cursor-pointer items-start gap-3 rounded-lg p-3 transition ${
@@ -363,21 +363,21 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
 
                   {orphans.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Auto-Removed (Orphans)</p>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Auto-Removed (Orphans)</p>
                       <div className="rounded-lg border border-cyan-500/15 bg-cyan-950/10 p-2 space-y-1">
                         {orphans.map((o) => (
                           <div key={o.id} className="flex items-center gap-2 px-2 py-1.5">
-                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/20 text-[9px] font-bold text-cyan-300">O</div>
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/20 text-[11px] font-bold text-cyan-300">O</div>
                             <span className="text-[13px] text-white/50 line-through">{o.teamName || o.ownerName || 'Unknown'}</span>
                           </div>
                         ))}
                       </div>
-                      <p className="text-[10px] text-white/25">These teams had no manager and will be marked as orphans.</p>
+                      <p className="text-[11px] text-white/25">These teams had no manager and will be marked as orphans.</p>
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Invite Members</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Invite Members</p>
                     {removedCount > 0 && (
                       <p className="text-[11px] text-amber-300/70">
                         {removedCount} member{removedCount !== 1 ? 's' : ''} will be removed.
@@ -398,7 +398,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
                               onChange={() => { if (!member.isCommissioner) toggleMember(member.id) }}
                               disabled={member.isCommissioner} className="sr-only" />
                             <span className="flex-1 text-[14px] text-white/80">{member.ownerName || member.teamName}</span>
-                            {member.isCommissioner && <span className="text-[10px] text-amber-300/50">Commissioner</span>}
+                            {member.isCommissioner && <span className="text-[11px] text-amber-300/50">Commissioner</span>}
                           </label>
                         )
                       })}
@@ -424,7 +424,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
                         <SearchIcon className="h-4 w-4 text-cyan-400" />
                         <div>
                           <p className="text-[12px] font-medium text-white/80">List in League Finder?</p>
-                          <p className="text-[10px] text-white/30">
+                          <p className="text-[11px] text-white/30">
                             Help new managers find your league
                           </p>
                         </div>

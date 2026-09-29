@@ -101,7 +101,7 @@ function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2,6)}`
 
 function PosBadge({ pos }: { pos: string }) {
   return (
-    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${POS_COLORS[pos] ?? 'bg-white/10 text-white/60 border-white/20'}`}>
+    <span className={`text-[11px] font-black px-1.5 py-0.5 rounded border ${POS_COLORS[pos] ?? 'bg-white/10 text-white/60 border-white/20'}`}>
       {pos}
     </span>
   )
@@ -249,8 +249,8 @@ function LeagueGate({ onSelect, requestedLeagueId }: { onSelect: (l: UserLeague)
                       </span>
                     </div>
                     <div className="flex gap-1.5">
-                      <span className="text-[10px] bg-white/8 rounded-full px-2 py-0.5 text-white/50">{league.sport}</span>
-                      <span className="text-[10px] bg-white/8 rounded-full px-2 py-0.5 text-white/50">{league.format}</span>
+                      <span className="text-[11px] bg-white/8 rounded-full px-2 py-0.5 text-white/50">{league.sport}</span>
+                      <span className="text-[11px] bg-white/8 rounded-full px-2 py-0.5 text-white/50">{league.format}</span>
                     </div>
                   </div>
                   <h3 className="text-base font-bold text-white mb-1 truncate">{league.name}</h3>
@@ -314,13 +314,13 @@ function TradeCard({
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Give */}
           <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3">
-            <div className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2">You Give</div>
+            <div className="text-[11px] font-bold text-red-400 uppercase tracking-widest mb-2">You Give</div>
             {opp.give.map((a, i) => (
               <div key={i} className="flex items-center gap-2 mb-1.5">
                 <PosBadge pos={a.position}/>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-white/80 truncate">{a.name}</div>
-                  <div className="text-[10px] text-white/30">{a.team} · {a.value.toLocaleString()}</div>
+                  <div className="text-[11px] text-white/30">{a.team} · {a.value.toLocaleString()}</div>
                 </div>
               </div>
             ))}
@@ -328,13 +328,13 @@ function TradeCard({
 
           {/* Get */}
           <div className="rounded-xl border border-green-500/15 bg-green-500/5 p-3">
-            <div className="text-[10px] font-bold text-green-400 uppercase tracking-widest mb-2">You Get</div>
+            <div className="text-[11px] font-bold text-green-400 uppercase tracking-widest mb-2">You Get</div>
             {opp.get.map((a, i) => (
               <div key={i} className="flex items-center gap-2 mb-1.5">
                 <PosBadge pos={a.position}/>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-white/80 truncate">{a.name}</div>
-                  <div className="text-[10px] text-white/30">{a.team} · {a.value.toLocaleString()}</div>
+                  <div className="text-[11px] text-white/30">{a.team} · {a.value.toLocaleString()}</div>
                 </div>
               </div>
             ))}
@@ -594,7 +594,7 @@ export default function TradeFinderPage() {
           <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/4 px-3 py-1.5">
             <span>{plat.emoji}</span>
             <span className="text-xs font-bold" style={{ color: plat.color }}>{league.name}</span>
-            <span className="text-[10px] text-white/30">· {league.sport} {league.format}</span>
+            <span className="text-[11px] text-white/30">· {league.sport} {league.format}</span>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -655,7 +655,7 @@ export default function TradeFinderPage() {
 
               {/* Strategy */}
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">Team Strategy</p>
+                <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-3">Team Strategy</p>
                 <div className="space-y-2">
                   {([
                     { v: 'WIN_NOW',  label: '🏆 Win Now',   color: '#ef4444' },
@@ -679,7 +679,7 @@ export default function TradeFinderPage() {
 
               {/* Focus preset */}
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">Trade Focus</p>
+                <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-3">Trade Focus</p>
                 <div className="flex flex-wrap gap-1.5">
                   {([
                     { v: 'NONE',             label: 'Any'             },
@@ -716,7 +716,7 @@ export default function TradeFinderPage() {
 
               {/* Position needs */}
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">Position Needs</p>
+                <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-3">Position Needs</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {(['QB','RB','WR','TE','FLEX','Picks'] as const).map(pos => {
                     const isActive = pos === 'Picks' ? needPositions.has('K') : needPositions.has(pos as Position)
@@ -736,7 +736,7 @@ export default function TradeFinderPage() {
               {/* Players on block */}
               {roster.length > 0 && (
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">
+                  <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-3">
                     Players I'd Trade
                   </p>
                   <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
@@ -747,11 +747,11 @@ export default function TradeFinderPage() {
                           className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition-all ${
                             onBlock.has(p.id) ? 'bg-violet-500 border-violet-500' : 'border-white/20'
                           }`}>
-                          {onBlock.has(p.id) && <span className="text-[9px] font-black text-white">✓</span>}
+                          {onBlock.has(p.id) && <span className="text-[11px] font-black text-white">✓</span>}
                         </div>
                         <PosBadge pos={p.position}/>
                         <span className="text-xs text-white/75 truncate">{p.name}</span>
-                        <span className="text-[10px] text-white/30 ml-auto shrink-0">{p.team}</span>
+                        <span className="text-[11px] text-white/30 ml-auto shrink-0">{p.team}</span>
                       </label>
                     ))}
                   </div>
@@ -761,7 +761,7 @@ export default function TradeFinderPage() {
               {/* Picks on block */}
               {picks.length > 0 && (
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">
+                  <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-3">
                     Picks I'd Trade
                   </p>
                   <div className="space-y-1">
@@ -772,7 +772,7 @@ export default function TradeFinderPage() {
                           className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition-all ${
                             picksOnBlock.has(pk.id) ? 'bg-violet-500 border-violet-500' : 'border-white/20'
                           }`}>
-                          {picksOnBlock.has(pk.id) && <span className="text-[9px] font-black text-white">✓</span>}
+                          {picksOnBlock.has(pk.id) && <span className="text-[11px] font-black text-white">✓</span>}
                         </div>
                         <span className="text-xs text-white/75">{pk.label}</span>
                       </label>
@@ -783,7 +783,7 @@ export default function TradeFinderPage() {
 
               {/* AI depth */}
               <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">AI Depth</p>
+                <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-3">AI Depth</p>
                 <div className="flex gap-1.5">
                   {(['FAST','DEEP','EXHAUSTIVE'] as FinderMode[]).map(m => (
                     <button key={m} onClick={() => setFinderMode(m)}
@@ -818,7 +818,7 @@ export default function TradeFinderPage() {
                       <span className="text-xs text-white/60">Exclude injured targets</span>
                     </label>
                     <div>
-                      <p className="text-[10px] text-white/30 mb-1.5">AI Tone</p>
+                      <p className="text-[11px] text-white/30 mb-1.5">AI Tone</p>
                       <select value={tone} onChange={e => setTone(e.target.value as Tone)}
                         className="w-full rounded-xl border border-white/10 bg-[#07071a] text-xs text-white px-3 py-2 focus:outline-none focus:border-violet-500/50">
                         {(['FRIENDLY','CONFIDENT','CASUAL','DATA_BACKED','SHORT'] as Tone[]).map(t => (
@@ -876,7 +876,7 @@ export default function TradeFinderPage() {
               */}
               {!loading && insights.length > 0 && (
                 <div className="mt-6 space-y-2" data-testid="trade-finder-insights">
-                  <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Also worth knowing</div>
+                  <div className="text-[11px] font-bold text-white/40 uppercase tracking-widest">Also worth knowing</div>
                   {insights.map((note, i) => (
                     <div key={`${note.title}-${i}`} className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
                       <div className="text-xs font-semibold text-white/75">{note.title}</div>
@@ -948,7 +948,7 @@ export default function TradeFinderPage() {
                       {partner.sharedNeeds.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-4">
                           {partner.sharedNeeds.slice(0,3).map(n => (
-                            <span key={n} className="text-[10px] bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-full px-2 py-0.5">
+                            <span key={n} className="text-[11px] bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-full px-2 py-0.5">
                               {n}
                             </span>
                           ))}

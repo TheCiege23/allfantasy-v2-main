@@ -114,7 +114,7 @@ function StepIndicator({ current }: { current: Step }) {
               }`}>
                 {done ? '✓' : num}
               </div>
-              <span className={`text-[10px] font-semibold whitespace-nowrap ${
+              <span className={`text-[11px] font-semibold whitespace-nowrap ${
                 active ? 'text-white/80' : done ? 'text-green-400' : 'text-white/25'
               }`}>{label}</span>
             </div>
@@ -164,7 +164,7 @@ function PlatformStep({ onSelect }: { onSelect: (p: Platform) => void }) {
             }}
           >
             {!p.available && (
-              <div className="absolute top-3 right-3 text-[9px] font-black bg-white/10 text-white/40 rounded-full px-2 py-0.5">
+              <div className="absolute top-3 right-3 text-[11px] font-black bg-white/10 text-white/40 rounded-full px-2 py-0.5">
                 SOON
               </div>
             )}
@@ -266,14 +266,14 @@ function LeagueIdStep({
                       : 'border-white/20 bg-white/5'
                   } ${opt.required ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  {options[opt.key] && <span className="text-[10px] font-black">✓</span>}
+                  {options[opt.key] && <span className="text-[11px] font-black">✓</span>}
                 </div>
                 <div>
                   <span className={`text-sm ${options[opt.key] ? 'text-white/80' : 'text-white/40'}`}>
                     {opt.label}
                   </span>
                   {opt.required && (
-                    <span className="ml-2 text-[9px] text-cyan-400/60 font-bold uppercase tracking-wide">Required</span>
+                    <span className="ml-2 text-[11px] text-cyan-400/60 font-bold uppercase tracking-wide">Required</span>
                   )}
                 </div>
               </label>
@@ -450,7 +450,7 @@ function ProgressStep({ events }: { events: ProgressEvent[] }) {
             <div key={s.key} className={`flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all ${
               isActive  ? 'bg-cyan-500/10 border border-cyan-500/20' : ''
             }`}>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
                 isDone   ? 'bg-green-500 text-white' :
                 isActive ? 'border border-cyan-500 bg-transparent' :
                 'bg-white/10 text-white/30'

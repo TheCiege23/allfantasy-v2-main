@@ -114,7 +114,7 @@ export function InContextMonetizationCard({
           <button
             type="button"
             onClick={() => void refetch()}
-            className="rounded-full border border-white/20 bg-black/20 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10"
+            className="rounded-full border border-white/20 bg-black/20 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
             data-testid={`${testIdPrefix}-refresh`}
           >
             Refresh
@@ -166,7 +166,7 @@ export function InContextMonetizationCard({
             return (
               <span
                 key={ruleCode}
-                className="rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-[10px] text-white/70"
+                className="rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-[11px] text-white/70"
               >
                 {preview.featureLabel}: {preview.tokenCost}
               </span>

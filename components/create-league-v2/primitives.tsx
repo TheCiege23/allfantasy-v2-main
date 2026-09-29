@@ -458,7 +458,7 @@ export function Segmented<T extends string>({
               <div className="min-w-0 flex-1">
                 <span className="relative block">{opt.label}</span>
                 {opt.hint ? (
-                  <span className="relative mt-0.5 block text-[10px] font-normal text-white/40">{opt.hint}</span>
+                  <span className="relative mt-0.5 block text-[11px] font-normal text-white/40">{opt.hint}</span>
                 ) : null}
               </div>
             </div>
@@ -497,7 +497,7 @@ export function StepProgress({
                 className="flex flex-1 items-center gap-2 text-left"
               >
                 <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-all duration-300 ${
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold transition-all duration-300 ${
                     isCurrent
                       ? `border-transparent bg-white text-[#060a18] ring-2 ${accent.ring} ${accent.glow}`
                       : reached

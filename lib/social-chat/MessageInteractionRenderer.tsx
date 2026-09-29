@@ -226,7 +226,7 @@ export function MessageInteractionRenderer({
           </button>
         )}
         {isAlreadyPinned && (
-          <span className="text-[10px]" style={{ color: "var(--muted)" }}>Pinned</span>
+          <span className="text-[11px]" style={{ color: "var(--muted)" }}>Pinned</span>
         )}
       </div>
     </div>
@@ -285,7 +285,7 @@ function PollBlock({
       <div className="flex items-center gap-2 mb-2">
         <p className="text-sm font-medium flex-1">{poll.question}</p>
         {isClosed && (
-          <span className="text-[10px] shrink-0 rounded px-1.5 py-0.5" style={{ background: "var(--panel2)", color: "var(--muted)" }}>
+          <span className="text-[11px] shrink-0 rounded px-1.5 py-0.5" style={{ background: "var(--panel2)", color: "var(--muted)" }}>
             Closed
           </span>
         )}
@@ -317,12 +317,12 @@ function PollBlock({
         })}
       </ul>
       {totalVotes > 0 && (
-        <p className="text-[10px] mt-1" style={{ color: "var(--muted)" }}>
+        <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
           {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
         </p>
       )}
       {!isClosed && userVotedIndex !== null && userVotedIndex !== undefined && (
-        <p className="text-[10px] mt-1" style={{ color: "var(--muted)" }}>
+        <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
           You can change your vote.
         </p>
       )}

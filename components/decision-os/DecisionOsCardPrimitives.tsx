@@ -258,7 +258,7 @@ export function DecisionOsStatChip({
   const toneClass = tone === 'risk' && value > 0 ? TONE_CLASSES.warning : 'border-subtle bg-surface-muted text-primary'
   return (
     <div className={cn('min-w-0 rounded-xl border px-4 py-3', toneClass)}>
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">
         <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
         {label}
       </div>

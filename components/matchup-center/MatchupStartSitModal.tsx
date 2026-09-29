@@ -121,7 +121,7 @@ export function MatchupStartSitModal({
                 <p className="mt-1 text-white/65">{result.playerOutlook.playerB.restOfGame}</p>
               </div>
             </div>
-            <p className="text-[10px] text-white/35">
+            <p className="text-[11px] text-white/35">
               OA {result.providers.openai} · DS {result.providers.deepseek} · Grok {result.providers.grok}. {result.dataNotes}
             </p>
           </div>

@@ -142,7 +142,7 @@ function NflRedraftDraftOrderBlock({
             <button
               type="button"
               onClick={onGenerateDraftOrder}
-              className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffb8d1] hover:bg-[#ff3d81]/20"
+              className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#ffb8d1] hover:bg-[#ff3d81]/20"
               data-testid="nfl-redraft-generate-draft-order"
             >
               {hasOrder ? 'Regenerate draft order' : 'Generate draft order'}
@@ -150,7 +150,7 @@ function NflRedraftDraftOrderBlock({
             <button
               type="button"
               onClick={onOpenDraftSettings}
-              className="rounded-lg border border-white/[0.12] bg-white/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white/85 hover:bg-white/[0.1]"
+              className="rounded-lg border border-white/[0.12] bg-white/[0.06] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white/85 hover:bg-white/[0.1]"
               data-testid="nfl-redraft-edit-draft-settings"
             >
               Edit draft settings
@@ -169,7 +169,7 @@ function NflRedraftDraftOrderBlock({
             >
               <span className="font-bold tabular-nums text-[#ff9ec0]">{i + 1}.</span>
               <span className="min-w-0 flex-1 truncate font-semibold text-white">{t.teamName}</span>
-              <span className="shrink-0 text-[10px] text-white/40">Slot #{t.draftPosition}</span>
+              <span className="shrink-0 text-[11px] text-white/40">Slot #{t.draftPosition}</span>
             </li>
           ))}
         </ol>
@@ -557,7 +557,7 @@ export function DraftTab({
             ) : null}
           </div>
           {isCommissioner ? (
-            <p className="mt-2 text-[10px] leading-relaxed text-white/35">
+            <p className="mt-2 text-[11px] leading-relaxed text-white/35">
               <Link href="/discover/leagues" className="text-[#ff3d81]/90 underline decoration-[#ff3d81]/30 underline-offset-2 hover:text-[#ff9ec0]">
                 League finder
               </Link>{' '}
@@ -650,7 +650,7 @@ export function DraftTab({
                         <span className="font-mono text-[17px] font-bold tabular-nums text-white sm:text-[19px]">
                           {value}
                         </span>
-                        <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
                           {label}
                         </span>
                       </div>
@@ -663,29 +663,29 @@ export function DraftTab({
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="nfl-redraft-predraft-summary">
             <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">League fill</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">League fill</p>
               <p className="mt-1 text-sm font-semibold text-white">{filled}/{cap} teams joined</p>
               <p className="mt-1 text-[11px] text-white/55">{isFull ? 'League is full and ready for draft setup.' : `${Math.max(cap - filled, 0)} spot${cap - filled === 1 ? '' : 's'} still open.`}</p>
             </div>
             <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Draft type</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft type</p>
               <p className="mt-1 text-sm font-semibold text-white">{draftTypeLabel}</p>
               <p className="mt-1 text-[11px] text-white/55">League setup card stays on Home until someone intentionally enters the draft room.</p>
             </div>
             <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Draft date</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft date</p>
               <p className="mt-1 text-sm font-semibold text-white">{draftDateLabel}</p>
               <p className="mt-1 text-[11px] text-white/55">Commissioners can edit this from draft settings.</p>
             </div>
             <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Pick timer</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Pick timer</p>
               <p className="mt-1 text-sm font-semibold text-white">{pickTimerLabel}</p>
               <p className="mt-1 text-[11px] text-white/55">Applies once the live draft room opens.</p>
             </div>
           </div>
 
           {sleeperDraftId ? (
-            <p className="mt-3 text-center text-[10px] text-white/35">
+            <p className="mt-3 text-center text-[11px] text-white/35">
               Sleeper draft id: <span className="font-mono text-white/50">{sleeperDraftId}</span>
             </p>
           ) : null}

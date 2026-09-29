@@ -47,14 +47,14 @@ export default function QuickCreatePlayoffPoolButton({
         type="button"
         onClick={quickCreate}
         disabled={pending}
-        className="rounded-lg border px-2 py-1 text-[10px] font-semibold transition disabled:opacity-50"
+        className="rounded-lg border px-2 py-1 text-[11px] font-semibold transition disabled:opacity-50"
         style={{ borderColor: "rgba(56,189,248,0.28)", color: "rgba(186,230,253,0.92)" }}
         data-testid={`quick-create-${sport}-pool-button`}
       >
         {pending ? "Creating..." : label}
       </button>
       {error ? (
-        <p className="text-[10px] font-semibold text-rose-300" data-testid={`quick-create-${sport}-error`}>
+        <p className="text-[11px] font-semibold text-rose-300" data-testid={`quick-create-${sport}-error`}>
           {error}
         </p>
       ) : null}

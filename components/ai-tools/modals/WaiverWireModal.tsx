@@ -199,7 +199,7 @@ function StructuredWaiverSummary({
     jumpArgs?: { name: string; position?: string },
   ) => (
     <div className="rounded-lg border border-white/[0.08] bg-[#0c1018] p-2.5">
-      <p className="text-[9px] font-bold uppercase tracking-wider text-white/40">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">{label}</p>
       {body ? (
         jump && jumpArgs ? (
           <button
@@ -208,7 +208,7 @@ function StructuredWaiverSummary({
             className="mt-1 w-full text-left"
           >
             <p className="text-[12px] font-semibold text-white/88 hover:text-cyan-50">{body}</p>
-            <span className="mt-0.5 block text-[9px] font-semibold text-cyan-400/90">View in ranked list →</span>
+            <span className="mt-0.5 block text-[11px] font-semibold text-cyan-400/90">View in ranked list →</span>
           </button>
         ) : (
           <p className="mt-1 text-[12px] font-semibold text-white/88">{body}</p>
@@ -216,7 +216,7 @@ function StructuredWaiverSummary({
       ) : (
         <p className="mt-1 text-[11px] text-white/35">—</p>
       )}
-      {sub ? <p className="mt-1 line-clamp-2 text-[10px] text-white/45">{sub}</p> : null}
+      {sub ? <p className="mt-1 line-clamp-2 text-[11px] text-white/45">{sub}</p> : null}
     </div>
   )
 
@@ -225,8 +225,8 @@ function StructuredWaiverSummary({
       className={`${mb} rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-cyan-500/[0.05] to-transparent px-4 py-3`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/75">Grounded summary</p>
-        <p className="text-[9px] text-white/35">Same players as the list — not synthetic</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/75">Grounded summary</p>
+        <p className="text-[11px] text-white/35">Same players as the list — not synthetic</p>
       </div>
 
       {rosterTeamNeeds && rosterTeamNeeds.length > 0 ? (
@@ -234,7 +234,7 @@ function StructuredWaiverSummary({
           {rosterTeamNeeds.map((n) => (
             <span
               key={n}
-              className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100/90"
+              className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-100/90"
             >
               Thin: {n}
             </span>
@@ -244,7 +244,7 @@ function StructuredWaiverSummary({
 
       <div className="mt-3 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-xl border border-white/[0.08] bg-[#0a0d12] p-3">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200/70">Best add overall</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-200/70">Best add overall</p>
           {jump ? (
             <button
               type="button"
@@ -255,7 +255,7 @@ function StructuredWaiverSummary({
                 {sr.bestAddOverall.name}{' '}
                 <span className="text-[11px] font-semibold text-white/45">{sr.bestAddOverall.position}</span>
               </p>
-              <span className="mt-0.5 block text-[9px] font-semibold text-cyan-400/90">View in ranked list →</span>
+              <span className="mt-0.5 block text-[11px] font-semibold text-cyan-400/90">View in ranked list →</span>
             </button>
           ) : (
             <p className="mt-1 text-[14px] font-bold text-white/90">
@@ -264,7 +264,7 @@ function StructuredWaiverSummary({
             </p>
           )}
           <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-white/55">{sr.bestAddOverall.why}</p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-white/45">
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/45">
             <span className="rounded bg-white/[0.06] px-2 py-0.5">Conf {Math.round(sr.bestAddOverall.confidence)}</span>
             <span className="rounded bg-white/[0.06] px-2 py-0.5">FAAB ~{sr.bestAddOverall.faabPct}%</span>
             <span className="rounded bg-white/[0.06] px-2 py-0.5">Proj {formatProjPts(sr.bestAddOverall.projectedPoints)}</span>
@@ -272,17 +272,17 @@ function StructuredWaiverSummary({
         </div>
         <div className="space-y-2 text-[11px] text-white/60">
           <p className="rounded-lg border border-white/[0.06] bg-[#0c1018] p-2.5 leading-snug">
-            <span className="text-[9px] font-bold uppercase tracking-wide text-cyan-200/60">FAAB / priority</span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/60">FAAB / priority</span>
             <span className="mt-1 block text-white/70">{sr.faabRecommendation}</span>
           </p>
           {sr.lockAndProcessingNote ? (
-            <p className="rounded-lg border border-white/[0.06] bg-[#0c1018] p-2.5 text-[10px] text-white/50">
+            <p className="rounded-lg border border-white/[0.06] bg-[#0c1018] p-2.5 text-[11px] text-white/50">
               <span className="font-bold text-white/55">League waiver rules · </span>
               {sr.lockAndProcessingNote}
             </p>
           ) : null}
           {sr.teamNeedsNote ? (
-            <p className="rounded-lg border border-amber-500/15 bg-amber-500/[0.04] p-2.5 text-[10px] text-amber-100/85">{sr.teamNeedsNote}</p>
+            <p className="rounded-lg border border-amber-500/15 bg-amber-500/[0.04] p-2.5 text-[11px] text-amber-100/85">{sr.teamNeedsNote}</p>
           ) : null}
         </div>
       </div>
@@ -316,14 +316,14 @@ function StructuredWaiverSummary({
 
       {sr.dropCandidate ? (
         <div className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/[0.04] px-3 py-2">
-          <p className="text-[9px] font-bold uppercase tracking-wide text-rose-200/80">Suggested drop (to open a spot)</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-rose-200/80">Suggested drop (to open a spot)</p>
           <p className="mt-0.5 text-[12px] font-semibold text-white/88">{sr.dropCandidate.name}</p>
-          <p className="mt-1 text-[10px] text-white/50">{sr.dropCandidate.reason}</p>
+          <p className="mt-1 text-[11px] text-white/50">{sr.dropCandidate.reason}</p>
           {onOpenDropsTab ? (
             <button
               type="button"
               onClick={onOpenDropsTab}
-              className="mt-2 text-[9px] font-semibold text-rose-200/90 hover:text-rose-100"
+              className="mt-2 text-[11px] font-semibold text-rose-200/90 hover:text-rose-100"
             >
               Open Drops tab →
             </button>
@@ -333,14 +333,14 @@ function StructuredWaiverSummary({
 
       {sr.bestAddByPosition.length > 0 ? (
         <div className="mt-3">
-          <p className="text-[9px] font-bold uppercase tracking-wide text-white/40">Best by position (from this pool)</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Best by position (from this pool)</p>
           <div className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-1 sm:max-h-none sm:flex-row sm:flex-wrap">
             {sr.bestAddByPosition.map((row) => (
               <div
                 key={row.position}
                 className="min-w-0 flex-1 rounded-lg border border-white/[0.06] bg-[#0c1018] px-2.5 py-2 sm:min-w-[140px] sm:max-w-[200px]"
               >
-                <p className="text-[9px] font-bold uppercase text-cyan-200/70">{row.position}</p>
+                <p className="text-[11px] font-bold uppercase text-cyan-200/70">{row.position}</p>
                 {jump ? (
                   <button
                     type="button"
@@ -348,13 +348,13 @@ function StructuredWaiverSummary({
                     className="mt-0.5 w-full truncate text-left"
                   >
                     <span className="text-[11px] font-semibold text-white/85 hover:text-cyan-100">{row.name}</span>
-                    <span className="mt-0.5 block text-[8px] font-semibold text-cyan-500/90">In list →</span>
+                    <span className="mt-0.5 block text-[11px] font-semibold text-cyan-500/90">In list →</span>
                   </button>
                 ) : (
                   <p className="mt-0.5 truncate text-[11px] font-semibold text-white/85">{row.name}</p>
                 )}
-                <p className="mt-0.5 line-clamp-2 text-[9px] text-white/40">{row.why}</p>
-                <p className="mt-1 text-[9px] text-white/35">
+                <p className="mt-0.5 line-clamp-2 text-[11px] text-white/40">{row.why}</p>
+                <p className="mt-1 text-[11px] text-white/35">
                   ~{row.faabPct}% FAAB · proj {formatProjPts(row.projectedPoints)}
                 </p>
               </div>
@@ -691,7 +691,7 @@ export function WaiverWireModal({
         headerBadge={
           <div className="flex flex-wrap items-center gap-1.5">
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
                 result?.analysisMode === 'global' || isGlobalMode
                   ? 'border-amber-500/35 bg-amber-500/10 text-amber-100'
                   : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
@@ -702,28 +702,28 @@ export function WaiverWireModal({
             {result?.sourceFlags ? (
               <>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                     result.sourceFlags.sportsDataReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                   }`}
                 >
                   DB
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                     result.sourceFlags.trendingFeedReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                   }`}
                 >
                   Trend
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                     result.sourceFlags.projectionLayerReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/5 text-white/35'
                   }`}
                 >
                   Proj
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase ${
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
                     result.sourceFlags.leagueRulesReady ? 'bg-emerald-500/15 text-emerald-200' : 'bg-amber-500/12 text-amber-100/90'
                   }`}
                 >
@@ -731,7 +731,7 @@ export function WaiverWireModal({
                 </span>
               </>
             ) : (
-              <span className="text-[9px] text-white/35">Run analysis for status</span>
+              <span className="text-[11px] text-white/35">Run analysis for status</span>
             )}
           </div>
         }
@@ -771,7 +771,7 @@ export function WaiverWireModal({
         {/* Controls */}
         <div className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="block text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-white/40">
               Sport
               <select
                 value={sportFilter}
@@ -789,7 +789,7 @@ export function WaiverWireModal({
                 ))}
               </select>
             </label>
-            <label className="block text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-white/40">
               League
               <select
                 value={leagueId}
@@ -827,7 +827,7 @@ export function WaiverWireModal({
                     ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-white/40">
               Rookies
               <button
                 type="button"
@@ -839,7 +839,7 @@ export function WaiverWireModal({
                 {rookiesOnly ? 'On' : 'Off'}
               </button>
             </label>
-            <label className="block text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-white/40">
               Team context
               <select
                 value={teamContext}
@@ -852,7 +852,7 @@ export function WaiverWireModal({
                 <option value="neutral">Neutral / general</option>
               </select>
             </label>
-            <label className="block text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-white/40">
               Strategy
               <select
                 value={strategy}
@@ -871,7 +871,7 @@ export function WaiverWireModal({
                 <option value="neutral">Neutral</option>
               </select>
             </label>
-            <label className="block text-[10px] font-bold uppercase tracking-wide text-white/40">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-white/40">
               Horizon
               <select
                 value={timeHorizon}
@@ -893,7 +893,7 @@ export function WaiverWireModal({
                 key={t.id}
                 type="button"
                 onClick={() => setAnalysisTab(t.id)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition ${
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
                   analysisTab === t.id ? 'bg-emerald-500/15 text-emerald-200' : 'text-white/35 hover:text-white/60'
                 }`}
               >
@@ -920,7 +920,7 @@ export function WaiverWireModal({
                 key={p}
                 type="button"
                 onClick={() => setPosition(p)}
-                className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${
                   position === p ? 'bg-emerald-500/15 text-emerald-200' : 'text-white/35 hover:text-white/60'
                 }`}
               >
@@ -939,7 +939,7 @@ export function WaiverWireModal({
 
         {result ? (
           <div className="mb-3 rounded-2xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[0.06] to-transparent px-4 py-3">
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-emerald-300/70">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300/70">
               {result.generalAnalysis ? 'Trending / FA pool · ' : ''}
               {selectedLeague?.name ?? (isGlobalMode ? 'Global sport scan' : 'AllFantasy leagues')}
             </p>
@@ -947,7 +947,7 @@ export function WaiverWireModal({
               <p className="mt-1 text-[11px] leading-snug text-sky-200/80">{result.summaryLine}</p>
             ) : null}
             {result.timeContext ? (
-              <div className="mt-1 text-[10px] text-white/45">
+              <div className="mt-1 text-[11px] text-white/45">
                 <span>
                   Local {result.timeContext.userLocalTime ?? '—'} ({result.timeContext.userTimezone ?? '—'})
                 </span>
@@ -963,14 +963,14 @@ export function WaiverWireModal({
               </div>
             ) : null}
             {result.dataQuality === 'degraded' ? (
-              <p className="mt-1 text-[10px] text-amber-200/85">Degraded data — review gaps below before bidding.</p>
+              <p className="mt-1 text-[11px] text-amber-200/85">Degraded data — review gaps below before bidding.</p>
             ) : null}
             <p className="mt-1 text-[12px] text-white/55">{formatLine}</p>
             {result.leagueSettingsSnapshot &&
             Array.isArray((result.leagueSettingsSnapshot as { quickModeBadges?: string[] }).quickModeBadges) ? (
               <div className="mt-2 flex flex-wrap gap-1">
                 {(result.leagueSettingsSnapshot as { quickModeBadges: string[] }).quickModeBadges.map((b) => (
-                  <span key={b} className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/55">
+                  <span key={b} className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/55">
                     {b}
                   </span>
                 ))}
@@ -985,18 +985,18 @@ export function WaiverWireModal({
                 </span>
               ) : null}
             </p>
-            <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold">
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold">
               <span className="rounded-md bg-red-500/15 px-2 py-0.5 text-red-200">{result.summary.critical} critical</span>
               <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-amber-200">{result.summary.high} high</span>
               <span className="rounded-md bg-cyan-500/10 px-2 py-0.5 text-cyan-200">{result.summary.medium} medium</span>
             </div>
             {result.dataGaps.length > 0 ? (
-              <p className="mt-2 text-[10px] text-amber-200/80">
+              <p className="mt-2 text-[11px] text-amber-200/80">
                 Data gaps: {result.dataGaps.slice(0, 3).join(' · ')}
                 {result.dataGaps.length > 3 ? '…' : ''}
               </p>
             ) : null}
-            <p className="mt-1 text-[9px] text-white/35">Updated {new Date(result.dataFreshness).toLocaleString()}</p>
+            <p className="mt-1 text-[11px] text-white/35">Updated {new Date(result.dataFreshness).toLocaleString()}</p>
           </div>
         ) : null}
 
@@ -1022,7 +1022,7 @@ export function WaiverWireModal({
                     onJumpToPick={jumpToPick}
                     onOpenDropsTab={openDropsTab}
                   />
-                  <p className="text-[10px] text-white/40">
+                  <p className="text-[11px] text-white/40">
                     Tip: switch to <span className="font-semibold text-white/55">Best adds</span> for the full ranked list and
                     waiver queue.
                   </p>
@@ -1053,7 +1053,7 @@ export function WaiverWireModal({
                           {d.position}
                         </span>
                       </span>
-                      <span className="max-w-[55%] text-right text-[10px] text-white/45">{d.reason}</span>
+                      <span className="max-w-[55%] text-right text-[11px] text-white/45">{d.reason}</span>
                     </li>
                   ))}
                   {(result?.suggestedDrops ?? []).length === 0 ? (
@@ -1092,18 +1092,18 @@ export function WaiverWireModal({
           <div className="w-full shrink-0 rounded-xl border border-white/[0.08] bg-[#080b11] p-3 lg:w-64">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Waiver queue</p>
-              <span className="text-[10px] text-cyan-200/90">
+              <span className="text-[11px] text-cyan-200/90">
                 {queue.length} · ${queueFaabTotal} bid
               </span>
             </div>
-            <p className="mt-1 text-[10px] text-white/35">
+            <p className="mt-1 text-[11px] text-white/35">
               Local plan only — submit claims in your host platform (Sleeper/Yahoo/ESPN).
             </p>
             <ul className="mt-3 space-y-2">
               {queue.map((q) => (
                 <li key={q.playerId} className="rounded-lg border border-white/[0.06] bg-[#0f141d] p-2">
                   <p className="truncate text-[11px] font-semibold text-white/85">{q.name}</p>
-                  <label className="mt-1 flex items-center gap-2 text-[10px] text-white/45">
+                  <label className="mt-1 flex items-center gap-2 text-[11px] text-white/45">
                     FAAB %
                     <input
                       type="number"
@@ -1137,7 +1137,7 @@ export function WaiverWireModal({
         {/* Sections (All sports) */}
         {result?.sections && result.sections.length > 0 ? (
           <div className="mt-4 space-y-3 border-t border-white/[0.06] pt-4">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">By sport (All mode)</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">By sport (All mode)</p>
             {result.sections.map((sec) => (
               <div key={sec.sport} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                 <p className="text-[12px] font-bold text-emerald-200/90">{sec.sport}</p>
@@ -1155,7 +1155,7 @@ export function WaiverWireModal({
 
         <div className="mt-4 rounded-xl border border-[#2e3347] bg-[#0a0d12] p-3">
           <p className="text-[11px] font-semibold text-emerald-200/90">Ask Chimmy</p>
-          <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+          <p className="mt-1 text-[11px] leading-relaxed text-white/45">
             Chimmy reasons from the waiver payload (trending counts, composites, FAAB, league context). Use JSON for a full
             structured interpretation.
           </p>
@@ -1243,12 +1243,12 @@ function WaiverPickRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="truncate text-[13px] font-bold text-white/90">{pick.name}</p>
             {showSport ? (
-              <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-bold text-white/50">{pick.sport}</span>
+              <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-bold text-white/50">{pick.sport}</span>
             ) : null}
             {pick.trendingAdds > 500 ? <Zap className="h-3 w-3 shrink-0 text-amber-400" /> : null}
             {pick.trendingAdds > 2000 ? <Activity className="h-3 w-3 shrink-0 text-orange-400" /> : null}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-white/40">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-white/40">
             <span className="font-bold text-white/60">{pick.position}</span>
             <span>·</span>
             <span>{pick.team}</span>
@@ -1262,34 +1262,34 @@ function WaiverPickRow({
             ) : null}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
-            <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/55">
+            <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/55">
               {TIER_LABEL[pick.tier] ?? pick.tier}
             </span>
-            <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-200/90">
+            <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-200/90">
               {pick.tag}
             </span>
           </div>
           {pick.rollingFppg != null ? (
-            <p className="mt-1 text-[10px] font-semibold text-sky-300/90">Rolling Insights FPPG {pick.rollingFppg.toFixed(1)}</p>
+            <p className="mt-1 text-[11px] font-semibold text-sky-300/90">Rolling Insights FPPG {pick.rollingFppg.toFixed(1)}</p>
           ) : null}
           <p className="mt-1.5 text-[11px] leading-relaxed text-white/60">{pick.why}</p>
           {pick.suggestedDrop ? (
-            <p className="mt-1 text-[10px] text-rose-200/80">
+            <p className="mt-1 text-[11px] text-rose-200/80">
               Drop candidate: {pick.suggestedDrop.name} — {pick.suggestedDrop.reason}
             </p>
           ) : null}
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">FAAB %</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-white/30">FAAB %</p>
           <p className={`text-[15px] font-black tabular-nums ${s.text}`}>{pick.faabPct}%</p>
-          <p className="text-[9px] text-white/35">conf {pick.confidence}</p>
+          <p className="text-[11px] text-white/35">conf {pick.confidence}</p>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
               onQueue()
             }}
-            className="mt-1 inline-flex items-center gap-0.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-200"
+            className="mt-1 inline-flex items-center gap-0.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-200"
           >
             <Plus className="h-3 w-3" /> Queue
           </button>
@@ -1300,7 +1300,7 @@ function WaiverPickRow({
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
           <div className={`h-full rounded-full ${s.bar}`} style={{ width: urgencyWidth(pick.urgency) }} />
         </div>
-        <span className={`text-[8px] font-bold uppercase tracking-widest ${s.text}`}>{s.label}</span>
+        <span className={`text-[11px] font-bold uppercase tracking-widest ${s.text}`}>{s.label}</span>
       </div>
     </div>
   )

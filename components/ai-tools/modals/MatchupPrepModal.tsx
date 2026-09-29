@@ -193,18 +193,18 @@ export function MatchupPrepModal({
   const headerBadge = (
     <span className="flex flex-wrap items-center gap-1">
       {data?.degraded || data?.dataGaps?.length ? (
-        <span className="rounded border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-200">
+        <span className="rounded border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-200">
           Partial data
         </span>
       ) : (
-        <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
+        <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-200">
           Live
         </span>
       )}
       {(() => {
         const sf = data?.sourceFlags
         if (!sf) return null
-        const chipBase = 'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide'
+        const chipBase = 'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
         const green = 'bg-emerald-500/15 text-emerald-200'
         const dim = 'bg-white/5 text-white/35'
         const amber = 'bg-amber-500/12 text-amber-100/90'
@@ -347,7 +347,7 @@ export function MatchupPrepModal({
           {(Object.keys(toggles) as (keyof MatchupPrepToggles)[]).map((k) => (
             <label
               key={k}
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[9px] text-white/70"
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[11px] text-white/70"
             >
               <input
                 type="checkbox"
@@ -366,7 +366,7 @@ export function MatchupPrepModal({
               key={t.id}
               type="button"
               onClick={() => setViewTab(t.id)}
-              className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+              className={`rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${
                 viewTab === t.id ? 'bg-sky-500/20 text-sky-100' : 'text-white/45 hover:text-white/75'
               }`}
             >
@@ -406,7 +406,7 @@ function MatchupTabBody({
     return (
       <div className="space-y-3">
         {data.scoringSummary ? (
-          <div className="rounded-xl border border-white/[0.06] bg-[#0d111a] px-3 py-2 text-[10px] text-white/70">
+          <div className="rounded-xl border border-white/[0.06] bg-[#0d111a] px-3 py-2 text-[11px] text-white/70">
             <span className="font-bold text-cyan-200/90">Scoring</span>{' '}
             {data.scoringSummary.scoringModel}
             {data.scoringSummary.receptionFormat ? ` · ${data.scoringSummary.receptionFormat}` : ''}
@@ -414,25 +414,25 @@ function MatchupTabBody({
           </div>
         ) : null}
         {data.matchupPeriod ? (
-          <p className="text-[10px] text-white/45">
+          <p className="text-[11px] text-white/45">
             Period: {data.matchupPeriod.weekLabel} · season {data.matchupPeriod.season}
             {data.matchupPeriod.periodSource ? ` · ${data.matchupPeriod.periodSource}` : ''}
           </p>
         ) : null}
         <div className="overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/[0.08] via-cyan-500/[0.04] to-transparent px-4 py-3">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-sky-300/70">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-300/70">
             Week {data.week} · {data.leagueName ?? 'League'}
           </p>
           <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
             <div className="text-right">
-              <p className="text-[10px] uppercase text-white/35">{data.myTeamName ?? 'You'}</p>
+              <p className="text-[11px] uppercase text-white/35">{data.myTeamName ?? 'You'}</p>
               <p className="text-[22px] font-black tabular-nums text-white">
                 {data.myProjectedTotal != null ? data.myProjectedTotal.toFixed(1) : '—'}
               </p>
-              <p className="text-[10px] text-white/40">{data.myRecord ?? '—'}</p>
+              <p className="text-[11px] text-white/40">{data.myRecord ?? '—'}</p>
             </div>
             <div className="flex flex-col items-center px-1">
-              <span className="text-[9px] font-bold uppercase text-sky-300/60">edge</span>
+              <span className="text-[11px] font-bold uppercase text-sky-300/60">edge</span>
               <span
                 className={`mt-0.5 rounded-md border px-1.5 py-0.5 text-[11px] font-black tabular-nums ${
                   edge != null && edge > 0
@@ -446,11 +446,11 @@ function MatchupTabBody({
               </span>
             </div>
             <div className="text-left">
-              <p className="text-[10px] uppercase text-white/35">{data.oppTeamName ?? 'Opponent'}</p>
+              <p className="text-[11px] uppercase text-white/35">{data.oppTeamName ?? 'Opponent'}</p>
               <p className="text-[22px] font-black tabular-nums text-white/70">
                 {data.oppProjectedTotal != null ? data.oppProjectedTotal.toFixed(1) : '—'}
               </p>
-              <p className="text-[10px] text-white/40">{data.oppRecord ?? '—'}</p>
+              <p className="text-[11px] text-white/40">{data.oppRecord ?? '—'}</p>
             </div>
           </div>
         </div>
@@ -458,41 +458,41 @@ function MatchupTabBody({
           <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[0.04] p-2">
             <div className="flex items-center gap-1">
               <Trophy className="h-3 w-3 text-emerald-400" />
-              <p className="text-[8px] font-bold uppercase text-emerald-300">Win chance</p>
+              <p className="text-[11px] font-bold uppercase text-emerald-300">Win chance</p>
             </div>
             <p className="mt-0.5 text-xl font-black tabular-nums text-emerald-200">{win != null ? `${win}%` : '—'}</p>
-            <p className="mt-1 text-[8px] leading-snug text-white/35">
+            <p className="mt-1 text-[11px] leading-snug text-white/35">
               {data.winProbabilityModel === 'starter_spread_normal'
                 ? 'From projection spread (fantasy pts)'
                 : 'From mean edge (logistic)'}
             </p>
           </div>
           <div className="rounded-xl border border-sky-500/15 bg-sky-500/[0.04] p-2">
-            <p className="text-[8px] font-bold uppercase text-sky-300">Confidence</p>
+            <p className="text-[11px] font-bold uppercase text-sky-300">Confidence</p>
             <p className="mt-0.5 text-xl font-black tabular-nums text-sky-200">{data.confidence}</p>
           </div>
           <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] p-2">
-            <p className="text-[8px] font-bold uppercase text-violet-300">Matchup</p>
+            <p className="text-[11px] font-bold uppercase text-violet-300">Matchup</p>
             <p className="mt-0.5 text-[11px] font-bold capitalize text-violet-100">{data.matchupDifficulty}</p>
           </div>
           <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-2">
-            <p className="text-[8px] font-bold uppercase text-amber-300">Urgency</p>
+            <p className="text-[11px] font-bold uppercase text-amber-300">Urgency</p>
             <p className="mt-0.5 text-xl font-black tabular-nums text-amber-100">{data.urgencyScore}</p>
           </div>
         </div>
         {data.winProbabilityNotes ? (
-          <p className="text-[9px] leading-relaxed text-white/40">{data.winProbabilityNotes}</p>
+          <p className="text-[11px] leading-relaxed text-white/40">{data.winProbabilityNotes}</p>
         ) : null}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-          <p className="text-[9px] font-bold uppercase text-white/45">Floor vs upside (Start/Sit)</p>
-          <p className="mt-1 text-[10px] text-white/75">{data.floorVsUpside.note}</p>
+          <p className="text-[11px] font-bold uppercase text-white/45">Floor vs upside (Start/Sit)</p>
+          <p className="mt-1 text-[11px] text-white/75">{data.floorVsUpside.note}</p>
         </div>
         {data.gamePlan.length > 0 ? (
-          <p className="text-[10px] text-white/50">
+          <p className="text-[11px] text-white/50">
             Next: <span className="text-white/80">{data.gamePlan[0]?.title}</span>
           </p>
         ) : null}
-        <p className="text-[10px] text-white/35">Updated {new Date(data.computedAt).toLocaleString()}</p>
+        <p className="text-[11px] text-white/35">Updated {new Date(data.computedAt).toLocaleString()}</p>
       </div>
     )
   }
@@ -507,13 +507,13 @@ function MatchupTabBody({
           >
             <div>
               <p className="text-[11px] font-bold text-white/90">{g.title}</p>
-              <p className="text-[10px] text-white/45">{g.detail}</p>
+              <p className="text-[11px] text-white/45">{g.detail}</p>
             </div>
             {g.linkTool ? (
               <button
                 type="button"
                 onClick={() => openTool(g.linkTool!)}
-                className="shrink-0 text-[9px] font-bold uppercase text-cyan-300"
+                className="shrink-0 text-[11px] font-bold uppercase text-cyan-300"
               >
                 Open
               </button>
@@ -522,9 +522,9 @@ function MatchupTabBody({
         ))}
         {data.conflicts.length > 0 ? (
           <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-2">
-            <p className="text-[9px] font-bold uppercase text-amber-200">Trade-offs</p>
+            <p className="text-[11px] font-bold uppercase text-amber-200">Trade-offs</p>
             {data.conflicts.map((c) => (
-              <p key={c.id} className="mt-1 text-[10px] text-amber-100/85">
+              <p key={c.id} className="mt-1 text-[11px] text-amber-100/85">
                 {c.summary}
               </p>
             ))}
@@ -539,11 +539,11 @@ function MatchupTabBody({
       <div className="space-y-3">
         {data.slotEdges.length > 0 ? (
           <div>
-            <p className="mb-1.5 text-[9px] font-bold uppercase text-sky-300/80">By lineup slot</p>
+            <p className="mb-1.5 text-[11px] font-bold uppercase text-sky-300/80">By lineup slot</p>
             <div className="space-y-2">
               {data.slotEdges.map((e) => (
                 <div key={e.slotName} className="rounded-lg border border-white/[0.06] bg-[#0d111a] px-2 py-1.5">
-                  <div className="flex items-center justify-between text-[10px]">
+                  <div className="flex items-center justify-between text-[11px]">
                     <span className="font-bold text-white/80">{e.slotName}</span>
                     <span
                       className={`font-black tabular-nums ${e.edge > 0 ? 'text-emerald-300' : e.edge < 0 ? 'text-red-300' : 'text-white/45'}`}
@@ -552,7 +552,7 @@ function MatchupTabBody({
                       {e.edge.toFixed(1)}
                     </span>
                   </div>
-                  <p className="text-[9px] text-white/40">
+                  <p className="text-[11px] text-white/40">
                     You {e.myStarterName ?? '—'} ({e.myPoints.toFixed(1)}) · Opp {e.oppStarterName ?? '—'} (
                     {e.oppPoints.toFixed(1)})
                   </p>
@@ -562,7 +562,7 @@ function MatchupTabBody({
           </div>
         ) : null}
         <div>
-          <p className="mb-1.5 text-[9px] font-bold uppercase text-white/50">By position group</p>
+          <p className="mb-1.5 text-[11px] font-bold uppercase text-white/50">By position group</p>
           {data.positionEdges.map((e) => (
             <EdgeBar key={e.position} label={e.position} mine={e.myPoints} theirs={e.oppPoints} />
           ))}
@@ -611,16 +611,16 @@ function MatchupTabBody({
         </button>
         {data.injuryPivots.length > 0 ? (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-2 py-2">
-            <p className="text-[9px] font-bold uppercase text-amber-200">Pivots to watch</p>
+            <p className="text-[11px] font-bold uppercase text-amber-200">Pivots to watch</p>
             {data.injuryPivots.map((p, i) => (
-              <p key={i} className="mt-1 text-[10px] text-amber-100/90">
+              <p key={i} className="mt-1 text-[11px] text-amber-100/90">
                 {p.player}: {p.detail}
               </p>
             ))}
           </div>
         ) : null}
         {data.injuryHighlights.map((h, i) => (
-          <div key={i} className="rounded-lg border border-white/[0.06] px-2 py-1.5 text-[10px] text-white/70">
+          <div key={i} className="rounded-lg border border-white/[0.06] px-2 py-1.5 text-[11px] text-white/70">
             <span className="font-bold text-white/85">{h.side === 'you' ? 'You' : 'Opp'} · {h.name}</span> — {h.status}
           </div>
         ))}
@@ -637,19 +637,19 @@ function MatchupTabBody({
           ))}
         </ul>
         {data.timeContext?.nextLockTimeUTC || data.timeContext?.matchupLockAt ? (
-          <p className="text-[10px] text-cyan-200/80">
+          <p className="text-[11px] text-cyan-200/80">
             Next lineup lock (UTC): {data.timeContext.nextLockTimeUTC ?? data.timeContext.matchupLockAt}
           </p>
         ) : null}
         {data.timeContext?.timeAuthorityNote ? (
-          <p className="text-[9px] text-white/45">{data.timeContext.timeAuthorityNote}</p>
+          <p className="text-[11px] text-white/45">{data.timeContext.timeAuthorityNote}</p>
         ) : null}
         <MarketEnvironment rows={data.marketContext ?? []} />
         {data.weatherInfluence.length > 0 ? (
           <div className="rounded-xl border border-sky-500/15 bg-sky-500/[0.04] px-2 py-2">
-            <p className="text-[9px] font-bold uppercase text-sky-300/80">Weather (your starters)</p>
+            <p className="text-[11px] font-bold uppercase text-sky-300/80">Weather (your starters)</p>
             {data.weatherInfluence.map((w, i) => (
-              <p key={i} className="mt-1 text-[10px] text-white/70">
+              <p key={i} className="mt-1 text-[11px] text-white/70">
                 {w.name} ({w.team}): {w.summary}
               </p>
             ))}
@@ -673,16 +673,16 @@ function MatchupTabBody({
         {data.streamingOpportunities.length > 0 ? (
           <ul className="space-y-2">
             {data.streamingOpportunities.map((s) => (
-              <li key={s.id} className="rounded-lg border border-white/[0.06] px-2 py-2 text-[10px] text-white/75">
+              <li key={s.id} className="rounded-lg border border-white/[0.06] px-2 py-2 text-[11px] text-white/75">
                 <span className="font-bold text-emerald-200/90">{s.title}</span>
                 <p className="mt-0.5 text-white/50">{s.detail}</p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-[10px] text-white/45">No clear positional stream need vs this opponent in projections.</p>
+          <p className="text-[11px] text-white/45">No clear positional stream need vs this opponent in projections.</p>
         )}
-        <p className="text-[10px] text-white/45">
+        <p className="text-[11px] text-white/45">
           Uses the same normalized projections as Start/Sit — open Waiver Wire for FAAB, priority, and adds.
         </p>
       </div>
@@ -699,7 +699,7 @@ function MatchupTabBody({
         ) : (
           <p className="text-[11px] text-white/45">AI summary unavailable — check OpenAI configuration.</p>
         )}
-        <p className="text-[10px] text-white/35">Gaps: {data.dataGaps.join('; ') || 'none'}</p>
+        <p className="text-[11px] text-white/35">Gaps: {data.dataGaps.join('; ') || 'none'}</p>
         <Link
           href={chimmyHref}
           className="flex items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 py-2.5 text-[12px] font-semibold text-sky-100"
@@ -744,8 +744,8 @@ export function MarketEnvironment({ rows }: { rows: MarketRow[] }) {
   if (usable.length === 0) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-2 py-2">
-        <p className="text-[9px] font-bold uppercase text-white/45">Scoring environment</p>
-        <p className="mt-1 text-[10px] text-white/45">
+        <p className="text-[11px] font-bold uppercase text-white/45">Scoring environment</p>
+        <p className="mt-1 text-[11px] text-white/45">
           No market read yet — expected team scoring posts closer to kickoff.
         </p>
       </div>
@@ -757,10 +757,10 @@ export function MarketEnvironment({ rows }: { rows: MarketRow[] }) {
   return (
     <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] px-2 py-2">
       <div className="flex items-baseline justify-between">
-        <p className="text-[9px] font-bold uppercase text-violet-300/80">
+        <p className="text-[11px] font-bold uppercase text-violet-300/80">
           Scoring environment (your starters)
         </p>
-        <span className="text-[8px] uppercase text-white/30">expected pts</span>
+        <span className="text-[11px] uppercase text-white/30">expected pts</span>
       </div>
 
       <div className="mt-1.5 space-y-1.5">
@@ -785,13 +785,13 @@ export function MarketEnvironment({ rows }: { rows: MarketRow[] }) {
               key={`${r.name}-${i}`}
               className="rounded-lg border border-white/[0.06] bg-[#0d111a] px-2 py-1.5"
             >
-              <div className="flex items-center justify-between text-[10px]">
+              <div className="flex items-center justify-between text-[11px]">
                 <span className="font-bold text-white/80">
                   {r.name} <span className="text-white/40">({r.team})</span>
                 </span>
                 <span className={`font-black tabular-nums ${tone}`}>{pts.toFixed(1)}</span>
               </div>
-              <p className="text-[9px] text-white/40">
+              <p className="text-[11px] text-white/40">
                 {r.isHome ? 'vs' : 'at'} {r.opponent ?? '—'}
                 {script ? ` · ${script}` : ''}
                 {r.gameTotal != null ? ` · ${r.gameTotal.toFixed(1)} combined` : ''}
@@ -802,11 +802,11 @@ export function MarketEnvironment({ rows }: { rows: MarketRow[] }) {
       </div>
 
       {anyStale ? (
-        <p className="mt-1.5 text-[9px] text-amber-300/70">
+        <p className="mt-1.5 text-[11px] text-amber-300/70">
           Past its refresh window — re-check before locking.
         </p>
       ) : null}
-      <p className="mt-1 text-[8px] text-white/30">
+      <p className="mt-1 text-[11px] text-white/30">
         Market-implied team scoring. Not a wager, and not your matchup win chance.
       </p>
     </div>
@@ -819,7 +819,7 @@ function EdgeBar({ label, mine, theirs }: { label: string; mine: number; theirs:
   const diff = mine - theirs
   return (
     <div>
-      <div className="flex items-center justify-between text-[10px]">
+      <div className="flex items-center justify-between text-[11px]">
         <span className="font-bold text-white/75">{label}</span>
         <span
           className={`font-black tabular-nums ${diff > 0 ? 'text-emerald-300' : diff < 0 ? 'text-red-300' : 'text-white/45'}`}
@@ -832,7 +832,7 @@ function EdgeBar({ label, mine, theirs }: { label: string; mine: number; theirs:
         <div className="h-full bg-gradient-to-r from-sky-400 to-cyan-300" style={{ width: `${w}%` }} />
         <div className="h-full flex-1 bg-red-400/35" />
       </div>
-      <p className="mt-0.5 text-[9px] text-white/35">
+      <p className="mt-0.5 text-[11px] text-white/35">
         You {mine.toFixed(1)} · Opp {theirs.toFixed(1)}
       </p>
     </div>

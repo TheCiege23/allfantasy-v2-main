@@ -250,14 +250,14 @@ export function LegacyImportResults({
                       Leagues imported <span className="ml-1 text-white/40">({payload.league_history?.length ?? 0})</span>
                     </p>
                   </div>
-                  <p className="text-[10px] text-white/40">Public history</p>
+                  <p className="text-[11px] text-white/40">Public history</p>
                 </div>
                 <ul className="max-h-[220px] divide-y divide-white/[0.05] overflow-y-auto">
                   {(payload.league_history ?? []).slice(0, 12).map((row) => (
                     <li key={`${row.league_id ?? 'x'}-${row.season ?? '?'}`} className="flex items-center gap-3 px-4 py-2.5">
                       <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff3d81]/60" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-[13px] text-white/85">{row.name ?? 'Untitled league'}</span>
-                      <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black tabular-nums text-white/60">
+                      <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-black tabular-nums text-white/60">
                         {row.season ?? '—'}
                       </span>
                     </li>

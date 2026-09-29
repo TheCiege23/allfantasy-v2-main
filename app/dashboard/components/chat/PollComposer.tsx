@@ -114,13 +114,13 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
           Hide who voted
         </label>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] text-white/35">Closes in:</span>
+          <span className="text-[11px] text-white/35">Closes in:</span>
           {DURATIONS.map((d) => (
             <button
               key={d.label}
               type="button"
               onClick={() => applyDuration(d.label, d.ms)}
-              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ${
                 activeDur === d.label
                   ? 'border-cyan-500/30 bg-cyan-500/20 text-cyan-400'
                   : 'border-white/[0.08] text-white/45 hover:bg-white/[0.06] hover:text-white/70'

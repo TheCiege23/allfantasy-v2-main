@@ -131,7 +131,7 @@ export function TradeReviewPanel(props: {
                 <ul className="space-y-1" data-testid="trade-review-flags">
                   {raised.map((c) => (
                     <li key={c.code} className="flex gap-2">
-                      <span className={`h-fit rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${SEVERITY_TONE[c.severity]}`}>
+                      <span className={`h-fit rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${SEVERITY_TONE[c.severity]}`}>
                         {LABEL[c.code]}
                       </span>
                       <span className="text-white/75">{c.explanation}</span>
@@ -141,7 +141,7 @@ export function TradeReviewPanel(props: {
               ) : null}
 
               {notChecked.length ? (
-                <div className="text-[10px] text-white/50" data-testid="trade-review-not-checked">
+                <div className="text-[11px] text-white/50" data-testid="trade-review-not-checked">
                   <p className="font-semibold text-white/60">Not checked</p>
                   <ul className="mt-0.5 space-y-0.5">
                     {notChecked.map((c) => (
@@ -154,13 +154,13 @@ export function TradeReviewPanel(props: {
               ) : null}
 
               {clear.length ? (
-                <p className="text-[10px] text-white/40" data-testid="trade-review-clear">
+                <p className="text-[11px] text-white/40" data-testid="trade-review-clear">
                   Clear: {clear.map((c) => LABEL[c.code]).join(' · ')}
                 </p>
               ) : null}
 
               {data.actOn ? (
-                <p className="text-[10px] text-amber-200/80" data-testid="trade-review-act-on">
+                <p className="text-[11px] text-amber-200/80" data-testid="trade-review-act-on">
                   {data.actOn.note}
                   {data.actOn.deepLink ? (
                     <>
@@ -173,7 +173,7 @@ export function TradeReviewPanel(props: {
                 </p>
               ) : null}
 
-              <p className="text-[10px] text-white/35">
+              <p className="text-[11px] text-white/35">
                 Advice only — AllFantasy never approves or vetoes a trade on its own.
               </p>
             </>

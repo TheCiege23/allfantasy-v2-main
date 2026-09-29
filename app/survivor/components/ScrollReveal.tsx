@@ -89,7 +89,7 @@ export function ScrollReveal({
             <p className="text-[12px] italic text-white/45">I vote for…</p>
             <p className="mt-2 text-2xl font-bold uppercase tracking-wide text-white">{step.targetName}</p>
             {step.voterLabel ? (
-              <p className="mt-3 text-[10px] text-white/35">Ballot sealed until reveal</p>
+              <p className="mt-3 text-[11px] text-white/35">Ballot sealed until reveal</p>
             ) : null}
           </div>
         ) : null}
@@ -118,7 +118,7 @@ export function ScrollReveal({
         className="relative z-[1] border-t border-white/10 bg-black/80 px-3 py-2"
         aria-live="polite"
       >
-        <p className="text-[10px] uppercase tracking-wider text-white/40">Running tally</p>
+        <p className="text-[11px] uppercase tracking-wider text-white/40">Running tally</p>
         <div className="mt-1 flex flex-wrap gap-2">
           {Object.entries(tally).map(([name, c]) => (
             <span

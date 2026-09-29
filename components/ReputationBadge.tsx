@@ -72,7 +72,7 @@ export function ReputationBadge({
   if (!rep) {
     return (
       <span
-        className={`inline-flex items-center gap-1 rounded border border-white/20 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-white/60 ${className}`}
+        className={`inline-flex items-center gap-1 rounded border border-white/20 bg-white/5 px-1.5 py-0.5 text-[11px] font-medium text-white/60 ${className}`}
         title={error ? `Reputation unavailable: ${error}` : 'Reputation not generated yet'}
       >
         No rep
@@ -95,7 +95,7 @@ export function ReputationBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${colorClass} ${className}`}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${colorClass} ${className}`}
       title={`Reputation: ${rep.tier} (${rep.overallScore.toFixed(0)}/100)${
         typeof rep.tradeFairnessScore === 'number'
           ? `, Trade fairness ${rep.tradeFairnessScore.toFixed(0)}`

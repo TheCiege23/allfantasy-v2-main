@@ -39,7 +39,7 @@ export function DraftBoard({ numTeams, numRounds, pickOrder, picks, currentOvera
           const round = ri + 1
           return (
             <div key={round} className="flex items-stretch gap-1.5">
-              <div className="sticky left-0 z-10 flex w-12 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-gradient-to-b from-white/[0.08] to-white/[0.02] text-[10px] font-bold tabular-nums tracking-tight text-white/60 shadow-inner shadow-black/30">
+              <div className="sticky left-0 z-10 flex w-12 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-gradient-to-b from-white/[0.08] to-white/[0.02] text-[11px] font-bold tabular-nums tracking-tight text-white/60 shadow-inner shadow-black/30">
                 R{round}
               </div>
               {Array.from({ length: numTeams }, (_, mi) => {

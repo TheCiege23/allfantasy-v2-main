@@ -232,7 +232,7 @@ export function StandingsView({
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]" tabIndex={0} aria-label="League standings table">
         <table className="min-w-[680px] w-full text-left text-[12px] text-white/80">
         <caption className="sr-only">Authoritative league standings ordered by the configured tiebreaker rules.</caption>
-        <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[10px] uppercase text-white/45">
+        <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[11px] uppercase text-white/45">
           <tr>
             <th className="px-3 py-2">#</th>
             <th className="px-3 py-2">Team</th>
@@ -306,14 +306,14 @@ function PlayoffRuntimePanel({
     >
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-white/50">
+          <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-white/50">
             Playoff runtime
           </span>
-          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200">
+          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-200">
             {runtime.bracket.status.replace(/_/g, ' ')}
           </span>
           {runtime.bracket.locked ? (
-            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">
+            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200">
               Locked
             </span>
           ) : null}
@@ -328,7 +328,7 @@ function PlayoffRuntimePanel({
 
         {runtime.bracket.generated ? (
           <div data-testid="redraft-playoff-seeds" className="space-y-1">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">Qualified seeds</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Qualified seeds</p>
             <div className="flex flex-wrap gap-1.5">
               {runtime.seeds.map((seed) => (
                 <span key={seed.rosterId} className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white/75">
@@ -362,7 +362,7 @@ function PlayoffRuntimePanel({
             <div key={round.roundId} className="rounded-lg border border-white/[0.08] bg-black/15 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="font-semibold text-white/80">{round.roundName}</p>
-                <span className="text-[10px] uppercase tracking-[0.14em] text-white/38">{round.status}</span>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">{round.status}</span>
               </div>
               <div className="grid gap-1.5">
                 {round.matchups.map((matchup) => (
@@ -388,7 +388,7 @@ function PlayoffRuntimePanel({
 function RuntimeMetric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/15 p-2">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-white/38">{label}</p>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-white/38">{label}</p>
       <p className="mt-1 text-sm font-semibold text-white/85">{value}</p>
     </div>
   )

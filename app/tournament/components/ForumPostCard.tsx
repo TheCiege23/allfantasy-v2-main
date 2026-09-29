@@ -51,7 +51,7 @@ export function ForumPostCard({
             {new Date(createdAt).toLocaleString()}
           </p>
         </div>
-        <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${meta.className}`}>{meta.label}</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.className}`}>{meta.label}</span>
       </div>
       <h3 className={`mt-2 font-bold text-white ${isLarge ? 'text-[17px]' : 'text-[14px]'}`}>{title}</h3>
       <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-[var(--tournament-text-mid)]">

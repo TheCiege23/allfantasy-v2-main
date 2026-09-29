@@ -127,14 +127,14 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
           placeholder="Search emojis..."
           className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
         />
-        <button type="button" onClick={onClose} className="text-[10px] text-white/40 hover:text-white">
+        <button type="button" onClick={onClose} className="text-[11px] text-white/40 hover:text-white">
           Done
         </button>
       </div>
 
       {!search.trim() && recent.length > 0 ? (
         <div className="mb-2">
-          <p className="mb-1 text-[9px] uppercase tracking-wide text-white/35">Recent</p>
+          <p className="mb-1 text-[11px] uppercase tracking-wide text-white/35">Recent</p>
           <div className="flex flex-wrap gap-1">
             {recent.map((c) => (
               <button

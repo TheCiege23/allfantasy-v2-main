@@ -172,7 +172,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-300" />
         <h2 className="text-sm font-bold text-white">AF Legacy — Redraft</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · W{context.currentWeek}/{context.totalWeeks}
         </span>
       </div>
@@ -188,7 +188,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
             data-testid="redraft-war-room-matchup-card"
           >
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Standing</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Standing</p>
               <p className="text-[11px] text-white/70">
                 {me && me.wins != null ? `${me.wins}-${me.losses}${me.ties ? `-${me.ties}` : ''}` : '—'}
                 {me?.playoffSeed != null ? ` · seed ${me.playoffSeed}` : ''}
@@ -196,13 +196,13 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Next matchup</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Next matchup</p>
               <p className="text-[11px] text-white/70">
                 {m ? `W${m.week} vs ${opp?.teamName ?? opp?.ownerName ?? 'TBD'}` : 'No upcoming matchup'}
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
               <p className="text-[11px] text-white/60">
                 {context.freeAgents?.length ?? 0} FAs · proj{' '}
                 {context.availability?.projections === 'available' ? '✓' : '—'} · ADP{' '}
@@ -222,7 +222,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <div>
-              <p className="text-[10px] font-semibold text-rose-300/80">NEEDS</p>
+              <p className="text-[11px] font-semibold text-rose-300/80">NEEDS</p>
               {needs.needs.length ? (
                 needs.needs.map((n) => (
                   <p key={n.position} className="text-[11px] text-white/70">
@@ -234,7 +234,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
               )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-emerald-300/80">STRENGTHS</p>
+              <p className="text-[11px] font-semibold text-emerald-300/80">STRENGTHS</p>
               {needs.strengths.length ? (
                 needs.strengths.slice(0, 4).map((s) => (
                   <p key={s} className="text-[11px] text-white/60">
@@ -246,7 +246,7 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
               )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-amber-300/80">TARGET POSITIONS</p>
+              <p className="text-[11px] font-semibold text-amber-300/80">TARGET POSITIONS</p>
               <p className="text-[11px] text-white/60">{needs.tradeTargetPositions.join(', ') || '—'}</p>
             </div>
           </div>
@@ -325,27 +325,27 @@ export function RedraftWarRoomPanel({ leagueId }: { leagueId: string }) {
                   <span className="font-semibold text-white/85">+ {a.playerName}</span>
                   <span className="text-white/50">({a.position})</span>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tierClass(a.tier)}`}
+                    className={`rounded px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${tierClass(a.tier)}`}
                     data-testid={`redraft-war-room-waiver-tier-${a.playerId}`}
                   >
                     {a.tier}
                   </span>
-                  <span className="text-[10px] text-white/45">
+                  <span className="text-[11px] text-white/45">
                     Score {a.recommendationScore} · Confidence {a.confidence} ({a.confidenceLevel})
                   </span>
                   {a.faabBand && (
-                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-200">
                       FAAB {a.faabBand}
                     </span>
                   )}
                   {a.priorityGuidance && (
-                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-200">
+                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-200">
                       {PRIORITY_GUIDANCE_LABEL[a.priorityGuidance]}
                     </span>
                   )}
                 </div>
                 {a.explanation.length > 0 && (
-                  <ul className="mt-1 ml-3 list-disc space-y-0.5 text-[10.5px] text-white/55">
+                  <ul className="mt-1 ml-3 list-disc space-y-0.5 text-[11px] text-white/55">
                     {a.explanation.map((e, i) => (
                       <li key={i}>{e}</li>
                     ))}

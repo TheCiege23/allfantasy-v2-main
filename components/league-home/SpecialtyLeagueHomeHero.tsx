@@ -367,7 +367,7 @@ export function SpecialtyLeagueHomeHero({
                 <div className="mt-0.5 flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
-                      'rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                      'rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider',
                       variant === 'tournament' &&
                         'border-amber-400/35 bg-amber-500/15 text-amber-100',
                       variant === 'survivor' &&
@@ -391,7 +391,7 @@ export function SpecialtyLeagueHomeHero({
             </div>
 
             <div className="rounded-2xl border border-white/[0.1] bg-black/45 px-3 py-2.5 backdrop-blur-md md:max-w-xl">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Phase</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Phase</p>
               <p className="mt-1 text-sm font-semibold text-white/95">
                 {variant === 'tournament' && tournamentContext ? (
                   <>

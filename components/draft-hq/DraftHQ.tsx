@@ -77,7 +77,7 @@ export type DraftHQData = {
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+      <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
         {title}
       </h2>
       <div className="mt-3">{children}</div>
@@ -109,7 +109,7 @@ export default function DraftHQ({ data }: { data: DraftHQData }) {
             Planning surface. Nothing here changes your draft order.
           </p>
         </div>
-        <span className="rounded-lg border border-white/10 px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">
+        <span className="rounded-lg border border-white/10 px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
           Read-only
         </span>
       </div>
@@ -164,7 +164,7 @@ export default function DraftHQ({ data }: { data: DraftHQData }) {
               ) : (
                 <table className="mt-3 w-full text-sm" data-testid="lottery-odds-table">
                   <thead>
-                    <tr className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/40">
+                    <tr className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/40">
                       <th className="pb-2 text-left font-bold">Team</th>
                       <th className="pb-2 text-right font-bold">Record</th>
                       <th className="pb-2 text-right font-bold">Balls</th>

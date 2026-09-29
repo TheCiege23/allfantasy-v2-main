@@ -91,10 +91,10 @@ export default function BadgeDisplay({ username }: { username: string }) {
           >
             <div className="text-2xl mb-1">{badge.icon}</div>
             <div className="text-xs font-semibold text-white truncate">{badge.name}</div>
-            <div className={`text-[10px] font-bold uppercase ${tierTextColors[badge.tier] || 'text-white/50'}`}>
+            <div className={`text-[11px] font-bold uppercase ${tierTextColors[badge.tier] || 'text-white/50'}`}>
               {badge.tier}
             </div>
-            <div className="text-[10px] text-white/40 mt-0.5">+{badge.xp} XP</div>
+            <div className="text-[11px] text-white/40 mt-0.5">+{badge.xp} XP</div>
           </div>
         ))}
 
@@ -107,8 +107,8 @@ export default function BadgeDisplay({ username }: { username: string }) {
               <Lock size={20} className="mx-auto text-white/30" />
             </div>
             <div className="text-xs font-semibold text-white/40 truncate">{badge.name}</div>
-            <div className="text-[10px] text-white/30 uppercase">{badge.tier}</div>
-            <div className="text-[10px] text-white/20 mt-0.5">+{badge.xp} XP</div>
+            <div className="text-[11px] text-white/30 uppercase">{badge.tier}</div>
+            <div className="text-[11px] text-white/20 mt-0.5">+{badge.xp} XP</div>
           </div>
         ))}
       </div>

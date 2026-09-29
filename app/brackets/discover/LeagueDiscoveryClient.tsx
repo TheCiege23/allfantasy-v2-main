@@ -195,16 +195,16 @@ export default function LeagueDiscoveryClient() {
                         {challengeLabel}
                       </p>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
                           <span className="font-semibold">{sportUI.badge}</span>
                           <span>{sportUI.shortLabel}</span>
                         </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "var(--panel2)", color: "var(--muted)" }}>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: "var(--panel2)", color: "var(--muted)" }}>
                           {SCORING_LABELS[league.scoringMode] ?? league.scoringMode}
                         </span>
                         {league.isPaidLeague && (
                           <span
-                            className="text-[10px] px-2 py-0.5 rounded-full"
+                            className="text-[11px] px-2 py-0.5 rounded-full"
                             style={{ background: "color-mix(in srgb, #22c55e 12%, transparent)", color: "#22c55e" }}
                             title={paidBoundaryDisclosure}
                           >
@@ -212,7 +212,7 @@ export default function LeagueDiscoveryClient() {
                           </span>
                         )}
                         {league.isPrivate && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ color: "var(--muted)" }}>Private</span>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ color: "var(--muted)" }}>Private</span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-2 text-xs" style={{ color: "var(--muted)" }}>

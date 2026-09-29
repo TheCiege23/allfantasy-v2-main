@@ -98,12 +98,12 @@ export function CommissionerFeederGrid({
             <div className="relative flex w-full items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1.5">
                 {card.sport ? (
-                  <span className={`rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${accent.text}`}>
+                  <span className={`rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] ${accent.text}`}>
                     {card.sport}
                   </span>
                 ) : null}
                 {card.tierLabel ? (
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
                     {card.tierLabel}
                   </span>
                 ) : null}

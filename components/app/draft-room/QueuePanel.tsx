@@ -169,7 +169,7 @@ export function QueuePanel({
           <ListOrdered className="h-3.5 w-3.5 text-cyan-400" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
         </div>
-        <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-white/75">
+        <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
           <input
             type="checkbox"
             checked={autoPickFromQueue}
@@ -217,7 +217,7 @@ export function QueuePanel({
                 onClick={() => setPositionFilter(position)}
                 data-testid={`draft-queue-position-pill-${position.toLowerCase()}`}
                 data-active={isActive ? 'true' : 'false'}
-                className={`inline-flex h-6 items-center rounded-full border px-2 text-[9px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
+                className={`inline-flex h-6 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
                   isActive
                     ? 'border-cyan-400/45 bg-gradient-to-r from-cyan-500/22 to-violet-600/18 text-cyan-50 shadow-[0_0_14px_rgba(34,211,238,0.18)]'
                     : 'border-white/15 bg-black/20 text-white/65 hover:border-white/28 hover:text-white/90'
@@ -421,7 +421,7 @@ export function QueuePanel({
       {!autoPickEnabled && (
         <p
           className={`border-b border-white/8 px-2 py-1 leading-snug ${
-            rs ? 'text-[9px] text-amber-200/75' : 'text-[10px] text-amber-200/90'
+            rs ? 'text-[11px] text-amber-200/75' : 'text-[11px] text-amber-200/90'
           }`}
           data-testid="draft-queue-autopick-disabled-note"
         >
@@ -429,12 +429,12 @@ export function QueuePanel({
         </p>
       )}
       {aiReorderExplanation && (
-        <p className="border-b border-white/8 px-2 py-1.5 text-[10px] text-cyan-100/90" title="AI reorder explanation">
+        <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-cyan-100/90" title="AI reorder explanation">
           {aiReorderExplanation}
         </p>
       )}
       {aiReorderExecutionMode && (
-        <p className="border-b border-white/8 px-2 py-1.5 text-[10px] text-white/60" data-testid="draft-queue-execution-mode">
+        <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-white/60" data-testid="draft-queue-execution-mode">
           Execution: {aiReorderExecutionMode === 'ai_explained' ? 'rules engine + AI explanation' : 'instant rules automation'}
         </p>
       )}
@@ -452,14 +452,14 @@ export function QueuePanel({
             <p className={`text-[11px] font-semibold ${rs ? 'text-cyan-100/88' : 'text-white/82'}`}>
               No players in your queue
             </p>
-            <p className="max-w-[220px] text-[9px] leading-relaxed text-white/45">
+            <p className="max-w-[220px] text-[11px] leading-relaxed text-white/45">
               Add from player pool to prep your next picks.
             </p>
           </div>
         ) : showFilteredEmptyState ? (
           <div className="space-y-1 rounded-xl border border-dashed border-white/15 bg-white/[0.03] px-3 py-5 text-center">
             <p className="text-[11px] font-semibold text-white/80">No queue matches</p>
-            <p className="text-[10px] text-white/55">Adjust search, position, or sort to see queued players.</p>
+            <p className="text-[11px] text-white/55">Adjust search, position, or sort to see queued players.</p>
           </div>
         ) : (
           <ul className="space-y-1">
@@ -527,7 +527,7 @@ export function QueuePanel({
                   />
                   <div className="min-w-0">
                     <p className="truncate text-[11px] font-semibold tracking-tight text-white">{entry.playerName}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[9px]">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px]">
                       {aiOverlaySignal ? (
                         <span
                           className={`rounded border px-1.5 py-[1px] ${
@@ -662,7 +662,7 @@ export function QueuePanel({
           </ul>
         )}
         {!canReorderVisually && displayQueue.length > 1 ? (
-          <p className="mt-2 text-[10px] text-white/45" data-testid="draft-queue-reorder-disabled-note">
+          <p className="mt-2 text-[11px] text-white/45" data-testid="draft-queue-reorder-disabled-note">
             Reorder is available when Sort is set to Queue order and no search/filter is active.
           </p>
         ) : null}

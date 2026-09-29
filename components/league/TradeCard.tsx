@@ -36,7 +36,7 @@ export function ActiveTradeCard({
     <div className="rounded-2xl border border-[#1E2A42] bg-[#131929] p-4">
       <div className="flex items-center justify-between gap-2">
         <span
-          className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+          className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
             trade.direction === 'incoming'
               ? 'bg-emerald-500/15 text-emerald-300'
               : trade.direction === 'outgoing'

@@ -27,7 +27,7 @@ function SignalBadge({ signal }: { signal: MarketSignal }) {
   const cfg = SIGNAL_CONFIG[signal]
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
-      <span className="text-[10px]">{cfg.icon}</span>
+      <span className="text-[11px]">{cfg.icon}</span>
       {cfg.label}
     </span>
   )
@@ -44,7 +44,7 @@ function TrendBar({ value, max }: { value: number; max: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={`text-[10px] font-mono font-bold min-w-[36px] text-right ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+      <span className={`text-[11px] font-mono font-bold min-w-[36px] text-right ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
         {isPositive ? '+' : ''}{value}%
       </span>
     </div>
@@ -73,7 +73,7 @@ function AlertCard({ alert }: { alert: MarketAlert }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="font-semibold text-white text-sm truncate">{alert.name}</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${posColor}`}>{alert.position}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${posColor}`}>{alert.position}</span>
           </div>
 
           <div className="flex items-center gap-2 mb-1.5">
@@ -82,7 +82,7 @@ function AlertCard({ alert }: { alert: MarketAlert }) {
               {alert.category === 'devy' && alert.classYear ? ` · Yr ${alert.classYear}` : ''}
             </span>
             {alert.category === 'devy' && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/25">DEVY</span>
+              <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/25">DEVY</span>
             )}
           </div>
 
@@ -98,10 +98,10 @@ function AlertCard({ alert }: { alert: MarketAlert }) {
         <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
           <SignalBadge signal={alert.signal} />
           {alert.category === 'nfl' && alert.dynastyValue > 0 && (
-            <span className="text-[10px] text-white/30 font-mono">{Math.round(alert.dynastyValue).toLocaleString()} val</span>
+            <span className="text-[11px] text-white/30 font-mono">{Math.round(alert.dynastyValue).toLocaleString()} val</span>
           )}
           {alert.category === 'devy' && alert.projectedRound && (
-            <span className="text-[10px] text-white/30 font-mono">Rd {alert.projectedRound} proj</span>
+            <span className="text-[11px] text-white/30 font-mono">Rd {alert.projectedRound} proj</span>
           )}
         </div>
       </div>
@@ -112,14 +112,14 @@ function AlertCard({ alert }: { alert: MarketAlert }) {
 
           <div className="flex flex-wrap gap-1.5">
             {alert.tags.map((tag, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/5 text-white/50 border border-white/10">
+              <span key={i} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/5 text-white/50 border border-white/10">
                 {tag}
               </span>
             ))}
           </div>
 
           {alert.category === 'nfl' && (
-            <div className="flex gap-4 mt-2.5 text-[10px] text-white/30">
+            <div className="flex gap-4 mt-2.5 text-[11px] text-white/30">
               <span>Overall #{alert.rank}</span>
               <span>{alert.position}{alert.positionRank}</span>
               {alert.volatility !== null && <span>Vol: {Math.round(alert.volatility)}%</span>}
@@ -136,7 +136,7 @@ function SummaryStat({ label, value, color }: { label: string; value: number; co
   return (
     <div className="flex flex-col items-center px-3 py-2">
       <span className={`text-lg font-bold ${color}`}>{value}</span>
-      <span className="text-[10px] text-white/40 uppercase tracking-wider">{label}</span>
+      <span className="text-[11px] text-white/40 uppercase tracking-wider">{label}</span>
     </div>
   )
 }
@@ -297,7 +297,7 @@ export default function MarketTimingAlerts() {
       )}
 
       {!loading && data && (
-        <p className="text-[10px] text-white/20 text-center pt-2">
+        <p className="text-[11px] text-white/20 text-center pt-2">
           Market data refreshed {formatTimeInTimezone(data.generatedAt)} · Powered by FantasyCalc + AI
         </p>
       )}

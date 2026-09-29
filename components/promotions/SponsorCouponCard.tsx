@@ -121,7 +121,7 @@ export default function SponsorCouponCard({
             <Tag className="h-4 w-4 text-amber-300" />
           </span>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.20em] text-amber-300/80">Sponsor Offer</div>
+            <div className="text-[11px] font-black uppercase tracking-[0.20em] text-amber-300/80">Sponsor Offer</div>
             <div className="text-sm font-black text-white">WassupFred × AllFantasy</div>
           </div>
         </div>

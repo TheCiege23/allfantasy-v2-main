@@ -187,7 +187,7 @@ export default function SurvivorIslandHomePage() {
           }}
         />
         <div className="relative md:col-span-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-torch)]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--survivor-torch)]">
             This week on the island
           </p>
           <p className="mt-3 font-mono text-xl font-semibold leading-snug tabular-nums text-white md:text-2xl">
@@ -197,7 +197,7 @@ export default function SurvivorIslandHomePage() {
           <p className="mt-3 text-[11px] leading-relaxed text-white/45">{SURVIVOR_ISLAND_TAGLINE}</p>
         </div>
         <div className="relative mt-4 rounded-xl border border-white/[0.08] bg-black/30 p-4 md:col-span-2 md:mt-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Your status</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Your status</p>
           <div className="mt-3 flex items-center gap-3">
             <div
               className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-lg font-bold ring-2 ring-cyan-500/30"
@@ -246,7 +246,7 @@ export default function SurvivorIslandHomePage() {
           </h2>
           <div className="survivor-panel overflow-x-auto rounded-xl">
             <table className="w-full min-w-[320px] text-left text-[12px]">
-              <thead className="border-b border-white/10 text-[10px] uppercase tracking-wider text-white/45">
+              <thead className="border-b border-white/10 text-[11px] uppercase tracking-wider text-white/45">
                 <tr>
                   <th className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Player</th>
@@ -262,9 +262,9 @@ export default function SurvivorIslandHomePage() {
                     <td className="px-3 py-2 font-mono text-sky-200">—</td>
                     <td className="px-3 py-2">
                       {p.hasImmunityThisWeek ? (
-                        <span className="text-[10px] text-cyan-300">Immune</span>
+                        <span className="text-[11px] text-cyan-300">Immune</span>
                       ) : (
-                        <span className="text-[10px] text-white/35">—</span>
+                        <span className="text-[11px] text-white/35">—</span>
                       )}
                     </td>
                   </tr>
@@ -290,7 +290,7 @@ export default function SurvivorIslandHomePage() {
               <p className="mt-2 text-[13px] text-white/70">{ch.description || ch.instructions}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span
-                  className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${
+                  className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${
                     ch.status === 'open' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-white/50'
                   }`}
                 >

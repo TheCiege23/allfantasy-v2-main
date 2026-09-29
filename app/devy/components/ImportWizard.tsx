@@ -26,7 +26,7 @@ export function ImportWizard({ leagueId, initialSessionId }: { leagueId: string;
               key={label}
               type="button"
               onClick={() => setStep(i)}
-              className={`whitespace-nowrap rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+              className={`whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
                 step === i ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/[0.04] text-white/45'
               }`}
               data-testid={`import-step-${i}`}
@@ -120,7 +120,7 @@ function StepMatching() {
         ].map(([label, n, cls]) => (
           <div key={String(label)} className="rounded-lg border border-white/[0.06] bg-black/25 p-3 text-center">
             <p className={`text-[20px] font-bold ${cls}`}>{n}</p>
-            <p className="text-[10px] uppercase text-white/45">{label}</p>
+            <p className="text-[11px] uppercase text-white/45">{label}</p>
           </div>
         ))}
       </div>
@@ -143,7 +143,7 @@ function StepConflicts() {
         ))}
       </div>
       <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
-        <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-100">
+        <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-100">
           Duplicate
         </span>
         <p className="mt-2 text-[12px] text-white/70">Sample conflict — choose resolution (radio) + notes.</p>
@@ -176,7 +176,7 @@ function StepPreMerge({ leagueId }: { leagueId: string }) {
       >
         Confirm merge →
       </button>
-      <p className="text-[10px] text-white/35">League: {leagueId}</p>
+      <p className="text-[11px] text-white/35">League: {leagueId}</p>
     </div>
   )
 }

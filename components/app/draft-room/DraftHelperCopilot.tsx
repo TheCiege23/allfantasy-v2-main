@@ -45,7 +45,7 @@ export function DraftHelperCopilot({
 
   return (
     <div className="space-y-3 p-2">
-      <div className="rounded-md border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[10px] text-cyan-100/85">
+      <div className="rounded-md border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100/85">
         Assistant guidance. Validate against your board context before locking a pick.
       </div>
       {/* Main Recommendation */}
@@ -65,7 +65,7 @@ export function DraftHelperCopilot({
           </div>
         </div>
         {showAiOverlays && recommendationOverlay ? (
-          <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
+          <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px]">
             {recommendationOverlay.valueDelta != null && Number.isFinite(recommendationOverlay.valueDelta) ? (
               <span
                 className={`rounded border px-1.5 py-0.5 ${

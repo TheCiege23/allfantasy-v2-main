@@ -83,7 +83,7 @@ export function LeagueFeedCommissionerSection({
             </button>
           ))}
         </div>
-        <p className="mt-1 text-[10px] text-white/35">
+        <p className="mt-1 text-[11px] text-white/35">
           Low throttles optional AI quotes on busy stretches; high keeps more flavor on marquee moments.
         </p>
       </div>

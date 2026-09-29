@@ -154,7 +154,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-300" />
         <h2 className="text-sm font-bold text-white">AF Legacy — Best Ball</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · {context.bestBall.mode}
         </span>
       </div>
@@ -172,18 +172,18 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
       {/* Rules + construction grade + data status */}
       <div className="grid gap-2 rounded-lg border border-white/[0.06] bg-[#07071a] p-3 sm:grid-cols-3" data-testid="best-ball-war-room-rules-card">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Build grade</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Build grade</p>
           <p className="text-[14px] font-bold text-violet-100">{construction?.grade ?? '—'}</p>
-          <p className="text-[10px] text-white/45">roster {construction?.rosterSize ?? 0}/{context.roster.recommendedRosterSize}</p>
+          <p className="text-[11px] text-white/45">roster {construction?.rosterSize ?? 0}/{context.roster.recommendedRosterSize}</p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Rules</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Rules</p>
           <p className="text-[11px] text-white/70">
             {context.roster.startingSlots} auto-start · waivers {waiversEnabled ? 'on' : 'off'} · trades {tradesEnabled ? 'on' : 'off'}
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
           <p className="text-[11px] text-white/60">
             ADP {context.availability.playerValues === 'available' ? '✓' : '—'} · scores{' '}
             {context.availability.weeklyScores === 'available' ? '✓' : '—'} · team{' '}

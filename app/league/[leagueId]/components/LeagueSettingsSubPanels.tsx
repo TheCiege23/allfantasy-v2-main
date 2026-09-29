@@ -94,7 +94,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">{children}</p>
+  return <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/35">{children}</p>
 }
 
 function SleeperLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -182,7 +182,7 @@ function DivisionSettingsPanel({ ctx }: { ctx: SubPanelContext }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-sky-200/50">Number of divisions</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/50">Number of divisions</p>
       {sleeperSettingsHref ? (
         <a
           href={sleeperSettingsHref}
@@ -230,7 +230,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
         <button
           type="button"
           onClick={() => setTab('spots')}
-          className={`flex-1 rounded-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+          className={`flex-1 rounded-full px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${
             tab === 'spots' ? 'bg-[#ff3d81]/25 text-[#ffd7e5] shadow-[inset_0_0_0_1px_rgba(255,61,129,0.25)]' : 'text-white/45'
           }`}
           data-testid="roster-tab-spots"
@@ -240,7 +240,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
         <button
           type="button"
           onClick={() => setTab('limits')}
-          className={`flex-1 rounded-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+          className={`flex-1 rounded-full px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${
             tab === 'limits' ? 'bg-[#ff3d81]/25 text-[#ffd7e5] shadow-[inset_0_0_0_1px_rgba(255,61,129,0.25)]' : 'text-white/45'
           }`}
           data-testid="roster-tab-limits"
@@ -251,7 +251,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
 
       {tab === 'spots' ? (
         <>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/45">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">
             Roster spots{totalSlots > 0 ? `: ${totalSlots}` : ''}
           </p>
           {groups.length === 0 ? (
@@ -274,7 +274,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
               ))}
               {idp.length > 0 ? (
                 <>
-                  <p className="bg-[#060c18] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-sky-200/55">
+                  <p className="bg-[#060c18] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-sky-200/55">
                     IDP roster spots
                   </p>
                   {idp.map(({ slot, count }) => (
@@ -298,7 +298,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
         </>
       ) : (
         <>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/45">Position limits</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Position limits</p>
           {groups.length === 0 ? (
             <p className="text-[12px] text-white/45">No positions to show.</p>
           ) : (
@@ -489,7 +489,7 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
       <li className="rounded-xl border border-white/[0.06] bg-[#0a1228]/80 px-3 py-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[17px] font-bold text-white">{row.season}</span>
-          <span className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/45">
+          <span className="rounded-md border border-white/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/45">
             No draft
           </span>
         </div>
@@ -503,7 +503,7 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
         <div className="flex items-center justify-between gap-2">
           <span className="text-[17px] font-bold text-white">{row.season}</span>
           <span
-            className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.className}`}
+            className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${badge.className}`}
           >
             {badge.label}
           </span>
@@ -520,7 +520,7 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[17px] font-bold text-white">{row.season}</span>
-        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.className}`}>
+        <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${badge.className}`}>
           {badge.label}
         </span>
       </div>
@@ -530,35 +530,35 @@ function DraftSeasonCard({ row }: { row: SeasonDraftRow }) {
             <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" aria-hidden />
             <div>
               <p className="font-semibold text-orange-200/95">{detail.typeLabel}</p>
-              <p className="text-[10px] text-white/38">Type</p>
+              <p className="text-[11px] text-white/38">Type</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
             <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-pink-400" aria-hidden />
             <div>
               <p className="font-semibold text-pink-200/95">{detail.roundsLabel}</p>
-              <p className="text-[10px] text-white/38">Rounds</p>
+              <p className="text-[11px] text-white/38">Rounds</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
             <Shield className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
             <div>
               <p className="font-semibold text-emerald-200/95">{detail.poolLabel}</p>
-              <p className="text-[10px] text-white/38">Player pool</p>
+              <p className="text-[11px] text-white/38">Player pool</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
             <Clock className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" aria-hidden />
             <div>
               <p className="font-semibold text-violet-200/95">{detail.timerLabel}</p>
-              <p className="text-[10px] text-white/38">Time / pick</p>
+              <p className="text-[11px] text-white/38">Time / pick</p>
             </div>
           </div>
           <div className="col-span-2 flex items-start gap-2">
             <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" aria-hidden />
             <div>
               <p className="font-semibold text-sky-200/95">{detail.cpuLabel}</p>
-              <p className="text-[10px] text-white/38">Autopick</p>
+              <p className="text-[11px] text-white/38">Autopick</p>
             </div>
           </div>
         </div>
@@ -653,7 +653,7 @@ function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish
         Per-season drafts from the Sleeper league chain (current season first).{' '}
         {isCommish ? 'Edits stay on the host.' : ''}
       </p>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-white/38">Drafts</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">Drafts</p>
       {seasonDrafts.length === 0 ? (
         <p className="text-[13px] text-white/45">No seasons found for this league chain.</p>
       ) : (
@@ -664,7 +664,7 @@ function DraftResultsPanel({ ctx, isCommish }: { ctx: SubPanelContext; isCommish
         </ul>
       )}
       <div className="space-y-2 border-t border-white/[0.06] pt-3">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-white/38">Picks (synced draft id)</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">Picks (synced draft id)</p>
         {!currentDraftId ? (
           <p className="text-[12px] text-white/45">No draft_id on synced league settings.</p>
         ) : picksLoading ? (
@@ -1165,7 +1165,7 @@ function CoOwnersPanel({ ctx }: { ctx: SubPanelContext }) {
         />
       </label>
       <div>
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-sky-200/45">Co-owners</p>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-sky-200/45">Co-owners</p>
         {filtered.length === 0 ? (
           <p className="rounded-xl border border-white/[0.06] bg-[#0a1228]/60 px-3 py-6 text-center text-[13px] text-white/45">
             No teams match this search.
@@ -1184,7 +1184,7 @@ function CoOwnersPanel({ ctx }: { ctx: SubPanelContext }) {
                     <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-white/10">
                       {av ? <img src={av} alt="" className="h-full w-full object-cover" /> : null}
                       {!av ? (
-                        <span className="flex h-full w-full items-center justify-center text-[10px] font-bold">
+                        <span className="flex h-full w-full items-center justify-center text-[11px] font-bold">
                           {initialsFromName(su?.display_name ?? t.ownerName)}
                         </span>
                       ) : null}
@@ -1247,7 +1247,7 @@ function LeagueHistoryPanel({
 
   return (
     <div className="space-y-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-sky-200/45">Previous leagues</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-sky-200/45">Previous leagues</p>
       <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a1228]/80">
         {rows.map((r, i) => (
           <li key={`${r.season}-${r.leagueId}-${i}`}>
@@ -1291,7 +1291,7 @@ function CommishGeneralPanel({
           onChange={(e) => setName(e.target.value)}
           className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white"
         />
-        <p className="mt-1 text-[10px] text-white/35">Updates AllFantasy + mirror changes in Sleeper.</p>
+        <p className="mt-1 text-[11px] text-white/35">Updates AllFantasy + mirror changes in Sleeper.</p>
       </div>
       <label className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#1a1f3a] px-3 py-2">
         <span className="text-[12px] text-white/85">Public league</span>
@@ -1324,7 +1324,7 @@ function MembersCommishPanel({ ctx }: { ctx: SubPanelContext }) {
         <p className="text-[12px] text-white/45">Connect a Sleeper league to open member management on the host.</p>
       )}
       <div>
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/38">Rosters</p>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/38">Rosters</p>
         <ul className="space-y-2">
           {ctx.league.teams.map((t, i) => (
             <li
@@ -1649,7 +1649,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
         ) : null}
         {showTeamList ? (
           <>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/38">Teams</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">Teams</p>
             <CommishTeamPickerList ctx={ctx} hostSettingsHref={href} />
           </>
         ) : (
@@ -1682,7 +1682,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
                 <Icon className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
               </div>
               <h3 className="text-[12px] font-bold leading-snug text-white">{t.title}</h3>
-              <p className="mt-1 text-[10px] leading-relaxed text-white/40">{t.description}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-white/40">{t.description}</p>
             </>
           )
           return (
@@ -1700,7 +1700,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
       </div>
 
       <div className="border-t border-white/[0.08] pt-4">
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-white/35">Danger zone</p>
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-white/35">Danger zone</p>
         <div className="space-y-3">
           {href ? (
             <a
@@ -1795,7 +1795,7 @@ function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
       >
         Save
       </button>
-      <p className="text-[10px] text-white/35">
+      <p className="text-[11px] text-white/35">
         Preference is stored locally until a server API is available for your league.
       </p>
     </div>

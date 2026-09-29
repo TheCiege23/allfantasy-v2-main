@@ -23,7 +23,7 @@ export function EpisodeCard({
     <article className="survivor-panel rounded-xl p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-text-dim)]">
             Episode {week}
           </p>
           <h3 className="mt-1 text-[15px] font-bold text-white">{title}</h3>

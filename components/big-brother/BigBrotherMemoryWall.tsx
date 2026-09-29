@@ -129,7 +129,7 @@ function MemoryTile({
         {entry.displayName}
       </p>
       <span
-        className={`mt-1.5 inline-flex max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge}`}
+        className={`mt-1.5 inline-flex max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge}`}
         title={STATUS_LABEL[entry.status]}
       >
         {STATUS_LABEL[entry.status]}

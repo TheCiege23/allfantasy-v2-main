@@ -264,14 +264,14 @@ export function C2CRosterClient({
         <section className="mt-8" data-testid="c2c-campus-section">
           <div className="sticky top-28 z-[5] mb-3 rounded-lg border border-violet-500/30 bg-violet-950/40 px-3 py-2 md:top-12">
             <h2 className="text-[12px] font-bold uppercase tracking-wide text-violet-200">🎓 Campus starters</h2>
-            <p className="text-[10px] text-violet-200/70">Points count toward team score</p>
+            <p className="text-[11px] text-violet-200/70">Points count toward team score</p>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {slots.campus.map((slot, i) => {
               const p = buckets.campusStarters[i] ?? null
               return (
                 <div key={slot.slot} className="rounded-xl border border-violet-500/20 bg-black/20 p-2">
-                  <p className="text-[9px] font-bold uppercase text-violet-300/80">
+                  <p className="text-[11px] font-bold uppercase text-violet-300/80">
                     {slot.position} · {slot.slot.replace(/^[^_]+_/, '')}
                   </p>
                   {p ? (
@@ -280,7 +280,7 @@ export function C2CRosterClient({
                       onOpen={() => setModal({ open: true, player: p, side: 'campus' })}
                     />
                   ) : (
-                    <div className="mt-2 rounded-lg border border-dashed border-white/[0.08] py-6 text-center text-[10px] text-white/35">
+                    <div className="mt-2 rounded-lg border border-dashed border-white/[0.08] py-6 text-center text-[11px] text-white/35">
                       Empty
                     </div>
                   )}
@@ -295,14 +295,14 @@ export function C2CRosterClient({
         <section className="mt-10" data-testid="c2c-canton-section">
           <div className="sticky top-28 z-[5] mb-3 rounded-lg border border-blue-500/30 bg-blue-950/40 px-3 py-2 md:top-12">
             <h2 className="text-[12px] font-bold uppercase tracking-wide text-blue-200">🏙 Canton starters</h2>
-            <p className="text-[10px] text-blue-200/70">Points count toward team score</p>
+            <p className="text-[11px] text-blue-200/70">Points count toward team score</p>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {slots.canton.map((slot, i) => {
               const p = buckets.cantonStarters[i] ?? null
               return (
                 <div key={slot.slot} className="rounded-xl border border-blue-500/20 bg-black/20 p-2">
-                  <p className="text-[9px] font-bold uppercase text-blue-300/80">
+                  <p className="text-[11px] font-bold uppercase text-blue-300/80">
                     {slot.position} · {slot.slot.replace(/^[^_]+_/, '')}
                   </p>
                   {p ? (
@@ -311,7 +311,7 @@ export function C2CRosterClient({
                       onOpen={() => setModal({ open: true, player: p, side: 'canton' })}
                     />
                   ) : (
-                    <div className="mt-2 rounded-lg border border-dashed border-white/[0.08] py-6 text-center text-[10px] text-white/35">
+                    <div className="mt-2 rounded-lg border border-dashed border-white/[0.08] py-6 text-center text-[11px] text-white/35">
                       Empty
                     </div>
                   )}
@@ -339,7 +339,7 @@ export function C2CRosterClient({
                 key={p.playerId}
                 className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-black/20 p-2 opacity-90"
               >
-                <span className="text-[9px] font-bold text-white/35">{p.playerSide === 'campus' ? '🎓' : '🏙'}</span>
+                <span className="text-[11px] font-bold text-white/35">{p.playerSide === 'campus' ? '🎓' : '🏙'}</span>
                 {p.playerSide === 'campus' ? (
                   <C2CCampusPlayerCard compact player={p} onOpen={() => setModal({ open: true, player: p, side: 'campus' })} />
                 ) : (
@@ -373,7 +373,7 @@ export function C2CRosterClient({
 
       <section className="mt-8 rounded-xl border border-violet-500/25 bg-violet-950/20 p-3" data-testid="c2c-devy-section">
         <h3 className="text-[11px] font-bold uppercase text-violet-200">Devy</h3>
-        <p className="mt-1 text-[10px] text-violet-200/70">{campusDevyNote}</p>
+        <p className="mt-1 text-[11px] text-violet-200/70">{campusDevyNote}</p>
         <div className="mt-2 space-y-2">
           {buckets.devy.map((p) => (
             <DevyPlayerCard
@@ -404,7 +404,7 @@ export function C2CRosterClient({
         </section>
       ) : null}
 
-      <p className="mt-8 text-center text-[10px] text-white/30">
+      <p className="mt-8 text-center text-[11px] text-white/30">
         Week {week} · Season {seasonYear}
         {seasonId ? ` · ${seasonId.slice(0, 8)}…` : ''}
       </p>

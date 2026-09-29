@@ -127,8 +127,8 @@ function ScoreBar({ value, max = 100, color = 'cyan', label, showValue = true }:
     <div className="space-y-0.5">
       {label && (
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-white/40">{label}</span>
-          {showValue && <span className="text-[10px] text-white/60 font-mono">{Math.round(value)}</span>}
+          <span className="text-[11px] text-white/40">{label}</span>
+          {showValue && <span className="text-[11px] text-white/60 font-mono">{Math.round(value)}</span>}
         </div>
       )}
       <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
@@ -155,7 +155,7 @@ function PositionalStrengthChart({ data }: { data: PositionalStrength[] }) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={cx('text-xs font-bold w-7', POS_COLORS[d.position])}>{d.position}</span>
-                  <span className="text-[10px] text-white/30">{d.playerCount} rostered</span>
+                  <span className="text-[11px] text-white/30">{d.playerCount} rostered</span>
                 </div>
                 <span className={cx('text-xs font-bold', isStrong ? 'text-emerald-300' : isWeak ? 'text-rose-300' : 'text-white/60')}>
                   {d.strengthPct}%
@@ -172,7 +172,7 @@ function PositionalStrengthChart({ data }: { data: PositionalStrength[] }) {
                   title="League median"
                 />
               </div>
-              <div className="flex justify-between text-[9px] text-white/25">
+              <div className="flex justify-between text-[11px] text-white/25">
                 <span>{d.userValue.toLocaleString()} value</span>
                 <span>Avg: {d.leagueAvgValue.toLocaleString()}</span>
               </div>
@@ -180,7 +180,7 @@ function PositionalStrengthChart({ data }: { data: PositionalStrength[] }) {
           )
         })}
       </div>
-      <div className="mt-3 flex items-center gap-3 text-[9px] text-white/25">
+      <div className="mt-3 flex items-center gap-3 text-[11px] text-white/25">
         <div className="flex items-center gap-1"><div className="w-0.5 h-3 bg-white/40" /> League average (100%)</div>
       </div>
     </div>
@@ -199,25 +199,25 @@ function RosterProfileCard({ profile }: { profile: RosterProfile }) {
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="text-center p-2 bg-black/20 rounded-lg">
           <div className="text-lg font-bold text-white">{profile.avgAge}</div>
-          <div className="text-[9px] text-white/30">Avg Age</div>
+          <div className="text-[11px] text-white/30">Avg Age</div>
         </div>
         <div className="text-center p-2 bg-black/20 rounded-lg">
           <div className="text-lg font-bold text-white">{profile.rosterSize}</div>
-          <div className="text-[9px] text-white/30">Players</div>
+          <div className="text-[11px] text-white/30">Players</div>
         </div>
         <div className="text-center p-2 bg-black/20 rounded-lg">
           <div className="text-lg font-bold text-white">{profile.assetConcentration}%</div>
-          <div className="text-[9px] text-white/30">Top-5 Share</div>
+          <div className="text-[11px] text-white/30">Top-5 Share</div>
         </div>
       </div>
       <div className="space-y-1.5">
-        <div className="text-[10px] text-white/40">Age Distribution</div>
+        <div className="text-[11px] text-white/40">Age Distribution</div>
         <div className="flex h-4 rounded-full overflow-hidden">
           {youngPct > 0 && <div className="bg-emerald-400/70" style={{ width: `${youngPct}%` }} title={`Young (≤24): ${profile.youngCount}`} />}
           {primePct > 0 && <div className="bg-cyan-400/70" style={{ width: `${primePct}%` }} title={`Prime (25-28): ${profile.primeCount}`} />}
           {vetPct > 0 && <div className="bg-amber-400/70" style={{ width: `${vetPct}%` }} title={`Veteran (29+): ${profile.veteranCount}`} />}
         </div>
-        <div className="flex justify-between text-[9px] text-white/30">
+        <div className="flex justify-between text-[11px] text-white/30">
           <span className="text-emerald-300/60">Young {profile.youngCount}</span>
           <span className="text-cyan-300/60">Prime {profile.primeCount}</span>
           <span className="text-amber-300/60">Veteran {profile.veteranCount}</span>
@@ -236,7 +236,7 @@ function PlanCard({ plan, goal }: { plan: PlanItem[]; goal: string }) {
         <span className="text-lg">&#x1F5FA;</span>
         <div>
           <h4 className="text-sm font-bold text-white">Your 3-5 Year Roadmap</h4>
-          <p className="text-[10px] text-white/40">AI-generated plan constrained by your roster data ({goal})</p>
+          <p className="text-[11px] text-white/40">AI-generated plan constrained by your roster data ({goal})</p>
         </div>
       </div>
       <div className="space-y-3">
@@ -256,7 +256,7 @@ function PlanCard({ plan, goal }: { plan: PlanItem[]; goal: string }) {
               {item.type === 'avoid' ? '!' : i + 1}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] text-white/40 font-semibold uppercase">{item.timeframe}</div>
+              <div className="text-[11px] text-white/40 font-semibold uppercase">{item.timeframe}</div>
               <p className="text-xs text-white/80 leading-relaxed mt-0.5">{item.action}</p>
             </div>
           </div>
@@ -279,27 +279,27 @@ function PlayerRow({ player, expanded, onToggle }: {
           <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-bold text-white/70">{player.userRank}</span>
           </div>
-          <span className={cx('text-[10px] font-bold uppercase w-6 flex-shrink-0', POS_COLORS[player.position] || 'text-white/50')}>
+          <span className={cx('text-[11px] font-bold uppercase w-6 flex-shrink-0', POS_COLORS[player.position] || 'text-white/50')}>
             {player.position}
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-white font-medium truncate">{player.name}</span>
               {player.isOnUserRoster && (
-                <span className="text-[8px] px-1 py-0.5 bg-cyan-500/20 text-cyan-300 rounded flex-shrink-0">YOURS</span>
+                <span className="text-[11px] px-1 py-0.5 bg-cyan-500/20 text-cyan-300 rounded flex-shrink-0">YOURS</span>
               )}
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              {player.team && <span className="text-[10px] text-white/30">{player.team}</span>}
-              {player.age && <span className="text-[10px] text-white/25">Age {player.age}</span>}
-              <span className="text-[10px] text-white/20">{player.estimatedPPG} PPG</span>
-              {player.trend30Day > 0 && <span className="text-[10px] text-emerald-400">&#x2191;</span>}
-              {player.trend30Day < 0 && <span className="text-[10px] text-rose-400">&#x2193;</span>}
+              {player.team && <span className="text-[11px] text-white/30">{player.team}</span>}
+              {player.age && <span className="text-[11px] text-white/25">Age {player.age}</span>}
+              <span className="text-[11px] text-white/20">{player.estimatedPPG} PPG</span>
+              {player.trend30Day > 0 && <span className="text-[11px] text-emerald-400">&#x2191;</span>}
+              {player.trend30Day < 0 && <span className="text-[11px] text-rose-400">&#x2193;</span>}
             </div>
           </div>
           <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-            <span className="text-[10px] text-white/40">TFS <span className={cx('font-bold', player.teamFitScore >= 60 ? 'text-emerald-300' : player.teamFitScore >= 40 ? 'text-cyan-300' : 'text-white/50')}>{player.teamFitScore}</span></span>
-            <span className="text-[10px] text-white/30">Score {player.userRankScore}</span>
+            <span className="text-[11px] text-white/40">TFS <span className={cx('font-bold', player.teamFitScore >= 60 ? 'text-emerald-300' : player.teamFitScore >= 40 ? 'text-cyan-300' : 'text-white/50')}>{player.teamFitScore}</span></span>
+            <span className="text-[11px] text-white/30">Score {player.userRankScore}</span>
           </div>
           <div className="flex-shrink-0 ml-1">
             <span className={cx('text-white/25 text-xs transition-transform inline-block', expanded ? 'rotate-90' : '')}>&#x25B6;</span>
@@ -322,30 +322,30 @@ function PlayerRow({ player, expanded, onToggle }: {
 
           <div className="grid grid-cols-4 gap-1.5">
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Slot Need</div>
+              <div className="text-[11px] text-white/30">Slot Need</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.tfsBreakdown.slotNeedFit)}</div>
             </div>
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Volatility</div>
+              <div className="text-[11px] text-white/30">Volatility</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.tfsBreakdown.volatilityBalance)}</div>
             </div>
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Age Fit</div>
+              <div className="text-[11px] text-white/30">Age Fit</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.tfsBreakdown.ageCurveFit)}</div>
             </div>
             <div className="text-center p-1.5 bg-white/3 rounded-lg">
-              <div className="text-[9px] text-white/30">Bye Relief</div>
+              <div className="text-[11px] text-white/30">Bye Relief</div>
               <div className="text-[11px] font-medium text-white/70">{Math.round(player.tfsBreakdown.byeClusterRelief)}</div>
             </div>
           </div>
 
           {player.goalDetails.reasoning && (
             <div className="p-2 rounded-lg bg-purple-500/5 border border-purple-500/10">
-              <span className="text-[10px] text-purple-300/80">{player.goalDetails.reasoning}</span>
+              <span className="text-[11px] text-purple-300/80">{player.goalDetails.reasoning}</span>
             </div>
           )}
 
-          <div className="flex items-center gap-2 text-[10px] text-white/30">
+          <div className="flex items-center gap-2 text-[11px] text-white/30">
             <span>Mkt #{player.marketRank}</span>
             <span>|</span>
             <span>Value: {player.marketValue.toLocaleString()}</span>
@@ -507,10 +507,10 @@ export default function EnhancedRankingsPanel({ username, leagueId, leagueName }
         <>
           {meta && (
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="text-[10px] text-white/30">
+              <div className="text-[11px] text-white/30">
                 {meta.leagueName} | {meta.leagueType} | {meta.scoring}{meta.isSF ? ' | SF' : ''}{meta.isTEP ? ' | TEP' : ''} | {meta.numTeams}T
               </div>
-              <span className={cx('px-2.5 py-1 rounded-full text-[10px] font-bold',
+              <span className={cx('px-2.5 py-1 rounded-full text-[11px] font-bold',
                 detectedGoal === 'win-now' ? 'bg-green-500/20 text-green-300' :
                 detectedGoal === 'rebuild' ? 'bg-purple-500/20 text-purple-300' :
                 'bg-yellow-500/20 text-yellow-300'
@@ -544,7 +544,7 @@ export default function EnhancedRankingsPanel({ username, leagueId, leagueName }
             <button
               onClick={() => setRosterOnly(!rosterOnly)}
               className={cx(
-                'px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition',
+                'px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition',
                 rosterOnly ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'border-transparent text-white/35 hover:text-white/60'
               )}
             >
@@ -556,7 +556,7 @@ export default function EnhancedRankingsPanel({ username, leagueId, leagueName }
                 const idx = fields.indexOf(sortField)
                 setSortField(fields[(idx + 1) % fields.length])
               }}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] text-white/40 hover:text-white/70 transition touch-manipulation"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] text-white/40 hover:text-white/70 transition touch-manipulation"
             >
               <span>&#x21C5;</span>
               <span className="capitalize">{sortField === 'userRank' ? 'Rank' : sortField === 'teamFit' ? 'TFS' : sortField === 'goalAlign' ? 'Goal' : sortField}</span>

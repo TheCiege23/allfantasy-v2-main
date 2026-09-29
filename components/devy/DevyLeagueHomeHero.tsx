@@ -42,10 +42,10 @@ export function DevyLeagueHomeHero({
       <div className="relative mx-auto flex max-w-5xl flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-cyan-400/35 bg-cyan-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-100">
+            <span className="rounded-full border border-cyan-400/35 bg-cyan-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100">
               Devy
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/55">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">
               {String(sport).toUpperCase()}
             </span>
             <span className="text-[11px] text-white/45">

@@ -153,27 +153,27 @@ export function WaiverCenter({
               <ClipboardList className="h-4 w-4 text-emerald-300" />
               <h4 className="text-[12px] font-bold text-white">Waiver runtime</h4>
             </div>
-            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase text-white/55">
+            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[11px] font-bold uppercase text-white/55">
               {runtime.settings.mode}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
-              <p className="text-[10px] text-white/35">Pending</p>
+              <p className="text-[11px] text-white/35">Pending</p>
               <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.pendingClaims}</p>
             </div>
             <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
-              <p className="text-[10px] text-white/35">FAAB teams</p>
+              <p className="text-[11px] text-white/35">FAAB teams</p>
               <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.faabTeams}</p>
             </div>
             <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
-              <p className="text-[10px] text-white/35">Priority</p>
+              <p className="text-[11px] text-white/35">Priority</p>
               <p className="mt-0.5 text-[15px] font-bold text-white">
                 {runtime.priorityOrder.find((row) => row.rosterId === rosterId)?.waiverPriority ?? '-'}
               </p>
             </div>
             <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
-              <p className="text-[10px] text-white/35">Transactions</p>
+              <p className="text-[11px] text-white/35">Transactions</p>
               <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.processedTransactions}</p>
             </div>
           </div>
@@ -188,7 +188,7 @@ export function WaiverCenter({
               href={`/player/${encodeURIComponent(t.name.toLowerCase().replace(/\s+/g, '-'))}`}
               className="flex items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5 transition hover:border-white/[0.1] hover:bg-white/[0.04]"
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/10 text-[10px] font-bold text-[#ff9ec0]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/10 text-[11px] font-bold text-[#ff9ec0]">
                 {i + 1}
               </span>
               <PlayerAvatar
@@ -203,13 +203,13 @@ export function WaiverCenter({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-[12px] font-semibold text-white/80">{t.name}</span>
-                  <span className="text-[10px] text-[#ff9ec0]/60">{t.position}</span>
-                  <span className="text-[10px] text-white/30">{t.team}</span>
+                  <span className="text-[11px] text-[#ff9ec0]/60">{t.position}</span>
+                  <span className="text-[11px] text-white/30">{t.team}</span>
                   {t.projectedPoints != null && <ProjectionChip points={t.projectedPoints} />}
                 </div>
-                {t.reason && <p className="mt-0.5 text-[10px] text-white/35 line-clamp-1">{t.reason}</p>}
+                {t.reason && <p className="mt-0.5 text-[11px] text-white/35 line-clamp-1">{t.reason}</p>}
               </div>
-              <div className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+              <div className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-bold text-emerald-300">
                 {t.priority}/10
               </div>
             </Link>
@@ -220,7 +220,7 @@ export function WaiverCenter({
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h4 className="text-[12px] font-bold text-white">Waiver claims</h4>
-          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-white/45">
+          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[11px] text-white/45">
             {sport ?? 'NFL'}
           </span>
         </div>
@@ -235,14 +235,14 @@ export function WaiverCenter({
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold text-white">{claim.addPlayerName}</p>
-                    <p className="text-[10px] text-white/40">
+                    <p className="text-[11px] text-white/40">
                       {claim.dropPlayerName ? `Drop ${claim.dropPlayerName}` : 'No drop'} - FAAB{' '}
                       {claim.bidAmount ?? 0}
                     </p>
                   </div>
                   <span
                     className={[
-                      'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
+                      'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase',
                       claim.status === 'approved'
                         ? 'bg-emerald-400/15 text-emerald-200'
                         : claim.status === 'denied'
@@ -253,7 +253,7 @@ export function WaiverCenter({
                     {claim.status}
                   </span>
                 </div>
-                {claim.denialReason ? <p className="mt-1 text-[10px] text-amber-100/80">{claim.denialReason}</p> : null}
+                {claim.denialReason ? <p className="mt-1 text-[11px] text-amber-100/80">{claim.denialReason}</p> : null}
               </div>
             ))}
           </div>

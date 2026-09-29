@@ -23,7 +23,7 @@ export function BlockOfferLine({ offer }: { offer: TradeBlockItem['suggestedOffe
   if (!offer) return null
   const g = offer.grade
   return (
-    <div className="mt-1 text-[10px] leading-snug text-white/65" data-testid="block-offer">
+    <div className="mt-1 text-[11px] leading-snug text-white/65" data-testid="block-offer">
       <span>
         Suggested offer: send {offer.gives.join(' + ')} for {offer.receives.join(' + ')}
       </span>
@@ -141,7 +141,7 @@ export function TradeBlockPanel({
                             : addTradeBlockItem({ leagueId, playerId: p.playerId, playerName: p.playerName, position: p.position, team: p.team }),
                         )
                       }
-                      className={`rounded px-1.5 py-0.5 text-[10px] ${on ? 'border border-rose-400/40 text-rose-200' : 'bg-violet-500/80 text-black'}`}
+                      className={`rounded px-1.5 py-0.5 text-[11px] ${on ? 'border border-rose-400/40 text-rose-200' : 'bg-violet-500/80 text-black'}`}
                     >
                       {on ? 'Remove' : 'Add to block'}
                     </button>
@@ -166,14 +166,14 @@ export function TradeBlockPanel({
                       <div className="flex gap-1">
                         <button type="button" disabled={busy} data-testid={`mark-interest-${i.playerId}`}
                           onClick={() => act(() => addTradeInterest({ leagueId, interestType: 'player_interest', targetRosterId: i.rosterId, playerId: i.playerId, playerName: i.playerName, position: i.position }))}
-                          className="rounded border border-white/20 px-1.5 py-0.5 text-[10px] text-white/80">Mark interest</button>
+                          className="rounded border border-white/20 px-1.5 py-0.5 text-[11px] text-white/80">Mark interest</button>
                         <button type="button" data-testid={`block-build-${i.rosterId}`}
                           onClick={() => onBuildProposal(i.rosterId)}
-                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[10px] font-semibold text-black">Build proposal</button>
+                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[11px] font-semibold text-black">Build proposal</button>
                       </div>
                     </div>
                     <BlockOfferLine offer={i.suggestedOffer} />
-                    {i.note ? <p className="mt-0.5 text-[10px] text-white/55">“{i.note}”</p> : null}
+                    {i.note ? <p className="mt-0.5 text-[11px] text-white/55">“{i.note}”</p> : null}
                   </div>
                 ))}
               </div>
@@ -187,7 +187,7 @@ export function TradeBlockPanel({
             ) : (
               <ul className="mt-1 space-y-0.5">
                 {myInterests.map((it) => (
-                  <li key={it.id} className="flex items-center justify-between gap-2 text-[10px] text-white/70">
+                  <li key={it.id} className="flex items-center justify-between gap-2 text-[11px] text-white/70">
                     <span>{it.playerName ?? it.position ?? it.interestType} <span className="text-white/40">({it.visibility})</span></span>
                     <button type="button" disabled={busy} onClick={() => act(() => removeTradeInterest(it.id))} className="text-rose-300/80">remove</button>
                   </li>

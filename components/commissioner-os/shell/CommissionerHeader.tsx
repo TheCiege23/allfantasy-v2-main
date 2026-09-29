@@ -83,7 +83,7 @@ export function CommissionerHeader({
         <Search size={16} aria-hidden />
         <span className="hidden sm:inline">Search</span>
         <kbd
-          className="ml-1 hidden rounded px-1.5 py-0.5 text-[10px] font-medium sm:inline"
+          className="ml-1 hidden rounded px-1.5 py-0.5 text-[11px] font-medium sm:inline"
           style={{ background: 'var(--panel)', color: 'var(--muted2)', border: '1px solid var(--border)' }}
         >
           &#8984;K
@@ -101,7 +101,7 @@ export function CommissionerHeader({
         {unreadNotificationCount > 0 && (
           <span
             aria-hidden
-            className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold"
+            className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[11px] font-semibold"
             style={{ background: 'var(--bad)', color: '#fff' }}
           >
             {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}

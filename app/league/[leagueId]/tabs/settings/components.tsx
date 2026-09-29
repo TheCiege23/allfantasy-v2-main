@@ -62,7 +62,7 @@ export function FaqButton({ open, onToggle }: { open: boolean; onToggle: () => v
     <button
       type="button"
       onClick={onToggle}
-      className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[10px] text-white/40 transition hover:bg-white/10 hover:text-white/60"
+      className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[11px] text-white/40 transition hover:bg-white/10 hover:text-white/60"
       aria-expanded={open}
       aria-label={t('league.draftSettings.aria.help')}
     >

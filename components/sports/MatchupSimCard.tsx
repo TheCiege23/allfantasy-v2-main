@@ -81,7 +81,7 @@ export function MatchupSimCard({
           type="button"
           onClick={runSim}
           disabled={loading}
-          className="text-[10px] font-semibold text-cyan-300 hover:text-cyan-200"
+          className="text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
         >
           {loading ? 'Re-running...' : 'Re-run'}
         </button>
@@ -102,11 +102,11 @@ export function MatchupSimCard({
       {/* Projected Scores */}
       <div className="mb-4 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-white/[0.03] px-3 py-2 text-center">
-          <p className="text-[10px] uppercase text-white/30">Projected</p>
+          <p className="text-[11px] uppercase text-white/30">Projected</p>
           <p className="text-xl font-black text-cyan-300">{result.projectedScoreA?.toFixed(1) ?? '—'}</p>
         </div>
         <div className="rounded-xl bg-white/[0.03] px-3 py-2 text-center">
-          <p className="text-[10px] uppercase text-white/30">Projected</p>
+          <p className="text-[11px] uppercase text-white/30">Projected</p>
           <p className="text-xl font-black text-purple-300">{result.projectedScoreB?.toFixed(1) ?? '—'}</p>
         </div>
       </div>
@@ -114,7 +114,7 @@ export function MatchupSimCard({
       {/* Key Factors */}
       {result.keyFactors?.length > 0 && (
         <div className="mb-3">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/30">Key Factors</p>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/30">Key Factors</p>
           <ul className="space-y-0.5">
             {result.keyFactors.slice(0, 4).map((f, i) => (
               <li key={i} className="text-[11px] text-white/55">• {f}</li>
@@ -126,10 +126,10 @@ export function MatchupSimCard({
       {/* Swing Players */}
       {result.swingPlayers?.length > 0 && (
         <div className="mb-3">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/30">Swing Players</p>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/30">Swing Players</p>
           <div className="flex flex-wrap gap-1">
             {result.swingPlayers.slice(0, 5).map((p, i) => (
-              <span key={i} className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+              <span key={i} className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
                 {p}
               </span>
             ))}

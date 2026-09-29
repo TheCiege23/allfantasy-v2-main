@@ -130,7 +130,7 @@ export function PlayerImage({
   if (exhausted || !currentUrl) {
     return (
       <div
-        className={`flex shrink-0 items-center justify-center border border-white/[0.12] text-[10px] font-bold text-white ${positionBgClass(position)} ${radius} ${className}`}
+        className={`flex shrink-0 items-center justify-center border border-white/[0.12] text-[11px] font-bold text-white ${positionBgClass(position)} ${radius} ${className}`}
         style={{ width: size, height: size }}
         aria-hidden
       >

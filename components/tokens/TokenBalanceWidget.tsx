@@ -39,7 +39,7 @@ export function TokenBalanceWidget() {
         <span className="text-xs text-amber-100/75">available</span>
       </div>
       {isAdminBypassAccount && (
-        <p className="mt-1.5 text-[10px] text-amber-100/50 italic" data-testid="token-balance-widget-bypass-notice">
+        <p className="mt-1.5 text-[11px] text-amber-100/50 italic" data-testid="token-balance-widget-bypass-notice">
           Admin bypass — synthetic balance, no ledger history
         </p>
       )}
