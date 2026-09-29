@@ -52,6 +52,8 @@ import { FreeAgentBids } from '@/components/core-app/player-finder/FreeAgentBids
 import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
 import { DepthChartBackups } from '@/components/core-app/player-finder/DepthChartBackups'
 import type { DepthChartView } from '@/lib/core-app/depthChart'
+import { WhoStartsHim } from '@/components/core-app/player-finder/WhoStartsHim'
+import type { WhoStartsHim as WhoStartsHimData } from '@/lib/core-app/whoStartsHim'
 import { buildLeagueStrip } from '@/lib/core-app/leagueStrip'
 import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
@@ -188,6 +190,8 @@ export type PlayerFinderProps = {
   freeAgentBids?: FreeAgentBidsData | null
   /** His team's depth chart at his spot, with where each player around him is in your leagues (depthChartBackups.ts). */
   depthChart?: DepthChartView | null
+  /** Where he is yours: the other teams he would start for (AF Pro; whoStartsHimLoader.ts). */
+  whoStartsHim?: WhoStartsHimData | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -383,6 +387,7 @@ export function PlayerFinder({
   savedPicks = null,
   freeAgentBids = null,
   depthChart = null,
+  whoStartsHim = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -1181,6 +1186,9 @@ export function PlayerFinder({
               playerName={detail.player.name}
               hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${leagueParam}`}
             />
+
+            {/* ── Who'd start him ──: the sell side where he is yours (AF Pro, withheld server-side when locked). */}
+            {signedIn ? <WhoStartsHim data={whoStartsHim} playerName={detail.player.name} access={depthAccess} /> : null}
 
             {/* ── This season: projected against scored, week by week (Phase 1) ── */}
             {depth ? <PlayerSeasonCard state={depth.season} name={detail.player.name} /> : null}
