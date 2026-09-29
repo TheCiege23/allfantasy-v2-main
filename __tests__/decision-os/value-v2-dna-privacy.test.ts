@@ -3,7 +3,6 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => (handler: unknown) => handler }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import { GET as legacyGet, POST as legacyPost } from '@/server/api-route-modules/legacy/manager-dna/route'
-import { GET as aiGet, POST as aiPost } from '@/app/api/ai/manager-dna/route'
 import { POST as draftPost } from '@/app/api/mock-draft/manager-dna/route'
 import { GET as directoryGet } from '@/app/api/v1/intelligence/league/manager-dna/route'
 import { GET as managerGet } from '@/app/api/v1/intelligence/manager/route'
@@ -12,8 +11,8 @@ import { GET as tradeProfileGet } from '@/app/api/user/trade-profile/route'
 import { formatDNAForPrompt, type ManagerDNAProfile } from '@/lib/manager-dna'
 import { formatOpponentForPrompt, type OpponentProfile } from '@/lib/opponent-tendencies'
 const routes = [
+  // The /api/ai/manager-dna alias is deleted (its only caller, /manager-compare, dropped the tab).
   ['legacy DNA GET', legacyGet], ['legacy DNA POST', legacyPost],
-  ['canonical DNA GET', aiGet], ['canonical DNA POST', aiPost],
   ['draft DNA POST', draftPost], ['DNA directory GET', directoryGet],
   ['v1 manager GET', managerGet], ['v1 managers GET', managersGet], ['inferred trade profile GET', tradeProfileGet],
 ] as const
