@@ -12,7 +12,6 @@ const config = ts.parseJsonConfigFileContent(configFile.config, ts.sys, cwd)
 const seams = [
   'app/api/decision-os/manager-intelligence/route.ts',
   'server/api-route-modules/legacy/manager-dna/route.ts',
-  'app/api/ai/manager-dna/route.ts',
   'app/api/mock-draft/manager-dna/route.ts',
   'app/api/v1/intelligence/manager/route.ts',
   'app/api/v1/intelligence/league/managers/route.ts',
@@ -39,7 +38,7 @@ const seams = [
   'lib/drama-engine/publicNarrative.ts', 'lib/drama-engine/DramaQueryService.ts', 'lib/drama-engine/DramaTimelineBuilder.ts',
   'lib/drama-engine/DramaEventDetector.ts', 'lib/decision-os/grounding/serialize.ts',
   'lib/league-history/leagueWarehouseReads.ts',
-  'app/api/war-room/opponent-tendencies/route.ts', 'app/api/ai/opponent-tendencies/route.ts',
+  'app/api/war-room/opponent-tendencies/route.ts',
   'app/api/admin/decision-os/grounding-proof/route.ts',
   'server/api-route-modules/legacy/trade/league-managers/route.ts', 'server/api-route-modules/legacy/opponent-tendencies/route.ts',
   'app/api/leagues/[leagueId]/relationship-insights/handler.ts', 'app/api/leagues/[leagueId]/rivalries/explain/route.ts',

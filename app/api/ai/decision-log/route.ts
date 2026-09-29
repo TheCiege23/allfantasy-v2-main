@@ -4,7 +4,9 @@
  * Thin passthrough that delegates to the legacy handler at /api/legacy/decision-log.
  * Request/response shape is byte-for-byte identical to the legacy route.
  *
- * Telemetry double-tagging is intentional during migration (see /api/ai/manager-dna header).
+ * Telemetry double-tagging is intentional during migration: this route fires its own
+ * `withApiUsage` tag and the delegated legacy handler fires its own, so every call produces
+ * both an `/api/ai/decision-log` and an `/api/legacy/decision-log` usage row.
  */
 
 import { NextRequest } from 'next/server'
