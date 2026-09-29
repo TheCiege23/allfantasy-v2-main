@@ -33,12 +33,15 @@ export type LeagueAssetPolicy = {
   priceDevy(side: { inputs: readonly TradeAssetInput[]; lines: TradeConsolePlayerLine[]; priced: PricedAsset[] }): Promise<DevyPricedSide>
 }
 
-/** Rights that no longer make him a prospect held here. */
-const NOT_HELD_STATES = ['PROMOTED_TO_PRO', 'RIGHTS_EXPIRED']
+/**
+ * Rights that no longer make him a prospect held here. Exported so the per-league Devy tab
+ * (`lib/core-app/devyLeagueTab.ts`) counts "held" exactly as the grade prices it.
+ */
+export const DEVY_RIGHTS_NOT_HELD_STATES: readonly string[] = ['PROMOTED_TO_PRO', 'RIGHTS_EXPIRED']
 
 export async function loadHeldDevyPlayers(leagueId: string): Promise<HeldDevyPlayer[]> {
   const rights = await prisma.devyRights
-    .findMany({ where: { leagueId, state: { notIn: NOT_HELD_STATES } }, select: { devyPlayerId: true } })
+    .findMany({ where: { leagueId, state: { notIn: [...DEVY_RIGHTS_NOT_HELD_STATES] } }, select: { devyPlayerId: true } })
     .catch(() => [] as Array<{ devyPlayerId: string }>)
   const ids = [...new Set(rights.map((r) => r.devyPlayerId))]
   if (ids.length === 0) return []
