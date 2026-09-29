@@ -95,8 +95,9 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
     '/trade-analyzer': '/trade-evaluator',
     '/waiver-wire': '/waiver-ai',
     '/social-pulse': '/social-pulse',
-    '/matchup-simulator': '/matchup-simulator',
-    '/app/simulation-lab': '/matchup-simulator',
+    // The matchup tool opens /core/matchup (its openToolHref) since /matchup-simulator became a 308.
+    '/matchup-simulator': '/core/matchup',
+    '/app/simulation-lab': '/core/matchup',
     '/bracket': '/brackets',
     '/app/power-rankings': '/power-rankings',
   }

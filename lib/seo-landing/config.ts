@@ -414,7 +414,8 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'Matchup Simulator',
     benefitSummary:
       'Simulate seasons, playoffs, and matchups. Use data-driven scenarios for redraft and dynasty.',
-    openToolHref: '/matchup-simulator',
+    // /matchup-simulator is a 308 to /core/matchup since 2026-09-29 — link the destination.
+    openToolHref: '/core/matchup',
     examples: [
       'Season and playoff simulations',
       'Head-to-head and scoring projections',
