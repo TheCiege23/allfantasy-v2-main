@@ -19,6 +19,13 @@
  *   sport  — "NFL", "NCAAF", or "all" (default)
  *   season — 4-digit year string (defaults to the current NFL/NCAAF season)
  *   force  — "true" to ingest even during the offseason (admin/manual use)
+ *
+ * FUTURE WEEKS (2026-09-29). After the current-week phase, a second, failure-isolated phase stores
+ * Sleeper's boards for the next `FUTURE_WEEK_HORIZON` weeks in `future_week_projections` — see
+ * lib/projections/futureWeekIngest.ts. 🛑 NEVER in `fantasy_projections`: its latest week is "the
+ * current week" to every reader. The phase reports under the top-level `futureWeeks` key, never in
+ * `results`, so it cannot turn a good current-week run into a 500. It is a no-op until migration
+ * 20260929180000_future_week_projections is applied, and it is skipped on a hand-run `?week=`.
  */
 
 import type { NextRequest } from "next/server"
@@ -29,6 +36,8 @@ import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { getWeekBoard } from "@/lib/sports-data/sleeperMarketService"
 import { projectionCoverageFor } from "@/lib/projections/projectionCoverage"
+import { ingestFutureWeeks } from "@/lib/projections/futureWeekIngest"
+import { futureWeekProjectionsReady, futureWeekStoreWriter } from "@/lib/projections/futureWeekProjectionStore"
 import { resolveCurrentNflWeek } from "@/lib/tournament/resolveNflWeek"
 
 /**
@@ -229,14 +238,64 @@ async function fetchSleeperNflProjections(
   return rows
 }
 
+/**
+ * The future-week phase may START a board fetch until this long after the request began. The
+ * current-week phase runs first and is unbounded by this; 150s leaves the phase's own per-fetch cap
+ * (30s) inside the shared 240s run budget and the 300s platform edge (see lib/cron/runBudget.ts).
+ */
+const FUTURE_PHASE_DEADLINE_MS = 150_000
+
+async function runFutureWeekPhase(
+  season: string,
+  handRunWeek: boolean,
+  anchor: { resolved: boolean; week: number | null },
+  startedAt: number,
+): Promise<Record<string, unknown>> {
+  if (handRunWeek) {
+    return {
+      ran: false,
+      reason: "Hand-run ?week= import: future weeks are anchored on Sleeper's own current week, so they were left untouched.",
+    }
+  }
+  try {
+    if (!(await futureWeekProjectionsReady())) {
+      return {
+        ran: false,
+        reason: "future_week_projections is not migrated yet (20260929180000_future_week_projections) — nothing written.",
+      }
+    }
+    const week = anchor.resolved ? anchor.week : await currentNflProjectionWeek(season)
+    if (week == null) {
+      return {
+        ran: false,
+        reason: `Could not establish Sleeper's current NFL week for season ${season}, so no future week was fetched.`,
+      }
+    }
+    const report = await ingestFutureWeeks(
+      { sport: "NFL", season, anchorWeek: week, deadlineAt: startedAt + FUTURE_PHASE_DEADLINE_MS },
+      { getBoard: getWeekBoard, store: futureWeekStoreWriter },
+    )
+    return { ran: true, ...report }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn("[cron/import-projections] future-week phase failed:", message.slice(0, 240))
+    return { ran: false, error: message.slice(0, 240) }
+  }
+}
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const sports = resolveSports(url.searchParams.get("sport"))
   const season = url.searchParams.get("season") ?? currentSeason()
   const force = url.searchParams.get("force") === "true"
+  const handRunWeek = url.searchParams.get("week") != null
 
   const startedAt = Date.now()
   const results: Record<string, unknown> = {}
+  /** Whether NFL got past the coverage and season gates — the future phase runs only then. */
+  let nflActive = false
+  /** Sleeper's current week, when the current-week phase already asked (so it is asked once). */
+  let nflAnchor: { resolved: boolean; week: number | null } = { resolved: false, week: null }
 
   try {
     for (const sport of sports) {
@@ -260,6 +319,8 @@ async function handle(req: NextRequest) {
         }
         continue
       }
+
+      if (sport === "NFL") nflActive = true
 
       const chainResult = await fetchWithChain({
         sport: sport.toLowerCase(),
@@ -285,7 +346,9 @@ async function handle(req: NextRequest) {
         // provider failing again.
         const weekParam = url.searchParams.get("week")
         const parsedWeek = weekParam == null ? null : toFiniteNumber(weekParam)
-        const week = parsedWeek != null && parsedWeek > 0 ? parsedWeek : await currentNflProjectionWeek(season)
+        const handWeek = parsedWeek != null && parsedWeek > 0 ? parsedWeek : null
+        const week = handWeek ?? (await currentNflProjectionWeek(season))
+        if (handWeek == null) nflAnchor = { resolved: true, week }
         if (week == null) {
           weekUnresolved = true
         } else {
@@ -339,12 +402,16 @@ async function handle(req: NextRequest) {
       .filter(([, r]) => (r as { ok?: boolean }).ok === false)
       .map(([sport]) => sport)
 
+    // After the status is decided from `results`, and reported beside them — never inside.
+    const futureWeeks = nflActive ? await runFutureWeekPhase(season, handRunWeek, nflAnchor, startedAt) : undefined
+
     return NextResponse.json(
       {
         ok: failed.length === 0,
         season,
         failedSports: failed.length ? failed : undefined,
         results,
+        futureWeeks,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
       },
