@@ -24,14 +24,11 @@ import { describe, expect, it } from 'vitest'
 const UNAUDITED = new Set<string>([
   'app/api/leagues/[leagueId]/dynasty-projections/handler.ts', // roster ids — platform-dependent space
   'lib/ai-payload/resolveAiTeamContext.ts',
-  'lib/ai/leagueSportsGroundingPacket.ts', // migrated in #1601
   'lib/ai/waivers/waiverRecommendationService.ts', // "whichever id space the source platform used"
   'lib/core-app/depthChartBackups.ts',
-  'lib/core-app/waiversBoard.ts', // migrated in #1601
   'lib/core-app/warRoomBoard.ts', // DraftPick.playerId: ours, the provider's, or Sleeper's
   'lib/nfl-data-foundation/nflDataFoundationService.ts',
   'lib/player-data/getPlayerDataForSurface.ts', // has a name-agreement guard (the 211-photo fix)
-  'lib/player-identity/findSportsPlayerByLeagueId.ts',
   'lib/provider-trades/scanPendingYahooTrades.ts',
   'lib/scoring/best-ball-engine.ts',
   'lib/sport-teams/PlayerTeamMapper.ts',

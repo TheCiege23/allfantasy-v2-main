@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 
-import { sleeperIdWhere } from './externalIdNamespace'
+import { mayBeSleeperId, nonSleeperExternalIdWhere, sleeperIdWhere } from './externalIdNamespace'
 
 /**
  * Resolve the ids a LEAGUE uses to `SportsPlayer` rows, authoritative match first.
@@ -21,6 +21,14 @@ import { sleeperIdWhere } from './externalIdNamespace'
  * right key and there is nothing to collide with. Asking the Sleeper space first fixes NFL
  * without breaking every other sport: a real Sleeper row now always wins, and the fallback runs
  * only where nothing in the Sleeper space claims the id.
+ *
+ * 🛑 AND THE FALLBACK NEVER TAKES AN ID THAT CAN BE A SLEEPER ID (2026-09-29). "Only where nothing
+ * claims it" was not enough: an NFL Sleeper id with no Sleeper row — a rookie the feed has not
+ * picked up, a retired id — fell through to `externalId` and found Rolling Insights' player of that
+ * number instead (Sleeper 9228 is Bryce Young; RI 9228 is an offensive tackle). An unclaimed NFL
+ * number now resolves to NOTHING, and AutoCoach leaves that starter alone rather than benching him
+ * on a stranger's status. Self-describing ids (`name:…`, `tsdb_…`) and every other sport's numbers
+ * still take the fallback — `nonSleeperExternalIdWhere` owns that rule.
  */
 
 type SportsPlayerRow = Awaited<ReturnType<typeof prisma.sportsPlayer.findFirst>>
@@ -48,8 +56,9 @@ export async function findSportsPlayerByLeagueId(
     orderBy: { updatedAt: 'desc' },
   })
   if (authoritative) return authoritative
+  if (mayBeSleeperId(leaguePlayerId, sk)) return null
   return prisma.sportsPlayer.findFirst({
-    where: { sport: sk, externalId: leaguePlayerId },
+    where: nonSleeperExternalIdWhere([leaguePlayerId], sk),
     orderBy: { updatedAt: 'desc' },
   })
 }
@@ -82,10 +91,10 @@ export async function findSportsPlayersByLeagueIds(
     if (key) keep(key, row)
   }
 
-  const unresolved = ids.filter((id) => !out.has(id))
+  const unresolved = ids.filter((id) => !out.has(id) && !mayBeSleeperId(id, sk))
   if (unresolved.length > 0) {
     const fallback = await prisma.sportsPlayer.findMany({
-      where: { sport: sk, externalId: { in: unresolved } },
+      where: nonSleeperExternalIdWhere(unresolved, sk),
     })
     for (const row of fallback) keep(row.externalId, row)
   }
