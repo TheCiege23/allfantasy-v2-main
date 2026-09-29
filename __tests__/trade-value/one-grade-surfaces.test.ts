@@ -527,6 +527,7 @@ const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string
   { file: 'server/api-route-modules/legacy/trade/quick-evaluate/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy Trade Hub live preview (quick evaluate)' },
   { file: 'server/api-route-modules/legacy/trade/league-analyze/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy league trade finder (league-analyze)' },
   { file: 'server/api-route-modules/legacy/trade/proposal-generator/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy proposal generator' },
+  { file: 'server/api-route-modules/legacy/trade/goal-proposals/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy goal proposals' },
 ]
 
 describe.each(LEGACY_SURFACES)('AF Legacy — $what', ({ file, entry }) => {
@@ -598,5 +599,24 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
     expect(PROPOSAL_PRIVATE.test('<AcceptanceMeter data={proposal.acceptanceModel as AcceptanceModelData} compact />')).toBe(true)
     expect(PROPOSAL_PRIVATE.test('{proposal.acceptProb}%')).toBe(true)
     expect(PROPOSAL_PRIVATE.test('<LegacyOneGrade grade={proposal.grade} />')).toBe(false)
+  })
+
+  it('goal proposals send the grade and none of the goal engine’s judging fields', () => {
+    const src = code('server/api-route-modules/legacy/trade/goal-proposals/route.ts')
+    expect(src).not.toMatch(/\.\.\.result\b/)
+    expect(src).toMatch(/await gradeOf\(gradeInputsFromEngineAssets\(p\.give\), gradeInputsFromEngineAssets\(p\.receive\)\)/)
+    expect(code('lib/trade-engine/goal-proposal-engine.ts')).not.toMatch(/Fair deal for both|values line up well|keeps things fair/)
+  })
+
+  it('neither proposal list on the page prints a generator’s own fairness, acceptance, drivers or totals', () => {
+    expect(PROPOSAL_PRIVATE.test(code('app/af-legacy/page.tsx'))).toBe(false)
+    expect(code('app/af-legacy/page.tsx').match(/<LegacyOneGrade grade=\{proposal\.grade\} \/>/g)?.length).toBe(2)
+  })
+
+  it('positive controls: the goal shapes match the code they replaced', () => {
+    expect(/\.\.\.result\b/.test('      success: true,\n      ...result,')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('{proposal.topDrivers.slice(0, 3).map((d: any, dIdx: number) => (')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('Total: {proposal.giveTotal?.toLocaleString()}')).toBe(true)
+    expect(/Fair deal for both|values line up well|keeps things fair/.test('in return. Fair deal for both of us.`,')).toBe(true)
   })
 })
