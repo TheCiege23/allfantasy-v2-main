@@ -40,7 +40,7 @@ const seams = [
   'lib/relationship-insights/publicView.ts', 'lib/core-app/scout.ts', 'components/core-app/screens/Scout.tsx',
   'lib/drama-engine/publicNarrative.ts', 'lib/drama-engine/DramaQueryService.ts', 'lib/drama-engine/DramaTimelineBuilder.ts',
   'lib/drama-engine/DramaEventDetector.ts', 'lib/decision-os/grounding/serialize.ts',
-  'lib/league-history/leagueWarehouseReads.ts', 'lib/trade-intel/tradePsychologyLoader.ts',
+  'lib/league-history/leagueWarehouseReads.ts',
   'app/api/war-room/opponent-tendencies/route.ts', 'app/api/ai/opponent-tendencies/route.ts',
   'app/api/admin/decision-os/grounding-proof/route.ts',
   'server/api-route-modules/legacy/trade/league-managers/route.ts', 'server/api-route-modules/legacy/opponent-tendencies/route.ts',
