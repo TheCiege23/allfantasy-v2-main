@@ -14,6 +14,7 @@
  */
 
 import type { MonthlyPriceRange } from '@/lib/monetization/planPresentation'
+import type { ImportProvider } from '@/lib/league-import/types'
 import { getLandingLivePlatformNames } from '@/components/core-app/screens/landingConnectPlatforms'
 import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 
@@ -97,7 +98,18 @@ export type LandingCopy = {
    * Two sport lists under two labels: what IMPORTS today (football) and what a league CREATED here
    * can run (all seven). One unlabelled list under "Connects to" read as an import claim.
    */
-  connects: { label: string; soon: string; importLabel: string; createLabel: string; soccer: string }
+  connects: {
+    label: string
+    soon: string
+    importLabel: string
+    createLabel: string
+    soccer: string
+    /**
+     * Why a "soon" platform is not live, keyed by provider. Rendered only while the import config
+     * still marks that provider unavailable, so flipping the flag retires the sentence with it.
+     */
+    soonNotes: Partial<Record<ImportProvider, string>>
+  }
   /** The "How it works" anchor target: what a new account actually does, in order. */
   steps: { h2: string; items: Step[] }
   chimmy: {
@@ -167,6 +179,8 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       importLabel: 'Imports',
       createLabel: 'Create a league',
       soccer: 'SOCCER',
+      // Yahoo gates its Fantasy Sports API behind an approval (provider-ui-config.ts records it).
+      soonNotes: { yahoo: 'Yahoo is coming soon — we’re waiting on Yahoo to approve our access.' },
     },
     steps: {
       h2: 'Set up in three steps',
@@ -329,6 +343,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       importLabel: 'Importa',
       createLabel: 'Crea una liga',
       soccer: 'FÚTBOL',
+      soonNotes: { yahoo: 'Yahoo llega pronto: estamos esperando que Yahoo apruebe nuestro acceso.' },
     },
     steps: {
       h2: 'Listo en tres pasos',
